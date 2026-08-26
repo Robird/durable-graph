@@ -23,3 +23,4 @@
 | ID | 标题 | 状态 | 重访触发条件 |
 |---|---|---|---|
 | [DB-001](0001-schema-authority-and-runtime-representation.md) | Schema authority 与运行时表示 | Deferred | 首个 canonical format、canonical-blob-bound generated codec 或持久化 SchemaStore 实验 |
+| [DB-002](0002-read-time-version-upgrade-pipeline.md) | 读取阶段的版本升级管线 | Open | 下一实现切片立即细化 historical binding、upgrade edge 与路径规则 |

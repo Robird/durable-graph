@@ -45,9 +45,29 @@
 
 ### 后续方向
 
-- **Open**：下一实验应转向版本升级路径注册、canonical schema binding，还是 durable object identity。
+- **Decided**：下一阶段先设计读取时自动尝试升级旧版本；Load 本身不回写，显式 Save 才保存升级后的当前版本对象。
+- **Open**：升级机制先采用唯一相邻版本链，还是允许一般有向图与路径选择。
+- **Open**：exact historical serializer binding 与 upgrade registry 的最小非泛型 seam 尚待设计。
 - **Open**：Schema runtime representation 与 canonical authority 的候选分叉记录在 `DB-001`，等待 exact codec/persistent format 实验裁决。
 - **Open**：哪些类型和 API 最终属于核心程序集，等待真实代码形状出现后再判断。
+
+### 当前自洽边界
+
+截至 commit `cba0c41`，当前 demo 能证明的是受限、单线程、公有 API 路径上的结构自洽：
+
+- 成功保存的每条 State record 都记录 exact `(SchemaId, Version)`，且对应 Schema 已先登记在同一个 `InMemoryStateStore.SchemaStore`。
+- Schema conflict 和 serialization failure 都不会覆盖 slot 中原有 State。
+- Load 在调用 deserializer 前验证 stored Schema 的 identity、version 和完整 shape。
+- generated serializer 只按稳定 FieldId 处理当前四种 scalar durable field，并忽略 transient field。
+
+当前不能声称：
+
+- **对象始终语义自洽**：Save 不检查输入对象的领域 invariant；Load 绕过构造器，尚无 cross-field validation、RebuildTransient 或 repository-level invariant pass。
+- **两个 Store 构成原子精确合集**：失败的 Save 可以在 SchemaStore 留下未被 State 引用的 Schema；当前只保证 State → Schema 引用闭合，不保证 Schema → State，也没有 unified commit。
+- **任意输入都安全**：手写 serializer 可以返回任意 object；boxed values 只做浅拷贝，malformed/missing/type-mismatched fields 也没有最终错误模型。
+- **并发或故障下仍成立**：两个 Store 都不提供线程安全、事务、crash recovery 或 durability。
+
+因此下一阶段可以依赖“读取某条 State 前能够取得并校验其 exact historical Schema”，但不能把对象 invariant、跨 Store atomicity 或持久化安全当作已解决。
 
 ## 4. 实验记录
 
@@ -285,6 +305,12 @@
 ```
 
 ## 6. 船长日志
+
+### 2026-08-27：Compaction 前冻结升级阶段入口
+
+- 收窄 EXP-005 的保证：当前仅有 State → exact Schema 的结构闭合与 schema-gated load，不保证对象语义 invariant 或两个 Store 的原子合集。
+- 下一阶段聚焦 read-time version upgrade；加载只产生当前版本内存对象，不隐式回写，后续显式 Save 才写入升级版本。
+- 在 `DB-002` 记录 historical serializer binding、upgrade path 与 failure gates 的候选设计。
 
 ### 2026-08-27：完成 EXP-005 boxed State round-trip
 
