@@ -20,11 +20,12 @@ public sealed class DurableSchemaGenerator : IIncrementalGenerator {
         "Atelia.DurableGraph.TransientAttribute";
     private const string DurableBaseMetadataName =
         "Atelia.DurableGraph.DurableBase";
+    private const string GeneratedSerializerTypeName = "__DurableSerializer";
 
     private static readonly DiagnosticDescriptor InvalidTypeShape = new(
         id: "DG0001",
         title: "Invalid durable type shape",
-        messageFormat: "Type '{0}' must be a top-level, non-generic, non-record partial class that directly inherits Atelia.DurableGraph.DurableBase",
+        messageFormat: "Type '{0}' must be a sealed, top-level, non-generic, non-record partial class that directly inherits Atelia.DurableGraph.DurableBase",
         category: "DurableGraph.Generator",
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true);
@@ -93,8 +94,29 @@ public sealed class DurableSchemaGenerator : IIncrementalGenerator {
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true);
 
+    private static readonly DiagnosticDescriptor ExistingSerializerMember = new(
+        id: "DG0010",
+        title: "Durable type has a reserved serializer member",
+        messageFormat: "Type '{0}' already uses the reserved generated serializer name '{1}'",
+        category: "DurableGraph.Generator",
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
+    private static readonly DiagnosticDescriptor ReadOnlyDurableField = new(
+        id: "DG0011",
+        title: "Durable field is readonly",
+        messageFormat: "Durable field '{0}' cannot be readonly because generated deserialization assigns it directly",
+        category: "DurableGraph.Generator",
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
     private static readonly SymbolDisplayFormat QualifiedNameFormat = new(
         globalNamespaceStyle: SymbolDisplayGlobalNamespaceStyle.Omitted,
+        typeQualificationStyle: SymbolDisplayTypeQualificationStyle.NameAndContainingTypesAndNamespaces,
+        miscellaneousOptions: SymbolDisplayMiscellaneousOptions.EscapeKeywordIdentifiers);
+
+    private static readonly SymbolDisplayFormat FullyQualifiedNameFormat = new(
+        globalNamespaceStyle: SymbolDisplayGlobalNamespaceStyle.Included,
         typeQualificationStyle: SymbolDisplayTypeQualificationStyle.NameAndContainingTypesAndNamespaces,
         miscellaneousOptions: SymbolDisplayMiscellaneousOptions.EscapeKeywordIdentifiers);
 
@@ -198,13 +220,21 @@ public sealed class DurableSchemaGenerator : IIncrementalGenerator {
         }
 
         ImmutableArray<ISymbol> schemaMembers = type.GetMembers("Schema");
-        if (!schemaMembers.IsEmpty) {
+        if (StringComparer.Ordinal.Equals(type.Name, "Schema") ||
+            !schemaMembers.IsEmpty) {
             context.ReportDiagnostic(Diagnostic.Create(
                 ExistingSchemaMember,
-                GetSourceLocation(schemaMembers[0]),
+                schemaMembers.IsEmpty
+                    ? GetSourceLocation(type)
+                    : GetSourceLocation(schemaMembers[0]),
                 typeName));
             hasErrors = true;
         }
+
+        hasErrors |= ReportReservedSerializerNameCollisions(
+            context,
+            type,
+            typeName);
 
         List<IFieldSymbol> fields = GetDirectFields(type);
         List<DurableFieldModel> durableFields = new();
@@ -252,6 +282,14 @@ public sealed class DurableSchemaGenerator : IIncrementalGenerator {
                 continue;
             }
 
+            if (field.IsReadOnly) {
+                context.ReportDiagnostic(Diagnostic.Create(
+                    ReadOnlyDurableField,
+                    GetSourceLocation(field),
+                    field.Name));
+                hasErrors = true;
+            }
+
             int fieldId = 0;
             if (durableFieldAttribute!.ConstructorArguments.Length != 1 ||
                 durableFieldAttribute.ConstructorArguments[0].Value is not int candidateFieldId ||
@@ -266,7 +304,10 @@ public sealed class DurableSchemaGenerator : IIncrementalGenerator {
 
             fieldId = candidateFieldId;
 
-            if (!TryGetTypeTag(field.Type, out string? typeTag)) {
+            if (!TryGetTypeTag(
+                field.Type,
+                out string? typeTag,
+                out string? fieldTypeName)) {
                 context.ReportDiagnostic(Diagnostic.Create(
                     UnsupportedFieldType,
                     GetSourceLocation(field),
@@ -276,7 +317,11 @@ public sealed class DurableSchemaGenerator : IIncrementalGenerator {
                 continue;
             }
 
-            durableFields.Add(new DurableFieldModel(field, fieldId, typeTag!));
+            durableFields.Add(new DurableFieldModel(
+                field,
+                fieldId,
+                typeTag!,
+                fieldTypeName!));
         }
 
         durableFields.Sort(static (left, right) => left.FieldId.CompareTo(right.FieldId));
@@ -294,6 +339,8 @@ public sealed class DurableSchemaGenerator : IIncrementalGenerator {
         System.Threading.CancellationToken cancellationToken) {
         if (type.TypeKind != TypeKind.Class ||
             type.IsRecord ||
+            type.IsAbstract ||
+            !type.IsSealed ||
             type.Arity != 0 ||
             type.ContainingType is not null ||
             !HasMetadataName(type.BaseType, DurableBaseMetadataName)) {
@@ -309,6 +356,46 @@ public sealed class DurableSchemaGenerator : IIncrementalGenerator {
         }
 
         return type.DeclaringSyntaxReferences.Length > 0;
+    }
+
+    private static bool ReportReservedSerializerNameCollisions(
+        SourceProductionContext context,
+        INamedTypeSymbol type,
+        string typeName) {
+        bool foundCollision = false;
+        foundCollision |= ReportReservedSerializerNameCollision(
+            context,
+            type,
+            typeName,
+            "Serializer");
+        foundCollision |= ReportReservedSerializerNameCollision(
+            context,
+            type,
+            typeName,
+            GeneratedSerializerTypeName);
+        return foundCollision;
+    }
+
+    private static bool ReportReservedSerializerNameCollision(
+        SourceProductionContext context,
+        INamedTypeSymbol type,
+        string typeName,
+        string reservedName) {
+        ImmutableArray<ISymbol> members = type.GetMembers(reservedName);
+        bool typeNameCollides = StringComparer.Ordinal.Equals(type.Name, reservedName);
+
+        if (members.IsEmpty && !typeNameCollides) {
+            return false;
+        }
+
+        context.ReportDiagnostic(Diagnostic.Create(
+            ExistingSerializerMember,
+            members.IsEmpty
+                ? GetSourceLocation(type)
+                : GetSourceLocation(members[0]),
+            typeName,
+            reservedName));
+        return true;
     }
 
     private static bool HasPartialModifier(SyntaxTokenList modifiers) {
@@ -373,22 +460,30 @@ public sealed class DurableSchemaGenerator : IIncrementalGenerator {
         return foundDuplicate;
     }
 
-    private static bool TryGetTypeTag(ITypeSymbol type, out string? typeTag) {
+    private static bool TryGetTypeTag(
+        ITypeSymbol type,
+        out string? typeTag,
+        out string? fieldTypeName) {
         switch (type.SpecialType) {
             case SpecialType.System_Boolean:
                 typeTag = "Boolean";
+                fieldTypeName = "global::System.Boolean";
                 return true;
             case SpecialType.System_Int32:
                 typeTag = "Int32";
+                fieldTypeName = "global::System.Int32";
                 return true;
             case SpecialType.System_Int64:
                 typeTag = "Int64";
+                fieldTypeName = "global::System.Int64";
                 return true;
             case SpecialType.System_String:
                 typeTag = "String";
+                fieldTypeName = "global::System.String";
                 return true;
             default:
                 typeTag = null;
+                fieldTypeName = null;
                 return false;
         }
     }
@@ -417,6 +512,8 @@ public sealed class DurableSchemaGenerator : IIncrementalGenerator {
         string typeIndent = hasNamespace ? "    " : string.Empty;
         string memberIndent = typeIndent + "    ";
         string argumentIndent = memberIndent + "        ";
+        string fullyQualifiedTypeName =
+            model.Symbol.ToDisplayString(FullyQualifiedNameFormat);
 
         if (hasNamespace) {
             source.Append("namespace ")
@@ -452,11 +549,120 @@ public sealed class DurableSchemaGenerator : IIncrementalGenerator {
                 .AppendLine();
         }
 
+        source.AppendLine();
+        AppendSerializer(
+            source,
+            model,
+            fullyQualifiedTypeName,
+            memberIndent);
+
         source.Append(typeIndent).AppendLine("}");
 
         if (hasNamespace) {
             source.AppendLine("}");
         }
+    }
+
+    private static void AppendSerializer(
+        StringBuilder source,
+        DurableTypeModel model,
+        string fullyQualifiedTypeName,
+        string memberIndent) {
+        string nestedMemberIndent = memberIndent + "    ";
+        string statementIndent = nestedMemberIndent + "    ";
+        string continuationIndent = statementIndent + "    ";
+        const string ReadOnlyDictionaryType =
+            "global::System.Collections.Generic.IReadOnlyDictionary<global::System.Int32, global::System.Object?>";
+        const string DictionaryType =
+            "global::System.Collections.Generic.Dictionary<global::System.Int32, global::System.Object?>";
+
+        source.Append(memberIndent)
+            .Append("public static global::Atelia.DurableGraph.IDurableSerializer<")
+            .Append(fullyQualifiedTypeName)
+            .AppendLine("> Serializer { get; } =");
+        source.Append(memberIndent)
+            .Append("    new ")
+            .Append(GeneratedSerializerTypeName)
+            .AppendLine("();");
+        source.AppendLine();
+        source.Append(memberIndent)
+            .Append("private sealed class ")
+            .Append(GeneratedSerializerTypeName)
+            .Append(" : global::Atelia.DurableGraph.IDurableSerializer<")
+            .Append(fullyQualifiedTypeName)
+            .AppendLine("> {");
+        source.Append(nestedMemberIndent)
+            .Append("public global::Atelia.DurableGraph.DurableSchema Schema => ")
+            .Append(fullyQualifiedTypeName)
+            .AppendLine(".Schema;");
+        source.AppendLine();
+        source.Append(nestedMemberIndent)
+            .Append("public ")
+            .Append(ReadOnlyDictionaryType)
+            .Append(" Serialize(")
+            .Append(fullyQualifiedTypeName)
+            .AppendLine(" value) {");
+
+        if (model.Fields.Count == 0) {
+            source.Append(statementIndent)
+                .Append("return new ")
+                .Append(DictionaryType)
+                .AppendLine("();");
+        } else {
+            source.Append(statementIndent)
+                .Append("return new ")
+                .Append(DictionaryType)
+                .AppendLine(" {");
+
+            foreach (DurableFieldModel field in model.Fields) {
+                source.Append(continuationIndent)
+                    .Append('[')
+                    .Append(field.FieldId.ToString(CultureInfo.InvariantCulture))
+                    .Append("] = value.")
+                    .Append(EscapeIdentifier(field.Symbol.Name))
+                    .AppendLine(",");
+            }
+
+            source.Append(statementIndent).AppendLine("};");
+        }
+
+        source.Append(nestedMemberIndent).AppendLine("}");
+        source.AppendLine();
+        source.Append(nestedMemberIndent)
+            .Append("public ")
+            .Append(fullyQualifiedTypeName)
+            .Append(" Deserialize(")
+            .Append(ReadOnlyDictionaryType)
+            .AppendLine(" fields) {");
+        source.Append(statementIndent)
+            .AppendLine("global::System.ArgumentNullException.ThrowIfNull(fields);");
+        source.Append(statementIndent)
+            .Append(fullyQualifiedTypeName)
+            .AppendLine(" value =");
+        source.Append(continuationIndent)
+            .Append('(')
+            .Append(fullyQualifiedTypeName)
+            .Append(")global::System.Runtime.CompilerServices.RuntimeHelpers.GetUninitializedObject(")
+            .AppendLine();
+        source.Append(continuationIndent)
+            .Append("    typeof(")
+            .Append(fullyQualifiedTypeName)
+            .AppendLine("));");
+
+        foreach (DurableFieldModel field in model.Fields) {
+            source.Append(statementIndent)
+                .Append("value.")
+                .Append(EscapeIdentifier(field.Symbol.Name))
+                .Append(" = (")
+                .Append(field.FieldTypeName)
+                .Append(")fields[")
+                .Append(field.FieldId.ToString(CultureInfo.InvariantCulture))
+                .AppendLine("]!;");
+        }
+
+        source.Append(statementIndent).AppendLine("return value;");
+        source.Append(nestedMemberIndent).AppendLine("}");
+        source.Append(memberIndent).AppendLine("}");
     }
 
     private static string EscapeIdentifier(string identifier) {
@@ -520,10 +726,15 @@ public sealed class DurableSchemaGenerator : IIncrementalGenerator {
     }
 
     private readonly struct DurableFieldModel {
-        public DurableFieldModel(IFieldSymbol symbol, int fieldId, string typeTag) {
+        public DurableFieldModel(
+            IFieldSymbol symbol,
+            int fieldId,
+            string typeTag,
+            string fieldTypeName) {
             Symbol = symbol;
             FieldId = fieldId;
             TypeTag = typeTag;
+            FieldTypeName = fieldTypeName;
         }
 
         public IFieldSymbol Symbol { get; }
@@ -531,6 +742,8 @@ public sealed class DurableSchemaGenerator : IIncrementalGenerator {
         public int FieldId { get; }
 
         public string TypeTag { get; }
+
+        public string FieldTypeName { get; }
     }
 
     private readonly struct DurableTypeModel {

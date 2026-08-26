@@ -22,4 +22,4 @@
 
 | ID | 标题 | 状态 | 重访触发条件 |
 |---|---|---|---|
-| [DB-001](0001-schema-authority-and-runtime-representation.md) | Schema authority 与运行时表示 | Deferred | 首个 canonical format、exact generated codec 或持久化 SchemaStore 实验 |
+| [DB-001](0001-schema-authority-and-runtime-representation.md) | Schema authority 与运行时表示 | Deferred | 首个 canonical format、canonical-blob-bound generated codec 或持久化 SchemaStore 实验 |

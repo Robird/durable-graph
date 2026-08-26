@@ -55,6 +55,88 @@ public sealed class DurableSchemaGeneratorTests {
             schema.Fields);
     }
 
+    [Fact]
+    public void GeneratedSerializerRunsTheSchemaGatedStateStoreDemo() {
+        const string source = """
+            using Atelia.DurableGraph;
+
+            namespace Samples;
+
+            [DurableType("samples.person", version: 1)]
+            public sealed partial class Person : DurableBase {
+                [DurableField(1)] private bool _active;
+                [DurableField(2)] private int _age;
+                [DurableField(3)] private long _score;
+                [DurableField(4)] private string _name;
+                [Transient] private int _cachedRank = 123;
+
+                public Person(bool active, int age, long score, string name) {
+                    ConstructorCalls++;
+                    _active = active;
+                    _age = age;
+                    _score = score;
+                    _name = name;
+                }
+
+                public static int ConstructorCalls { get; private set; }
+                public bool Active => _active;
+                public int Age => _age;
+                public long Score => _score;
+                public string Name => _name;
+                public int CachedRank => _cachedRank;
+            }
+            """;
+        GeneratorTestRun run = RunGenerator(source);
+        Assert.DoesNotContain(run.GeneratorDiagnostics, IsError);
+        Assert.DoesNotContain(run.OutputCompilation.GetDiagnostics(), IsError);
+        string generatedSource = Assert.Single(run.GeneratedSources).SourceText.ToString();
+        Assert.Contains("RuntimeHelpers.GetUninitializedObject", generatedSource);
+        Assert.DoesNotContain("FormatterServices", generatedSource);
+
+        Assembly assembly = EmitAndLoad(run.OutputCompilation);
+        Type? personType = assembly.GetType("Samples.Person");
+        Assert.NotNull(personType);
+        object? sourceValue = Activator.CreateInstance(
+            personType,
+            new object?[] { true, 42, 900L, "Ada" });
+        Assert.NotNull(sourceValue);
+        PropertyInfo? serializerProperty = personType.GetProperty(
+            "Serializer",
+            BindingFlags.Public | BindingFlags.Static);
+        Assert.NotNull(serializerProperty);
+        object? serializer = serializerProperty.GetValue(null);
+        Assert.NotNull(serializer);
+        InMemoryStateStore stateStore = new();
+
+        InvokeStateStore(
+            stateStore,
+            nameof(InMemoryStateStore.Save),
+            personType,
+            "root",
+            sourceValue,
+            serializer);
+        object? loaded = InvokeStateStore(
+            stateStore,
+            nameof(InMemoryStateStore.Load),
+            personType,
+            "root",
+            serializer);
+
+        Assert.NotNull(loaded);
+        Assert.Equal(1, personType.GetProperty("ConstructorCalls")!.GetValue(null));
+        Assert.Equal(true, personType.GetProperty("Active")!.GetValue(loaded));
+        Assert.Equal(42, personType.GetProperty("Age")!.GetValue(loaded));
+        Assert.Equal(900L, personType.GetProperty("Score")!.GetValue(loaded));
+        Assert.Equal("Ada", personType.GetProperty("Name")!.GetValue(loaded));
+        Assert.Equal(0, personType.GetProperty("CachedRank")!.GetValue(loaded));
+
+        DurableSchema schema = Assert.IsType<DurableSchema>(
+            personType.GetProperty("Schema")!.GetValue(null));
+        Assert.Same(
+            schema,
+            stateStore.SchemaStore.GetRequired("samples.person", version: 1));
+    }
+
     [Theory]
     [MemberData(nameof(InvalidSources))]
     public void InvalidDurableDeclarationsFailWithPreciseDiagnostic(
@@ -139,6 +221,18 @@ public sealed class DurableSchemaGeneratorTests {
             },
             {
                 "DG0001",
+                DurableTypeSource(
+                    "[Transient] private int _value;",
+                    typeDeclaration: "public abstract partial class Example : DurableBase")
+            },
+            {
+                "DG0001",
+                DurableTypeSource(
+                    "[Transient] private int _value;",
+                    typeDeclaration: "public partial class Example : DurableBase")
+            },
+            {
+                "DG0001",
                 """
                 using Atelia.DurableGraph;
 
@@ -216,8 +310,31 @@ public sealed class DurableSchemaGeneratorTests {
                     "public static DurableSchema Schema => throw null!;")
             },
             {
+                "DG0008",
+                """
+                using Atelia.DurableGraph;
+
+                namespace Samples;
+
+                [DurableType("samples.schema", 1)]
+                public sealed partial class Schema : DurableBase {
+                    [Transient] private int _value;
+                }
+                """
+            },
+            {
                 "DG0009",
                 DurableTypeSource("[DurableField(1)] private static int _value;")
+            },
+            {
+                "DG0010",
+                DurableTypeSource(
+                    "[Transient] private int _value;\n" +
+                    "public static object Serializer => new object();")
+            },
+            {
+                "DG0011",
+                DurableTypeSource("[DurableField(1)] private readonly int _value;")
             },
         };
     }
@@ -282,6 +399,18 @@ public sealed class DurableSchemaGeneratorTests {
             string.Join(Environment.NewLine, result.Diagnostics));
 
         return Assembly.Load(assemblyStream.ToArray());
+    }
+
+    private static object? InvokeStateStore(
+        InMemoryStateStore stateStore,
+        string methodName,
+        Type durableType,
+        params object?[] arguments) {
+        MethodInfo method = Assert.Single(
+            typeof(InMemoryStateStore).GetMethods(BindingFlags.Public | BindingFlags.Instance),
+            candidate => candidate.Name == methodName);
+
+        return method.MakeGenericMethod(durableType).Invoke(stateStore, arguments);
     }
 
     private static bool IsError(Diagnostic diagnostic) {

@@ -13,3 +13,5 @@ DG0006 | DurableGraph.Generator | Error | Duplicate durable field ID
 DG0007 | DurableGraph.Generator | Error | Unsupported durable field type
 DG0008 | DurableGraph.Generator | Error | Existing Schema member
 DG0009 | DurableGraph.Generator | Error | Classified static field
+DG0010 | DurableGraph.Generator | Error | Reserved serializer member collision
+DG0011 | DurableGraph.Generator | Error | Readonly durable field

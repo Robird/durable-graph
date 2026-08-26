@@ -20,7 +20,7 @@
 
 记录日期：2026-08-27
 
-- **Observed**：仓库已加入元数据 Attribute 契约、wire-format-independent Schema 值模型、内存 SchemaStore 和首个 Schema Source Generator；尚无对象身份、StateStore、升级器或持久化实现。
+- **Observed**：仓库已跑通 boxed-value 的内存 Save/Load demo：包含元数据契约、Schema 值模型、内存 SchemaStore/StateStore，以及生成 Schema 与 Serializer 的 Source Generator；尚无对象身份、升级器、wire format 或持久化实现。
 - **Observed**：`DurableGraph.slnx` 包含 `DurableGraph`、`DurableGraph.Generator`、`DurableGraph.Cli` 和 `DurableGraph.Tests`。
 - **Observed**：核心库将 Generator 作为 Roslyn analyzer 引用；CLI 引用核心库；测试项目引用核心库和 Generator。
 - **Observed**：运行时项目和测试项目目标框架为 `net10.0`；Generator 为兼容 Roslyn 加载而目标框架为 `netstandard2.0`。
@@ -39,12 +39,13 @@
 - Schema 值模型：提供 `TypeTag`、`DurableFieldInfo` 和 `DurableSchema`。
 - 内存 SchemaStore：提供 exact version 注册、查询、幂等和冲突语义。
 - Schema Generator：从受限的 durable class/field 声明生成静态 `DurableSchema`。
+- Boxed State demo：由 generated serializer 驱动 `InMemoryStateStore`，验证 Schema-first Save 与 validate-before-Deserialize。
 - Candidate design branches：在 `docs/design-branches/` 隔离尚未裁决的架构分叉。
 - 本实验簿：保存随实验演化的项目认识。
 
 ### 后续方向
 
-- **Open**：下一实验应先做 generated Schema 的注册/发现、版本升级路径注册，还是带 Schema key 的内存 StateStore/load orchestration。
+- **Open**：下一实验应转向版本升级路径注册、canonical schema binding，还是 durable object identity。
 - **Open**：Schema runtime representation 与 canonical authority 的候选分叉记录在 `DB-001`，等待 exact codec/persistent format 实验裁决。
 - **Open**：哪些类型和 API 最终属于核心程序集，等待真实代码形状出现后再判断。
 
@@ -215,6 +216,54 @@
 - `src/DurableGraph.Generator/AnalyzerReleases.Unshipped.md`
 - `tests/DurableGraph.Tests/DurableSchemaGeneratorTests.cs`
 
+### EXP-005：Schema-gated boxed State round-trip
+
+状态：Concluded
+
+日期：2026-08-27
+
+问题：能否用刻意潦草的进程内 State 表示，首次跑通“generated serializer → Save 自动登记 Schema → Load 先校验 Schema → generated deserializer”的闭环？
+
+本轮明确不回答：
+
+- wire format、跨进程/重启持久化、durability、事务和并发。
+- DurableId、共享引用、循环图、collections、properties 与继承字段。
+- 旧版本自动升级、upgrade registry、RebuildTransient 和对象图 invariant validation。
+- malformed/untrusted boxed payload 的完整错误模型。
+
+最小实验：
+
+- `IDurableSerializer<T>` 暴露 exact Schema、FieldId → boxed value 的 Serialize，以及反向 Deserialize。
+- `InMemoryStateStore` 用 ordinal string slot 保存 `(SchemaId, Version, boxed fields)`；slot 明确不是 DurableId。
+- Save 在调用 serializer 和替换 State 前注册 Schema。
+- Load 在调用 deserializer 前校验 stored exact Schema 的 identity、version 和 shape。
+- Generator 在 `Schema` 旁生成静态 `Serializer`，支持当前四种 scalar TypeTag。
+- generated Deserialize 使用 `RuntimeHelpers.GetUninitializedObject` 创建实例并直接填充 durable fields。
+
+观察：
+
+- **Decided**：不使用 obsolete 的 `FormatterServices.GetUninitializedObject`；.NET 10 路径使用官方替代 `RuntimeHelpers.GetUninitializedObject`。
+- **Observed**：只有带参构造的动态测试类型可成功恢复；Load 不再次运行构造器或 field initializer。
+- **Observed**：所有 durable fields 由生成代码赋值，transient field 保持零值；尚无 RebuildTransient。
+- **Observed**：Schema conflict 在 Serialize 前失败；serialization failure 不覆盖旧 State；Load mismatch 在 Deserialize 前失败。
+- **Decided**：当前 boxed fields 是浅拷贝的 `Dictionary<int, object?>`，仅用于同进程流程实验，不构成 serialization 或 persistence 证据。
+- **Decided**：当前不支持继承，durable type 必须 sealed，防止派生实例经基类 serializer 静默截断。
+- **Decided**：readonly durable field 被 DG0011 拒绝；generated deserializer 必须能直接写入全部 durable fields。
+- **Observed**：缺失 FieldId 或 boxed type 错误由 dictionary/cast 自然失败，多余字段被忽略；这些不是最终 malformed-input contract。
+- **Open**：当前 Deserialize 在读取全部字段前分配未初始化对象。内存 Store 正常路径不会产生 malformed boxed state，但持久化或不可信输入阶段必须先读入/验证全部 locals，再分配对象，避免带 finalizer 的半初始化对象产生可观察行为。
+- **Observed**：独立审查发现并促成 sealed-type 和 enclosing type named `Schema` 两个 fail-closed 修复；复审后无 blocking 或 medium finding。
+
+结论：第一个 Schema-gated State round-trip demo 成立；solution 构建为 0 warning / 0 error，71 个测试全部通过。
+
+相关源码/测试：
+
+- `src/DurableGraph/IDurableSerializer.cs`
+- `src/DurableGraph/InMemoryStateStore.cs`
+- `src/DurableGraph/StateSchemaMismatchException.cs`
+- `src/DurableGraph.Generator/DurableSchemaGenerator.cs`
+- `tests/DurableGraph.Tests/InMemoryStateStoreTests.cs`
+- `tests/DurableGraph.Tests/DurableSchemaGeneratorTests.cs`
+
 ## 5. 实验记录模板
 
 后续实验按需增加条目，不要求为了形式填写无意义内容。
@@ -236,6 +285,13 @@
 ```
 
 ## 6. 船长日志
+
+### 2026-08-27：完成 EXP-005 boxed State round-trip
+
+- 新增 `InMemoryStateStore` 与 boxed serializer runtime seam，固定 Schema-first Save 和 validate-before-Deserialize。
+- Generator 产生 `Serializer`，通过 `RuntimeHelpers.GetUninitializedObject` 绕过构造器并恢复四种 scalar field。
+- 用 sealed-type、readonly field 和生成成员冲突 diagnostics 保持当前不支持范围 fail closed。
+- 明确 boxed dictionary、零值 transient 和 allocation-before-validation 均是原型边界，不是持久化承诺。
 
 ### 2026-08-27：建立候选设计分叉库
 

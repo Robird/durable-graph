@@ -31,6 +31,7 @@ Schema 的正常运行时表示是否应该长期保持为强类型 `DurableSche
 ## 当前证据
 
 - 当前 Generator、`InMemorySchemaStore` 和测试直接消费 `DurableSchema`。
+- EXP-005 已生成 boxed serializer，并由 `InMemoryStateStore` 在调用它前比较 typed Schema；由于仍无 canonical blob/hash binding，这只证明当前模型能支撑 demo，尚不能裁决长期 runtime representation。
 - 强类型模型已经验证字段排序、构造期校验、结构相等和 field-level inspection。
 - 目前没有持久化 SchemaStore、canonical format、SchemaHash、generated codec registry 或历史数据。
 - 当前 typed Schema 每个 durable type 只进行一次静态初始化；没有启动时间或内存瓶颈测量。
@@ -111,7 +112,7 @@ canonical bytes/hash       durable authority
 满足任一条件时重开本分叉：
 
 1. 开始定义首个 persistent SchemaStore 或 canonical SchemaHash。
-2. Generator 开始产生与 exact Schema 绑定的 serializer/deserializer/materializer。
+2. Generator 开始产生与 canonical blob/hash exact 绑定的 serializer/deserializer/materializer。
 3. 版本升级流程需要按 FieldId 动态遍历历史 Schema。
 4. CLI、救援或 Coding Agent 工具出现真实 field-level diff/inspection consumer。
 5. 测量证明 static typed Schema 初始化或常驻内存形成瓶颈。
