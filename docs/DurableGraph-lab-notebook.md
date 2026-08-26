@@ -20,7 +20,7 @@
 
 记录日期：2026-08-27
 
-- **Observed**：仓库已加入元数据 Attribute 契约、wire-format-independent Schema 值模型和内存 SchemaStore；尚无 Source Generator、对象身份、StateStore 或持久化实现。
+- **Observed**：仓库已加入元数据 Attribute 契约、wire-format-independent Schema 值模型、内存 SchemaStore 和首个 Schema Source Generator；尚无对象身份、StateStore、升级器或持久化实现。
 - **Observed**：`DurableGraph.slnx` 包含 `DurableGraph`、`DurableGraph.Generator`、`DurableGraph.Cli` 和 `DurableGraph.Tests`。
 - **Observed**：核心库将 Generator 作为 Roslyn analyzer 引用；CLI 引用核心库；测试项目引用核心库和 Generator。
 - **Observed**：运行时项目和测试项目目标框架为 `net10.0`；Generator 为兼容 Roslyn 加载而目标框架为 `netstandard2.0`。
@@ -38,11 +38,14 @@
 - 空项目骨架：提供最小构建、测试、Generator 和 CLI 边界。
 - Schema 值模型：提供 `TypeTag`、`DurableFieldInfo` 和 `DurableSchema`。
 - 内存 SchemaStore：提供 exact version 注册、查询、幂等和冲突语义。
+- Schema Generator：从受限的 durable class/field 声明生成静态 `DurableSchema`。
+- Candidate design branches：在 `docs/design-branches/` 隔离尚未裁决的架构分叉。
 - 本实验簿：保存随实验演化的项目认识。
 
 ### 后续方向
 
-- **Open**：下一实验应先做 Generator 最小链路、版本升级路径注册，还是带 Schema key 的内存 StateStore/load orchestration。
+- **Open**：下一实验应先做 generated Schema 的注册/发现、版本升级路径注册，还是带 Schema key 的内存 StateStore/load orchestration。
+- **Open**：Schema runtime representation 与 canonical authority 的候选分叉记录在 `DB-001`，等待 exact codec/persistent format 实验裁决。
 - **Open**：哪些类型和 API 最终属于核心程序集，等待真实代码形状出现后再判断。
 
 ## 4. 实验记录
@@ -169,6 +172,49 @@
 - `src/DurableGraph/SchemaNotFoundException.cs`
 - `tests/DurableGraph.Tests/InMemorySchemaStoreTests.cs`
 
+### EXP-004：首个 DurableSchema Source Generator
+
+状态：Concluded
+
+日期：2026-08-27
+
+问题：能否从最小 durable class 声明生成可执行的静态 `DurableSchema`，并在编译期拒绝当前契约内的不明确字段？
+
+本轮明确不回答：
+
+- properties、auto-property backing field、继承字段、嵌套/泛型/record durable type。
+- nullability、collection、durable reference 和用户自定义 value type。
+- serializer/deserializer、SchemaHash、Store 自动注册和跨类型 Schema key 冲突。
+- 历史版本升级路径与 State load orchestration。
+
+最小实验：
+
+- 实现 `DurableSchemaGenerator : IIncrementalGenerator`。
+- 支持顶层、非泛型、非 record、`partial` 且直接继承 `DurableBase` 的 class。
+- 要求直接声明的实例 field 恰好具有 `[DurableField]` 或 `[Transient]`。
+- 把 `bool`、`int`、`long`、`string` 映射为现有 TypeTag。
+- 为每个合法类型生成公共静态 `Schema` 属性。
+- 用 DG0001-DG0009 覆盖类型形状、Schema metadata、字段分类、FieldId、field type、成员冲突和静态字段误标。
+
+观察：
+
+- **Decided**：Generator 不引用 runtime project，避免 `DurableGraph -> Generator -> DurableGraph` 循环；它按 metadata name 识别契约，并在生成代码中使用全限定 runtime 类型名。
+- **Decided**：一次 compilation 生成单一 `DurableSchemas.g.cs`；类型按完全限定名排序，字段按 FieldId 排序，换行统一为 LF。
+- **Observed**：Generator-driver 测试能编译输入源码、运行 Generator、emit 动态程序集，并从生成的静态属性读回正确 `DurableSchema`。
+- **Observed**：仅比较简单类型名和 namespace 会误认同 namespace 下的嵌套 lookalike；metadata matcher 已收紧为拒绝 containing type，并有 DurableBase/Attribute 回归测试。
+- **Observed**：单个非法 durable type 只抑制自身生成，不妨碍同 compilation 中其他合法类型。
+- **Decided**：当前直接继承限制使继承字段语义保持关闭；尚未设计前不得静默遍历用户基类。
+- **Observed**：auto-property 等合成存储目前被忽略，符合本轮 field-only 非目标，但仍是后续必须显式裁决的边界。
+- **Observed**：独立只读审查在修复 metadata lookalike 问题后批准实现，无 blocking 或 medium finding。
+
+结论：首个 Schema Generator walking skeleton 成立；solution 构建为 0 warning / 0 error，58 个测试全部通过。
+
+相关源码/测试：
+
+- `src/DurableGraph.Generator/DurableSchemaGenerator.cs`
+- `src/DurableGraph.Generator/AnalyzerReleases.Unshipped.md`
+- `tests/DurableGraph.Tests/DurableSchemaGeneratorTests.cs`
+
 ## 5. 实验记录模板
 
 后续实验按需增加条目，不要求为了形式填写无意义内容。
@@ -190,6 +236,18 @@
 ```
 
 ## 6. 船长日志
+
+### 2026-08-27：建立候选设计分叉库
+
+- 建立 `docs/design-branches/`，把尚未获得足够证据的竞争方案与实验结论、正式决定分开。
+- `DB-001` 记录 typed `DurableSchema` 与 canonical schema blob 的 authority/runtime representation 分叉。
+
+### 2026-08-27：完成 EXP-004 Schema Generator walking skeleton
+
+- 生成每个合法 durable type 的静态 `Schema`，并固定首批四种 scalar TypeTag 映射。
+- 落地 DG0001-DG0009 fail-closed diagnostics 和 Roslyn 动态编译/emit 测试。
+- 经独立审查修复嵌套 lookalike metadata 误认，补齐类型/字段顺序确定性证据。
+- 保持 properties、继承、Store registration、SchemaHash 和 serialization 在本轮范围之外。
 
 ### 2026-08-27：完成 EXP-003 内存 SchemaStore
 

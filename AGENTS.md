@@ -34,6 +34,8 @@
 ## Working memory
 
 - Maintain `docs/DurableGraph-lab-notebook.md` when an experiment produces a material result, changes direction, or leaves an important unresolved question.
+- Record unresolved architectural alternatives in `docs/design-branches/`, keep its index current, and label each branch so it cannot be mistaken for an accepted design.
 - Keep the notebook concise and evidence-oriented. It is not a transcript and must not contain private reasoning, credentials, or incidental command output.
 - Update an earlier tentative statement when it becomes decided or rejected; preserve enough context to explain why.
-- Split the notebook into `docs/experiments/` or ADRs only when the single file becomes difficult to navigate or a decision becomes stable enough to deserve its own artifact.
+- Promote a branch to an ADR only after evidence selects it; rejected or superseded branches should retain the reason and pointer to the succeeding decision.
+- Split the notebook into `docs/experiments/` only when the single file becomes difficult to navigate.
