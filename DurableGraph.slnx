@@ -1,0 +1,10 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/DurableGraph.Cli/DurableGraph.Cli.csproj" />
+    <Project Path="src/DurableGraph.Generator/DurableGraph.Generator.csproj" />
+    <Project Path="src/DurableGraph/DurableGraph.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/DurableGraph.Tests/DurableGraph.Tests.csproj" />
+  </Folder>
+</Solution>

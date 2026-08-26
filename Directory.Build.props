@@ -1,0 +1,8 @@
+<Project>
+  <PropertyGroup>
+    <!-- 默认程序集名、命名空间、包名均为 Atelia.{项目名} -->
+    <AssemblyName>Atelia.$(MSBuildProjectName)</AssemblyName>
+    <RootNamespace>Atelia.$(MSBuildProjectName)</RootNamespace>
+    <PackageId>Atelia.$(MSBuildProjectName)</PackageId>
+  </PropertyGroup>
+</Project>
