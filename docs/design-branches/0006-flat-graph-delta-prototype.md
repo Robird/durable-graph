@@ -1,10 +1,10 @@
 # DB-006：Flat Graph Delta 原型
 
-> 状态：Chosen for current prototype；R1/R2/R3a Concluded
+> 状态：Chosen for current prototype；R1/R2/R3a/R3b Concluded
 > 创建日期：2026-08-27  
 > 当前实验选择：latest typed Snapshot baseline、flat ID table、per-entry `RequiresRewrite`、whole-object Upsert、single-root iterative traversal、success-only baseline replacement。  
 > 边界：此选择只固定下一实验的问题与不变量；不冻结 public API、正式 DurableId、异构 Snapshot 容器、wire format、persistent Store 或 commit protocol。
-> 实现状态：EXP-011 已完成 R1，EXP-012 已完成隔离 R2，EXP-013 已完成 test-only StoredGraphImage normalization R3a。production runtime、默认 Generator 与 package 尚未获得 reference graph 能力。
+> 实现状态：EXP-011 已完成 R1，EXP-012 已完成隔离 R2，EXP-013/014 已完成 test-only normalization/materialization R3a/R3b。production runtime、默认 Generator 与 package 尚未获得 reference graph 能力。
 
 ## 1. 问题
 
@@ -64,7 +64,13 @@ stored exact Schema validation
 
 EXP-013 已在 fixture 中验证该层：record-table keys 是唯一 `SourceRecordIds`；全表 exact Schema/payload-variant preflight 先于任何 Decode；V1 typed handler 只产出 current `ProbeSnapshot`；decode/upgrade/reference failure 均不返回 partial baseline。该证据不是 persistent authority 或产品 Load API。
 
-### 3.3 Comparison layer
+### 3.3 Materialization layer
+
+EXP-014 从 normalized baseline 的 RootId 出发，只计算 current reachable closure；先为每个 reachable ID 分配唯一 CLR placeholder，再统一 hydrate scalar 与 references，全部成功后只返回 root。disconnected source entries 不分配，仍留在 baseline 供下一次 Save 分类。
+
+materialized root 是可丢弃 working graph，不是 authority、object table 或 cache。`RequiresRewrite` 不进入领域对象。未来 `RebuildTransient`/graph invariant phase 若加入，root exposure 必须顺延到其成功之后。
+
+### 3.4 Comparison layer
 
 comparison layer 从 current domain root 遍历 CLR graph，与 normalized baseline 按 DurableId 比较，产生 logical `GraphDelta`。它不读磁盘 delta chain，也不解释 historical Schema。
 
@@ -351,6 +357,8 @@ VisitReferences(in CapturedReferences, Action<T>)
 | Reference TypeTag/history representation | Defer；默认严格 history 仍只有 1...4 |
 | production Generator graph adapter | Defer；EXP-012 默认不可发现 |
 | test-only StoredGraphImage normalizer | Keep as R3a evidence；不提升为产品 API |
+| root-only two-pass materializer | Keep as R3b evidence；不暴露 placeholder map |
+| materialized CLR graph ownership | Disposable working graph；不是 baseline/StateMap authority |
 | heterogeneous graph/type-erased Snapshot table | Defer |
 | 同 ID 更换 Schema identity | Future heterogeneous gate；预期 fail closed |
 | inheritance/value struct/collections | Separate experiments |
@@ -450,24 +458,59 @@ VisitReferences(in CapturedReferences, Action<T>)
 
 本实验仍未证明：
 
-- R3b allocate-all/hydrate-all、sharing/cycle `ReferenceEquals` 或 transient rebuild；
+- EXP-013 自身未证明 R3b allocate-all/hydrate-all；该 gap 随后由 EXP-014 回答；transient rebuild 仍未证明；
 - product Reference TypeTag、Generator/Store integration 或 historical bytes；
 - heterogeneous graph、upgrade-created node、StateMap/head、commit 或 persistence；
 - 对 decode/upgrade handler 外部 side effect 的 rollback。
 
-结论：R3a normalization state law 成立。下一主线入口是 roadmap R3b normalized baseline → current CLR graph；不要把 fixture Schema/StoredGraphImage 当作 durable format。
+结论：R3a normalization state law 成立。该 baseline 随后成为 EXP-014 materialization 输入；不要把 fixture Schema/StoredGraphImage 当作 durable format。
 
-## 17. 重访触发条件
+## 17. EXP-014 实验结果
+
+实现位置：
+
+- `tests/DurableGraph.Tests/NormalizedGraphMaterializationProbe.cs`
+- `tests/DurableGraph.Tests/NormalizedGraphMaterializationProbeTests.cs`
+- `tests/DurableGraph.Tests/GraphDeltaProbe.cs` 中的 one-time hydration seam。
+
+观察：
+
+- **Observed**：materializer 用显式 stack 计算 current RootId closure；baseline 中 disconnected source ID 不 allocation/hydration，也不从 baseline 删除。
+- **Observed**：第一轮为每个 reachable ID 产生唯一 `RuntimeHelpers.GetUninitializedObject` placeholder；第二轮才解析完整 ID table 并 hydrate，phase tests 不依赖 ID 枚举顺序。
+- **Observed**：shared Next/Alias 恢复同一 CLR instance；self-cycle 与 two-node cycle 均以 `ReferenceEquals` 恢复；scalar/null refs 使用 literal assertions 验证。
+- **Observed**：正常 constructor/field initializer 被绕过，transient/CaptureHook 保持零值；one-time hydration seam 拒绝正常构造节点或已绑定 identity 的节点再次 hydrate。
+- **Observed**：R3a historical root materialize 后仍由 baseline `RequiresRewrite` 驱动 R1 whole-object Upsert；disconnected source row 进入 Unreachable，flag 不进入 CLR object。
+- **Observed**：late allocator failure 与 late hydration failure 都不返回 root，保存 outer phase/id/inner exception，baseline 不变；同一 baseline retry 重新执行完整两阶段。重复成功 materialization 返回互不共享的 fresh graphs。
+- **Observed**：fault-injection phase hook 只接收 `(Phase, Id)`，不暴露 placeholder/map；可插拔 allocator 仅为 internal test seam，默认仍是 `GetUninitializedObject`。
+- **Observed**：独立 correctness/test-evidence review 找到并促成真实 allocator-boundary fault injection 与去除 ID sorting；最终无 blocker/medium。
+
+验证：
+
+- R3b 聚焦测试：7/7 passed。
+- 完整 solution/test/format/package 结果在实验簿 EXP-014 中记录。
+
+本实验仍未证明：
+
+- `RebuildTransient`、graph invariant validation 或其失败时的 exposure gate；
+- product DurableId 的 constructor-bypass one-time binding API；
+- product Generator/Reference TypeTag、heterogeneous materialization、StateMap/cache 或 bytes；
+- allocation/throughput/stack/memory 性能。
+
+结论：R3b root-only two-pass materialization state law 成立。下一主线仍是 roadmap R4 logical StateMap/delta apply；R5–R7 顺序不变。
+
+## 18. 重访触发条件
 
 - 首个 probe 证明或推翻 flat baseline / whole-object delta laws；
 - production Generator 开始支持第一个 durable reference field；
+- 正式 identity 需要在 constructor-bypassed CLR instance 上一次性绑定；
+- 引入 `RebuildTransient` 或 graph-level invariant validation；
 - historical upgrade 需要改变引用或创建新 durable node；
 - 出现第二个 durable node type，需要异构 dispatch 和 Schema identity gate；
 - 开始设计 logical/persistent StateMap 与 exact head；
 - 开始定义 canonical object-record bytes；
 - 性能数据表明 materialized baseline 或 O(live graph) traversal 不可接受。
 
-## 18. 相关材料
+## 19. 相关材料
 
 - `docs/DurableGraph-research-roadmap.md`
 - `docs/design-branches/0002-read-time-version-upgrade-pipeline.md`

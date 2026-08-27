@@ -7,7 +7,7 @@
 
 ## 1. 当前出发点
 
-截至 EXP-013，仓库已经证明：
+截至 EXP-014，仓库已经证明：
 
 - 四种 scalar field 可以通过 generated boxed serializer 保存和加载；
 - stored exact Schema 在 payload decode 前 fail closed；
@@ -17,6 +17,7 @@
 - fixture-only EXP-011 已证明单类型 flat baseline、identity-aware traversal、whole-object delta、`RequiresRewrite` 与 success-only clean baseline 的逻辑状态律。
 - isolated EXP-012 已证明 Source Generator 可以为单个 direct-self-reference 类型产生强类型 current Snapshot capture、durable equality 与同次字段读取得到的 reference visitation，并与 EXP-011 oracle 对齐。
 - fixture-only EXP-013 已证明 mixed-version StoredGraphImage 可以在全表 exact preflight 后，通过强类型 decode/upgrade 归一化为保留完整 SourceRecordIds 的 current-Snapshot baseline；decode、upgrade 或 reference failure 不返回 partial baseline。
+- fixture-only EXP-014 已证明 normalized current-Snapshot baseline 可以按 current root closure allocate-all/hydrate-all，恢复 scalar、sharing 与 cycles；disconnected source rows 不物化，allocation/hydration failure 不返回 root 且可重试。
 
 当前尚未实现：
 
@@ -33,7 +34,7 @@
 
 ### 2.1 先闭合 logical graph 语义，再固定 bytes
 
-R1/R2 已回答 current graph capture/delta，R3a 已回答 historical records 到 normalized baseline。下一主线优先回答 R3b：能否从 normalized current Snapshots allocate-all/hydrate-all，恢复 sharing/cycle CLR graph 而不暴露 partial root？
+R1/R2 已回答 current graph capture/delta，R3a/R3b 已闭合 historical records → normalized baseline → current CLR root。下一主线进入 R4：验证 logical StateMap、record reuse 与 repeated delta apply。
 
 继续使用 test-only 内存逻辑值。`BinaryReader` / `BinaryWriter` 只在 logical Load/materialize/delta 状态律闭合后介入，避免过早冻结 framing、引用编码、canonical order 和 malformed-input contract。
 
@@ -84,7 +85,7 @@ unchanged object 的旧 record address 由 authoritative StateMap 提供；不�
 R1 Graph Delta semantic probe (Concluded)
     -> R2 generated graph operations (Concluded)
     -> R3a normalized flat-graph Load (Concluded)
-    -> R3b two-pass CLR hydrate
+    -> R3b two-pass CLR hydrate (Concluded)
     -> R4 in-memory StateMap and repeated logical delta apply
     -> R5 binary codec for the proven logical IR
     -> R6 persistent publication and recovery
@@ -148,7 +149,7 @@ VisitReferences(in CapturedReferences, Action<T>)
 
 ### R3：读取归一化与两阶段对象图物化
 
-状态：R3a Concluded（EXP-013）；R3b 尚未开始。
+状态：R3a Concluded（EXP-013）；R3b Concluded（EXP-014）。
 
 问题：能否把 exact historical records 全量归一化成 current Snapshot table，并恢复共享引用和循环 CLR graph？
 
@@ -175,19 +176,21 @@ baseline 的 ID set 保留 `SourceRecordIds`。升级可能删除引用，使其
 
 可执行结果：9 个聚焦 tests 覆盖 mixed/reversed records、value-changing/value-preserving upgrades、全表 schema-before-decode、unknown version、payload variant mismatch、missing handler、decode/upgrade late failure 与同 image retry、current/upgraded/default external reference、结构/defensive-copy gate，以及升级删边后保留 source entry 并交给 R1 Save 判为 Unreachable。
 
-本切片只保证 loader 不修改输入、不返回 partial baseline；用户 decode/upgrade hook 自身的外部副作用不具备回滚语义。下一步若继续主线，应进入 R3b，而不是把 StoredGraphImage 或 probe Schema 提升为产品 API。
+本切片只保证 loader 不修改输入、不返回 partial baseline；用户 decode/upgrade hook 自身的外部副作用不具备回滚语义。该 current-Snapshot baseline 随后成为 R3b 输入；StoredGraphImage 与 probe Schema 仍未提升为产品 API。
 
 #### R3b：normalized baseline → current CLR graph
 
-最小流程：
+已验证流程：
 
 1. 从 normalized current references 计算 `CurrentReachableIds`；
 2. allocate-all reachable CLR placeholders；
 3. hydrate-all scalar fields and references；
 4. 验证共享引用和循环；
-5. 最后才允许未来的 transient rebuild / invariant phase 介入。
+5. 全部成功后只返回 root，不暴露 placeholder map。
 
-可执行闸门：sharing/self-cycle/two-node cycle 在 materialize 后恢复 `ReferenceEquals`；缺失目标 ID 不暴露 partial graph；R3a 中因升级变得不可达的 source entries 不进入 exposed current root closure。
+可执行结果：7 个聚焦 tests 覆盖 R3a→R3b→R1 组合路径、allocate-all-before-hydrate-all、shared alias、self-cycle、two-node cycle、disconnected source skip、constructor/initializer bypass、transient zero、one-time identity bind、重复物化不缓存，以及 late allocator/hydration failure 的 no-root 与 retry。invalid/dangling baseline 由 `NormalizedBaselineGraph` 在进入 materializer 前拒绝。
+
+materialized root 是可丢弃 working graph，不是 baseline、StateMap 或第二 authority；`RequiresRewrite` 不进入 CLR object，只影响后续 Save。当前 phase hook 与 allocator 都是 test-only fault-injection seam，且不暴露 placeholder。未来若加入 `RebuildTransient` 或 graph invariant validation，root exposure boundary 必须顺延到这些阶段全部成功之后。
 
 ### R4：内存 StateMap 与重复逻辑 delta apply
 
@@ -197,9 +200,10 @@ baseline 的 ID set 保留 `SourceRecordIds`。升级可能删除引用，使其
 
 - current logical StateMap，保存 ID 到 logical object-record 的绑定；
 - 与该 StateMap 同源的 normalized projection；
+- 初始 source StateMap 允许包含因 read-time upgrade 改边而相对 current root disconnected 的 rows，以及对应 rewrite obligations；
 - unchanged ID 继承旧 record，Upsert 产生新 record，Unreachable 不进入新 StateMap；
 - delta 按测试给定的顺序依次 apply；
-- candidate failure 不替换旧 StateMap/baseline。
+- candidate failure 不替换旧 StateMap/baseline；成功 apply 后安装 exact result-root closure 与 clean baseline。
 
 可执行闸门：
 
@@ -209,9 +213,12 @@ SequentialApply(base, delta1, ..., deltaN)
 
 LoadNormalized(logical StateMap N)
     == expected current Snapshot table
+
+Materialize(LoadNormalized(logical StateMap N))
+    == expected current CLR root closure
 ```
 
-这一阶段只验证逻辑 state transition，不让 delta 脱离当前顺序独立应用，也不承诺 revision、文件布局、原子 publish 或 durability。
+R4 的首个组合场景应从“disconnected source rows + reachable rewrite obligations”开始，证明 apply 后 StateMap 恰好成为 result-root closure。该阶段只验证逻辑 state transition，不让 delta 脱离当前顺序独立应用，也不承诺 revision、文件布局、原子 publish 或 durability。
 
 ### R5：为已证明的逻辑 IR 增加 binary codec
 

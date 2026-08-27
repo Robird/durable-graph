@@ -30,7 +30,9 @@ internal sealed class ProbeNode {
         Value = value;
     }
 
-    internal ProbeId Id { get; }
+    internal ProbeId Id { get; private set; }
+
+    internal bool ConstructorWasRun { get; } = true;
 
     internal int Value { get; set; }
 
@@ -41,6 +43,24 @@ internal sealed class ProbeNode {
     internal int TransientValue { get; set; }
 
     internal Action<ProbeNode>? CaptureHook { get; set; }
+
+    internal void HydrateForMaterialization(
+        ProbeId id,
+        in ProbeSnapshot snapshot,
+        ProbeNode? next,
+        ProbeNode? alias) {
+        if (ConstructorWasRun || Id.Value > 0) {
+            throw new InvalidOperationException(
+                "Only an uninitialized, unbound probe node can be hydrated.");
+        }
+
+        ProbeIdValidation.ThrowIfInvalid(id, nameof(id));
+
+        Id = id;
+        Value = snapshot.Value;
+        Next = next;
+        Alias = alias;
+    }
 }
 
 internal readonly record struct ProbeSnapshot(
