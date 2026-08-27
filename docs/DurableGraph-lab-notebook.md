@@ -20,7 +20,7 @@
 
 记录日期：2026-08-27
 
-- **Observed**：仓库已跑通 boxed-value 的内存 Save/Load demo：包含元数据契约、Schema 值模型、内存 SchemaStore/StateStore，以及生成 Schema 与 Serializer 的 Source Generator；尚无对象身份、升级器、wire format 或持久化实现。
+- **Observed**：仓库已跑通 boxed-value 的内存 Save/Load 与 read-time upgrade demo：包含元数据契约、Schema 值模型、内存 SchemaStore/StateStore、Snapshot History，以及生成 version-aware Serializer 与静态相邻升级链的 Source Generator；尚无对象身份、wire format 或持久化实现。
 - **Observed**：`DurableGraph.slnx` 包含 runtime、Generator、Build tool、CLI 和 Tests 五个项目；Build tool 是随 NuGet 包部署的私有 snapshot-history publisher/verifier，不承载运行时持久化语义。
 - **Observed**：核心库将 Generator 作为 Roslyn analyzer 引用；CLI 引用核心库；测试项目引用核心库和 Generator。
 - **Observed**：运行时项目和测试项目目标框架为 `net10.0`；Generator 为兼容 Roslyn 加载而目标框架为 `netstandard2.0`。
@@ -43,14 +43,15 @@
 - Source Generator history feedback probe：隔离证明 `AddSource` 不会自行反馈为后续 `AdditionalFiles`，但显式 post-compile publisher 可以形成下一轮可见的 Snapshot History。
 - Snapshot upgrade shape probe：固定 ordinary struct、`in/out`、partial implementation、definite assignment 与 overload 的 C# 语义边界。
 - Package-delivered Snapshot History：单一 `Atelia.DurableGraph` 包向直接消费者交付 runtime、Generator、MSBuild 自动接入与私有 Build tool，并由真实 PackageReference probe 验证。
+- Generated read-time upgrade：按 stored version 只分派一次，随后以强类型 Snapshot locals 和 required partial 相邻 handler 直达 current domain object；Load 不隐式写回。
 - Candidate design branches：在 `docs/design-branches/` 隔离尚未裁决的架构分叉。
 - 本实验簿：保存随实验演化的项目认识。
 
 ### 后续方向
 
-- **Decided**：下一阶段先设计读取时自动尝试升级旧版本；Load 本身不回写，显式 Save 才保存升级后的当前版本对象。
+- **Observed**：读取阶段的闭世界升级管线已经落地；Load 本身不回写，显式 Save 才保存升级后的当前版本对象。
 - **Decided**：首轮升级机制只支持唯一相邻版本链 `V1 → V2 → V3`；出现真实跳版或分支消费者前不引入一般图。
-- **Tentative**：在所有历史版本都属于当前 compilation 的闭世界模型中，生成 ordinary struct Snapshot、exact-version switch，以及 required partial `void UpgradeV1ToV2(in old, out next)` direct call；暂缓 runtime historical binding/upgrade registry。
+- **Decided**：每个 stored version 生成一个静态直达 current 的入口协调器；入口只有一次 version switch，随后使用 ordinary struct Snapshot 与 required partial `void UpgradeV1ToV2(in old, out next)` direct calls。runtime historical binding/upgrade registry 继续暂缓。
 - **Tentative**：快速原型的 local real build 自动 append checked-in Snapshot History；CI/design-time 只读，单 writer/单 TargetFramework/串行发布。显式 Accept target 记录为竞争分支。
 - **Observed**：上述 local publish/CI verify 快速原型已由包内 `build/*.props/targets` 和 `DurableGraph.Build` 落地；其工作流已实现，但 snapshot 格式和发布模型仍是可替换的原型边界。
 - **Decided**：继续关闭 durable 领域继承；FieldId 展平、base private field access 和 leaf version coupling 独立记录在 DB-005。
@@ -59,21 +60,22 @@
 
 ### 当前自洽边界
 
-截至 commit `cba0c41`，当前 demo 能证明的是受限、单线程、公有 API 路径上的结构自洽：
+截至 EXP-009，当前 demo 能证明的是受限、单线程、公有 API 路径上的结构自洽：
 
 - 成功保存的每条 State record 都记录 exact `(SchemaId, Version)`，且对应 Schema 已先登记在同一个 `InMemoryStateStore.SchemaStore`。
 - Schema conflict 和 serialization failure 都不会覆盖 slot 中原有 State。
-- Load 在调用 deserializer 前验证 stored Schema 的 identity、version 和完整 shape。
+- Load 从 State key 解析 authoritative exact stored Schema，并在进入 serializer 前拒绝 SchemaId 不同；generated serializer 在 payload decode 前验证其 generated historical exact Schema 的 version 和完整 shape。
 - generated serializer 只按稳定 FieldId 处理当前四种 scalar durable field，并忽略 transient field。
+- known historical version 的 payload 先 decode 到强类型 Snapshot，再依次升级；只有全部成功后才分配 current domain object。Load 不登记 current Schema 或覆盖旧 State。
 
 当前不能声称：
 
 - **对象始终语义自洽**：Save 不检查输入对象的领域 invariant；Load 绕过构造器，尚无 cross-field validation、RebuildTransient 或 repository-level invariant pass。
 - **两个 Store 构成原子精确合集**：失败的 Save 可以在 SchemaStore 留下未被 State 引用的 Schema；当前只保证 State → Schema 引用闭合，不保证 Schema → State，也没有 unified commit。
-- **任意输入都安全**：手写 serializer 可以返回任意 object；boxed values 只做浅拷贝，malformed/missing/type-mismatched fields 也没有最终错误模型。
+- **任意输入都安全**：手写 serializer 可以返回任意 object；boxed values 只做浅拷贝，missing/type-mismatched fields 虽会在 handler 和领域对象分配前失败，但尚无最终统一错误模型；额外字段仍被忽略。
 - **并发或故障下仍成立**：两个 Store 都不提供线程安全、事务、crash recovery 或 durability。
 
-因此下一阶段可以依赖“读取某条 State 前能够取得并校验其 exact historical Schema”，但不能把对象 invariant、跨 Store atomicity 或持久化安全当作已解决。
+因此后续可以依赖“known historical State 能被 exact Schema 绑定并只在内存中升级到 current”，但不能把 handler 纯度、对象 invariant、跨 Store atomicity 或持久化安全当作已解决。
 
 ## 4. 实验记录
 
@@ -423,6 +425,56 @@
 - `experiments/PackageConsumerProbe/`
 - `docs/design-branches/0004-snapshot-history-authoring-and-publishing.md`
 
+### EXP-009：Generated static read-time upgrade coordinators
+
+状态：Concluded
+
+日期：2026-08-27
+
+问题：能否让当前 compilation 仅凭 checked-in Snapshot History 和当前领域源码，生成从每个 known stored version 到 current 的强类型升级路径，并使 Load 升级成功后仍不隐式改写 State/Schema Store？
+
+本轮明确不回答：
+
+- wire format、persistent Store、对象图身份、增量保存或 Schema/State unified commit。
+- 一般版本图、跳版本 handler、runtime registry、plugin/跨程序集贡献或 path selection。
+- handler 纯度、领域 invariant、RebuildTransient 和统一 malformed boxed-payload 错误模型。
+- O(N²) generated call-site/IL 在大量版本下的真实性能与体积影响。
+
+最小实现：
+
+- `IDurableSerializer<T>.Schema` 明确为 current/write Schema；`Deserialize` 接收 authoritative `storedSchema` 与 boxed fields。
+- `InMemoryStateStore.Load` 只解析 stored exact Schema、拒绝不同 SchemaId，并把同 identity 的历史版本交给 version-aware serializer；它不登记 current Schema，也不写回 State。
+- Generator 先建立 history-validated IR，再生成 serializer；同 compilation 两个 current CLR types 复用 SchemaId 时以 DG0017 双方 fail closed。
+- 每个 durable type 生成 private ordinary `__DurableSnapshotVn` 与 required partial `UpgradeVnToVnPlus1(in,out)`；缺实现由 CS8795、漏赋目标字段由 CS0177 拒绝。
+- nested serializer 生成每版 exact `DurableSchema`、唯一一次 stored-version switch，以及每个 stored version 的独立直达-current静态协调器。
+- 每个协调器固定执行 exact shape validation → 起始 Snapshot decode → 相邻强类型 direct calls → 最后 `GetUninitializedObject` 并 hydrate current fields。
+- unknown version、identity mismatch、shape conflict 和具体 edge failure 使用 typed exceptions；edge failure 保留原异常为 InnerException。
+
+观察：
+
+- **Observed**：动态 V1 compilation 生成并 Save 的 State 可由独立 V2 compilation 读取；第一次与重复 Load 都调用 V1→V2 handler，且 SchemaStore 没有 V2。
+- **Observed**：显式 Save 已升级的 V2 object 后，slot 才推进到 V2；后续 Load 走 current coordinator，不再调用历史 handler。
+- **Observed**：V1→V2→V3 handler 严格按顺序执行并传递强类型字段值；generated code 只含一次 `storedSchema.Version switch`。
+- **Observed**：historical shape mismatch、缺字段和错误 boxed type 在 handler 与 current domain object 分配前失败；handler 异常被包装为带 SchemaId/from/to 的 `DurableUpgradeException`。
+- **Observed**：真实 local nupkg consumer 用手写 V1 serializer 保存 boxed State，再通过 package-delivered `Character.Serializer` 连续 Load、显式 Save 和 current Load，证明 runtime/Generator/build assets 的发布组合也执行同一升级语义。
+- **Decided**：独立挑战后仍选择每入口单帧直线协调器。共享 O(N) suffix helpers 是唯一有竞争力替代，但会产生多层 frame 并把单条路径拆散；只有版本数或 generated IL 体积出现实测问题时重访。
+- **Decided**：O(N²) 指所有入口累计生成的 call-sites/IL，一次从 Vn Load 到 current 仍只执行 O(current-n) 条相邻边。
+- **Deferred**：额外 boxed fields 继续忽略；`newValue = default` 仍可绕过 out 的逐字段 tripwire；用户 handler 仍可自行产生外部 side effect。
+
+结论：闭世界唯一相邻链的 read-time upgrade vertical slice 成立；动态性被限制在一次版本入口分派，历史 payload 进入 handler 前已转成强类型 Snapshot，Store authority 只有显式 Save 才改变。
+
+相关材料：
+
+- `src/DurableGraph/IDurableSerializer.cs`
+- `src/DurableGraph/InMemoryStateStore.cs`
+- `src/DurableGraph/DurableUpgradeException.cs`
+- `src/DurableGraph/UnsupportedSchemaVersionException.cs`
+- `src/DurableGraph.Generator/DurableSchemaGenerator.cs`
+- `tests/DurableGraph.Tests/InMemoryStateStoreTests.cs`
+- `tests/DurableGraph.Tests/DurableSchemaGeneratorTests.cs`
+- `experiments/PackageConsumerProbe/Run-Probe.ps1`
+- `docs/design-branches/0002-read-time-version-upgrade-pipeline.md`
+
 ## 5. 实验记录模板
 
 后续实验按需增加条目，不要求为了形式填写无意义内容。
@@ -444,6 +496,13 @@
 ```
 
 ## 6. 船长日志
+
+### 2026-08-27：跑通 generated static read-time upgrade
+
+- 独立方案挑战确认：共享 O(N) 后缀链只在版本数/IL 体积成为实测问题时更优；当前采用每个 stored version 一个单帧直达-current协调器。
+- Generator 现在产生一次 version switch、exact historical Schema、required adjacent partial handlers 和强类型 Snapshot chain；DG0017 阻止 SchemaId 映射到多个 current CLR types。
+- V1 Save→V2 Load、重复无写回、显式 Save 后推进、V1→V2→V3 顺序以及关键失败路径均由 executable tests 覆盖。
+- 下一步尚未自动确定；wire format、领域 invariant/rebuild、malformed payload error、一般图与统一 commit 仍保持分离。
 
 ### 2026-08-27：将 Snapshot History feedback 固化为单一 NuGet 包
 

@@ -7,7 +7,7 @@ namespace Atelia.DurableGraph;
 public interface IDurableSerializer<T>
     where T : DurableBase {
     /// <summary>
-    /// Gets the exact schema produced and consumed by this serializer.
+    /// Gets the current schema produced when this serializer writes state.
     /// </summary>
     DurableSchema Schema { get; }
 
@@ -17,7 +17,15 @@ public interface IDurableSerializer<T>
     IReadOnlyDictionary<int, object?> Serialize(T value);
 
     /// <summary>
-    /// Restores an instance from fields identified by their stable identifiers.
+    /// Restores a current instance from fields written with the supplied stored
+    /// schema.
     /// </summary>
-    T Deserialize(IReadOnlyDictionary<int, object?> fields);
+    /// <remarks>
+    /// Implementations are responsible for validating the complete stored
+    /// schema and upgrading supported historical versions before materializing
+    /// the current durable type.
+    /// </remarks>
+    T Deserialize(
+        DurableSchema storedSchema,
+        IReadOnlyDictionary<int, object?> fields);
 }

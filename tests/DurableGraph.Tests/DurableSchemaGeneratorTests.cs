@@ -29,6 +29,20 @@ public sealed class DurableSchemaGeneratorTests {
 
                 [DurableField(3)]
                 private int _age;
+
+                private static partial void UpgradeV1ToV2(
+                    in __DurableSnapshotV1 oldValue,
+                    out __DurableSnapshotV2 newValue) {
+                    newValue.Field3 = oldValue.Field3;
+                    newValue.Field9 = oldValue.Field9;
+                }
+
+                private static partial void UpgradeV2ToV3(
+                    in __DurableSnapshotV2 oldValue,
+                    out __DurableSnapshotV3 newValue) {
+                    newValue.Field3 = oldValue.Field3;
+                    newValue.Field9 = oldValue.Field9;
+                }
             }
             """;
 
@@ -139,6 +153,412 @@ public sealed class DurableSchemaGeneratorTests {
         Assert.Same(
             schema,
             stateStore.SchemaStore.GetRequired("samples.person", version: 1));
+    }
+
+    [Fact]
+    public void GeneratedUpgradeCoordinatorLoadsHistoricalStateWithoutImplicitWriteback() {
+        const string versionOneSource = """
+            using Atelia.DurableGraph;
+
+            namespace Samples;
+
+            [DurableType("samples.upgrade-person", version: 1)]
+            public sealed partial class UpgradePerson : DurableBase {
+                [DurableField(1)] private string _name;
+
+                public UpgradePerson(string name) {
+                    _name = name;
+                }
+
+                public string Name => _name;
+            }
+            """;
+        const string versionTwoSource = """
+            using Atelia.DurableGraph;
+
+            namespace Samples;
+
+            [DurableType("samples.upgrade-person", version: 2)]
+            public sealed partial class UpgradePerson : DurableBase {
+                [DurableField(1)] private string _name;
+                [DurableField(2)] private bool _active;
+
+                public static int UpgradeCalls { get; private set; }
+                public string Name => _name;
+                public bool Active => _active;
+
+                private static partial void UpgradeV1ToV2(
+                    in __DurableSnapshotV1 oldValue,
+                    out __DurableSnapshotV2 newValue) {
+                    UpgradeCalls++;
+                    newValue.Field1 = oldValue.Field1;
+                    newValue.Field2 = true;
+                }
+            }
+            """;
+        GeneratorTestRun versionOneRun = RunGenerator(versionOneSource);
+        GeneratorTestRun versionTwoRun = RunGenerator(
+            versionTwoSource,
+            SnapshotHistory(
+                "upgrade-person-v1.dgsnapshot",
+                "samples.upgrade-person",
+                1,
+                (1, 4)));
+
+        Assert.DoesNotContain(versionOneRun.OutputCompilation.GetDiagnostics(), IsError);
+        Assert.DoesNotContain(versionTwoRun.OutputCompilation.GetDiagnostics(), IsError);
+
+        Assembly versionOneAssembly = EmitAndLoad(versionOneRun.OutputCompilation);
+        Type? versionOneType = versionOneAssembly.GetType("Samples.UpgradePerson");
+        Assert.NotNull(versionOneType);
+        object? versionOneValue = Activator.CreateInstance(versionOneType, ["Ada"]);
+        Assert.NotNull(versionOneValue);
+        object? versionOneSerializer =
+            versionOneType.GetProperty("Serializer")!.GetValue(null);
+        Assert.NotNull(versionOneSerializer);
+        InMemoryStateStore stateStore = new();
+        InvokeStateStore(
+            stateStore,
+            nameof(InMemoryStateStore.Save),
+            versionOneType,
+            "root",
+            versionOneValue,
+            versionOneSerializer);
+
+        Assembly versionTwoAssembly = EmitAndLoad(versionTwoRun.OutputCompilation);
+        Type? versionTwoType = versionTwoAssembly.GetType("Samples.UpgradePerson");
+        Assert.NotNull(versionTwoType);
+        object? versionTwoSerializer =
+            versionTwoType.GetProperty("Serializer")!.GetValue(null);
+        Assert.NotNull(versionTwoSerializer);
+        object? firstLoad = InvokeStateStore(
+            stateStore,
+            nameof(InMemoryStateStore.Load),
+            versionTwoType,
+            "root",
+            versionTwoSerializer);
+        Assert.NotNull(firstLoad);
+
+        Assert.Equal("Ada", versionTwoType.GetProperty("Name")!.GetValue(firstLoad));
+        Assert.Equal(true, versionTwoType.GetProperty("Active")!.GetValue(firstLoad));
+        Assert.Equal(1, versionTwoType.GetProperty("UpgradeCalls")!.GetValue(null));
+        Assert.Throws<SchemaNotFoundException>(() =>
+            stateStore.SchemaStore.GetRequired("samples.upgrade-person", version: 2));
+
+        object? secondLoad = InvokeStateStore(
+            stateStore,
+            nameof(InMemoryStateStore.Load),
+            versionTwoType,
+            "root",
+            versionTwoSerializer);
+        Assert.NotNull(secondLoad);
+        Assert.Equal(2, versionTwoType.GetProperty("UpgradeCalls")!.GetValue(null));
+
+        InvokeStateStore(
+            stateStore,
+            nameof(InMemoryStateStore.Save),
+            versionTwoType,
+            "root",
+            secondLoad,
+            versionTwoSerializer);
+        object? currentLoad = InvokeStateStore(
+            stateStore,
+            nameof(InMemoryStateStore.Load),
+            versionTwoType,
+            "root",
+            versionTwoSerializer);
+        Assert.NotNull(currentLoad);
+
+        Assert.Equal("Ada", versionTwoType.GetProperty("Name")!.GetValue(currentLoad));
+        Assert.Equal(true, versionTwoType.GetProperty("Active")!.GetValue(currentLoad));
+        Assert.Equal(2, versionTwoType.GetProperty("UpgradeCalls")!.GetValue(null));
+    }
+
+    [Fact]
+    public void MissingAdjacentUpgradeImplementationFailsCompilation() {
+        GeneratorTestRun run = RunGenerator(
+            DurableTypeSource(
+                "[DurableField(1)] private int _value;",
+                durableTypeArguments: "\"samples.example\", 2"),
+            SnapshotHistory("example-v1.dgsnapshot", "samples.example", 1, (1, 2)));
+
+        Diagnostic diagnostic = Assert.Single(
+            run.OutputCompilation.GetDiagnostics(),
+            candidate => candidate.Id == "CS8795");
+        Assert.Contains("UpgradeV1ToV2", diagnostic.GetMessage(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AdjacentUpgradeMustAssignEveryTargetSnapshotField() {
+        const string source = """
+            using Atelia.DurableGraph;
+
+            namespace Samples;
+
+            [DurableType("samples.example", 2)]
+            public sealed partial class Example : DurableBase {
+                [DurableField(1)] private int _value;
+                [DurableField(2)] private bool _enabled;
+
+                private static partial void UpgradeV1ToV2(
+                    in __DurableSnapshotV1 oldValue,
+                    out __DurableSnapshotV2 newValue) {
+                    newValue.Field1 = oldValue.Field1;
+                }
+            }
+            """;
+        GeneratorTestRun run = RunGenerator(
+            source,
+            SnapshotHistory("example-v1.dgsnapshot", "samples.example", 1, (1, 2)));
+
+        Assert.Contains(
+            run.OutputCompilation.GetDiagnostics(),
+            candidate => candidate.Id == "CS0177");
+    }
+
+    [Fact]
+    public void HistoricalEntryRunsAdjacentUpgradeChainInOrder() {
+        const string source = """
+            using System.Collections.Generic;
+            using Atelia.DurableGraph;
+
+            namespace Samples;
+
+            [DurableType("samples.chain", 3)]
+            public sealed partial class Chain : DurableBase {
+                [DurableField(1)] private long _value;
+                [DurableField(2)] private string _label = string.Empty;
+                [DurableField(3)] private bool _ready;
+
+                public static List<string> Steps { get; } = new();
+                public long Value => _value;
+                public string Label => _label;
+                public bool Ready => _ready;
+
+                private static partial void UpgradeV1ToV2(
+                    in __DurableSnapshotV1 oldValue,
+                    out __DurableSnapshotV2 newValue) {
+                    Steps.Add("1-2");
+                    newValue.Field1 = oldValue.Field1;
+                    newValue.Field2 = "from-v2";
+                }
+
+                private static partial void UpgradeV2ToV3(
+                    in __DurableSnapshotV2 oldValue,
+                    out __DurableSnapshotV3 newValue) {
+                    Steps.Add("2-3");
+                    newValue.Field1 = oldValue.Field1 * 10L;
+                    newValue.Field2 = oldValue.Field2;
+                    newValue.Field3 = true;
+                }
+            }
+            """;
+        GeneratorTestRun run = RunGenerator(
+            source,
+            SnapshotHistory("chain-v1.dgsnapshot", "samples.chain", 1, (1, 2)),
+            SnapshotHistory("chain-v2.dgsnapshot", "samples.chain", 2, (1, 2), (2, 4)));
+        Assert.DoesNotContain(run.OutputCompilation.GetDiagnostics(), IsError);
+        Assembly assembly = EmitAndLoad(run.OutputCompilation);
+        Type chainType = assembly.GetType("Samples.Chain")!;
+        object serializer = chainType.GetProperty("Serializer")!.GetValue(null)!;
+        DurableSchema storedSchema = new(
+            "samples.chain",
+            1,
+            new DurableFieldInfo(1, TypeTag.Int32));
+
+        object value = InvokeSerializerDeserialize(
+            serializer,
+            storedSchema,
+            new Dictionary<int, object?> { [1] = 7 })!;
+
+        Assert.Equal(70L, chainType.GetProperty("Value")!.GetValue(value));
+        Assert.Equal("from-v2", chainType.GetProperty("Label")!.GetValue(value));
+        Assert.Equal(true, chainType.GetProperty("Ready")!.GetValue(value));
+        Assert.Equal(
+            ["1-2", "2-3"],
+            Assert.IsAssignableFrom<IEnumerable<string>>(
+                chainType.GetProperty("Steps")!.GetValue(null)));
+
+        string generated = GeneratedSource(run, "DurableSchemas.g.cs");
+        Assert.Equal(1, CountOccurrences(generated, "storedSchema.Version switch"));
+        Assert.Contains("DeserializeV1", generated);
+        Assert.Contains("DeserializeV2", generated);
+        Assert.Contains("DeserializeV3", generated);
+    }
+
+    [Fact]
+    public void UpgradeFailureIsWrappedWithTheFailingEdge() {
+        const string source = """
+            using System;
+            using Atelia.DurableGraph;
+
+            namespace Samples;
+
+            [DurableType("samples.failure", 2)]
+            public sealed partial class Failure : DurableBase {
+                [DurableField(1)] private int _value;
+
+                private static partial void UpgradeV1ToV2(
+                    in __DurableSnapshotV1 oldValue,
+                    out __DurableSnapshotV2 newValue) {
+                    throw new InvalidOperationException("upgrade-body");
+                }
+            }
+            """;
+        GeneratorTestRun run = RunGenerator(
+            source,
+            SnapshotHistory("failure-v1.dgsnapshot", "samples.failure", 1, (1, 2)));
+        Assert.DoesNotContain(run.OutputCompilation.GetDiagnostics(), IsError);
+        Assembly assembly = EmitAndLoad(run.OutputCompilation);
+        Type failureType = assembly.GetType("Samples.Failure")!;
+        object serializer = failureType.GetProperty("Serializer")!.GetValue(null)!;
+        DurableSchema storedSchema = new(
+            "samples.failure",
+            1,
+            new DurableFieldInfo(1, TypeTag.Int32));
+
+        TargetInvocationException invocation = Assert.Throws<TargetInvocationException>(() =>
+            InvokeSerializerDeserialize(
+                serializer,
+                storedSchema,
+                new Dictionary<int, object?> { [1] = 1 }));
+        DurableUpgradeException exception =
+            Assert.IsType<DurableUpgradeException>(invocation.InnerException);
+
+        Assert.Equal("samples.failure", exception.SchemaId);
+        Assert.Equal(1, exception.FromVersion);
+        Assert.Equal(2, exception.ToVersion);
+        InvalidOperationException inner =
+            Assert.IsType<InvalidOperationException>(exception.InnerException);
+        Assert.Equal("upgrade-body", inner.Message);
+    }
+
+    [Fact]
+    public void HistoricalShapeAndPayloadAreValidatedBeforeUpgradeHandler() {
+        const string source = """
+            using Atelia.DurableGraph;
+
+            namespace Samples;
+
+            [DurableType("samples.validation", 2)]
+            public sealed partial class Validation : DurableBase {
+                [DurableField(1)] private string _value = string.Empty;
+                public static int UpgradeCalls { get; private set; }
+
+                private static partial void UpgradeV1ToV2(
+                    in __DurableSnapshotV1 oldValue,
+                    out __DurableSnapshotV2 newValue) {
+                    UpgradeCalls++;
+                    newValue.Field1 = oldValue.Field1;
+                }
+            }
+            """;
+        GeneratorTestRun run = RunGenerator(
+            source,
+            SnapshotHistory("validation-v1.dgsnapshot", "samples.validation", 1, (1, 4)));
+        Assert.DoesNotContain(run.OutputCompilation.GetDiagnostics(), IsError);
+        Assembly assembly = EmitAndLoad(run.OutputCompilation);
+        Type validationType = assembly.GetType("Samples.Validation")!;
+        object serializer = validationType.GetProperty("Serializer")!.GetValue(null)!;
+
+        TargetInvocationException shapeInvocation = Assert.Throws<TargetInvocationException>(() =>
+            InvokeSerializerDeserialize(
+                serializer,
+                new DurableSchema(
+                    "samples.validation",
+                    1,
+                    new DurableFieldInfo(1, TypeTag.Int32)),
+                new Dictionary<int, object?> { [1] = 1 }));
+        SchemaConflictException shapeException =
+            Assert.IsType<SchemaConflictException>(shapeInvocation.InnerException);
+        Assert.Equal(TypeTag.Int32, shapeException.RegisteredSchema.Fields[0].TypeTag);
+        Assert.Equal(TypeTag.String, shapeException.ConflictingSchema.Fields[0].TypeTag);
+        Assert.Equal(0, validationType.GetProperty("UpgradeCalls")!.GetValue(null));
+
+        TargetInvocationException payloadInvocation = Assert.Throws<TargetInvocationException>(() =>
+            InvokeSerializerDeserialize(
+                serializer,
+                new DurableSchema(
+                    "samples.validation",
+                    1,
+                    new DurableFieldInfo(1, TypeTag.String)),
+                new Dictionary<int, object?>()));
+        Assert.IsType<KeyNotFoundException>(payloadInvocation.InnerException);
+        Assert.Equal(0, validationType.GetProperty("UpgradeCalls")!.GetValue(null));
+
+        TargetInvocationException typeInvocation = Assert.Throws<TargetInvocationException>(() =>
+            InvokeSerializerDeserialize(
+                serializer,
+                new DurableSchema(
+                    "samples.validation",
+                    1,
+                    new DurableFieldInfo(1, TypeTag.String)),
+                new Dictionary<int, object?> { [1] = 1 }));
+        Assert.IsType<InvalidCastException>(typeInvocation.InnerException);
+        Assert.Equal(0, validationType.GetProperty("UpgradeCalls")!.GetValue(null));
+    }
+
+    [Fact]
+    public void DuplicateSchemaIdFailsBothDurableTypesClosed() {
+        const string source = """
+            using Atelia.DurableGraph;
+
+            namespace Samples;
+
+            [DurableType("samples.duplicate", 1)]
+            public sealed partial class First : DurableBase {
+                [DurableField(1)] private int _value;
+            }
+
+            [DurableType("samples.duplicate", 1)]
+            public sealed partial class Second : DurableBase {
+                [DurableField(1)] private int _value;
+            }
+            """;
+        GeneratorTestRun run = RunGenerator(source);
+
+        Assert.Equal(
+            2,
+            run.GeneratorDiagnostics.Count(candidate => candidate.Id == "DG0017"));
+        Assert.Empty(run.GeneratedSources);
+    }
+
+    [Fact]
+    public void GeneratedEntryRejectsDifferentIdentityAndUnknownVersion() {
+        GeneratorTestRun run = RunGenerator(
+            DurableTypeSource("[DurableField(1)] private int _value;"));
+        Assert.DoesNotContain(run.OutputCompilation.GetDiagnostics(), IsError);
+        Assembly assembly = EmitAndLoad(run.OutputCompilation);
+        Type exampleType = assembly.GetType("Samples.Example")!;
+        object serializer = exampleType.GetProperty("Serializer")!.GetValue(null)!;
+        IReadOnlyDictionary<int, object?> fields =
+            new Dictionary<int, object?> { [1] = 1 };
+
+        TargetInvocationException identityInvocation =
+            Assert.Throws<TargetInvocationException>(() =>
+                InvokeSerializerDeserialize(
+                    serializer,
+                    new DurableSchema(
+                        "samples.other",
+                        1,
+                        new DurableFieldInfo(1, TypeTag.Int32)),
+                    fields));
+        Assert.IsType<StateSchemaMismatchException>(identityInvocation.InnerException);
+
+        TargetInvocationException versionInvocation =
+            Assert.Throws<TargetInvocationException>(() =>
+                InvokeSerializerDeserialize(
+                    serializer,
+                    new DurableSchema(
+                        "samples.example",
+                        2,
+                        new DurableFieldInfo(1, TypeTag.Int32)),
+                    fields));
+        UnsupportedSchemaVersionException exception =
+            Assert.IsType<UnsupportedSchemaVersionException>(
+                versionInvocation.InnerException);
+        Assert.Equal(2, exception.StoredVersion);
+        Assert.Equal(1, exception.CurrentVersion);
     }
 
     [Theory]
@@ -279,7 +699,7 @@ public sealed class DurableSchemaGeneratorTests {
                 [DurableField(1)] private string _name = string.Empty;
                 [DurableField(2)] private bool _active;
 
-                private static void Upgrade(
+                private static partial void UpgradeV1ToV2(
                     in __DurableSnapshotV1 oldValue,
                     out __DurableSnapshotV2 newValue) {
                     newValue.Field1 = oldValue.Field1;
@@ -642,6 +1062,32 @@ public sealed class DurableSchemaGeneratorTests {
             candidate => candidate.Name == methodName);
 
         return method.MakeGenericMethod(durableType).Invoke(stateStore, arguments);
+    }
+
+    private static object? InvokeSerializerDeserialize(
+        object serializer,
+        DurableSchema storedSchema,
+        IReadOnlyDictionary<int, object?> fields) {
+        MethodInfo method = Assert.Single(
+            serializer.GetType().GetMethods(BindingFlags.Public | BindingFlags.Instance),
+            candidate => candidate.Name == "Deserialize");
+
+        return method.Invoke(serializer, [storedSchema, fields]);
+    }
+
+    private static int CountOccurrences(string text, string value) {
+        int count = 0;
+        int startIndex = 0;
+
+        while ((startIndex = text.IndexOf(
+            value,
+            startIndex,
+            StringComparison.Ordinal)) >= 0) {
+            count++;
+            startIndex += value.Length;
+        }
+
+        return count;
     }
 
     private static bool IsError(Diagnostic diagnostic) {

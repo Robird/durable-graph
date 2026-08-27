@@ -1,10 +1,40 @@
 # DB-002：读取阶段的版本升级管线
 
-> 状态：Open
+> 状态：Chosen for current prototype
 >
 > 创建日期：2026-08-27
 >
 > 当前方向：读取旧版本时尝试升级为请求的当前版本；Load 不隐式写 Store，后续显式 Save 才保存升级后的对象。
+
+> 实现状态：EXP-009 已选择并验证“每个 stored version 一个 generated 静态直达-current协调器 + 唯一一次 version switch + required partial 相邻 handler”。本选择不冻结长期公共 API，也不开放一般版本图。
+
+## EXP-009 裁决与实现结果
+
+当前 version-aware serializer seam 是：
+
+```csharp
+DurableSchema Schema { get; } // current/write schema
+
+T Deserialize(
+    DurableSchema storedSchema,
+    IReadOnlyDictionary<int, object?> fields);
+```
+
+`InMemoryStateStore` 从 State key 取得 authoritative exact Schema，只预先拒绝 SchemaId 不同；同 identity 的 version/shape 由 generated serializer 与其 historical IR 校验。Load 不登记 current Schema、不写回 State。
+
+Generator 为每个 known stored version 生成一条独立直线：
+
+```text
+single stored-version switch
+    -> exact historical Schema shape validation
+    -> boxed fields decode into starting Snapshot
+    -> UpgradeVnToVn+1 direct calls
+    -> allocate and hydrate current domain object
+```
+
+缺相邻 handler 与漏填 out field 分别由 CS8795/CS0177 在编译期拒绝；unknown version、identity mismatch、shape conflict 和 handler exception 在运行时使用 typed failures。两个 current CLR types 复用同一 SchemaId 由 DG0017 拒绝。
+
+独立挑战中唯一有竞争力的替代是共享 O(N) suffix helpers。它减少所有入口累计的 generated IL，却引入 O(N) helper frames 并把一条升级路径拆散。当前版本数量小、实验优先直线可读性，因此保留每入口协调器；当 generated IL/build time/stack pressure 出现实测问题时重访。
 
 ## 阶段目标
 
@@ -13,9 +43,8 @@
 ```text
 stored State (Schema V1)
     -> exact historical Schema validation
-    -> exact V1 serializer/materializer
-    -> V1 CLR object
-    -> explicit upgrade path
+    -> exact V1 Snapshot decode
+    -> static adjacent upgrade path
     -> current V2 CLR object
     -> caller-visible result
 
@@ -64,7 +93,7 @@ EXP-006 只证明 build hook/自制工具能够承担历史发布 side effect；
 
 ## 为什么需要 historical serializer binding
 
-当前 `InMemoryStateStore.Load<T>` 只拿到调用方提供的当前 `IDurableSerializer<T>`。当 State 指向 V1、调用方请求 V2 时，V2 serializer 不能安全解释 V1 fields。
+EXP-009 之前，`InMemoryStateStore.Load<T>` 只把 fields 交给 current `IDurableSerializer<T>`，V2 serializer 不能安全解释 V1 fields。现在 Store 同时传入 authoritative stored Schema，generated serializer 用一次 version switch 绑定 exact historical Snapshot。
 
 升级前必须先找到一个与 stored exact Schema 绑定的 historical binding：
 
@@ -74,7 +103,7 @@ ExactSchemaKey + exact Schema shape
     -> historical serializer/materializer
 ```
 
-原始候选是假设加载协调器需要在运行时查找未知 historical CLR 泛型类型。EXP-006 之后，当前更小的闭世界方案是让 Generator 为每个 current durable type 生成完整的 historical version switch 和直接强类型调用；Store 只面对一个 version-aware current binding，不需要知道 Snapshot CLR 类型。
+原始候选是假设加载协调器需要在运行时查找未知 historical CLR 泛型类型。EXP-009 已验证更小的闭世界方案：Generator 为每个 current durable type 生成完整 historical switch 和直接强类型调用；Store 只面对一个 version-aware current binding，不知道 Snapshot CLR 类型。
 
 ## 原始候选最小组件（runtime registry 已暂缓）
 
@@ -184,13 +213,12 @@ CharacterSnapshotV2, Schema version 2
 
 `RebuildTransient`、对象图 invariant validation 和 malformed payload 的“先验证全部字段再分配”仍是后续独立阶段。
 
-## 下一轮需要裁决的最小问题
+## EXP-009 后仍未裁决的问题
 
-1. generated version-aware serializer/binding 交给 `InMemoryStateStore` 的最小 API。
-2. Snapshot → current domain hydrate 是现有 serializer 的一部分，还是独立 generated step。
-3. handler 异常如何附加 SchemaId/from/to 而不掩盖原异常。
-4. 自动 local publisher 的最小接入方式与连续 history diagnostics。
-5. 同 key 异形、并行 build 和多文件发布的 fail-closed/atomicity 边界。
+1. boxed payload 的最终 malformed/extra-field/nullability 错误模型。
+2. handler 领域 validation、RebuildTransient 与外部 side-effect policy。
+3. 何时需要共享 suffix coordinators、一般版本图或 runtime registry。
+4. persistent wire format 与 Schema/State commit/recovery boundary。
 
 ## 相关材料
 

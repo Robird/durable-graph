@@ -23,7 +23,7 @@
 | ID | 标题 | 状态 | 重访触发条件 |
 |---|---|---|---|
 | [DB-001](0001-schema-authority-and-runtime-representation.md) | Schema authority 与运行时表示 | Deferred | 首个 canonical format、canonical-blob-bound generated codec 或持久化 SchemaStore 实验 |
-| [DB-002](0002-read-time-version-upgrade-pipeline.md) | 读取阶段的版本升级管线 | Open | 首个 generated version-aware serializer + read-time upgrade vertical slice |
+| [DB-002](0002-read-time-version-upgrade-pipeline.md) | 读取阶段的版本升级管线 | Chosen | 首个一般图、runtime plugin/registry、persistent payload 或 generated coordinator 伸缩性问题 |
 | [DB-003](0003-snapshot-value-shape-and-upgrade-signature.md) | Snapshot 值形状与 Upgrade 签名 | Open | struct/in-out probe 后的真实 pipeline、性能或 expected rejection 消费者 |
 | [DB-004](0004-snapshot-history-authoring-and-publishing.md) | Snapshot History 创作与发布 | Open | 正式 Generator publisher、团队/CI 摩擦或 persistent Schema authority 实验 |
 | [DB-005](0005-durable-inheritance-flattening.md) | Durable 继承展平 | Deferred | 首个真实 durable inheritance 模型或 composition 对照 |

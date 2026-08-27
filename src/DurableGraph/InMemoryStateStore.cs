@@ -3,7 +3,8 @@ using System.Collections.ObjectModel;
 namespace Atelia.DurableGraph;
 
 /// <summary>
-/// Stores prototype boxed state in memory and gates access through exact schemas.
+/// Stores prototype boxed state in memory and gates access through registered
+/// schemas.
 /// </summary>
 /// <remarks>
 /// Slots are demo-only addresses, not durable object identifiers. This type does
@@ -53,9 +54,14 @@ public sealed class InMemoryStateStore {
     }
 
     /// <summary>
-    /// Loads boxed state only after its registered schema exactly matches the
-    /// serializer's schema identity, version, and shape.
+    /// Loads boxed state after resolving its exact registered schema and
+    /// confirming that it belongs to the serializer's schema identity.
     /// </summary>
+    /// <remarks>
+    /// Historical version and shape validation belongs to the serializer. A
+    /// load does not register the serializer's current schema or rewrite the
+    /// stored state after an in-memory upgrade.
+    /// </remarks>
     public T Load<T>(string slot, IDurableSerializer<T> serializer)
         where T : DurableBase {
         ArgumentException.ThrowIfNullOrWhiteSpace(slot);
@@ -73,18 +79,13 @@ public sealed class InMemoryStateStore {
 
         if (!StringComparer.Ordinal.Equals(
                 storedSchema.SchemaId,
-                expectedSchema.SchemaId) ||
-            storedSchema.Version != expectedSchema.Version) {
+                expectedSchema.SchemaId)) {
             throw new StateSchemaMismatchException(
                 storedSchema,
                 expectedSchema);
         }
 
-        if (!storedSchema.Equals(expectedSchema)) {
-            throw new SchemaConflictException(storedSchema, expectedSchema);
-        }
-
-        return serializer.Deserialize(state.Fields);
+        return serializer.Deserialize(storedSchema, state.Fields);
     }
 
     private sealed record StoredState(

@@ -6,6 +6,8 @@
 >
 > 当前快速原型选择：generated ordinary mutable `struct` Snapshot；版本限定的 required partial `void UpgradeV1ToV2(in oldValue, out newValue)`。
 
+> 实现状态：EXP-009 已把该形状用于 generated read-time upgrade coordinator，并由 V1→V2→V3、CS8795、CS0177 与 exception-path tests 验证；性能和长期 ABI 仍未冻结。
+
 ## 问题
 
 historical Snapshot 是升级 handler 的强类型数据面。它需要在不复制旧领域类型及其方法的前提下表达 exact historical durable fields，同时避免把 boxed state 或未来 wire format 暴露给用户代码。

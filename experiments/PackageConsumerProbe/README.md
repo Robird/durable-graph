@@ -12,4 +12,6 @@ Run from the repository root:
 
 The probe packs a unique local package, uses an isolated package cache and snapshot-history
 directory under this experiment's ignored `obj` directory, and exercises local publish plus
-CI-style read-only verification.
+CI-style read-only verification. Its V2 executable also saves a manual V1 boxed record, loads it
+twice through the packaged generated serializer without writeback, explicitly saves V2, and then
+confirms the current-version path no longer invokes the upgrade handler.
