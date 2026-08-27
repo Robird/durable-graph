@@ -41,6 +41,7 @@
 - Schema Generator：从受限的 durable class/field 声明生成静态 `DurableSchema`。
 - Boxed State demo：由 generated serializer 驱动 `InMemoryStateStore`，验证 Schema-first Save 与 validate-before-Deserialize。
 - Source Generator history feedback probe：隔离证明 `AddSource` 不会自行反馈为后续 `AdditionalFiles`，但显式 post-compile publisher 可以形成下一轮可见的 Snapshot History。
+- Snapshot upgrade shape probe：固定 ordinary struct、`in/out`、partial implementation、definite assignment 与 overload 的 C# 语义边界。
 - Candidate design branches：在 `docs/design-branches/` 隔离尚未裁决的架构分叉。
 - 本实验簿：保存随实验演化的项目认识。
 
@@ -48,8 +49,9 @@
 
 - **Decided**：下一阶段先设计读取时自动尝试升级旧版本；Load 本身不回写，显式 Save 才保存升级后的当前版本对象。
 - **Decided**：首轮升级机制只支持唯一相邻版本链 `V1 → V2 → V3`；出现真实跳版或分支消费者前不引入一般图。
-- **Tentative**：在所有历史版本都属于当前 compilation 的闭世界模型中，优先生成 exact-version switch 与强类型相邻调用；暂缓 runtime historical binding/upgrade registry。
-- **Open**：Snapshot History 的正式 authority、格式与发布工作流尚待设计；普通 build 自动改写源码树和显式 CLI/code-fix accept 都只是候选。
+- **Tentative**：在所有历史版本都属于当前 compilation 的闭世界模型中，生成 ordinary struct Snapshot、exact-version switch，以及 required partial `void UpgradeV1ToV2(in old, out next)` direct call；暂缓 runtime historical binding/upgrade registry。
+- **Tentative**：快速原型的 local real build 自动 append checked-in Snapshot History；CI/design-time 只读，单 writer/单 TargetFramework/串行发布。显式 Accept target 记录为竞争分支。
+- **Decided**：继续关闭 durable 领域继承；FieldId 展平、base private field access 和 leaf version coupling 独立记录在 DB-005。
 - **Open**：Schema runtime representation 与 canonical authority 的候选分叉记录在 `DB-001`，等待 exact codec/persistent format 实验裁决。
 - **Open**：哪些类型和 API 最终属于核心程序集，等待真实代码形状出现后再判断。
 
@@ -329,6 +331,48 @@
 - `experiments/SourceGeneratorHistoryProbe/Probe.Generator/HistoryProbeGenerator.cs`
 - `experiments/SourceGeneratorHistoryProbe/Probe/HistoryProbe.csproj`
 
+### EXP-007：Snapshot struct 与 Upgrade 签名语义
+
+状态：Concluded
+
+日期：2026-08-27
+
+问题：ordinary struct Snapshot 与 `in old/out next` 是否能为强类型相邻升级提供可执行的 C# 契约？`out`、`bool`、return overload 和 stack allocation 的真实边界是什么？
+
+本轮明确不回答：
+
+- struct 相比 class 的真实性能、GC、copy 或 stack pressure。
+- production Generator 如何生成 Snapshot/partial declaration/direct pipeline。
+- nullability、领域 invariant、malformed payload 和 handler error wrapping。
+- durable inheritance flattening 和 jump-version path selection。
+
+最小实验：
+
+- 在 `experiments/SnapshotUpgradeShapeProbe/` 用同一 .NET 10 project 条件编译一组成功/失败源码。
+- 成功路径执行 ordinary struct 的直接强类型 `in/out` V1 → V2，并用显式 out target 选择 V1 → V3 overload。
+- 失败路径精确锁定 missing target field、false-without-out、missing partial implementation、return-only overload、`out var` ambiguity 和 managed stackalloc diagnostics。
+
+观察：
+
+- **Observed**：逐字段写完 V2 out Snapshot 可 0 warning / 0 error 编译并执行；漏写 Field2 产生 CS0177。
+- **Observed**：显式 accessibility 的 partial upgrade declaration 缺 implementation 产生 CS8795。
+- **Observed**：`newValue = default` 可以绕过逐字段 definite-assignment，且 string field 得到 null；out 只是结构赋值 tripwire，不是有效性证明。
+- **Observed**：bool false path 仍须赋 out，否则同样产生 CS0177；当前没有 expected rejection consumer 支持引入 bool。
+- **Observed**：两个只靠返回 V2/V3 区分的 `Upgrade(V1)` 产生 CS0111；out target type 可区分 overload，但 `out var` 产生 CS0121。
+- **Observed**：含 string 的 managed Snapshot 作为 `stackalloc` element 产生 CS0208。
+- **Decided**：当前原型使用 ordinary mutable struct + version-qualified required partial `void/in/out`；失败通过异常传播。
+- **Deferred**：Try/bool 等到首个 expected data rejection；readonly/record struct、class return 和 `ref struct` 保留在 DB-003。
+- **Rejected**：把 ordinary struct 描述成“保证栈分配、零复制或整个 State pipeline 无装箱”。
+
+结论：用户提出的 `out` 具有真实的字段级编译期帮助；struct 值语义值得进入下一 vertical slice，但性能与完整性主张必须保持为待验证假设。
+
+相关材料：
+
+- `experiments/SnapshotUpgradeShapeProbe/README.md`
+- `docs/design-branches/0003-snapshot-value-shape-and-upgrade-signature.md`
+- `docs/design-branches/0004-snapshot-history-authoring-and-publishing.md`
+- `docs/design-branches/0005-durable-inheritance-flattening.md`
+
 ## 5. 实验记录模板
 
 后续实验按需增加条目，不要求为了形式填写无意义内容。
@@ -350,6 +394,13 @@
 ```
 
 ## 6. 船长日志
+
+### 2026-08-27：固定 Snapshot struct/in-out 原型方向
+
+- 通过正反编译 probe 保留 ordinary struct 与 `in/out`，并删除当前无消费者的 bool failure channel。
+- 快速原型选择成功 local build 自动发布 history；显式 Accept/CLI 与普通 build purity 保留为 DB-004 分叉。
+- 将 Snapshot representation/signature、history authoring/publisher 和 durable inheritance flattening 分别记录为 DB-003/004/005。
+- 下一 vertical slice 聚焦 generated version-aware serializer、required adjacent handler 与 read-time upgrade；不开放继承或跳版。
 
 ### 2026-08-27：完成 Source Generator history feedback probe
 

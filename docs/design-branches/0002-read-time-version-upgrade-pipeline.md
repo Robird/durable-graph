@@ -48,12 +48,16 @@ runtime historical binding registry、upgrade registry 和 object-erased edge ad
 
 EXP-006 只证明 build hook/自制工具能够承担历史发布 side effect；它没有选定正式 history format、publisher owner，也没有批准普通 build 修改受版本控制的工作树。
 
+后续 Snapshot signature probe 又收窄了当前原型形状：historical Snapshot 使用 generated ordinary struct；相邻 handler 使用版本限定的 required partial `void UpgradeV1ToV2(in oldValue, out newValue)`。`out` 提供字段级 definite-assignment tripwire，但 `default` 仍可绕过，不能把它描述成领域有效性保证。详见 DB-003。
+
+针对快速原型的 history publishing，当前直觉选择是成功的本地非 design-time compilation 自动 append current Snapshot；CI/design-time 只读验证，单 writer 串行发布。显式 Accept target 保留为竞争分支。详见 DB-004。
+
 ## 必须保留的边界
 
 1. State record 的 `(SchemaId, Version)` 决定唯一 historical Schema，不使用 latest fallback。
 2. historical payload 只能交给与该 exact Schema shape 绑定的 serializer/materializer。
 3. 同 SchemaId 才允许版本升级；不同 SchemaId 是类型不匹配。
-4. 缺失 historical shape、缺失相邻升级实现、链不完整、handler 抛错或返回错误结果时 fail closed；可在生成期/编译期拒绝的情况不推迟到运行时。
+4. 缺失 historical shape、缺失相邻升级实现、链不完整、handler 抛错或后续 validation 拒绝 out Snapshot 时 fail closed；可在生成期/编译期拒绝的情况不推迟到运行时。
 5. Load 不修改 StateStore 或 SchemaStore authority；升级成功只返回新的内存对象。
 6. 只有调用方随后显式 Save，升级后的当前版本才进入 Store。
 7. 失败升级不得覆盖旧 State；旧 Schema 和旧 boxed fields 保持可再次读取/诊断。
@@ -138,35 +142,34 @@ handler 应是显式、同步、确定的对象转换；本阶段不允许网络
 
 ## 首个演示场景
 
-建议定义两个 sealed historical CLR type，共用 SchemaId：
+建议由 history + current source 生成两个 ordinary struct Snapshot，共用 SchemaId：
 
 ```text
-CharacterV1, Schema version 1
+CharacterSnapshotV1, Schema version 1
     Field 1: String display name
 
-CharacterV2, Schema version 2
+CharacterSnapshotV2, Schema version 2
     Field 1: String display name
     Field 2: Boolean is active
 ```
 
 演示：
 
-1. 用 V1 generated serializer 保存 boxed State。
-2. 注册 V1 binding、V2 binding 和显式 V1 → V2 handler。
-3. 请求 Load V2，先 materialize V1，再升级得到 V2。
+1. 用 V1 current-domain generated serializer 保存 boxed State。
+2. V2 compilation 从 checked-in V1 history 生成 SnapshotV1/V2、exact materializer、required V1 → V2 partial declaration 和 direct call。
+3. 请求 Load V2，先 materialize SnapshotV1，再通过 `void UpgradeV1ToV2(in V1, out V2)` 得到 SnapshotV2，最后 hydrate 当前领域对象。
 4. 证明 StateStore 仍是 V1，Load 没有隐式改写。
 5. 显式 Save V2 后，证明 slot 改为 V2，后续可直接 Load V2。
 
 ## 必测失败路径
 
 - State 指向未知 Schema version。
-- Schema 存在但缺少 historical serializer binding。
-- binding 的 Schema 与 SchemaStore exact Schema shape 不一致。
-- 缺少 V1 → V2 edge，或链在中间断裂。
+- Snapshot History 缺少 stored version，或 history version chain 有缺口。
+- generated historical expected Schema 与 SchemaStore exact Schema shape 不一致。
+- 缺少 required V1 → V2 implementation 或漏赋目标 Snapshot field 时 compilation fail。
 - handler 抛异常。
-- handler 返回 null、错误 CLR type 或错误目标版本对象。
 - SchemaId 不同却尝试升级。
-- 任一失败后旧 State 保持不变，后续补齐 registry 后仍可重试。
+- 任一 runtime 失败后旧 State 保持不变，修复 history/handler、重新构建后仍可重试。
 
 ## 对象自洽仍未解决
 
@@ -183,17 +186,20 @@ CharacterV2, Schema version 2
 
 ## 下一轮需要裁决的最小问题
 
-1. Snapshot History 的正式 source authority 与最小格式。
-2. history publisher 由显式 CLI/code fix 触发，还是允许真实 build target 自动修改工作树。
-3. generated version-aware serializer/binding 交给 `InMemoryStateStore` 的最小 API。
-4. generated strong handler contract 使用 required partial method，还是其他编译期强制形式。
+1. generated version-aware serializer/binding 交给 `InMemoryStateStore` 的最小 API。
+2. Snapshot → current domain hydrate 是现有 serializer 的一部分，还是独立 generated step。
+3. handler 异常如何附加 SchemaId/from/to 而不掩盖原异常。
+4. 自动 local publisher 的最小接入方式与连续 history diagnostics。
 5. 同 key 异形、并行 build 和多文件发布的 fail-closed/atomicity 边界。
 
 ## 相关材料
 
-- `docs/DurableGraph-lab-notebook.md` 的“当前自洽边界”、EXP-005 和 EXP-006。
+- `docs/DurableGraph-lab-notebook.md` 的“当前自洽边界”、EXP-005、EXP-006 和 EXP-007。
 - `docs/design-branches/0001-schema-authority-and-runtime-representation.md`。
+- `docs/design-branches/0003-snapshot-value-shape-and-upgrade-signature.md`
+- `docs/design-branches/0004-snapshot-history-authoring-and-publishing.md`
 - `experiments/SourceGeneratorHistoryProbe/README.md`
+- `experiments/SnapshotUpgradeShapeProbe/README.md`
 - `src/DurableGraph/InMemoryStateStore.cs`
 - `src/DurableGraph/IDurableSerializer.cs`
 - `src/DurableGraph.Generator/DurableSchemaGenerator.cs`
