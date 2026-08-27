@@ -8,7 +8,7 @@ using Microsoft.CodeAnalysis.Text;
 
 namespace Atelia.DurableGraph.Tests;
 
-public sealed class DurableSchemaGeneratorTests {
+public sealed partial class DurableSchemaGeneratorTests {
     private static readonly CSharpParseOptions ParseOptions =
         CSharpParseOptions.Default.WithLanguageVersion(LanguageVersion.CSharp14);
 

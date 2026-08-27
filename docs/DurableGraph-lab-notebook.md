@@ -20,7 +20,7 @@
 
 记录日期：2026-08-27
 
-- **Observed**：仓库已跑通 boxed-value 的内存 Save/Load 与 read-time upgrade demo：包含元数据契约、Schema 值模型、内存 SchemaStore/StateStore、Snapshot History，以及生成 version-aware Serializer 与静态相邻升级链的 Source Generator；尚无对象身份、wire format 或持久化实现。
+- **Observed**：仓库已跑通 boxed-value 的内存 Save/Load 与 read-time upgrade demo，并以隔离探针跑通单类型 Flat Graph Delta R1 和 generated graph operations R2；production runtime/default Generator 仍无对象身份、reference graph、wire format 或持久化实现。
 - **Observed**：`DurableGraph.slnx` 包含 runtime、Generator、Build tool、CLI 和 Tests 五个项目；Build tool 是随 NuGet 包部署的私有 snapshot-history publisher/verifier，不承载运行时持久化语义。
 - **Observed**：核心库将 Generator 作为 Roslyn analyzer 引用；CLI 引用核心库；测试项目引用核心库和 Generator。
 - **Observed**：运行时项目和测试项目目标框架为 `net10.0`；Generator 为兼容 Roslyn 加载而目标框架为 `netstandard2.0`。
@@ -44,6 +44,9 @@
 - Snapshot upgrade shape probe：固定 ordinary struct、`in/out`、partial implementation、definite assignment 与 overload 的 C# 语义边界。
 - Package-delivered Snapshot History：单一 `Atelia.DurableGraph` 包向直接消费者交付 runtime、Generator、MSBuild 自动接入与私有 Build tool，并由真实 PackageReference probe 验证。
 - Generated read-time upgrade：按 stored version 只分派一次，随后以强类型 Snapshot locals 和 required partial 相邻 handler 直达 current domain object；Load 不隐式写回。
+- Research roadmap：按 Graph Delta semantic probe → generated graph operations → normalized graph Load → logical delta chain → binary codec → persistent publication 的证据依赖安排后续切片。
+- Flat Graph Delta R1：已用 fixture-only latest typed Snapshot baseline、flat ID table、`RequiresRewrite`、whole-object Upsert 与 success-only baseline replacement 完成可执行探针。
+- Generated Graph Operations R2：internal、无 `[Generator]` 的 probe generator 已产生强类型 Capture/Snapshot equality/reference visitor，并与 R1 oracle 做差分验证；默认 package analyzer 路径不运行它。
 - Candidate design branches：在 `docs/design-branches/` 隔离尚未裁决的架构分叉。
 - 本实验簿：保存随实验演化的项目认识。
 
@@ -55,12 +58,17 @@
 - **Tentative**：快速原型的 local real build 自动 append checked-in Snapshot History；CI/design-time 只读，单 writer/单 TargetFramework/串行发布。显式 Accept target 记录为竞争分支。
 - **Observed**：上述 local publish/CI verify 快速原型已由包内 `build/*.props/targets` 和 `DurableGraph.Build` 落地；其工作流已实现，但 snapshot 格式和发布模型仍是可替换的原型边界。
 - **Decided**：继续关闭 durable 领域继承；FieldId 展平、base private field access 和 leaf version coupling 独立记录在 DB-005。
+- **Observed**：EXP-011 已跑通 fixture-only 单类型 Graph Delta 语义探针；逻辑 baseline 是带 RootId 的 flat ID table，每项保存 current Snapshot 与 `RequiresRewrite`，未引入 bytes、持久 head 或正式 DurableId。
+- **Observed**：EXP-012 已跑通 isolated generated graph operations；caller-provided `TIdentity : struct` 只是一条 test seam，未引入正式 DurableId、Reference TypeTag 或产品 Generator 支持。
+- **Decided**：当前不把 self-reference 半接入 scalar-only Schema History/boxed Serializer；默认 `DurableSchemaGenerator` 继续 DG0007 fail closed，下一主线可在 test-only logical graph 上进入 R3a Load normalization。
+- **Decided**：historical payload 在读取边界 exact decode 并升级到 current Snapshot；reachable upgraded node 在下一次显式 Save whole-object rewrite，unreachable upgraded node 不被保活。
+- **Decided**：normalized baseline 是派生比较投影，不复制 per-entry source Schema/object address；未来 persistent Save 通过 graph-level exact head + authoritative StateMap 与 projection 的同源 bundle 取得 provenance。
 - **Open**：Schema runtime representation 与 canonical authority 的候选分叉记录在 `DB-001`，等待 exact codec/persistent format 实验裁决。
 - **Open**：哪些类型和 API 最终属于核心程序集，等待真实代码形状出现后再判断。
 
 ### 当前自洽边界
 
-截至 EXP-010，当前 demo 能证明的是受限、单线程、公有 API 路径上的结构自洽：
+截至 EXP-012，公有 demo 仍只具有 EXP-010 的受限、单线程结构自洽边界；EXP-011/012 是隔离证据，不扩大 package/runtime 保证：
 
 - 成功保存的每条 State record 都记录 exact `(SchemaId, Version)`，且对应 Schema 已先登记在同一个 `InMemoryStateStore.SchemaStore`。
 - Schema conflict 和 serialization failure 都不会覆盖 slot 中原有 State。
@@ -513,6 +521,96 @@
 - `tests/DurableGraph.Tests/DurableSchemaGeneratorTests.cs`
 - `docs/design-branches/0002-read-time-version-upgrade-pipeline.md`
 
+### EXP-011：Flat Graph Delta semantic probe
+
+状态：Concluded
+
+日期：2026-08-27
+
+问题：能否在不引入产品 DurableId、Generator graph adapter、wire format 或 Store 的前提下，用单类型强类型 fixture 验证 flat latest-Snapshot baseline、identity-aware traversal、whole-object delta 和成功后 clean baseline 的核心状态律？
+
+本轮明确不回答：
+
+- historical payload → current baseline 的真实 Load integration。
+- generated `Capture / Equals / VisitReferences`。
+- two-pass CLR graph hydrate、正式 DurableId、异构类型和 Schema identity gate。
+- binary codec、StateMap/head、persistent delta chain、commit 和 concurrent mutation。
+- allocation、stack、throughput 或内存优化。
+
+最小实现：
+
+- 在测试项目内定义 internal `ProbeId`、`ProbeNode`、`ProbeSnapshot`、`BaselineEntry`、`NormalizedBaselineGraph` 和 `GraphDelta`，不修改 runtime public surface。
+- `PlanSave` 用显式 stack 和单一 ID→CLR instance table 遍历 current root closure；同 ID/different instance 在 visited skip 前 fail closed。
+- 每个节点只读取一次 reference fields，同一 locals 同时形成 Snapshot ID slots 和 child work items。
+- missing、`RequiresRewrite` 或 Snapshot unequal 产生完整 Upsert；source baseline IDs 与 current reachable IDs 的差集成为 Unreachable。
+- `AcceptForAssertion` 拒绝 Upsert/Unreachable overlap、遗漏 rewrite obligation、missing root、dangling reference 和结果 table 的 disconnected entries；成功时返回全新的 clean baseline。
+
+观察：
+
+- **Observed**：21 个聚焦测试覆盖 no-op、transient、leaf locality、identity replacement、sharing、cycles、duplicate ID、root replacement、rewrite/unreachable 分流、default ID、defensive copy、capture failure/retry、malformed candidate 和状态律。
+- **Observed**：`RequiresRewrite` 不必携带 source version 就能满足当前比较与首次显式重写；未来 record provenance 仍属于 authority StateMap，不是本轮结论。
+- **Observed**：baseline 可以包含因 normalization 而暂时 disconnected 的 source entries，但 accepted clean baseline 必须恰好等于新 RootId closure；独立审查发现并促成了该 gate。
+- **Observed**：当 ProbeId immutable 时，无需同时维护 ID map、reference visited set 和 reachable set；一个 ID map 足以保留全部 R1 语义。
+- **Observed**：Map/Set 容器枚举顺序没有被提升为语义；确定性展示由测试显式按 ID 排序。
+- **Observed**：solution build 0 warning / 0 error，完整测试从 100 增至 121 且全部通过；三路最终复审无 blocker/medium。
+
+结论：DB-006 R1 semantic probe 成立。它证明的是纯内存逻辑状态转换，不是产品对象图持久化；下一主线入口是 R2 generated graph operations。
+
+相关材料：
+
+- `tests/DurableGraph.Tests/GraphDeltaProbe.cs`
+- `tests/DurableGraph.Tests/GraphDeltaProbeTests.cs`
+- `docs/design-branches/0006-flat-graph-delta-prototype.md`
+- `docs/DurableGraph-research-roadmap.md`
+
+### EXP-012：Generated Graph Operations probe
+
+状态：Concluded
+
+日期：2026-08-27
+
+问题：Source Generator 能否为单个 direct-self-reference durable type 产生 R1 所需的强类型 current Snapshot capture、durable equality 和 reference visitation，同时暂不定义正式 identity、Reference TypeTag、wire format 或产品 graph API？
+
+本轮明确不回答：
+
+- 默认/package `DurableSchemaGenerator` 如何发布 reference Schema/history。
+- 正式 `DurableId`、allocator、异构 dispatch、polymorphism 或跨程序集 reference。
+- historical graph payload normalization、two-pass hydrate、StateMap、bytes、commit 或 recovery。
+- provisional `TIdentity`、delegate 与 generated private shape 的性能或最终 API 适合性。
+
+最小实现：
+
+- 在 Generator 程序集内新增 internal、无 `[Generator]` 的 `DurableGraphOperationsProbeGenerator`；测试用 Roslyn driver 显式运行，默认 analyzer discovery 保持不变。
+- 支持四种 scalar 与字段类型恰好等于当前 durable type 的 direct self-reference；Snapshot reference slot 使用 caller-provided `TIdentity?`，CapturedReferences 保存具体 CLR child。
+- `CaptureCurrent` 先按 FieldId 把 durable fields 各读入一个 local，再用同一 reference local 同时写 Snapshot ID 和 captured child；`DurableEquals` 比较 scalar/ID；`VisitReferences` 按 field slot 访问且不预先去重 shared child。
+- generated-driven test coordinator 继续复用 R1 的 identity-conflict/cycle/reachability 语义，但 expected baseline 和 literal delta 不由被测 capture 生成。
+
+观察：
+
+- **Observed**：shared two-node cycle 的 root/child Snapshot、重复 alias visitation 和 transient omission 与 literal values 及 EXP-011 oracle 一致。
+- **Observed**：两个不同 CLR child 具有相同 ID、或只修改 child 内容时，parent Snapshot 保持相等；child ID/null slot 改变时 parent Snapshot 改变。
+- **Observed**：no-op、transient-only、child scalar locality 与 same-valued child replacement 的 generated delta 同时匹配 literal Upserts/Unreachable 和 R1 oracle。
+- **Observed**：array、base-typed、cross-type reference 以 DG0007 fail closed；reserved helper 以不可配置的 probe-only DG0018 fail closed；失败的单类型 run 不产生空 hint。
+- **Observed**：生成文本不受字段声明顺序影响并使用 LF；reference visit 明确按 FieldId。syntax/symbol/semantic gates 证明 generated normal path 没有 `object`/`dynamic` data flow、dictionary、TypeTag 或 Serializer。
+- **Observed**：测试首先抓到 validation failure 后残留空 hint，以及文本扫描不足以排除 weak `object` flow 两个问题；修复后两路独立复审均无 blocker/medium。
+
+验证：
+
+- R1+R2 聚焦 `~Probe`：31/31 passed，其中 EXP-012 新增 10 cases。
+- Generator 单项目：0 warnings / 0 errors。
+- `DurableGraph.slnx`：0 warnings / 0 errors；完整 `DurableGraph.Tests`：131/131 passed。
+- `dotnet format --verify-no-changes`：passed；真实 PackageConsumerProbe：passed，确认 packaged analyzer 仍只自动发现产品 Generator。
+
+结论：R2 的 code-generation seam 获得可执行证据，但仍是默认不可发现的隔离探针；它没有改变严格 1...4 Snapshot History 或产品 self-reference 的 DG0007 边界。下一主线入口是 R3a test-only StoredGraphImage → normalized baseline。
+
+相关材料：
+
+- `src/DurableGraph.Generator/DurableGraphOperationsProbeGenerator.cs`
+- `tests/DurableGraph.Tests/GeneratedGraphOperationsProbeTests.cs`
+- `tests/DurableGraph.Tests/GraphDeltaProbe.cs`
+- `docs/design-branches/0006-flat-graph-delta-prototype.md`
+- `docs/DurableGraph-research-roadmap.md`
+
 ## 5. 实验记录模板
 
 后续实验按需增加条目，不要求为了形式填写无意义内容。
@@ -534,6 +632,28 @@
 ```
 
 ## 6. 船长日志
+
+### 2026-08-27：完成 Generated Graph Operations R2 probe
+
+- 选择 internal、无 `[Generator]` 的隔离 probe，而不是现在冻结 Reference TypeTag 或让产品 Generator 产生无法 hydrate 的半成品 boxed Serializer。
+- 以 provisional `TIdentity : struct` resolver 生成 typed Snapshot/CapturedReferences/Capture/equality/visitor，并用 literal expectations + R1 oracle 双重验证 sharing、cycle、locality 与 replacement。
+- 聚焦 31/31、完整 131/131、solution 0 warning / 0 error、PackageConsumerProbe passed；独立复审促成 semantic no-`object` gate 和 probe-only DG0018 元数据收口，最终无 blocker/medium。
+- 默认产品 Generator 仍 DG0007 拒绝 self-reference；下一主线为 R3a logical StoredGraphImage normalization。
+
+### 2026-08-27：完成 Flat Graph Delta R1 semantic probe
+
+- 以 internal single-type fixture 跑通 latest Snapshot baseline、`RequiresRewrite`、identity-aware stack traversal、whole-object Upsert、Unreachable 与 root transition。
+- 独立复审找到 accepted baseline 可残留 disconnected clean entry 的漏洞；新增 exact result-root closure gate 与 malformed candidate tests 后复核通过。
+- 合并 visited/reachability 状态为单一 ID→instance table，并移除 core sorted containers；确定性只在展示边界显式排序。
+- 聚焦 21/21、完整 121/121、solution 0 warning / 0 error；未修改 runtime 或 Generator public/product behavior。
+
+### 2026-08-27：选择 latest-Snapshot flat baseline 作为 Graph Delta 下一探针
+
+- 后续主线转向先验证 identity、reachability、sharing/cycle 与 whole-object delta，再为已证明的逻辑 IR 增加 binary codec。
+- baseline 保存来源 StateMap 的 flat live ID set；每项 historical payload 在 Load 边界升级成 current typed Snapshot，并以 `RequiresRewrite` 记录下一次显式 Save 的推进义务。
+- `RequiresRewrite` 属于 baseline entry envelope；失败时不清除，只有成功 publication 后通过安装新的 clean baseline 一次性消解。
+- normalized projection 不成为第二 authority；未来 old record reuse 和 stale-baseline gate 由 exact head + authoritative StateMap 在整图层绑定。
+- 将路线与实验 gate 写入 `DurableGraph-research-roadmap.md`，将最小算法、不变量和反例写入 DB-006。
 
 ### 2026-08-27：用 goto labels 线性化 generated upgrade chain
 

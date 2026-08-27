@@ -31,7 +31,7 @@ public sealed class DurableSchemaGenerator : IIncrementalGenerator {
         encoderShouldEmitUTF8Identifier: false,
         throwOnInvalidBytes: true);
 
-    private static readonly DiagnosticDescriptor InvalidTypeShape = new(
+    internal static readonly DiagnosticDescriptor InvalidTypeShape = new(
         id: "DG0001",
         title: "Invalid durable type shape",
         messageFormat: "Type '{0}' must be a sealed, top-level, non-generic, non-record partial class that directly inherits Atelia.DurableGraph.DurableBase",
@@ -39,7 +39,7 @@ public sealed class DurableSchemaGenerator : IIncrementalGenerator {
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true);
 
-    private static readonly DiagnosticDescriptor InvalidSchemaMetadata = new(
+    internal static readonly DiagnosticDescriptor InvalidSchemaMetadata = new(
         id: "DG0002",
         title: "Invalid durable schema metadata",
         messageFormat: "Durable type '{0}' must declare a non-empty schema ID and a positive version",
@@ -47,7 +47,7 @@ public sealed class DurableSchemaGenerator : IIncrementalGenerator {
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true);
 
-    private static readonly DiagnosticDescriptor UnclassifiedField = new(
+    internal static readonly DiagnosticDescriptor UnclassifiedField = new(
         id: "DG0003",
         title: "Unclassified durable type field",
         messageFormat: "Field '{0}' must be marked with exactly one of DurableFieldAttribute or TransientAttribute",
@@ -55,7 +55,7 @@ public sealed class DurableSchemaGenerator : IIncrementalGenerator {
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true);
 
-    private static readonly DiagnosticDescriptor ConflictingFieldClassification = new(
+    internal static readonly DiagnosticDescriptor ConflictingFieldClassification = new(
         id: "DG0004",
         title: "Conflicting field classification",
         messageFormat: "Field '{0}' cannot be marked with both DurableFieldAttribute and TransientAttribute",
@@ -63,7 +63,7 @@ public sealed class DurableSchemaGenerator : IIncrementalGenerator {
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true);
 
-    private static readonly DiagnosticDescriptor InvalidFieldId = new(
+    internal static readonly DiagnosticDescriptor InvalidFieldId = new(
         id: "DG0005",
         title: "Invalid durable field ID",
         messageFormat: "Durable field '{0}' must declare a positive field ID",
@@ -71,7 +71,7 @@ public sealed class DurableSchemaGenerator : IIncrementalGenerator {
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true);
 
-    private static readonly DiagnosticDescriptor DuplicateFieldId = new(
+    internal static readonly DiagnosticDescriptor DuplicateFieldId = new(
         id: "DG0006",
         title: "Duplicate durable field ID",
         messageFormat: "Durable field ID {0} is duplicated in type '{1}'",
@@ -79,7 +79,7 @@ public sealed class DurableSchemaGenerator : IIncrementalGenerator {
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true);
 
-    private static readonly DiagnosticDescriptor UnsupportedFieldType = new(
+    internal static readonly DiagnosticDescriptor UnsupportedFieldType = new(
         id: "DG0007",
         title: "Unsupported durable field type",
         messageFormat: "Field '{0}' has unsupported durable type '{1}'",
@@ -95,7 +95,7 @@ public sealed class DurableSchemaGenerator : IIncrementalGenerator {
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true);
 
-    private static readonly DiagnosticDescriptor ClassifiedStaticField = new(
+    internal static readonly DiagnosticDescriptor ClassifiedStaticField = new(
         id: "DG0009",
         title: "Static field has durable classification",
         messageFormat: "Static field '{0}' cannot be marked as durable or transient",
@@ -111,7 +111,7 @@ public sealed class DurableSchemaGenerator : IIncrementalGenerator {
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true);
 
-    private static readonly DiagnosticDescriptor ReadOnlyDurableField = new(
+    internal static readonly DiagnosticDescriptor ReadOnlyDurableField = new(
         id: "DG0011",
         title: "Durable field is readonly",
         messageFormat: "Durable field '{0}' cannot be readonly because generated deserialization assigns it directly",
