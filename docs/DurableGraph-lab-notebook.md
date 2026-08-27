@@ -51,7 +51,7 @@
 
 - **Observed**：读取阶段的闭世界升级管线已经落地；Load 本身不回写，显式 Save 才保存升级后的当前版本对象。
 - **Decided**：首轮升级机制只支持唯一相邻版本链 `V1 → V2 → V3`；出现真实跳版或分支消费者前不引入一般图。
-- **Decided**：每个 stored version 生成一个静态直达 current 的入口协调器；入口只有一次 version switch，随后使用 ordinary struct Snapshot 与 required partial `void UpgradeV1ToV2(in old, out next)` direct calls。runtime historical binding/upgrade registry 继续暂缓。
+- **Decided**：Generator 生成一个线性 read-time coordinator：入口只有一次 version switch，各 case decode 对应 Snapshot 后以 `goto SnapshotVnReady` 进入共享的顺序相邻边；ordinary struct 与 required partial `void UpgradeV1ToV2(in old, out next)` 契约不变。runtime historical binding/upgrade registry 继续暂缓。
 - **Tentative**：快速原型的 local real build 自动 append checked-in Snapshot History；CI/design-time 只读，单 writer/单 TargetFramework/串行发布。显式 Accept target 记录为竞争分支。
 - **Observed**：上述 local publish/CI verify 快速原型已由包内 `build/*.props/targets` 和 `DurableGraph.Build` 落地；其工作流已实现，但 snapshot 格式和发布模型仍是可替换的原型边界。
 - **Decided**：继续关闭 durable 领域继承；FieldId 展平、base private field access 和 leaf version coupling 独立记录在 DB-005。
@@ -60,7 +60,7 @@
 
 ### 当前自洽边界
 
-截至 EXP-009，当前 demo 能证明的是受限、单线程、公有 API 路径上的结构自洽：
+截至 EXP-010，当前 demo 能证明的是受限、单线程、公有 API 路径上的结构自洽：
 
 - 成功保存的每条 State record 都记录 exact `(SchemaId, Version)`，且对应 Schema 已先登记在同一个 `InMemoryStateStore.SchemaStore`。
 - Schema conflict 和 serialization failure 都不会覆盖 slot 中原有 State。
@@ -429,6 +429,8 @@
 
 状态：Concluded
 
+> 初始的每版本独立协调器代码形状已由 EXP-010 线性化；本实验建立的 runtime seam、强类型相邻链与无写回语义继续有效。
+
 日期：2026-08-27
 
 问题：能否让当前 compilation 仅凭 checked-in Snapshot History 和当前领域源码，生成从每个 known stored version 到 current 的强类型升级路径，并使 Load 升级成功后仍不隐式改写 State/Schema Store？
@@ -457,8 +459,8 @@
 - **Observed**：V1→V2→V3 handler 严格按顺序执行并传递强类型字段值；generated code 只含一次 `storedSchema.Version switch`。
 - **Observed**：historical shape mismatch、缺字段和错误 boxed type 在 handler 与 current domain object 分配前失败；handler 异常被包装为带 SchemaId/from/to 的 `DurableUpgradeException`。
 - **Observed**：真实 local nupkg consumer 用手写 V1 serializer 保存 boxed State，再通过 package-delivered `Character.Serializer` 连续 Load、显式 Save 和 current Load，证明 runtime/Generator/build assets 的发布组合也执行同一升级语义。
-- **Decided**：独立挑战后仍选择每入口单帧直线协调器。共享 O(N) suffix helpers 是唯一有竞争力替代，但会产生多层 frame 并把单条路径拆散；只有版本数或 generated IL 体积出现实测问题时重访。
-- **Decided**：O(N²) 指所有入口累计生成的 call-sites/IL，一次从 Vn Load 到 current 仍只执行 O(current-n) 条相邻边。
+- **Superseded**：初次独立挑战曾在“每入口单帧直线协调器”和“多层 O(N) suffix helpers”之间选择前者；EXP-010 后来用 goto labels 找到单帧且 O(N) 的第三种形状。
+- **Observed**：初始 O(N²) 只涉及所有入口累计生成的 call-sites/IL，一次 Load 的执行边数始终是 O(current-n)；EXP-010 消除了前者。
 - **Deferred**：额外 boxed fields 继续忽略；`newValue = default` 仍可绕过 out 的逐字段 tripwire；用户 handler 仍可自行产生外部 side effect。
 
 结论：闭世界唯一相邻链的 read-time upgrade vertical slice 成立；动态性被限制在一次版本入口分派，历史 payload 进入 handler 前已转成强类型 Snapshot，Store authority 只有显式 Save 才改变。
@@ -473,6 +475,42 @@
 - `tests/DurableGraph.Tests/InMemoryStateStoreTests.cs`
 - `tests/DurableGraph.Tests/DurableSchemaGeneratorTests.cs`
 - `experiments/PackageConsumerProbe/Run-Probe.ps1`
+- `docs/design-branches/0002-read-time-version-upgrade-pipeline.md`
+
+### EXP-010：Goto-label linear upgrade coordinator
+
+状态：Concluded
+
+日期：2026-08-27
+
+问题：能否在不增加 helper frames、不改变任何 public/runtime/handler 语义的前提下，用 generated `goto` labels 共享相邻升级后缀，把所有版本入口累计生成规模从 O(N²) 降为 O(N)？
+
+本轮明确不回答：
+
+- JIT 是否复用不同 Snapshot locals 的 stack slots，或单个较大方法的首次 JIT 成本。
+- 大型 Snapshot/长历史链的实测栈帧、机器码体积和吞吐。
+- 一般版本图、跳边、循环或分支 path selection。
+
+最小实验与实现：
+
+- 独立 warnings-as-errors probe 预先声明全部 Snapshot locals；每个 switch case 完成 exact-version decode 后跳到 `SnapshotVnReady` label。
+- switch 后只生成一份有序 labels；每个非 current label 调用并包装一条相邻 edge，然后自然落入下一 label；current label 只 materialize/hydrate/return 一次。
+- 保持 shape-before-decode、decode-before-handler、handler-before-domain-allocation，以及 unknown/identity/shape/edge typed failure 语义不变。
+- Generator tests 结构性锁定：一个 switch statement、没有 `DeserializeVn` methods、每个版本字段 decode 一次、每条 edge call 一次、`GetUninitializedObject` 一次。
+
+观察：
+
+- **Observed**：C# definite-assignment 接受 case→label 多入口与 labels 的顺序穿透；V1/V2/V3 和零字段历史 Snapshot 均成功动态编译执行。
+- **Observed**：原有 V1 Save→V2 Load/no-writeback、V1→V2→V3 顺序、异常包装、shape/payload gates、CS8795/CS0177、DG0017 与 package E2E 语义保持不变。
+- **Decided**：generated 源码和 IL 控制流结构现在随版本/边数量线性增长；一次 Load 仍执行 O(current-stored) 条边。
+- **Open**：单方法包含全部 Snapshot locals；虽然其生命周期呈线性，`in/out` 会取地址，JIT 不保证 slot reuse。历史很长或 Snapshot 很大时需用实际 stack/JIT/IL 测量裁决。
+
+结论：goto 在手写领域代码中通常需要克制，但在确定性 generated state-machine-like code 中恰好表达了“多个静态入口共享同一升级后缀”，以更小生成规模保留了单帧、强类型和直线可读性。
+
+相关材料：
+
+- `src/DurableGraph.Generator/DurableSchemaGenerator.cs`
+- `tests/DurableGraph.Tests/DurableSchemaGeneratorTests.cs`
 - `docs/design-branches/0002-read-time-version-upgrade-pipeline.md`
 
 ## 5. 实验记录模板
@@ -497,9 +535,16 @@
 
 ## 6. 船长日志
 
+### 2026-08-27：用 goto labels 线性化 generated upgrade chain
+
+- 技术 probe 证明 C# definite-assignment 支持 switch case decode 后 goto typed Snapshot-ready labels，并能顺序穿透后续相邻边。
+- 删除每版本复制升级后缀的 `DeserializeVn` methods；现在每个版本 decode、每条 edge 和 materialize 都只生成一次，代码规模从 O(N²) 降为 O(N)。
+- 保留单方法帧、唯一动态 switch、required partial handlers、typed failures 和 Load 无写回语义。
+- 将所有 Snapshot locals 共处单方法造成的 JIT/stack tradeoff 保留为未来实测问题，而不是宣称已优化运行时性能。
+
 ### 2026-08-27：跑通 generated static read-time upgrade
 
-- 独立方案挑战确认：共享 O(N) 后缀链只在版本数/IL 体积成为实测问题时更优；当前采用每个 stored version 一个单帧直达-current协调器。
+- 初始方案采用每个 stored version 一个单帧直达-current协调器；该代码形状随后由 EXP-010 的 goto-label 共享后缀线性化。
 - Generator 现在产生一次 version switch、exact historical Schema、required adjacent partial handlers 和强类型 Snapshot chain；DG0017 阻止 SchemaId 映射到多个 current CLR types。
 - V1 Save→V2 Load、重复无写回、显式 Save 后推进、V1→V2→V3 顺序以及关键失败路径均由 executable tests 覆盖。
 - 下一步尚未自动确定；wire format、领域 invariant/rebuild、malformed payload error、一般图与统一 commit 仍保持分离。

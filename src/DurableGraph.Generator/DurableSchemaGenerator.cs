@@ -1298,43 +1298,67 @@ public sealed class DurableSchemaGenerator : IIncrementalGenerator {
             .AppendLine("    Schema);");
         source.Append(statementIndent).AppendLine("}");
         source.AppendLine();
-        source.Append(statementIndent)
-            .AppendLine("return storedSchema.Version switch {");
 
         foreach (SnapshotVersionModel version in snapshotModel.Versions) {
-            source.Append(continuationIndent)
+            source.Append(statementIndent)
+                .Append(SnapshotTypeNamePrefix)
                 .Append(version.Version.ToString(CultureInfo.InvariantCulture))
-                .Append(" => DeserializeV")
+                .Append(" snapshotV")
                 .Append(version.Version.ToString(CultureInfo.InvariantCulture))
-                .AppendLine("(storedSchema, fields),");
+                .AppendLine(";");
         }
 
+        source.AppendLine();
+        source.Append(statementIndent).AppendLine("switch (storedSchema.Version) {");
+
+        foreach (SnapshotVersionModel version in snapshotModel.Versions) {
+            AppendDeserializeCase(
+                source,
+                version,
+                continuationIndent);
+        }
+
+        source.Append(continuationIndent).AppendLine("default:");
         source.Append(continuationIndent)
-            .AppendLine("_ => throw new global::Atelia.DurableGraph.UnsupportedSchemaVersionException(");
+            .AppendLine("    throw new global::Atelia.DurableGraph.UnsupportedSchemaVersionException(");
         source.Append(continuationIndent)
-            .AppendLine("    storedSchema.SchemaId,");
+            .AppendLine("        storedSchema.SchemaId,");
         source.Append(continuationIndent)
-            .AppendLine("    storedSchema.Version,");
+            .AppendLine("        storedSchema.Version,");
         source.Append(continuationIndent)
-            .AppendLine("    Schema.Version),");
-        source.Append(statementIndent).AppendLine("};");
-        source.Append(nestedMemberIndent).AppendLine("}");
+            .AppendLine("        Schema.Version);");
+        source.Append(statementIndent).AppendLine("}");
 
         for (int versionIndex = 0;
-            versionIndex < snapshotModel.Versions.Count;
+            versionIndex < snapshotModel.Versions.Count - 1;
             versionIndex++) {
             source.AppendLine();
-            AppendDeserializeCoordinator(
+            AppendUpgradeLabel(
                 source,
-                snapshotModel,
-                versionIndex,
+                model.SchemaId,
+                snapshotModel.Versions[versionIndex],
+                snapshotModel.Versions[versionIndex + 1],
                 fullyQualifiedTypeName,
-                ReadOnlyDictionaryType,
-                nestedMemberIndent,
                 statementIndent,
                 continuationIndent);
         }
 
+        SnapshotVersionModel currentVersion =
+            snapshotModel.Versions[snapshotModel.Versions.Count - 1];
+        source.AppendLine();
+        source.Append(statementIndent)
+            .Append("SnapshotV")
+            .Append(currentVersion.Version.ToString(CultureInfo.InvariantCulture))
+            .AppendLine("Ready:");
+        AppendMaterialization(
+            source,
+            model,
+            currentVersion,
+            fullyQualifiedTypeName,
+            continuationIndent,
+            continuationIndent + "    ");
+
+        source.Append(nestedMemberIndent).AppendLine("}");
         source.Append(memberIndent).AppendLine("}");
     }
 
@@ -1370,98 +1394,93 @@ public sealed class DurableSchemaGenerator : IIncrementalGenerator {
         }
     }
 
-    private static void AppendDeserializeCoordinator(
+    private static void AppendDeserializeCase(
         StringBuilder source,
-        DurableSnapshotTypeModel snapshotModel,
-        int startingVersionIndex,
-        string fullyQualifiedTypeName,
-        string readOnlyDictionaryType,
-        string memberIndent,
-        string statementIndent,
-        string continuationIndent) {
-        DurableTypeModel model = snapshotModel.CurrentType;
-        SnapshotVersionModel startingVersion =
-            snapshotModel.Versions[startingVersionIndex];
-        source.Append(memberIndent)
-            .Append("private static ")
-            .Append(fullyQualifiedTypeName)
-            .Append(" DeserializeV")
-            .Append(startingVersion.Version.ToString(CultureInfo.InvariantCulture))
-            .AppendLine("(");
-        source.Append(statementIndent)
-            .AppendLine("global::Atelia.DurableGraph.DurableSchema storedSchema,");
-        source.Append(statementIndent)
-            .Append(readOnlyDictionaryType)
-            .AppendLine(" fields) {");
+        SnapshotVersionModel version,
+        string caseIndent) {
+        string statementIndent = caseIndent + "    ";
+        string nestedStatementIndent = statementIndent + "    ";
+        string argumentIndent = nestedStatementIndent + "    ";
+        source.Append(caseIndent)
+            .Append("case ")
+            .Append(version.Version.ToString(CultureInfo.InvariantCulture))
+            .AppendLine(":");
         source.Append(statementIndent)
             .Append("if (!storedSchema.Equals(SchemaV")
-            .Append(startingVersion.Version.ToString(CultureInfo.InvariantCulture))
+            .Append(version.Version.ToString(CultureInfo.InvariantCulture))
             .AppendLine(")) {");
-        source.Append(continuationIndent)
+        source.Append(nestedStatementIndent)
             .AppendLine("throw new global::Atelia.DurableGraph.SchemaConflictException(");
-        source.Append(continuationIndent)
-            .AppendLine("    storedSchema,");
-        source.Append(continuationIndent)
-            .Append("    SchemaV")
-            .Append(startingVersion.Version.ToString(CultureInfo.InvariantCulture))
+        source.Append(argumentIndent)
+            .AppendLine("storedSchema,");
+        source.Append(argumentIndent)
+            .Append("SchemaV")
+            .Append(version.Version.ToString(CultureInfo.InvariantCulture))
             .AppendLine(");");
         source.Append(statementIndent).AppendLine("}");
-        source.AppendLine();
-
-        AppendSnapshotDecode(
+        AppendSnapshotDecodeAssignments(
             source,
-            startingVersion,
+            version,
             statementIndent);
+        source.Append(statementIndent)
+            .Append("goto SnapshotV")
+            .Append(version.Version.ToString(CultureInfo.InvariantCulture))
+            .AppendLine("Ready;");
+    }
 
-        for (int versionIndex = startingVersionIndex;
-            versionIndex < snapshotModel.Versions.Count - 1;
-            versionIndex++) {
-            SnapshotVersionModel fromVersion = snapshotModel.Versions[versionIndex];
-            SnapshotVersionModel toVersion = snapshotModel.Versions[versionIndex + 1];
-            source.AppendLine();
-            source.Append(statementIndent)
-                .Append(SnapshotTypeNamePrefix)
-                .Append(toVersion.Version.ToString(CultureInfo.InvariantCulture))
-                .Append(" snapshotV")
-                .Append(toVersion.Version.ToString(CultureInfo.InvariantCulture))
-                .AppendLine(";");
-            source.Append(statementIndent).AppendLine("try {");
-            source.Append(continuationIndent)
-                .Append(fullyQualifiedTypeName)
-                .Append(".UpgradeV")
-                .Append(fromVersion.Version.ToString(CultureInfo.InvariantCulture))
-                .Append("ToV")
-                .Append(toVersion.Version.ToString(CultureInfo.InvariantCulture))
-                .Append("(in snapshotV")
-                .Append(fromVersion.Version.ToString(CultureInfo.InvariantCulture))
-                .Append(", out snapshotV")
-                .Append(toVersion.Version.ToString(CultureInfo.InvariantCulture))
-                .AppendLine(");");
-            source.Append(statementIndent)
-                .AppendLine("} catch (global::System.Exception exception) {");
-            source.Append(continuationIndent)
-                .Append("throw new global::Atelia.DurableGraph.DurableUpgradeException(")
-                .AppendLine();
-            source.Append(continuationIndent)
-                .Append("    ")
-                .Append(SymbolDisplay.FormatLiteral(model.SchemaId, quote: true))
-                .AppendLine(",");
-            source.Append(continuationIndent)
-                .Append("    ")
-                .Append(fromVersion.Version.ToString(CultureInfo.InvariantCulture))
-                .AppendLine(",");
-            source.Append(continuationIndent)
-                .Append("    ")
-                .Append(toVersion.Version.ToString(CultureInfo.InvariantCulture))
-                .AppendLine(",");
-            source.Append(continuationIndent)
-                .AppendLine("    exception);");
-            source.Append(statementIndent).AppendLine("}");
-        }
+    private static void AppendUpgradeLabel(
+        StringBuilder source,
+        string schemaId,
+        SnapshotVersionModel fromVersion,
+        SnapshotVersionModel toVersion,
+        string fullyQualifiedTypeName,
+        string labelIndent,
+        string statementIndent) {
+        string continuationIndent = statementIndent + "    ";
+        source.Append(labelIndent)
+            .Append("SnapshotV")
+            .Append(fromVersion.Version.ToString(CultureInfo.InvariantCulture))
+            .AppendLine("Ready:");
+        source.Append(statementIndent).AppendLine("try {");
+        source.Append(continuationIndent)
+            .Append(fullyQualifiedTypeName)
+            .Append(".UpgradeV")
+            .Append(fromVersion.Version.ToString(CultureInfo.InvariantCulture))
+            .Append("ToV")
+            .Append(toVersion.Version.ToString(CultureInfo.InvariantCulture))
+            .Append("(in snapshotV")
+            .Append(fromVersion.Version.ToString(CultureInfo.InvariantCulture))
+            .Append(", out snapshotV")
+            .Append(toVersion.Version.ToString(CultureInfo.InvariantCulture))
+            .AppendLine(");");
+        source.Append(statementIndent)
+            .AppendLine("} catch (global::System.Exception exception) {");
+        source.Append(continuationIndent)
+            .AppendLine("throw new global::Atelia.DurableGraph.DurableUpgradeException(");
+        source.Append(continuationIndent)
+            .Append("    ")
+            .Append(SymbolDisplay.FormatLiteral(schemaId, quote: true))
+            .AppendLine(",");
+        source.Append(continuationIndent)
+            .Append("    ")
+            .Append(fromVersion.Version.ToString(CultureInfo.InvariantCulture))
+            .AppendLine(",");
+        source.Append(continuationIndent)
+            .Append("    ")
+            .Append(toVersion.Version.ToString(CultureInfo.InvariantCulture))
+            .AppendLine(",");
+        source.Append(continuationIndent)
+            .AppendLine("    exception);");
+        source.Append(statementIndent).AppendLine("}");
+    }
 
-        SnapshotVersionModel currentVersion =
-            snapshotModel.Versions[snapshotModel.Versions.Count - 1];
-        source.AppendLine();
+    private static void AppendMaterialization(
+        StringBuilder source,
+        DurableTypeModel model,
+        SnapshotVersionModel currentVersion,
+        string fullyQualifiedTypeName,
+        string statementIndent,
+        string continuationIndent) {
         source.Append(statementIndent)
             .Append(fullyQualifiedTypeName)
             .AppendLine(" value =");
@@ -1487,25 +1506,19 @@ public sealed class DurableSchemaGenerator : IIncrementalGenerator {
         }
 
         source.Append(statementIndent).AppendLine("return value;");
-        source.Append(memberIndent).AppendLine("}");
     }
 
-    private static void AppendSnapshotDecode(
+    private static void AppendSnapshotDecodeAssignments(
         StringBuilder source,
         SnapshotVersionModel version,
         string statementIndent) {
-        source.Append(statementIndent)
-            .Append(SnapshotTypeNamePrefix)
-            .Append(version.Version.ToString(CultureInfo.InvariantCulture))
-            .Append(" snapshotV")
-            .Append(version.Version.ToString(CultureInfo.InvariantCulture));
-
         if (version.Fields.Count == 0) {
-            source.AppendLine(" = default;");
+            source.Append(statementIndent)
+                .Append("snapshotV")
+                .Append(version.Version.ToString(CultureInfo.InvariantCulture))
+                .AppendLine(" = default;");
             return;
         }
-
-        source.AppendLine(";");
 
         foreach (SnapshotFieldModel field in version.Fields) {
             TryGetFieldTypeName(field.TypeTagValue, out string? fieldTypeName);

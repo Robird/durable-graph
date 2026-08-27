@@ -379,11 +379,102 @@ public sealed class DurableSchemaGeneratorTests {
             Assert.IsAssignableFrom<IEnumerable<string>>(
                 chainType.GetProperty("Steps")!.GetValue(null)));
 
+        List<string> steps = Assert.IsType<List<string>>(
+            chainType.GetProperty("Steps")!.GetValue(null));
+        steps.Clear();
+        object fromVersionTwo = InvokeSerializerDeserialize(
+            serializer,
+            new DurableSchema(
+                "samples.chain",
+                2,
+                new DurableFieldInfo(1, TypeTag.Int32),
+                new DurableFieldInfo(2, TypeTag.String)),
+            new Dictionary<int, object?> {
+                [1] = 8,
+                [2] = "direct-v2",
+            })!;
+        Assert.Equal(80L, chainType.GetProperty("Value")!.GetValue(fromVersionTwo));
+        Assert.Equal("direct-v2", chainType.GetProperty("Label")!.GetValue(fromVersionTwo));
+        Assert.Equal(true, chainType.GetProperty("Ready")!.GetValue(fromVersionTwo));
+        Assert.Equal(["2-3"], steps);
+
+        steps.Clear();
+        object fromVersionThree = InvokeSerializerDeserialize(
+            serializer,
+            new DurableSchema(
+                "samples.chain",
+                3,
+                new DurableFieldInfo(1, TypeTag.Int64),
+                new DurableFieldInfo(2, TypeTag.String),
+                new DurableFieldInfo(3, TypeTag.Boolean)),
+            new Dictionary<int, object?> {
+                [1] = 9L,
+                [2] = "direct-v3",
+                [3] = true,
+            })!;
+        Assert.Equal(9L, chainType.GetProperty("Value")!.GetValue(fromVersionThree));
+        Assert.Equal("direct-v3", chainType.GetProperty("Label")!.GetValue(fromVersionThree));
+        Assert.Equal(true, chainType.GetProperty("Ready")!.GetValue(fromVersionThree));
+        Assert.Empty(steps);
+
         string generated = GeneratedSource(run, "DurableSchemas.g.cs");
-        Assert.Equal(1, CountOccurrences(generated, "storedSchema.Version switch"));
-        Assert.Contains("DeserializeV1", generated);
-        Assert.Contains("DeserializeV2", generated);
-        Assert.Contains("DeserializeV3", generated);
+        Assert.Equal(1, CountOccurrences(generated, "switch (storedSchema.Version)"));
+        Assert.DoesNotContain("DeserializeV1", generated, StringComparison.Ordinal);
+        Assert.DoesNotContain("DeserializeV2", generated, StringComparison.Ordinal);
+        Assert.DoesNotContain("DeserializeV3", generated, StringComparison.Ordinal);
+        Assert.Equal(1, CountOccurrences(generated, ".UpgradeV1ToV2("));
+        Assert.Equal(1, CountOccurrences(generated, ".UpgradeV2ToV3("));
+        Assert.Equal(1, CountOccurrences(generated, "GetUninitializedObject("));
+
+        foreach (string decode in new[] {
+            "snapshotV1.Field1 = (",
+            "snapshotV2.Field1 = (",
+            "snapshotV2.Field2 = (",
+            "snapshotV3.Field1 = (",
+            "snapshotV3.Field2 = (",
+            "snapshotV3.Field3 = (",
+        }) {
+            Assert.Equal(1, CountOccurrences(generated, decode));
+        }
+    }
+
+    [Fact]
+    public void ZeroFieldHistoricalSnapshotUsesDefaultBeforeUpgrade() {
+        const string source = """
+            using Atelia.DurableGraph;
+
+            namespace Samples;
+
+            [DurableType("samples.zero-history", 2)]
+            public sealed partial class ZeroHistory : DurableBase {
+                [DurableField(1)] private int _value;
+                public int Value => _value;
+
+                private static partial void UpgradeV1ToV2(
+                    in __DurableSnapshotV1 oldValue,
+                    out __DurableSnapshotV2 newValue) {
+                    newValue.Field1 = 42;
+                }
+            }
+            """;
+        GeneratorTestRun run = RunGenerator(
+            source,
+            SnapshotHistory("zero-v1.dgsnapshot", "samples.zero-history", 1));
+        Assert.DoesNotContain(run.OutputCompilation.GetDiagnostics(), IsError);
+        Assembly assembly = EmitAndLoad(run.OutputCompilation);
+        Type zeroType = assembly.GetType("Samples.ZeroHistory")!;
+        object serializer = zeroType.GetProperty("Serializer")!.GetValue(null)!;
+
+        object value = InvokeSerializerDeserialize(
+            serializer,
+            new DurableSchema("samples.zero-history", 1),
+            new Dictionary<int, object?>())!;
+
+        Assert.Equal(42, zeroType.GetProperty("Value")!.GetValue(value));
+        Assert.Contains(
+            "snapshotV1 = default;",
+            GeneratedSource(run, "DurableSchemas.g.cs"),
+            StringComparison.Ordinal);
     }
 
     [Fact]

@@ -6,9 +6,9 @@
 >
 > 当前方向：读取旧版本时尝试升级为请求的当前版本；Load 不隐式写 Store，后续显式 Save 才保存升级后的对象。
 
-> 实现状态：EXP-009 已选择并验证“每个 stored version 一个 generated 静态直达-current协调器 + 唯一一次 version switch + required partial 相邻 handler”。本选择不冻结长期公共 API，也不开放一般版本图。
+> 实现状态：EXP-009 已验证唯一相邻 read-time upgrade 语义；EXP-010 进一步选择“唯一一次 version switch + case decode + goto Snapshot-ready labels + 单份顺序相邻链”。本选择不冻结长期公共 API，也不开放一般版本图。
 
-## EXP-009 裁决与实现结果
+## EXP-009/010 裁决与实现结果
 
 当前 version-aware serializer seam 是：
 
@@ -22,19 +22,21 @@ T Deserialize(
 
 `InMemoryStateStore` 从 State key 取得 authoritative exact Schema，只预先拒绝 SchemaId 不同；同 identity 的 version/shape 由 generated serializer 与其 historical IR 校验。Load 不登记 current Schema、不写回 State。
 
-Generator 为每个 known stored version 生成一条独立直线：
+Generator 生成一个线性 coordinator：
 
 ```text
 single stored-version switch
-    -> exact historical Schema shape validation
-    -> boxed fields decode into starting Snapshot
-    -> UpgradeVnToVn+1 direct calls
+    -> each case validates and decodes its exact starting Snapshot
+    -> goto SnapshotVnReady
+    -> one shared ordered sequence of UpgradeVnToVn+1 labels/calls
     -> allocate and hydrate current domain object
 ```
 
 缺相邻 handler 与漏填 out field 分别由 CS8795/CS0177 在编译期拒绝；unknown version、identity mismatch、shape conflict 和 handler exception 在运行时使用 typed failures。两个 current CLR types 复用同一 SchemaId 由 DG0017 拒绝。
 
-独立挑战中唯一有竞争力的替代是共享 O(N) suffix helpers。它减少所有入口累计的 generated IL，却引入 O(N) helper frames 并把一条升级路径拆散。当前版本数量小、实验优先直线可读性，因此保留每入口协调器；当 generated IL/build time/stack pressure 出现实测问题时重访。
+初次独立挑战比较了每入口 O(N²) 后缀复制与 O(N) suffix helpers；后者会引入多层 helper frames。随后 EXP-010 验证了第三种形状：用 goto labels 在同一方法内让多个 case 进入共享后缀。它既不复制 edge call-sites，也不增加 helper frames，因此成为当前选择。
+
+当前生成规模为 O(versions + fields + edges)，但运行时性能尚未据此宣称改善：单方法包含全部 Snapshot locals，`in/out` address-taking 下的 stack-slot reuse 与大方法 JIT 成本需要真实长链测量。
 
 ## 阶段目标
 
