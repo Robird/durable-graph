@@ -40,14 +40,16 @@
 - 内存 SchemaStore：提供 exact version 注册、查询、幂等和冲突语义。
 - Schema Generator：从受限的 durable class/field 声明生成静态 `DurableSchema`。
 - Boxed State demo：由 generated serializer 驱动 `InMemoryStateStore`，验证 Schema-first Save 与 validate-before-Deserialize。
+- Source Generator history feedback probe：隔离证明 `AddSource` 不会自行反馈为后续 `AdditionalFiles`，但显式 post-compile publisher 可以形成下一轮可见的 Snapshot History。
 - Candidate design branches：在 `docs/design-branches/` 隔离尚未裁决的架构分叉。
 - 本实验簿：保存随实验演化的项目认识。
 
 ### 后续方向
 
 - **Decided**：下一阶段先设计读取时自动尝试升级旧版本；Load 本身不回写，显式 Save 才保存升级后的当前版本对象。
-- **Open**：升级机制先采用唯一相邻版本链，还是允许一般有向图与路径选择。
-- **Open**：exact historical serializer binding 与 upgrade registry 的最小非泛型 seam 尚待设计。
+- **Decided**：首轮升级机制只支持唯一相邻版本链 `V1 → V2 → V3`；出现真实跳版或分支消费者前不引入一般图。
+- **Tentative**：在所有历史版本都属于当前 compilation 的闭世界模型中，优先生成 exact-version switch 与强类型相邻调用；暂缓 runtime historical binding/upgrade registry。
+- **Open**：Snapshot History 的正式 authority、格式与发布工作流尚待设计；普通 build 自动改写源码树和显式 CLI/code-fix accept 都只是候选。
 - **Open**：Schema runtime representation 与 canonical authority 的候选分叉记录在 `DB-001`，等待 exact codec/persistent format 实验裁决。
 - **Open**：哪些类型和 API 最终属于核心程序集，等待真实代码形状出现后再判断。
 
@@ -284,6 +286,49 @@
 - `tests/DurableGraph.Tests/InMemoryStateStoreTests.cs`
 - `tests/DurableGraph.Tests/DurableSchemaGeneratorTests.cs`
 
+### EXP-006：Source Generator Snapshot History feedback
+
+状态：Concluded
+
+日期：2026-08-27
+
+问题：Source Generator 能否把本轮生成的 Durable shape 自动累积为后续 compilation 的 `AdditionalFiles`，并在不保留旧领域类源码的情况下重建强类型历史 Snapshot？
+
+本轮明确不回答：
+
+- Snapshot History 的正式 canonical 格式和 durable authority。
+- 是否允许普通 build 改写受版本控制的源码树。
+- 并行 build、多 TargetFramework、原子发布和跨程序集 history ownership。
+- version-aware runtime serializer、真实 upgrade handler contract 和 StateStore 集成。
+
+最小实验：
+
+- 在 `experiments/SourceGeneratorHistoryProbe/` 建立与正式 Generator/Runtime 隔离的 Roslyn Generator 和单一 consumer project。
+- 同一 consumer project 由 `ProbeVersion` 分别只编译 V1 或 V2 领域源码；V2 源码没有 V1 领域类副本，却直接引用 generated `CharacterSnapshotV1` 与 `CharacterSnapshotV2`。
+- Generator 从当前 marked fields 和显式 `*.dgsnapshot` AdditionalFiles 生成 sealed reference Snapshot，并额外产生 comment-only snapshot candidate。
+- opt-in `AfterTargets="CoreCompile"` target 只在成功编译后把 candidate 复制到外部 history；下一次独立 project evaluation 才把它作为 AdditionalFile。
+- PowerShell runner 覆盖 no-feedback 负对照、V1 publish、clean V2 build、强类型 handler 执行、clean rebuild 和重复发布幂等。
+
+观察：
+
+- **Observed**：关闭 publisher 时，V1 `AddSource` candidate 即使仍物理存在，下一次 V2 build 也不会把它视为 AdditionalFile；V2 因缺少 `CharacterSnapshotV1` 按预期编译失败。
+- **Observed**：开启 publisher 后，成功 V1 build 产生一个外部 V1 snapshot；clean V2 build 读取它并同时生成 `CharacterSnapshotV1`/`V2`，强类型 `V1 → V2` 方法成功执行。
+- **Observed**：AdditionalFiles feedback 延迟一个 build；同一次 compilation 看不到 post-compile 新发布的文件。
+- **Observed**：clean V2 rebuild 可只依赖显式 history 重现，重复发布保持两个 history 文件及其 SHA-256 不变。
+- **Observed**：完整 probe 矩阵和现有 solution gate 都能做到 0 warning / 0 error；负对照中的预期编译错误由 runner 显式要求。
+- **Rejected**：依靠 Source Generator 自身、compiler cache 或 `obj` 中 `.g.cs` 隐式累积历史。`AddSource` 是当前 compilation 的派生输出，不是下一轮输入 authority。
+- **Tentative**：MSBuild hook、自制 build tool 或 CLI 可以承担显式 side effect；本实验只证明技术可行性，没有选定正式发布 owner。
+- **Open**：正式 publisher 必须进一步定义同 key 异形冲突、并行与原子发布、CI/IDE/design-time 权限，以及 build 改写工作树是否可接受。
+
+结论：强类型 Snapshot History 可以由“显式历史输入 → 纯 Generator 投影”稳定重建；全自动累积需要 Generator 外部的受控 build side effect，而且只能供下一次 build 使用。
+
+相关材料：
+
+- `experiments/SourceGeneratorHistoryProbe/README.md`
+- `experiments/SourceGeneratorHistoryProbe/Run-Probe.ps1`
+- `experiments/SourceGeneratorHistoryProbe/Probe.Generator/HistoryProbeGenerator.cs`
+- `experiments/SourceGeneratorHistoryProbe/Probe/HistoryProbe.csproj`
+
 ## 5. 实验记录模板
 
 后续实验按需增加条目，不要求为了形式填写无意义内容。
@@ -305,6 +350,13 @@
 ```
 
 ## 6. 船长日志
+
+### 2026-08-27：完成 Source Generator history feedback probe
+
+- 用同一 consumer project 的 V1/V2 负对照证明 `AddSource` 物理输出不会自动进入下一轮 `AdditionalFiles`。
+- 用 opt-in post-compile publisher 跑通 V1 history 发布、clean V2 强类型 Snapshot 恢复与幂等重复发布。
+- 将 runtime registry 暂缓，下一步先围绕闭世界 generated version switch/typed adjacent calls 继续实验。
+- 保留 history 格式、publisher owner 和普通 build 是否允许修改工作树为开放设计问题。
 
 ### 2026-08-27：Compaction 前冻结升级阶段入口
 

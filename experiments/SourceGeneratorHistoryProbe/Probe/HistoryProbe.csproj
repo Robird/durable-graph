@@ -1,0 +1,54 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <ProbeVersion Condition="'$(ProbeVersion)' == ''">1</ProbeVersion>
+    <HistoryProbePublish Condition="'$(HistoryProbePublish)' == ''">false</HistoryProbePublish>
+    <HistoryProbeResetStaging Condition="'$(HistoryProbeResetStaging)' == ''">true</HistoryProbeResetStaging>
+    <HistoryProbeHistoryDirectory Condition="'$(HistoryProbeHistoryDirectory)' == ''">$(MSBuildProjectDirectory)\History</HistoryProbeHistoryDirectory>
+    <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
+    <CompilerGeneratedFilesOutputPath>$(BaseIntermediateOutputPath)history-probe-generated</CompilerGeneratedFilesOutputPath>
+    <UseSharedCompilation>false</UseSharedCompilation>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="Contracts.cs" />
+    <Compile Include="Domain.V1.cs" Condition="'$(ProbeVersion)' == '1'" />
+    <Compile Include="Domain.V2.cs" Condition="'$(ProbeVersion)' == '2'" />
+    <AdditionalFiles Include="$(HistoryProbeHistoryDirectory)\*.dgsnapshot" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Probe.Generator\HistoryProbe.Generator.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+  <Target Name="ResetHistoryProbeGeneratedStaging"
+          BeforeTargets="CreateCompilerGeneratedFilesOutputPath"
+          Condition="'$(HistoryProbeResetStaging)' == 'true'">
+    <RemoveDir Directories="$(CompilerGeneratedFilesOutputPath)" />
+  </Target>
+
+  <Target Name="PublishHistoryProbeSnapshot"
+          AfterTargets="CoreCompile"
+          Condition="'$(HistoryProbePublish)' == 'true'
+                     and '$(DesignTimeBuild)' != 'true'
+                     and '$(BuildingProject)' == 'true'">
+    <ItemGroup>
+      <_HistoryProbeCandidate Include="$(CompilerGeneratedFilesOutputPath)\**\*.V$(ProbeVersion).*dgsnapshot.cs" />
+    </ItemGroup>
+
+    <MakeDir Condition="'@(_HistoryProbeCandidate)' != ''"
+             Directories="$(HistoryProbeHistoryDirectory)" />
+    <Copy Condition="'@(_HistoryProbeCandidate)' != ''"
+          SourceFiles="@(_HistoryProbeCandidate)"
+          DestinationFiles="@(_HistoryProbeCandidate->'$(HistoryProbeHistoryDirectory)\%(Filename)')"
+          SkipUnchangedFiles="true" />
+  </Target>
+
+</Project>

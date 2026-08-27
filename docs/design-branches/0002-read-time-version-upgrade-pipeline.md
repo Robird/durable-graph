@@ -26,12 +26,34 @@ later explicit Save(V2 object)
 
 本阶段不处理增量序列化、统一 commit、多 Store durability、对象身份或 wire format。
 
+## EXP-006 后的方向修订
+
+`experiments/SourceGeneratorHistoryProbe/` 已观察到：
+
+- Source Generator 的 `AddSource` 输出不会自行成为下一次 compilation 的 `AdditionalFiles`；即使旧 candidate 仍物理存在，未显式登记时也不是输入。
+- opt-in post-compile publisher 可以在成功 build 后把 current shape 写到外部 Snapshot History；它只能在下一次独立 project evaluation 中被 Generator 读取。
+- 只保留当前 V2 领域源码和显式 V1 history 时，fresh compilation 能生成 `SnapshotV1`/`SnapshotV2`，编译并执行强类型 `V1 → V2` 方法。
+
+同时已经决定首轮只支持唯一相邻版本链。由此当前倾向收窄为闭世界 generated pipeline：
+
+```text
+explicit Snapshot History + current domain source
+    -> generated exact historical Snapshots/materializers
+    -> generated stored-version switch
+    -> direct typed V1 -> V2 -> V3 calls
+    -> current domain materialization
+```
+
+runtime historical binding registry、upgrade registry 和 object-erased edge adapter 暂缓。只有 runtime plugin、独立 migration package、多个程序集共同贡献版本或热安装修复成为真实消费者时再重访。
+
+EXP-006 只证明 build hook/自制工具能够承担历史发布 side effect；它没有选定正式 history format、publisher owner，也没有批准普通 build 修改受版本控制的工作树。
+
 ## 必须保留的边界
 
 1. State record 的 `(SchemaId, Version)` 决定唯一 historical Schema，不使用 latest fallback。
 2. historical payload 只能交给与该 exact Schema shape 绑定的 serializer/materializer。
 3. 同 SchemaId 才允许版本升级；不同 SchemaId 是类型不匹配。
-4. 缺失 historical binding、缺失升级边、路径不完整、handler 抛错或返回错误类型时 fail closed。
+4. 缺失 historical shape、缺失相邻升级实现、链不完整、handler 抛错或返回错误结果时 fail closed；可在生成期/编译期拒绝的情况不推迟到运行时。
 5. Load 不修改 StateStore 或 SchemaStore authority；升级成功只返回新的内存对象。
 6. 只有调用方随后显式 Save，升级后的当前版本才进入 Store。
 7. 失败升级不得覆盖旧 State；旧 Schema 和旧 boxed fields 保持可再次读取/诊断。
@@ -48,9 +70,9 @@ ExactSchemaKey + exact Schema shape
     -> historical serializer/materializer
 ```
 
-由于加载前不知道 historical CLR 泛型类型，registry 需要一个最小的非泛型视图；是否由现有 `IDurableSerializer<T>` 适配，还是生成独立 binding，留待下一轮具体设计。
+原始候选是假设加载协调器需要在运行时查找未知 historical CLR 泛型类型。EXP-006 之后，当前更小的闭世界方案是让 Generator 为每个 current durable type 生成完整的 historical version switch 和直接强类型调用；Store 只面对一个 version-aware current binding，不需要知道 Snapshot CLR 类型。
 
-## 候选最小组件
+## 原始候选最小组件（runtime registry 已暂缓）
 
 ### Historical serializer registry
 
@@ -161,16 +183,17 @@ CharacterV2, Schema version 2
 
 ## 下一轮需要裁决的最小问题
 
-1. 非泛型 historical binding 的具体 API shape。
-2. Upgrade handler 使用泛型接口、delegate adapter，还是 generated glue。
-3. registry 由 `InMemoryStateStore` 持有，还是作为独立依赖注入。
-4. 首轮是否只允许唯一相邻版本链。
-5. 当前版本由调用方 serializer 明确指定，还是 registry 声明 current binding。
+1. Snapshot History 的正式 source authority 与最小格式。
+2. history publisher 由显式 CLI/code fix 触发，还是允许真实 build target 自动修改工作树。
+3. generated version-aware serializer/binding 交给 `InMemoryStateStore` 的最小 API。
+4. generated strong handler contract 使用 required partial method，还是其他编译期强制形式。
+5. 同 key 异形、并行 build 和多文件发布的 fail-closed/atomicity 边界。
 
 ## 相关材料
 
-- `docs/DurableGraph-lab-notebook.md` 的“当前自洽边界”和 EXP-005。
+- `docs/DurableGraph-lab-notebook.md` 的“当前自洽边界”、EXP-005 和 EXP-006。
 - `docs/design-branches/0001-schema-authority-and-runtime-representation.md`。
+- `experiments/SourceGeneratorHistoryProbe/README.md`
 - `src/DurableGraph/InMemoryStateStore.cs`
 - `src/DurableGraph/IDurableSerializer.cs`
 - `src/DurableGraph.Generator/DurableSchemaGenerator.cs`
