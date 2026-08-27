@@ -1,15 +1,46 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\DurableGraph.Generator\DurableGraph.Generator.csproj"
                       OutputItemType="Analyzer"
-                      ReferenceOutputAssembly="false" />
+                      ReferenceOutputAssembly="false"
+                      PrivateAssets="all" />
+    <ProjectReference Include="..\DurableGraph.Build\DurableGraph.Build.csproj"
+                      ReferenceOutputAssembly="false"
+                      PrivateAssets="all" />
   </ItemGroup>
+
+  <ItemGroup>
+    <None Include="build\Atelia.DurableGraph.props"
+          Pack="true"
+          PackagePath="build/Atelia.DurableGraph.props" />
+    <None Include="build\Atelia.DurableGraph.targets"
+          Pack="true"
+          PackagePath="build/Atelia.DurableGraph.targets" />
+    <None Include="PACKAGE.md"
+          Pack="true"
+          PackagePath="README.md" />
+  </ItemGroup>
+
+  <Target Name="CollectDurableGraphPackageAssets" BeforeTargets="_GetPackageFiles">
+    <ItemGroup>
+      <Content Include="..\DurableGraph.Generator\bin\$(Configuration)\netstandard2.0\Atelia.DurableGraph.Generator.dll"
+               Pack="true"
+               PackagePath="analyzers/dotnet/cs/Atelia.DurableGraph.Generator.dll" />
+      <_DurableGraphBuildRuntime Include="..\DurableGraph.Build\bin\$(Configuration)\net10.0\Atelia.DurableGraph.Build.dll;
+                                             ..\DurableGraph.Build\bin\$(Configuration)\net10.0\Atelia.DurableGraph.Build.deps.json;
+                                             ..\DurableGraph.Build\bin\$(Configuration)\net10.0\Atelia.DurableGraph.Build.runtimeconfig.json" />
+      <Content Include="@(_DurableGraphBuildRuntime)"
+               Pack="true"
+               PackagePath="tools/net10.0/%(RecursiveDir)%(Filename)%(Extension)" />
+    </ItemGroup>
+  </Target>
 
 </Project>

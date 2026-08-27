@@ -4,6 +4,7 @@ using Atelia.DurableGraph.Generator;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.Emit;
+using Microsoft.CodeAnalysis.Text;
 
 namespace Atelia.DurableGraph.Tests;
 
@@ -31,7 +32,10 @@ public sealed class DurableSchemaGeneratorTests {
             }
             """;
 
-        GeneratorTestRun run = RunGenerator(source);
+        GeneratorTestRun run = RunGenerator(
+            source,
+            SnapshotHistory("person-v1.dgsnapshot", "samples.person", 1, (3, 2), (9, 4)),
+            SnapshotHistory("person-v2.dgsnapshot", "samples.person", 2, (3, 2), (9, 4)));
 
         Assert.DoesNotContain(run.GeneratorDiagnostics, IsError);
         Assert.DoesNotContain(run.OutputCompilation.GetDiagnostics(), IsError);
@@ -89,7 +93,7 @@ public sealed class DurableSchemaGeneratorTests {
         GeneratorTestRun run = RunGenerator(source);
         Assert.DoesNotContain(run.GeneratorDiagnostics, IsError);
         Assert.DoesNotContain(run.OutputCompilation.GetDiagnostics(), IsError);
-        string generatedSource = Assert.Single(run.GeneratedSources).SourceText.ToString();
+        string generatedSource = GeneratedSource(run, "DurableSchemas.g.cs");
         Assert.Contains("RuntimeHelpers.GetUninitializedObject", generatedSource);
         Assert.DoesNotContain("FormatterServices", generatedSource);
 
@@ -188,10 +192,16 @@ public sealed class DurableSchemaGeneratorTests {
         GeneratorTestRun first = RunGenerator(firstOrder);
         GeneratorTestRun second = RunGenerator(secondOrder);
 
-        string firstGenerated = Assert.Single(first.GeneratedSources).SourceText.ToString();
-        string secondGenerated = Assert.Single(second.GeneratedSources).SourceText.ToString();
-        Assert.Equal(firstGenerated, secondGenerated);
-        Assert.DoesNotContain('\r', firstGenerated);
+        foreach (string hintName in new[] {
+            "DurableSchemas.g.cs",
+            "DurableGraphSnapshotCandidates.g.cs",
+            "DurableSnapshots.g.cs",
+        }) {
+            string firstGenerated = GeneratedSource(first, hintName);
+            string secondGenerated = GeneratedSource(second, hintName);
+            Assert.Equal(firstGenerated, secondGenerated);
+            Assert.DoesNotContain('\r', firstGenerated);
+        }
     }
 
     [Fact]
@@ -206,9 +216,188 @@ public sealed class DurableSchemaGeneratorTests {
         GeneratorTestRun first = RunGenerator(firstOrder);
         GeneratorTestRun second = RunGenerator(secondOrder);
 
-        string firstGenerated = Assert.Single(first.GeneratedSources).SourceText.ToString();
-        string secondGenerated = Assert.Single(second.GeneratedSources).SourceText.ToString();
-        Assert.Equal(firstGenerated, secondGenerated);
+        foreach (string hintName in new[] {
+            "DurableSchemas.g.cs",
+            "DurableGraphSnapshotCandidates.g.cs",
+            "DurableSnapshots.g.cs",
+        }) {
+            string firstGenerated = GeneratedSource(first, hintName);
+            string secondGenerated = GeneratedSource(second, hintName);
+            Assert.Equal(firstGenerated, secondGenerated);
+        }
+    }
+
+    [Fact]
+    public void VersionOneEmitsCanonicalCandidateAndCurrentSnapshot() {
+        GeneratorTestRun run = RunGenerator(
+            DurableTypeSource(
+                "[DurableField(9)] private string _name = string.Empty;\n" +
+                "[DurableField(3)] private int _age;"),
+            SnapshotHistory("unrelated.dgsnapshot", "samples.unrelated", 7, (1, 1)));
+
+        Assert.DoesNotContain(run.GeneratorDiagnostics, IsError);
+        Assert.DoesNotContain(run.OutputCompilation.GetDiagnostics(), IsError);
+        Assert.Equal(
+            "// durable-graph-snapshot-manifest:1\n" +
+            "// snapshot-begin\n" +
+            "// schema-id-base64:c2FtcGxlcy5leGFtcGxl\n" +
+            "// version:1\n" +
+            "// field:3|2\n" +
+            "// field:9|4\n" +
+            "// snapshot-end\n",
+            GeneratedSource(run, "DurableGraphSnapshotCandidates.g.cs"));
+
+        string snapshots = GeneratedSource(run, "DurableSnapshots.g.cs");
+        Assert.Contains("private struct __DurableSnapshotV1", snapshots);
+        Assert.Contains("public global::System.Int32 Field3;", snapshots);
+        Assert.Contains("public global::System.String Field9;", snapshots);
+    }
+
+    [Fact]
+    public void CompilationWithoutDurableTypesEmitsAnEmptyCandidateManifest() {
+        GeneratorTestRun run = RunGenerator(
+            "namespace Samples; internal sealed class PlainType { }");
+
+        Assert.DoesNotContain(run.GeneratorDiagnostics, IsError);
+        Assert.Equal(
+            "// durable-graph-snapshot-manifest:1\n",
+            GeneratedSource(run, "DurableGraphSnapshotCandidates.g.cs"));
+        Assert.DoesNotContain(
+            run.GeneratedSources,
+            source => source.HintName == "DurableSnapshots.g.cs");
+    }
+
+    [Fact]
+    public void VersionTwoConsumesHistoryAsStronglyTypedSnapshots() {
+        const string source = """
+            using Atelia.DurableGraph;
+
+            namespace Samples;
+
+            [DurableType("samples.person", 2)]
+            public sealed partial class Person : DurableBase {
+                [DurableField(1)] private string _name = string.Empty;
+                [DurableField(2)] private bool _active;
+
+                private static void Upgrade(
+                    in __DurableSnapshotV1 oldValue,
+                    out __DurableSnapshotV2 newValue) {
+                    newValue.Field1 = oldValue.Field1;
+                    newValue.Field2 = true;
+                }
+            }
+            """;
+        GeneratorTestRun run = RunGenerator(
+            source,
+            SnapshotHistory("person-v1.dgsnapshot", "samples.person", 1, (1, 4)),
+            SnapshotHistory("person-v2.dgsnapshot", "samples.person", 2, (1, 4), (2, 1)));
+
+        Assert.DoesNotContain(run.GeneratorDiagnostics, IsError);
+        Assert.DoesNotContain(run.OutputCompilation.GetDiagnostics(), IsError);
+
+        string snapshots = GeneratedSource(run, "DurableSnapshots.g.cs");
+        Assert.Contains("private struct __DurableSnapshotV1", snapshots);
+        Assert.Contains("private struct __DurableSnapshotV2", snapshots);
+        Assert.Contains("public global::System.String Field1;", snapshots);
+        Assert.Contains("public global::System.Boolean Field2;", snapshots);
+    }
+
+    [Fact]
+    public void MissingPredecessorHistoryFailsClosed() {
+        GeneratorTestRun run = RunGenerator(
+            DurableTypeSource(
+                "[DurableField(1)] private int _value;",
+                durableTypeArguments: "\"samples.example\", 3"),
+            SnapshotHistory("example-v1.dgsnapshot", "samples.example", 1, (1, 2)));
+
+        Diagnostic diagnostic = Assert.Single(
+            run.GeneratorDiagnostics,
+            candidate => candidate.Id == "DG0014");
+        Assert.Contains("version 2", diagnostic.GetMessage(), StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            run.GeneratedSources,
+            source => source.HintName == "DurableSnapshots.g.cs");
+    }
+
+    [Fact]
+    public void MalformedSnapshotHistoryFailsClosed() {
+        GeneratorTestRun run = RunGenerator(
+            DurableTypeSource("[DurableField(1)] private int _value;"),
+            new InMemoryAdditionalText(
+                "broken.dgsnapshot",
+                "// durable-graph-snapshot:1\n// not-a-snapshot\n"));
+
+        Diagnostic diagnostic = Assert.Single(
+            run.GeneratorDiagnostics,
+            candidate => candidate.Id == "DG0012");
+        Assert.Equal(DiagnosticSeverity.Error, diagnostic.Severity);
+        Assert.Equal("broken.dgsnapshot", diagnostic.Location.GetLineSpan().Path);
+    }
+
+    [Fact]
+    public void CandidateManifestCannotMasqueradeAsAcceptedHistory() {
+        GeneratorTestRun run = RunGenerator(
+            DurableTypeSource("[DurableField(1)] private int _value;"),
+            new InMemoryAdditionalText(
+                "candidate.dgsnapshot",
+                "// durable-graph-snapshot-manifest:1\n" +
+                "// snapshot-begin\n" +
+                "// schema-id-base64:c2FtcGxlcy5leGFtcGxl\n" +
+                "// version:1\n" +
+                "// field:1|2\n" +
+                "// snapshot-end\n"));
+
+        Diagnostic diagnostic = Assert.Single(
+            run.GeneratorDiagnostics,
+            candidate => candidate.Id == "DG0012");
+        Assert.Equal(DiagnosticSeverity.Error, diagnostic.Severity);
+    }
+
+    [Fact]
+    public void ConflictingHistoryForSameSchemaVersionFailsClosed() {
+        GeneratorTestRun run = RunGenerator(
+            DurableTypeSource(
+                "[DurableField(1)] private int _value;",
+                durableTypeArguments: "\"samples.example\", 2"),
+            SnapshotHistory("first.dgsnapshot", "samples.example", 1, (1, 2)),
+            SnapshotHistory("second.dgsnapshot", "samples.example", 1, (1, 3)));
+
+        Assert.Contains(
+            run.GeneratorDiagnostics,
+            candidate => candidate.Id == "DG0013");
+        Assert.DoesNotContain(
+            run.GeneratedSources,
+            source => source.HintName == "DurableSnapshots.g.cs");
+    }
+
+    [Fact]
+    public void CurrentHistoryMustExactlyMatchCurrentFields() {
+        GeneratorTestRun run = RunGenerator(
+            DurableTypeSource("[DurableField(1)] private int _value;"),
+            SnapshotHistory("current.dgsnapshot", "samples.example", 1, (1, 3)));
+
+        Diagnostic diagnostic = Assert.Single(
+            run.GeneratorDiagnostics,
+            candidate => candidate.Id == "DG0015");
+        Assert.Equal(DiagnosticSeverity.Error, diagnostic.Severity);
+        Assert.DoesNotContain(
+            run.GeneratedSources,
+            source => source.HintName == "DurableSnapshots.g.cs");
+    }
+
+    [Fact]
+    public void ExistingGeneratedSnapshotNameFailsClosed() {
+        GeneratorTestRun run = RunGenerator(DurableTypeSource(
+            "[DurableField(1)] private int _value;\n" +
+            "private struct __DurableSnapshotV1 { }"));
+
+        Diagnostic diagnostic = Assert.Single(
+            run.GeneratorDiagnostics,
+            candidate => candidate.Id == "DG0016");
+        Assert.Equal(DiagnosticSeverity.Error, diagnostic.Severity);
+        Assert.DoesNotContain(
+            run.GeneratedSources,
+            source => source.HintName == "DurableSnapshots.g.cs");
     }
 
     public static TheoryData<string, string> InvalidSources() {
@@ -256,6 +445,12 @@ public sealed class DurableSchemaGeneratorTests {
                 DurableTypeSource(
                     "[Transient] private int _value;",
                     durableTypeArguments: "\"   \", 1")
+            },
+            {
+                "DG0002",
+                DurableTypeSource(
+                    "[Transient] private int _value;",
+                    durableTypeArguments: "\"\\uD800\", 1")
             },
             {
                 "DG0003",
@@ -355,7 +550,9 @@ public sealed class DurableSchemaGeneratorTests {
             """;
     }
 
-    private static GeneratorTestRun RunGenerator(string source) {
+    private static GeneratorTestRun RunGenerator(
+        string source,
+        params AdditionalText[] additionalTexts) {
         SyntaxTree syntaxTree = CSharpSyntaxTree.ParseText(source, ParseOptions);
         CSharpCompilation compilation = CSharpCompilation.Create(
             assemblyName: $"GeneratorTests_{Guid.NewGuid():N}",
@@ -367,6 +564,7 @@ public sealed class DurableSchemaGeneratorTests {
                 nullableContextOptions: NullableContextOptions.Enable));
         GeneratorDriver driver = CSharpGeneratorDriver.Create(
             generators: [new DurableSchemaGenerator().AsSourceGenerator()],
+            additionalTexts: additionalTexts,
             parseOptions: ParseOptions);
 
         driver = driver.RunGeneratorsAndUpdateCompilation(
@@ -379,6 +577,39 @@ public sealed class DurableSchemaGeneratorTests {
             (CSharpCompilation)outputCompilation,
             runResult.Diagnostics,
             runResult.Results.SelectMany(result => result.GeneratedSources).ToArray());
+    }
+
+    private static string GeneratedSource(
+        GeneratorTestRun run,
+        string hintName) {
+        return Assert.Single(
+            run.GeneratedSources,
+            source => source.HintName == hintName).SourceText.ToString();
+    }
+
+    private static AdditionalText SnapshotHistory(
+        string path,
+        string schemaId,
+        int version,
+        params (int FieldId, int TypeTag)[] fields) {
+        string content =
+            "// durable-graph-snapshot:1\n" +
+            "// snapshot-begin\n" +
+            "// schema-id-base64:" +
+            Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(schemaId)) +
+            "\n// version:" + version.ToString(System.Globalization.CultureInfo.InvariantCulture) +
+            "\n";
+
+        foreach ((int fieldId, int typeTag) in fields) {
+            content += "// field:" +
+                fieldId.ToString(System.Globalization.CultureInfo.InvariantCulture) +
+                "|" +
+                typeTag.ToString(System.Globalization.CultureInfo.InvariantCulture) +
+                "\n";
+        }
+
+        content += "// snapshot-end\n";
+        return new InMemoryAdditionalText(path, content);
     }
 
     private static IEnumerable<MetadataReference> PlatformReferences() {
@@ -421,4 +652,20 @@ public sealed class DurableSchemaGeneratorTests {
         CSharpCompilation OutputCompilation,
         IEnumerable<Diagnostic> GeneratorDiagnostics,
         GeneratedSourceResult[] GeneratedSources);
+
+    private sealed class InMemoryAdditionalText : AdditionalText {
+        private readonly SourceText _text;
+
+        public InMemoryAdditionalText(string path, string content) {
+            Path = path;
+            _text = SourceText.From(content);
+        }
+
+        public override string Path { get; }
+
+        public override SourceText GetText(
+            CancellationToken cancellationToken = default) {
+            return _text;
+        }
+    }
 }

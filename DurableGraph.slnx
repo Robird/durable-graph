@@ -1,5 +1,6 @@
 <Solution>
   <Folder Name="/src/">
+    <Project Path="src/DurableGraph.Build/DurableGraph.Build.csproj" />
     <Project Path="src/DurableGraph.Cli/DurableGraph.Cli.csproj" />
     <Project Path="src/DurableGraph.Generator/DurableGraph.Generator.csproj" />
     <Project Path="src/DurableGraph/DurableGraph.csproj" />

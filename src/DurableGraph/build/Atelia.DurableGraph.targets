@@ -1,0 +1,37 @@
+<Project>
+  <PropertyGroup>
+    <DurableGraphHistoryMode Condition="'$(DurableGraphHistoryMode)' == '' and '$(ContinuousIntegrationBuild)' == 'true'">Verify</DurableGraphHistoryMode>
+    <DurableGraphHistoryMode Condition="'$(DurableGraphHistoryMode)' == ''">Publish</DurableGraphHistoryMode>
+    <_DurableGraphBuildTool>$(MSBuildThisFileDirectory)../tools/net10.0/Atelia.DurableGraph.Build.dll</_DurableGraphBuildTool>
+    <_DurableGraphDotNetHost Condition="'$(DotNetHostPath)' != ''">$(DotNetHostPath)</_DurableGraphDotNetHost>
+    <_DurableGraphDotNetHost Condition="'$(_DurableGraphDotNetHost)' == ''">dotnet</_DurableGraphDotNetHost>
+  </PropertyGroup>
+
+  <ItemGroup Condition="Exists('$(DurableGraphSnapshotHistoryDirectory)')">
+    <AdditionalFiles Include="$(DurableGraphSnapshotHistoryDirectory)/*.dgsnapshot"
+                     Visible="false" />
+  </ItemGroup>
+
+  <Target Name="DurableGraphProcessSnapshotHistory"
+          AfterTargets="CoreCompile"
+          Condition="'$(DurableGraphHistoryMode)' != 'Off'
+                     and '$(DesignTimeBuild)' != 'true'
+                     and '$(BuildingProject)' == 'true'
+                     and '$(Language)' == 'C#'">
+    <ItemGroup>
+      <_DurableGraphSnapshotManifest Include="$(CompilerGeneratedFilesOutputPath)/**/DurableGraphSnapshotCandidates.g.cs" />
+    </ItemGroup>
+
+    <Error Condition="'$(DurableGraphHistoryMode)' != 'Publish' and '$(DurableGraphHistoryMode)' != 'Verify'"
+           Text="DurableGraphHistoryMode must be Publish, Verify, or Off; found '$(DurableGraphHistoryMode)'." />
+    <Error Condition="'@(_DurableGraphSnapshotManifest->Count())' != '1'"
+           Text="DurableGraph expected exactly one snapshot candidate manifest under '$(CompilerGeneratedFilesOutputPath)' but found @(_DurableGraphSnapshotManifest->Count()). Clean the project and rebuild, and do not disable EmitCompilerGeneratedFiles." />
+    <Error Condition="!Exists('$(_DurableGraphBuildTool)')"
+           Text="DurableGraph snapshot publisher was not found at '$(_DurableGraphBuildTool)'." />
+
+    <Exec Condition="'@(_DurableGraphSnapshotManifest->Count())' == '1' and '$(DurableGraphHistoryMode)' == 'Publish'"
+          Command="&quot;$(_DurableGraphDotNetHost)&quot; &quot;$(_DurableGraphBuildTool)&quot; publish --manifest &quot;@(_DurableGraphSnapshotManifest)&quot; --history &quot;$(DurableGraphSnapshotHistoryDirectory)&quot;" />
+    <Exec Condition="'@(_DurableGraphSnapshotManifest->Count())' == '1' and '$(DurableGraphHistoryMode)' == 'Verify'"
+          Command="&quot;$(_DurableGraphDotNetHost)&quot; &quot;$(_DurableGraphBuildTool)&quot; verify --manifest &quot;@(_DurableGraphSnapshotManifest)&quot; --history &quot;$(DurableGraphSnapshotHistoryDirectory)&quot;" />
+  </Target>
+</Project>

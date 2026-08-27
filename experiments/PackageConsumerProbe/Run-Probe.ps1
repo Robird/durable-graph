@@ -1,0 +1,277 @@
+[CmdletBinding()]
+param()
+
+$ErrorActionPreference = "Stop"
+
+function Invoke-DotNet {
+    param([Parameter(Mandatory)][string[]] $Arguments)
+
+    & dotnet @Arguments
+
+    if ($LASTEXITCODE -ne 0) {
+        throw "dotnet $($Arguments -join ' ') failed with exit code $LASTEXITCODE."
+    }
+}
+
+function Invoke-DotNetExpectFailure {
+    param(
+        [Parameter(Mandatory)][string[]] $Arguments,
+        [Parameter(Mandatory)][string] $ExpectedText
+    )
+
+    $output = (& dotnet @Arguments 2>&1 | Out-String)
+    $exitCode = $LASTEXITCODE
+    Write-Host $output
+
+    if ($exitCode -eq 0) {
+        throw "dotnet $($Arguments -join ' ') unexpectedly succeeded."
+    }
+
+    if (-not $output.Contains($ExpectedText, [StringComparison]::Ordinal)) {
+        throw "Expected failed command output to contain '$ExpectedText'."
+    }
+}
+
+function Invoke-ConsumerClean {
+    param(
+        [Parameter(Mandatory)][string] $Project,
+        [Parameter(Mandatory)][string] $PackageVersion,
+        [Parameter(Mandatory)][string] $HistoryDirectory,
+        [Parameter(Mandatory)][int] $ProbeVersion
+    )
+
+    Invoke-DotNet @(
+        "clean", $Project,
+        "-p:DurableGraphPackageVersion=$PackageVersion",
+        "-p:DurableGraphSnapshotHistoryDirectory=$HistoryDirectory",
+        "-p:ProbeVersion=$ProbeVersion"
+    )
+}
+
+function Get-HistoryFiles {
+    param([Parameter(Mandatory)][string] $HistoryDirectory)
+
+    if (-not (Test-Path -LiteralPath $HistoryDirectory)) {
+        return @()
+    }
+
+    return @(Get-ChildItem -LiteralPath $HistoryDirectory -Filter *.dgsnapshot -File)
+}
+
+function Assert-HistoryCount {
+    param(
+        [Parameter(Mandatory)][string] $HistoryDirectory,
+        [Parameter(Mandatory)][int] $Expected
+    )
+
+    $actual = @(Get-HistoryFiles $HistoryDirectory).Count
+
+    if ($actual -ne $Expected) {
+        throw "Expected $Expected snapshot history file(s), found $actual."
+    }
+}
+
+$probeRoot = $PSScriptRoot
+$repositoryRoot = (Resolve-Path (Join-Path $probeRoot "../..")).Path
+$consumerProject = Join-Path $probeRoot "Consumer/Consumer.csproj"
+$runId = "run-$([DateTime]::UtcNow.ToString('yyyyMMddHHmmss'))-$PID"
+$workRoot = Join-Path $probeRoot "obj/$runId"
+$feed = Join-Path $workRoot "feed"
+$packageCache = Join-Path $workRoot "packages"
+$history = Join-Path $workRoot "history"
+$packageVersion = "0.0.0-e2e.$([DateTime]::UtcNow.ToString('yyyyMMddHHmmss')).$PID"
+$consumerProjectText = Get-Content -LiteralPath $consumerProject -Raw
+
+foreach ($forbiddenConsumerWiring in @(
+    "<Import",
+    "<ProjectReference",
+    "<Analyzer",
+    "<AdditionalFiles"
+)) {
+    if ($consumerProjectText.Contains($forbiddenConsumerWiring, [StringComparison]::Ordinal)) {
+        throw "Consumer project contains forbidden manual wiring '$forbiddenConsumerWiring'."
+    }
+}
+
+New-Item -ItemType Directory -Path $feed, $packageCache | Out-Null
+
+Push-Location $repositoryRoot
+
+try {
+    Invoke-DotNet @(
+        "pack", "src/DurableGraph/DurableGraph.csproj",
+        "--configuration", "Release",
+        "--output", $feed,
+        "-p:PackageVersion=$packageVersion"
+    )
+
+    $packages = @(Get-ChildItem -LiteralPath $feed -Filter *.nupkg -File -ErrorAction Stop)
+
+    if ($packages.Count -ne 1) {
+        throw "Expected exactly one package, found $($packages.Count)."
+    }
+
+    $package = $packages[0]
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $archive = [System.IO.Compression.ZipFile]::OpenRead($package.FullName)
+
+    try {
+        $entries = @($archive.Entries | ForEach-Object FullName)
+        $requiredEntries = @(
+            "lib/net10.0/Atelia.DurableGraph.dll",
+            "analyzers/dotnet/cs/Atelia.DurableGraph.Generator.dll",
+            "build/Atelia.DurableGraph.props",
+            "build/Atelia.DurableGraph.targets",
+            "README.md",
+            "tools/net10.0/Atelia.DurableGraph.Build.dll",
+            "tools/net10.0/Atelia.DurableGraph.Build.deps.json",
+            "tools/net10.0/Atelia.DurableGraph.Build.runtimeconfig.json"
+        )
+
+        foreach ($requiredEntry in $requiredEntries) {
+            if ($entries -notcontains $requiredEntry) {
+                throw "Package is missing '$requiredEntry'."
+            }
+        }
+
+        if ($entries -contains "tools/net10.0/Atelia.DurableGraph.Build.exe") {
+            throw "Package contains a platform-specific build-tool apphost."
+        }
+    }
+    finally {
+        $archive.Dispose()
+    }
+
+    Invoke-DotNet @(
+        "restore", $consumerProject,
+        "--source", $feed,
+        "--packages", $packageCache,
+        "-p:DurableGraphPackageVersion=$packageVersion"
+    )
+
+    Invoke-DotNetExpectFailure -Arguments @(
+        "build", $consumerProject, "--no-restore",
+        "-p:DurableGraphPackageVersion=$packageVersion",
+        "-p:DurableGraphSnapshotHistoryDirectory=$history",
+        "-p:ProbeVersion=2"
+    ) -ExpectedText "DG0014"
+    Assert-HistoryCount $history 0
+
+    Invoke-ConsumerClean $consumerProject $packageVersion $history 1
+    Invoke-DotNet @(
+        "build", $consumerProject, "--no-restore",
+        "-p:DurableGraphPackageVersion=$packageVersion",
+        "-p:DurableGraphSnapshotHistoryDirectory=$history",
+        "-p:ProbeVersion=1"
+    )
+    Assert-HistoryCount $history 1
+
+    Invoke-ConsumerClean $consumerProject $packageVersion $history 2
+    Invoke-DotNet @(
+        "build", $consumerProject, "--no-restore",
+        "-p:DurableGraphPackageVersion=$packageVersion",
+        "-p:DurableGraphSnapshotHistoryDirectory=$history",
+        "-p:ProbeVersion=2"
+    )
+    Assert-HistoryCount $history 2
+
+    $consumerAssembly = Join-Path $probeRoot "Consumer/bin/Debug/net10.0/Atelia.Consumer.dll"
+    $consumerOutput = (& dotnet $consumerAssembly | Out-String).Trim()
+
+    if ($LASTEXITCODE -ne 0 -or $consumerOutput -ne "V1:True") {
+        throw "Generated strong snapshot exercise failed; output was '$consumerOutput'."
+    }
+
+    $hashesBeforeVerify = @{}
+
+    foreach ($file in Get-HistoryFiles $history) {
+        $hashesBeforeVerify[$file.Name] = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash
+    }
+
+    Invoke-DotNet @(
+        "build", $consumerProject, "--no-restore",
+        "-p:DurableGraphPackageVersion=$packageVersion",
+        "-p:DurableGraphSnapshotHistoryDirectory=$history",
+        "-p:ProbeVersion=0"
+    )
+    $generatedRoot = Join-Path $probeRoot "Consumer/obj/Debug/net10.0/generated"
+    $emptyManifests = @(Get-ChildItem -LiteralPath $generatedRoot -Recurse -File |
+        Where-Object Name -eq "DurableGraphSnapshotCandidates.g.cs")
+
+    if ($emptyManifests.Count -ne 1 -or
+        (Get-Content -LiteralPath $emptyManifests[0].FullName -Raw) -ne "// durable-graph-snapshot-manifest:1`n") {
+        throw "Removing all durable types without cleaning did not replace the old candidate with an empty manifest."
+    }
+
+    foreach ($file in Get-HistoryFiles $history) {
+        $zeroTypeHash = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash
+
+        if ($hashesBeforeVerify[$file.Name] -ne $zeroTypeHash) {
+            throw "Zero-type publication changed '$($file.Name)'."
+        }
+    }
+
+    Invoke-ConsumerClean $consumerProject $packageVersion $history 2
+    Invoke-DotNet @(
+        "build", $consumerProject, "--no-restore",
+        "-p:DurableGraphPackageVersion=$packageVersion",
+        "-p:DurableGraphSnapshotHistoryDirectory=$history",
+        "-p:ProbeVersion=2",
+        "-p:ContinuousIntegrationBuild=true"
+    )
+
+    foreach ($file in Get-HistoryFiles $history) {
+        $verifiedHash = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash
+
+        if ($hashesBeforeVerify[$file.Name] -ne $verifiedHash) {
+            throw "CI verification rewrote '$($file.Name)'."
+        }
+    }
+
+    $versionTwoFiles = @(Get-HistoryFiles $history |
+        Where-Object { (Get-Content -LiteralPath $_.FullName -Raw).Contains("// version:2`n", [StringComparison]::Ordinal) })
+
+    if ($versionTwoFiles.Count -ne 1) {
+        throw "Expected exactly one V2 history file, found $($versionTwoFiles.Count)."
+    }
+
+    $versionTwoFile = $versionTwoFiles[0]
+    $heldVersionTwo = Join-Path $workRoot $versionTwoFile.Name
+    Move-Item -LiteralPath $versionTwoFile.FullName -Destination $heldVersionTwo
+
+    try {
+        Invoke-ConsumerClean $consumerProject $packageVersion $history 2
+        Invoke-DotNetExpectFailure -Arguments @(
+            "build", $consumerProject, "--no-restore",
+            "-p:DurableGraphPackageVersion=$packageVersion",
+            "-p:DurableGraphSnapshotHistoryDirectory=$history",
+            "-p:ProbeVersion=2",
+            "-p:ContinuousIntegrationBuild=true"
+        ) -ExpectedText "history is missing schema"
+        Assert-HistoryCount $history 1
+    }
+    finally {
+        Move-Item -LiteralPath $heldVersionTwo -Destination $versionTwoFile.FullName
+    }
+
+    Invoke-ConsumerClean $consumerProject $packageVersion $history 2
+    Invoke-DotNet @(
+        "build", $consumerProject, "--no-restore",
+        "-p:DurableGraphPackageVersion=$packageVersion",
+        "-p:DurableGraphSnapshotHistoryDirectory=$history",
+        "-p:ProbeVersion=2"
+    )
+
+    foreach ($file in Get-HistoryFiles $history) {
+        $publishedHash = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash
+
+        if ($hashesBeforeVerify[$file.Name] -ne $publishedHash) {
+            throw "Repeated local publication changed '$($file.Name)'."
+        }
+    }
+
+    Write-Host "Package consumer probe passed. Artifacts: $workRoot"
+}
+finally {
+    Pop-Location
+}

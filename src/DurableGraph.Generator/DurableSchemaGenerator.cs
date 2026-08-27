@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Globalization;
+using System.IO;
 using System.Text;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
@@ -21,6 +22,14 @@ public sealed class DurableSchemaGenerator : IIncrementalGenerator {
     private const string DurableBaseMetadataName =
         "Atelia.DurableGraph.DurableBase";
     private const string GeneratedSerializerTypeName = "__DurableSerializer";
+    private const string SnapshotTypeNamePrefix = "__DurableSnapshotV";
+    private const string SnapshotManifestHeader =
+        "// durable-graph-snapshot-manifest:1";
+    private const string SnapshotHistoryHeader =
+        "// durable-graph-snapshot:1";
+    private static readonly UTF8Encoding StrictUtf8 = new(
+        encoderShouldEmitUTF8Identifier: false,
+        throwOnInvalidBytes: true);
 
     private static readonly DiagnosticDescriptor InvalidTypeShape = new(
         id: "DG0001",
@@ -110,6 +119,46 @@ public sealed class DurableSchemaGenerator : IIncrementalGenerator {
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true);
 
+    private static readonly DiagnosticDescriptor MalformedSnapshotHistory = new(
+        id: "DG0012",
+        title: "Malformed durable snapshot history",
+        messageFormat: "Snapshot history file '{0}' is malformed: {1}",
+        category: "DurableGraph.Generator",
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
+    private static readonly DiagnosticDescriptor ConflictingSnapshotHistory = new(
+        id: "DG0013",
+        title: "Conflicting durable snapshot history",
+        messageFormat: "Snapshot history for schema '{0}' version {1} conflicts with another shape",
+        category: "DurableGraph.Generator",
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
+    private static readonly DiagnosticDescriptor MissingSnapshotHistory = new(
+        id: "DG0014",
+        title: "Missing durable snapshot history",
+        messageFormat: "Durable type '{0}' requires snapshot history for schema '{1}' version {2}",
+        category: "DurableGraph.Generator",
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
+    private static readonly DiagnosticDescriptor CurrentSnapshotMismatch = new(
+        id: "DG0015",
+        title: "Current durable snapshot history mismatch",
+        messageFormat: "Durable type '{0}' does not match snapshot history for schema '{1}' version {2}",
+        category: "DurableGraph.Generator",
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
+    private static readonly DiagnosticDescriptor ExistingSnapshotMember = new(
+        id: "DG0016",
+        title: "Durable type has a reserved snapshot member",
+        messageFormat: "Type '{0}' already uses the reserved generated snapshot name '{1}'",
+        category: "DurableGraph.Generator",
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
     private static readonly SymbolDisplayFormat QualifiedNameFormat = new(
         globalNamespaceStyle: SymbolDisplayGlobalNamespaceStyle.Omitted,
         typeQualificationStyle: SymbolDisplayTypeQualificationStyle.NameAndContainingTypesAndNamespaces,
@@ -128,17 +177,33 @@ public sealed class DurableSchemaGenerator : IIncrementalGenerator {
                 static (attributeContext, _) =>
                     (INamedTypeSymbol)attributeContext.TargetSymbol);
 
+        IncrementalValuesProvider<SnapshotText> snapshotHistoryFiles =
+            context.AdditionalTextsProvider
+                .Where(static file => StringComparer.OrdinalIgnoreCase.Equals(
+                    Path.GetExtension(file.Path),
+                    ".dgsnapshot"))
+                .Select(static (file, cancellationToken) => new SnapshotText(
+                    file.Path,
+                    file.GetText(cancellationToken)?.ToString()));
+
         context.RegisterSourceOutput(
-            durableTypes.Collect(),
-            static (productionContext, types) =>
-                GenerateSchemas(productionContext, types));
+            durableTypes.Collect().Combine(snapshotHistoryFiles.Collect()),
+            static (productionContext, input) =>
+                GenerateSchemas(
+                    productionContext,
+                    input.Left,
+                    input.Right));
     }
 
     private static void GenerateSchemas(
         SourceProductionContext context,
-        ImmutableArray<INamedTypeSymbol> candidateTypes) {
+        ImmutableArray<INamedTypeSymbol> candidateTypes,
+        ImmutableArray<SnapshotText> snapshotHistoryFiles) {
         List<INamedTypeSymbol> types = GetDistinctSortedTypes(candidateTypes);
         List<DurableTypeModel> validTypes = new(types.Count);
+        List<SnapshotHistoryModel> history = ParseSnapshotHistory(
+            context,
+            snapshotHistoryFiles);
 
         foreach (INamedTypeSymbol type in types) {
             context.CancellationToken.ThrowIfCancellationRequested();
@@ -155,6 +220,27 @@ public sealed class DurableSchemaGenerator : IIncrementalGenerator {
             context.AddSource(
                 "DurableSchemas.g.cs",
                 SourceText.From(generatedSource, Encoding.UTF8));
+        }
+
+        if (validTypes.Count > 0 || types.Count == 0) {
+            string manifestSource = RenderSnapshotManifest(validTypes)
+                .Replace("\r\n", "\n");
+            context.AddSource(
+                "DurableGraphSnapshotCandidates.g.cs",
+                SourceText.From(manifestSource, Encoding.UTF8));
+        }
+
+        if (validTypes.Count > 0) {
+            List<DurableSnapshotTypeModel> snapshotTypes =
+                ValidateAndCreateSnapshotTypes(context, validTypes, history);
+
+            if (snapshotTypes.Count > 0) {
+                string snapshotSource = RenderSnapshots(snapshotTypes)
+                    .Replace("\r\n", "\n");
+                context.AddSource(
+                    "DurableSnapshots.g.cs",
+                    SourceText.From(snapshotSource, Encoding.UTF8));
+            }
         }
     }
 
@@ -183,6 +269,339 @@ public sealed class DurableSchemaGenerator : IIncrementalGenerator {
         return result;
     }
 
+    private static List<SnapshotHistoryModel> ParseSnapshotHistory(
+        SourceProductionContext context,
+        ImmutableArray<SnapshotText> files) {
+        List<SnapshotHistoryModel> history = new(files.Length);
+
+        foreach (SnapshotText file in files) {
+            context.CancellationToken.ThrowIfCancellationRequested();
+
+            if (TryParseSnapshotHistory(file, out SnapshotHistoryModel model, out string? error)) {
+                history.Add(model);
+            } else {
+                context.ReportDiagnostic(Diagnostic.Create(
+                    MalformedSnapshotHistory,
+                    CreateAdditionalFileLocation(file.Path),
+                    file.Path,
+                    error));
+            }
+        }
+
+        history.Sort(static (left, right) => {
+            int schemaComparison = StringComparer.Ordinal.Compare(
+                left.SchemaId,
+                right.SchemaId);
+
+            if (schemaComparison != 0) {
+                return schemaComparison;
+            }
+
+            int versionComparison = left.Version.CompareTo(right.Version);
+            return versionComparison != 0
+                ? versionComparison
+                : StringComparer.Ordinal.Compare(left.Path, right.Path);
+        });
+
+        for (int index = 1; index < history.Count; index++) {
+            SnapshotHistoryModel previous = history[index - 1];
+            SnapshotHistoryModel current = history[index];
+
+            if (StringComparer.Ordinal.Equals(previous.SchemaId, current.SchemaId) &&
+                previous.Version == current.Version &&
+                !HaveSameFields(previous.Fields, current.Fields)) {
+                context.ReportDiagnostic(Diagnostic.Create(
+                    ConflictingSnapshotHistory,
+                    CreateAdditionalFileLocation(current.Path),
+                    current.SchemaId,
+                    current.Version));
+            }
+        }
+
+        return history;
+    }
+
+    private static bool TryParseSnapshotHistory(
+        SnapshotText file,
+        out SnapshotHistoryModel model,
+        out string? error) {
+        model = default;
+
+        if (file.Content is null) {
+            error = "the file could not be read";
+            return false;
+        }
+
+        string normalized = file.Content.Replace("\r\n", "\n");
+        if (normalized.IndexOf('\r') >= 0) {
+            error = "bare carriage returns are not permitted";
+            return false;
+        }
+
+        if (normalized.EndsWith("\n", StringComparison.Ordinal)) {
+            normalized = normalized.Substring(0, normalized.Length - 1);
+        }
+
+        string[] lines = normalized.Split('\n');
+        if (lines.Length < 5 ||
+            !StringComparer.Ordinal.Equals(lines[0], SnapshotHistoryHeader) ||
+            !StringComparer.Ordinal.Equals(lines[1], "// snapshot-begin") ||
+            !StringComparer.Ordinal.Equals(lines[lines.Length - 1], "// snapshot-end")) {
+            error = "the required header and single snapshot block were not found";
+            return false;
+        }
+
+        const string SchemaPrefix = "// schema-id-base64:";
+        if (!lines[2].StartsWith(SchemaPrefix, StringComparison.Ordinal) ||
+            !TryDecodeSchemaId(lines[2].Substring(SchemaPrefix.Length), out string? schemaId)) {
+            error = "the schema ID must be canonical base64-encoded non-empty UTF-8";
+            return false;
+        }
+
+        const string VersionPrefix = "// version:";
+        if (!lines[3].StartsWith(VersionPrefix, StringComparison.Ordinal) ||
+            !TryParsePositiveCanonicalInt(
+                lines[3].Substring(VersionPrefix.Length),
+                out int version)) {
+            error = "the version must be a positive canonical integer";
+            return false;
+        }
+
+        List<SnapshotFieldModel> fields = new(lines.Length - 5);
+        int previousFieldId = 0;
+
+        for (int index = 4; index < lines.Length - 1; index++) {
+            const string FieldPrefix = "// field:";
+            string line = lines[index];
+
+            if (!line.StartsWith(FieldPrefix, StringComparison.Ordinal)) {
+                error = "each field must use the canonical field record syntax";
+                return false;
+            }
+
+            string fieldRecord = line.Substring(FieldPrefix.Length);
+            int separator = fieldRecord.IndexOf('|');
+            if (separator <= 0 ||
+                separator != fieldRecord.LastIndexOf('|') ||
+                !TryParsePositiveCanonicalInt(
+                    fieldRecord.Substring(0, separator),
+                    out int fieldId) ||
+                fieldId <= previousFieldId ||
+                !TryParsePositiveCanonicalInt(
+                    fieldRecord.Substring(separator + 1),
+                    out int typeTagValue) ||
+                !TryGetFieldTypeName(typeTagValue, out _)) {
+                error = "fields must have increasing positive IDs and supported numeric type tags";
+                return false;
+            }
+
+            fields.Add(new SnapshotFieldModel(fieldId, typeTagValue));
+            previousFieldId = fieldId;
+        }
+
+        model = new SnapshotHistoryModel(
+            file.Path,
+            schemaId!,
+            version,
+            fields);
+        error = null;
+        return true;
+    }
+
+    private static bool TryDecodeSchemaId(
+        string encoded,
+        out string? schemaId) {
+        try {
+            byte[] bytes = Convert.FromBase64String(encoded);
+            if (!StringComparer.Ordinal.Equals(Convert.ToBase64String(bytes), encoded)) {
+                schemaId = null;
+                return false;
+            }
+
+            schemaId = StrictUtf8.GetString(bytes);
+            return !string.IsNullOrWhiteSpace(schemaId);
+        } catch (FormatException) {
+            schemaId = null;
+            return false;
+        } catch (DecoderFallbackException) {
+            schemaId = null;
+            return false;
+        }
+    }
+
+    private static bool TryParsePositiveCanonicalInt(
+        string text,
+        out int value) {
+        return int.TryParse(
+                text,
+                NumberStyles.None,
+                CultureInfo.InvariantCulture,
+                out value) &&
+            value > 0 &&
+            StringComparer.Ordinal.Equals(
+                text,
+                value.ToString(CultureInfo.InvariantCulture));
+    }
+
+    private static bool CanEncodeStrictUtf8(string value) {
+        try {
+            StrictUtf8.GetByteCount(value);
+            return true;
+        } catch (EncoderFallbackException) {
+            return false;
+        }
+    }
+
+    private static Location CreateAdditionalFileLocation(string path) {
+        return Location.Create(
+            path,
+            new TextSpan(0, 0),
+            new LinePositionSpan(
+                new LinePosition(0, 0),
+                new LinePosition(0, 0)));
+    }
+
+    private static List<DurableSnapshotTypeModel> ValidateAndCreateSnapshotTypes(
+        SourceProductionContext context,
+        List<DurableTypeModel> currentTypes,
+        List<SnapshotHistoryModel> history) {
+        List<DurableSnapshotTypeModel> result = new(currentTypes.Count);
+
+        foreach (DurableTypeModel currentType in currentTypes) {
+            bool hasErrors = false;
+            List<SnapshotVersionModel> versions = new();
+
+            for (int version = 1; version < currentType.Version; version++) {
+                List<SnapshotHistoryModel> matches = FindHistory(
+                    history,
+                    currentType.SchemaId,
+                    version);
+
+                if (matches.Count == 0) {
+                    context.ReportDiagnostic(Diagnostic.Create(
+                        MissingSnapshotHistory,
+                        GetSourceLocation(currentType.Symbol),
+                        currentType.Symbol.ToDisplayString(QualifiedNameFormat),
+                        currentType.SchemaId,
+                        version));
+                    hasErrors = true;
+                    break;
+                }
+
+                if (!AllHaveSameFields(matches)) {
+                    hasErrors = true;
+                    break;
+                }
+
+                versions.Add(new SnapshotVersionModel(
+                    version,
+                    matches[0].Fields));
+            }
+
+            List<SnapshotHistoryModel> currentHistory = FindHistory(
+                history,
+                currentType.SchemaId,
+                currentType.Version);
+            List<SnapshotFieldModel> currentFields = ToSnapshotFields(
+                currentType.Fields);
+
+            if (currentHistory.Count > 0 &&
+                (!AllHaveSameFields(currentHistory) ||
+                    !HaveSameFields(currentHistory[0].Fields, currentFields))) {
+                context.ReportDiagnostic(Diagnostic.Create(
+                    CurrentSnapshotMismatch,
+                    GetSourceLocation(currentType.Symbol),
+                    currentType.Symbol.ToDisplayString(QualifiedNameFormat),
+                    currentType.SchemaId,
+                    currentType.Version));
+                hasErrors = true;
+            }
+
+            versions.Add(new SnapshotVersionModel(
+                currentType.Version,
+                currentFields));
+
+            foreach (SnapshotVersionModel version in versions) {
+                string reservedName = SnapshotTypeNamePrefix +
+                    version.Version.ToString(CultureInfo.InvariantCulture);
+                ImmutableArray<ISymbol> members = currentType.Symbol.GetMembers(reservedName);
+
+                if (!members.IsEmpty) {
+                    context.ReportDiagnostic(Diagnostic.Create(
+                        ExistingSnapshotMember,
+                        GetSourceLocation(members[0]),
+                        currentType.Symbol.ToDisplayString(QualifiedNameFormat),
+                        reservedName));
+                    hasErrors = true;
+                }
+            }
+
+            if (!hasErrors) {
+                result.Add(new DurableSnapshotTypeModel(
+                    currentType.Symbol,
+                    versions));
+            }
+        }
+
+        return result;
+    }
+
+    private static List<SnapshotHistoryModel> FindHistory(
+        List<SnapshotHistoryModel> history,
+        string schemaId,
+        int version) {
+        List<SnapshotHistoryModel> result = new();
+
+        foreach (SnapshotHistoryModel candidate in history) {
+            if (StringComparer.Ordinal.Equals(candidate.SchemaId, schemaId) &&
+                candidate.Version == version) {
+                result.Add(candidate);
+            }
+        }
+
+        return result;
+    }
+
+    private static bool AllHaveSameFields(List<SnapshotHistoryModel> history) {
+        for (int index = 1; index < history.Count; index++) {
+            if (!HaveSameFields(history[0].Fields, history[index].Fields)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool HaveSameFields(
+        List<SnapshotFieldModel> left,
+        List<SnapshotFieldModel> right) {
+        if (left.Count != right.Count) {
+            return false;
+        }
+
+        for (int index = 0; index < left.Count; index++) {
+            if (left[index].FieldId != right[index].FieldId ||
+                left[index].TypeTagValue != right[index].TypeTagValue) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static List<SnapshotFieldModel> ToSnapshotFields(
+        List<DurableFieldModel> fields) {
+        List<SnapshotFieldModel> result = new(fields.Count);
+
+        foreach (DurableFieldModel field in fields) {
+            result.Add(new SnapshotFieldModel(
+                field.FieldId,
+                field.TypeTagValue));
+        }
+
+        return result;
+    }
+
     private static DurableTypeModel? CreateTypeModel(
         SourceProductionContext context,
         INamedTypeSymbol type) {
@@ -207,6 +626,7 @@ public sealed class DurableSchemaGenerator : IIncrementalGenerator {
             durableTypeAttribute.ConstructorArguments.Length != 2 ||
             durableTypeAttribute.ConstructorArguments[0].Value is not string candidateSchemaId ||
             string.IsNullOrWhiteSpace(candidateSchemaId) ||
+            !CanEncodeStrictUtf8(candidateSchemaId) ||
             durableTypeAttribute.ConstructorArguments[1].Value is not int candidateVersion ||
             candidateVersion <= 0) {
             context.ReportDiagnostic(Diagnostic.Create(
@@ -307,6 +727,7 @@ public sealed class DurableSchemaGenerator : IIncrementalGenerator {
             if (!TryGetTypeTag(
                 field.Type,
                 out string? typeTag,
+                out int typeTagValue,
                 out string? fieldTypeName)) {
                 context.ReportDiagnostic(Diagnostic.Create(
                     UnsupportedFieldType,
@@ -321,6 +742,7 @@ public sealed class DurableSchemaGenerator : IIncrementalGenerator {
                 field,
                 fieldId,
                 typeTag!,
+                typeTagValue,
                 fieldTypeName!));
         }
 
@@ -463,26 +885,54 @@ public sealed class DurableSchemaGenerator : IIncrementalGenerator {
     private static bool TryGetTypeTag(
         ITypeSymbol type,
         out string? typeTag,
+        out int typeTagValue,
         out string? fieldTypeName) {
         switch (type.SpecialType) {
             case SpecialType.System_Boolean:
                 typeTag = "Boolean";
+                typeTagValue = 1;
                 fieldTypeName = "global::System.Boolean";
                 return true;
             case SpecialType.System_Int32:
                 typeTag = "Int32";
+                typeTagValue = 2;
                 fieldTypeName = "global::System.Int32";
                 return true;
             case SpecialType.System_Int64:
                 typeTag = "Int64";
+                typeTagValue = 3;
                 fieldTypeName = "global::System.Int64";
                 return true;
             case SpecialType.System_String:
                 typeTag = "String";
+                typeTagValue = 4;
                 fieldTypeName = "global::System.String";
                 return true;
             default:
                 typeTag = null;
+                typeTagValue = 0;
+                fieldTypeName = null;
+                return false;
+        }
+    }
+
+    private static bool TryGetFieldTypeName(
+        int typeTagValue,
+        out string? fieldTypeName) {
+        switch (typeTagValue) {
+            case 1:
+                fieldTypeName = "global::System.Boolean";
+                return true;
+            case 2:
+                fieldTypeName = "global::System.Int32";
+                return true;
+            case 3:
+                fieldTypeName = "global::System.Int64";
+                return true;
+            case 4:
+                fieldTypeName = "global::System.String";
+                return true;
+            default:
                 fieldTypeName = null;
                 return false;
         }
@@ -503,6 +953,119 @@ public sealed class DurableSchemaGenerator : IIncrementalGenerator {
         }
 
         return source.ToString();
+    }
+
+    private static string RenderSnapshotManifest(List<DurableTypeModel> types) {
+        List<DurableTypeModel> sortedTypes = new(types);
+        sortedTypes.Sort(static (left, right) => {
+            int schemaComparison = StringComparer.Ordinal.Compare(
+                left.SchemaId,
+                right.SchemaId);
+
+            if (schemaComparison != 0) {
+                return schemaComparison;
+            }
+
+            int versionComparison = left.Version.CompareTo(right.Version);
+            return versionComparison != 0
+                ? versionComparison
+                : StringComparer.Ordinal.Compare(
+                    left.Symbol.ToDisplayString(QualifiedNameFormat),
+                    right.Symbol.ToDisplayString(QualifiedNameFormat));
+        });
+
+        StringBuilder source = new();
+        source.AppendLine(SnapshotManifestHeader);
+
+        foreach (DurableTypeModel type in sortedTypes) {
+            source.AppendLine("// snapshot-begin");
+            source.Append("// schema-id-base64:")
+                .AppendLine(Convert.ToBase64String(StrictUtf8.GetBytes(type.SchemaId)));
+            source.Append("// version:")
+                .AppendLine(type.Version.ToString(CultureInfo.InvariantCulture));
+
+            foreach (DurableFieldModel field in type.Fields) {
+                source.Append("// field:")
+                    .Append(field.FieldId.ToString(CultureInfo.InvariantCulture))
+                    .Append('|')
+                    .AppendLine(field.TypeTagValue.ToString(CultureInfo.InvariantCulture));
+            }
+
+            source.AppendLine("// snapshot-end");
+        }
+
+        return source.ToString();
+    }
+
+    private static string RenderSnapshots(
+        List<DurableSnapshotTypeModel> types) {
+        StringBuilder source = new();
+        source.AppendLine("// <auto-generated/>");
+        source.AppendLine("#nullable enable");
+        source.AppendLine();
+
+        for (int index = 0; index < types.Count; index++) {
+            AppendSnapshotType(source, types[index]);
+
+            if (index < types.Count - 1) {
+                source.AppendLine();
+            }
+        }
+
+        return source.ToString();
+    }
+
+    private static void AppendSnapshotType(
+        StringBuilder source,
+        DurableSnapshotTypeModel model) {
+        bool hasNamespace = !model.Symbol.ContainingNamespace.IsGlobalNamespace;
+        string typeIndent = hasNamespace ? "    " : string.Empty;
+        string memberIndent = typeIndent + "    ";
+        string fieldIndent = memberIndent + "    ";
+
+        if (hasNamespace) {
+            source.Append("namespace ")
+                .Append(model.Symbol.ContainingNamespace.ToDisplayString(QualifiedNameFormat))
+                .AppendLine(" {");
+        }
+
+        source.Append(typeIndent)
+            .Append("partial class ")
+            .Append(EscapeIdentifier(model.Symbol.Name))
+            .AppendLine(" {");
+
+        for (int versionIndex = 0;
+            versionIndex < model.Versions.Count;
+            versionIndex++) {
+            SnapshotVersionModel version = model.Versions[versionIndex];
+            source.Append(memberIndent)
+                .Append("private struct ")
+                .Append(SnapshotTypeNamePrefix)
+                .Append(version.Version.ToString(CultureInfo.InvariantCulture))
+                .AppendLine(" {");
+
+            foreach (SnapshotFieldModel field in version.Fields) {
+                TryGetFieldTypeName(field.TypeTagValue, out string? fieldTypeName);
+                source.Append(fieldIndent)
+                    .Append("public ")
+                    .Append(fieldTypeName)
+                    .Append(" Field")
+                    .Append(field.FieldId.ToString(CultureInfo.InvariantCulture))
+                    .AppendLine(";");
+            }
+
+            source.Append(memberIndent).AppendLine("}");
+
+            if (versionIndex < model.Versions.Count - 1) {
+                source.AppendLine();
+            }
+        }
+
+        source.Append(typeIndent).AppendLine("}");
+
+        if (hasNamespace) {
+            source.AppendLine("}");
+        }
     }
 
     private static void AppendType(
@@ -730,10 +1293,12 @@ public sealed class DurableSchemaGenerator : IIncrementalGenerator {
             IFieldSymbol symbol,
             int fieldId,
             string typeTag,
+            int typeTagValue,
             string fieldTypeName) {
             Symbol = symbol;
             FieldId = fieldId;
             TypeTag = typeTag;
+            TypeTagValue = typeTagValue;
             FieldTypeName = fieldTypeName;
         }
 
@@ -742,6 +1307,8 @@ public sealed class DurableSchemaGenerator : IIncrementalGenerator {
         public int FieldId { get; }
 
         public string TypeTag { get; }
+
+        public int TypeTagValue { get; }
 
         public string FieldTypeName { get; }
     }
@@ -765,5 +1332,74 @@ public sealed class DurableSchemaGenerator : IIncrementalGenerator {
         public int Version { get; }
 
         public List<DurableFieldModel> Fields { get; }
+    }
+
+    private readonly struct SnapshotText {
+        public SnapshotText(string path, string? content) {
+            Path = path;
+            Content = content;
+        }
+
+        public string Path { get; }
+
+        public string? Content { get; }
+    }
+
+    private readonly struct SnapshotFieldModel {
+        public SnapshotFieldModel(int fieldId, int typeTagValue) {
+            FieldId = fieldId;
+            TypeTagValue = typeTagValue;
+        }
+
+        public int FieldId { get; }
+
+        public int TypeTagValue { get; }
+    }
+
+    private readonly struct SnapshotHistoryModel {
+        public SnapshotHistoryModel(
+            string path,
+            string schemaId,
+            int version,
+            List<SnapshotFieldModel> fields) {
+            Path = path;
+            SchemaId = schemaId;
+            Version = version;
+            Fields = fields;
+        }
+
+        public string Path { get; }
+
+        public string SchemaId { get; }
+
+        public int Version { get; }
+
+        public List<SnapshotFieldModel> Fields { get; }
+    }
+
+    private readonly struct SnapshotVersionModel {
+        public SnapshotVersionModel(
+            int version,
+            List<SnapshotFieldModel> fields) {
+            Version = version;
+            Fields = fields;
+        }
+
+        public int Version { get; }
+
+        public List<SnapshotFieldModel> Fields { get; }
+    }
+
+    private readonly struct DurableSnapshotTypeModel {
+        public DurableSnapshotTypeModel(
+            INamedTypeSymbol symbol,
+            List<SnapshotVersionModel> versions) {
+            Symbol = symbol;
+            Versions = versions;
+        }
+
+        public INamedTypeSymbol Symbol { get; }
+
+        public List<SnapshotVersionModel> Versions { get; }
     }
 }

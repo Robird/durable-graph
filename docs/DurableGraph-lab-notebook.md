@@ -21,7 +21,7 @@
 记录日期：2026-08-27
 
 - **Observed**：仓库已跑通 boxed-value 的内存 Save/Load demo：包含元数据契约、Schema 值模型、内存 SchemaStore/StateStore，以及生成 Schema 与 Serializer 的 Source Generator；尚无对象身份、升级器、wire format 或持久化实现。
-- **Observed**：`DurableGraph.slnx` 包含 `DurableGraph`、`DurableGraph.Generator`、`DurableGraph.Cli` 和 `DurableGraph.Tests`。
+- **Observed**：`DurableGraph.slnx` 包含 runtime、Generator、Build tool、CLI 和 Tests 五个项目；Build tool 是随 NuGet 包部署的私有 snapshot-history publisher/verifier，不承载运行时持久化语义。
 - **Observed**：核心库将 Generator 作为 Roslyn analyzer 引用；CLI 引用核心库；测试项目引用核心库和 Generator。
 - **Observed**：运行时项目和测试项目目标框架为 `net10.0`；Generator 为兼容 Roslyn 加载而目标框架为 `netstandard2.0`。
 - **Observed**：`Directory.Build.props` 将程序集名、根命名空间和包名统一加上 `Atelia.` 前缀。
@@ -42,6 +42,7 @@
 - Boxed State demo：由 generated serializer 驱动 `InMemoryStateStore`，验证 Schema-first Save 与 validate-before-Deserialize。
 - Source Generator history feedback probe：隔离证明 `AddSource` 不会自行反馈为后续 `AdditionalFiles`，但显式 post-compile publisher 可以形成下一轮可见的 Snapshot History。
 - Snapshot upgrade shape probe：固定 ordinary struct、`in/out`、partial implementation、definite assignment 与 overload 的 C# 语义边界。
+- Package-delivered Snapshot History：单一 `Atelia.DurableGraph` 包向直接消费者交付 runtime、Generator、MSBuild 自动接入与私有 Build tool，并由真实 PackageReference probe 验证。
 - Candidate design branches：在 `docs/design-branches/` 隔离尚未裁决的架构分叉。
 - 本实验簿：保存随实验演化的项目认识。
 
@@ -51,6 +52,7 @@
 - **Decided**：首轮升级机制只支持唯一相邻版本链 `V1 → V2 → V3`；出现真实跳版或分支消费者前不引入一般图。
 - **Tentative**：在所有历史版本都属于当前 compilation 的闭世界模型中，生成 ordinary struct Snapshot、exact-version switch，以及 required partial `void UpgradeV1ToV2(in old, out next)` direct call；暂缓 runtime historical binding/upgrade registry。
 - **Tentative**：快速原型的 local real build 自动 append checked-in Snapshot History；CI/design-time 只读，单 writer/单 TargetFramework/串行发布。显式 Accept target 记录为竞争分支。
+- **Observed**：上述 local publish/CI verify 快速原型已由包内 `build/*.props/targets` 和 `DurableGraph.Build` 落地；其工作流已实现，但 snapshot 格式和发布模型仍是可替换的原型边界。
 - **Decided**：继续关闭 durable 领域继承；FieldId 展平、base private field access 和 leaf version coupling 独立记录在 DB-005。
 - **Open**：Schema runtime representation 与 canonical authority 的候选分叉记录在 `DB-001`，等待 exact codec/persistent format 实验裁决。
 - **Open**：哪些类型和 API 最终属于核心程序集，等待真实代码形状出现后再判断。
@@ -373,6 +375,54 @@
 - `docs/design-branches/0004-snapshot-history-authoring-and-publishing.md`
 - `docs/design-branches/0005-durable-inheritance-flattening.md`
 
+### EXP-008：Package-delivered Snapshot History workflow
+
+状态：Concluded
+
+日期：2026-08-27
+
+问题：能否把 EXP-006 的外部 feedback 路径固化为下游只需直接 `PackageReference` 即可获得的可复用产物，并让本地构建自动发布、CI 构建只读校验？
+
+本轮明确不回答：
+
+- runtime read-time upgrade orchestration、historical serializer 与自动 Save 回写。
+- 最终 canonical Schema/wire format、跨程序集 ownership 和一般版本图。
+- multi-targeting、并行 writer 与多个 history 文件的事务发布。
+- `buildTransitive` 间接消费者语义、IDE code fix 或显式 Accept UX。
+
+最小实现：
+
+- Generator 严格读取单-block `*.dgsnapshot` AdditionalFiles，要求 current Vn 的 V1...V(n-1) 连续存在，并以 DG0012-DG0016 拒绝 malformed、冲突、缺口、current mismatch 和 generated member collision。
+- Generator 产生固定 comment-only candidate manifest，以及当前 durable partial class 内的 private ordinary `__DurableSnapshotVn` structs；历史成员只用稳定 `Field{id}` 与 TypeTag 映射重建。
+- 新增独立 `DurableGraph.Build` net10 tool，提供 `publish`/`verify`；它严格解析、全批预检、create-only 发布、同形幂等，并用 SchemaId/content 的 SHA-256 形成不含原始 SchemaId 的文件名。
+- `Atelia.DurableGraph` nupkg 显式包含 runtime、`analyzers/dotnet/cs` Generator、`build` props/targets 与 `tools/net10.0` Build tool；直接消费者不写 `Import`、Analyzer reference、AdditionalFiles 或 post-compile script。
+- local 默认为 Publish；`ContinuousIntegrationBuild=true` 默认为 Verify；design-time 跳过，`Off` 只作为显式诊断逃生口。
+
+观察：
+
+- **Observed**：真实 local-feed restore 证明 package layout 会自动加载 Generator 与 build assets，项目文件只含一个普通 `PackageReference`。
+- **Observed**：空 history 直接构建 V2 以 DG0014 失败且不发布；V1 成功构建发布 V1，随后 clean V2 build 从 V1 history 重建 V1/V2 private structs，并执行强类型 `in/out` 转换。
+- **Observed**：V2 成功构建追加 V2；重复 local publish 内容哈希不变。CI Verify 不写 history；移走 current V2 后 CI 失败且不补写。
+- **Observed**：候选使用固定 `DurableGraphSnapshotCandidates.g.cs`；没有 durable type 的成功 compilation 仍产生空 manifest，避免旧 manifest 被误当作当前候选，同时不会创建空 history 目录。
+- **Decided**：AdditionalFiles 与 publisher 都只读取 history 根目录的 `*.dgsnapshot`；首版不承诺递归目录布局。
+- **Decided**：包只放 `build/`，不放 `buildTransitive/`；当前只为直接引用 DurableGraph 的 C# durable project 自动接入。
+- **Decided**：candidate manifest 与 checked-in history 使用不同 header；Generator 不接受把 candidate 重命名后冒充已发布 history。
+- **Decided**：SchemaId 必须能由 strict UTF-8 无损编码；Generator 以 DG0002 拒绝孤立 UTF-16 surrogate，防止不同 ordinal SchemaId 折叠为同一 Base64 history identity。
+- **Decided**：Generator 负责结构语义，Build tool 是 checked-in history 原始字节 canonicality 的最终 gate；例如 CRLF 可能先被 AdditionalText 文本层规范化，但 publisher/verify 仍会拒绝非 LF canonical bytes。
+- **Observed**：当前 TypeTag build-time parser 只接受已锁定的 1...4；新增 TypeTag 时必须同步 Generator、publisher 与格式测试。
+- **Open**：普通 build 写工作树在团队/IDE 场景中的摩擦、显式 Accept workflow 和 batch atomicity 仍保留在 DB-004。
+
+结论：EXP-006 的技术验证已经成为一个可真实消费的单包 vertical slice；它证明 build-time Snapshot History 的自动累积与只读 CI gate 可行，但尚未实现读取旧 State 或调用 upgrade handler。
+
+相关材料：
+
+- `src/DurableGraph/build/Atelia.DurableGraph.props`
+- `src/DurableGraph/build/Atelia.DurableGraph.targets`
+- `src/DurableGraph.Build/`
+- `tests/DurableGraph.Tests/SnapshotHistoryToolTests.cs`
+- `experiments/PackageConsumerProbe/`
+- `docs/design-branches/0004-snapshot-history-authoring-and-publishing.md`
+
 ## 5. 实验记录模板
 
 后续实验按需增加条目，不要求为了形式填写无意义内容。
@@ -394,6 +444,13 @@
 ```
 
 ## 6. 船长日志
+
+### 2026-08-27：将 Snapshot History feedback 固化为单一 NuGet 包
+
+- `Atelia.DurableGraph` 包现在同时交付 runtime、Generator、自动导入的 build assets 和私有 publish/verify tool；下游无需复制脚本或手写 hook。
+- production Generator 能从 checked-in `.dgsnapshot` 重建历史 private structs，并对连续版本、冲突和 current shape fail closed。
+- package-only consumer probe 跑通 V2 负例、V1/V2 累积、强类型 Snapshot 使用、CI read-only failure 与重复发布幂等。
+- 下一 vertical slice 回到 read-time upgrade：生成 historical deserialize/version switch、required adjacent handler，再让 Load 只在内存中升级到 current；本轮没有提前实现它。
 
 ### 2026-08-27：固定 Snapshot struct/in-out 原型方向
 

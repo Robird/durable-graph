@@ -6,6 +6,8 @@
 >
 > 当前快速原型选择：成功的本地非 design-time compilation 自动发布 current Snapshot；history 作为 checked-in AdditionalFiles；单 project、单 TargetFramework、单 writer、串行发布。
 
+> 实现状态：EXP-008 已通过 `Atelia.DurableGraph` 包内 Generator、`build/*.props/targets` 与 `DurableGraph.Build` tool 落地并由真实 PackageReference consumer 验证；该状态不表示格式或工作流已经冻结。
+
 ## 问题
 
 Source Generator 只能从显式输入重建历史，不能把自己的 `AddSource` 输出隐式累积为下一轮输入。需要由 Generator 外部的 owner 把 current durable shape 冻结进受版本控制的 Snapshot History，同时避免失败编译、缓存残留或同 key 异形污染历史。
@@ -20,12 +22,19 @@ EXP-006 已证明：
 - clean build 可以从外部 history 重建 strong Snapshot；
 - 重复发布可以做到内容幂等。
 
+EXP-008 进一步观察到：
+
+- 单一 nupkg 可把 runtime、C# analyzer、MSBuild build assets 和私有 tool 一并交付给直接 PackageReference consumer；
+- local Publish、CI Verify、缺前驱 Generator error、缺 current history verifier error 与幂等发布均可在 package boundary 上执行；
+- candidate manifest 与 accepted history 必须使用不同 header，不能靠改扩展名把候选冒充 authority input；
+- 没有 durable type 时生成空 candidate manifest，可以覆盖旧 generated manifest 而不创建空 history 目录。
+
 ## 当前快速原型选择
 
 ### Authority 与格式
 
-- 每个 durable project 在源码树内维护 checked-in Snapshot History 目录。
-- 一份文件表达一个 exact `(SchemaId, Version)` shape；文件名包含稳定 SchemaId 编码、Version 和完整 shape token/hash。
+- 每个 durable project 默认在源码树的 `DurableGraphSnapshots/` 维护 checked-in Snapshot History 目录；当前只读取该目录根部的 `*.dgsnapshot`。
+- 一份文件表达一个 exact `(SchemaId, Version)` shape；当前文件名包含 SchemaId UTF-8 SHA-256、Version 和 canonical content SHA-256，原始 SchemaId 不进入路径。
 - 文件至少保存 format version、SchemaId、Version、按 FieldId 排序的 FieldId/TypeTag；机械 generated member name 由 FieldId 派生。
 - 当前采用简单、确定、line-oriented 的 build-time probe format；它不是 wire format、persistent SchemaStore encoding 或最终 canonical Schema authority。
 - 同 key 同形幂等；同 key 异形硬失败，永不覆盖。
@@ -34,8 +43,8 @@ EXP-006 已证明：
 
 ```text
 local publish mode
-    -> reset isolated generated staging
-    -> run a real compilation and emit current-version candidates
+    -> run or reuse an up-to-date successful CoreCompile
+    -> require exactly one fixed-name current candidate manifest
     -> validate all candidates and existing history
     -> final publish target appends missing exact versions
     -> command succeeds only if publication succeeds
@@ -46,10 +55,12 @@ local publish mode
 - local publish mode 允许 current Vn 尚未入账；它必须由本次真实 compilation 产生 candidate，并在 build command 成功前发布。
 - CI/`ContinuousIntegrationBuild` 使用 read-only mode：要求 current Vn 已有 exact history entry；漏提交本地生成文件时立即失败，绝不发布。
 - 编译失败不发布；publisher 不得扫描并追认旧 staging。
-- publisher 只接受本次 compilation 的 candidates；若 current history 缺失但 compilation 被 up-to-date check 跳过，必须强制 rebuild 或失败，不能静默成功。
+- 发布边界是成功 `CoreCompile`，不是整个可扩展 MSBuild 图的最终事务点；后续 packing、文档或第三方 `AfterBuild` target 仍可能失败，而已冻结的可运行 assembly shape 不回滚。
+- publisher 只接受固定 manifest；真实 compilation 会覆盖它，失败 CoreCompile 不进入 publisher。up-to-date CoreCompile 可复用上次成功 compilation 的同一 manifest；若 manifest 丢失则 build 明确失败并要求 clean rebuild，不能静默跳过 gate。
 - 定义 durable type 的 project 是该 SchemaId 的唯一 writer。
 - 当前只支持单 TargetFramework、单进程串行 build；检测到同 key 冲突即 fail。
 - History 文件进入 source control，diff 是发布结果的人工审计面。
+- 当前由直接 `PackageReference` 自动导入 `build/Atelia.DurableGraph.props/targets`；暂不启用 `buildTransitive`。
 
 ### 连续性闸门
 
@@ -99,6 +110,7 @@ dotnet msbuild /t:AcceptDurableHistory
 - 多个 Schema candidate 的跨文件事务。
 - history format 与未来 wire/canonical schema format 相同。
 - 用户从未成功构建/提交过的旧源码 shape 可以恢复。
+- 间接 PackageReference、非 C# project 或跨 TFM history ownership。
 
 ## 重访触发条件
 
