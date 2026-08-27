@@ -20,7 +20,7 @@
 
 记录日期：2026-08-27
 
-- **Observed**：仓库已跑通 boxed-value 的内存 Save/Load 与 read-time upgrade demo，并以隔离探针跑通单类型 Flat Graph Delta R1 和 generated graph operations R2；production runtime/default Generator 仍无对象身份、reference graph、wire format 或持久化实现。
+- **Observed**：仓库已跑通 boxed-value 的内存 Save/Load 与 read-time upgrade demo，并以隔离探针跑通单类型 Flat Graph Delta R1、generated graph operations R2 与 StoredGraphImage normalization R3a；production runtime/default Generator 仍无对象身份、reference graph、wire format 或持久化实现。
 - **Observed**：`DurableGraph.slnx` 包含 runtime、Generator、Build tool、CLI 和 Tests 五个项目；Build tool 是随 NuGet 包部署的私有 snapshot-history publisher/verifier，不承载运行时持久化语义。
 - **Observed**：核心库将 Generator 作为 Roslyn analyzer 引用；CLI 引用核心库；测试项目引用核心库和 Generator。
 - **Observed**：运行时项目和测试项目目标框架为 `net10.0`；Generator 为兼容 Roslyn 加载而目标框架为 `netstandard2.0`。
@@ -47,6 +47,7 @@
 - Research roadmap：按 Graph Delta semantic probe → generated graph operations → normalized graph Load → logical delta chain → binary codec → persistent publication 的证据依赖安排后续切片。
 - Flat Graph Delta R1：已用 fixture-only latest typed Snapshot baseline、flat ID table、`RequiresRewrite`、whole-object Upsert 与 success-only baseline replacement 完成可执行探针。
 - Generated Graph Operations R2：internal、无 `[Generator]` 的 probe generator 已产生强类型 Capture/Snapshot equality/reference visitor，并与 R1 oracle 做差分验证；默认 package analyzer 路径不运行它。
+- Stored Graph Normalization R3a：test-only mixed V1/V2 record table 经全表 exact preflight、typed decode/upgrade 与 source-reference gate 归一化成 current-Snapshot baseline。
 - Candidate design branches：在 `docs/design-branches/` 隔离尚未裁决的架构分叉。
 - 本实验簿：保存随实验演化的项目认识。
 
@@ -61,6 +62,8 @@
 - **Observed**：EXP-011 已跑通 fixture-only 单类型 Graph Delta 语义探针；逻辑 baseline 是带 RootId 的 flat ID table，每项保存 current Snapshot 与 `RequiresRewrite`，未引入 bytes、持久 head 或正式 DurableId。
 - **Observed**：EXP-012 已跑通 isolated generated graph operations；caller-provided `TIdentity : struct` 只是一条 test seam，未引入正式 DurableId、Reference TypeTag 或产品 Generator 支持。
 - **Decided**：当前不把 self-reference 半接入 scalar-only Schema History/boxed Serializer；默认 `DurableSchemaGenerator` 继续 DG0007 fail closed，下一主线可在 test-only logical graph 上进入 R3a Load normalization。
+- **Observed**：EXP-013 已跑通 test-only StoredGraphImage normalization；全表 Schema preflight 先于 Decode，V1/V2 均归一化为 current `ProbeSnapshot`，并保留完整 source record table 与 historical rewrite obligation。
+- **Decided**：R3a 失败只承诺不修改输入、不返回 partial baseline；decode/upgrade hook 自身的外部 side effect 不可回滚。下一主线入口是 R3b allocate-all/hydrate-all。
 - **Decided**：historical payload 在读取边界 exact decode 并升级到 current Snapshot；reachable upgraded node 在下一次显式 Save whole-object rewrite，unreachable upgraded node 不被保活。
 - **Decided**：normalized baseline 是派生比较投影，不复制 per-entry source Schema/object address；未来 persistent Save 通过 graph-level exact head + authoritative StateMap 与 projection 的同源 bundle 取得 provenance。
 - **Open**：Schema runtime representation 与 canonical authority 的候选分叉记录在 `DB-001`，等待 exact codec/persistent format 实验裁决。
@@ -68,7 +71,7 @@
 
 ### 当前自洽边界
 
-截至 EXP-012，公有 demo 仍只具有 EXP-010 的受限、单线程结构自洽边界；EXP-011/012 是隔离证据，不扩大 package/runtime 保证：
+截至 EXP-013，公有 demo 仍只具有 EXP-010 的受限、单线程结构自洽边界；EXP-011/012/013 是隔离证据，不扩大 package/runtime 保证：
 
 - 成功保存的每条 State record 都记录 exact `(SchemaId, Version)`，且对应 Schema 已先登记在同一个 `InMemoryStateStore.SchemaStore`。
 - Schema conflict 和 serialization failure 都不会覆盖 slot 中原有 State。
@@ -611,6 +614,55 @@
 - `docs/design-branches/0006-flat-graph-delta-prototype.md`
 - `docs/DurableGraph-research-roadmap.md`
 
+### EXP-013：Stored Graph normalization probe
+
+状态：Concluded
+
+日期：2026-08-27
+
+问题：能否把 mixed exact-version logical records 全有或全无地归一化为 latest/current typed Snapshot baseline，并把 historical rewrite obligation 与完整 source record table 正确交给 R1 Save？
+
+本轮明确不回答：
+
+- R3b CLR placeholder allocation、reference hydrate、sharing/cycle `ReferenceEquals` 或 transient rebuild。
+- product DurableId、Reference TypeTag、Generator/Store integration 或 historical wire bytes。
+- heterogeneous dispatch、upgrade-created node、StateMap/head、commit、recovery 或 concurrency。
+- decode/upgrade handler 外部 side effect 的 rollback。
+
+最小实现：
+
+- `StoredGraphImage` 从 entry sequence defensive copy 出 record table；duplicate/default ID、missing/default root 和 null record 在构造阶段 fail closed，`Records.Keys` 是唯一 `SourceRecordIds`。
+- test-only `ProbeStoredSchema` 对 SchemaId/version/sorted FieldId-kind 做内容相等；logical kind 只有 `Int32` 与 `Reference`，不修改产品 TypeTag 1...4。
+- 封闭 V1/V2 record variants 分别返回 `ProbeSnapshotV1` 与 current `ProbeSnapshot`；V1 handler 是 `void(in old, out current)`。
+- normalization 先按 ID 对全表 preflight identity/version/exact shape/payload variant，确认 required handler；随后逐 record typed decode/upgrade、验证对完整 SourceRecordIds 的 references，全部成功后才返回 `NormalizedBaselineGraph`。
+
+观察：
+
+- **Observed**：mixed/reversed V1/V2 records 得到相同 current baseline 与按 ID trace；value-changing 与 value-preserving historical upgrades 都 `RequiresRewrite=true`，current record 为 false。
+- **Observed**：identity、shape、unknown version 与 payload variant mismatch 均在全表任何 Decode/Upgrade 前失败。
+- **Observed**：current、upgrade-produced 和显式 nullable-default reference 都 fail closed；坏引用位于 disconnected source record 时仍被检查。
+- **Observed**：upgrade 删除旧 edge 后 target entry 仍保留；R1 PlanSave 对 matching current root 强制 Upsert historical root，并把断开的 target 标为 Unreachable。
+- **Observed**：late typed Decode failure 与 late Upgrade failure 都不返回 partial baseline，保留 input records/inner exception；同一 image 修复后重试重新 decode 并返回完整 baseline。
+- **Observed**：schema/entry input arrays、typed value payload 与 normalized baseline 相互 detached；core map/set 枚举顺序仍不成为语义。
+- **Observed**：独立 correctness/test-evidence review 找到并促成 decode-failure retry 与 null-record coverage；最终无 blocker/medium。
+
+验证：
+
+- R3a 聚焦测试：9/9 passed。
+- `DurableGraph.slnx`：0 warnings / 0 errors；完整 `DurableGraph.Tests`：140/140 passed。
+- `dotnet format --verify-no-changes`：passed。
+- 真实 PackageConsumerProbe：passed，确认 test-only R3a 未改变 packaged runtime/Generator/history 行为。
+
+结论：R3a normalization state law 成立，但只是一套 test fixture evidence。下一主线入口是 R3b normalized baseline → current CLR graph；StoredGraphImage、probe Schema 与 sorted processing policy 都未提升为 public/durable contract。
+
+相关材料：
+
+- `tests/DurableGraph.Tests/StoredGraphNormalizationProbe.cs`
+- `tests/DurableGraph.Tests/StoredGraphNormalizationProbeTests.cs`
+- `tests/DurableGraph.Tests/GraphDeltaProbe.cs`
+- `docs/design-branches/0006-flat-graph-delta-prototype.md`
+- `docs/DurableGraph-research-roadmap.md`
+
 ## 5. 实验记录模板
 
 后续实验按需增加条目，不要求为了形式填写无意义内容。
@@ -632,6 +684,13 @@
 ```
 
 ## 6. 船长日志
+
+### 2026-08-27：完成 Stored Graph normalization R3a probe
+
+- 用 immutable record table + full-table exact preflight + typed V1/V2 decode/upgrade 产出 current-Snapshot baseline，未引入产品 Reference TypeTag 或 wire format。
+- 保留完整 SourceRecordIds；upgrade 删除 edge 后由下一次 R1 Save 将 target 分类为 Unreachable，而不是 normalization 提前裁掉。
+- decode/upgrade late failure 均无 partial result，并能在同一 image 上修复重试；handler 自身外部副作用仍明确不回滚。
+- 聚焦 9/9、完整 140/140、solution 0 warning / 0 error、PackageConsumerProbe passed；两路独立复审最终无 blocker/medium。下一主线为 R3b two-pass hydrate。
 
 ### 2026-08-27：完成 Generated Graph Operations R2 probe
 

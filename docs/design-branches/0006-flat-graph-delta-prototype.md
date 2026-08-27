@@ -1,10 +1,10 @@
 # DB-006：Flat Graph Delta 原型
 
-> 状态：Chosen for current prototype；R1/R2 Concluded  
+> 状态：Chosen for current prototype；R1/R2/R3a Concluded
 > 创建日期：2026-08-27  
 > 当前实验选择：latest typed Snapshot baseline、flat ID table、per-entry `RequiresRewrite`、whole-object Upsert、single-root iterative traversal、success-only baseline replacement。  
 > 边界：此选择只固定下一实验的问题与不变量；不冻结 public API、正式 DurableId、异构 Snapshot 容器、wire format、persistent Store 或 commit protocol。
-> 实现状态：EXP-011 已在 test fixture 中完成 R1；EXP-012 以默认不可发现的 internal probe generator 完成 R2。production runtime、默认 Generator 与 package 尚未获得 reference graph 能力。
+> 实现状态：EXP-011 已完成 R1，EXP-012 已完成隔离 R2，EXP-013 已完成 test-only StoredGraphImage normalization R3a。production runtime、默认 Generator 与 package 尚未获得 reference graph 能力。
 
 ## 1. 问题
 
@@ -61,6 +61,8 @@ stored exact Schema validation
 ```
 
 所有 historical Snapshot 都只在 decode/upgrade pipeline 中短暂存在。进入 baseline 后，Graph Delta 只面对 current Snapshot。
+
+EXP-013 已在 fixture 中验证该层：record-table keys 是唯一 `SourceRecordIds`；全表 exact Schema/payload-variant preflight 先于任何 Decode；V1 typed handler 只产出 current `ProbeSnapshot`；decode/upgrade/reference failure 均不返回 partial baseline。该证据不是 persistent authority 或产品 Load API。
 
 ### 3.3 Comparison layer
 
@@ -348,6 +350,7 @@ VisitReferences(in CapturedReferences, Action<T>)
 | provisional `TIdentity` resolver | Probe only；不提升为产品 API |
 | Reference TypeTag/history representation | Defer；默认严格 history 仍只有 1...4 |
 | production Generator graph adapter | Defer；EXP-012 默认不可发现 |
+| test-only StoredGraphImage normalizer | Keep as R3a evidence；不提升为产品 API |
 | heterogeneous graph/type-erased Snapshot table | Defer |
 | 同 ID 更换 Schema identity | Future heterogeneous gate；预期 fail closed |
 | inheritance/value struct/collections | Separate experiments |
@@ -417,12 +420,44 @@ VisitReferences(in CapturedReferences, Action<T>)
 
 - production/package Generator 支持 durable reference；
 - 正式 DurableId、allocator、Reference TypeTag 或 historical reference Snapshot；
-- historical graph Load、two-pass hydrate、StateMap、bytes 或 persistence；
+- EXP-012 自身未证明 historical graph Load；该 normalization gap 随后由 test-only EXP-013 回答；two-pass hydrate、StateMap、bytes 或 persistence 仍未证明；
 - delegate/struct shape 的 allocation 或性能优势。
 
-结论：R2 code-generation seam 成立，但保持为隔离探针。下一主线入口是 roadmap R3a 的 test-only StoredGraphImage → normalized baseline，而不是把 probe 自动注册为产品 Generator。
+结论：R2 code-generation seam 成立，但保持为隔离探针。该结论随后为 EXP-013 提供 current Snapshot 边界，而不是把 probe 自动注册为产品 Generator。
 
-## 16. 重访触发条件
+## 16. EXP-013 实验结果
+
+实现位置：
+
+- `tests/DurableGraph.Tests/StoredGraphNormalizationProbe.cs`
+- `tests/DurableGraph.Tests/StoredGraphNormalizationProbeTests.cs`
+
+观察：
+
+- **Observed**：immutable StoredGraphImage 从 entry sequence 建立 defensive copied record table；重复/default ID、missing/default root 与 null record 在 Decode 前拒绝，`Records.Keys` 是唯一 `SourceRecordIds` authority。
+- **Observed**：test-only Schema 对 `(SchemaId, Version, sorted FieldId/Kind)` 做内容相等；全表按 ID 预检 identity、known version、exact shape 与 V1/V2 payload variant，任一失败时全表 decode/upgrade 计数为零。
+- **Observed**：V1 `void(in ProbeSnapshotV1, out ProbeSnapshot)` handler 与 V2 typed Decode 都只产生 current Snapshot；historical entry 无论升级后值是否改变都 `RequiresRewrite=true`，current entry 为 false。
+- **Observed**：current、upgrade-produced 与显式 nullable-default reference 均对完整 source table fail closed；坏引用位于 disconnected record 时也会被验证，证明 normalization 不只走 root closure。
+- **Observed**：upgrade 删除 edge 后，目标 source entry 仍保留在 baseline；交给 R1 PlanSave 后 historical root whole-object Upsert，断开的 target 进入 Unreachable。
+- **Observed**：late decode 与 late upgrade failure 均不返回 partial result；保留原 input record instances 与 inner exception，同一 image 修复后重试会重新 decode 全部相关 records 并返回完整 baseline。
+- **Observed**：输入 schema/entry arrays、typed value payload 与输出 baseline 相互 detached；record input order 不改变按 ID 的逻辑结果或处理 trace。
+- **Observed**：两路独立 correctness/test-evidence review 的有效缺口已补齐；最终无 blocker/medium。
+
+验证：
+
+- R3a 聚焦测试：9/9 passed。
+- 完整 solution/test/format 结果在实验簿 EXP-013 中记录。
+
+本实验仍未证明：
+
+- R3b allocate-all/hydrate-all、sharing/cycle `ReferenceEquals` 或 transient rebuild；
+- product Reference TypeTag、Generator/Store integration 或 historical bytes；
+- heterogeneous graph、upgrade-created node、StateMap/head、commit 或 persistence；
+- 对 decode/upgrade handler 外部 side effect 的 rollback。
+
+结论：R3a normalization state law 成立。下一主线入口是 roadmap R3b normalized baseline → current CLR graph；不要把 fixture Schema/StoredGraphImage 当作 durable format。
+
+## 17. 重访触发条件
 
 - 首个 probe 证明或推翻 flat baseline / whole-object delta laws；
 - production Generator 开始支持第一个 durable reference field；
@@ -432,7 +467,7 @@ VisitReferences(in CapturedReferences, Action<T>)
 - 开始定义 canonical object-record bytes；
 - 性能数据表明 materialized baseline 或 O(live graph) traversal 不可接受。
 
-## 17. 相关材料
+## 18. 相关材料
 
 - `docs/DurableGraph-research-roadmap.md`
 - `docs/design-branches/0002-read-time-version-upgrade-pipeline.md`

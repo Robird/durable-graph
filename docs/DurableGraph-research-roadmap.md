@@ -7,7 +7,7 @@
 
 ## 1. 当前出发点
 
-截至 EXP-012，仓库已经证明：
+截至 EXP-013，仓库已经证明：
 
 - 四种 scalar field 可以通过 generated boxed serializer 保存和加载；
 - stored exact Schema 在 payload decode 前 fail closed；
@@ -16,12 +16,13 @@
 - Load 只在内存中升级，只有后续显式 Save 才推进 Store 中的版本。
 - fixture-only EXP-011 已证明单类型 flat baseline、identity-aware traversal、whole-object delta、`RequiresRewrite` 与 success-only clean baseline 的逻辑状态律。
 - isolated EXP-012 已证明 Source Generator 可以为单个 direct-self-reference 类型产生强类型 current Snapshot capture、durable equality 与同次字段读取得到的 reference visitation，并与 EXP-011 oracle 对齐。
+- fixture-only EXP-013 已证明 mixed-version StoredGraphImage 可以在全表 exact preflight 后，通过强类型 decode/upgrade 归一化为保留完整 SourceRecordIds 的 current-Snapshot baseline；decode、upgrade 或 reference failure 不返回 partial baseline。
 
 当前尚未实现：
 
 - `DurableId` 与对象身份分配；
 - production Generator/runtime 中的 durable reference、共享引用、循环图和 reachability；
-- 对象图 baseline、Graph Delta 或 object version；
+- production 对象图 baseline、Graph Delta 或 object version；
 - binary wire format、持久 StateStore 或 SchemaStore；
 - commit publication、并发、crash recovery 或 durability；
 - durable value struct、collection、领域继承和 `RebuildTransient`。
@@ -30,11 +31,11 @@
 
 ## 2. 当前研究方向
 
-### 2.1 先验证 Graph Delta 语义，再固定 bytes
+### 2.1 先闭合 logical graph 语义，再固定 bytes
 
-下一主线优先回答：在没有 ChangeTracker 的前提下，能否按持久身份遍历当前对象图，并相对上次发布状态的强类型投影，精确产生 whole-object Upsert 与不可达集合？
+R1/R2 已回答 current graph capture/delta，R3a 已回答 historical records 到 normalized baseline。下一主线优先回答 R3b：能否从 normalized current Snapshots allocate-all/hydrate-all，恢复 sharing/cycle CLR graph 而不暴露 partial root？
 
-首轮继续使用内存逻辑值和 boxed scaffolding。`BinaryReader` / `BinaryWriter` 只在逻辑 IR 和状态转换律通过后介入，避免过早冻结 framing、引用编码、canonical order 和 malformed-input contract。
+继续使用 test-only 内存逻辑值。`BinaryReader` / `BinaryWriter` 只在 logical Load/materialize/delta 状态律闭合后介入，避免过早冻结 framing、引用编码、canonical order 和 malformed-input contract。
 
 ### 2.2 历史版本在读取边界归一化
 
@@ -82,7 +83,8 @@ unchanged object 的旧 record address 由 authoritative StateMap 提供；不�
 ```text
 R1 Graph Delta semantic probe (Concluded)
     -> R2 generated graph operations (Concluded)
-    -> R3 normalized flat-graph Load and two-pass hydrate
+    -> R3a normalized flat-graph Load (Concluded)
+    -> R3b two-pass CLR hydrate
     -> R4 in-memory StateMap and repeated logical delta apply
     -> R5 binary codec for the proven logical IR
     -> R6 persistent publication and recovery
@@ -146,6 +148,8 @@ VisitReferences(in CapturedReferences, Action<T>)
 
 ### R3：读取归一化与两阶段对象图物化
 
+状态：R3a Concluded（EXP-013）；R3b 尚未开始。
+
 问题：能否把 exact historical records 全量归一化成 current Snapshot table，并恢复共享引用和循环 CLR graph？
 
 为保持失败定位清楚，本阶段包含两个依赖明确的小切片。
@@ -154,19 +158,24 @@ VisitReferences(in CapturedReferences, Action<T>)
 
 R3 首轮仍可沿用 test-only logical IDs/Snapshots 研究 Load 状态律；这不要求先把 EXP-012 probe 接入产品 Generator，也不授权定义 Reference TypeTag 或 wire bytes。
 
+实现采用 immutable `StoredGraphImage`，其 record-table keys 是唯一 `SourceRecordIds` authority。V1/V2 payload 是封闭强类型 variants；test-only exact Schema descriptor 使用 `Int32`/`Reference` logical kind，不修改产品 TypeTag。
+
 输入是 test-only immutable `StoredGraphImage`：显式 RootId、完整 `SourceRecordIds` 和 exact logical records；它不是 authoritative StateMap 或 persistent head。
 
-最小流程：
+已验证流程：
 
 1. 从 StoredGraphImage 取得 root 和完整 `SourceRecordIds`；
-2. 每个 record 先 exact Schema validation，再 decode/upgrade 到 current Snapshot；
-3. historical record 对应的 entry 标记 `RequiresRewrite`；
-4. 任一节点失败时不暴露 partial baseline；
-5. 升级后的每个 non-null durable reference 必须仍指向 `SourceRecordIds` 内的 ID；引用 source table 之外的旧 record、垃圾 record 或新 ID 均视为 unsupported/dangling，all-or-nothing fail。
+2. 先按 ID 对全表执行 SchemaId、known version、exact shape 与 payload variant preflight，期间不调用 Decode；
+3. 每个 record typed decode；V1 通过 `void(in ProbeSnapshotV1, out ProbeSnapshot)` 升级到 current，V2 直接得到 current Snapshot；
+4. historical record 无论值是否改变都标记 `RequiresRewrite`，current record 不标记；
+5. current/upgraded Snapshot 的每个 non-null reference 必须属于完整 `SourceRecordIds`，包括 disconnected source entries；
+6. 全部成功后才一次性构造并返回 `NormalizedBaselineGraph`。
 
 baseline 的 ID set 保留 `SourceRecordIds`。升级可能删除引用，使其中部分 source nodes 相对 current root 已不可达；这些节点留待下一次 Save 进入 `Unreachable`，不能在归一化阶段静默丢失。升级创建新 durable node 或重新接入 source table 之外的 ID 继续暂缓。
 
-可执行闸门：mixed stored versions 全部变成 current Snapshot；只有历史节点 flagged；unknown version、shape mismatch、source-external reference 均 all-or-nothing fail。
+可执行结果：9 个聚焦 tests 覆盖 mixed/reversed records、value-changing/value-preserving upgrades、全表 schema-before-decode、unknown version、payload variant mismatch、missing handler、decode/upgrade late failure 与同 image retry、current/upgraded/default external reference、结构/defensive-copy gate，以及升级删边后保留 source entry 并交给 R1 Save 判为 Unreachable。
+
+本切片只保证 loader 不修改输入、不返回 partial baseline；用户 decode/upgrade hook 自身的外部副作用不具备回滚语义。下一步若继续主线，应进入 R3b，而不是把 StoredGraphImage 或 probe Schema 提升为产品 API。
 
 #### R3b：normalized baseline → current CLR graph
 
