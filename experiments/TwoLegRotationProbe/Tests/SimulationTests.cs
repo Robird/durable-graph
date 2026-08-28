@@ -20,7 +20,7 @@ public sealed class SimulationTests {
         Assert.Equal(5, run.FileStore.GetFile(run.CurrentFileNumber).FrameCount);
         Assert.Empty(run.FileStore.ReadFrame(run.RevisionAddresses[2]).ObjectVersions);
         Assert.Equal(
-            new AbsoluteFrameAddress(run.CurrentFileNumber, new FrameTicket(4)),
+            run.RevisionAddresses[4],
             Assert.Single(run.StateMap).Value);
         Assert.False(run.StateMap.ContainsKey(2));
         AssertExactState(
@@ -54,9 +54,15 @@ public sealed class SimulationTests {
         Assert.Equal(firstPayloadBytes, firstUpdate.PayloadBytes);
         Assert.Equal(secondPayloadBytes, secondUpdate.PayloadBytes);
         Assert.Equal(thirdPayloadBytes, thirdUpdate.PayloadBytes);
-        Assert.Equal(new RelativeFrameTicket(false, new FrameTicket(0)), firstUpdate.ParentFrameTicket);
-        Assert.Equal(new RelativeFrameTicket(false, new FrameTicket(1)), secondUpdate.ParentFrameTicket);
-        Assert.Equal(new RelativeFrameTicket(false, new FrameTicket(3)), thirdUpdate.ParentFrameTicket);
+        Assert.Equal(
+            new RelativeFrameTicket(false, run.RevisionAddresses[0].FrameTicket),
+            firstUpdate.ParentFrameTicket);
+        Assert.Equal(
+            new RelativeFrameTicket(false, run.RevisionAddresses[1].FrameTicket),
+            secondUpdate.ParentFrameTicket);
+        Assert.Equal(
+            new RelativeFrameTicket(false, run.RevisionAddresses[3].FrameTicket),
+            thirdUpdate.ParentFrameTicket);
         Assert.Equal(4, thirdUpdate.VersionOrdinal);
 
         if (policy == BaselinePolicy.AlwaysDeltaWhenLegal) {
@@ -74,7 +80,7 @@ public sealed class SimulationTests {
     public void Delta_apply_rejects_a_parent_state_that_does_not_match_its_precondition() {
         RbfFileStore store = new();
         RbfFile file = store.CreateFile();
-        AppendBase(file, objectId: 1, resultBasePayloadBytes: 100);
+        FrameTicket parentTicket = AppendBase(file, objectId: 1, resultBasePayloadBytes: 100);
         FrameBuilder deltaFrame = new();
         ObjectVersionBuilder delta = deltaFrame.Add(1);
         ConfigureDelta(
@@ -83,7 +89,7 @@ public sealed class SimulationTests {
             resultBasePayloadBytes: 60,
             payloadBytes: 7,
             versionOrdinal: 2,
-            parentFrameTicket: new FrameTicket(0));
+            parentFrameTicket: parentTicket);
         FrameTicket headTicket = file.Append(deltaFrame.Build());
         Dictionary<uint, AbsoluteFrameAddress> stateMap = new() {
             [1] = new AbsoluteFrameAddress(file.FileNumber, headTicket),
@@ -107,7 +113,7 @@ public sealed class SimulationTests {
         rebased.VersionOrdinal = 2;
         rebased.ParentFrameTicket = new RelativeFrameTicket(
             IsPreviousFile: true,
-            FrameTicket: new FrameTicket(0));
+            FrameTicket: new FrameTicket(4, 24));
         FrameTicket headTicket = file.Append(frame.Build());
         Dictionary<uint, AbsoluteFrameAddress> stateMap = new() {
             [1] = new AbsoluteFrameAddress(file.FileNumber, headTicket),
@@ -132,7 +138,7 @@ public sealed class SimulationTests {
             resultBasePayloadBytes: 60,
             payloadBytes: 7,
             versionOrdinal: 2,
-            parentFrameTicket: new FrameTicket(1));
+            parentFrameTicket: new FrameTicket(32, 24));
         FrameTicket headTicket = file.Append(deltaFrame.Build());
         AppendBase(file, objectId: 1, resultBasePayloadBytes: 100);
         Dictionary<uint, AbsoluteFrameAddress> stateMap = new() {
@@ -150,7 +156,7 @@ public sealed class SimulationTests {
         RbfFile file = store.CreateFile();
         FrameBuilder unrelatedFrame = new();
         AppendConfiguredBase(unrelatedFrame.Add(missingFrame ? 1U : 2U), 100);
-        file.Append(unrelatedFrame.Build());
+        FrameTicket availableParent = file.Append(unrelatedFrame.Build());
 
         FrameBuilder deltaFrame = new();
         ObjectVersionBuilder delta = deltaFrame.Add(1);
@@ -160,7 +166,11 @@ public sealed class SimulationTests {
             resultBasePayloadBytes: 60,
             payloadBytes: 7,
             versionOrdinal: 2,
-            parentFrameTicket: new FrameTicket(missingFrame ? 9 : 0));
+            parentFrameTicket: missingFrame
+                ? new FrameTicket(
+                    availableParent.OffsetBytes,
+                    availableParent.LengthBytes + RbfV040Layout.AlignmentBytes)
+                : availableParent);
         FrameTicket headTicket = file.Append(deltaFrame.Build());
         Dictionary<uint, AbsoluteFrameAddress> stateMap = new() {
             [1] = new AbsoluteFrameAddress(file.FileNumber, headTicket),
@@ -243,13 +253,13 @@ public sealed class SimulationTests {
             .ReadFrame(run.RevisionAddresses[revisionIndex])
             .ObjectVersions[objectId];
 
-    private static void AppendBase(
+    private static FrameTicket AppendBase(
         RbfFile file,
         uint objectId,
         int resultBasePayloadBytes) {
         FrameBuilder frame = new();
         AppendConfiguredBase(frame.Add(objectId), resultBasePayloadBytes);
-        file.Append(frame.Build());
+        return file.Append(frame.Build());
     }
 
     private static void AppendConfiguredBase(

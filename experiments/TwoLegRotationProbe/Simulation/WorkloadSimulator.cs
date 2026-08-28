@@ -16,9 +16,11 @@ internal static class WorkloadSimulator {
         RbfFile currentFile = store.CreateFile();
         Dictionary<uint, AbsoluteFrameAddress> acceptedStateMap = [];
         List<AbsoluteFrameAddress> revisionAddresses = new(trace.Steps.Count);
+        List<RevisionObservation> observations = new(trace.Steps.Count);
         WorkloadReplayCursor logicalCursor = new();
 
-        foreach (SaveStep step in trace.Steps) {
+        for (int stepIndex = 0; stepIndex < trace.Steps.Count; stepIndex++) {
+            SaveStep step = trace.Steps[stepIndex];
             Frame candidateFrame = BuildFrame(
                 step,
                 logicalCursor,
@@ -26,7 +28,11 @@ internal static class WorkloadSimulator {
                 currentFile.FileNumber,
                 policy);
             IReadOnlyDictionary<uint, LogicalObjectState> expectedState = logicalCursor.Apply(step);
-            FrameTicket candidateTicket = currentFile.Append(candidateFrame);
+            int objectPayloadBytes = GetObjectPayloadBytes(candidateFrame);
+            FrameTicket candidateTicket = currentFile.Append(
+                candidateFrame,
+                objectPayloadBytes,
+                tailMetaLengthBytes: 0);
             AbsoluteFrameAddress candidateAddress = new(currentFile.FileNumber, candidateTicket);
             Dictionary<uint, AbsoluteFrameAddress> candidateStateMap =
                 BuildCandidateStateMap(acceptedStateMap, step, candidateAddress);
@@ -35,8 +41,18 @@ internal static class WorkloadSimulator {
                 PhysicalStateOracle.Materialize(store, candidateStateMap);
             EnsureExactState(expectedState, actualState);
 
+            RevisionObservation observation = CreateObservation(
+                stepIndex,
+                step,
+                candidateFrame,
+                candidateAddress,
+                currentFile.ReadLayout(candidateTicket),
+                candidateStateMap.Count,
+                PhysicalStateOracle.MeasureReconstruction(store, candidateStateMap));
+
             acceptedStateMap = candidateStateMap;
             revisionAddresses.Add(candidateAddress);
+            observations.Add(observation);
         }
 
         return new SimulationRun(
@@ -45,7 +61,8 @@ internal static class WorkloadSimulator {
             store,
             currentFile.FileNumber,
             acceptedStateMap,
-            revisionAddresses);
+            revisionAddresses,
+            observations);
     }
 
     private static Frame BuildFrame(
@@ -141,6 +158,76 @@ internal static class WorkloadSimulator {
         }
 
         return candidate;
+    }
+
+    private static int GetObjectPayloadBytes(Frame frame) {
+        long total = 0;
+        foreach (ObjectVersion version in frame.ObjectVersions.Values) {
+            total = checked(total + version.PayloadBytes);
+        }
+
+        if (total > RbfV040Layout.MaxPayloadAndTailMetaLengthBytes) {
+            throw new InvalidDataException(
+                $"Object payload length {total} exceeds the modeled RBF payload capacity.");
+        }
+
+        return (int)total;
+    }
+
+    private static RevisionObservation CreateObservation(
+        int stepIndex,
+        SaveStep step,
+        Frame frame,
+        AbsoluteFrameAddress address,
+        RbfFrameLayoutEstimate layout,
+        int liveBindingCount,
+        PostSaveReconstructionMetrics reconstruction) {
+        int createdObjectCount = 0;
+        int updatedObjectCount = 0;
+        int removedObjectCount = 0;
+        foreach (WorkloadChange change in step.Changes) {
+            switch (change) {
+                case CreateObject:
+                    createdObjectCount++;
+                    break;
+                case UpdateObject:
+                    updatedObjectCount++;
+                    break;
+                case RemoveObject:
+                    removedObjectCount++;
+                    break;
+            }
+        }
+
+        int baseVersionCount = 0;
+        int deltaVersionCount = 0;
+        long baseObjectPayloadBytes = 0;
+        long deltaObjectPayloadBytes = 0;
+        foreach (ObjectVersion version in frame.ObjectVersions.Values) {
+            if (version.Kind == ObjectVersionKind.Base) {
+                baseVersionCount++;
+                baseObjectPayloadBytes = checked(baseObjectPayloadBytes + version.PayloadBytes);
+            } else {
+                deltaVersionCount++;
+                deltaObjectPayloadBytes = checked(deltaObjectPayloadBytes + version.PayloadBytes);
+            }
+        }
+
+        return new RevisionObservation(
+            stepIndex,
+            AccountingScope.ObjectPayloadOnly,
+            address,
+            layout,
+            frame.ObjectVersions.Count,
+            createdObjectCount,
+            updatedObjectCount,
+            removedObjectCount,
+            liveBindingCount,
+            baseVersionCount,
+            deltaVersionCount,
+            baseObjectPayloadBytes,
+            deltaObjectPayloadBytes,
+            reconstruction);
     }
 
     private static void EnsureExactState(

@@ -7,6 +7,7 @@ namespace Atelia.TwoLegRotationProbe.Simulation;
 internal sealed class SimulationRun {
     private readonly ReadOnlyDictionary<uint, AbsoluteFrameAddress> _stateMap;
     private readonly ReadOnlyCollection<AbsoluteFrameAddress> _revisionAddresses;
+    private readonly ReadOnlyCollection<RevisionObservation> _observations;
 
     internal SimulationRun(
         WorkloadTrace sourceTrace,
@@ -14,11 +15,13 @@ internal sealed class SimulationRun {
         RbfFileStore fileStore,
         uint currentFileNumber,
         IReadOnlyDictionary<uint, AbsoluteFrameAddress> stateMap,
-        IEnumerable<AbsoluteFrameAddress> revisionAddresses) {
+        IEnumerable<AbsoluteFrameAddress> revisionAddresses,
+        IEnumerable<RevisionObservation> observations) {
         ArgumentNullException.ThrowIfNull(sourceTrace);
         ArgumentNullException.ThrowIfNull(fileStore);
         ArgumentNullException.ThrowIfNull(stateMap);
         ArgumentNullException.ThrowIfNull(revisionAddresses);
+        ArgumentNullException.ThrowIfNull(observations);
 
         SourceTrace = sourceTrace;
         Policy = policy;
@@ -26,6 +29,7 @@ internal sealed class SimulationRun {
         CurrentFileNumber = currentFileNumber;
         _stateMap = new(new Dictionary<uint, AbsoluteFrameAddress>(stateMap));
         _revisionAddresses = Array.AsReadOnly(revisionAddresses.ToArray());
+        _observations = Array.AsReadOnly(observations.ToArray());
     }
 
     public WorkloadTrace SourceTrace { get; }
@@ -39,4 +43,6 @@ internal sealed class SimulationRun {
     public IReadOnlyDictionary<uint, AbsoluteFrameAddress> StateMap => _stateMap;
 
     public IReadOnlyList<AbsoluteFrameAddress> RevisionAddresses => _revisionAddresses;
+
+    public IReadOnlyList<RevisionObservation> Observations => _observations;
 }

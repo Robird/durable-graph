@@ -52,7 +52,7 @@
 - StateStore 基础设计：选择 one-Revision/one-RBF-frame、object-level version chains、ObjectVersionDict authority、LSB-tagged `RelativeFrameTicket` 与 current-head two-file reconstruction closure；实现尚未开始。
 - 双腿轮转派生说明：记录 A/B/C evacuation、B RelayRevision、absolute-normalized ObjectVersionDict、one-frame bounds 与 `CanPrepareAndRotate` safety gate。
 - Adaptive rotation branch DB-007：隔离尚未裁决的统一 Base/Delta/cold-migration/rotation 策略和内存模拟输入。
-- Two-leg rotation probe：以独立 xUnit 项目建立 one-based file store、append-only/random-read frame collection、相邻 FileScope、absolute live StateMap、Frame/ObjectVersion 父链、deterministic workload generation/replay，以及单文件 AlwaysBase/AlwaysDelta symbolic materialization baseline。
+- Two-leg rotation probe：以独立 xUnit 项目建立 one-based file store、offset/length FrameTicket、exact RBF v0.40 envelope、相邻 FileScope、absolute live StateMap、Frame/ObjectVersion 父链、deterministic workload generation/replay，以及单文件 AlwaysBase/AlwaysDelta symbolic materialization 与 ObjectPayloadOnly raw metrics baseline。
 - Candidate design branches：在 `docs/design-branches/` 隔离尚未裁决的架构分叉。
 - 本实验簿：保存随实验演化的项目认识。
 
@@ -78,7 +78,8 @@
 - **Decided**：持久地址使用 LSB-tagged `RelativeFrameTicket = (SizedPtr.Serialize() << 1) | same/previous`，进程内 authority 使用 `AbsoluteFrameAddress`；接受约 512 GiB 最大 frame-start 的容量代价。
 - **Decided**：Base 与 Delta 都保留 lineage parent；从 A/B 轮转到 B/C 时，将 Base 位于 A 的 live objects 以 Base 写 C。latest head 仍在 A 的对象通过 B 中 per-ObjectId forwarding RelayRevision 解决 C 无法直接编码 A 的问题。
 - **Decided**：物理删除文件后的数据不可访问不属于地址格式需要抵抗的故障模型；Relay 保证 retained files 之间的 lineage 连续，不承担抗删文件冗余。
-- **Observed**：S1 preparatory baseline 已把冻结 workload 的每个 Save 编译为单个 Frame，并以 absolute live StateMap、relative lineage parent 和 checked symbolic Delta apply 逐 prefix 对照 logical replay；尚未证明 two-file rotation、layout representability 或 `CanPrepareAndRotate`。
+- **Observed**：S1 preparatory baseline 已把冻结 workload 的每个 Save 编译为单个 Frame，并以 absolute live StateMap、relative lineage parent 和 checked symbolic Delta apply 逐 prefix 对照 logical replay；尚未证明完整 Revision layout、two-file rotation 或 `CanPrepareAndRotate`。
+- **Observed**：S1b 已对给定 Payload/TailMeta 长度复刻 exact RBF v0.40 envelope，并把 synthetic workload 接入逐 Save write 与 post-save reconstruction/co-read observations；accounting 明示排除 DG header/OVD/index/VarUInt，所以尚不能证明完整 Revision bytes、容量安全或策略 winner。
 - **Decided**：当前不引入 `MaxLogicalChainBytes`、`TargetFileBytes` 或固定 migration budget；先在纯内存模拟中采集无权重原始量，比较自适应统一策略。
 - **Open**：统一策略能否仅依靠 two-file pressure、lineage/reconstruction overhead 与渐进 cold migration 自动收敛；`CanPrepareAndRotate` 必须把 B maintenance 可完成性与 C evacuation Revision 可编码性一起作为策略无关的 safety oracle。
 - **Open**：Schema runtime representation 与 canonical authority 的候选分叉记录在 `DB-001`，等待 exact codec/persistent format 实验裁决。
@@ -753,6 +754,15 @@
 ```
 
 ## 6. 船长日志
+
+### 2026-08-28：建立 ObjectPayloadOnly RBF envelope 与 raw metrics
+
+- `FrameTicket` 从 frame 序号改为 RBF byte-range `(OffsetBytes, LengthBytes)`；文件以 4-byte HeaderFence 起步，Append 精确计入 24-byte frame fixed overhead、padding 与独立 trailing Fence。
+- 原生 RBF 约 1 TiB frame-start 与 DurableGraph 约 512 GiB relative-start gate 分层建模；最后合法 start 的 frame end 可以越界，下一次 Append 才失败。
+- 每个 Save 记录 Base/Delta object payload write；每个 post-save state 记录 required versions、unique frames、required/in-frame/co-read payload 与 object-payload-only full-frame read bytes。读指标保持状态快照，不默认跨 Save 求和。
+- 固定 generated mixed workload 首次让两基线显出可复现 tradeoff：AlwaysBase modeled file 436 bytes/final read 148 bytes，AlwaysDelta modeled file 364 bytes/final read 348 bytes；这些不是完整 wire bytes，也不构成 winner。
+- OVD/index/header、TailMeta、relative VarUInt、self-ticket fixed point、two-file/relay/rotation 与 `CanPrepareAndRotate` 继续暂缓到对应具体 codec/planner 切片。
+- 验证：Probe 90/90、root tests 147/147、root solution build 0 warning/0 error、两套 solution format check 与 diff check 通过；独立复核最终无 blocker/medium。
 
 ### 2026-08-28：跑通单文件 Base/Delta physical baseline
 

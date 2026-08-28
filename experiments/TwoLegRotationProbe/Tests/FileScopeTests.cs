@@ -64,7 +64,7 @@ public sealed class FileScopeTests {
         FileScope scope = new(firstFile.FileNumber);
         RelativeFrameTicket invalidParent = new(
             IsPreviousFile: true,
-            FrameTicket: new FrameTicket(0));
+            FrameTicket: new FrameTicket(4, 24));
 
         Assert.Throws<InvalidOperationException>(() => scope.Resolve(invalidParent));
         Assert.Throws<InvalidOperationException>(() => scope.ReadFrame(store, invalidParent));

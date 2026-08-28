@@ -18,7 +18,7 @@ internal static class PhysicalStateOracle {
 
         Dictionary<uint, LogicalObjectState> result = new(stateMap.Count);
         foreach ((uint objectId, AbsoluteFrameAddress headAddress) in stateMap) {
-            result.Add(objectId, Reconstruct(store, objectId, headAddress));
+            result.Add(objectId, Reconstruct(store, objectId, headAddress, visit: null));
         }
 
         return new ReadOnlyDictionary<uint, LogicalObjectState>(result);
@@ -40,10 +40,72 @@ internal static class PhysicalStateOracle {
         }
     }
 
+    public static PostSaveReconstructionMetrics MeasureReconstruction(SimulationRun run) {
+        ArgumentNullException.ThrowIfNull(run);
+        return MeasureReconstruction(run.FileStore, run.StateMap);
+    }
+
+    public static PostSaveReconstructionMetrics MeasureReconstruction(
+        RbfFileStore store,
+        IReadOnlyDictionary<uint, AbsoluteFrameAddress> stateMap) {
+        ArgumentNullException.ThrowIfNull(store);
+        ArgumentNullException.ThrowIfNull(stateMap);
+
+        HashSet<AbsoluteFrameAddress> uniqueFrames = [];
+        HashSet<VisitedObjectVersion> requiredVersions = [];
+        long requiredObjectPayloadBytes = 0;
+
+        foreach ((uint objectId, AbsoluteFrameAddress headAddress) in stateMap) {
+            _ = Reconstruct(
+                store,
+                objectId,
+                headAddress,
+                (address, version) => {
+                    uniqueFrames.Add(address);
+                    if (requiredVersions.Add(new VisitedObjectVersion(objectId, address))) {
+                        requiredObjectPayloadBytes = checked(
+                            requiredObjectPayloadBytes + version.PayloadBytes);
+                    }
+                });
+        }
+
+        long objectPayloadBytesInUniqueFrames = 0;
+        long objectPayloadOnlyRbfFrameBytesRead = 0;
+        foreach (AbsoluteFrameAddress frameAddress in uniqueFrames) {
+            Frame frame = store.ReadFrame(frameAddress);
+            long frameObjectPayloadBytes = 0;
+            foreach (ObjectVersion version in frame.ObjectVersions.Values) {
+                frameObjectPayloadBytes = checked(
+                    frameObjectPayloadBytes + version.PayloadBytes);
+            }
+
+            RbfFrameLayoutEstimate layout = store.ReadLayout(frameAddress);
+            if (layout.TailMetaLengthBytes != 0 ||
+                layout.PayloadLengthBytes != frameObjectPayloadBytes) {
+                throw new InvalidDataException(
+                    $"Frame {frameAddress} was not appended with ObjectPayloadOnly accounting.");
+            }
+
+            objectPayloadBytesInUniqueFrames = checked(
+                objectPayloadBytesInUniqueFrames + frameObjectPayloadBytes);
+            objectPayloadOnlyRbfFrameBytesRead = checked(
+                objectPayloadOnlyRbfFrameBytesRead + layout.FrameLengthBytes);
+        }
+
+        return new PostSaveReconstructionMetrics(
+            stateMap.Count,
+            requiredVersions.Count,
+            uniqueFrames.Count,
+            requiredObjectPayloadBytes,
+            objectPayloadBytesInUniqueFrames,
+            objectPayloadOnlyRbfFrameBytesRead);
+    }
+
     private static LogicalObjectState Reconstruct(
         RbfFileStore store,
         uint objectId,
-        AbsoluteFrameAddress headAddress) {
+        AbsoluteFrameAddress headAddress,
+        Action<AbsoluteFrameAddress, ObjectVersion>? visit) {
         List<ObjectVersion> pendingDeltas = [];
         HashSet<AbsoluteFrameAddress> visited = [];
         AbsoluteFrameAddress address = headAddress;
@@ -56,6 +118,7 @@ internal static class PhysicalStateOracle {
             }
 
             ObjectVersion version = ReadObjectVersion(store, objectId, address);
+            visit?.Invoke(address, version);
             if (version.Kind == ObjectVersionKind.Base) {
                 current = new LogicalObjectState(
                     version.ResultBasePayloadBytes,
@@ -161,7 +224,7 @@ internal static class PhysicalStateOracle {
         }
 
         if (parentAddress.FileNumber == childAddress.FileNumber &&
-            parentAddress.FrameTicket.Value >= childAddress.FrameTicket.Value) {
+            parentAddress.FrameTicket.OffsetBytes >= childAddress.FrameTicket.OffsetBytes) {
             throw new InvalidDataException(
                 $"Frame {childAddress} points to non-earlier frame {parentAddress}.");
         }
@@ -190,4 +253,8 @@ internal static class PhysicalStateOracle {
 
         return version;
     }
+
+    private readonly record struct VisitedObjectVersion(
+        uint ObjectId,
+        AbsoluteFrameAddress FrameAddress);
 }

@@ -11,7 +11,7 @@ public sealed class BuilderTests {
         ObjectVersionBuilder firstVersion = builder.Add(firstObjectId);
         RelativeFrameTicket originalParentFrameTicket = new(
             IsPreviousFile: true,
-            FrameTicket: new FrameTicket(3));
+            FrameTicket: new FrameTicket(4, 24));
         firstVersion.Kind = ObjectVersionKind.Delta;
         firstVersion.PayloadBytes = 8;
         firstVersion.ResultBasePayloadBytes = 100;
@@ -27,7 +27,7 @@ public sealed class BuilderTests {
         firstVersion.VersionOrdinal = 1;
         firstVersion.ParentFrameTicket = new RelativeFrameTicket(
             IsPreviousFile: false,
-            FrameTicket: new FrameTicket(9));
+            FrameTicket: new FrameTicket(32, 24));
         builder.Add(secondObjectId);
 
         ObjectVersion persistedVersion = Assert.Single(frame.ObjectVersions).Value;
@@ -44,7 +44,7 @@ public sealed class BuilderTests {
     public void Build_rejects_invalid_object_version_shapes() {
         RelativeFrameTicket parent = new(
             IsPreviousFile: false,
-            FrameTicket: new FrameTicket(0));
+            FrameTicket: new FrameTicket(4, 24));
         ObjectVersionBuilder[] invalidBuilders = [
             new() { Kind = (ObjectVersionKind)99 },
             new() { ResultBasePayloadBytes = -1 },
@@ -108,13 +108,29 @@ public sealed class BuilderTests {
     }
 
     [Fact]
-    public void FrameTicket_rejects_a_negative_value() {
-        Assert.Throws<ArgumentOutOfRangeException>(() => new FrameTicket(-1));
+    public void FrameTicket_rejects_invalid_offsets_and_lengths() {
+        Assert.Throws<ArgumentOutOfRangeException>(() => new FrameTicket(0, 24));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new FrameTicket(5, 24));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new FrameTicket(4, 20));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new FrameTicket(4, 25));
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => new FrameTicket(
+                RbfV040Layout.MaxNativeFrameStartOffsetBytes + RbfV040Layout.AlignmentBytes,
+                24));
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => new FrameTicket(4, RbfV040Layout.MaxFrameLengthBytes + 4));
+
+        FrameTicket maximum = new(
+            RbfV040Layout.MaxNativeFrameStartOffsetBytes,
+            RbfV040Layout.MaxFrameLengthBytes);
+        Assert.Equal(
+            RbfV040Layout.MaxNativeFrameStartOffsetBytes + RbfV040Layout.MaxFrameLengthBytes,
+            maximum.EndOffsetExclusive);
     }
 
     [Fact]
     public void AbsoluteFrameAddress_rejects_zero_file_number() {
         Assert.Throws<ArgumentOutOfRangeException>(
-            () => new AbsoluteFrameAddress(0, new FrameTicket(0)));
+            () => new AbsoluteFrameAddress(0, new FrameTicket(4, 24)));
     }
 }

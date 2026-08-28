@@ -1,7 +1,7 @@
 namespace Atelia.TwoLegRotationProbe.Model;
 
 internal sealed class RbfFile {
-    private readonly List<Frame> _frames = [];
+    private readonly Dictionary<FrameTicket, StoredFrame> _frames = [];
 
     public RbfFile(uint fileNumber) {
         ArgumentOutOfRangeException.ThrowIfZero(fileNumber);
@@ -12,19 +12,38 @@ internal sealed class RbfFile {
 
     public int FrameCount => _frames.Count;
 
-    public FrameTicket Append(Frame frame) {
+    public long TailOffsetBytes { get; private set; } = RbfV040Layout.InitialTailOffsetBytes;
+
+    public FrameTicket Append(
+        Frame frame,
+        int payloadLengthBytes = 0,
+        int tailMetaLengthBytes = 0) {
         ArgumentNullException.ThrowIfNull(frame);
 
-        FrameTicket frameTicket = new(_frames.Count);
-        _frames.Add(frame);
-        return frameTicket;
+        RbfFrameLayoutEstimate layout = RbfV040Layout.Estimate(
+            TailOffsetBytes,
+            payloadLengthBytes,
+            tailMetaLengthBytes);
+        _frames.Add(layout.Ticket, new StoredFrame(frame, layout));
+        TailOffsetBytes = layout.TailOffsetAfterBytes;
+        return layout.Ticket;
     }
 
     public Frame Read(FrameTicket frameTicket) {
-        if ((uint)frameTicket.Value >= (uint)_frames.Count) {
-            throw new ArgumentOutOfRangeException(nameof(frameTicket));
+        if (!_frames.TryGetValue(frameTicket, out StoredFrame? stored)) {
+            throw new KeyNotFoundException($"RBF frame {frameTicket} does not exist in file {FileNumber}.");
         }
 
-        return _frames[frameTicket.Value];
+        return stored.Frame;
     }
+
+    public RbfFrameLayoutEstimate ReadLayout(FrameTicket frameTicket) {
+        if (!_frames.TryGetValue(frameTicket, out StoredFrame? stored)) {
+            throw new KeyNotFoundException($"RBF frame {frameTicket} does not exist in file {FileNumber}.");
+        }
+
+        return stored.Layout;
+    }
+
+    private sealed record StoredFrame(Frame Frame, RbfFrameLayoutEstimate Layout);
 }

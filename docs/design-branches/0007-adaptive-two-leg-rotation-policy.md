@@ -145,6 +145,14 @@ failed plan leaves published state unchanged
 - 约 512 GiB representability、one-frame bounds 与 `CanPrepareAndRotate` 是不可调的格式 gate，必须从第一个模拟器开始建模。
 - 第一项实现工作应是纯内存、deterministic、可穷举小状态的策略模拟，而不是直接绑定真实 RBF I/O。
 
+## S1b 阶段性证据：ObjectPayloadOnly RBF envelope
+
+TwoLegRotationProbe 已把 FrameTicket 从序号推进为 `(OffsetBytes, LengthBytes)`，并按本地 RBF draft v0.40 复刻 HeaderFence、24-byte fixed frame overhead、4B padding、trailing Fence、TailOffset、原生 start 与 DurableGraph relative-start 边界。该层对给定 Payload/TailMeta 长度的 RBF envelope 是精确的。
+
+当前 Revision accounting 则有意保持不完整，固定标记 `ObjectPayloadOnly`：只计 synthetic ObjectVersion payload，TailMeta=0，排除 ObjectVersion header、ObjectVersionDict、TailMeta index、relative-ticket VarUInt 与 self-ticket fixed point。由此已经可以观测 Base/Delta payload write、unique reconstruction frames、required payload 与同帧 co-read；不能宣称完整 Revision bytes、完整 Revision capacity gate 或策略 winner。首个固定 generated workload 中，AlwaysBase 呈现“写更多、最终读更少”，AlwaysDelta 呈现“写更少、最终读更多”；这只证明度量管线能显现 tradeoff，不能据此选择统一策略。
+
+只有在出现首个具体 ObjectVersion/OVD/index codec 后，才引入 versioned complete accounting 与 self-ticket fixed point，并重跑所有边界和候选策略。
+
 ## 重访触发条件
 
 - 模拟表明无参数策略不能保证 `CanPrepareAndRotate` 或产生明显振荡；

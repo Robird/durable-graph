@@ -22,4 +22,7 @@ internal sealed class RbfFileStore {
 
     public Frame ReadFrame(AbsoluteFrameAddress address) =>
         GetFile(address.FileNumber).Read(address.FrameTicket);
+
+    public RbfFrameLayoutEstimate ReadLayout(AbsoluteFrameAddress address) =>
+        GetFile(address.FileNumber).ReadLayout(address.FrameTicket);
 }
