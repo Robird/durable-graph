@@ -18,7 +18,7 @@
 
 ## 2. 当前基线
 
-记录日期：2026-08-27
+记录日期：2026-08-28
 
 - **Observed**：仓库已跑通 boxed-value 的内存 Save/Load 与 read-time upgrade demo，并以隔离探针跑通单类型 Flat Graph Delta R1、generated graph operations R2、StoredGraphImage normalization R3a 与 two-pass CLR materialization R3b；production runtime/default Generator 仍无对象身份、reference graph、wire format 或持久化实现。
 - **Observed**：`DurableGraph.slnx` 包含 runtime、Generator、Build tool、CLI 和 Tests 五个项目；Build tool 是随 NuGet 包部署的私有 snapshot-history publisher/verifier，不承载运行时持久化语义。
@@ -49,6 +49,9 @@
 - Generated Graph Operations R2：internal、无 `[Generator]` 的 probe generator 已产生强类型 Capture/Snapshot equality/reference visitor，并与 R1 oracle 做差分验证；默认 package analyzer 路径不运行它。
 - Stored Graph Normalization R3a：test-only mixed V1/V2 record table 经全表 exact preflight、typed decode/upgrade 与 source-reference gate 归一化成 current-Snapshot baseline。
 - CLR Graph Materialization R3b：只对 normalized current root closure allocate-all/hydrate-all，恢复 sharing/cycles 后 root-only exposure；disconnected source rows 不分配。
+- StateStore 基础设计：选择 one-Revision/one-RBF-frame、object-level version chains、ObjectVersionDict authority、LSB-tagged `RelativeFrameTicket` 与 current-head two-file reconstruction closure；实现尚未开始。
+- 双腿轮转派生说明：记录 A/B/C evacuation、B RelayRevision、absolute-normalized ObjectVersionDict、one-frame bounds 与 `CanPrepareAndRotate` safety gate。
+- Adaptive rotation branch DB-007：隔离尚未裁决的统一 Base/Delta/cold-migration/rotation 策略和内存模拟输入。
 - Candidate design branches：在 `docs/design-branches/` 隔离尚未裁决的架构分叉。
 - 本实验簿：保存随实验演化的项目认识。
 
@@ -69,6 +72,13 @@
 - **Decided**：materialized CLR root 是 disposable working graph，不是 baseline/StateMap authority；`RequiresRewrite` 只影响 Save。R4 将从带 disconnected rows/rewrite obligations 的 source StateMap 开始验证 apply 后 exact clean closure。
 - **Decided**：historical payload 在读取边界 exact decode 并升级到 current Snapshot；reachable upgraded node 在下一次显式 Save whole-object rewrite，unreachable upgraded node 不被保活。
 - **Decided**：normalized baseline 是派生比较投影，不复制 per-entry source Schema/object address；未来 persistent Save 通过 graph-level exact head + authoritative StateMap 与 projection 的同源 bundle 取得 provenance。
+- **Decided**：当前研究优先级从低风险的 R4 logical StateMap/apply 暂时切换到 StateStore 双腿轮转；R4–R7 依赖顺序保留，未被否定。
+- **Decided**：首版只保证 latest published Revision，采用进程独占 single writer；一次 Revision 暂为一个 RBF Frame，越过约 256 MiB payload/TailMeta 或 64 KiB TailMeta 边界时 fail closed，Extent 留待容量证据。
+- **Decided**：持久地址使用 LSB-tagged `RelativeFrameTicket = (SizedPtr.Serialize() << 1) | same/previous`，进程内 authority 使用 `AbsoluteFrameAddress`；接受约 512 GiB 最大 frame-start 的容量代价。
+- **Decided**：Base 与 Delta 都保留 lineage parent；从 A/B 轮转到 B/C 时，将 Base 位于 A 的 live objects 以 Base 写 C。latest head 仍在 A 的对象通过 B 中 per-ObjectId forwarding RelayRevision 解决 C 无法直接编码 A 的问题。
+- **Decided**：物理删除文件后的数据不可访问不属于地址格式需要抵抗的故障模型；Relay 保证 retained files 之间的 lineage 连续，不承担抗删文件冗余。
+- **Decided**：当前不引入 `MaxLogicalChainBytes`、`TargetFileBytes` 或固定 migration budget；先在纯内存模拟中采集无权重原始量，比较自适应统一策略。
+- **Open**：统一策略能否仅依靠 two-file pressure、lineage/reconstruction overhead 与渐进 cold migration 自动收敛；`CanPrepareAndRotate` 必须把 B maintenance 可完成性与 C evacuation Revision 可编码性一起作为策略无关的 safety oracle。
 - **Open**：Schema runtime representation 与 canonical authority 的候选分叉记录在 `DB-001`，等待 exact codec/persistent format 实验裁决。
 - **Open**：哪些类型和 API 最终属于核心程序集，等待真实代码形状出现后再判断。
 
@@ -741,6 +751,14 @@
 ```
 
 ## 6. 船长日志
+
+### 2026-08-28：将研究优先级切换到 StateStore 双腿轮转
+
+- 根据 StateJournal/RBF 本地实现复核，选择 A=OldPrevious、B=Current、C=Next 的 current-head two-file reconstruction 模型；R4 logical StateMap/apply 保留但暂缓。
+- 地址层选择独立 `RelativeFrameTicket` / `AbsoluteFrameAddress`，以 LSB selector + 左移后的 `SizedPtr.Serialize()` 保留 VarUInt 紧凑性，并接受约 512 GiB frame-start 上限。
+- 轮转时把 terminating Base 位于 A 的 live objects 以 Base 写 C；latest head 仍在 A 的对象经 B 中 lightweight per-ObjectId RelayRevision 保留 direct lineage parent。
+- one Revision/one RBF Frame 保持为有界首版，Extent、固定性能阈值与持久 `TotalPersistBytes` 均等待模拟或容量证据。
+- 建立 `state-store-base-design.md`、`state-store-base-derived.md`、`state-store-addressing-design.md` 与 DB-007；下一步先商定纯内存策略模拟模型，不宣称持久 Store 已实现。
 
 ### 2026-08-28：完成 Two-pass CLR graph materialization R3b probe
 

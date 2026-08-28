@@ -1,7 +1,7 @@
 # DurableGraph 后续研究与实现路线
 
 > 状态：Living Roadmap  
-> 更新日期：2026-08-27  
+> 更新日期：2026-08-28
 > 用途：记录当前证据支持的研究顺序、每个切片的问题和可执行闸门。  
 > 边界：本文不是当前实现事实、冻结 API 或持久格式规格；源码、测试和可复现输出优先，已完成实验的事实记录在 `DurableGraph-lab-notebook.md`。
 
@@ -32,13 +32,26 @@
 
 ## 2. 当前研究方向
 
-### 2.1 先闭合 logical graph 语义，再固定 bytes
+### 2.1 当前优先验证 StateStore 双腿轮转策略
 
-R1/R2 已回答 current graph capture/delta，R3a/R3b 已闭合 historical records → normalized baseline → current CLR root。下一主线进入 R4：验证 logical StateMap、record reuse 与 repeated delta apply。
+R1–R3 已经使 logical graph 的后续状态律相对清晰。当前最大设计不确定性转为 StateStore 的 two-leg file rotation：在每个 published current Revision 最多引用 current/previous 两文件的前提下，能否以渐进 Base/Delta/relay 行为避免集中 full checkpoint，并形成稳定的自适应策略。
+
+首轮仍使用纯内存、deterministic 模拟，不绑定真实 RBF I/O。模拟必须把 two-file reconstruction closure、`RelativeFrameTicket` 可表示范围、one-frame bounds 与 relay completion 当作 correctness oracle；Base/Delta、cold migration 与 rotation 时机只是被比较的 policy。
+
+相关基础设计与开放分叉：
+
+- `state-store-base-design.md`
+- `state-store-base-derived.md`
+- `state-store-addressing-design.md`
+- `design-branches/0007-adaptive-two-leg-rotation-policy.md`
+
+### 2.2 继续闭合 logical graph 语义，再固定产品 bytes
+
+R1/R2 已回答 current graph capture/delta，R3a/R3b 已闭合 historical records → normalized baseline → current CLR root。R4 仍将验证 logical StateMap、record reuse 与 repeated delta apply；它没有被否定，只是当前研究优先级让位于风险更高的 two-leg rotation 策略。
 
 继续使用 test-only 内存逻辑值。`BinaryReader` / `BinaryWriter` 只在 logical Load/materialize/delta 状态律闭合后介入，避免过早冻结 framing、引用编码、canonical order 和 malformed-input contract。
 
-### 2.2 历史版本在读取边界归一化
+### 2.3 历史版本在读取边界归一化
 
 磁盘或逻辑 Store 中的 historical payload 必须先经过：
 
@@ -53,7 +66,7 @@ exact Schema lookup and shape validation
 
 若节点由历史版本升级而来，其 baseline entry 带 `RequiresRewrite`。只要它在下一次 Save 中仍可达，就必须写入完整 current Snapshot；若已不可达，则只从新图中移除，不为升级义务而保活。
 
-### 2.3 逻辑图展平，引用只保存 DurableId
+### 2.4 逻辑图展平，引用只保存 DurableId
 
 baseline 的逻辑形状是：
 
@@ -65,7 +78,7 @@ Snapshot 中的 durable reference slot 保存目标 `DurableId`，不嵌套另�
 
 Map 使用哈希表、排序表还是其他索引属于实现与测量问题；确定性测试、诊断和未来编码在输出边界显式按 ID 排序，不依赖容器枚举顺序。
 
-### 2.4 Authority 与派生 baseline 分离
+### 2.5 Authority 与派生 baseline 分离
 
 `NormalizedBaselineGraph` 是由已发布状态产生的、detached、可丢弃重建的比较投影，不是 authority。
 
@@ -86,10 +99,17 @@ R1 Graph Delta semantic probe (Concluded)
     -> R2 generated graph operations (Concluded)
     -> R3a normalized flat-graph Load (Concluded)
     -> R3b two-pass CLR hydrate (Concluded)
-    -> R4 in-memory StateMap and repeated logical delta apply
-    -> R5 binary codec for the proven logical IR
-    -> R6 persistent publication and recovery
-    -> R7 measurement-driven optimizations
+
+Current priority research track:
+    S1 in-memory adaptive two-leg rotation simulation
+        -> S2 RelativeFrameTicket / one-frame layout probe
+        -> S3 RBF publication and reopen fault probe
+
+Product vertical sequence retained:
+    R4 in-memory StateMap and repeated logical delta apply
+        -> R5 binary codec for the proven logical IR
+        -> R6 persistent publication and recovery
+        -> R7 measurement-driven optimizations
 ```
 
 每一步只提升已经由前一步证明的概念。阶段编号表示依赖顺序，不是发布日期承诺。
@@ -191,6 +211,35 @@ baseline 的 ID set 保留 `SourceRecordIds`。升级可能删除引用，使其
 可执行结果：7 个聚焦 tests 覆盖 R3a→R3b→R1 组合路径、allocate-all-before-hydrate-all、shared alias、self-cycle、two-node cycle、disconnected source skip、constructor/initializer bypass、transient zero、one-time identity bind、重复物化不缓存，以及 late allocator/hydration failure 的 no-root 与 retry。invalid/dangling baseline 由 `NormalizedBaselineGraph` 在进入 materializer 前拒绝。
 
 materialized root 是可丢弃 working graph，不是 baseline、StateMap 或第二 authority；`RequiresRewrite` 不进入 CLR object，只影响后续 Save。当前 phase hook 与 allocator 都是 test-only fault-injection seam，且不暴露 placeholder。未来若加入 `RebuildTransient` 或 graph invariant validation，root exposure boundary 必须顺延到这些阶段全部成功之后。
+
+### S1：内存自适应双腿轮转策略模拟
+
+状态：Planned。当前优先研究切片；不修改 R1–R3 已验证结论，也不把 StateStore working design 描述为实现事实。
+
+问题：在不先引入固定 `MaxLogicalChainBytes`、`TargetFileBytes` 或 migration-byte budget 的情况下，能否用无权重事实量设计并比较 Base、Delta、渐进 cold migration、RelayRevision 与正式 rotation 的候选策略？
+
+最小模型：
+
+- A=OldPrevious、B=Current、C=Next 的纯内存文件与 Revision frames；
+- per-object Base/Delta chain、latest head、terminating Base 与 absolute addresses；
+- one Revision/one frame 的真实 payload/TailMeta/frame-start estimator；
+- B 中 per-ObjectId relay forwarders与 C 中 evacuation Bases；
+- ObjectVersionDict absolute-normalize / relative-encode 的模拟；
+- 一个不含物理 I/O 的 logical graph oracle。
+
+硬闸门：
+
+```text
+Materialize(candidate) == expected logical graph
+ReconstructionFiles(candidate) ⊆ {Current, Previous}
+CanPrepareAndRotate(successful post-state) == true
+all frame starts/tickets/layouts are representable
+failed plan leaves published state unchanged
+```
+
+模拟记录原始 bytes、frame sets、lineage、relay debt、useful/unused reads 与布局事实；所有比例和加权 score 后算。至少比较 AlwaysBase、AlwaysDelta-when-legal、StateJournal-style local cost、Previous-ratio、渐进 cold migration 与统一策略候选。
+
+本切片不实现真实 `DurableFlush`、atomic HEAD、reopen/truncate 或文件删除。逻辑策略收敛后，S2/S3 分别验证地址/layout 与 filesystem publication；文件被物理删除后不可访问不属于格式需要抵抗的故障模型。
 
 ### R4：内存 StateMap 与重复逻辑 delta apply
 

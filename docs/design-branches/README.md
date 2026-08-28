@@ -28,3 +28,4 @@
 | [DB-004](0004-snapshot-history-authoring-and-publishing.md) | Snapshot History 创作与发布 | Open | 正式 Generator publisher、团队/CI 摩擦或 persistent Schema authority 实验 |
 | [DB-005](0005-durable-inheritance-flattening.md) | Durable 继承展平 | Deferred | 首个真实 durable inheritance 模型或 composition 对照 |
 | [DB-006](0006-flat-graph-delta-prototype.md) | Flat Graph Delta 原型 | Chosen | R4 logical StateMap/apply、production reference adapter、persistent head 或 measured baseline cost |
+| [DB-007](0007-adaptive-two-leg-rotation-policy.md) | 自适应双腿轮转与 Rebase/Deltify 策略 | Open | 内存策略模拟、真实 RBF read log、relay completion 反例或 one-frame 容量证据 |
