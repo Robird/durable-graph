@@ -88,6 +88,10 @@ encoded >= 2  -> required frame ticket
 
 `encoded == 1` 相当于 `selector=Previous` 且 `frameCode=0`，必须拒绝，避免产生第二种 None 表示。
 
+上述规则属于通用 `RelativeFrameTicket`。ObjectVersionDict 的 value 字段另有一个局部
+grammar，可以把通用编码中本来非法的 `1` 用作 `BindSelf`；见第 6 节。这个局部 token
+不会进入 `RelativeFrameTicket` 类型，也不改变 optional parent 的 `None=0`。
+
 ## 4. Encode
 
 伪代码：
@@ -177,16 +181,30 @@ ObjectId -> AbsoluteFrameAddress
 
 ```text
 for each Map version in source frame:
-    for each Upsert(ObjectId, relative):
-        absolute = relative.Resolve(sourceFrame.FileNumber)
+    for each Upsert(ObjectId, binding):
+        absolute = binding == BindSelf
+            ? AbsoluteFrameAddress(sourceFrame.FileNumber, sourceFrame.Ticket)
+            : binding.Relative.Resolve(sourceFrame.FileNumber)
         authoritativeMap[ObjectId] = absolute
 ```
 
 写 Map Delta 或 Base 时：
 
 ```text
-relative = Encode(outputMapFrame.FileNumber, absolute)
+if absolute == containing Revision Frame:
+    binding = BindSelf(1)
+else:
+    binding = Encode(outputMapFrame.FileNumber, absolute) // >= 2
 ```
+
+读取时，`BindSelf` 由 source frame 的 `FileNumber` 和 RBF read result 自带的 containing
+`SizedPtr` 直接还原为 `AbsoluteFrameAddress`。其他 token 仍按通用 relative codec 解析；
+若一个显式 relative token 又解析回 containing frame，reader 必须拒绝，避免同一 value
+存在两种 canonical 表示。
+
+这个 `Self` 只属于 OVD binding 字段。ObjectVersion parent 仍使用通用
+`RelativeFrameTicket`：首次版本为 `None=0`，后续版本必须指向更早的 same/previous
+frame，不接受 `Self`。
 
 旧 Map version 中未修改的 entry 先前已经 absolute-normalized；不得把旧 raw relative bits 原样复制到新的 origin。若 target 超出 same/previous horizon，planner 必须先安排对应 ObjectVersion 的 relocation/Rebase；codec 只负责 fail closed，不自行改变图状态。
 
@@ -209,21 +227,20 @@ previous = (frameCode << 1) | 1
 
 这些性质用于 size planner 与测试，不形成第二套 wire authority。
 
-## 8. 单 Frame 自引用 ticket 的布局要求
+## 8. 单 Frame Contextual Self
 
-一个 Revision Frame 内的 ObjectVersionDict 可能指向同 Frame 中刚写出的 ObjectVersion，而最终 `SizedPtr.Length` 又包含这些 self-ticket 的 VarUInt 长度。
+当前 one-Revision/one-RBF-Frame 约束下，RBF 的 append 返回值、`IRbfFrame.Ticket` 与
+`IRbfTailMeta.Ticket` 都已经提供 containing `SizedPtr`。TailMeta directory 只需保存 OVD
+和 domain records 的 frame 内 offset，不再重复保存当前 OVD 的 self-ticket。
 
-writer 必须在真正 append 前完成有界 size preflight：
+OVD 同帧 binding 使用第 6 节的 1-byte `BindSelf`。因此 record bytes 不再依赖最终
+`SizedPtr.Length`，writer 对已知 Payload/TailMeta 长度只做一次普通 RBF layout preflight，
+append 返回 ticket 后再把 candidate StateMap 中的 contextual bindings 安装成绝对地址。
 
-```text
-已知 frame start
-    -> 假定 self-ticket VarUInt width
-    -> 计算 frame length 与 SizedPtr
-    -> 重算 self-ticket width
-    -> 直到 width 稳定
-```
-
-VarUInt width 只有 1..10，布局随 width 单调不减；若不能稳定、或超过 Frame/TailMeta 上限，则在写入前 fail closed。当前不为了绕过该问题引入额外 `Self` address variant。
+被替代的 literal-self 方案不仅有递归，还可能有多个稳定宽度；“迭代直到稳定”不能单独
+定义 canonical wire。其反例和重访条件记录于
+[`DB-008`](design-branches/0008-revision-contextual-self-address.md)。若未来一个逻辑
+Revision 跨越多个 Frames，再重访 `Self` 的作用域，而不是现在为 Extent 冻结地址 union。
 
 ## 9. 最小测试向量
 
@@ -236,4 +253,5 @@ VarUInt width 只有 1..10，布局随 width 单调不减；若不能稳定、�
 - future、前两代及更老 target 的 encode 拒绝；
 - `SizedPtr.Serialize()` bit 63 已占用时拒绝；
 - ObjectVersionDict Base 跨文件重写后 relative bits 改变、absolute address 不变；
-- self-ticket width fixed-point 的收敛与超限失败。
+- OVD `BindSelf` 在不同 containing frames 中解析为各自绝对地址；
+- 显式 relative binding 指回 containing frame 时拒绝。

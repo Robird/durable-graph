@@ -1,3 +1,4 @@
+using Atelia.TwoLegRotationProbe.Encoding;
 using Atelia.TwoLegRotationProbe.Model;
 using Atelia.TwoLegRotationProbe.Workloads;
 
@@ -5,9 +6,19 @@ namespace Atelia.TwoLegRotationProbe.Simulation;
 
 internal static class WorkloadSimulator {
     public static SimulationRun Run(WorkloadTrace trace, BaselinePolicy policy) {
+        return Run(trace, policy, AccountingScope.ObjectPayloadOnly);
+    }
+
+    public static SimulationRun Run(
+        WorkloadTrace trace,
+        BaselinePolicy policy,
+        AccountingScope accountingScope) {
         ArgumentNullException.ThrowIfNull(trace);
         if (!Enum.IsDefined(policy)) {
             throw new ArgumentOutOfRangeException(nameof(policy));
+        }
+        if (!Enum.IsDefined(accountingScope)) {
+            throw new ArgumentOutOfRangeException(nameof(accountingScope));
         }
 
         _ = WorkloadReplayer.Replay(trace);
@@ -17,6 +28,7 @@ internal static class WorkloadSimulator {
         Dictionary<uint, AbsoluteFrameAddress> acceptedStateMap = [];
         List<AbsoluteFrameAddress> revisionAddresses = new(trace.Steps.Count);
         List<RevisionObservation> observations = new(trace.Steps.Count);
+        Dictionary<AbsoluteFrameAddress, FrameAccountingEstimate> accountingEstimates = [];
         WorkloadReplayCursor logicalCursor = new();
 
         for (int stepIndex = 0; stepIndex < trace.Steps.Count; stepIndex++) {
@@ -29,12 +41,29 @@ internal static class WorkloadSimulator {
                 currentFile.FileNumber,
                 policy);
             IReadOnlyDictionary<uint, LogicalObjectState> expectedState = logicalCursor.Apply(step);
-            int objectPayloadBytes = GetObjectPayloadBytes(candidateFrame);
+            FrameAccountingEstimate accountingEstimate = EstimateCandidateFrame(
+                accountingScope,
+                candidateFrame,
+                step,
+                currentFile,
+                revisionAddresses.Count == 0
+                    ? null
+                    : ToRelativeCurrentFile(
+                        currentFile.FileNumber,
+                        revisionAddresses[^1]));
+            RbfFrameLayoutEstimate expectedLayout = accountingEstimate.RbfLayout;
             FrameTicket candidateTicket = currentFile.Append(
                 candidateFrame,
-                objectPayloadBytes,
-                tailMetaLengthBytes: 0);
+                expectedLayout.PayloadLengthBytes,
+                expectedLayout.TailMetaLengthBytes);
+            RbfFrameLayoutEstimate storedLayout = currentFile.ReadLayout(candidateTicket);
+            if (candidateTicket != expectedLayout.Ticket || storedLayout != expectedLayout) {
+                throw new InvalidDataException(
+                    "RBF append did not match the precomputed accounting estimate.");
+            }
+
             AbsoluteFrameAddress candidateAddress = new(currentFile.FileNumber, candidateTicket);
+            accountingEstimates.Add(candidateAddress, accountingEstimate);
             Dictionary<uint, AbsoluteFrameAddress> candidateStateMap =
                 BuildCandidateStateMap(acceptedStateMap, step, candidateAddress);
 
@@ -47,9 +76,13 @@ internal static class WorkloadSimulator {
                 step,
                 candidateFrame,
                 candidateAddress,
-                currentFile.ReadLayout(candidateTicket),
+                accountingEstimate,
                 candidateStateMap.Count,
-                PhysicalStateOracle.MeasureReconstruction(store, candidateStateMap));
+                PhysicalStateOracle.MeasureReconstruction(
+                    store,
+                    candidateStateMap,
+                    accountingScope,
+                    accountingEstimates));
 
             acceptedStateMap = candidateStateMap;
             revisionAddresses.Add(candidateAddress);
@@ -59,11 +92,13 @@ internal static class WorkloadSimulator {
         return new SimulationRun(
             trace,
             policy,
+            accountingScope,
             store,
             currentFile.FileNumber,
             acceptedStateMap,
             revisionAddresses,
-            observations);
+            observations,
+            accountingEstimates);
     }
 
     private static Frame BuildFrame(
@@ -201,12 +236,37 @@ internal static class WorkloadSimulator {
         return (int)total;
     }
 
+    private static FrameAccountingEstimate EstimateCandidateFrame(
+        AccountingScope accountingScope,
+        Frame frame,
+        SaveStep step,
+        RbfFile currentFile,
+        RelativeFrameTicket? parentObjectVersionDictionaryFrameTicket) {
+        switch (accountingScope) {
+            case AccountingScope.ObjectPayloadOnly:
+                return FrameAccountingEstimate.ObjectPayloadOnly(
+                    RbfV040Layout.Estimate(
+                        currentFile.TailOffsetBytes,
+                        GetObjectPayloadBytes(frame),
+                        tailMetaLengthBytes: 0));
+            case AccountingScope.ProvisionalRevisionV0:
+                return FrameAccountingEstimate.Provisional(
+                    ProvisionalRevisionV0Estimator.Estimate(
+                        frame,
+                        step,
+                        parentObjectVersionDictionaryFrameTicket,
+                        currentFile.TailOffsetBytes));
+            default:
+                throw new ArgumentOutOfRangeException(nameof(accountingScope));
+        }
+    }
+
     private static RevisionObservation CreateObservation(
         int stepIndex,
         SaveStep step,
         Frame frame,
         AbsoluteFrameAddress address,
-        RbfFrameLayoutEstimate layout,
+        FrameAccountingEstimate accountingEstimate,
         int liveBindingCount,
         PostSaveReconstructionMetrics reconstruction) {
         int createdObjectCount = 0;
@@ -242,9 +302,9 @@ internal static class WorkloadSimulator {
 
         return new RevisionObservation(
             stepIndex,
-            AccountingScope.ObjectPayloadOnly,
+            accountingEstimate.Scope,
             address,
-            layout,
+            accountingEstimate,
             frame.ObjectVersions.Count,
             createdObjectCount,
             updatedObjectCount,

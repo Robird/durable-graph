@@ -2,6 +2,7 @@ using Atelia.TwoLegRotationProbe.Model;
 using Atelia.TwoLegRotationProbe.Simulation;
 using Atelia.TwoLegRotationProbe.Workloads;
 using Atelia.TwoLegRotationProbe.Workloads.Generation;
+using Atelia.TwoLegRotationProbe.Encoding;
 
 namespace Atelia.TwoLegRotationProbe.Tests;
 
@@ -150,6 +151,50 @@ public sealed class PolicyMatrixTests {
         }
     }
 
+    [Fact]
+    public void Provisional_hot_cold_matrix_exposes_shared_metadata_and_read_costs() {
+        WorkloadTrace trace = CreateHotColdTrace();
+        SimulationRun[] first = RunProvisionalPolicyMatrix(trace);
+        SimulationRun[] second = RunProvisionalPolicyMatrix(trace);
+
+        Assert.Equal(
+            "AlwaysBase:BodyW1500/MetaW179/F1900:FinalR900/1000/100/1148/9/2|" +
+            "AlwaysDeltaWhenLegal:BodyW1050/MetaW177/F1440:FinalR1050/1050/0/1408/15/7|" +
+            "ObjectPayloadReadAmplification3:BodyW1125/MetaW177/F1516:" +
+            "FinalR900/1000/100/1148/9/2",
+            DescribeProvisionalComparison(first));
+        Assert.Equal(
+            DescribeProvisionalComparison(first),
+            DescribeProvisionalComparison(second));
+        Assert.All(
+            first,
+            run => AssertExactState(
+                WorkloadReplayer.Replay(trace),
+                PhysicalStateOracle.Materialize(run)));
+    }
+
+    [Fact]
+    public void Provisional_fixed_seed_mixed_matrix_is_repeatable() {
+        WorkloadTrace trace = ScenarioGenerator.Generate(CreateMixedDefinition()).Trace;
+        SimulationRun[] first = RunProvisionalPolicyMatrix(trace);
+        SimulationRun[] second = RunProvisionalPolicyMatrix(trace);
+
+        Assert.Equal(
+            "AlwaysBase:BodyW342/MetaW99/F536:FinalR123/123/0/184/3/1|" +
+            "AlwaysDeltaWhenLegal:BodyW274/MetaW97/F464:FinalR171/274/103/448/6/3|" +
+            "ObjectPayloadReadAmplification3:BodyW279/MetaW97/F468:" +
+            "FinalR147/181/34/300/4/2",
+            DescribeProvisionalComparison(first));
+        Assert.Equal(
+            DescribeProvisionalComparison(first),
+            DescribeProvisionalComparison(second));
+        Assert.All(
+            first,
+            run => AssertExactState(
+                WorkloadReplayer.Replay(trace),
+                PhysicalStateOracle.Materialize(run)));
+    }
+
     private static WorkloadTrace CreateHotColdTrace() {
         List<WorkloadChange> creates = [new CreateObject(1, 100)];
         for (uint objectId = 2; objectId <= 9; objectId++) {
@@ -220,6 +265,50 @@ public sealed class PolicyMatrixTests {
                 $"{finalRead.ObjectPayloadOnlyRbfFrameBytesRead}/" +
                 $"{finalRead.RequiredObjectVersionCount}/{finalRead.UniqueFrameCount}";
         }));
+
+    private static SimulationRun[] RunProvisionalPolicyMatrix(WorkloadTrace trace) => [
+        WorkloadSimulator.Run(
+            trace,
+            BaselinePolicy.AlwaysBase,
+            AccountingScope.ProvisionalRevisionV0),
+        WorkloadSimulator.Run(
+            trace,
+            BaselinePolicy.AlwaysDeltaWhenLegal,
+            AccountingScope.ProvisionalRevisionV0),
+        WorkloadSimulator.Run(
+            trace,
+            BaselinePolicy.ObjectPayloadReadAmplification3,
+            AccountingScope.ProvisionalRevisionV0),
+    ];
+
+    private static string DescribeProvisionalComparison(
+        IEnumerable<SimulationRun> runs) => string.Join(
+            "|",
+            runs.Select(static run => {
+                long syntheticBodyWriteBytes = run.Observations.Sum(static observation =>
+                    observation.ObjectPayloadBytesWritten);
+                long durableGraphMetadataWriteBytes = run.Observations.Sum(
+                    static observation => {
+                        ProvisionalRevisionV0Estimate estimate =
+                            observation.ProvisionalRevisionV0!;
+                        return (long)estimate.DomainRecordHeaderBytes +
+                            estimate.ObjectVersionDictionaryRecordBytes +
+                            estimate.TailMetaDirectoryBytes;
+                    });
+                long modeledFileBytes = run.FileStore
+                    .GetFile(run.CurrentFileNumber)
+                    .TailOffsetBytes;
+                PostSaveReconstructionMetrics finalRead =
+                    run.Observations[^1].PostSaveReconstruction;
+                return $"{run.Policy}:BodyW{syntheticBodyWriteBytes}/" +
+                    $"MetaW{durableGraphMetadataWriteBytes}/F{modeledFileBytes}:" +
+                    $"FinalR{finalRead.RequiredObjectPayloadBytes}/" +
+                    $"{finalRead.ObjectPayloadBytesInUniqueFrames}/" +
+                    $"{finalRead.CoReadObjectPayloadBytes}/" +
+                    $"{finalRead.ModeledRbfFrameBytesRead}/" +
+                    $"{finalRead.RequiredObjectVersionCount}/" +
+                    $"{finalRead.UniqueFrameCount}";
+            }));
 
     private static void AssertExactState(
         IReadOnlyDictionary<uint, LogicalObjectState> expected,

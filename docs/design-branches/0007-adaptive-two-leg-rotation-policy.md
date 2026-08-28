@@ -149,9 +149,10 @@ failed plan leaves published state unchanged
 
 TwoLegRotationProbe 已把 FrameTicket 从序号推进为 `(OffsetBytes, LengthBytes)`，并按本地 RBF draft v0.40 复刻 HeaderFence、24-byte fixed frame overhead、4B padding、trailing Fence、TailOffset、原生 start 与 DurableGraph relative-start 边界。该层对给定 Payload/TailMeta 长度的 RBF envelope 是精确的。
 
-当前 Revision accounting 则有意保持不完整，固定标记 `ObjectPayloadOnly`：只计 synthetic ObjectVersion payload，TailMeta=0，排除 ObjectVersion header、ObjectVersionDict、TailMeta index、relative-ticket VarUInt 与 self-ticket fixed point。由此已经可以观测 Base/Delta payload write、unique reconstruction frames、required payload 与同帧 co-read；不能宣称完整 Revision bytes、完整 Revision capacity gate 或策略 winner。首个固定 generated workload 中，AlwaysBase 呈现“写更多、最终读更少”，AlwaysDelta 呈现“写更少、最终读更多”；这只证明度量管线能显现 tradeoff，不能据此选择统一策略。
+S1b 的 Revision accounting 有意保持不完整，固定标记 `ObjectPayloadOnly`：只计 synthetic ObjectVersion payload，TailMeta=0，排除 ObjectVersion header、ObjectVersionDict、TailMeta index 与 relative-ticket VarUInt。由此已经可以观测 Base/Delta payload write、unique reconstruction frames、required payload 与同帧 co-read；不能宣称完整 Revision bytes、完整 Revision capacity gate 或策略 winner。首个固定 generated workload 中，AlwaysBase 呈现“写更多、最终读更少”，AlwaysDelta 呈现“写更少、最终读更多”；这只证明度量管线能显现 tradeoff，不能据此选择统一策略。
 
-只有在出现首个具体 ObjectVersion/OVD/index codec 后，才引入 versioned complete accounting 与 self-ticket fixed point，并重跑所有边界和候选策略。
+这一后续依赖已由 S1d 的明确版本化、但不承诺兼容的 `ProvisionalRevisionV0`
+满足；它以独立 accounting profile 重跑边界和候选策略，没有修改或覆盖旧 baseline 数字。
 
 ## S1c 阶段性证据：ObjectPayloadReadAmplification3
 
@@ -162,6 +163,31 @@ TwoLegRotationProbe 已把 FrameTicket 从序号推进为 `(OffsetBytes, LengthB
 每个 ObjectVersion 暂存 `ReconstructionObjectPayloadBytes`：Base 等于自身 payload，Delta 等于 parent cumulative 加自身 payload。它避免 runner 私有 dictionary 成为第二权威，并由 materialization oracle 独立重算后 fail closed；但当前不计入 layout，不代表已选择 wire 字段。
 
 四个命名 workload 的 executable matrix 已证明 threshold/tie/reset、`Base <= Delta`、hot/cold shared-frame 与 fixed-seed mixed 的确定性。报告只将 write events 汇总；read 只报告 final post-save snapshot。首轮中第三策略的 modeled write/read 落在两个极端基线之间，但这只证明局部累计判据能形成不同决策，不代表已经选择 winner。shared-frame co-read、完整 codec bytes、relay/evacuation debt 与 `CanPrepareAndRotate` 仍不在该策略输入中。
+
+## S1d 阶段性证据：ProvisionalRevisionV0
+
+检查本地 Atelia RBF commit `fec021295828fcfe638434d69d04ff078c87c8ce` 后，确认现有
+envelope 公式与容量边界正确；同时发现 RBF append/read context 已提供 containing
+`SizedPtr`。此前设想的 literal self-ticket 不是底层要求，而且可能出现多个稳定宽度，
+“迭代到稳定”不足以定义 canonical wire。当前 Working Design 改为 OVD 字段级
+`BindSelf=1`，通用 `RelativeFrameTicket` 的 `0=None、1=invalid、>=2=required` 不变。
+具体候选对照和 multi-frame 重访条件见 DB-008。
+
+`ProvisionalRevisionV0` 为每次 run 选择独立 physical address space，按一个临时 grammar
+精确计入 domain record headers、synthetic body、OVD record、TailMeta directory、canonical
+VarUInt、RBF padding/fixed/fence；组件 provenance 与实际 append ticket/layout 必须一致。
+它不写/读 bytes，不计入当前 simulator-only result-size/ordinal/cumulative 字段，也不冻结
+RBF Tag、opcode 或最终 record 顺序。
+
+同一 hot/cold workload 的 V0 modeled file/final-read frame bytes 为：AlwaysBase
+`1900/1148`、AlwaysDelta `1440/1408`、local `1516/1148`；fixed-seed mixed 为
+`536/184`、`464/448`、`468/300`。这些结果保留了 S1c 的方向，但 metadata 对三个策略
+接近常量，尚未使 object-local payload policy 看见 shared-frame/rotation cost，也不构成
+winner。write 汇总与 final read snapshot 继续分栏，不定义跨 Save `TotalReadBytes`。
+
+V0 已能 fail closed 检查当前单文件 Save grammar 的 TailMeta、Payload+TailMeta、frame start
+和 checked arithmetic，但还没有 C evacuation 的 mixed Self/Previous full OVD、Relay record
+或 `CanPrepareAndRotate` completion plan，所以不能称为完整 rotation capacity gate。
 
 ## 重访触发条件
 

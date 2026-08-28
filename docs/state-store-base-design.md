@@ -68,7 +68,9 @@ ObjectId -> OffsetOfObjectVersion
 
 读取路径为：
 
-1. 以承载地址值的文件号解析 `RelativeFrameTicket`，得到 `AbsoluteFrameAddress`；
+1. 以承载 OVD version 的 frame context 解析 binding：`BindSelf` 使用 containing ticket，
+   `BindRelative` 才按承载文件号解析 `RelativeFrameTicket`，两者都得到
+   `AbsoluteFrameAddress`；
 2. 读取并验证目标 RBF Frame；
 3. 从 TailMeta 的 ObjectId 索引取得 ObjectVersion offset；
 4. 从已经完成完整性验证的 Frame 内解析 ObjectVersion。
@@ -130,7 +132,12 @@ ObjectVersionDict 拥有固定 ObjectId 和元数据身份，并复用 Object-Le
 - 从祖先 Map version 继承的 value 保持 absolute，不按最新 Map frame 重新解释；
 - Map Base/Rebase 写入新文件时，逐项相对于输出文件重新编码。
 
-每个 BinaryFrame 的 TailMeta 固定位置保存当前 ObjectVersionDict version 的 `RelativeFrameTicket`。
+每个 BinaryFrame 的 TailMeta 固定位置保存当前 ObjectVersionDict version 的 frame 内
+offset。承载它的 Revision ticket 已由 RBF append/read context 提供，不在 Frame 内重复
+序列化。OVD 中指向本 Revision 新 records 的 value 使用字段级 `BindSelf`，其他 value
+才使用 `RelativeFrameTicket`；两者读取后都立即 absolute-normalize。具体语法与淘汰
+self-ticket fixed point 的依据见 [`state-store-addressing-design.md`](state-store-addressing-design.md)
+和 [`DB-008`](design-branches/0008-revision-contextual-self-address.md)。
 
 ## 7. 一个 BinaryFrame 对应一个 Revision
 

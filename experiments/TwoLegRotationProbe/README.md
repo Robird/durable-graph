@@ -89,10 +89,12 @@ apply, not serialization or content-level delta replay. Current-state
 materialization stops at the newest Base; the separate lineage diagnostic can
 walk older parents without turning those reads into reconstruction cost.
 
-The current single-file model preflights the necessary object-payload-only RBF
-limit, but has no complete Revision capacity or rotation legality gate. Within
-that surviving input set, `AlwaysDeltaWhenLegal` is presently equivalent to
-“always Delta.” The enum is intentionally not a general policy interface yet.
+The current single-file model can run either the historical
+`ObjectPayloadOnly` profile or the explicitly provisional full-frame
+`ProvisionalRevisionV0` size grammar described below. It still has no
+two-file/relay completion or rotation legality gate. Within that surviving
+input set, `AlwaysDeltaWhenLegal` is presently equivalent to “always Delta.”
+The enum is intentionally not a general policy interface yet.
 
 ## Object-local payload policy
 
@@ -118,15 +120,16 @@ materialization oracle independently recomputes and validates this value, so it
 does not become a trusted shortcut or runner-private second authority.
 
 This cumulative field is provisional simulation metadata. It is excluded from
-the RBF Payload length under `AccountingScope.ObjectPayloadOnly` and is not a
-wire-format commitment. Accordingly the policy is StateJournal-inspired, not
-an exact StateJournal cost-model port; it cannot see shared-frame overhead,
-ObjectVersionDict/index bytes, or co-read when making its local decision.
+both accounting grammars and is not a wire-format commitment. Accordingly the
+policy is StateJournal-inspired, not an exact StateJournal cost-model port. The
+V0 run can observe shared-frame and metadata cost after each decision, but the
+local policy itself still does not use those facts.
 
 ## RBF envelope and raw observations
 
-The in-memory file now reproduces the size and placement rules of the locally
-inspected RBF draft v0.40 envelope:
+The in-memory file reproduces the size and placement rules of the locally
+inspected RBF draft v0.40 envelope at Atelia commit
+`fec021295828fcfe638434d69d04ff078c87c8ce`:
 
 ```text
 file = 4-byte HeaderFence + frames
@@ -141,19 +144,51 @@ relative-start boundary.
 A last frame may begin at a legal maximum start and end beyond it; only the next
 start then becomes impossible.
 
-Simulation observations deliberately use `AccountingScope.ObjectPayloadOnly`.
-The supplied RBF Payload is only the selected synthetic
-`ObjectVersion.PayloadBytes`, while modeled TailMeta is zero. The accounting
-explicitly excludes ObjectVersion headers, ObjectVersionDict, TailMeta indexes,
-relative-ticket VarUInt bytes, and self-ticket fixed-point effects. Therefore
-the RBF envelope is exact for its supplied lengths, but the resulting numbers
-are **not** complete DurableGraph Revision or wire sizes.
+Actual `IRbfFile` reads a complete frame for L3 Payload CRC validation and does
+not expose arbitrary payload slices. TailMeta can be previewed separately, but
+that path has only L2 Trailer CRC trust; a TailMeta directory cannot install an
+authoritative StateMap until the containing frame passes full L3 validation.
+Accordingly reconstruction cost continues to count each required unique full
+frame once.
+
+## Accounting profiles
+
+`AccountingScope.ObjectPayloadOnly` remains the default and preserves the
+original golden baseline. Its RBF Payload is only selected synthetic
+`ObjectVersion.PayloadBytes`; TailMeta is zero. It excludes every DurableGraph
+header, OVD, directory and address token.
+
+`AccountingScope.ProvisionalRevisionV0` gives the same frozen workload a fresh,
+self-consistent physical address space and accounts for one experimental
+grammar:
+
+```text
+domain record = U(body length) + kind + U(parent) + opaque synthetic body
+OVD record    = U(body length) + kind + U(parent) + sorted mutations
+TailMeta      = U(OVD offset) + sorted ObjectId -> record-offset directory
+```
+
+Here `U` is canonical unsigned Base128 width. The projection of
+`SizedPtr.Serialize()` and the same/previous LSB selector match the inspected
+Atelia source. A field-contextual one-byte `BindSelf` represents OVD bindings
+to the containing Revision Frame; the RBF append/read context already supplies
+that ticket. This removes the earlier literal self-ticket fixed point. An
+executable counterexample demonstrates that the rejected literal design could
+have two stable widths, so merely iterating until stable would not define a
+unique canonical encoding.
+
+V0 sorts records by ObjectId, checks component arithmetic, TailMeta,
+Payload+TailMeta, native RBF bounds and the 512 GiB relative-start gate before
+Append. It returns component sizes and validates the resulting RBF layout, but
+does not write or parse bytes. It is exact for this named provisional grammar,
+not a production wire-format or compatibility promise. RBF Tag values,
+opcodes, final record fields and Extent behavior remain unchosen.
 
 Each `RevisionObservation` separates a write event from the post-save
 reconstruction snapshot. Writes record Base/Delta object payload and the
-object-payload-only frame/append lengths. Reconstruction records required
-object versions, unique frames, required payload, all object payload co-read
-from those frames, and their full object-payload-only RBF frame lengths.
+selected profile's frame/append layout. Reconstruction records required object
+versions, unique frames, required payload, all object payload co-read from those
+frames, and the selected profile's full RBF frame lengths.
 Post-save read snapshots are not a run total unless an experiment explicitly
 chooses to simulate a full reload after every Save.
 
@@ -161,6 +196,8 @@ The current named matrix uses exact handwritten threshold/direction/hot-cold
 cases plus one fixed-seed Field/List workload. Reports keep additive write
 events separate from the final post-save read snapshot; no `TotalReadBytes` is
 defined. Two examples demonstrate tradeoffs rather than a winner:
+
+Object-payload-only baseline:
 
 | Workload | Policy | Modeled file bytes | Final modeled frame bytes read |
 |---|---|---:|---:|
@@ -171,19 +208,32 @@ defined. Two examples demonstrate tradeoffs rather than a winner:
 | hot-one/cold-eight | AlwaysDelta | 1268 | 1236 |
 | hot-one/cold-eight | ObjectPayloadReadAmplification3 | 1340 | 1048 |
 
-These values must be rerun after a concrete ObjectVersion/OVD/index codec
-exists. The matrix currently lives in executable tests; a ScenarioCatalog or
-report format waits for a CLI, persisted artifact, or batch-run consumer.
+The same traces under `ProvisionalRevisionV0`; `metadata write` is domain
+headers + OVD record + TailMeta directory and does not double-count its
+address-token diagnostic subset:
 
-This preparatory slice still does not model complete `SizedPtr`/relative-ticket
-encoding, publication, relay revisions, two-file closure, full Revision
-capacity, rotation planning, adaptive Base-or-Deltify decisions,
-`CanPrepareAndRotate`, or policy scoring. Generated Base/Delta sizes remain
-synthetic payload observations, not a serializer or wire-format claim.
+| Workload | Policy | Body write | Metadata write | Modeled file bytes | Final modeled frame bytes read |
+|---|---|---:|---:|---:|---:|
+| fixed-seed mixed | AlwaysBase | 342 | 99 | 536 | 184 |
+| fixed-seed mixed | AlwaysDelta | 274 | 97 | 464 | 448 |
+| fixed-seed mixed | ObjectPayloadReadAmplification3 | 279 | 97 | 468 | 300 |
+| hot-one/cold-eight | AlwaysBase | 1500 | 179 | 1900 | 1148 |
+| hot-one/cold-eight | AlwaysDelta | 1050 | 177 | 1440 | 1408 |
+| hot-one/cold-eight | ObjectPayloadReadAmplification3 | 1125 | 177 | 1516 | 1148 |
+
+Both tables demonstrate tradeoffs rather than a winner. Reports sum write
+events and show only the final post-save read snapshot; no `TotalReadBytes` is
+defined. The matrix lives in executable tests; a ScenarioCatalog or report
+format waits for a CLI, persisted artifact, or batch-run consumer.
+
+This preparatory slice still does not implement a byte writer/parser,
+publication, relay revisions, two-file closure, evacuation/full-OVD planning,
+rotation, `CanPrepareAndRotate`, or policy scoring. Generated Base/Delta sizes
+remain synthetic payload observations, not serializer output.
 `RelativeFrameTicket` is interpreted relative to the file containing it:
 stepping creates a new file and a new `FileScope`; an old frame must still be
-read with the scope of its own origin file. This pair is an in-memory precursor,
-not a proposed durable ticket encoding.
+read with the scope of its own origin file. The V0 projection is a versioned
+research input, not a durable-format commitment.
 
 Run from the repository root:
 

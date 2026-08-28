@@ -42,14 +42,48 @@ internal static class PhysicalStateOracle {
 
     public static PostSaveReconstructionMetrics MeasureReconstruction(SimulationRun run) {
         ArgumentNullException.ThrowIfNull(run);
-        return MeasureReconstruction(run.FileStore, run.StateMap);
+        return MeasureReconstruction(
+            run.FileStore,
+            run.StateMap,
+            run.AccountingScope,
+            run.AccountingEstimates);
     }
 
     public static PostSaveReconstructionMetrics MeasureReconstruction(
         RbfFileStore store,
         IReadOnlyDictionary<uint, AbsoluteFrameAddress> stateMap) {
+        return MeasureReconstructionCore(
+            store,
+            stateMap,
+            AccountingScope.ObjectPayloadOnly,
+            accountingEstimates: null);
+    }
+
+    internal static PostSaveReconstructionMetrics MeasureReconstruction(
+        RbfFileStore store,
+        IReadOnlyDictionary<uint, AbsoluteFrameAddress> stateMap,
+        AccountingScope accountingScope,
+        IReadOnlyDictionary<AbsoluteFrameAddress, FrameAccountingEstimate>
+            accountingEstimates) {
+        ArgumentNullException.ThrowIfNull(accountingEstimates);
+        return MeasureReconstructionCore(
+            store,
+            stateMap,
+            accountingScope,
+            accountingEstimates);
+    }
+
+    private static PostSaveReconstructionMetrics MeasureReconstructionCore(
+        RbfFileStore store,
+        IReadOnlyDictionary<uint, AbsoluteFrameAddress> stateMap,
+        AccountingScope accountingScope,
+        IReadOnlyDictionary<AbsoluteFrameAddress, FrameAccountingEstimate>?
+            accountingEstimates) {
         ArgumentNullException.ThrowIfNull(store);
         ArgumentNullException.ThrowIfNull(stateMap);
+        if (!Enum.IsDefined(accountingScope)) {
+            throw new ArgumentOutOfRangeException(nameof(accountingScope));
+        }
 
         HashSet<AbsoluteFrameAddress> uniqueFrames = [];
         HashSet<VisitedObjectVersion> requiredVersions = [];
@@ -70,7 +104,7 @@ internal static class PhysicalStateOracle {
         }
 
         long objectPayloadBytesInUniqueFrames = 0;
-        long objectPayloadOnlyRbfFrameBytesRead = 0;
+        long modeledRbfFrameBytesRead = 0;
         foreach (AbsoluteFrameAddress frameAddress in uniqueFrames) {
             Frame frame = store.ReadFrame(frameAddress);
             long frameObjectPayloadBytes = 0;
@@ -80,25 +114,61 @@ internal static class PhysicalStateOracle {
             }
 
             RbfFrameLayoutEstimate layout = store.ReadLayout(frameAddress);
-            if (layout.TailMetaLengthBytes != 0 ||
-                layout.PayloadLengthBytes != frameObjectPayloadBytes) {
-                throw new InvalidDataException(
-                    $"Frame {frameAddress} was not appended with ObjectPayloadOnly accounting.");
+            if (accountingEstimates is null) {
+                if (layout.TailMetaLengthBytes != 0 ||
+                    layout.PayloadLengthBytes != frameObjectPayloadBytes) {
+                    throw new InvalidDataException(
+                        $"Frame {frameAddress} was not appended with ObjectPayloadOnly accounting.");
+                }
+            } else {
+                if (!accountingEstimates.TryGetValue(
+                    frameAddress,
+                    out FrameAccountingEstimate? estimate)) {
+                    throw new InvalidDataException(
+                        $"Frame {frameAddress} has no accounting-estimate provenance.");
+                }
+
+                if (estimate.Scope != accountingScope || estimate.RbfLayout != layout) {
+                    throw new InvalidDataException(
+                        $"Frame {frameAddress} accounting provenance does not match the run or stored layout.");
+                }
+
+                switch (accountingScope) {
+                    case AccountingScope.ObjectPayloadOnly:
+                        if (layout.TailMetaLengthBytes != 0 ||
+                            layout.PayloadLengthBytes != frameObjectPayloadBytes) {
+                            throw new InvalidDataException(
+                                $"Frame {frameAddress} was not appended with ObjectPayloadOnly accounting.");
+                        }
+
+                        break;
+                    case AccountingScope.ProvisionalRevisionV0:
+                        if (estimate.ProvisionalRevisionV0 is not { } provisional ||
+                            provisional.SyntheticObjectPayloadBytes != frameObjectPayloadBytes) {
+                            throw new InvalidDataException(
+                                $"Frame {frameAddress} has inconsistent provisional accounting provenance.");
+                        }
+
+                        break;
+                    default:
+                        throw new ArgumentOutOfRangeException(nameof(accountingScope));
+                }
             }
 
             objectPayloadBytesInUniqueFrames = checked(
                 objectPayloadBytesInUniqueFrames + frameObjectPayloadBytes);
-            objectPayloadOnlyRbfFrameBytesRead = checked(
-                objectPayloadOnlyRbfFrameBytesRead + layout.FrameLengthBytes);
+            modeledRbfFrameBytesRead = checked(
+                modeledRbfFrameBytesRead + layout.FrameLengthBytes);
         }
 
         return new PostSaveReconstructionMetrics(
+            accountingScope,
             stateMap.Count,
             requiredVersions.Count,
             uniqueFrames.Count,
             requiredObjectPayloadBytes,
             objectPayloadBytesInUniqueFrames,
-            objectPayloadOnlyRbfFrameBytesRead);
+            modeledRbfFrameBytesRead);
     }
 
     private static LogicalObjectState Reconstruct(

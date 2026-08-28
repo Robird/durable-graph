@@ -174,21 +174,23 @@ CanPrepareAndRotate(postSaveState, A, B, C)
 
 如果实际支持范围频繁撞墙，再引入 Extent：多个 RBF Frames 形成一个逻辑 DurableGraphFrame，并由最终 manifest/commit frame 形成 publication root。在此之前不把 multi-frame prepare/commit 状态加入首个策略模拟。
 
-## 7. 单 Frame self-ticket 的 fixed point
+## 7. 单 Frame contextual self 消除 fixed point
 
-ObjectVersionDict 可能指向同一 Revision Frame 内刚写出的 ObjectVersions。frame `SizedPtr.Length` 包含 Map 中 self-ticket 的 VarUInt bytes，而 self-ticket 的 VarUInt width 又取决于最终 Length。
-
-writer 可以在 append 前迭代 size-only layout：
+实际 RBF append/read API 始终把 containing Frame 的 `SizedPtr` 交给上层，所以 OVD 无需
+在同一 Frame 内重复保存 literal self-ticket。当前 Working Design 改为：
 
 ```text
-known start + assumed ticket width
-    -> candidate frame length
-    -> SizedPtr.Serialize()
-    -> actual ticket width
-    -> repeat until stable
+OVD binding 1     -> containing Revision Frame
+OVD binding >= 2  -> same/previous RelativeFrameTicket
+TailMeta           -> OVD offset + ObjectId/record-offset directory
 ```
 
-VarUInt width 只有 1..10 且布局大小单调不减，因此这是有限 fixed-point preflight。不能收敛或超限时 fail closed；无需为此增加第二种 Self 地址格式。
+`1` 只在 OVD binding 字段中表示 `BindSelf`；通用 `RelativeFrameTicket` 仍把它视为
+invalid。decode 后两种 binding 都立即归一化成 `AbsoluteFrameAddress`。
+
+这样 Payload/TailMeta bytes 与最终 Frame length 不再互相递归，single-frame capacity
+preflight 只需计算一次 RBF layout。literal-self 的多 fixed-point 反例、候选对照和
+multi-frame 重访条件见 [`DB-008`](design-branches/0008-revision-contextual-self-address.md)。
 
 ## 8. 正确性与策略必须分层
 
