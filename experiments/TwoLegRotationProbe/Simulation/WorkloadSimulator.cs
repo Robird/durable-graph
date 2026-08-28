@@ -24,6 +24,7 @@ internal static class WorkloadSimulator {
             Frame candidateFrame = BuildFrame(
                 step,
                 logicalCursor,
+                store,
                 acceptedStateMap,
                 currentFile.FileNumber,
                 policy);
@@ -68,6 +69,7 @@ internal static class WorkloadSimulator {
     private static Frame BuildFrame(
         SaveStep step,
         WorkloadReplayCursor logicalCursor,
+        RbfFileStore store,
         IReadOnlyDictionary<uint, AbsoluteFrameAddress> stateMap,
         uint currentFileNumber,
         BaselinePolicy policy) {
@@ -83,6 +85,7 @@ internal static class WorkloadSimulator {
                         builder.Add(update.ObjectId),
                         update,
                         logicalCursor.GetLiveObjectState(update.ObjectId),
+                        GetHeadObjectVersion(store, stateMap[update.ObjectId], update.ObjectId),
                         stateMap[update.ObjectId],
                         currentFileNumber,
                         policy);
@@ -100,6 +103,7 @@ internal static class WorkloadSimulator {
         CreateObject create) {
         builder.Kind = ObjectVersionKind.Base;
         builder.PayloadBytes = create.BasePayloadBytes;
+        builder.ReconstructionObjectPayloadBytes = create.BasePayloadBytes;
         builder.ResultBasePayloadBytes = create.BasePayloadBytes;
         builder.VersionOrdinal = 1;
     }
@@ -108,6 +112,7 @@ internal static class WorkloadSimulator {
         ObjectVersionBuilder builder,
         UpdateObject update,
         LogicalObjectState previousState,
+        ObjectVersion previousVersion,
         AbsoluteFrameAddress previousAddress,
         uint currentFileNumber,
         BaselinePolicy policy) {
@@ -115,19 +120,41 @@ internal static class WorkloadSimulator {
         builder.ResultBasePayloadBytes = update.ResultBasePayloadBytes;
         builder.VersionOrdinal = checked(previousState.VersionOrdinal + 1);
 
-        switch (policy) {
-            case BaselinePolicy.AlwaysBase:
-                builder.Kind = ObjectVersionKind.Base;
-                builder.PayloadBytes = update.ResultBasePayloadBytes;
-                break;
-            case BaselinePolicy.AlwaysDeltaWhenLegal:
-                builder.Kind = ObjectVersionKind.Delta;
-                builder.PayloadBytes = update.DeltaPayloadBytes;
-                builder.ExpectedParentBasePayloadBytes = previousState.BasePayloadBytes;
-                break;
-            default:
-                throw new ArgumentOutOfRangeException(nameof(policy));
+        bool writeBase = policy switch {
+            BaselinePolicy.AlwaysBase => true,
+            BaselinePolicy.AlwaysDeltaWhenLegal => false,
+            BaselinePolicy.ObjectPayloadReadAmplification3 =>
+                ObjectPayloadReadAmplificationPolicy.ShouldWriteBase(
+                    update.ResultBasePayloadBytes,
+                    update.DeltaPayloadBytes,
+                    previousVersion.ReconstructionObjectPayloadBytes),
+            _ => throw new ArgumentOutOfRangeException(nameof(policy)),
+        };
+
+        if (writeBase) {
+            builder.Kind = ObjectVersionKind.Base;
+            builder.PayloadBytes = update.ResultBasePayloadBytes;
+            builder.ReconstructionObjectPayloadBytes = update.ResultBasePayloadBytes;
+        } else {
+            builder.Kind = ObjectVersionKind.Delta;
+            builder.PayloadBytes = update.DeltaPayloadBytes;
+            builder.ReconstructionObjectPayloadBytes = checked(
+                previousVersion.ReconstructionObjectPayloadBytes + update.DeltaPayloadBytes);
+            builder.ExpectedParentBasePayloadBytes = previousState.BasePayloadBytes;
         }
+    }
+
+    private static ObjectVersion GetHeadObjectVersion(
+        RbfFileStore store,
+        AbsoluteFrameAddress address,
+        uint objectId) {
+        Frame frame = store.ReadFrame(address);
+        if (!frame.ObjectVersions.TryGetValue(objectId, out ObjectVersion? version)) {
+            throw new InvalidOperationException(
+                $"StateMap head {address} does not contain object {objectId}.");
+        }
+
+        return version;
     }
 
     private static RelativeFrameTicket ToRelativeCurrentFile(

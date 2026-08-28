@@ -4,6 +4,7 @@ internal sealed class ObjectVersion {
     internal ObjectVersion(
         ObjectVersionKind kind,
         int payloadBytes,
+        long reconstructionObjectPayloadBytes,
         int resultBasePayloadBytes,
         int? expectedParentBasePayloadBytes,
         int versionOrdinal,
@@ -13,6 +14,7 @@ internal sealed class ObjectVersion {
         }
 
         ArgumentOutOfRangeException.ThrowIfNegative(payloadBytes);
+        ArgumentOutOfRangeException.ThrowIfNegative(reconstructionObjectPayloadBytes);
         ArgumentOutOfRangeException.ThrowIfNegative(resultBasePayloadBytes);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(versionOrdinal);
 
@@ -42,6 +44,12 @@ internal sealed class ObjectVersion {
                         nameof(payloadBytes));
                 }
 
+                if (reconstructionObjectPayloadBytes != payloadBytes) {
+                    throw new ArgumentException(
+                        "A Base version reconstruction payload size must equal its payload size.",
+                        nameof(reconstructionObjectPayloadBytes));
+                }
+
                 break;
             case ObjectVersionKind.Delta:
                 if (expectedParentBasePayloadBytes is null) {
@@ -54,6 +62,12 @@ internal sealed class ObjectVersion {
                     expectedParentBasePayloadBytes.Value,
                     nameof(expectedParentBasePayloadBytes));
                 ArgumentOutOfRangeException.ThrowIfZero(payloadBytes);
+                if (reconstructionObjectPayloadBytes < payloadBytes) {
+                    throw new ArgumentException(
+                        "A Delta version reconstruction payload size cannot be smaller than its payload size.",
+                        nameof(reconstructionObjectPayloadBytes));
+                }
+
                 break;
             default:
                 throw new ArgumentOutOfRangeException(nameof(kind));
@@ -61,6 +75,7 @@ internal sealed class ObjectVersion {
 
         Kind = kind;
         PayloadBytes = payloadBytes;
+        ReconstructionObjectPayloadBytes = reconstructionObjectPayloadBytes;
         ResultBasePayloadBytes = resultBasePayloadBytes;
         ExpectedParentBasePayloadBytes = expectedParentBasePayloadBytes;
         VersionOrdinal = versionOrdinal;
@@ -70,6 +85,8 @@ internal sealed class ObjectVersion {
     public ObjectVersionKind Kind { get; }
 
     public int PayloadBytes { get; }
+
+    public long ReconstructionObjectPayloadBytes { get; }
 
     public int ResultBasePayloadBytes { get; }
 

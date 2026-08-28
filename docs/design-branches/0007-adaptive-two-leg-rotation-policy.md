@@ -153,6 +153,16 @@ TwoLegRotationProbe 已把 FrameTicket 从序号推进为 `(OffsetBytes, LengthB
 
 只有在出现首个具体 ObjectVersion/OVD/index codec 后，才引入 versioned complete accounting 与 self-ticket fixed point，并重跑所有边界和候选策略。
 
+## S1c 阶段性证据：ObjectPayloadReadAmplification3
+
+第三条基线保留 StateJournal `VersionChainStatus.ShouldRebase` 的 ratio=3 与局部判据形状：Base 不大于 Delta 时立即 Base；否则当本次选择 Delta 所节省的 payload 乘 3 已不大于父版本 reconstruction payload 累计时 Base。相等时选 Base。
+
+该策略没有复制 StateJournal 对 one-object-per-frame RBF/metadata 的 38-byte 估值。DurableGraph 当前多个 ObjectVersion 共享 Frame，且 S1b 只允许 `ObjectPayloadOnly`，此时引入固定 per-object frame overhead 会同时双计共享成本并偷渡尚未冻结的 metadata 格式。因此类型名明确为 `ObjectPayloadReadAmplification3`，不是 exact StateJournal port。
+
+每个 ObjectVersion 暂存 `ReconstructionObjectPayloadBytes`：Base 等于自身 payload，Delta 等于 parent cumulative 加自身 payload。它避免 runner 私有 dictionary 成为第二权威，并由 materialization oracle 独立重算后 fail closed；但当前不计入 layout，不代表已选择 wire 字段。
+
+四个命名 workload 的 executable matrix 已证明 threshold/tie/reset、`Base <= Delta`、hot/cold shared-frame 与 fixed-seed mixed 的确定性。报告只将 write events 汇总；read 只报告 final post-save snapshot。首轮中第三策略的 modeled write/read 落在两个极端基线之间，但这只证明局部累计判据能形成不同决策，不代表已经选择 winner。shared-frame co-read、完整 codec bytes、relay/evacuation debt 与 `CanPrepareAndRotate` 仍不在该策略输入中。
+
 ## 重访触发条件
 
 - 模拟表明无参数策略不能保证 `CanPrepareAndRotate` 或产生明显振荡；

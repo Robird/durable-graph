@@ -169,13 +169,14 @@ public sealed class RbfFileTests {
         RbfFileStore store = new();
         RbfFile previousFile = store.CreateFile();
         FrameBuilder rootBuilder = new();
-        rootBuilder.Add(objectId);
+        rootBuilder.Add(objectId).ReconstructionObjectPayloadBytes = 0;
         Frame root = rootBuilder.Build();
         FrameTicket rootTicket = previousFile.Append(root);
 
         RbfFile currentFile = store.CreateFile();
         FrameBuilder childBuilder = new();
         ObjectVersionBuilder childVersion = childBuilder.Add(objectId);
+        childVersion.ReconstructionObjectPayloadBytes = 0;
         childVersion.VersionOrdinal = 2;
         childVersion.ParentFrameTicket = new RelativeFrameTicket(
             IsPreviousFile: true,

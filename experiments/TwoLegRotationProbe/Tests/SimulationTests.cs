@@ -8,6 +8,7 @@ public sealed class SimulationTests {
     [Theory]
     [InlineData(BaselinePolicy.AlwaysBase)]
     [InlineData(BaselinePolicy.AlwaysDeltaWhenLegal)]
+    [InlineData(BaselinePolicy.ObjectPayloadReadAmplification3)]
     internal void Golden_trace_compiles_one_frame_per_save_and_materializes_exact_state(
         BaselinePolicy policy) {
         WorkloadTrace trace = CreateGoldenTrace();
@@ -34,14 +35,33 @@ public sealed class SimulationTests {
     }
 
     [Theory]
-    [InlineData(BaselinePolicy.AlwaysBase, ObjectVersionKind.Base, 60, 120, 120)]
-    [InlineData(BaselinePolicy.AlwaysDeltaWhenLegal, ObjectVersionKind.Delta, 7, 60, 200)]
+    [InlineData(
+        BaselinePolicy.AlwaysBase,
+        ObjectVersionKind.Base,
+        60,
+        120,
+        120,
+        60,
+        120,
+        120)]
+    [InlineData(
+        BaselinePolicy.AlwaysDeltaWhenLegal,
+        ObjectVersionKind.Delta,
+        7,
+        60,
+        200,
+        107,
+        167,
+        367)]
     internal void Baseline_policy_is_fixed_and_preserves_object_lineage(
         BaselinePolicy policy,
         ObjectVersionKind expectedUpdateKind,
         int firstPayloadBytes,
         int secondPayloadBytes,
-        int thirdPayloadBytes) {
+        int thirdPayloadBytes,
+        long firstReconstructionPayloadBytes,
+        long secondReconstructionPayloadBytes,
+        long thirdReconstructionPayloadBytes) {
         SimulationRun run = WorkloadSimulator.Run(CreateGoldenTrace(), policy);
 
         ObjectVersion firstUpdate = ReadObjectVersion(run, revisionIndex: 1, objectId: 1);
@@ -54,6 +74,15 @@ public sealed class SimulationTests {
         Assert.Equal(firstPayloadBytes, firstUpdate.PayloadBytes);
         Assert.Equal(secondPayloadBytes, secondUpdate.PayloadBytes);
         Assert.Equal(thirdPayloadBytes, thirdUpdate.PayloadBytes);
+        Assert.Equal(
+            firstReconstructionPayloadBytes,
+            firstUpdate.ReconstructionObjectPayloadBytes);
+        Assert.Equal(
+            secondReconstructionPayloadBytes,
+            secondUpdate.ReconstructionObjectPayloadBytes);
+        Assert.Equal(
+            thirdReconstructionPayloadBytes,
+            thirdUpdate.ReconstructionObjectPayloadBytes);
         Assert.Equal(
             new RelativeFrameTicket(false, run.RevisionAddresses[0].FrameTicket),
             firstUpdate.ParentFrameTicket);
@@ -88,6 +117,7 @@ public sealed class SimulationTests {
             expectedParentBasePayloadBytes: 99,
             resultBasePayloadBytes: 60,
             payloadBytes: 7,
+            reconstructionObjectPayloadBytes: 107,
             versionOrdinal: 2,
             parentFrameTicket: parentTicket);
         FrameTicket headTicket = file.Append(deltaFrame.Build());
@@ -102,6 +132,31 @@ public sealed class SimulationTests {
     }
 
     [Fact]
+    public void Delta_apply_rejects_a_tampered_reconstruction_payload_size() {
+        RbfFileStore store = new();
+        RbfFile file = store.CreateFile();
+        FrameTicket parentTicket = AppendBase(file, objectId: 1, resultBasePayloadBytes: 100);
+        FrameBuilder deltaFrame = new();
+        ConfigureDelta(
+            deltaFrame.Add(1),
+            expectedParentBasePayloadBytes: 100,
+            resultBasePayloadBytes: 60,
+            payloadBytes: 7,
+            reconstructionObjectPayloadBytes: 106,
+            versionOrdinal: 2,
+            parentFrameTicket: parentTicket);
+        FrameTicket headTicket = file.Append(deltaFrame.Build());
+        Dictionary<uint, AbsoluteFrameAddress> stateMap = new() {
+            [1] = new AbsoluteFrameAddress(file.FileNumber, headTicket),
+        };
+
+        InvalidDataException exception = Assert.Throws<InvalidDataException>(
+            () => PhysicalStateOracle.Materialize(store, stateMap));
+
+        Assert.Contains("parent and payload require 107 bytes", exception.Message);
+    }
+
+    [Fact]
     public void Base_materialization_does_not_read_its_lineage_parent() {
         RbfFileStore store = new();
         RbfFile file = store.CreateFile();
@@ -109,6 +164,7 @@ public sealed class SimulationTests {
         ObjectVersionBuilder rebased = frame.Add(1);
         rebased.Kind = ObjectVersionKind.Base;
         rebased.PayloadBytes = 100;
+        rebased.ReconstructionObjectPayloadBytes = 100;
         rebased.ResultBasePayloadBytes = 100;
         rebased.VersionOrdinal = 2;
         rebased.ParentFrameTicket = new RelativeFrameTicket(
@@ -137,6 +193,7 @@ public sealed class SimulationTests {
             expectedParentBasePayloadBytes: 100,
             resultBasePayloadBytes: 60,
             payloadBytes: 7,
+            reconstructionObjectPayloadBytes: 107,
             versionOrdinal: 2,
             parentFrameTicket: new FrameTicket(32, 24));
         FrameTicket headTicket = file.Append(deltaFrame.Build());
@@ -165,6 +222,7 @@ public sealed class SimulationTests {
             expectedParentBasePayloadBytes: 100,
             resultBasePayloadBytes: 60,
             payloadBytes: 7,
+            reconstructionObjectPayloadBytes: 107,
             versionOrdinal: 2,
             parentFrameTicket: missingFrame
                 ? new FrameTicket(
@@ -200,6 +258,7 @@ public sealed class SimulationTests {
     [Theory]
     [InlineData(BaselinePolicy.AlwaysBase)]
     [InlineData(BaselinePolicy.AlwaysDeltaWhenLegal)]
+    [InlineData(BaselinePolicy.ObjectPayloadReadAmplification3)]
     internal void Invalid_trace_is_rejected_even_when_policy_would_ignore_its_delta(
         BaselinePolicy policy) {
         WorkloadTrace invalidGrowth = new(
@@ -267,6 +326,7 @@ public sealed class SimulationTests {
         int resultBasePayloadBytes) {
         builder.Kind = ObjectVersionKind.Base;
         builder.PayloadBytes = resultBasePayloadBytes;
+        builder.ReconstructionObjectPayloadBytes = resultBasePayloadBytes;
         builder.ResultBasePayloadBytes = resultBasePayloadBytes;
         builder.VersionOrdinal = 1;
     }
@@ -276,10 +336,12 @@ public sealed class SimulationTests {
         int expectedParentBasePayloadBytes,
         int resultBasePayloadBytes,
         int payloadBytes,
+        long reconstructionObjectPayloadBytes,
         int versionOrdinal,
         FrameTicket parentFrameTicket) {
         builder.Kind = ObjectVersionKind.Delta;
         builder.PayloadBytes = payloadBytes;
+        builder.ReconstructionObjectPayloadBytes = reconstructionObjectPayloadBytes;
         builder.ResultBasePayloadBytes = resultBasePayloadBytes;
         builder.ExpectedParentBasePayloadBytes = expectedParentBasePayloadBytes;
         builder.VersionOrdinal = versionOrdinal;
@@ -296,6 +358,7 @@ public sealed class SimulationTests {
                     .OrderBy(static pair => pair.Key)
                     .Select(static pair =>
                         $"{pair.Key}:{pair.Value.Kind}:{pair.Value.PayloadBytes}:" +
+                        $"{pair.Value.ReconstructionObjectPayloadBytes}:" +
                         $"{pair.Value.ResultBasePayloadBytes}:" +
                         $"{pair.Value.ExpectedParentBasePayloadBytes}:" +
                         $"{pair.Value.VersionOrdinal}:{pair.Value.ParentFrameTicket}")));

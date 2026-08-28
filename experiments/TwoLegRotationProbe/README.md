@@ -62,7 +62,8 @@ cross-process replay or persisted failure artifacts have a concrete consumer.
 ## Physical baseline compilation
 
 `WorkloadSimulator` compiles the same frozen trace into a fresh, private
-single-file run under either `AlwaysBase` or `AlwaysDeltaWhenLegal`:
+single-file run under `AlwaysBase`, `AlwaysDeltaWhenLegal`, or
+`ObjectPayloadReadAmplification3`:
 
 ```text
 SaveStep
@@ -92,6 +93,35 @@ The current single-file model preflights the necessary object-payload-only RBF
 limit, but has no complete Revision capacity or rotation legality gate. Within
 that surviving input set, `AlwaysDeltaWhenLegal` is presently equivalent to
 “always Delta.” The enum is intentionally not a general policy interface yet.
+
+## Object-local payload policy
+
+`ObjectPayloadReadAmplification3` preserves the shape and ratio of the locally
+inspected StateJournal `VersionChainStatus.ShouldRebase` rule, but deliberately
+does not port its estimated 38-byte per-object Frame/metadata overhead. That
+overhead assumes one object per Frame and would conflict with this probe's
+multi-object Frames and `ObjectPayloadOnly` accounting.
+
+For an Update, the policy writes Base when:
+
+```text
+BasePayloadBytes <= DeltaPayloadBytes
+    or
+(BasePayloadBytes - DeltaPayloadBytes) * 3
+    <= ParentReconstructionObjectPayloadBytes
+```
+
+Otherwise it writes Delta. Equality selects Base. Every `ObjectVersion`
+records `ReconstructionObjectPayloadBytes`: Base resets it to its own payload;
+Delta sets it to parent cumulative payload plus its own payload. The
+materialization oracle independently recomputes and validates this value, so it
+does not become a trusted shortcut or runner-private second authority.
+
+This cumulative field is provisional simulation metadata. It is excluded from
+the RBF Payload length under `AccountingScope.ObjectPayloadOnly` and is not a
+wire-format commitment. Accordingly the policy is StateJournal-inspired, not
+an exact StateJournal cost-model port; it cannot see shared-frame overhead,
+ObjectVersionDict/index bytes, or co-read when making its local decision.
 
 ## RBF envelope and raw observations
 
@@ -127,12 +157,23 @@ from those frames, and their full object-payload-only RBF frame lengths.
 Post-save read snapshots are not a run total unless an experiment explicitly
 chooses to simulate a full reload after every Save.
 
-The fixed generated mixed workload currently demonstrates a tradeoff, not a
-winner: under this incomplete accounting, AlwaysBase writes a 436-byte modeled
-file and its final reconstruction reads one 148-byte modeled frame;
-AlwaysDelta writes 364 modeled bytes but its final reconstruction reads three
-modeled frames totaling 348 bytes. Those values must be rerun after a concrete
-ObjectVersion/OVD/index codec exists.
+The current named matrix uses exact handwritten threshold/direction/hot-cold
+cases plus one fixed-seed Field/List workload. Reports keep additive write
+events separate from the final post-save read snapshot; no `TotalReadBytes` is
+defined. Two examples demonstrate tradeoffs rather than a winner:
+
+| Workload | Policy | Modeled file bytes | Final modeled frame bytes read |
+|---|---|---:|---:|
+| fixed-seed mixed | AlwaysBase | 436 | 148 |
+| fixed-seed mixed | AlwaysDelta | 364 | 348 |
+| fixed-seed mixed | ObjectPayloadReadAmplification3 | 372 | 232 |
+| hot-one/cold-eight | AlwaysBase | 1700 | 1048 |
+| hot-one/cold-eight | AlwaysDelta | 1268 | 1236 |
+| hot-one/cold-eight | ObjectPayloadReadAmplification3 | 1340 | 1048 |
+
+These values must be rerun after a concrete ObjectVersion/OVD/index codec
+exists. The matrix currently lives in executable tests; a ScenarioCatalog or
+report format waits for a CLI, persisted artifact, or batch-run consumer.
 
 This preparatory slice still does not model complete `SizedPtr`/relative-ticket
 encoding, publication, relay revisions, two-file closure, full Revision

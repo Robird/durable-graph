@@ -110,6 +110,7 @@ internal static class PhysicalStateOracle {
         HashSet<AbsoluteFrameAddress> visited = [];
         AbsoluteFrameAddress address = headAddress;
         LogicalObjectState current;
+        long currentReconstructionObjectPayloadBytes;
 
         while (true) {
             if (!visited.Add(address)) {
@@ -120,9 +121,17 @@ internal static class PhysicalStateOracle {
             ObjectVersion version = ReadObjectVersion(store, objectId, address);
             visit?.Invoke(address, version);
             if (version.Kind == ObjectVersionKind.Base) {
+                if (version.ReconstructionObjectPayloadBytes != version.PayloadBytes) {
+                    throw new InvalidDataException(
+                        $"Base for object {objectId} declares " +
+                        $"{version.ReconstructionObjectPayloadBytes} reconstruction payload bytes, " +
+                        $"but contains {version.PayloadBytes} payload bytes.");
+                }
+
                 current = new LogicalObjectState(
                     version.ResultBasePayloadBytes,
                     version.VersionOrdinal);
+                currentReconstructionObjectPayloadBytes = version.PayloadBytes;
                 break;
             }
 
@@ -132,6 +141,25 @@ internal static class PhysicalStateOracle {
 
         for (int index = pendingDeltas.Count - 1; index >= 0; index--) {
             ObjectVersion delta = pendingDeltas[index];
+            long expectedReconstructionObjectPayloadBytes;
+            try {
+                expectedReconstructionObjectPayloadBytes = checked(
+                    currentReconstructionObjectPayloadBytes + delta.PayloadBytes);
+            } catch (OverflowException exception) {
+                throw new InvalidDataException(
+                    $"Reconstruction payload size overflowed for object {objectId}.",
+                    exception);
+            }
+
+            if (delta.ReconstructionObjectPayloadBytes !=
+                expectedReconstructionObjectPayloadBytes) {
+                throw new InvalidDataException(
+                    $"Delta for object {objectId} declares " +
+                    $"{delta.ReconstructionObjectPayloadBytes} reconstruction payload bytes, " +
+                    $"but its parent and payload require " +
+                    $"{expectedReconstructionObjectPayloadBytes} bytes.");
+            }
+
             int expectedParentBytes = delta.ExpectedParentBasePayloadBytes
                 ?? throw new InvalidDataException(
                     $"Delta for object {objectId} has no expected parent size.");
@@ -161,6 +189,8 @@ internal static class PhysicalStateOracle {
             current = new LogicalObjectState(
                 delta.ResultBasePayloadBytes,
                 delta.VersionOrdinal);
+            currentReconstructionObjectPayloadBytes =
+                expectedReconstructionObjectPayloadBytes;
         }
 
         return current;

@@ -18,7 +18,7 @@
 
 ## 2. 当前基线
 
-记录日期：2026-08-28
+记录日期：2026-08-29
 
 - **Observed**：仓库已跑通 boxed-value 的内存 Save/Load 与 read-time upgrade demo，并以隔离探针跑通单类型 Flat Graph Delta R1、generated graph operations R2、StoredGraphImage normalization R3a 与 two-pass CLR materialization R3b；production runtime/default Generator 仍无对象身份、reference graph、wire format 或持久化实现。
 - **Observed**：`DurableGraph.slnx` 包含 runtime、Generator、Build tool、CLI 和 Tests 五个项目；Build tool 是随 NuGet 包部署的私有 snapshot-history publisher/verifier，不承载运行时持久化语义。
@@ -52,7 +52,7 @@
 - StateStore 基础设计：选择 one-Revision/one-RBF-frame、object-level version chains、ObjectVersionDict authority、LSB-tagged `RelativeFrameTicket` 与 current-head two-file reconstruction closure；实现尚未开始。
 - 双腿轮转派生说明：记录 A/B/C evacuation、B RelayRevision、absolute-normalized ObjectVersionDict、one-frame bounds 与 `CanPrepareAndRotate` safety gate。
 - Adaptive rotation branch DB-007：隔离尚未裁决的统一 Base/Delta/cold-migration/rotation 策略和内存模拟输入。
-- Two-leg rotation probe：以独立 xUnit 项目建立 one-based file store、offset/length FrameTicket、exact RBF v0.40 envelope、相邻 FileScope、absolute live StateMap、Frame/ObjectVersion 父链、deterministic workload generation/replay，以及单文件 AlwaysBase/AlwaysDelta symbolic materialization 与 ObjectPayloadOnly raw metrics baseline。
+- Two-leg rotation probe：以独立 xUnit 项目建立 one-based file store、offset/length FrameTicket、exact RBF v0.40 envelope、相邻 FileScope、absolute live StateMap、Frame/ObjectVersion 父链、deterministic workload generation/replay，以及单文件 AlwaysBase/AlwaysDelta/ObjectPayloadReadAmplification3 symbolic materialization 与 ObjectPayloadOnly raw metrics baseline。
 - Candidate design branches：在 `docs/design-branches/` 隔离尚未裁决的架构分叉。
 - 本实验簿：保存随实验演化的项目认识。
 
@@ -80,6 +80,7 @@
 - **Decided**：物理删除文件后的数据不可访问不属于地址格式需要抵抗的故障模型；Relay 保证 retained files 之间的 lineage 连续，不承担抗删文件冗余。
 - **Observed**：S1 preparatory baseline 已把冻结 workload 的每个 Save 编译为单个 Frame，并以 absolute live StateMap、relative lineage parent 和 checked symbolic Delta apply 逐 prefix 对照 logical replay；尚未证明完整 Revision layout、two-file rotation 或 `CanPrepareAndRotate`。
 - **Observed**：S1b 已对给定 Payload/TailMeta 长度复刻 exact RBF v0.40 envelope，并把 synthetic workload 接入逐 Save write 与 post-save reconstruction/co-read observations；accounting 明示排除 DG header/OVD/index/VarUInt，所以尚不能证明完整 Revision bytes、容量安全或策略 winner。
+- **Observed**：S1c 已加入 ratio=3 的 `ObjectPayloadReadAmplification3` 与四场景 matrix；per-object reconstruction payload 随 ObjectVersion 保存并由 oracle 重算，但不计入 layout。结果只证明局部策略形成可复现 tradeoff，不代表 exact StateJournal port 或 winner。
 - **Decided**：当前不引入 `MaxLogicalChainBytes`、`TargetFileBytes` 或固定 migration budget；先在纯内存模拟中采集无权重原始量，比较自适应统一策略。
 - **Open**：统一策略能否仅依靠 two-file pressure、lineage/reconstruction overhead 与渐进 cold migration 自动收敛；`CanPrepareAndRotate` 必须把 B maintenance 可完成性与 C evacuation Revision 可编码性一起作为策略无关的 safety oracle。
 - **Open**：Schema runtime representation 与 canonical authority 的候选分叉记录在 `DB-001`，等待 exact codec/persistent format 实验裁决。
@@ -754,6 +755,14 @@
 ```
 
 ## 6. 船长日志
+
+### 2026-08-29：加入 object-local payload read-amplification 基线
+
+- 第三策略保留 StateJournal `ShouldRebase` 的 ratio=3/threshold 形状，但删除与多对象共享 Frame 冲突的 38-byte per-object overhead；名称明确为 `ObjectPayloadReadAmplification3`。
+- ObjectVersion 记录 `ReconstructionObjectPayloadBytes`：Base 重置，Delta checked 累加；Builder 漏填 fail closed，materialization 从 Base 重算并拒绝 tamper。该字段仍排除在 ObjectPayloadOnly layout 外。
+- 四场景 matrix 覆盖 threshold tie/reset、增长/缩小/等尺寸 direct Base、hot-one/cold-eight shared Frame 和 fixed-seed Field/List mixed；write totals 与 final read snapshot 分栏，不定义 TotalReadBytes。
+- fixed mixed 中三策略 modeled file/final read 分别为 Base 436/148、Delta 364/348、local 372/232；hot/cold 中为 1700/1048、1268/1236、1340/1048。结果不是 winner，完整 codec/shared-frame/rotation-aware cost 仍待后续。
+- 验证：Probe 100/100、root tests 147/147、root solution build 0 warning/0 error、两套 solution format check 与 diff check 通过；独立复核最终无 blocker/medium。
 
 ### 2026-08-28：建立 ObjectPayloadOnly RBF envelope 与 raw metrics
 

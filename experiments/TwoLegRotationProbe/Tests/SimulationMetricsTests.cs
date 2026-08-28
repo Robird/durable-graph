@@ -88,6 +88,7 @@ public sealed class SimulationMetricsTests {
     [Theory]
     [InlineData(BaselinePolicy.AlwaysBase)]
     [InlineData(BaselinePolicy.AlwaysDeltaWhenLegal)]
+    [InlineData(BaselinePolicy.ObjectPayloadReadAmplification3)]
     internal void Object_payload_that_cannot_fit_one_rbf_frame_fails_closed(
         BaselinePolicy policy) {
         WorkloadTrace trace = new(
@@ -115,6 +116,7 @@ public sealed class SimulationMetricsTests {
         FrameBuilder frameBuilder = new();
         ObjectVersionBuilder version = frameBuilder.Add(1);
         version.PayloadBytes = 10;
+        version.ReconstructionObjectPayloadBytes = 10;
         version.ResultBasePayloadBytes = 10;
         FrameTicket ticket = file.Append(frameBuilder.Build());
         Dictionary<uint, AbsoluteFrameAddress> stateMap = new() {

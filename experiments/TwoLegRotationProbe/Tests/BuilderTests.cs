@@ -14,6 +14,7 @@ public sealed class BuilderTests {
             FrameTicket: new FrameTicket(4, 24));
         firstVersion.Kind = ObjectVersionKind.Delta;
         firstVersion.PayloadBytes = 8;
+        firstVersion.ReconstructionObjectPayloadBytes = 103;
         firstVersion.ResultBasePayloadBytes = 100;
         firstVersion.ExpectedParentBasePayloadBytes = 95;
         firstVersion.VersionOrdinal = 2;
@@ -22,6 +23,7 @@ public sealed class BuilderTests {
         Frame frame = builder.Build();
         firstVersion.Kind = ObjectVersionKind.Base;
         firstVersion.PayloadBytes = 0;
+        firstVersion.ReconstructionObjectPayloadBytes = 0;
         firstVersion.ResultBasePayloadBytes = 0;
         firstVersion.ExpectedParentBasePayloadBytes = null;
         firstVersion.VersionOrdinal = 1;
@@ -33,6 +35,7 @@ public sealed class BuilderTests {
         ObjectVersion persistedVersion = Assert.Single(frame.ObjectVersions).Value;
         Assert.Equal(ObjectVersionKind.Delta, persistedVersion.Kind);
         Assert.Equal(8, persistedVersion.PayloadBytes);
+        Assert.Equal(103, persistedVersion.ReconstructionObjectPayloadBytes);
         Assert.Equal(100, persistedVersion.ResultBasePayloadBytes);
         Assert.Equal(95, persistedVersion.ExpectedParentBasePayloadBytes);
         Assert.Equal(2, persistedVersion.VersionOrdinal);
@@ -46,29 +49,33 @@ public sealed class BuilderTests {
             IsPreviousFile: false,
             FrameTicket: new FrameTicket(4, 24));
         ObjectVersionBuilder[] invalidBuilders = [
-            new() { Kind = (ObjectVersionKind)99 },
-            new() { ResultBasePayloadBytes = -1 },
-            new() { VersionOrdinal = 0 },
+            new() { Kind = (ObjectVersionKind)99, ReconstructionObjectPayloadBytes = 0 },
+            new() { ReconstructionObjectPayloadBytes = 0, ResultBasePayloadBytes = -1 },
+            new() { ReconstructionObjectPayloadBytes = 0, VersionOrdinal = 0 },
             new() {
                 Kind = ObjectVersionKind.Delta,
                 PayloadBytes = 1,
+                ReconstructionObjectPayloadBytes = 1,
                 ResultBasePayloadBytes = 1,
                 ExpectedParentBasePayloadBytes = 0,
             },
-            new() { ParentFrameTicket = parent },
-            new() { VersionOrdinal = 2 },
+            new() { ReconstructionObjectPayloadBytes = 0, ParentFrameTicket = parent },
+            new() { ReconstructionObjectPayloadBytes = 0, VersionOrdinal = 2 },
             new() {
+                ReconstructionObjectPayloadBytes = 0,
                 VersionOrdinal = 2,
                 ParentFrameTicket = parent,
                 ExpectedParentBasePayloadBytes = 0,
             },
             new() {
                 PayloadBytes = 1,
+                ReconstructionObjectPayloadBytes = 1,
                 ResultBasePayloadBytes = 2,
             },
             new() {
                 Kind = ObjectVersionKind.Delta,
                 PayloadBytes = 1,
+                ReconstructionObjectPayloadBytes = 1,
                 ResultBasePayloadBytes = 1,
                 VersionOrdinal = 2,
                 ParentFrameTicket = parent,
@@ -76,6 +83,7 @@ public sealed class BuilderTests {
             new() {
                 Kind = ObjectVersionKind.Delta,
                 PayloadBytes = 1,
+                ReconstructionObjectPayloadBytes = 1,
                 ResultBasePayloadBytes = 1,
                 ExpectedParentBasePayloadBytes = -1,
                 VersionOrdinal = 2,
@@ -83,6 +91,7 @@ public sealed class BuilderTests {
             },
             new() {
                 Kind = ObjectVersionKind.Delta,
+                ReconstructionObjectPayloadBytes = 0,
                 ResultBasePayloadBytes = 1,
                 ExpectedParentBasePayloadBytes = 0,
                 VersionOrdinal = 2,
@@ -96,15 +105,44 @@ public sealed class BuilderTests {
     }
 
     [Fact]
+    public void Build_requires_and_validates_reconstruction_payload_bytes() {
+        RelativeFrameTicket parent = new(
+            IsPreviousFile: false,
+            FrameTicket: new FrameTicket(4, 24));
+        ObjectVersionBuilder missing = new();
+        ObjectVersionBuilder baseMismatch = new() {
+            PayloadBytes = 10,
+            ReconstructionObjectPayloadBytes = 11,
+            ResultBasePayloadBytes = 10,
+        };
+        ObjectVersionBuilder deltaTooSmall = new() {
+            Kind = ObjectVersionKind.Delta,
+            PayloadBytes = 10,
+            ReconstructionObjectPayloadBytes = 9,
+            ResultBasePayloadBytes = 10,
+            ExpectedParentBasePayloadBytes = 10,
+            VersionOrdinal = 2,
+            ParentFrameTicket = parent,
+        };
+
+        Assert.Throws<InvalidOperationException>(() => missing.Build());
+        Assert.Throws<ArgumentException>(() => baseMismatch.Build());
+        Assert.Throws<ArgumentException>(() => deltaTooSmall.Build());
+    }
+
+    [Fact]
     public void Built_frame_exposes_a_read_only_dictionary() {
         FrameBuilder builder = new();
-        builder.Add(1);
+        builder.Add(1).ReconstructionObjectPayloadBytes = 0;
         Frame frame = builder.Build();
         IDictionary<uint, ObjectVersion> dictionary =
             Assert.IsAssignableFrom<IDictionary<uint, ObjectVersion>>(frame.ObjectVersions);
 
         Assert.True(dictionary.IsReadOnly);
-        Assert.Throws<NotSupportedException>(() => dictionary.Add(2, new ObjectVersionBuilder().Build()));
+        Assert.Throws<NotSupportedException>(
+            () => dictionary.Add(
+                2,
+                new ObjectVersionBuilder { ReconstructionObjectPayloadBytes = 0 }.Build()));
     }
 
     [Fact]
