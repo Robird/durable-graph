@@ -12,19 +12,19 @@ internal sealed class RbfFile {
 
     public int FrameCount => _frames.Count;
 
-    public int Append(Frame frame) {
+    public FrameId Append(Frame frame) {
         ArgumentNullException.ThrowIfNull(frame);
 
-        int frameNumber = _frames.Count;
+        FrameId frameId = new(_frames.Count);
         _frames.Add(frame);
-        return frameNumber;
+        return frameId;
     }
 
-    public Frame Read(int frameNumber) {
-        if ((uint)frameNumber >= (uint)_frames.Count) {
-            throw new ArgumentOutOfRangeException(nameof(frameNumber));
+    public Frame Read(FrameId frameId) {
+        if ((uint)frameId.Value >= (uint)_frames.Count) {
+            throw new ArgumentOutOfRangeException(nameof(frameId));
         }
 
-        return _frames[frameNumber];
+        return _frames[frameId.Value];
     }
 }

@@ -9,14 +9,19 @@ public sealed class BuilderTests {
         const uint secondObjectId = 12;
         FrameBuilder builder = new();
         ObjectVersionBuilder firstVersion = builder.Add(firstObjectId);
-        firstVersion.ParentId = 3;
+        ParentId originalParentId = new(
+            IsPreviousFile: true,
+            FrameId: new FrameId(3));
+        firstVersion.ParentId = originalParentId;
 
         Frame frame = builder.Build();
-        firstVersion.ParentId = 9;
+        firstVersion.ParentId = new ParentId(
+            IsPreviousFile: false,
+            FrameId: new FrameId(9));
         builder.Add(secondObjectId);
 
         ObjectVersion persistedVersion = Assert.Single(frame.ObjectVersions).Value;
-        Assert.Equal(3, persistedVersion.ParentId);
+        Assert.Equal(originalParentId, persistedVersion.ParentId);
         Assert.False(frame.ObjectVersions.ContainsKey(secondObjectId));
     }
 
@@ -33,11 +38,7 @@ public sealed class BuilderTests {
     }
 
     [Fact]
-    public void ObjectVersionBuilder_rejects_a_negative_parent_id_at_build_time() {
-        ObjectVersionBuilder builder = new() {
-            ParentId = -1,
-        };
-
-        Assert.Throws<ArgumentOutOfRangeException>(() => builder.Build());
+    public void FrameId_rejects_a_negative_value() {
+        Assert.Throws<ArgumentOutOfRangeException>(() => new FrameId(-1));
     }
 }

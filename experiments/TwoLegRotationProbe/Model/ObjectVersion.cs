@@ -1,15 +1,11 @@
 namespace Atelia.TwoLegRotationProbe.Model;
 
 internal sealed class ObjectVersion {
-    private readonly int? _parentId;
+    private readonly ParentId? _parentId;
 
-    internal ObjectVersion(int? parentId) {
-        if (parentId < 0) {
-            throw new ArgumentOutOfRangeException(nameof(parentId));
-        }
-
+    internal ObjectVersion(ParentId? parentId) {
         _parentId = parentId;
     }
 
-    public int? ParentId => _parentId;
+    public ParentId? ParentId => _parentId;
 }

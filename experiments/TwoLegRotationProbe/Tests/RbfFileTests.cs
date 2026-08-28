@@ -9,45 +9,48 @@ public sealed class RbfFileTests {
         Frame first = new FrameBuilder().Build();
         Frame second = new FrameBuilder().Build();
 
-        int firstNumber = file.Append(first);
-        int secondNumber = file.Append(second);
+        FrameId firstId = file.Append(first);
+        FrameId secondId = file.Append(second);
 
-        Assert.Equal(0, firstNumber);
-        Assert.Equal(1, secondNumber);
+        Assert.Equal(new FrameId(0), firstId);
+        Assert.Equal(new FrameId(1), secondId);
         Assert.Equal(2, file.FrameCount);
-        Assert.Same(first, file.Read(firstNumber));
-        Assert.Same(second, file.Read(secondNumber));
-    }
-
-    [Theory]
-    [InlineData(-1)]
-    [InlineData(1)]
-    public void Read_rejects_missing_frame(int frameNumber) {
-        RbfFile file = new(1);
-        file.Append(new FrameBuilder().Build());
-
-        Assert.Throws<ArgumentOutOfRangeException>(() => file.Read(frameNumber));
+        Assert.Same(first, file.Read(firstId));
+        Assert.Same(second, file.Read(secondId));
     }
 
     [Fact]
-    public void ParentId_locates_the_same_object_in_an_earlier_frame() {
-        const uint objectId = 42;
+    public void Read_rejects_missing_frame() {
         RbfFile file = new(1);
+        file.Append(new FrameBuilder().Build());
+
+        Assert.Throws<ArgumentOutOfRangeException>(() => file.Read(new FrameId(1)));
+    }
+
+    [Fact]
+    public void ParentId_locates_the_same_object_in_the_previous_file() {
+        const uint objectId = 42;
+        RbfFileStore store = new();
+        RbfFile previousFile = store.CreateFile();
         FrameBuilder rootBuilder = new();
         rootBuilder.Add(objectId);
         Frame root = rootBuilder.Build();
-        int rootId = file.Append(root);
+        FrameId rootId = previousFile.Append(root);
 
+        RbfFile currentFile = store.CreateFile();
         FrameBuilder childBuilder = new();
-        childBuilder.Add(objectId).ParentId = rootId;
+        childBuilder.Add(objectId).ParentId = new ParentId(
+            IsPreviousFile: true,
+            FrameId: rootId);
         Frame child = childBuilder.Build();
-        file.Append(child);
+        currentFile.Append(child);
+        FileScope scope = new(currentFile.FileNumber);
 
-        int? parentId = child.ObjectVersions[objectId].ParentId;
+        ParentId? parentId = child.ObjectVersions[objectId].ParentId;
 
         Assert.NotNull(parentId);
         Assert.Same(
             root.ObjectVersions[objectId],
-            file.Read(parentId.Value).ObjectVersions[objectId]);
+            scope.ReadFrame(store, parentId.Value).ObjectVersions[objectId]);
     }
 }
