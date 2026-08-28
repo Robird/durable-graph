@@ -52,6 +52,7 @@
 - StateStore 基础设计：选择 one-Revision/one-RBF-frame、object-level version chains、ObjectVersionDict authority、LSB-tagged `RelativeFrameTicket` 与 current-head two-file reconstruction closure；实现尚未开始。
 - 双腿轮转派生说明：记录 A/B/C evacuation、B RelayRevision、absolute-normalized ObjectVersionDict、one-frame bounds 与 `CanPrepareAndRotate` safety gate。
 - Adaptive rotation branch DB-007：隔离尚未裁决的统一 Base/Delta/cold-migration/rotation 策略和内存模拟输入。
+- Two-leg rotation probe：以独立 xUnit 项目建立 one-based file store、append-only/random-read frame collection、相邻 FileScope 与待扩展 Frame/ObjectVersion 占位类型。
 - Candidate design branches：在 `docs/design-branches/` 隔离尚未裁决的架构分叉。
 - 本实验簿：保存随实验演化的项目认识。
 
@@ -751,6 +752,13 @@
 ```
 
 ## 6. 船长日志
+
+### 2026-08-28：启动 Two-leg rotation S1 probe
+
+- 建立隔离的 `experiments/TwoLegRotationProbe` .NET 10/xUnit 项目，不改产品 runtime 或根 solution 项目集合。
+- 首轮只固定 one-based 单调 FileNumber、RbfFile append-only/random-read 容器和 `PreviousFileNumber = CurrentFileNumber - 1` 的相邻语义。
+- `Frame`、`ObjectVersion` 暂为空壳；frame number 暂为内存 List key，不冒充 `SizedPtr` 或 durable address。
+- 下一步可从该骨架逐层加入 ObjectVersion chain、Revision Frame、byte/layout estimator 和可替换策略，不提前把候选 heuristic 写入容器层。
 
 ### 2026-08-28：将研究优先级切换到 StateStore 双腿轮转
 
