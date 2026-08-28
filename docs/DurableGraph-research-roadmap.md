@@ -214,7 +214,7 @@ materialized root 是可丢弃 working graph，不是 baseline、StateMap 或第
 
 ### S1：内存自适应双腿轮转策略模拟
 
-状态：In Progress。当前优先研究切片；已建立 deterministic workload generation/replay substrate，尚未接入 BaseOrDeltify、rotation policy 或 frame layout；不修改 R1–R3 已验证结论，也不把 StateStore working design 描述为产品实现事实。
+状态：In Progress。当前优先研究切片；已建立 deterministic workload generation/replay substrate，并以单文件 preparatory baseline 跑通 `AlwaysBase` / `AlwaysDeltaWhenLegal` 到 Frame、absolute live StateMap 与 symbolic materialization 的逐 Save 前缀闭环。尚未接入自适应 BaseOrDeltify、two-file rotation、representability 或 frame layout；不修改 R1–R3 已验证结论，也不把 StateStore working design 描述为产品实现事实。
 
 问题：在不先引入固定 `MaxLogicalChainBytes`、`TargetFileBytes` 或 migration-byte budget 的情况下，能否用无权重事实量设计并比较 Base、Delta、渐进 cold migration、RelayRevision 与正式 rotation 的候选策略？
 
@@ -238,6 +238,8 @@ failed plan leaves published state unchanged
 ```
 
 模拟记录原始 bytes、frame sets、lineage、relay debt、useful/unused reads 与布局事实；所有比例和加权 score 后算。至少比较 AlwaysBase、AlwaysDelta-when-legal、StateJournal-style local cost、Previous-ratio、渐进 cold migration 与统一策略候选。
+
+已完成的 S1 preparatory baseline 明确区分：StateMap 保存 `AbsoluteFrameAddress`，ObjectVersion 内 parent 保存由承载 frame 的 `FileScope` 解释的 `RelativeFrameTicket`；Create 写 Base，Update 由两条固定基线选择 Base/Delta，Remove 只删 live binding 但仍产生空 Revision Frame。Delta 以 `(ExpectedParentBasePayloadBytes, ResultBasePayloadBytes)` 构成可校验的尺寸态变换，`PayloadBytes` 只表示写成本。每个 Save prefix 均先 materialize 并与唯一 logical replay cursor exact compare，再成为下一步输入；整次 Run 失败不暴露 private candidate Store。当前没有容量 gate，因此 `AlwaysDeltaWhenLegal` 仅等价于 AlwaysDelta，不代表一般 legality planner。
 
 本切片不实现真实 `DurableFlush`、atomic HEAD、reopen/truncate 或文件删除。逻辑策略收敛后，S2/S3 分别验证地址/layout 与 filesystem publication；文件被物理删除后不可访问不属于格式需要抵抗的故障模型。
 

@@ -12,8 +12,13 @@ The first scaffold deliberately models only a few container facts:
 - a `FileScope` has a readonly `CurrentFileNumber`, derives its
   `PreviousFileNumber`, and resolves relative parent IDs against the store;
 - a built `Frame` owns a read-only `ObjectId` (`uint`) to `ObjectVersion` map;
-- `ObjectVersion.ParentFrameTicket` is nullable for a root, otherwise it is
-  `(bool IsPreviousFile, FrameTicket)`;
+- `ObjectVersion` distinguishes Base from Delta and records synthetic payload
+  cost, resulting Base size, logical version ordinal, and lineage parent;
+- `ObjectVersion.ParentFrameTicket` is nullable for a first version, otherwise
+  it is `(bool IsPreviousFile, FrameTicket)` interpreted in the containing
+  frame's file scope;
+- the live in-memory StateMap uses `AbsoluteFrameAddress(FileNumber,
+  FrameTicket)`, rather than retaining a context-dependent relative ticket;
 - mutable `FrameBuilder` and `ObjectVersionBuilder` instances are copied into
   read-only built state.
 
@@ -54,10 +59,45 @@ same instance can be replayed by every candidate policy. It does **not** mean
 the trace is serialized to a file. A canonical trace format is deferred until
 cross-process replay or persisted failure artifacts have a concrete consumer.
 
-This does not yet model byte offsets, `SizedPtr`, frame layout, publication,
-relay revisions, rotation planning, Base-or-Deltify policies, or policy
-scoring. Generated Base/Delta sizes are synthetic payload observations, not a
-real serializer or wire-format claim.
+## Physical baseline compilation
+
+`WorkloadSimulator` compiles the same frozen trace into a fresh, private
+single-file run under either `AlwaysBase` or `AlwaysDeltaWhenLegal`:
+
+```text
+SaveStep
+    -> one candidate Frame
+    -> candidate absolute live StateMap
+    -> symbolic materialize and exact logical-prefix comparison
+    -> next accepted in-memory step
+```
+
+Create always writes a Base. Update writes the strategy-selected Base or Delta
+and points to that object's previous head, which can skip unrelated or
+remove-only frames. Remove only deletes the live StateMap binding; its SaveStep
+still appends an empty physical Frame and old frames remain readable history.
+Every non-create Base also retains its lineage parent, although reconstruction
+stops at the newest Base.
+
+Delta payload bytes remain a storage-cost observation, not a value transform.
+For an executable size-only oracle, each Delta separately records its expected
+parent Base size and resulting Base size. Materialization must reconstruct the
+parent, check that precondition, validate the logical ordinal and no-compression
+growth bound, and only then produce the result. This is symbolic size-state
+apply, not serialization or content-level delta replay. Current-state
+materialization stops at the newest Base; the separate lineage diagnostic can
+walk older parents without turning those reads into reconstruction cost.
+
+The current single-file model has no capacity or rotation legality gate, so all
+validated workload updates are legal and `AlwaysDeltaWhenLegal` is presently
+equivalent to “always Delta.” The enum is intentionally not a general policy
+interface yet.
+
+This preparatory slice still does not model byte offsets, `SizedPtr`, frame
+layout, representability/capacity, publication, relay revisions, rotation
+planning, adaptive Base-or-Deltify decisions, or policy scoring. Generated
+Base/Delta sizes are synthetic payload observations, not a real serializer or
+wire-format claim.
 `RelativeFrameTicket` is interpreted relative to the file containing it:
 stepping creates a new file and a new `FileScope`; an old frame must still be
 read with the scope of its own origin file. This pair is an in-memory precursor,

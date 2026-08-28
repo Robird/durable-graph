@@ -52,7 +52,7 @@
 - StateStore 基础设计：选择 one-Revision/one-RBF-frame、object-level version chains、ObjectVersionDict authority、LSB-tagged `RelativeFrameTicket` 与 current-head two-file reconstruction closure；实现尚未开始。
 - 双腿轮转派生说明：记录 A/B/C evacuation、B RelayRevision、absolute-normalized ObjectVersionDict、one-frame bounds 与 `CanPrepareAndRotate` safety gate。
 - Adaptive rotation branch DB-007：隔离尚未裁决的统一 Base/Delta/cold-migration/rotation 策略和内存模拟输入。
-- Two-leg rotation probe：以独立 xUnit 项目建立 one-based file store、append-only/random-read frame collection、相邻 FileScope、Frame/ObjectVersion 父链，以及 deterministic workload generation/replay substrate。
+- Two-leg rotation probe：以独立 xUnit 项目建立 one-based file store、append-only/random-read frame collection、相邻 FileScope、absolute live StateMap、Frame/ObjectVersion 父链、deterministic workload generation/replay，以及单文件 AlwaysBase/AlwaysDelta symbolic materialization baseline。
 - Candidate design branches：在 `docs/design-branches/` 隔离尚未裁决的架构分叉。
 - 本实验簿：保存随实验演化的项目认识。
 
@@ -78,6 +78,7 @@
 - **Decided**：持久地址使用 LSB-tagged `RelativeFrameTicket = (SizedPtr.Serialize() << 1) | same/previous`，进程内 authority 使用 `AbsoluteFrameAddress`；接受约 512 GiB 最大 frame-start 的容量代价。
 - **Decided**：Base 与 Delta 都保留 lineage parent；从 A/B 轮转到 B/C 时，将 Base 位于 A 的 live objects 以 Base 写 C。latest head 仍在 A 的对象通过 B 中 per-ObjectId forwarding RelayRevision 解决 C 无法直接编码 A 的问题。
 - **Decided**：物理删除文件后的数据不可访问不属于地址格式需要抵抗的故障模型；Relay 保证 retained files 之间的 lineage 连续，不承担抗删文件冗余。
+- **Observed**：S1 preparatory baseline 已把冻结 workload 的每个 Save 编译为单个 Frame，并以 absolute live StateMap、relative lineage parent 和 checked symbolic Delta apply 逐 prefix 对照 logical replay；尚未证明 two-file rotation、layout representability 或 `CanPrepareAndRotate`。
 - **Decided**：当前不引入 `MaxLogicalChainBytes`、`TargetFileBytes` 或固定 migration budget；先在纯内存模拟中采集无权重原始量，比较自适应统一策略。
 - **Open**：统一策略能否仅依靠 two-file pressure、lineage/reconstruction overhead 与渐进 cold migration 自动收敛；`CanPrepareAndRotate` 必须把 B maintenance 可完成性与 C evacuation Revision 可编码性一起作为策略无关的 safety oracle。
 - **Open**：Schema runtime representation 与 canonical authority 的候选分叉记录在 `DB-001`，等待 exact codec/persistent format 实验裁决。
@@ -752,6 +753,14 @@
 ```
 
 ## 6. 船长日志
+
+### 2026-08-28：跑通单文件 Base/Delta physical baseline
+
+- 同一冻结 `WorkloadTrace` 可分别编译为 fresh `AlwaysBase` 与 `AlwaysDeltaWhenLegal` runs；每个 Save 都产生一个 Frame，remove-only Save 产生空 Frame，object parent 指向自己的旧 head 而非全局上一 Frame。
+- live StateMap 使用 `AbsoluteFrameAddress`；ObjectVersion 内 parent 保持 `RelativeFrameTicket`，由承载 Frame 的文件号解析。Base/Delta 都保留 lineage，reconstruction 遇最新 Base 停止。
+- Delta payload size 只作写成本；symbolic apply 先重建并校验 expected parent size、ordinal 与无压缩增长下界，再产生 result size。每个 Save prefix exact-match logical cursor 后才推进 private run。
+- 本切片只是 S1 前置基线；frame bytes/layout、capacity/representability、two-file closure、relay、rotation 与自适应策略仍未实现。
+- 验证：Probe 74/74、root tests 147/147、root solution build 0 warning/0 error、两套 solution format check 与 diff check 通过；独立复核最终无 blocker/medium。
 
 ### 2026-08-28：建立 deterministic workload generation/replay substrate
 

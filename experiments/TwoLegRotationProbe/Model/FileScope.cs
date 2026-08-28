@@ -12,9 +12,7 @@ internal sealed class FileScope {
         ? CurrentFileNumber - 1
         : null;
 
-    public Frame ReadFrame(RbfFileStore store, RelativeFrameTicket ticket) {
-        ArgumentNullException.ThrowIfNull(store);
-
+    public AbsoluteFrameAddress Resolve(RelativeFrameTicket ticket) {
         uint targetFileNumber;
         if (ticket.IsPreviousFile) {
             targetFileNumber = PreviousFileNumber
@@ -24,6 +22,11 @@ internal sealed class FileScope {
             targetFileNumber = CurrentFileNumber;
         }
 
-        return store.GetFile(targetFileNumber).Read(ticket.FrameTicket);
+        return new AbsoluteFrameAddress(targetFileNumber, ticket.FrameTicket);
+    }
+
+    public Frame ReadFrame(RbfFileStore store, RelativeFrameTicket ticket) {
+        ArgumentNullException.ThrowIfNull(store);
+        return store.ReadFrame(Resolve(ticket));
     }
 }

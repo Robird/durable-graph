@@ -23,6 +23,9 @@ public sealed class FileScopeTests {
             IsPreviousFile: false,
             FrameTicket: frameTicket);
 
+        Assert.Equal(
+            new AbsoluteFrameAddress(currentFile.FileNumber, frameTicket),
+            scope.Resolve(currentLeg));
         Assert.Same(frame, scope.ReadFrame(store, currentLeg));
     }
 
@@ -43,6 +46,12 @@ public sealed class FileScopeTests {
         FileScope secondScope = new(secondFile.FileNumber);
         FileScope thirdScope = new(thirdFile.FileNumber);
 
+        Assert.Equal(
+            new AbsoluteFrameAddress(firstFile.FileNumber, sharedFrameTicket),
+            secondScope.Resolve(previousLeg));
+        Assert.Equal(
+            new AbsoluteFrameAddress(secondFile.FileNumber, sharedFrameTicket),
+            thirdScope.Resolve(previousLeg));
         Assert.Same(firstFrame, secondScope.ReadFrame(store, previousLeg));
         Assert.Same(secondFrame, thirdScope.ReadFrame(store, previousLeg));
     }
@@ -57,6 +66,7 @@ public sealed class FileScopeTests {
             IsPreviousFile: true,
             FrameTicket: new FrameTicket(0));
 
+        Assert.Throws<InvalidOperationException>(() => scope.Resolve(invalidParent));
         Assert.Throws<InvalidOperationException>(() => scope.ReadFrame(store, invalidParent));
     }
 }

@@ -19,4 +19,7 @@ internal sealed class RbfFileStore {
 
         return _files[checked((int)fileNumber - 1)];
     }
+
+    public Frame ReadFrame(AbsoluteFrameAddress address) =>
+        GetFile(address.FileNumber).Read(address.FrameTicket);
 }

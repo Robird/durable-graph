@@ -39,7 +39,9 @@ public sealed class RbfFileTests {
 
         RbfFile currentFile = store.CreateFile();
         FrameBuilder childBuilder = new();
-        childBuilder.Add(objectId).ParentFrameTicket = new RelativeFrameTicket(
+        ObjectVersionBuilder childVersion = childBuilder.Add(objectId);
+        childVersion.VersionOrdinal = 2;
+        childVersion.ParentFrameTicket = new RelativeFrameTicket(
             IsPreviousFile: true,
             FrameTicket: rootTicket);
         Frame child = childBuilder.Build();

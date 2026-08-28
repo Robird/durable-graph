@@ -26,4 +26,14 @@ public sealed class RbfFileStoreTests {
 
         Assert.Throws<KeyNotFoundException>(() => store.GetFile(fileNumber));
     }
+
+    [Fact]
+    public void ReadFrame_uses_an_absolute_address() {
+        RbfFileStore store = new();
+        RbfFile file = store.CreateFile();
+        Frame frame = new FrameBuilder().Build();
+        FrameTicket ticket = file.Append(frame);
+
+        Assert.Same(frame, store.ReadFrame(new AbsoluteFrameAddress(file.FileNumber, ticket)));
+    }
 }
