@@ -11,12 +11,16 @@ The first scaffold deliberately models only a few container facts:
 - an `RbfFileStore` creates files and retrieves them by file number;
 - a `FileScope` exposes mutable `CurrentFileNumber` state and derives its
   read-only `PreviousFileNumber`;
-- `Frame` and `ObjectVersion` are empty placeholders.
+- a built `Frame` owns a read-only `ObjectId` (`uint`) to `ObjectVersion` map;
+- `ObjectVersion.ParentId` is the nullable, provisional zero-based number of
+  the parent frame in the same simulated RBF file;
+- mutable `FrameBuilder` and `ObjectVersionBuilder` instances are copied into
+  read-only built state.
 
 This does not yet model byte offsets, `SizedPtr`, frame layout, publication,
-ObjectVersion chains, Base/Delta payloads, relay revisions, rotation planning,
-or policy scoring. The zero-based frame number is only an in-memory collection
-key and is not a proposed durable address.
+cross-file parent addresses, Base/Delta payloads, relay revisions, rotation
+planning, or policy scoring. The zero-based frame number and `ParentId` are only
+in-memory collection keys and are not proposed durable addresses.
 
 Run from the repository root:
 
