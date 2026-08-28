@@ -2,7 +2,7 @@
 
 > 状态：Working Design
 >
-> 更新日期：2026-08-28
+> 更新日期：2026-08-29
 >
 > 边界：本文记录当前已选择的基础形状与仍在研究的策略问题，不代表已经实现或冻结的 wire format。
 
@@ -107,6 +107,12 @@ C.Base(Object X)
 ```
 
 紧邻轮转创建的 dedicated `RelayRevision` 是物理上合法、但不会成为 PublishedHead 的 maintenance Revision。它为需要跨两代寻址的 ObjectId 保存轻量 forwarding ObjectVersion；forwarder 自身不重复领域状态，只把 lineage/reconstruction parent 指回 A。
+
+当前 one-shot 尺寸原型把 dedicated relay 的 ObjectVersionDict 建模为以旧 B head 为 parent
+的 empty Delta：relay helpers 进入 TailMeta directory，但不被这份未发布 OVD 安装；随后 C
+Base 的 lineage parent 直接引用它们。C 的 full OVD Base 以该 relay Revision 为 parent，并
+把 evacuated objects 安装为 C Self。这样 dedicated relay 不制造一份马上被覆盖的中间
+latest-map。该选择目前是 provisional record grammar 的工作形状，不冻结 numeric opcode。
 
 轮转时只有“最新 ObjectVersion 仍在 A”的对象需要 relay。若对象最新版本已在 B、只是其 reconstruction Base 位于 A，则 C 中的新 Base 可以直接把 B 中的最新版本作为 parent，不需要额外中继。
 

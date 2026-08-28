@@ -69,4 +69,38 @@ public sealed class FileScopeTests {
         Assert.Throws<InvalidOperationException>(() => scope.Resolve(invalidParent));
         Assert.Throws<InvalidOperationException>(() => scope.ReadFrame(store, invalidParent));
     }
+
+    [Fact]
+    public void Current_and_previous_absolute_addresses_roundtrip_through_relative_tickets() {
+        FileScope scope = new(3);
+        FrameTicket ticket = new(4, 24);
+        AbsoluteFrameAddress current = new(3, ticket);
+        AbsoluteFrameAddress previous = new(2, ticket);
+
+        RelativeFrameTicket currentRelative = scope.Relativize(current);
+        RelativeFrameTicket previousRelative = scope.Relativize(previous);
+
+        Assert.False(currentRelative.IsPreviousFile);
+        Assert.True(previousRelative.IsPreviousFile);
+        Assert.Equal(current, scope.Resolve(currentRelative));
+        Assert.Equal(previous, scope.Resolve(previousRelative));
+    }
+
+    [Theory]
+    [InlineData(1U)]
+    [InlineData(4U)]
+    public void Relativize_rejects_addresses_outside_the_two_file_scope(uint fileNumber) {
+        FileScope scope = new(3);
+        AbsoluteFrameAddress address = new(fileNumber, new FrameTicket(4, 24));
+
+        Assert.Throws<InvalidOperationException>(() => scope.Relativize(address));
+    }
+
+    [Fact]
+    public void First_file_scope_rejects_every_non_current_absolute_address() {
+        FileScope scope = new(1);
+        AbsoluteFrameAddress future = new(2, new FrameTicket(4, 24));
+
+        Assert.Throws<InvalidOperationException>(() => scope.Relativize(future));
+    }
 }

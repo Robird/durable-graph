@@ -758,6 +758,15 @@
 
 ## 6. 船长日志
 
+### 2026-08-29：构造首个 ImmediateRotationPlan
+
+- 将 `ProvisionalRevisionV0` 的唯一尺寸算法改接显式 grammar IR；普通 `Frame + SaveStep` 入口降为 adapter，旧 golden 不变。IR 现在能独立表达 domain Relay、带 parent 的 OVD Base/Delta，以及 Self/External/Remove。
+- 新增 source-chain 只读 inspection 与 `FileScope.Relativize`；pure planner 从 caller 提供的 StateMap 推导 `EvacuationSet=Base@A`、`RelaySet=EvacuationSet∩Head@A`，不接收第二份集合 authority。
+- dedicated B relay 使用 zero-synthetic-payload helpers + empty OVD Delta，C 为全部 evacuation objects 写 Base，并用 mixed Self/Previous full OVD 产生唯一 ProjectedStateMap。planner 不 CreateFile、不 Append、不 publish。
+- AA/BA/BB fixture 得到 `Evacuation={AA,BA}`、`Relay={AA}`；provisional relay ticket 为 `32/40`，C ticket 为 `4/88`。hard-coded golden 分别冻结 relay `0+4+5+4` 与 C `35+8+12+6` 的 body/header/OVD/TailMeta 分量。
+- tests 覆盖 no-relay、empty graph、canonical order、B relay TailMeta overflow、C combined capacity overflow、失败零 mutation 和同 store retry；Probe 158/158、root tests 147/147、solution build 0 warning/error，两路独立复核无 blocker/medium。
+- 该结果只证明“至多一个 B relay Frame + 一个 C evacuation Frame”的 immediate constructive witness；失败不排除多个 relay Frames 或 published B maintenance，不能当作一般 `CanPrepareAndRotate == false`。planned maintenance records 仍不 materialize，因为当前 `VersionOrdinal` 尚未拆分领域版本与物理 lineage 次序。
+
 ### 2026-08-29：用 contextual self 建立 ProvisionalRevisionV0 尺寸基线
 
 - 复核本地 Atelia RBF commit `fec021295828fcfe638434d69d04ff078c87c8ce`：现有 envelope 常量与边界正确；完整 L3 read 仍读取整个 Frame，TailMeta preview 只有 L2；append/read context 均提供 containing ticket。

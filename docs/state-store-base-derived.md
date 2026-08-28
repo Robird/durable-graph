@@ -2,7 +2,7 @@
 
 > 状态：Derived Notes
 >
-> 更新日期：2026-08-28
+> 更新日期：2026-08-29
 >
 > 性质：本文不是独立设计 authority。基础决策以 [`state-store-base-design.md`](state-store-base-design.md) 为准，地址 wire 以 [`state-store-addressing-design.md`](state-store-addressing-design.md) 为准。
 
@@ -162,6 +162,17 @@ CanPrepareAndRotate(postSaveState, A, B, C)
 ```
 
 `CanCompleteRelay` 只证明 B 中 parent 落点可完成，不证明 C 的 evacuation Revision 装得下。`CanPrepareAndRotate` 才是成功 Save 后的无死锁安全门；它允许先在 B 的普通 published revisions 中渐进写 Base 或 relay，再由 C 中的完整 Base 消除剩余 A reconstruction dependency。三个判断都受 frame-start、单帧 payload、TailMeta、padding/fence 与 ObjectVersionDict 成本影响，首个模拟器宜直接构造 deterministic completion plan，不急于发明闭式公式。
+
+当前 `TwoLegRotationProbe` 已构造第一种更窄的 executable witness：在最多一个 B relay
+Frame 和一个 C evacuation Frame 内直接完成。它精确估算 relay helper、empty OVD Delta、
+C full Bases、mixed Self/Previous full OVD 与两个 RBF envelopes。成功可作为
+`CanPrepareAndRotate` 的一条具体见证；失败只淘汰这一个形状，不能排除多个 relay Frames
+或先做 published B maintenance 的有限计划，因此尚不是上述一般 oracle。
+
+该 planner 目前纯读且不 append。其 projected StateMap 从 C full OVD binding 解码产生，但
+planned relay/relocated Base 仍是 size-only grammar records，尚未进入当前 CLR
+`ObjectVersion` materializer；这避免把领域 `VersionOrdinal` 错当成 maintenance lineage
+ordinal。真实执行与一般 completion search 分别留给后续实验。
 
 ## 6. 一个 Frame 一个 Revision 的派生边界
 

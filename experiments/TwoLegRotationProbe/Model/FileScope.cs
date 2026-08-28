@@ -25,6 +25,20 @@ internal sealed class FileScope {
         return new AbsoluteFrameAddress(targetFileNumber, ticket.FrameTicket);
     }
 
+    public RelativeFrameTicket Relativize(AbsoluteFrameAddress address) {
+        bool isPreviousFile;
+        if (address.FileNumber == CurrentFileNumber) {
+            isPreviousFile = false;
+        } else if (address.FileNumber == PreviousFileNumber) {
+            isPreviousFile = true;
+        } else {
+            throw new InvalidOperationException(
+                $"Frame {address} is outside the current/previous scope of RBF file {CurrentFileNumber}.");
+        }
+
+        return new RelativeFrameTicket(isPreviousFile, address.FrameTicket);
+    }
+
     public Frame ReadFrame(RbfFileStore store, RelativeFrameTicket ticket) {
         ArgumentNullException.ThrowIfNull(store);
         return store.ReadFrame(Resolve(ticket));

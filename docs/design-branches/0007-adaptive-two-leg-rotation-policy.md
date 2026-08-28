@@ -4,6 +4,8 @@
 >
 > 创建日期：2026-08-28
 >
+> 更新日期：2026-08-29
+>
 > 当前方向：先建立纯内存模拟模型，比较统一策略；不先冻结固定链长、目标文件大小或搬迁字节阈值。
 
 ## 问题
@@ -186,8 +188,43 @@ RBF Tag、opcode 或最终 record 顺序。
 winner。write 汇总与 final read snapshot 继续分栏，不定义跨 Save `TotalReadBytes`。
 
 V0 已能 fail closed 检查当前单文件 Save grammar 的 TailMeta、Payload+TailMeta、frame start
-和 checked arithmetic，但还没有 C evacuation 的 mixed Self/Previous full OVD、Relay record
-或 `CanPrepareAndRotate` completion plan，所以不能称为完整 rotation capacity gate。
+和 checked arithmetic。S1e 随后补上 C evacuation 的 mixed Self/Previous full OVD 与
+dedicated Relay record，但仍没有一般 `CanPrepareAndRotate` completion plan，所以不能称为
+完整 rotation capacity gate。
+
+## S1e 阶段性证据：ImmediateRotationPlan
+
+V0 estimator 的唯一尺寸算法现已改接显式 grammar IR；原 `Frame + SaveStep` 入口仅作为
+普通 Save adapter，旧 golden 不变。显式 IR 能分别表示 domain Base/Delta/Relay、带 parent
+的 OVD Base/Delta，以及 Self/External/Remove binding，因而不再把“OVD Base”等同于
+“首 Revision 且所有 binding 都是 Self”。
+
+纯 `ImmediateRotationPlanner` 从 caller 提供的 absolute StateMap 和已验证 reconstruction
+chain 推导：
+
+```text
+EvacuationSet = terminating Base 位于 A
+RelaySet      = EvacuationSet 中 latest head 仍位于 A
+```
+
+若 RelaySet 非空，planner 在 B 当前 tail 估算一个 dedicated relay Revision：每个对象有一个
+zero-synthetic-payload helper record，OVD 是以旧 B head 为 parent 的 empty Delta，TailMeta
+仍索引全部 helpers。该 OVD 不安装 relay；helper 由随后 C Base 的 lineage parent 直接引用。C 在初始
+offset 估算所有 EvacuationSet 的 full Bases 和覆盖全部 live ObjectId 的 OVD Base：evacuated
+对象使用 contextual Self，留在 B 的对象使用 Previous external binding。Projected StateMap
+只从这份 full OVD 解码派生。
+
+三对象 `AA(head/base@A) / BA(head@B, base@A) / BB(head/base@B)` fixture 得到
+`Evacuation={AA,BA}`、`Relay={AA}`；临时 grammar 下 relay ticket 为 `32/40`，C ticket 为
+`4/88`。测试覆盖无 relay、空图、输入顺序确定性、B relay TailMeta overflow、C combined
+capacity overflow、失败零 mutation 与同 store 重试。
+
+该结果只构成“至多一个 B relay Frame + 一个 C evacuation Frame”的 immediate-rotation
+constructive witness。成功可证明这个具体 post-state 存在一条 preparation path；失败既不能
+排除多个 relay Frames，也不能排除先做若干 published B maintenance Bases，因此不能推出
+`CanPrepareAndRotate == false`。当前 `ObjectVersion.VersionOrdinal` 仍混合领域版本和物理
+lineage 次序，本切片有意不 append 或 materialize relay/relocated Base，避免提前裁决
+maintenance record 的 runtime 语义。
 
 ## 重访触发条件
 

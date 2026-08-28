@@ -91,10 +91,11 @@ walk older parents without turning those reads into reconstruction cost.
 
 The current single-file model can run either the historical
 `ObjectPayloadOnly` profile or the explicitly provisional full-frame
-`ProvisionalRevisionV0` size grammar described below. It still has no
-two-file/relay completion or rotation legality gate. Within that surviving
-input set, `AlwaysDeltaWhenLegal` is presently equivalent to “always Delta.”
-The enum is intentionally not a general policy interface yet.
+`ProvisionalRevisionV0` size grammar described below. A separate pure planner
+now projects one immediate A/B to B/C step, but it is not wired into the
+single-file policy runs. Within those runs, `AlwaysDeltaWhenLegal` is presently
+equivalent to “always Delta.” The enum is intentionally not a general policy
+interface yet.
 
 ## Object-local payload policy
 
@@ -226,10 +227,46 @@ events and show only the final post-save read snapshot; no `TotalReadBytes` is
 defined. The matrix lives in executable tests; a ScenarioCatalog or report
 format waits for a CLI, persisted artifact, or batch-run consumer.
 
-This preparatory slice still does not implement a byte writer/parser,
-publication, relay revisions, two-file closure, evacuation/full-OVD planning,
-rotation, `CanPrepareAndRotate`, or policy scoring. Generated Base/Delta sizes
-remain synthetic payload observations, not serializer output.
+## Immediate rotation witness
+
+`ImmediateRotationPlanner` is a pure grammar-level planner for the narrow case
+that fits in at most one B relay Frame and one C evacuation Frame. It derives
+source facts through the existing reconstruction oracle, then computes:
+
+```text
+EvacuationSet = live objects whose terminating Base is in A
+RelaySet      = EvacuationSet objects whose latest head is still in A
+```
+
+The optional B relay Revision contains one zero-synthetic-payload helper per
+RelaySet object, an empty OVD Delta whose parent is the old B head, and a
+TailMeta directory for those helpers. The C Revision writes a full Base for
+every evacuated object and a full OVD Base: evacuated bindings use contextual
+Self, while retained objects bind Previous to their unchanged B heads. The
+projected StateMap is decoded from those OVD bindings rather than supplied as a
+second result authority.
+
+For the canonical `AA / BA / BB` three-object fixture, the provisional exact
+layout is:
+
+| Planned Frame | Start/length | Synthetic payload | Domain headers | OVD | TailMeta |
+|---|---:|---:|---:|---:|---:|
+| B relay | `32 / 40` | 0 | 4 | 5 | 4 |
+| C evacuation | `4 / 88` | 35 | 8 | 12 | 6 |
+
+Executable tests also prove canonical ordering, empty/no-relay plans, B relay
+TailMeta overflow, C combined-capacity overflow, retryability, and zero input
+mutation. Success is a constructive immediate-rotation witness and therefore a
+sufficient example of preparability. Failure only rejects this single-relay,
+single-C shape; it does not prove that multiple B maintenance/relay Frames or a
+general `CanPrepareAndRotate` plan are impossible.
+
+This preparatory slice still does not implement a byte writer/parser, append,
+publication, maintenance-record materialization, general two-file completion
+search, rotation-aware policy scoring, or the `CanPrepareAndRotate` safety gate.
+Generated Base/Delta sizes remain synthetic payload observations, not serializer
+output. The caller-supplied StateMap is the current in-memory authority; there is
+not yet a persisted OVD reader that can derive it from the supplied head.
 `RelativeFrameTicket` is interpreted relative to the file containing it:
 stepping creates a new file and a new `FileScope`; an old frame must still be
 read with the scope of its own origin file. The V0 projection is a versioned

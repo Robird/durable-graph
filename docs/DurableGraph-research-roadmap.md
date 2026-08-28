@@ -1,7 +1,7 @@
 # DurableGraph 后续研究与实现路线
 
 > 状态：Living Roadmap  
-> 更新日期：2026-08-28
+> 更新日期：2026-08-29
 > 用途：记录当前证据支持的研究顺序、每个切片的问题和可执行闸门。  
 > 边界：本文不是当前实现事实、冻结 API 或持久格式规格；源码、测试和可复现输出优先，已完成实验的事实记录在 `DurableGraph-lab-notebook.md`。
 
@@ -214,7 +214,7 @@ materialized root 是可丢弃 working graph，不是 baseline、StateMap 或第
 
 ### S1：内存自适应双腿轮转策略模拟
 
-状态：In Progress。当前优先研究切片；已建立 deterministic workload generation/replay substrate，以单文件 preparatory baseline 跑通 `AlwaysBase` / `AlwaysDeltaWhenLegal` / `ObjectPayloadReadAmplification3` 到 Frame、absolute live StateMap 与 symbolic materialization 的逐 Save 前缀闭环，并加入 exact RBF v0.40 envelope。`ObjectPayloadOnly` baseline 继续保留，另有 `ProvisionalRevisionV0` 对一个实验 grammar 计入 ObjectVersion headers、OVD、TailMeta directory 与 relative VarUInt。尚未实现 byte writer/parser、shared-frame-aware 或 rotation-aware 自适应策略、two-file rotation、mixed-binding evacuation/relay capacity 或 `CanPrepareAndRotate`；不修改 R1–R3 已验证结论，也不把 StateStore working design 描述为产品实现事实。
+状态：In Progress。当前优先研究切片；已建立 deterministic workload generation/replay substrate，以单文件 preparatory baseline 跑通 `AlwaysBase` / `AlwaysDeltaWhenLegal` / `ObjectPayloadReadAmplification3` 到 Frame、absolute live StateMap 与 symbolic materialization 的逐 Save 前缀闭环，并加入 exact RBF v0.40 envelope。`ObjectPayloadOnly` baseline 继续保留，另有 `ProvisionalRevisionV0` 对一个实验 grammar 计入 ObjectVersion headers、OVD、TailMeta directory 与 relative VarUInt。S1e 已能纯规划一个至多包含单 B relay Frame 与单 C evacuation Frame 的 immediate witness，并覆盖 mixed full OVD 与两侧容量失败；尚未实现 byte writer/parser、planned maintenance record 的 materialization/append、shared-frame-aware 或 rotation-aware 自适应策略、一般 two-file completion search 或 `CanPrepareAndRotate` gate。不修改 R1–R3 已验证结论，也不把 StateStore working design 描述为产品实现事实。
 
 问题：在不先引入固定 `MaxLogicalChainBytes`、`TargetFileBytes` 或 migration-byte budget 的情况下，能否用无权重事实量设计并比较 Base、Delta、渐进 cold migration、RelayRevision 与正式 rotation 的候选策略？
 
@@ -239,7 +239,7 @@ failed plan leaves published state unchanged
 
 模拟记录原始 bytes、frame sets、lineage、relay debt、useful/unused reads 与布局事实；所有比例和加权 score 后算。至少比较 AlwaysBase、AlwaysDelta-when-legal、StateJournal-style local cost、Previous-ratio、渐进 cold migration 与统一策略候选。
 
-S1a preparatory baseline 明确区分：StateMap 保存 `AbsoluteFrameAddress`，ObjectVersion 内 parent 保存由承载 frame 的 `FileScope` 解释的 `RelativeFrameTicket`；Create 写 Base，Update 由当前三种 policy 选择 Base/Delta，Remove 只删 live binding 但仍产生空 Revision Frame。Delta 以 `(ExpectedParentBasePayloadBytes, ResultBasePayloadBytes)` 构成可校验的尺寸态变换，`PayloadBytes` 只表示写成本。每个 Save prefix 均先 materialize 并与唯一 logical replay cursor exact compare，再成为下一步输入；整次 Run 失败不暴露 private candidate Store。该 baseline 当时只具备 object-payload-only 必要容量 preflight；S1d 已补当前单文件 Save 的 provisional metadata gate，但仍没有 mixed-binding evacuation、relay 或 rotation legality gate。因此 `AlwaysDeltaWhenLegal` 在现有输入内仍仅等价于 AlwaysDelta，不代表一般 legality planner。
+S1a preparatory baseline 明确区分：StateMap 保存 `AbsoluteFrameAddress`，ObjectVersion 内 parent 保存由承载 frame 的 `FileScope` 解释的 `RelativeFrameTicket`；Create 写 Base，Update 由当前三种 policy 选择 Base/Delta，Remove 只删 live binding 但仍产生空 Revision Frame。Delta 以 `(ExpectedParentBasePayloadBytes, ResultBasePayloadBytes)` 构成可校验的尺寸态变换，`PayloadBytes` 只表示写成本。每个 Save prefix 均先 materialize 并与唯一 logical replay cursor exact compare，再成为下一步输入；整次 Run 失败不暴露 private candidate Store。该 baseline 当时只具备 object-payload-only 必要容量 preflight；S1d 补当前单文件 Save 的 provisional metadata gate，S1e 另建 immediate rotation planner，但尚未把 rotation legality 接入这些 policy runs。因此 `AlwaysDeltaWhenLegal` 在现有输入内仍仅等价于 AlwaysDelta，不代表一般 legality planner。
 
 S1b 将 `FrameTicket` 推进为 offset/length，并按本地 RBF draft v0.40 精确建模 HeaderFence、24-byte frame fixed overhead、4B padding、trailing Fence、TailOffset、native start 与 DurableGraph 512 GiB relative-start 边界。Simulation 的输入仍严格标记为 `ObjectPayloadOnly`：只把 synthetic ObjectVersion payload 放入 RBF Payload，TailMeta=0，明确排除 ObjectVersion headers、OVD、index、VarUInt 与 self-ticket fixed point。因此当前可比较的是 synthetic payload write、frame sharing、reconstruction closure 与 co-read；不能从这些数字推出完整 Revision bytes、真实容量安全或策略 winner。write metrics 是逐 Save event；post-save read metrics 是状态快照，默认不跨 Save 求和。
 
@@ -249,7 +249,23 @@ S1c 新增 `ObjectPayloadReadAmplification3`。它保留 StateJournal `ShouldReb
 
 S1d 对本地 Atelia RBF commit `fec021295828fcfe638434d69d04ff078c87c8ce` 的实际接口做了复核：完整 L3 读取仍以整个 Frame 为边界，TailMeta-only preview 只有 L2 信任；append、`IRbfFrame` 与 `IRbfTailMeta` 都提供 containing ticket。因此 OVD 用字段级 `BindSelf` 即可还原同帧 binding，不再在 Frame 内重复序列化 self-ticket。literal-self 的 executable 反例出现两个稳定宽度，证明 fixed-point 方案还需要额外的 least/canonical 规则；当前以更小的 contextual-self 方案取代，详见 DB-008。
 
-`ProvisionalRevisionV0` 使用同一冻结 trace 的独立 run-level accounting scope，component estimate、RBF append ticket/layout 与 reconstruction provenance 必须一致。hot/cold 三策略 modeled file/final read 分别为 `1900/1148`、`1440/1408`、`1516/1148`；fixed-seed mixed 为 `536/184`、`464/448`、`468/300`。该 profile 对其临时尺寸语法是精确的，但尚无 bytes round-trip，也未冻结 Tag/opcode/record layout。下一窄切片应先让 estimator 表达 C evacuation 的 mixed Self/Previous full OVD 与 B relay，再构造 two-file `CanPrepareAndRotate` plan；不必先实现真实文件 publication。
+`ProvisionalRevisionV0` 使用同一冻结 trace 的独立 run-level accounting scope，component estimate、RBF append ticket/layout 与 reconstruction provenance 必须一致。hot/cold 三策略 modeled file/final read 分别为 `1900/1148`、`1440/1408`、`1516/1148`；fixed-seed mixed 为 `536/184`、`464/448`、`468/300`。该 profile 对其临时尺寸语法是精确的，但尚无 bytes round-trip，也未冻结 Tag/opcode/record layout。
+
+S1e 把 V0 尺寸算法改接显式 grammar IR，使 OVD Base/Delta、parent 与
+Self/External/Remove 不再由 `SaveStep` 或“是否首 Revision”隐式推导。纯
+`ImmediateRotationPlanner` 从 source reconstruction facts 得到
+`EvacuationSet=Base@A`、`RelaySet=EvacuationSet∩Head@A`，在 B 估算 zero-synthetic-payload helpers +
+empty OVD Delta，再在 C 估算 evacuation Bases + 覆盖全部 live IDs 的 mixed full OVD Base；
+Projected StateMap 只从该 OVD 解码。AA/BA/BB golden 得到 relay `ticket=32/40`、C
+`ticket=4/88`，并执行性覆盖 B TailMeta 与 C combined-capacity fail-closed、零 mutation 和
+retry。
+
+这只是“最多一个 B relay Frame + 一个 C evacuation Frame”的 immediate constructive
+witness。成功证明存在一条具体 preparation path；失败不排除多个 relay Frames 或先在 B
+做若干 published maintenance，因此还不是一般 `CanPrepareAndRotate` oracle。当前
+`ObjectVersion.VersionOrdinal` 也尚未拆分领域版本与 maintenance lineage 次序，所以 planned
+records 不 append、不 materialize；下一切片应先决定是继续构造多步 completion search，还是
+先建立透明 maintenance record 的独立逻辑模型，而不把两者与 heuristic/policy scoring 混做。
 
 本切片不实现真实 `DurableFlush`、atomic HEAD、reopen/truncate 或文件删除。逻辑策略收敛后，S2/S3 分别验证地址/layout 与 filesystem publication；文件被物理删除后不可访问不属于格式需要抵抗的故障模型。
 

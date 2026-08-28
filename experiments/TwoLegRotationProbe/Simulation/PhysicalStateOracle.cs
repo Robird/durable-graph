@@ -5,6 +5,33 @@ using Atelia.TwoLegRotationProbe.Workloads;
 namespace Atelia.TwoLegRotationProbe.Simulation;
 
 internal static class PhysicalStateOracle {
+    public static ObjectReconstructionInspection InspectObjectReconstruction(
+        RbfFileStore store,
+        uint objectId,
+        AbsoluteFrameAddress headAddress) {
+        ArgumentNullException.ThrowIfNull(store);
+
+        List<AbsoluteFrameAddress> reconstructionFrameAddresses = [];
+        AbsoluteFrameAddress? baseAddress = null;
+        LogicalObjectState state = Reconstruct(
+            store,
+            objectId,
+            headAddress,
+            (address, version) => {
+                reconstructionFrameAddresses.Add(address);
+                if (version.Kind == ObjectVersionKind.Base) {
+                    baseAddress = address;
+                }
+            });
+
+        return new ObjectReconstructionInspection(
+            state,
+            headAddress,
+            baseAddress ?? throw new InvalidDataException(
+                $"Object {objectId} reconstruction did not terminate at a Base."),
+            reconstructionFrameAddresses);
+    }
+
     public static IReadOnlyDictionary<uint, LogicalObjectState> Materialize(SimulationRun run) {
         ArgumentNullException.ThrowIfNull(run);
         return Materialize(run.FileStore, run.StateMap);
