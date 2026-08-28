@@ -214,7 +214,7 @@ materialized root 是可丢弃 working graph，不是 baseline、StateMap 或第
 
 ### S1：内存自适应双腿轮转策略模拟
 
-状态：Planned。当前优先研究切片；不修改 R1–R3 已验证结论，也不把 StateStore working design 描述为实现事实。
+状态：In Progress。当前优先研究切片；已建立 deterministic workload generation/replay substrate，尚未接入 BaseOrDeltify、rotation policy 或 frame layout；不修改 R1–R3 已验证结论，也不把 StateStore working design 描述为产品实现事实。
 
 问题：在不先引入固定 `MaxLogicalChainBytes`、`TargetFileBytes` 或 migration-byte budget 的情况下，能否用无权重事实量设计并比较 Base、Delta、渐进 cold migration、RelayRevision 与正式 rotation 的候选策略？
 

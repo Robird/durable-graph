@@ -52,7 +52,7 @@
 - StateStore 基础设计：选择 one-Revision/one-RBF-frame、object-level version chains、ObjectVersionDict authority、LSB-tagged `RelativeFrameTicket` 与 current-head two-file reconstruction closure；实现尚未开始。
 - 双腿轮转派生说明：记录 A/B/C evacuation、B RelayRevision、absolute-normalized ObjectVersionDict、one-frame bounds 与 `CanPrepareAndRotate` safety gate。
 - Adaptive rotation branch DB-007：隔离尚未裁决的统一 Base/Delta/cold-migration/rotation 策略和内存模拟输入。
-- Two-leg rotation probe：以独立 xUnit 项目建立 one-based file store、append-only/random-read frame collection、相邻 FileScope，以及由 Builder 冻结的 Frame/ObjectVersion 父链模型。
+- Two-leg rotation probe：以独立 xUnit 项目建立 one-based file store、append-only/random-read frame collection、相邻 FileScope、Frame/ObjectVersion 父链，以及 deterministic workload generation/replay substrate。
 - Candidate design branches：在 `docs/design-branches/` 隔离尚未裁决的架构分叉。
 - 本实验簿：保存随实验演化的项目认识。
 
@@ -752,6 +752,16 @@
 ```
 
 ## 6. 船长日志
+
+### 2026-08-28：建立 deterministic workload generation/replay substrate
+
+- 新增 immutable `WorkloadTrace`：以 canonical SaveStep 承载 Create/Update/Remove；logical replay 维护 live set、不可复用 ObjectId、Base size 与自动 VersionOrdinal。
+- Update 的 previous size 只来自 replay state；在无压缩 literal-image 假设下拒绝 `DeltaPayloadBytes < max(0, currentBase - previousBase)`，同尺寸更新仍推进版本。
+- 固定 SplitMix64 root 按 lifecycle/create/update 与 step/object/lane 非消费式分流；完整 trace 在策略运行前只生成一次，所有候选策略未来共享同一个内存实例。
+- `GeneratedScenario` envelope 同时冻结结构相等的 ScenarioDefinition 与策略输入 WorkloadTrace；无需 trace 文件即可解释同名同 seed 下的参数差异，mixed-scenario golden 则约束 GeneratorVersion。
+- 薄泛型 ObjectBehavior 以 candidate-first/measure/freeze/commit 保证失败不半提交；Field 维护固定 component sizes，List 维护 item sizes 并只生成合法 Insert/Remove/Replace。
+- ScenarioGenerator 当前采用固定计数 lifecycle、Field/List 权重和显式 synthetic size accounting；生成后强制经过 independent logical replay 并核对 final live Base sizes。
+- 当前未实现 trace 文件格式、真实 codec、Frame layout、BaseOrDeltify、rotation policy 或综合评分；随机生成补充手写边界 trace，不替代 exact-fit/relay/evacuation 反例。
 
 ### 2026-08-28：启动 Two-leg rotation S1 probe
 
