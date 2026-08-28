@@ -757,9 +757,9 @@
 
 - 建立隔离的 `experiments/TwoLegRotationProbe` .NET 10/xUnit 项目，不改产品 runtime 或根 solution 项目集合。
 - 首轮只固定 one-based 单调 FileNumber、RbfFile append-only/random-read 容器和 `PreviousFileNumber = CurrentFileNumber - 1` 的相邻语义。
-- `FrameBuilder/ObjectVersionBuilder` 是落盘前可变态；`Build()` 防御性复制为只读 ObjectId→ObjectVersion map，并冻结 nullable `ParentId`。
-- `ParentId` 已建模为 `(IsPreviousFile, FrameId)`；`FileScope.ReadFrame` 以承载 ParentId 的 origin file 选择 Current/Previous。FileScope 固定 origin，迈腿时创建新文件与新 scope，旧 frame 仍使用旧 scope 解读。
-- `FrameId` 暂为文件内零基 List key；ParentId/FileScope pair 不冒充 `SizedPtr` 或已经冻结的 durable ticket encoding。
+- `FrameBuilder/ObjectVersionBuilder` 是落盘前可变态；`Build()` 防御性复制为只读 ObjectId→ObjectVersion map，并冻结 nullable `ParentFrameTicket`。
+- `RelativeFrameTicket` 已建模为 `(IsPreviousFile, FrameTicket)`；`FileScope.ReadFrame` 以承载 ParentId 的 origin file 选择 Current/Previous。FileScope 固定 origin，迈腿时创建新文件与新 scope，旧 frame 仍使用旧 scope 解读。
+- `FrameTicket` 暂为文件内零基 List key；ParentId/FileScope pair 不冒充 `SizedPtr` 或已经冻结的 durable ticket encoding。
 - 下一步可从该骨架逐层加入 Base/Delta 内容、跨文件地址、Revision layout estimator 和可替换策略，不提前把候选 heuristic 写入容器层。
 
 ### 2026-08-28：将研究优先级切换到 StateStore 双腿轮转

@@ -12,11 +12,11 @@ internal sealed class FileScope {
         ? CurrentFileNumber - 1
         : null;
 
-    public Frame ReadFrame(RbfFileStore store, ParentId id) {
+    public Frame ReadFrame(RbfFileStore store, RelativeFrameTicket ticket) {
         ArgumentNullException.ThrowIfNull(store);
 
         uint targetFileNumber;
-        if (id.IsPreviousFile) {
+        if (ticket.IsPreviousFile) {
             targetFileNumber = PreviousFileNumber
                 ?? throw new InvalidOperationException(
                     $"RBF file {CurrentFileNumber} has no previous file.");
@@ -24,6 +24,6 @@ internal sealed class FileScope {
             targetFileNumber = CurrentFileNumber;
         }
 
-        return store.GetFile(targetFileNumber).Read(id.FrameId);
+        return store.GetFile(targetFileNumber).Read(ticket.FrameTicket);
     }
 }

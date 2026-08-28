@@ -17,11 +17,11 @@ public sealed class FileScopeTests {
         RbfFileStore store = new();
         RbfFile currentFile = store.CreateFile();
         Frame frame = new FrameBuilder().Build();
-        FrameId frameId = currentFile.Append(frame);
+        FrameTicket frameTicket = currentFile.Append(frame);
         FileScope scope = new(currentFile.FileNumber);
-        ParentId currentLeg = new(
+        RelativeFrameTicket currentLeg = new(
             IsPreviousFile: false,
-            FrameId: frameId);
+            FrameTicket: frameTicket);
 
         Assert.Same(frame, scope.ReadFrame(store, currentLeg));
     }
@@ -31,15 +31,15 @@ public sealed class FileScopeTests {
         RbfFileStore store = new();
         RbfFile firstFile = store.CreateFile();
         Frame firstFrame = new FrameBuilder().Build();
-        FrameId sharedFrameId = firstFile.Append(firstFrame);
+        FrameTicket sharedFrameTicket = firstFile.Append(firstFrame);
         RbfFile secondFile = store.CreateFile();
         Frame secondFrame = new FrameBuilder().Build();
-        Assert.Equal(sharedFrameId, secondFile.Append(secondFrame));
+        Assert.Equal(sharedFrameTicket, secondFile.Append(secondFrame));
         RbfFile thirdFile = store.CreateFile();
 
-        ParentId previousLeg = new(
+        RelativeFrameTicket previousLeg = new(
             IsPreviousFile: true,
-            FrameId: sharedFrameId);
+            FrameTicket: sharedFrameTicket);
         FileScope secondScope = new(secondFile.FileNumber);
         FileScope thirdScope = new(thirdFile.FileNumber);
 
@@ -53,9 +53,9 @@ public sealed class FileScopeTests {
         RbfFile firstFile = store.CreateFile();
         firstFile.Append(new FrameBuilder().Build());
         FileScope scope = new(firstFile.FileNumber);
-        ParentId invalidParent = new(
+        RelativeFrameTicket invalidParent = new(
             IsPreviousFile: true,
-            FrameId: new FrameId(0));
+            FrameTicket: new FrameTicket(0));
 
         Assert.Throws<InvalidOperationException>(() => scope.ReadFrame(store, invalidParent));
     }

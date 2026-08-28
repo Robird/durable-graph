@@ -1,7 +1,7 @@
 namespace Atelia.TwoLegRotationProbe.Model;
 
 internal sealed class ObjectVersionBuilder {
-    public ParentId? ParentId { get; set; }
+    public RelativeFrameTicket? ParentFrameTicket { get; set; }
 
-    public ObjectVersion Build() => new(ParentId);
+    public ObjectVersion Build() => new(ParentFrameTicket);
 }

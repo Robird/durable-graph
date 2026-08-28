@@ -1,11 +1,11 @@
 namespace Atelia.TwoLegRotationProbe.Model;
 
 internal sealed class ObjectVersion {
-    private readonly ParentId? _parentId;
+    private readonly RelativeFrameTicket? _parentFrameTicket;
 
-    internal ObjectVersion(ParentId? parentId) {
-        _parentId = parentId;
+    internal ObjectVersion(RelativeFrameTicket? parentFrameTicket) {
+        _parentFrameTicket = parentFrameTicket;
     }
 
-    public ParentId? ParentId => _parentId;
+    public RelativeFrameTicket? ParentFrameTicket => _parentFrameTicket;
 }
