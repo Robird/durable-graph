@@ -10,71 +10,31 @@ public sealed class BaseLineageParentLocatorTests {
     private const uint BbObjectId = 3;
 
     [Fact]
-    public void Hybrid_relay_and_relay_free_layouts_preserve_heads_and_roots_but_not_exact_hops() {
-        CanonicalLayout hybrid = BuildCanonicalLayout(
-            includeRelay: true,
-            bindAaInRelay: true,
-            reverseEntryOrder: false);
-        CanonicalLayout relayFree = BuildCanonicalLayout(
-            includeRelay: false,
-            bindAaInRelay: false,
-            reverseEntryOrder: false);
+    public void Revision_locator_layout_preserves_current_heads_and_resolves_exact_lineage() {
+        CanonicalLayout layout = BuildCanonicalLayout(reverseEntryOrder: false);
 
-        AssertCurrentReconstructionReadsOnlyC(hybrid);
-        AssertCurrentReconstructionReadsOnlyC(relayFree);
-        AssertBbResolvesExternallyFromC(hybrid);
-        AssertBbResolvesExternallyFromC(relayFree);
+        AssertCurrentReconstructionReadsOnlyC(layout);
+        AssertBbResolvesExternallyFromC(layout);
 
-        RevisionLocatorLineageInspection hybridAa = Inspect(hybrid, AaObjectId);
-        RevisionLocatorLineageInspection relayFreeAa = Inspect(relayFree, AaObjectId);
-        RevisionLocatorLineageInspection hybridBa = Inspect(hybrid, BaObjectId);
-        RevisionLocatorLineageInspection relayFreeBa = Inspect(relayFree, BaObjectId);
+        ObjectLineageInspection aa = Inspect(layout, AaObjectId);
+        ObjectLineageInspection ba = Inspect(layout, BaObjectId);
 
-        Assert.Equal(relayFreeAa.HeadState, hybridAa.HeadState);
-        Assert.Equal(relayFreeAa.RootAddress, hybridAa.RootAddress);
-        Assert.Equal(relayFreeBa.HeadState, hybridBa.HeadState);
-        Assert.Equal(relayFreeBa.RootAddress, hybridBa.RootAddress);
+        Assert.Equal(new LogicalObjectState(10, 1), aa.HeadState);
+        Assert.Equal(layout.A, aa.RootAddress);
+        Assert.Equal([layout.C, layout.A], aa.ObjectVersionLineageAddresses);
+        AssertLookup(aa, [layout.B, layout.A]);
 
-        Assert.Equal(
-            [hybrid.C, hybrid.Relay!.Value, hybrid.A],
-            hybridAa.ObjectVersionLineageAddresses);
-        AssertLookup(hybridAa, [hybrid.Relay.Value]);
-        Assert.Equal(
-            [relayFree.C, relayFree.A],
-            relayFreeAa.ObjectVersionLineageAddresses);
-        AssertLookup(relayFreeAa, [relayFree.B, relayFree.A]);
-
-        Assert.Equal(
-            [hybrid.C, hybrid.B, hybrid.A],
-            hybridBa.ObjectVersionLineageAddresses);
-        AssertLookup(hybridBa, [hybrid.Relay.Value, hybrid.B]);
-        Assert.Equal(
-            [relayFree.C, relayFree.B, relayFree.A],
-            relayFreeBa.ObjectVersionLineageAddresses);
-        AssertLookup(relayFreeBa, [relayFree.B]);
-    }
-
-    [Fact]
-    public void Relay_record_without_an_OVD_self_binding_is_skipped() {
-        CanonicalLayout layout = BuildCanonicalLayout(
-            includeRelay: true,
-            bindAaInRelay: false,
-            reverseEntryOrder: false);
-
-        RevisionLocatorLineageInspection lineage = Inspect(layout, AaObjectId);
-
-        Assert.Equal([layout.C, layout.A], lineage.ObjectVersionLineageAddresses);
-        AssertLookup(lineage, [layout.Relay!.Value, layout.B, layout.A]);
-        Assert.DoesNotContain(layout.Relay.Value, lineage.ObjectVersionLineageAddresses);
+        Assert.Equal(new LogicalObjectState(22, 2), ba.HeadState);
+        Assert.Equal(layout.A, ba.RootAddress);
+        Assert.Equal([layout.C, layout.B, layout.A], ba.ObjectVersionLineageAddresses);
+        AssertLookup(ba, [layout.B]);
     }
 
     [Fact]
     public void Removed_and_absent_locator_results_fail_lineage_but_not_reconstruction() {
         CanonicalLayout removed = BuildCanonicalLayout(
-            includeRelay: true,
-            bindAaInRelay: false,
             reverseEntryOrder: false,
-            removeAaInRelay: true);
+            removeAaInB: true);
         CanonicalLayout absent = BuildAbsentLocatorLayout();
 
         AssertHeadStillReconstructs(removed, AaObjectId, expectedBytes: 10);
@@ -103,18 +63,12 @@ public sealed class BaseLineageParentLocatorTests {
 
     [Fact]
     public void Revision_locator_inspection_is_frozen_repeatable_and_entry_order_independent() {
-        CanonicalLayout forward = BuildCanonicalLayout(
-            includeRelay: true,
-            bindAaInRelay: true,
-            reverseEntryOrder: false);
-        CanonicalLayout reverse = BuildCanonicalLayout(
-            includeRelay: true,
-            bindAaInRelay: true,
-            reverseEntryOrder: true);
+        CanonicalLayout forward = BuildCanonicalLayout(reverseEntryOrder: false);
+        CanonicalLayout reverse = BuildCanonicalLayout(reverseEntryOrder: true);
 
-        RevisionLocatorLineageInspection first = Inspect(forward, BaObjectId);
-        RevisionLocatorLineageInspection repeated = Inspect(forward, BaObjectId);
-        RevisionLocatorLineageInspection reordered = Inspect(reverse, BaObjectId);
+        ObjectLineageInspection first = Inspect(forward, BaObjectId);
+        ObjectLineageInspection repeated = Inspect(forward, BaObjectId);
+        ObjectLineageInspection reordered = Inspect(reverse, BaObjectId);
 
         AssertEquivalent(first, repeated);
         AssertEquivalent(first, reordered);
@@ -133,10 +87,8 @@ public sealed class BaseLineageParentLocatorTests {
     }
 
     private static CanonicalLayout BuildCanonicalLayout(
-        bool includeRelay,
-        bool bindAaInRelay,
         bool reverseEntryOrder,
-        bool removeAaInRelay = false) {
+        bool removeAaInB = false) {
         RbfFileStore store = new();
         RbfFile aFile = store.CreateFile();
         ObjectVersionDictionaryBuilder aDictionary = new();
@@ -152,6 +104,10 @@ public sealed class BaseLineageParentLocatorTests {
             ParentRevisionFrameTicket = Previous(a.FrameTicket),
         };
         BindSelf(bDictionary, reverseEntryOrder, BaObjectId, BbObjectId);
+        if (removeAaInB) {
+            bDictionary.Remove(AaObjectId);
+        }
+
         FrameBuilder bBuilder = new() { ObjectVersionDictionary = bDictionary };
         AddDelta(
             bBuilder,
@@ -165,35 +121,8 @@ public sealed class BaseLineageParentLocatorTests {
         AddBase(bBuilder, BbObjectId, payloadBytes: 30, logicalVersionOrdinal: 1, null);
         AbsoluteFrameAddress b = Append(bFile, bBuilder);
 
-        AbsoluteFrameAddress? relay = null;
-        if (includeRelay) {
-            ObjectVersionDictionaryBuilder relayDictionary = new() {
-                Kind = ObjectVersionDictionaryKind.Delta,
-                ParentRevisionFrameTicket = Current(b.FrameTicket),
-            };
-            if (bindAaInRelay) {
-                relayDictionary.BindSelf(AaObjectId);
-            } else if (removeAaInRelay) {
-                relayDictionary.Remove(AaObjectId);
-            }
-
-            FrameBuilder relayBuilder = new() {
-                ObjectVersionDictionary = relayDictionary,
-            };
-            AddDelta(
-                relayBuilder,
-                AaObjectId,
-                payloadBytes: 0,
-                reconstructionPayloadBytes: 10,
-                resultBasePayloadBytes: 10,
-                expectedParentBasePayloadBytes: 10,
-                logicalVersionOrdinal: 1,
-                Previous(a.FrameTicket));
-            relay = Append(bFile, relayBuilder);
-        }
-
         RbfFile cFile = store.CreateFile();
-        RelativeFrameTicket locator = Previous((relay ?? b).FrameTicket);
+        RelativeFrameTicket locator = Previous(b.FrameTicket);
         ObjectVersionDictionaryBuilder cDictionary = new() {
             Kind = ObjectVersionDictionaryKind.Base,
             ParentRevisionFrameTicket = locator,
@@ -213,7 +142,7 @@ public sealed class BaseLineageParentLocatorTests {
         AddBase(cBuilder, BaObjectId, payloadBytes: 22, logicalVersionOrdinal: 2, locator);
         AbsoluteFrameAddress c = Append(cFile, cBuilder);
 
-        return new CanonicalLayout(store, a, b, relay, c);
+        return new CanonicalLayout(store, a, b, c);
     }
 
     private static CanonicalLayout BuildAbsentLocatorLayout() {
@@ -243,7 +172,7 @@ public sealed class BaseLineageParentLocatorTests {
             logicalVersionOrdinal: 1,
             locator);
         AbsoluteFrameAddress c = Append(cFile, cBuilder);
-        return new CanonicalLayout(store, a, b, null, c);
+        return new CanonicalLayout(store, a, b, c);
     }
 
     private static CanonicalLayout BuildMalformedLocatorLayout(LocatorKind locatorKind) {
@@ -272,7 +201,7 @@ public sealed class BaseLineageParentLocatorTests {
             logicalVersionOrdinal: 1,
             locator);
         AbsoluteFrameAddress c = Append(cFile, cBuilder);
-        return new CanonicalLayout(store, a, b, null, c);
+        return new CanonicalLayout(store, a, b, c);
     }
 
     private static void AssertCurrentReconstructionReadsOnlyC(CanonicalLayout layout) {
@@ -294,11 +223,11 @@ public sealed class BaseLineageParentLocatorTests {
         Assert.Equal([currentHead], reconstruction.ReconstructionFrameAddresses);
     }
 
-    private static RevisionLocatorLineageInspection Inspect(
+    private static ObjectLineageInspection Inspect(
         CanonicalLayout layout,
         uint objectId) {
         AbsoluteFrameAddress currentHead = LookupCurrentHead(layout, objectId);
-        return PhysicalStateOracle.InspectObjectLineageViaRevisionLocator(
+        return PhysicalStateOracle.InspectObjectLineage(
             layout.Store,
             objectId,
             currentHead);
@@ -328,7 +257,7 @@ public sealed class BaseLineageParentLocatorTests {
     }
 
     private static void AssertLookup(
-        RevisionLocatorLineageInspection lineage,
+        ObjectLineageInspection lineage,
         AbsoluteFrameAddress[] expectedRevisionReads) {
         ObjectVersionDictionaryLookupInspection lookup =
             Assert.Single(lineage.BaseParentLookups);
@@ -337,8 +266,8 @@ public sealed class BaseLineageParentLocatorTests {
     }
 
     private static void AssertEquivalent(
-        RevisionLocatorLineageInspection expected,
-        RevisionLocatorLineageInspection actual) {
+        ObjectLineageInspection expected,
+        ObjectLineageInspection actual) {
         Assert.Equal(expected.ObjectId, actual.ObjectId);
         Assert.Equal(expected.HeadState, actual.HeadState);
         Assert.Equal(expected.HeadAddress, actual.HeadAddress);
@@ -408,17 +337,16 @@ public sealed class BaseLineageParentLocatorTests {
     private static AbsoluteFrameAddress Append(RbfFile file, FrameBuilder builder) =>
         new(file.FileNumber, file.Append(builder.Build()));
 
-    private static RelativeFrameTicket Current(FrameTicket ticket) =>
-        new(IsPreviousFile: false, ticket);
-
     private static RelativeFrameTicket Previous(FrameTicket ticket) =>
         new(IsPreviousFile: true, ticket);
+
+    private static RelativeFrameTicket Current(FrameTicket ticket) =>
+        new(IsPreviousFile: false, ticket);
 
     private sealed record CanonicalLayout(
         RbfFileStore Store,
         AbsoluteFrameAddress A,
         AbsoluteFrameAddress B,
-        AbsoluteFrameAddress? Relay,
         AbsoluteFrameAddress C);
 
     private enum LocatorKind {

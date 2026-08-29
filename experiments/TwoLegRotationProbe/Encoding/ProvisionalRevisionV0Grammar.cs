@@ -7,7 +7,6 @@ namespace Atelia.TwoLegRotationProbe.Encoding;
 internal enum ProvisionalDomainRecordRole : byte {
     Base = 1,
     Delta = 2,
-    Relay = 3,
 }
 
 /// <summary>Size-only domain-record input. Synthetic payload is deliberately opaque.</summary>

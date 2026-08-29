@@ -9,29 +9,24 @@ namespace Atelia.TwoLegRotationProbe.Rotation;
 /// Builds the smallest one-shot A/B to B/C rotation witness. The method is deliberately
 /// pure: it reads the source store but never creates a file, appends a frame, or publishes.
 /// </summary>
-/// <remarks>
-/// The supplied state map is the current in-memory authority for this probe. Until a persisted
-/// OVD reader exists, readability of <paramref name="publishedRevisionAddress"/> does not prove
-/// that the frame encoded the same map.
-/// </remarks>
 internal static class ImmediateRotationPlanner {
     public static ImmediateRotationPlan Create(
         RbfFileStore store,
         uint currentFileNumber,
-        AbsoluteFrameAddress publishedRevisionAddress,
-        IReadOnlyDictionary<uint, AbsoluteFrameAddress> stateMap) {
+        AbsoluteFrameAddress publishedRevisionAddress) {
         ArgumentNullException.ThrowIfNull(store);
-        ArgumentNullException.ThrowIfNull(stateMap);
 
-        (uint previousFileNumber, uint nextFileNumber, RbfFile currentFile) =
+        (uint previousFileNumber, uint nextFileNumber) =
             ValidateFileScope(store, currentFileNumber);
         ValidatePublishedRevision(
             store,
             currentFileNumber,
             publishedRevisionAddress);
 
-        ReadOnlyDictionary<uint, AbsoluteFrameAddress> sourceStateMap =
-            FreezeStateMap(stateMap);
+        IReadOnlyDictionary<uint, AbsoluteFrameAddress> sourceStateMap =
+            ObjectVersionDictionaryReader.MaterializeLive(
+                store,
+                publishedRevisionAddress).Bindings;
         PhysicalStateOracle.ValidateLineage(store, sourceStateMap);
 
         SortedDictionary<uint, ObjectReconstructionInspection> inspections =
@@ -44,34 +39,17 @@ internal static class ImmediateRotationPlanner {
             .Where(pair => pair.Value.BaseAddress.FileNumber == previousFileNumber)
             .Select(static pair => pair.Key)
             .ToArray();
-        uint[] relayObjectIds = evacuationObjectIds
-            .Where(objectId =>
-                inspections[objectId].HeadAddress.FileNumber == previousFileNumber)
-            .ToArray();
         HashSet<uint> evacuationSet = evacuationObjectIds.ToHashSet();
-        HashSet<uint> relaySet = relayObjectIds.ToHashSet();
-
-        FileScope currentScope = new(currentFileNumber);
-        PlannedRevisionV0? relayRevision = CreateRelayRevision(
-            currentFile,
-            previousFileNumber,
-            currentFileNumber,
-            publishedRevisionAddress,
-            currentScope,
-            relayObjectIds,
-            inspections);
 
         FileScope nextScope = new(nextFileNumber);
         PlannedRevisionV0 evacuationRevision = CreateEvacuationRevision(
             currentFileNumber,
             nextFileNumber,
             publishedRevisionAddress,
-            relayRevision,
             nextScope,
             sourceStateMap,
             inspections,
-            evacuationSet,
-            relaySet);
+            evacuationSet);
 
         IReadOnlyDictionary<uint, AbsoluteFrameAddress> projectedStateMap =
             ResolveProjectedStateMap(evacuationRevision);
@@ -90,16 +68,13 @@ internal static class ImmediateRotationPlanner {
             nextFileNumber,
             publishedRevisionAddress,
             evacuationObjectIds,
-            relayObjectIds,
-            relayRevision,
             evacuationRevision,
             projectedStateMap);
     }
 
     private static (
         uint PreviousFileNumber,
-        uint NextFileNumber,
-        RbfFile CurrentFile) ValidateFileScope(
+        uint NextFileNumber) ValidateFileScope(
             RbfFileStore store,
             uint currentFileNumber) {
         if (currentFileNumber < 2) {
@@ -124,7 +99,8 @@ internal static class ImmediateRotationPlanner {
         }
 
         _ = store.GetFile(previousFileNumber);
-        return (previousFileNumber, nextFileNumber, store.GetFile(currentFileNumber));
+        _ = store.GetFile(currentFileNumber);
+        return (previousFileNumber, nextFileNumber);
     }
 
     private static void ValidatePublishedRevision(
@@ -145,17 +121,6 @@ internal static class ImmediateRotationPlanner {
                 $"Published revision {publishedRevisionAddress} is not readable.",
                 exception);
         }
-    }
-
-    private static ReadOnlyDictionary<uint, AbsoluteFrameAddress> FreezeStateMap(
-        IReadOnlyDictionary<uint, AbsoluteFrameAddress> stateMap) {
-        Dictionary<uint, AbsoluteFrameAddress> copy = new(stateMap.Count);
-        foreach ((uint objectId, AbsoluteFrameAddress address) in
-            stateMap.OrderBy(static pair => pair.Key)) {
-            copy.Add(objectId, address);
-        }
-
-        return new ReadOnlyDictionary<uint, AbsoluteFrameAddress>(copy);
     }
 
     private static SortedDictionary<uint, ObjectReconstructionInspection> InspectSourceState(
@@ -191,76 +156,25 @@ internal static class ImmediateRotationPlanner {
         return inspections;
     }
 
-    private static PlannedRevisionV0? CreateRelayRevision(
-        RbfFile currentFile,
-        uint previousFileNumber,
-        uint currentFileNumber,
-        AbsoluteFrameAddress publishedRevisionAddress,
-        FileScope currentScope,
-        IReadOnlyList<uint> relayObjectIds,
-        IReadOnlyDictionary<uint, ObjectReconstructionInspection> inspections) {
-        if (relayObjectIds.Count == 0) {
-            return null;
-        }
-
-        ProvisionalDomainRecordInput[] relayRecords = relayObjectIds
-            .Select(objectId => {
-                AbsoluteFrameAddress headAddress = inspections[objectId].HeadAddress;
-                if (headAddress.FileNumber != previousFileNumber) {
-                    throw new InvalidDataException(
-                        $"Relay object {objectId} head is not in Previous file " +
-                        $"{previousFileNumber}.");
-                }
-
-                return new ProvisionalDomainRecordInput(
-                    objectId,
-                    ProvisionalDomainRecordRole.Relay,
-                    SyntheticPayloadBytes: 0,
-                    currentScope.Relativize(headAddress));
-            })
-            .ToArray();
-        ProvisionalRevisionV0Input input = new(
-            relayRecords,
-            new ProvisionalObjectVersionDictionaryInput(
-                ProvisionalObjectVersionDictionaryKind.Delta,
-                currentScope.Relativize(publishedRevisionAddress),
-                entries: []));
-        ProvisionalRevisionV0Estimate estimate =
-            ProvisionalRevisionV0Estimator.Estimate(input, currentFile.TailOffsetBytes);
-        AbsoluteFrameAddress address = new(
-            currentFileNumber,
-            estimate.RbfLayout.Ticket);
-        return new PlannedRevisionV0(
-            PlannedRevisionV0Role.Relay,
-            currentFileNumber,
-            address,
-            input,
-            estimate);
-    }
-
     private static PlannedRevisionV0 CreateEvacuationRevision(
         uint currentFileNumber,
         uint nextFileNumber,
         AbsoluteFrameAddress publishedRevisionAddress,
-        PlannedRevisionV0? relayRevision,
         FileScope nextScope,
         IReadOnlyDictionary<uint, AbsoluteFrameAddress> sourceStateMap,
         IReadOnlyDictionary<uint, ObjectReconstructionInspection> inspections,
-        IReadOnlySet<uint> evacuationSet,
-        IReadOnlySet<uint> relaySet) {
+        IReadOnlySet<uint> evacuationSet) {
+        RelativeFrameTicket publishedRevisionLocator =
+            nextScope.Relativize(publishedRevisionAddress);
         ProvisionalDomainRecordInput[] evacuationRecords = evacuationSet
             .Order()
             .Select(objectId => {
                 ObjectReconstructionInspection inspection = inspections[objectId];
-                AbsoluteFrameAddress lineageParent = relaySet.Contains(objectId)
-                    ? relayRevision?.Address ?? throw new InvalidDataException(
-                        $"Relay object {objectId} has no planned relay revision.")
-                    : inspection.HeadAddress;
                 return new ProvisionalDomainRecordInput(
                     objectId,
                     ProvisionalDomainRecordRole.Base,
                     inspection.State.BasePayloadBytes,
-                    nextScope.Relativize(lineageParent));
+                    publishedRevisionLocator);
             })
             .ToArray();
 
@@ -271,20 +185,17 @@ internal static class ImmediateRotationPlanner {
                     pair.Key,
                     nextScope.Relativize(pair.Value)))
             .ToArray();
-        AbsoluteFrameAddress ovdParentAddress =
-            relayRevision?.Address ?? publishedRevisionAddress;
         ProvisionalRevisionV0Input input = new(
             evacuationRecords,
             new ProvisionalObjectVersionDictionaryInput(
                 ProvisionalObjectVersionDictionaryKind.Base,
-                nextScope.Relativize(ovdParentAddress),
+                publishedRevisionLocator,
                 bindings));
         ProvisionalRevisionV0Estimate estimate = ProvisionalRevisionV0Estimator.Estimate(
             input,
             RbfV040Layout.InitialTailOffsetBytes);
         AbsoluteFrameAddress address = new(nextFileNumber, estimate.RbfLayout.Ticket);
         return new PlannedRevisionV0(
-            PlannedRevisionV0Role.Evacuation,
             nextFileNumber,
             address,
             input,

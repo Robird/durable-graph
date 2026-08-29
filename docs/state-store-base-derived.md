@@ -43,64 +43,34 @@ ReconstructionFiles(NewHead) ⊆ {B, C}
 
 这个推导不依赖 Previous-byte ratio、链长阈值或特定 RebaseOrDeltify 收益公式；那些量只影响何时以及以何种节奏迁移。
 
-## 3. Base Revision locator 与可选 Relay
-
-### 3.1 Evacuation 不再推出 RelaySet
+## 3. Base Revision locator
 
 ```text
 EvacuationSet
     = reconstruction Base 位于 A 的 live objects
 ```
 
-EvacuationSet 全部需要在 C 写 Base。direct-parent 模型曾进一步定义 `RelaySet`，因为 C 无法
-直接编码 A address。runtime OVD probe 证明可把 C Base parent 解释为 B Revision locator，再
-由 B OVD 按 ObjectId 找到 A/B 中的 prior exact ObjectVersion；所以 EvacuationSet 不再逻辑上
-推出 dedicated relay。
-
-### 3.2 三种 relay 形状的差异
-
-当前旧 planner 的 relay 是 zero-payload helpers + empty OVD Delta，C Base 直接定位 helper。
-用户澄清的 locator 形状则要求 relay OVD 对 helpers `BindSelf`：
+EvacuationSet 全部需要在 C 写 Base。C 不能直接编码 A address，但可以编码 B PublishedRevision：
 
 ```text
-B.RelayRevision:
-    RelayEntry1(parent = A.Head1, no field mutation)
-    RelayEntry2(parent = A.Head2, no field mutation)
-    OVD Delta(parent = old B head) { Object1=Self, Object2=Self }
-
-C.Base(Object1) -> B.RelayRevision locator -> RelayEntry1
+C.Base(X)
+    -> B.PublishedRevision locator
+    -> LookupLive(B.OVD, X)
+    -> exact X version in A or B
 ```
 
-若 locator 形状仍使用 empty OVD，point lookup 会继承 old B OVD 并跳过 relay records。此时
-helper 写入和 TailMeta 都是未消费成本。
+因此，current reconstruction 在 C Base 停止；lineage 才读取 B OVD，并可能继续到 A。每张
+relative ticket 仍只跨 same/previous file：C→B 与 B→A 是两个独立 scope 的合法跳转。
 
-即使使用 Self，一个共享 relay Frame 仍是 O(N)：每个对象至少需要 ObjectVersion header、
-parent ticket、OVD entry 与 ObjectId index。它可能缩短 historical OVD lookup，但不是 O(1)
-通用跳板。
+该模型不要求 B 写 forwarding record，所以 immediate rotation 只有 C evacuation capacity debt。
+如果 C 当前放不下全部 EvacuationSet，仍可在 B 通过 published Base migrations 分批降低集合；
+这属于一般 `CanPrepareAndRotate`，不是 forwarding 机制。
 
-### 3.3 relay-free 的读取与写入交换
+被拒绝的 direct forwarding 与 OVD-Self forwarding 方案、成本对比和可执行归档见
+[`DB-009`](design-branches/0009-base-lineage-parent-locator.md) 及 tag
+`research/relay-vs-relay-free-20260829`。
 
-canonical AA 在两种 locator 方案中的观察是：
-
-```text
-relay + Self:
-    ObjectVersion hops = C, Relay, A
-    OVD reads          = Relay
-
-relay-free:
-    ObjectVersion hops = C, A
-    OVD reads          = B, A
-```
-
-current reconstruction 都只读 C，logical state、ordinal 与 root 相同。当前没有消费者要求物理
-no-op hop，因此 relay-free 是更小的 correctness model；relay 只在实际 lineage read amplification
-证明有收益时作为 optimization 重访。若只是想截短 OVD chain，也可实验更轻的 OVD External
-checkpoint，而不一定写 domain no-op Delta。
-
-若未来选择 relay，写入顺序仍必须是 B append/durable 后才能写 C dependency；失败窗口、orphan
-与 reopen tail 规则随之重新进入设计。relay-free path 不制造这项额外 B publication dependency。
-
-### 3.4 文件 retention 的职责边界
+### 3.1 文件 retention 的职责边界
 
 文件 retention/GC 决定历史数据实际保留多久。文件被物理删除后，其内部数据不可访问是删除
 操作本身的结果，不是地址格式需要抵抗的故障模型。无论 A 是否保留，latest object 都从 C
@@ -148,20 +118,12 @@ CanPrepareAndRotate(postSaveState, A, B, C)
     随后 B OVD 可作 lineage locator，且 C candidate 可合法发布
 ```
 
-`CanCompleteRelay` 不再是 correctness 子问题。只有策略主动选择 dedicated relay 或 OVD-only
-checkpoint optimization 时，相关额外容量才加入该候选计划的 preflight；但 B preparatory Base migration 仍可能
-是把过大 EvacuationSet 分批转移、最终让 C 可编码的 correctness path。任何成功 Save 都必须
-保留至少一条这样的有限完成路径。
+B preparatory Base migration 可能是把过大 EvacuationSet 分批转移、最终让 C 可编码的
+correctness path。任何成功 Save 都必须保留至少一条这样的有限完成路径。
 
-旧 `ImmediateRotationPlanner` 是更窄的 executable witness：它在最多一个 B relay Frame 和一个
-C evacuation Frame 内直接完成，并精确估算 empty-OVD relay 与 C full OVD。但它仍由 caller
-StateMap 驱动，planned records 只是 size grammar，尚未 materialize/append。
-
-后续 runtime probes 已证明 transparent Relay/RelocatedBase 的 logical ordinal 语义，并建立
-单一 runtime OVD `LookupLive` 与 Base Revision-locator discriminator。C full OVD 是 current
-authority；relay-free 与 relay+Self 的 logical state/root 相同，前者以 B/A OVD reads 换掉 B
-maintenance write。所以下一步是迁移 planner authority 并 materialize relay-free plan，不是扩展
-multi-frame relay completion。详情见 [`DB-009`](design-branches/0009-base-lineage-parent-locator.md)。
+当前 `ImmediateRotationPlanner` 是更窄的 executable witness：它从 B PublishedRevision OVD
+materialize source live map，只规划一个 C evacuation Revision，不写 B。planned C 仍是 size
+grammar，尚未 append/materialize 后由 runtime reader 复验。
 
 ## 6. 一个 Frame 一个 Revision 的派生边界
 
@@ -170,7 +132,7 @@ multi-frame relay completion。详情见 [`DB-009`](design-branches/0009-base-li
 - Payload + TailMeta 的单 Frame 上限约 256 MiB；
 - TailMeta 上限 65,535 bytes，可能先于 payload 被大量小 ObjectVersion 的 index 撞满。
 
-所以普通 Revision 与 C 中 evacuation Revision 都需要完整 size preflight；若选择可选 RelayRevision，它也受相同约束。超限是合法的 fail-closed 结果，不得部分发布。
+所以普通 Revision、B preparatory Base migration 与 C evacuation Revision 都需要完整 size preflight。超限是合法的 fail-closed 结果，不得部分发布。
 
 如果实际支持范围频繁撞墙，再引入 Extent：多个 RBF Frames 形成一个逻辑 DurableGraphFrame，并由最终 manifest/commit frame 形成 publication root。在此之前不把 multi-frame prepare/commit 状态加入首个策略模拟。
 

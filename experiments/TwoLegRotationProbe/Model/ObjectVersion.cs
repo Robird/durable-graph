@@ -69,11 +69,10 @@ internal sealed class ObjectVersion {
                 ArgumentOutOfRangeException.ThrowIfNegative(
                     expectedParentBasePayloadBytes.Value,
                     nameof(expectedParentBasePayloadBytes));
-                if (payloadBytes == 0 &&
-                    resultBasePayloadBytes != expectedParentBasePayloadBytes.Value) {
+                if (payloadBytes == 0) {
                     throw new ArgumentException(
-                        "A zero-payload Delta must preserve its parent's base size.",
-                        nameof(resultBasePayloadBytes));
+                        "A Delta version must have a positive payload size.",
+                        nameof(payloadBytes));
                 }
 
                 if (reconstructionObjectPayloadBytes < payloadBytes) {

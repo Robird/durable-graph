@@ -39,18 +39,13 @@ internal static class WorkloadSimulator {
                 store,
                 acceptedStateMap,
                 currentFile.FileNumber,
+                revisionAddresses.Count == 0 ? null : revisionAddresses[^1],
                 policy);
             IReadOnlyDictionary<uint, LogicalObjectState> expectedState = logicalCursor.Apply(step);
             FrameAccountingEstimate accountingEstimate = EstimateCandidateFrame(
                 accountingScope,
                 candidateFrame,
-                step,
-                currentFile,
-                revisionAddresses.Count == 0
-                    ? null
-                    : ToRelativeCurrentFile(
-                        currentFile.FileNumber,
-                        revisionAddresses[^1]));
+                currentFile);
             RbfFrameLayoutEstimate expectedLayout = accountingEstimate.RbfLayout;
             FrameTicket candidateTicket = currentFile.Append(
                 candidateFrame,
@@ -64,8 +59,15 @@ internal static class WorkloadSimulator {
 
             AbsoluteFrameAddress candidateAddress = new(currentFile.FileNumber, candidateTicket);
             accountingEstimates.Add(candidateAddress, accountingEstimate);
+            ObjectVersionDictionaryMaterializationInspection materializedOvd =
+                ObjectVersionDictionaryReader.MaterializeLive(store, candidateAddress);
             Dictionary<uint, AbsoluteFrameAddress> candidateStateMap =
-                BuildCandidateStateMap(acceptedStateMap, step, candidateAddress);
+                new(materializedOvd.Bindings);
+            EnsurePointLookupsMatchMaterialization(
+                store,
+                candidateAddress,
+                step,
+                candidateStateMap);
 
             IReadOnlyDictionary<uint, LogicalObjectState> actualState =
                 PhysicalStateOracle.Materialize(store, candidateStateMap);
@@ -107,13 +109,22 @@ internal static class WorkloadSimulator {
         RbfFileStore store,
         IReadOnlyDictionary<uint, AbsoluteFrameAddress> stateMap,
         uint currentFileNumber,
+        AbsoluteFrameAddress? previousRevisionAddress,
         BaselinePolicy policy) {
-        FrameBuilder builder = new();
+        ObjectVersionDictionaryBuilder dictionary = new();
+        if (previousRevisionAddress is AbsoluteFrameAddress previousRevision) {
+            dictionary.Kind = ObjectVersionDictionaryKind.Delta;
+            dictionary.ParentRevisionFrameTicket =
+                ToRelativeCurrentFile(currentFileNumber, previousRevision);
+        }
+
+        FrameBuilder builder = new() { ObjectVersionDictionary = dictionary };
 
         foreach (WorkloadChange change in step.Changes) {
             switch (change) {
                 case CreateObject create:
                     ConfigureCreate(builder.Add(create.ObjectId), create);
+                    dictionary.BindSelf(create.ObjectId);
                     break;
                 case UpdateObject update:
                     ConfigureUpdate(
@@ -122,10 +133,14 @@ internal static class WorkloadSimulator {
                         logicalCursor.GetLiveObjectState(update.ObjectId),
                         GetHeadObjectVersion(store, stateMap[update.ObjectId], update.ObjectId),
                         stateMap[update.ObjectId],
+                        previousRevisionAddress ?? throw new InvalidOperationException(
+                            "An update requires a previous published Revision."),
                         currentFileNumber,
                         policy);
+                    dictionary.BindSelf(update.ObjectId);
                     break;
-                case RemoveObject:
+                case RemoveObject remove:
+                    dictionary.Remove(remove.ObjectId);
                     break;
             }
         }
@@ -149,9 +164,9 @@ internal static class WorkloadSimulator {
         LogicalObjectState previousState,
         ObjectVersion previousVersion,
         AbsoluteFrameAddress previousAddress,
+        AbsoluteFrameAddress previousRevisionAddress,
         uint currentFileNumber,
         BaselinePolicy policy) {
-        builder.ParentFrameTicket = ToRelativeCurrentFile(currentFileNumber, previousAddress);
         builder.ResultBasePayloadBytes = update.ResultBasePayloadBytes;
         builder.LogicalVersionOrdinal = checked(previousState.LogicalVersionOrdinal + 1);
 
@@ -168,10 +183,13 @@ internal static class WorkloadSimulator {
 
         if (writeBase) {
             builder.Kind = ObjectVersionKind.Base;
+            builder.ParentFrameTicket =
+                ToRelativeCurrentFile(currentFileNumber, previousRevisionAddress);
             builder.PayloadBytes = update.ResultBasePayloadBytes;
             builder.ReconstructionObjectPayloadBytes = update.ResultBasePayloadBytes;
         } else {
             builder.Kind = ObjectVersionKind.Delta;
+            builder.ParentFrameTicket = ToRelativeCurrentFile(currentFileNumber, previousAddress);
             builder.PayloadBytes = update.DeltaPayloadBytes;
             builder.ReconstructionObjectPayloadBytes = checked(
                 previousVersion.ReconstructionObjectPayloadBytes + update.DeltaPayloadBytes);
@@ -203,23 +221,33 @@ internal static class WorkloadSimulator {
         return new RelativeFrameTicket(IsPreviousFile: false, address.FrameTicket);
     }
 
-    private static Dictionary<uint, AbsoluteFrameAddress> BuildCandidateStateMap(
-        IReadOnlyDictionary<uint, AbsoluteFrameAddress> acceptedStateMap,
+    private static void EnsurePointLookupsMatchMaterialization(
+        RbfFileStore store,
+        AbsoluteFrameAddress revisionAddress,
         SaveStep step,
-        AbsoluteFrameAddress candidateAddress) {
-        Dictionary<uint, AbsoluteFrameAddress> candidate = new(acceptedStateMap);
-        foreach (WorkloadChange change in step.Changes) {
-            switch (change) {
-                case CreateObject or UpdateObject:
-                    candidate[change.ObjectId] = candidateAddress;
-                    break;
-                case RemoveObject:
-                    candidate.Remove(change.ObjectId);
-                    break;
+        IReadOnlyDictionary<uint, AbsoluteFrameAddress> materializedStateMap) {
+        foreach ((uint objectId, AbsoluteFrameAddress expectedAddress) in materializedStateMap) {
+            ObjectVersionDictionaryLookupInspection lookup =
+                ObjectVersionDictionaryReader.LookupLive(store, revisionAddress, objectId);
+            if (lookup.Disposition != ObjectVersionDictionaryLookupDisposition.Found ||
+                lookup.ResolvedObjectVersionAddress != expectedAddress) {
+                throw new InvalidDataException(
+                    $"Point lookup for live object {objectId} disagrees with OVD materialization.");
             }
         }
 
-        return candidate;
+        foreach (WorkloadChange change in step.Changes) {
+            if (change is not RemoveObject) {
+                continue;
+            }
+
+            ObjectVersionDictionaryLookupInspection lookup =
+                ObjectVersionDictionaryReader.LookupLive(store, revisionAddress, change.ObjectId);
+            if (lookup.Disposition != ObjectVersionDictionaryLookupDisposition.Removed) {
+                throw new InvalidDataException(
+                    $"Point lookup for removed object {change.ObjectId} did not stop at Remove.");
+            }
+        }
     }
 
     private static int GetObjectPayloadBytes(Frame frame) {
@@ -239,9 +267,7 @@ internal static class WorkloadSimulator {
     private static FrameAccountingEstimate EstimateCandidateFrame(
         AccountingScope accountingScope,
         Frame frame,
-        SaveStep step,
-        RbfFile currentFile,
-        RelativeFrameTicket? parentObjectVersionDictionaryFrameTicket) {
+        RbfFile currentFile) {
         switch (accountingScope) {
             case AccountingScope.ObjectPayloadOnly:
                 return FrameAccountingEstimate.ObjectPayloadOnly(
@@ -253,8 +279,6 @@ internal static class WorkloadSimulator {
                 return FrameAccountingEstimate.Provisional(
                     ProvisionalRevisionV0Estimator.Estimate(
                         frame,
-                        step,
-                        parentObjectVersionDictionaryFrameTicket,
                         currentFile.TailOffsetBytes));
             default:
                 throw new ArgumentOutOfRangeException(nameof(accountingScope));

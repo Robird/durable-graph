@@ -37,7 +37,12 @@ internal sealed class SimulationRun {
         AccountingScope = accountingScope;
         FileStore = fileStore;
         CurrentFileNumber = currentFileNumber;
-        _stateMap = new(new Dictionary<uint, AbsoluteFrameAddress>(stateMap));
+        SortedDictionary<uint, AbsoluteFrameAddress> frozenStateMap = [];
+        foreach ((uint objectId, AbsoluteFrameAddress address) in stateMap) {
+            frozenStateMap.Add(objectId, address);
+        }
+
+        _stateMap = new(frozenStateMap);
         _revisionAddresses = Array.AsReadOnly(revisionAddresses.ToArray());
         _observations = Array.AsReadOnly(observations.ToArray());
         _accountingEstimates = new(new Dictionary<AbsoluteFrameAddress, FrameAccountingEstimate>(

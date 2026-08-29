@@ -1,5 +1,4 @@
 using Atelia.TwoLegRotationProbe.Model;
-using Atelia.TwoLegRotationProbe.Workloads;
 
 namespace Atelia.TwoLegRotationProbe.Encoding;
 
@@ -10,16 +9,11 @@ namespace Atelia.TwoLegRotationProbe.Encoding;
 internal static class ProvisionalRevisionV0Estimator {
     public static ProvisionalRevisionV0Estimate Estimate(
         Frame frame,
-        SaveStep step,
-        RelativeFrameTicket? parentObjectVersionDictionaryFrameTicket,
         long frameStartOffsetBytes) {
         ArgumentNullException.ThrowIfNull(frame);
-        ArgumentNullException.ThrowIfNull(step);
-
-        bool isFirstRevision = parentObjectVersionDictionaryFrameTicket is null;
-        if (isFirstRevision) {
-            ValidateFirstRevision(frame, step);
-        }
+        ObjectVersionDictionary dictionary = frame.ObjectVersionDictionary
+            ?? throw new InvalidDataException(
+                "A provisional Revision Frame requires an explicit object-version dictionary.");
 
         ProvisionalDomainRecordInput[] domainRecords = frame.ObjectVersions
             .Select(static pair => new ProvisionalDomainRecordInput(
@@ -33,28 +27,32 @@ internal static class ProvisionalRevisionV0Estimator {
                 pair.Value.PayloadBytes,
                 pair.Value.ParentFrameTicket))
             .ToArray();
-        ProvisionalObjectVersionDictionaryEntry[] ovdEntries = isFirstRevision
-            ? frame.ObjectVersions.Keys
-                .Select(ProvisionalObjectVersionDictionaryEntry.BindSelf)
-                .ToArray()
-            : step.Changes
-                .Select(static change => change switch {
-                    CreateObject or UpdateObject =>
-                        ProvisionalObjectVersionDictionaryEntry.BindSelf(change.ObjectId),
-                    RemoveObject =>
-                        ProvisionalObjectVersionDictionaryEntry.Remove(change.ObjectId),
-                    _ => throw new InvalidDataException(
-                        $"Object {change.ObjectId} has unsupported change kind {change.GetType().Name}."),
-                })
-                .ToArray();
+        ProvisionalObjectVersionDictionaryEntry[] ovdEntries = dictionary.Entries
+            .Select(static pair => pair.Value.Kind switch {
+                ObjectVersionDictionaryBindingKind.Self =>
+                    ProvisionalObjectVersionDictionaryEntry.BindSelf(pair.Key),
+                ObjectVersionDictionaryBindingKind.External
+                    when pair.Value.ExternalFrameTicket is RelativeFrameTicket external =>
+                    ProvisionalObjectVersionDictionaryEntry.BindExternal(pair.Key, external),
+                ObjectVersionDictionaryBindingKind.Remove =>
+                    ProvisionalObjectVersionDictionaryEntry.Remove(pair.Key),
+                _ => throw new InvalidDataException(
+                    $"Object {pair.Key} has an invalid runtime OVD binding."),
+            })
+            .ToArray();
 
         ProvisionalRevisionV0Input input = new(
             domainRecords,
             new ProvisionalObjectVersionDictionaryInput(
-                isFirstRevision
-                    ? ProvisionalObjectVersionDictionaryKind.Base
-                    : ProvisionalObjectVersionDictionaryKind.Delta,
-                parentObjectVersionDictionaryFrameTicket,
+                dictionary.Kind switch {
+                    ObjectVersionDictionaryKind.Base =>
+                        ProvisionalObjectVersionDictionaryKind.Base,
+                    ObjectVersionDictionaryKind.Delta =>
+                        ProvisionalObjectVersionDictionaryKind.Delta,
+                    _ => throw new InvalidDataException(
+                        $"Unsupported runtime OVD kind {dictionary.Kind}."),
+                },
+                dictionary.ParentRevisionFrameTicket,
                 ovdEntries));
         return Estimate(input, frameStartOffsetBytes);
     }
@@ -203,17 +201,6 @@ internal static class ProvisionalRevisionV0Estimator {
             layout);
     }
 
-    private static void ValidateFirstRevision(Frame frame, SaveStep step) {
-        if (frame.ObjectVersions.Count != step.Changes.Count ||
-            step.Changes.Any(static change => change is not CreateObject) ||
-            !frame.ObjectVersions.Keys.Order().SequenceEqual(
-                step.Changes.Select(static change => change.ObjectId).Order())) {
-            throw new InvalidDataException(
-                "The provisional first-revision OVD Base requires exact ObjectId correspondence " +
-                "between domain records and self-bound creates.");
-        }
-    }
-
     private static void ValidateDomainRecords(
         IReadOnlyList<ProvisionalDomainRecordInput> records) {
         for (int index = 0; index < records.Count; index++) {
@@ -228,10 +215,16 @@ internal static class ProvisionalRevisionV0Estimator {
                     $"Object {record.ObjectId} has negative synthetic payload bytes.");
             }
 
-            if (record.Role == ProvisionalDomainRecordRole.Relay &&
-                record.ParentFrameTicket is null) {
-                throw new InvalidDataException(
-                    $"Relay domain record {record.ObjectId} requires a parent frame ticket.");
+            if (record.Role == ProvisionalDomainRecordRole.Delta) {
+                if (record.ParentFrameTicket is null) {
+                    throw new InvalidDataException(
+                        $"Delta domain record {record.ObjectId} requires a parent frame ticket.");
+                }
+
+                if (record.SyntheticPayloadBytes == 0) {
+                    throw new InvalidDataException(
+                        $"Delta domain record {record.ObjectId} requires a positive synthetic payload.");
+                }
             }
 
             if (index > 0 && records[index - 1].ObjectId == record.ObjectId) {

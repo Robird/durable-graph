@@ -32,51 +32,11 @@ internal static class PhysicalStateOracle {
             reconstructionFrameAddresses);
     }
 
-    public static ObjectLineageInspection InspectObjectLineage(
-        RbfFileStore store,
-        uint objectId,
-        AbsoluteFrameAddress headAddress) {
-        ArgumentNullException.ThrowIfNull(store);
-
-        LogicalObjectState headState = Reconstruct(
-            store,
-            objectId,
-            headAddress,
-            visit: null);
-        List<AbsoluteFrameAddress> headToRootFrameAddresses = [];
-        HashSet<AbsoluteFrameAddress> visited = [];
-        AbsoluteFrameAddress address = headAddress;
-
-        while (true) {
-            if (!visited.Add(address)) {
-                throw new InvalidDataException(
-                    $"Object {objectId} has a cycle in its lineage chain.");
-            }
-
-            headToRootFrameAddresses.Add(address);
-            ObjectVersion version = ReadObjectVersion(store, objectId, address);
-            if (version.ParentFrameTicket is not RelativeFrameTicket parentTicket) {
-                return new ObjectLineageInspection(
-                    objectId,
-                    headState,
-                    headAddress,
-                    address,
-                    headToRootFrameAddresses);
-            }
-
-            AbsoluteFrameAddress parentAddress = ResolveParent(address, parentTicket);
-            ObjectVersion parent = ReadObjectVersion(store, objectId, parentAddress);
-            ValidateLineageEdge(objectId, version, parent);
-            address = parentAddress;
-        }
-    }
-
     /// <summary>
-    /// Experiments with a hybrid lineage-parent interpretation: Delta parents address an
-    /// exact ObjectVersion, while Base parents address an earlier Revision whose OVD resolves
-    /// the exact ObjectVersion parent for <paramref name="objectId"/>.
+    /// Follows exact Delta parents and resolves Base lineage parents through the referenced
+    /// Revision's authoritative object-version dictionary.
     /// </summary>
-    public static RevisionLocatorLineageInspection InspectObjectLineageViaRevisionLocator(
+    public static ObjectLineageInspection InspectObjectLineage(
         RbfFileStore store,
         uint objectId,
         AbsoluteFrameAddress headAddress) {
@@ -101,7 +61,7 @@ internal static class PhysicalStateOracle {
             objectVersionLineageAddresses.Add(address);
             ObjectVersion version = ReadObjectVersion(store, objectId, address);
             if (version.ParentFrameTicket is not RelativeFrameTicket parentTicket) {
-                return new RevisionLocatorLineageInspection(
+                return new ObjectLineageInspection(
                     objectId,
                     headState,
                     headAddress,
@@ -382,24 +342,12 @@ internal static class PhysicalStateOracle {
                     $"but reconstructed {current.BasePayloadBytes} bytes.");
             }
 
-            if (delta.LogicalVersionOrdinal == current.LogicalVersionOrdinal) {
-                if (delta.PayloadBytes != 0 ||
-                    delta.ResultBasePayloadBytes != current.BasePayloadBytes) {
-                    throw new InvalidDataException(
-                        $"Same-version Delta for object {objectId} must be fully transparent.");
-                }
-
-                currentReconstructionObjectPayloadBytes =
-                    expectedReconstructionObjectPayloadBytes;
-                continue;
-            }
-
             if (current.LogicalVersionOrdinal == int.MaxValue ||
                 delta.LogicalVersionOrdinal != current.LogicalVersionOrdinal + 1) {
                 throw new InvalidDataException(
                     $"Delta for object {objectId} has logical version ordinal " +
-                    $"{delta.LogicalVersionOrdinal}, but its parent permits " +
-                    $"{current.LogicalVersionOrdinal} or the next logical version.");
+                    $"{delta.LogicalVersionOrdinal}, but its parent requires the next " +
+                    $"logical version after {current.LogicalVersionOrdinal}.");
             }
 
             if (delta.PayloadBytes == 0) {
@@ -462,17 +410,18 @@ internal static class PhysicalStateOracle {
         }
 
         if (version.LogicalVersionOrdinal == parent.LogicalVersionOrdinal) {
+            if (version.Kind != ObjectVersionKind.Base) {
+                throw new InvalidDataException(
+                    $"Only a relocated Base may preserve logical version " +
+                    $"{version.LogicalVersionOrdinal} for object {objectId}.");
+            }
+
             LogicalObjectState state = ToLogicalState(version);
             LogicalObjectState parentState = ToLogicalState(parent);
             if (state != parentState) {
                 throw new InvalidDataException(
                     $"Same-version maintenance record for object {objectId} changes " +
                     "its logical state.");
-            }
-
-            if (version.Kind == ObjectVersionKind.Delta && version.PayloadBytes != 0) {
-                throw new InvalidDataException(
-                    $"Same-version Delta for object {objectId} must have zero payload bytes.");
             }
 
             return;

@@ -27,6 +27,7 @@ public sealed class SimulationTests {
         AssertExactState(
             WorkloadReplayer.Replay(trace),
             PhysicalStateOracle.Materialize(run));
+        AssertRuntimeOvdChain(run);
         PhysicalStateOracle.ValidateLineage(run);
 
         IDictionary<uint, AbsoluteFrameAddress> stateMap =
@@ -87,7 +88,11 @@ public sealed class SimulationTests {
             new RelativeFrameTicket(false, run.RevisionAddresses[0].FrameTicket),
             firstUpdate.ParentFrameTicket);
         Assert.Equal(
-            new RelativeFrameTicket(false, run.RevisionAddresses[1].FrameTicket),
+            new RelativeFrameTicket(
+                false,
+                policy == BaselinePolicy.AlwaysBase
+                    ? run.RevisionAddresses[2].FrameTicket
+                    : run.RevisionAddresses[1].FrameTicket),
             secondUpdate.ParentFrameTicket);
         Assert.Equal(
             new RelativeFrameTicket(false, run.RevisionAddresses[3].FrameTicket),
@@ -102,6 +107,64 @@ public sealed class SimulationTests {
             Assert.Null(firstUpdate.ExpectedParentBasePayloadBytes);
             Assert.Null(secondUpdate.ExpectedParentBasePayloadBytes);
             Assert.Null(thirdUpdate.ExpectedParentBasePayloadBytes);
+        }
+    }
+
+    private static void AssertRuntimeOvdChain(SimulationRun run) {
+        for (int index = 0; index < run.RevisionAddresses.Count; index++) {
+            AbsoluteFrameAddress revisionAddress = run.RevisionAddresses[index];
+            Frame frame = run.FileStore.ReadFrame(revisionAddress);
+            ObjectVersionDictionary dictionary = Assert.IsType<ObjectVersionDictionary>(
+                frame.ObjectVersionDictionary);
+
+            if (index == 0) {
+                Assert.Equal(ObjectVersionDictionaryKind.Base, dictionary.Kind);
+                Assert.Null(dictionary.ParentRevisionFrameTicket);
+            } else {
+                Assert.Equal(ObjectVersionDictionaryKind.Delta, dictionary.Kind);
+                Assert.Equal(
+                    new RelativeFrameTicket(false, run.RevisionAddresses[index - 1].FrameTicket),
+                    dictionary.ParentRevisionFrameTicket);
+            }
+
+            SaveStep step = run.SourceTrace.Steps[index];
+            Assert.Equal(
+                step.Changes.Select(static change => change.ObjectId).Order(),
+                dictionary.Entries.Keys.Order());
+            foreach (WorkloadChange change in step.Changes) {
+                ObjectVersionDictionaryBinding binding = dictionary.Entries[change.ObjectId];
+                Assert.Equal(
+                    change is RemoveObject
+                        ? ObjectVersionDictionaryBindingKind.Remove
+                        : ObjectVersionDictionaryBindingKind.Self,
+                    binding.Kind);
+            }
+
+            ObjectVersionDictionaryMaterializationInspection materialized =
+                ObjectVersionDictionaryReader.MaterializeLive(run.FileStore, revisionAddress);
+            foreach ((uint objectId, AbsoluteFrameAddress expectedAddress) in
+                materialized.Bindings) {
+                ObjectVersionDictionaryLookupInspection lookup =
+                    ObjectVersionDictionaryReader.LookupLive(
+                        run.FileStore,
+                        revisionAddress,
+                        objectId);
+                Assert.Equal(ObjectVersionDictionaryLookupDisposition.Found, lookup.Disposition);
+                Assert.Equal(expectedAddress, lookup.ResolvedObjectVersionAddress);
+            }
+
+            foreach (RemoveObject removed in step.Changes.OfType<RemoveObject>()) {
+                Assert.Equal(
+                    ObjectVersionDictionaryLookupDisposition.Removed,
+                    ObjectVersionDictionaryReader.LookupLive(
+                        run.FileStore,
+                        revisionAddress,
+                        removed.ObjectId).Disposition);
+            }
+
+            if (index == run.RevisionAddresses.Count - 1) {
+                Assert.Equal(run.StateMap, materialized.Bindings);
+            }
         }
     }
 

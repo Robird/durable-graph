@@ -25,13 +25,13 @@ The first scaffold deliberately models only a few container facts:
 - mutable `FrameBuilder` and `ObjectVersionBuilder` instances are copied into
   read-only built state.
 
-`LogicalVersionOrdinal` is deliberately not a physical chain ordinal. A parent
-edge with `child = parent + 1` represents a domain change; a same-version edge
-represents transparent physical maintenance. With no additional runtime kind,
-a zero-payload same-version Delta is a relay and a same-version Base is a
-relocated full value. Reconstruction follows Delta records and stops at Base;
-the separate lineage inspection continues through Base parents and validates
-the full physical chain. In this size-only probe, logical equality means exact
+`LogicalVersionOrdinal` is deliberately not a physical chain ordinal. A Delta
+always has positive payload and advances exactly one logical version. A
+same-version Base is a relocated full value; it is the only transparent
+maintenance record retained by the selected model. Reconstruction follows
+exact Delta parents and stops at Base. Lineage resolves a Base parent as an
+earlier Revision locator, then uses that Revision's OVD to find the exact prior
+ObjectVersion. In this size-only probe, logical equality means exact
 `(BasePayloadBytes, LogicalVersionOrdinal)` equality, not future field-value
 equality.
 
@@ -248,85 +248,45 @@ events and show only the final post-save read snapshot; no `TotalReadBytes` is
 defined. The matrix lives in executable tests; a ScenarioCatalog or report
 format waits for a CLI, persisted artifact, or batch-run consumer.
 
-## Immediate rotation witness
+## Relay-free immediate rotation witness
 
 `ImmediateRotationPlanner` is a pure grammar-level planner for the narrow case
-that fits in at most one B relay Frame and one C evacuation Frame. It derives
-source facts through the existing reconstruction oracle, then computes:
+that fits in one C evacuation Frame. Its only source of live bindings is
+`MaterializeLive(B PublishedRevision)`; it does not accept a caller StateMap.
 
 ```text
 EvacuationSet = live objects whose terminating Base is in A
-RelaySet      = EvacuationSet objects whose latest head is still in A
 ```
 
-The optional B relay Revision in this earlier direct-parent planner contains
-one zero-synthetic-payload helper per RelaySet object, an empty OVD Delta whose
-parent is the old B head, and a
-TailMeta directory for those helpers. The C Revision writes a full Base for
-every evacuated object and a full OVD Base: evacuated bindings use contextual
-Self, while retained objects bind Previous to their unchanged B heads. The
-projected StateMap is decoded from those OVD bindings rather than supplied as a
-second result authority.
+The C Revision writes a full Base for every evacuated object. Every such Base
+uses the B PublishedRevision as its lineage locator. C also writes a full OVD
+Base: evacuated bindings use contextual Self, while retained objects bind
+Previous to unchanged B heads. The projected StateMap is decoded from this OVD.
+No B maintenance Frame, forwarding record, or B capacity preflight exists in
+the selected immediate plan.
 
-For the canonical `AA / BA / BB` three-object fixture, the provisional exact
-layout is:
+The canonical `AA / BA / BB` fixture proves:
 
-| Planned Frame | Start/length | Synthetic payload | Domain headers | OVD | TailMeta |
-|---|---:|---:|---:|---:|---:|
-| B relay | `32 / 40` | 0 | 4 | 5 | 4 |
-| C evacuation | `4 / 88` | 35 | 8 | 12 | 6 |
+- AA current reconstruction reads only C; lineage resolves `C -> A` through
+  OVD reads `B -> A`;
+- BA current reconstruction reads only C; lineage resolves `C -> B -> A`;
+- BB remains at B and C binds it External;
+- a Remove in B's Published OVD is authoritative and cannot be revived by a
+  separately supplied map;
+- OVD insertion order does not affect the plan;
+- C capacity failures are repeatable and do not mutate the source store;
+- an exhausted B tail does not block a relay-free immediate plan.
 
-Executable tests also prove canonical ordering, empty/no-relay plans, B relay
-TailMeta overflow, C combined-capacity overflow, retryability, and zero input
-mutation. Success is a constructive immediate-rotation witness and therefore a
-sufficient example of preparability. Failure only rejects this single-relay,
-single-C shape; it does not prove that multiple B maintenance/relay Frames or a
-general `CanPrepareAndRotate` plan are impossible.
+This slice still does not implement a byte writer/parser, append, publication,
+planned-record materialization, general multi-step B Base preparation,
+rotation-aware policy scoring, or the `CanPrepareAndRotate` safety gate.
+Generated Base/Delta sizes remain synthetic payload observations. The V0
+projection is a versioned research input, not a durable-format commitment.
 
-This preparatory slice still does not implement a byte writer/parser, append,
-publication, maintenance-record materialization, general two-file completion
-search, rotation-aware policy scoring, or the `CanPrepareAndRotate` safety gate.
-Generated Base/Delta sizes remain synthetic payload observations, not serializer
-output. The caller-supplied StateMap remains the planner's current in-memory
-authority; the newer runtime OVD reader has not yet been integrated into this
-planner.
-`RelativeFrameTicket` is interpreted relative to the file containing it:
-stepping creates a new file and a new `FileScope`; an old frame must still be
-read with the scope of its own origin file. The V0 projection is a versioned
-research input, not a durable-format commitment.
-
-The runtime model has executable transparent Relay/RelocatedBase semantics,
-but the planned rotation records are still not materialized or appended.
-
-## Runtime OVD and Base lineage locator discriminator
-
-The newer runtime discriminator keeps the existing direct-lineage oracle and
-adds a separate experimental interpretation: Delta parents remain exact
-ObjectVersion addresses, while a Base parent addresses an earlier Revision and
-uses that Revision's OVD to resolve the exact prior ObjectVersion by ObjectId.
-
-The canonical C Revision is itself the only current authority: AA/BA bind Self
-and BB binds External to B. Every current head is obtained through
-`LookupLive(C, objectId)` before reconstruction or lineage inspection; there is
-no separately authored StateMap.
-
-Three shapes are now distinguishable:
-
-| Shape | AA ObjectVersion lineage | Base-parent OVD reads | B maintenance |
-|---|---|---|---|
-| relay + OVD Self + locator | `C -> Relay -> A` | `Relay` | one O(N) Revision |
-| relay-free locator | `C -> A` | `B -> A` | none |
-| relay + empty OVD + locator | `C -> A` | `Relay -> B -> A` | helper is skipped |
-
-The relay and relay-free variants produce the same current logical state,
-logical version, and lineage root in this synthetic size-state probe. No
-current correctness consumer requires the explicit physical no-op hop. The
-relay-free locator is therefore the leading candidate; the only observed relay
-benefit is potentially fewer historical OVD reads. DB-009 remains open until
-the rotation planner itself consumes the runtime OVD authority and its plan is
-materialized. DB-010 records a further candidate simplification: Base lineage
-may use the containing Revision's single prior-snapshot anchor instead of a
-per-record locator.
+The rejected forwarding alternatives and their executable comparison are
+preserved by annotated tag `research/relay-vs-relay-free-20260829` and DB-009.
+DB-010 remains open: this slice deliberately retains each Base's per-record
+Revision locator instead of adopting a shared Revision prior-snapshot anchor.
 
 Run from the repository root:
 

@@ -1,6 +1,5 @@
 using Atelia.TwoLegRotationProbe.Encoding;
 using Atelia.TwoLegRotationProbe.Model;
-using Atelia.TwoLegRotationProbe.Workloads;
 
 namespace Atelia.TwoLegRotationProbe.Tests;
 
@@ -15,8 +14,8 @@ public sealed class ProvisionalRevisionV0GrammarTests {
             [
                 new ProvisionalDomainRecordInput(
                     99,
-                    ProvisionalDomainRecordRole.Relay,
-                    SyntheticPayloadBytes: 0,
+                    ProvisionalDomainRecordRole.Delta,
+                    SyntheticPayloadBytes: 1,
                     PreviousFirstFrame),
                 new ProvisionalDomainRecordInput(
                     7,
@@ -41,26 +40,20 @@ public sealed class ProvisionalRevisionV0GrammarTests {
 
         Assert.Equal([7U, 99U], estimate.DomainRecords.Select(static record => record.ObjectId));
         Assert.Equal(2, estimate.DomainRecordCount);
-        Assert.Equal(5, estimate.SyntheticObjectPayloadBytes);
+        Assert.Equal(6, estimate.SyntheticObjectPayloadBytes);
         Assert.Equal(7, estimate.DomainRecordHeaderBytes);
-        Assert.Equal(12, estimate.ObjectVersionDictionaryPayloadOffsetBytes);
+        Assert.Equal(13, estimate.ObjectVersionDictionaryPayloadOffsetBytes);
         Assert.Equal(10, estimate.ObjectVersionDictionaryRecordBytes);
         Assert.Equal(6, estimate.TailMetaDirectoryBytes);
         Assert.Equal(8, estimate.AddressTokenBytes);
-        Assert.Equal(22, estimate.PayloadLengthBytes);
-        Assert.Equal(52, estimate.RbfLayout.FrameLengthBytes);
+        Assert.Equal(23, estimate.PayloadLengthBytes);
+        Assert.Equal(56, estimate.RbfLayout.FrameLengthBytes);
     }
 
     [Fact]
-    public void Empty_Ovd_Delta_can_carry_a_zero_payload_Relay_helper() {
+    public void Empty_Ovd_Delta_without_domain_records_is_valid() {
         ProvisionalRevisionV0Input input = new(
-            [
-                new ProvisionalDomainRecordInput(
-                    42,
-                    ProvisionalDomainRecordRole.Relay,
-                    SyntheticPayloadBytes: 0,
-                    PreviousFirstFrame),
-            ],
+            [],
             new ProvisionalObjectVersionDictionaryInput(
                 ProvisionalObjectVersionDictionaryKind.Delta,
                 PreviousFirstFrame,
@@ -69,15 +62,11 @@ public sealed class ProvisionalRevisionV0GrammarTests {
         ProvisionalRevisionV0Estimate estimate =
             ProvisionalRevisionV0Estimator.Estimate(input, frameStartOffsetBytes: 4);
 
-        ProvisionalDomainRecordEstimate relay = Assert.Single(estimate.DomainRecords);
-        Assert.Equal(42U, relay.ObjectId);
-        Assert.Equal(0, relay.SyntheticObjectPayloadBytes);
-        Assert.Equal(4, relay.HeaderBytes);
-        Assert.Equal(4, relay.FullRecordBytes);
-        Assert.Equal(4, estimate.ObjectVersionDictionaryPayloadOffsetBytes);
+        Assert.Empty(estimate.DomainRecords);
+        Assert.Equal(0, estimate.ObjectVersionDictionaryPayloadOffsetBytes);
         Assert.Equal(5, estimate.ObjectVersionDictionaryRecordBytes);
-        Assert.Equal(4, estimate.TailMetaDirectoryBytes);
-        Assert.Equal(4, estimate.AddressTokenBytes);
+        Assert.Equal(2, estimate.TailMetaDirectoryBytes);
+        Assert.Equal(2, estimate.AddressTokenBytes);
     }
 
     [Fact]
@@ -85,7 +74,7 @@ public sealed class ProvisionalRevisionV0GrammarTests {
         ProvisionalDomainRecordInput domainRecord = new(
             7,
             ProvisionalDomainRecordRole.Delta,
-            SyntheticPayloadBytes: 0,
+            SyntheticPayloadBytes: 1,
             PreviousFirstFrame);
         ProvisionalRevisionV0Input self = CreateInput(
             [domainRecord],
@@ -204,12 +193,21 @@ public sealed class ProvisionalRevisionV0GrammarTests {
             (ProvisionalObjectVersionDictionaryKind)255,
             parentFrameTicket: null,
             []);
-        ProvisionalRevisionV0Input parentlessRelay = CreateInput(
+        ProvisionalRevisionV0Input parentlessDelta = CreateInput(
             [new ProvisionalDomainRecordInput(
                 1,
-                ProvisionalDomainRecordRole.Relay,
-                0,
+                ProvisionalDomainRecordRole.Delta,
+                1,
                 null)],
+            ProvisionalObjectVersionDictionaryKind.Base,
+            parentFrameTicket: null,
+            []);
+        ProvisionalRevisionV0Input emptyDelta = CreateInput(
+            [new ProvisionalDomainRecordInput(
+                1,
+                ProvisionalDomainRecordRole.Delta,
+                0,
+                PreviousFirstFrame)],
             ProvisionalObjectVersionDictionaryKind.Base,
             parentFrameTicket: null,
             []);
@@ -249,7 +247,11 @@ public sealed class ProvisionalRevisionV0GrammarTests {
                 frameStartOffsetBytes: 4));
         Assert.Throws<InvalidDataException>(
             () => ProvisionalRevisionV0Estimator.Estimate(
-                parentlessRelay,
+                parentlessDelta,
+                frameStartOffsetBytes: 4));
+        Assert.Throws<InvalidDataException>(
+            () => ProvisionalRevisionV0Estimator.Estimate(
+                emptyDelta,
                 frameStartOffsetBytes: 4));
         Assert.Throws<InvalidDataException>(
             () => ProvisionalRevisionV0Estimator.Estimate(
@@ -266,7 +268,7 @@ public sealed class ProvisionalRevisionV0GrammarTests {
     }
 
     [Fact]
-    public void Frame_adapter_rejects_first_revision_with_mismatched_ObjectIds() {
+    public void Frame_adapter_requires_an_explicit_runtime_Ovd() {
         FrameBuilder builder = new();
         ObjectVersionBuilder objectVersion = builder.Add(1);
         objectVersion.Kind = ObjectVersionKind.Base;
@@ -278,8 +280,6 @@ public sealed class ProvisionalRevisionV0GrammarTests {
         Assert.Throws<InvalidDataException>(
             () => ProvisionalRevisionV0Estimator.Estimate(
                 builder.Build(),
-                new SaveStep([new CreateObject(2, 0)]),
-                parentObjectVersionDictionaryFrameTicket: null,
                 frameStartOffsetBytes: 4));
     }
 

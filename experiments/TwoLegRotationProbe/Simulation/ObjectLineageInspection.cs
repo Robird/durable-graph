@@ -10,15 +10,18 @@ internal sealed class ObjectLineageInspection {
         LogicalObjectState headState,
         AbsoluteFrameAddress headAddress,
         AbsoluteFrameAddress rootAddress,
-        IEnumerable<AbsoluteFrameAddress> headToRootFrameAddresses) {
-        ArgumentNullException.ThrowIfNull(headToRootFrameAddresses);
+        IEnumerable<AbsoluteFrameAddress> objectVersionLineageAddresses,
+        IEnumerable<ObjectVersionDictionaryLookupInspection> baseParentLookups) {
+        ArgumentNullException.ThrowIfNull(objectVersionLineageAddresses);
+        ArgumentNullException.ThrowIfNull(baseParentLookups);
 
         ObjectId = objectId;
         HeadState = headState;
         HeadAddress = headAddress;
         RootAddress = rootAddress;
-        HeadToRootFrameAddresses = Array.AsReadOnly(
-            headToRootFrameAddresses.ToArray());
+        ObjectVersionLineageAddresses = Array.AsReadOnly(
+            objectVersionLineageAddresses.ToArray());
+        BaseParentLookups = Array.AsReadOnly(baseParentLookups.ToArray());
     }
 
     public uint ObjectId { get; }
@@ -29,5 +32,7 @@ internal sealed class ObjectLineageInspection {
 
     public AbsoluteFrameAddress RootAddress { get; }
 
-    public ReadOnlyCollection<AbsoluteFrameAddress> HeadToRootFrameAddresses { get; }
+    public ReadOnlyCollection<AbsoluteFrameAddress> ObjectVersionLineageAddresses { get; }
+
+    public ReadOnlyCollection<ObjectVersionDictionaryLookupInspection> BaseParentLookups { get; }
 }

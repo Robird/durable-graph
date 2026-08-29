@@ -130,6 +130,24 @@ public sealed class BuilderTests {
     }
 
     [Fact]
+    public void Build_rejects_a_zero_payload_delta_even_when_it_preserves_state() {
+        ObjectVersionBuilder builder = new() {
+            Kind = ObjectVersionKind.Delta,
+            PayloadBytes = 0,
+            ReconstructionObjectPayloadBytes = 10,
+            ResultBasePayloadBytes = 10,
+            ExpectedParentBasePayloadBytes = 10,
+            LogicalVersionOrdinal = 2,
+            ParentFrameTicket = new RelativeFrameTicket(
+                IsPreviousFile: false,
+                FrameTicket: new FrameTicket(4, 24)),
+        };
+
+        ArgumentException exception = Assert.Throws<ArgumentException>(() => builder.Build());
+        Assert.Equal("payloadBytes", exception.ParamName);
+    }
+
+    [Fact]
     public void Built_frame_exposes_a_read_only_dictionary() {
         FrameBuilder builder = new();
         builder.Add(1).ReconstructionObjectPayloadBytes = 0;

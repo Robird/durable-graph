@@ -50,9 +50,9 @@
 - Stored Graph Normalization R3a：test-only mixed V1/V2 record table 经全表 exact preflight、typed decode/upgrade 与 source-reference gate 归一化成 current-Snapshot baseline。
 - CLR Graph Materialization R3b：只对 normalized current root closure allocate-all/hydrate-all，恢复 sharing/cycles 后 root-only exposure；disconnected source rows 不分配。
 - StateStore 基础设计：选择 one-Revision/one-RBF-frame、object-level version chains、ObjectVersionDict authority、LSB-tagged `RelativeFrameTicket` 与 current-head two-file reconstruction closure；产品实现尚未开始，TwoLegRotationProbe 已进入 provisional layout 模拟。
-- 双腿轮转派生说明：记录 A/B/C evacuation、B RelayRevision、absolute-normalized ObjectVersionDict、one-frame bounds 与 `CanPrepareAndRotate` safety gate。
+- 双腿轮转派生说明：记录 A/B/C evacuation、Base Revision locator、absolute-normalized ObjectVersionDict、one-frame bounds 与 `CanPrepareAndRotate` safety gate。
 - Adaptive rotation branch DB-007：隔离尚未裁决的统一 Base/Delta/cold-migration/rotation 策略和内存模拟输入。
-- Two-leg rotation probe：以独立 xUnit 项目建立 exact RBF v0.40 envelope、相邻 FileScope、absolute live StateMap、Frame/ObjectVersion 父链、deterministic workload 和三种 policy；保留 `ObjectPayloadOnly` baseline，并新增 contextual-self `ProvisionalRevisionV0` 组件尺寸/provenance。
+- Two-leg rotation probe：以独立 xUnit 项目建立 exact RBF v0.40 envelope、相邻 FileScope、runtime OVD authority、Frame/ObjectVersion 父链、deterministic workload 和三种 policy；StateMap 由 OVD replay 派生，并保留 contextual-self `ProvisionalRevisionV0` 组件尺寸/provenance。
 - Candidate design branches：在 `docs/design-branches/` 隔离尚未裁决的架构分叉。
 - 本实验簿：保存随实验演化的项目认识。
 
@@ -77,14 +77,15 @@
 - **Decided**：首版只保证 latest published Revision，采用进程独占 single writer；一次 Revision 暂为一个 RBF Frame，越过约 256 MiB payload/TailMeta 或 64 KiB TailMeta 边界时 fail closed，Extent 留待容量证据。
 - **Decided**：持久地址使用 LSB-tagged `RelativeFrameTicket = (SizedPtr.Serialize() << 1) | same/previous`，进程内 authority 使用 `AbsoluteFrameAddress`；接受约 512 GiB 最大 frame-start 的容量代价。
 - **Decided**：同 Revision 的 OVD binding 用字段级 `BindSelf=1`，不把 Self 加入通用 RelativeFrameTicket；RBF context 已提供 containing ticket，TailMeta 保存 OVD/record offset。literal self-ticket 因重复信息和多固定点 canonicality 被当前 Working Design 淘汰，multi-frame 时重访 DB-008。
-- **Decided**：Base 与 Delta 都保留 lineage parent；从 A/B 轮转到 B/C 时，将 Base 位于 A 的 live objects 以 Base 写 C。latest head 仍在 A 的对象通过 B 中 per-ObjectId forwarding RelayRevision 解决 C 无法直接编码 A 的问题。
-- **Decided**：物理删除文件后的数据不可访问不属于地址格式需要抵抗的故障模型；Relay 保证 retained files 之间的 lineage 连续，不承担抗删文件冗余。
-- **Observed**：S1 preparatory baseline 已把冻结 workload 的每个 Save 编译为单个 Frame，并以 absolute live StateMap、relative lineage parent 和 checked symbolic Delta apply 逐 prefix 对照 logical replay；尚未证明完整 Revision layout、two-file rotation 或 `CanPrepareAndRotate`。
+- **Decided**：Delta parent 直接指 exact ObjectVersion；Base parent 指 earlier Revision locator，并由该 Revision OVD 按 ObjectId 找 exact prior version。从 A/B 轮转到 B/C 时，Base 位于 A 的 live objects 以 Base 写 C，locator 统一指最终 B PublishedRevision；不写 per-Object forwarding record。
+- **Rejected**：B 中 forwarding RelayRevision 只优化罕见 lineage/TailMeta reads，却扩大写入、容量、durable 顺序与恢复状态；竞争实现由 tag `research/relay-vs-relay-free-20260829` 保存，裁决见 DB-009。
+- **Decided**：物理删除文件后的数据不可访问不属于地址格式需要抵抗的故障模型；Base locator 只承诺 retained files 之间的 lineage 可导航。
+- **Observed**：S1 preparatory baseline 已把冻结 workload 的每个 Save 编译为带 runtime OVD 的单个 Frame；live StateMap 从 OVD replay 派生，Base/Delta parent 分别按 locator/exact 解释，并以 checked symbolic Delta apply 逐 prefix 对照 logical replay。
 - **Observed**：S1b 已对给定 Payload/TailMeta 长度复刻 exact RBF v0.40 envelope，并把 synthetic workload 接入逐 Save write 与 post-save reconstruction/co-read observations；accounting 明示排除 DG header/OVD/index/VarUInt，所以尚不能证明完整 Revision bytes、容量安全或策略 winner。
 - **Observed**：S1c 已加入 ratio=3 的 `ObjectPayloadReadAmplification3` 与四场景 matrix；per-object reconstruction payload 随 ObjectVersion 保存并由 oracle 重算，但不计入 layout。结果只证明局部策略形成可复现 tradeoff，不代表 exact StateJournal port 或 winner。
 - **Observed**：S1d `ProvisionalRevisionV0` 已按临时 grammar 计入 domain headers、OVD、TailMeta directory、relative VarUInt 与 exact RBF envelope；run-level provenance、layout、capacity gates、contextual Self 和旧 baseline 回归均有 executable evidence。它仍是 size-only estimator，不是 byte codec 或 rotation capacity proof。
 - **Decided**：当前不引入 `MaxLogicalChainBytes`、`TargetFileBytes` 或固定 migration budget；先在纯内存模拟中采集无权重原始量，比较自适应统一策略。
-- **Open**：统一策略能否仅依靠 two-file pressure、lineage/reconstruction overhead 与渐进 cold migration 自动收敛；`CanPrepareAndRotate` 必须把 B maintenance 可完成性与 C evacuation Revision 可编码性一起作为策略无关的 safety oracle。
+- **Open**：统一策略能否仅依靠 two-file pressure、lineage/reconstruction overhead 与渐进 cold Base migration 自动收敛；`CanPrepareAndRotate` 必须把 B Base migration 可完成性与 C evacuation Revision 可编码性一起作为策略无关的 safety oracle。
 - **Open**：Schema runtime representation 与 canonical authority 的候选分叉记录在 `DB-001`，等待 exact codec/persistent format 实验裁决。
 - **Open**：哪些类型和 API 最终属于核心程序集，等待真实代码形状出现后再判断。
 
@@ -758,7 +759,16 @@
 
 ## 6. 船长日志
 
-### 2026-08-29：建立 OVD authority 并验证 relay-free Base locator
+### 2026-08-29：选择 relay-free 并删除 forwarding 主线
+
+- 为三方案并存的可执行岔口 `b84620b` 创建 annotated tag `research/relay-vs-relay-free-20260829`，随后把 DB-009 裁决为 Revision locator。
+- runtime 删除 direct-Base/locator 双 inspection：唯一 lineage 语义为 Delta exact parent、Base Revision locator。Delta 必须正 payload 且 ordinal 为 `parent + 1`；same-version maintenance 只保留 RelocatedBase。
+- OVD 新增 `MaterializeLive(PublishedRevision)`；WorkloadSimulator 每次 Save 写 runtime OVD，StateMap 只由 OVD replay 派生，并以 point lookup 交叉校验。V0 Frame adapter 直接投影同一 OVD，不再从 SaveStep 重造计费副本。
+- relay-free `ImmediateRotationPlanner` 删除 caller StateMap、RelaySet、RelayRevision、B capacity debt 与 Relay grammar role；source 只来自 B PublishedRevision OVD，所有 evacuation Bases 以 B 为 locator，planner 只产生 C full Base/OVD。
+- canonical AA/BA/BB、Published Remove、OVD insertion order、C capacity、B exhausted tail、source scope 与零 mutation 均有 executable tests；Probe 198/198，独立 correctness review 无 blocker/high/medium。
+- preparatory B Base migration 仍是一般 `CanPrepareAndRotate` 的 correctness path；planned C 尚未 append/materialize 后由 runtime reader 复验。DB-010 shared Revision anchor 继续 Open，本轮未实现。
+
+### 2026-08-29：历史 discriminator：建立 OVD authority 并比较 forwarding/relay-free（已归档）
 
 - 用户澄清原始中继设想是 `B zero-payload Delta + OVD Self`，C Base 把 B Revision 当 locator；这与当前 planner 的 `direct parent + empty OVD` 不是同一形状。
 - runtime `Frame` 新增显式 nullable OVD；`null` 表示未建模 authority，不冒充 empty Base。`LookupLive` 不接收 caller StateMap，区分 Found/Removed/AbsentAtBase，并验证 decisive binding、source-scope relative decode、same ObjectId 与 earlier address。
@@ -767,7 +777,7 @@
 - 当前没有产品律要求每次物理跨文件都暴露 no-op ObjectVersion hop，故 relay-free 成为领先方向；relay 只保留为可能降低 historical OVD read amplification 的候选 optimization。planner 仍依赖 caller StateMap，尚不能删除旧 relay path。
 - 新增 DB-010：在 single-prior-snapshot Revision 法律下，Base per-record locator 还可能与 `Revision.OVD.ParentRevisionTicket` 合并；merge/import/rescue 与 DurableId reuse 是明确重访条件。
 
-### 2026-08-29：分离 logical version 与 transparent maintenance lineage
+### 2026-08-29：历史 forwarding 模型：logical version 与 transparent maintenance lineage（已归档）
 
 - 将 probe 的 `VersionOrdinal` 明确重命名为 `LogicalVersionOrdinal`；物理先后继续由 append address、direct parent 与 cycle gate 表达，不增加 physical ordinal、maintenance flag 或 runtime kind。
 - executable semantics 选择 `same ordinal = maintenance`、`parent + 1 = domain change`：在 synthetic size-state 模型中，zero-payload Delta 可作 Relay，Base 可作 RelocatedBase；Base current reconstruction 停止，独立 lineage inspection 继续穿过 Base。
@@ -775,7 +785,7 @@
 - 独立化简审查提出 DB-009：Base lineage parent 或可改指 earlier Revision，再经其 OVD point lookup prior ObjectVersion，从而删除 relay。AA/BA/BB 未发现反例，但当前无 replayable OVD authority，caller StateMap 不能冒充历史 OVD；Remove 后同 DurableId 重新接入也尚待裁决。
 - 下一 discriminator 优先建立单一 authority 的 OVD Base/Delta point lookup，再决定 materialize relay plan 还是删除 relay；不先扩展 multi-frame completion planner 或策略 heuristic。
 
-### 2026-08-29：构造首个 ImmediateRotationPlan
+### 2026-08-29：历史 direct-forwarding ImmediateRotationPlan（已归档）
 
 - 将 `ProvisionalRevisionV0` 的唯一尺寸算法改接显式 grammar IR；普通 `Frame + SaveStep` 入口降为 adapter，旧 golden 不变。IR 现在能独立表达 domain Relay、带 parent 的 OVD Base/Delta，以及 Self/External/Remove。
 - 新增 source-chain 只读 inspection 与 `FileScope.Relativize`；pure planner 从 caller 提供的 StateMap 推导 `EvacuationSet=Base@A`、`RelaySet=EvacuationSet∩Head@A`，不接收第二份集合 authority。

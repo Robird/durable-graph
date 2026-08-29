@@ -194,23 +194,17 @@ public sealed class ProvisionalRevisionV0IntegrationTests {
         FrameBuilder descendingBuilder = new();
         ConfigureBase(descendingBuilder.Add(200), payloadBytes: 4);
         ConfigureBase(descendingBuilder.Add(1), payloadBytes: 3);
+        ConfigureFullSelfOvd(descendingBuilder);
         FrameBuilder ascendingBuilder = new();
         ConfigureBase(ascendingBuilder.Add(1), payloadBytes: 3);
         ConfigureBase(ascendingBuilder.Add(200), payloadBytes: 4);
-        SaveStep step = new([
-            new CreateObject(200, 4),
-            new CreateObject(1, 3),
-        ]);
+        ConfigureFullSelfOvd(ascendingBuilder);
 
         ProvisionalRevisionV0Estimate descending = ProvisionalRevisionV0Estimator.Estimate(
             descendingBuilder.Build(),
-            step,
-            parentObjectVersionDictionaryFrameTicket: null,
             frameStartOffsetBytes: 4);
         ProvisionalRevisionV0Estimate ascending = ProvisionalRevisionV0Estimator.Estimate(
             ascendingBuilder.Build(),
-            step,
-            parentObjectVersionDictionaryFrameTicket: null,
             frameStartOffsetBytes: 4);
 
         Assert.Equal([1U, 200U], descending.DomainRecords.Select(static record => record.ObjectId));
@@ -261,23 +255,17 @@ public sealed class ProvisionalRevisionV0IntegrationTests {
         exactlyAtLimit[0] = 20_000;
         uint[] oneByteOverLimit = (uint[])exactlyAtLimit.Clone();
         oneByteOverLimit[0] = 3_000_000;
-        (Frame acceptedFrame, SaveStep acceptedStep) = BuildZeroPayloadFirstRevision(
-            exactlyAtLimit);
-        (Frame rejectedFrame, SaveStep rejectedStep) = BuildZeroPayloadFirstRevision(
-            oneByteOverLimit);
+        Frame acceptedFrame = BuildZeroPayloadFirstRevision(exactlyAtLimit);
+        Frame rejectedFrame = BuildZeroPayloadFirstRevision(oneByteOverLimit);
 
         ProvisionalRevisionV0Estimate accepted = ProvisionalRevisionV0Estimator.Estimate(
             acceptedFrame,
-            acceptedStep,
-            parentObjectVersionDictionaryFrameTicket: null,
             frameStartOffsetBytes: 4);
 
         Assert.Equal(RbfV040Layout.MaxTailMetaLengthBytes, accepted.TailMetaDirectoryBytes);
         ArgumentOutOfRangeException exception = Assert.Throws<ArgumentOutOfRangeException>(
             () => ProvisionalRevisionV0Estimator.Estimate(
                 rejectedFrame,
-                rejectedStep,
-                parentObjectVersionDictionaryFrameTicket: null,
                 frameStartOffsetBytes: 4));
         Assert.Equal("tailMetaLengthBytes", exception.ParamName);
     }
@@ -286,13 +274,11 @@ public sealed class ProvisionalRevisionV0IntegrationTests {
     public void Estimator_accepts_last_relative_start_and_rejects_next_aligned_start() {
         FrameBuilder builder = new();
         ConfigureBase(builder.Add(1), payloadBytes: 0);
+        ConfigureFullSelfOvd(builder);
         Frame frame = builder.Build();
-        SaveStep step = new([new CreateObject(1, 0)]);
 
         ProvisionalRevisionV0Estimate accepted = ProvisionalRevisionV0Estimator.Estimate(
             frame,
-            step,
-            parentObjectVersionDictionaryFrameTicket: null,
             frameStartOffsetBytes: RbfV040Layout.MaxDurableGraphRelativeFrameStartOffsetBytes);
 
         Assert.Equal(
@@ -304,8 +290,6 @@ public sealed class ProvisionalRevisionV0IntegrationTests {
         Assert.Throws<InvalidDataException>(
             () => ProvisionalRevisionV0Estimator.Estimate(
                 frame,
-                step,
-                parentObjectVersionDictionaryFrameTicket: null,
                 frameStartOffsetBytes:
                     RbfV040Layout.MaxDurableGraphRelativeFrameStartOffsetBytes +
                     RbfV040Layout.AlignmentBytes));
@@ -362,16 +346,24 @@ public sealed class ProvisionalRevisionV0IntegrationTests {
         }
     }
 
-    private static (Frame Frame, SaveStep Step) BuildZeroPayloadFirstRevision(
+    private static Frame BuildZeroPayloadFirstRevision(
         IEnumerable<uint> objectIds) {
         FrameBuilder builder = new();
-        List<WorkloadChange> changes = [];
         foreach (uint objectId in objectIds) {
             ConfigureBase(builder.Add(objectId), payloadBytes: 0);
-            changes.Add(new CreateObject(objectId, 0));
         }
 
-        return (builder.Build(), new SaveStep(changes));
+        ConfigureFullSelfOvd(builder);
+        return builder.Build();
+    }
+
+    private static void ConfigureFullSelfOvd(FrameBuilder builder) {
+        ObjectVersionDictionaryBuilder dictionary = new();
+        foreach (uint objectId in builder.ObjectVersions.Keys) {
+            dictionary.BindSelf(objectId);
+        }
+
+        builder.ObjectVersionDictionary = dictionary;
     }
 
     private static void ConfigureBase(

@@ -27,10 +27,10 @@
 1. 新 ObjectVersion 只写入 CurrentFile。
 2. 每个 published current Revision 的 reconstruction closure 至多引用 Current/Previous 两个相邻文件。
 3. 从 A/B 轮转到 B/C 时，Base 位于 A 的 live objects 必须在 C 产生完整 Base。
-4. C 中 relocated Base 的 lineage locator 必须落在 B，并由 B 的权威 OVD 找到 prior exact ObjectVersion；dedicated relay 不是 correctness hard constraint。
+4. C 中 relocated Base 的 lineage locator 必须落在 B，并由 B 的权威 OVD 找到 prior exact ObjectVersion。
 5. ObjectVersionDict 内存使用 absolute address；输出时相对于目标 frame 编码。
 6. `RelativeFrameTicket` 的约 512 GiB frame-start 范围、RBF 单 Frame 和 TailMeta 上限是格式安全门，不是调优参数。
-7. 任意成功 Save 后必须满足 `CanPrepareAndRotate`：存在有限、容量合法的 B published Base migration/checkpoint plan，随后 C Revision 能容纳剩余 EvacuationSet 的完整 Bases、OVD 与 index；dedicated relay 可选。
+7. 任意成功 Save 后必须满足 `CanPrepareAndRotate`：存在有限、容量合法的 B published Base migration plan，随后 C Revision 能容纳剩余 EvacuationSet 的完整 Bases、OVD 与 index。
 8. 物理删除文件后的数据不可访问不属于格式需要抵抗的故障模型。
 
 ## 候选策略族
@@ -41,7 +41,7 @@
 
 优点：简单、O(1) 决策形状清楚。
 
-风险：局部最优未必为未来 relay/rotation 留出可完成路径；多 ObjectVersion 共享 Revision Frame 时，per-object bytes 也不等于整图物理读取。
+风险：局部最优未必为未来 rotation 留出可完成路径；多 ObjectVersion 共享 Revision Frame 时，per-object bytes 也不等于整图物理读取。
 
 ### 候选 B：Previous/Current 重量平衡
 
@@ -53,7 +53,7 @@
 
 ### 候选 C：渐进 cold migration
 
-每次普通 Save 额外选择少量 cold objects，在 Current 中提前建立 Base 或 OVD checkpoint，使未来正式轮转不出现集中 full-copy 或历史 lookup 峰值。若实验 relay，它必须由权威 OVD 安装；未被 authority 引用的 helper 只是 orphan。
+每次普通 Save 额外选择少量 cold objects，在 Current 中提前建立 Base，使未来正式轮转不出现集中 full-copy 高峰。
 
 优点：有机会平滑写入与 pause。
 
@@ -66,7 +66,6 @@
 ```text
 Base(O)
 Delta(O)
-CheckpointOrRelay(O)
 Stay
 Rotate
 ```
@@ -93,16 +92,16 @@ Rotate
 - ObjectId、latest head 与 terminating Base 的绝对地址；
 - reconstruction closure 的 FrameTicket 集合；
 - Base/Delta candidate encoded bytes；
-- lineage locator、OVD lookup 与 optional relay/checkpoint encoded bytes；
+- lineage locator 与 OVD lookup encoded bytes；
 - logical chain bytes、depth 与涉及的 unique frames；
 - 距离上次领域修改和上次 Base 的 Save 数；
 - 本次选择及事实性 reason tags。
 
 ### Revision / Rotation
 
-- live、changed、new、unreachable、evacuation 与 optional maintenance object counts；
+- live、changed、new、unreachable、evacuation 与 preparatory Base migration object counts；
 - A/B/C unique reconstruction frame sets 与 bytes；
-- ordinary write、Base、Delta、optional relay/checkpoint、ObjectVersionDict 与 index bytes；
+- ordinary write、Base、Delta、ObjectVersionDict 与 index bytes；
 - Base-parent OVD lookup frames/bytes；
 - deterministic evacuation plan 的 Frame 数与最终 TailOffset；
 - `CanEncodeEvacuationRevision`、`CanPrepareAndRotate` 与 `CanRotateNow`；
@@ -122,7 +121,7 @@ all frame starts/tickets/layouts are representable
 failed plan leaves published state unchanged
 ```
 
-`CanEncodeEvacuationRevision` 只覆盖当前 C 中 full Bases/OVD/index；`CanPrepareAndRotate` 还必须构造有限、容量合法的 B published Base migration/checkpoint plan，并验证最终 B OVD 可作 lineage locator。preparatory Base migration 可能是 correctness 所需；只有 dedicated relay 是可选 optimization。首版让 deterministic frame-layout estimator 实际构造 completion plan，以覆盖单帧 payload、TailMeta、padding、fence、frame-start 与 ObjectVersionDict 开销。
+`CanEncodeEvacuationRevision` 只覆盖当前 C 中 full Bases/OVD/index；`CanPrepareAndRotate` 还必须构造有限、容量合法的 B published Base migration plan，并验证最终 B OVD 可作 lineage locator。首版让 deterministic frame-layout estimator 实际构造 completion plan，以覆盖单帧 payload、TailMeta、padding、fence、frame-start 与 ObjectVersionDict 开销。
 
 ## 最小 workload 矩阵
 
@@ -164,7 +163,7 @@ S1b 的 Revision accounting 有意保持不完整，固定标记 `ObjectPayloadO
 
 每个 ObjectVersion 暂存 `ReconstructionObjectPayloadBytes`：Base 等于自身 payload，Delta 等于 parent cumulative 加自身 payload。它避免 runner 私有 dictionary 成为第二权威，并由 materialization oracle 独立重算后 fail closed；但当前不计入 layout，不代表已选择 wire 字段。
 
-四个命名 workload 的 executable matrix 已证明 threshold/tie/reset、`Base <= Delta`、hot/cold shared-frame 与 fixed-seed mixed 的确定性。报告只将 write events 汇总；read 只报告 final post-save snapshot。首轮中第三策略的 modeled write/read 落在两个极端基线之间，但这只证明局部累计判据能形成不同决策，不代表已经选择 winner。shared-frame co-read、完整 codec bytes、relay/evacuation debt 与 `CanPrepareAndRotate` 仍不在该策略输入中。
+四个命名 workload 的 executable matrix 已证明 threshold/tie/reset、`Base <= Delta`、hot/cold shared-frame 与 fixed-seed mixed 的确定性。报告只将 write events 汇总；read 只报告 final post-save snapshot。首轮中第三策略的 modeled write/read 落在两个极端基线之间，但这只证明局部累计判据能形成不同决策，不代表已经选择 winner。shared-frame co-read、完整 codec bytes、evacuation debt 与 `CanPrepareAndRotate` 仍不在该策略输入中。
 
 ## S1d 阶段性证据：ProvisionalRevisionV0
 
@@ -192,7 +191,7 @@ V0 已能 fail closed 检查当前单文件 Save grammar 的 TailMeta、Payload+
 dedicated Relay record，但仍没有一般 `CanPrepareAndRotate` completion plan，所以不能称为
 完整 rotation capacity gate。
 
-## S1e 阶段性证据：ImmediateRotationPlan
+## S1e 历史证据：旧 forwarding ImmediateRotationPlan
 
 V0 estimator 的唯一尺寸算法现已改接显式 grammar IR；原 `Frame + SaveStep` 入口仅作为
 普通 Save adapter，旧 golden 不变。显式 IR 能分别表示 domain Base/Delta/Relay、带 parent
@@ -219,7 +218,7 @@ offset 估算所有 EvacuationSet 的 full Bases 和覆盖全部 live ObjectId �
 `4/88`。测试覆盖无 relay、空图、输入顺序确定性、B relay TailMeta overflow、C combined
 capacity overflow、失败零 mutation 与同 store 重试。
 
-该结果只构成“至多一个 B relay Frame + 一个 C evacuation Frame”的 immediate-rotation
+该结果只构成“至多一个 B forwarding Frame + 一个 C evacuation Frame”的 historical
 constructive witness。成功可证明这个具体 post-state 存在一条 preparation path；失败既不能
 排除多个 relay Frames，也不能排除先做若干 published B maintenance Bases，因此不能推出
 `CanPrepareAndRotate == false`。
@@ -231,16 +230,12 @@ size-state 模型中，same-version zero-payload Delta/Base 分别表达 Relay/R
 inspection 保持分层。该 probe 仍未
 append 或 materialize planner records。
 
-S1g 已建立不接收 caller StateMap 的 runtime OVD `LookupLive`，并用 C full OVD authority 完成
-DB-009 discriminator。用户澄清的 relay + OVD Self 与 relay-free locator 得到相同 current
-state、logical ordinal 与 lineage root；前者 AA exact hops/read 为 `C/Relay/A` 与 `Relay`，后者
-为 `C/A` 与 `B/A`。relay record 若配 empty OVD，则 locator 会跳过 helper。
-
-因此 dedicated RelayRevision 不再是 correctness hard constraint，而是可能用 B write 换历史
-OVD read 的候选 optimization。当前 `ImmediateRotationPlanner` 仍是旧 direct-parent + empty OVD
-形状，source authority 仍由 caller StateMap 提供；在它迁移并 materialize 前不删除旧代码，
-也不扩展 multi-frame relay completion planner。进一步把 Base per-record locator 合并到 Revision
-共同 prior-snapshot anchor 的分叉见 DB-010。
+S1g 建立不接收 caller StateMap 的 runtime OVD lookup/materialization，并完成 DB-009
+discriminator。随后已选择 relay-free：当前 planner 只从 B PublishedRevision OVD 取 source，
+只规划一个 C evacuation Revision；runtime/grammar 不再表达 transparent Delta forwarding。
+竞争实现与本节旧 golden 由 tag `research/relay-vs-relay-free-20260829` 保存，不再是 active
+planner。进一步把 Base per-record locator 合并到 Revision 共同 prior-snapshot anchor 的分叉见
+DB-010。
 
 ## 重访触发条件
 

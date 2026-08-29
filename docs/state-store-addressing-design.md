@@ -202,7 +202,7 @@ else:
 若一个显式 relative token 又解析回 containing frame，reader 必须拒绝，避免同一 value
 存在两种 canonical 表示。
 
-这个 `Self` 只属于 OVD binding 字段。ObjectVersion 的 direct Delta parent 与当前实验中的
+这个 `Self` 只属于 OVD binding 字段。ObjectVersion 的 direct Delta parent 与当前选择的
 per-record Base Revision locator 都使用通用 `RelativeFrameTicket`：optional root 为 `None=0`，
 required target 必须是更早的 same/previous frame，不接受 `Self`。DB-010 若选择 Revision 共同
 prior-snapshot anchor，Base 将不再单独编码该 ticket；通用地址 grammar 本身不变。

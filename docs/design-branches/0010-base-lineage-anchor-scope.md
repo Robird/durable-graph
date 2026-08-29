@@ -4,8 +4,8 @@
 >
 > 创建日期：2026-08-29
 >
-> 当前方向：先保留 per-record Base locator 完成 DB-009 集成；随后验证并优先合并到
-> containing Revision 的唯一 OVD parent。Delta direct parent 不在本分叉中。
+> 当前方向：DB-009 已选择 relay-free，但本轮仍保留 per-record Base locator；单独验证后再
+> 决定是否合并到 containing Revision 的唯一 OVD parent。Delta direct parent 不在本分叉中。
 
 ## 问题
 
@@ -26,7 +26,7 @@ reconstruction 热依赖。
 - domain Base：lookup 得 exact old head，ordinal `+1`；
 - maintenance/relocated Base：lookup 得 exact old head，ordinal 与状态相同；
 - 不同 objects 的 old heads 可分别位于 A/B；共享的是 prior snapshot，不是同一物理地址；
-- relay 形状若保留，relay OVD Self/继承可以让一个共同 relay Revision anchor 分别解析 AA/BA。
+- rotation C Revision 中的多个 relocated Bases 可共享 B PublishedRevision prior anchor，并分别解析到 A/B exact heads。
 
 当前 simulator 的 single writer、one Save/Revision、每 Save 同 ObjectId 至多一次、禁止 ID reuse
 均与该模型一致。尚无 branch merge、historical import 或 rescue consumer。
@@ -51,7 +51,7 @@ Remove 后复用同一 DurableId 并延续旧 lineage 也会要求不同的 hist
 1. 一个 Revision 同时含 new、domain Base 与 maintenance Base，只给一个 OVD parent；
 2. prior OVD 把不同 ObjectIds 解析到 A/B 不同 exact versions；
 3. OVD Base 的 live lookup 缺项不继承，与 `ResolveBasePrior` 从 OVD parent 查询严格分离；
-4. relay OVD Self 与 empty OVD 分别证明“命中 relay”和“跳过 relay”；
+4. canonical AA/BA 以同一个 B PublishedRevision anchor 分别解析到 A/B exact heads；
 5. Remove 后创建 installed Base fail closed，不静默当作 never-seen root；
 6. out-of-snapshot import/rescue 作为明确拒绝案例和重访触发条件。
 
@@ -60,6 +60,6 @@ Remove 后复用同一 DurableId 并延续旧 lineage 也会要求不同的 hist
 
 ## 重访触发条件
 
-- DB-009 的 locator planner 完成 OVD-authoritative materialization；
+- planned C 被 materialize/append，并由 runtime OVD/lineage reader 复验；
 - branch merge、historical import、rescue restore 或 stale-snapshot Save 成为真实消费者；
 - DurableId reuse 的 lineage 语义被裁决。
