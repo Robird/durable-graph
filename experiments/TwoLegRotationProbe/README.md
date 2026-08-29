@@ -411,8 +411,14 @@ final C candidate fits, while an exhausted B start boundary produces a stable
 `TargetFrameStartRelative` rejection. Certificate construction never mutates
 the caller Store, and the successful script is executable against it.
 
-A continuous multi-rotation runner and rotation-policy comparison remain future
-slices.
+A caller-scripted continuous witness now composes these existing seams without
+adding a second runner authority. It performs Stay-B, Rotate-C, Stay-C, then
+Rotate-D, requiring an exact certificate before each accepted Stay while only
+applying that certificate's initial caller-selected Save. The executable path
+proves `A/B -> B/C -> C/D`, exact logical state and reconstruction closure after
+every Save, and a Previous-debt sawtooth of `{10} -> {20} -> {} -> {20}`.
+The script retains the selected candidates' existing raw observations locally;
+it does not define a policy, score, transcript format, or durable head.
 
 ## Preparatory B migration witness
 
@@ -492,12 +498,12 @@ projection is a versioned research input, not a durable-format commitment.
 not a law of whether an already-published format is readable. A concrete finite
 B-migration-plus-C-rotation witness proves it true for that source state.
 The current canonical prefix proof reports `RejectedUnproven` when it cannot
-construct that witness; this is not a proof that no completion exists. The next
-slice is a caller-scripted continuous `A/B -> B/C -> C/D` run using the explicit
-cursor, apply seam, and certificate admission without choosing a weighted
-winner. A bounded reference explorer waits for a concrete conservative
-rejection or suspected heuristic false-negative; it does not block the first
-strategy loop.
+construct that witness; this is not a proof that no completion exists. The
+continuous caller script is now closed without choosing a weighted winner. The
+next slice can give two simple rotation-policy baselines the same frozen trace;
+only after they expose real duplicated orchestration should a minimal reusable
+runner be extracted. A bounded reference explorer still waits for a concrete
+conservative rejection or suspected heuristic false-negative.
 
 The rejected forwarding alternatives and their executable comparison are
 preserved by annotated tag `research/relay-vs-relay-free-20260829` and DB-009.

@@ -763,12 +763,19 @@
 
 ## 6. 船长日志
 
+### 2026-08-29：用现有 seams 跑通连续两次换腿
+
+- **Observed**：test-local caller script 依次执行 Stay-B、Rotate-C、Stay-C、Rotate-D，跑通 `A/B -> B/C -> C/D`；每步 physical materialization 等于 normalized PostLive，current reconstruction 保持在结果 FileScope 内。
+- **Observed**：两个 accepted Stay 都先取得 exact `CanPrepareAndRotate` certificate，规划不改变 caller Store；live run 只应用 caller 选择的 initial Stay，certificate 的 maintenance/final chain 保持 admission witness 角色。
+- **Observed**：同一四步脚本的 Previous debt 为 `{10} -> {20} -> {} -> {20}`，直接展示迁债与换腿后的锯齿，而无需先定义 score。
+- **Decided**：当前只有一个 caller，不新增通用 Runner、transcript 或 observation schema；下一切片先让两个简单策略重放同一 frozen trace，出现真实重复后再提取最小复用 seam。
+
 ### 2026-08-29：闭合显式 apply 与保守 CanPrepareAndRotate 证书
 
 - **Observed**：caller-owned volatile cursor 以 `{FileScope, PublishedRevision, Current tail}` 绑定实验 runner 的当前点；强类型 Stay-B / Rotate-C apply 在唯一变异前重验 source facts、reconstruction、candidate state/layout/anchor 与 target tail，失败不产生本次追加，但不声称 durable publication、并发或 crash safety。
 - **Observed**：certificate planner 在 exact scratch fork 上实际重放同一 apply；先试零迁移 Rotate-C，容量拒绝后按 ObjectId 升序逐个生成统一 maintenance Stay-B candidate，每个 prefix 再试 Rotate-C，首次成功即冻结 exact chain。
 - **Observed**：3 x 140,000,000-byte A debt 反例稳定生成两次单对象 B migration 后的 final C；relative-start 边界则稳定返回带 stage/count/ObjectId/capacity 的 `RejectedUnproven`。证书生成不改 caller Store，成功 chain 可在真实 Store 上重放到 B/C closure。
-- **Observed / Next**：apply 8/8、certificate 5/5、TwoLegRotationProbe 259/259，solution build 0 warning / 0 error；独立复审无 blocker/high/medium。下一切片接 caller-scripted `A/B -> B/C -> C/D` 连续 runner 与原始 rotation observations，仍不建立 weighted winner 或一般 solver。
+- **Observed**：apply 8/8、certificate 5/5、当时 TwoLegRotationProbe 259/259，solution build 0 warning / 0 error；独立复审无 blocker/high/medium。其后续 caller-scripted 连续轮转证据见上一条船长日志。
 
 ### 2026-08-29：闭合显式 Rotate-C candidate 与 maintenance 统一入口
 

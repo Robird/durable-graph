@@ -124,19 +124,21 @@ PublishedRevision 为 shared prior-snapshot anchor。accepted new head 的 curre
   candidate state/layout/anchor，失败不追加；不写 Store head，不声称并发、crash 或 durable publication；
 - 保守 `CanPrepareAndRotate` certificate：在 exact scratch fork 上先试零迁移 Rotate-C，再按 ObjectId 升序
   每次迁一个 A-debt object；成功冻结完整 exact candidate chain，容量受阻只返回 `RejectedUnproven`；
+- caller-scripted 连续 Save witness：只组合现有 normalized facts、pair、certificate 与 apply seam，已跑通
+  `A/B -> B/C -> C/D`，并观察到 Previous debt `{10} -> {20} -> {} -> {20}` 的换腿锯齿；
 - caller-selected B same-state Base migration plan/append witness；
 - relay-free immediate A/B -> B/C plan/append、shared anchor、B/C closure witness；
 - 多批 B migration 使原本放不下的 C evacuation 可编码的容量 witness；
 - terminal sizing 反例：high-ticket External 不支配 zero-payload Base+Self。
 
-Stay-B 与 Rotate-C 已接入同一 per-Save facts、paired evaluation、显式 apply 与保守 completion proof；
-连续 Save / 多次轮转策略循环仍未闭合。
+Stay-B 与 Rotate-C 已接入同一 per-Save facts、paired evaluation、显式 apply、保守 completion proof 与
+连续多轮转调用节奏。当前连续 witness 仍是 test-local caller script，不是自动策略或通用 Runner。
 当前三条 policy matrix 只是 Base/Deltify baseline，不是 rotation-policy comparison。
 
 ## 当前研究焦点
 
-下一步接入 caller-scripted 的连续 Save 节奏，复用现有 cursor、paired evaluation、completion certificate
-与 apply seam，尽快画出：
+下一步让至少两个简单 rotation-policy baseline 重放同一 frozen trace，复用现有 cursor、paired evaluation、
+completion certificate 与 apply seam，开始比较：
 
 ```text
 A debt 随连续 Save 变化
@@ -146,40 +148,41 @@ A debt 随连续 Save 变化
     -> 在新 FileScope 中继续 Save 和再次轮转
 ```
 
-不再单独扩张 terminal planner、lineage 语义或 provisional wire grammar。
+先把策略选择留在 test-local caller；只有第二个真实策略消费者暴露出重复循环后，才提取不拥有 winner、
+score 或 publication authority 的最小 runner。预计现有 `CandidateRawObservation` 足以开始首轮比较；若
+实际 replay 暴露缺口再扩张，而不先改 terminal planner、lineage 语义或 provisional wire grammar。
 
 ## 下一编码切片
 
-闭合一个 **scripted continuous multi-rotation runner**：
+闭合第一组 **rotation-policy comparison baselines**：
 
 ```text
-caller script + frozen SaveSteps
-    -> normalize + explicit paired candidates
-    -> caller selects an exact feasible action
-    -> require concrete completion certificate when accepting Stay-B
-    -> explicit apply advances the volatile cursor
-    -> repeat across A/B -> B/C -> C/D
+same frozen SaveSteps
+    -> Lazy/no-cold-migration caller
+    -> deterministic PacedCold caller
+    -> same admission/apply seams
+    -> raw observation projections and Pareto comparison
 ```
 
-首版由测试脚本明确给出每步 decision 与 target，不建立 automatic winner 或 heuristic。runner 必须逐步验证
-logical PostLive、FileScope closure、cursor/source continuity 和 certificate 可重放性，并只记录原始 observations；
-不在本切片加入权重、一般 explorer、durable head、crash/reopen 或文件删除。
+先不冻结通用 policy interface。两个 caller 都必须显式选择 exact action；accepted Stay-B 仍需当场取得
+具体 certificate，Rotate-C 直接闭合本次换腿。若控制流出现真实重复，再抽取最小 test harness，并保留
+decision ownership 在策略侧。比较只折叠现有原始 observations，不在本切片加入权重或一般 explorer。
 
 ## 近期 roadmap
 
-1. **Scripted continuous runner**
-   - 先由测试脚本显式给出动作，不声称 heuristic；
-   - 至少跑通 `A/B -> B/C -> C/D`，验证每步 logical state、FileScope closure 和 role rollover；
-   - 每个 accepted Stay-B 附带保守的具体 completion certificate；Rotate-C 自身完成换腿，不先建立一般搜索器。
-2. **Rotation observations**
+1. **简单策略基线与最小复用 seam**
+   - 让 Lazy/no cold migration 与 deterministic PacedCold 重放同一 frozen trace；
+   - 策略只负责显式 decision/target，现有组件继续拥有 normalization、feasibility、certificate 与 mutation；
+   - 出现第二份重复调用循环后再提取最小 runner，不提前建立策略插件框架。
+2. **Rotation observation reductions**
    - 记录 debt count/full-Base bytes、Previous unique frames/bytes、B tail/headroom、domain/migration bytes、
      exact terminal-C estimate、per-Save/rotation peak、leg length、rotation count 与保守拒绝；
-   - 保留原始量，不预设总分。
-3. **简单策略基线**
-   - Lazy/no cold migration；
-   - Touch/ChangedDebtFirst；
-   - deterministic PacedCold（例如每 Save 一个）与 DebtZeroThenRotate；
-   - 全部重放同一 frozen traces，报告 Pareto 与明显 dead-end/振荡。
+   - 首先由现有 `CandidateRawObservation` 与 cursor/certificate 做 test-local value projection；只有报告或
+     batch consumer 出现后才固化 run/epoch 类型；
+   - 保留原始量，不预设总分，报告 Pareto 与明显 dead-end/振荡。
+3. **扩充策略与 workload**
+   - Touch/ChangedDebtFirst、DebtZeroThenRotate 与 pressure-aware 候选；
+   - stable hot/cold、burst、size distribution 和更长 fixed-seed traces。
 4. **按证据加入 bounded explorer**
    - 仅在出现具体 `RejectedUnproven`、`RejectedCapacityUnsearched` 或疑似 heuristic false-negative 后，
      冻结该小状态；
@@ -191,7 +194,10 @@ logical PostLive、FileScope closure、cursor/source continuity 和 certificate 
 
 - unbounded preference cost 如何比较两个 target，同时保持原始多目标事实而不偷渡权重；
 - `RejectedCapacityUnsearched` 出现多频繁时值得加入次优 action menu 或 constraint-aware repair；
-- scripted runner 如何显式表达“caller 选 action + Stay-B 必须有 certificate”的 admission 顺序，而不偷渡 winner；
+- Lazy 与 PacedCold 的首次明确 rotation trigger 如何保持为可解释 baseline，而不偷渡产品默认权重；
+- `RejectedUnproven` 在连续策略循环中出现时，是停止该 run、选择 Rotate-C，还是记录策略失效并交给后续
+  bounded explorer；
+- 第二个策略 caller 出现后，哪些循环机械步骤确实值得抽取，且不会形成第二 StateMap/head authority；
 - stable hot/cold、burst、size distribution 与长 trace 是否先用 handwritten fixture，何时扩充 generator；
 - `PacedCold` 的 fixed-count baseline 之后，何种无隐藏权重的 pressure facts 最值得比较；
 - 多个不可支配策略出现后，何时需要用户用真实 workload/SLO 选择产品默认值。
