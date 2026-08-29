@@ -8,7 +8,7 @@ internal sealed class ObjectVersion {
         int resultBasePayloadBytes,
         int? expectedParentBasePayloadBytes,
         int logicalVersionOrdinal,
-        RelativeFrameTicket? parentFrameTicket) {
+        RelativeFrameTicket? deltaParentFrameTicket) {
         if (!Enum.IsDefined(kind)) {
             throw new ArgumentOutOfRangeException(nameof(kind));
         }
@@ -18,22 +18,14 @@ internal sealed class ObjectVersion {
         ArgumentOutOfRangeException.ThrowIfNegative(resultBasePayloadBytes);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(logicalVersionOrdinal);
 
-        if (parentFrameTicket is null) {
-            if (kind != ObjectVersionKind.Base) {
-                throw new ArgumentException(
-                    "An object version without a parent must be a Base version.",
-                    nameof(kind));
-            }
-
-            if (logicalVersionOrdinal != 1) {
-                throw new ArgumentException(
-                    "An object version without a parent must have logical version ordinal 1.",
-                    nameof(logicalVersionOrdinal));
-            }
-        }
-
         switch (kind) {
             case ObjectVersionKind.Base:
+                if (deltaParentFrameTicket is not null) {
+                    throw new ArgumentException(
+                        "A Base version cannot carry a direct Delta parent.",
+                        nameof(deltaParentFrameTicket));
+                }
+
                 if (expectedParentBasePayloadBytes is not null) {
                     throw new ArgumentException(
                         "A Base version cannot declare an expected parent base size.",
@@ -54,10 +46,10 @@ internal sealed class ObjectVersion {
 
                 break;
             case ObjectVersionKind.Delta:
-                if (parentFrameTicket is null) {
+                if (deltaParentFrameTicket is null) {
                     throw new ArgumentException(
-                        "A Delta version must have a parent.",
-                        nameof(parentFrameTicket));
+                        "A Delta version must have an exact parent.",
+                        nameof(deltaParentFrameTicket));
                 }
 
                 if (expectedParentBasePayloadBytes is null) {
@@ -92,7 +84,7 @@ internal sealed class ObjectVersion {
         ResultBasePayloadBytes = resultBasePayloadBytes;
         ExpectedParentBasePayloadBytes = expectedParentBasePayloadBytes;
         LogicalVersionOrdinal = logicalVersionOrdinal;
-        ParentFrameTicket = parentFrameTicket;
+        DeltaParentFrameTicket = deltaParentFrameTicket;
     }
 
     public ObjectVersionKind Kind { get; }
@@ -107,5 +99,6 @@ internal sealed class ObjectVersion {
 
     public int LogicalVersionOrdinal { get; }
 
-    public RelativeFrameTicket? ParentFrameTicket { get; }
+    /// <summary>Exact reconstruction parent for Delta; always null for Base.</summary>
+    public RelativeFrameTicket? DeltaParentFrameTicket { get; }
 }

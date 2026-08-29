@@ -6,7 +6,8 @@
 >
 > 裁决日期：2026-08-29
 >
-> 选择：Base parent 使用 earlier Revision locator；不写 forwarding Relay。
+> 选择：Base lineage 使用 earlier Revision locator；不写 forwarding Relay。DB-010 随后把
+> locator 收敛为 containing Revision 的 shared prior-snapshot anchor。
 >
 > 竞争方案归档：annotated tag `research/relay-vs-relay-free-20260829`
 > 指向提交 `b84620b`。
@@ -16,8 +17,9 @@
 选择 relay-free：
 
 ```text
+C.Revision.OVD.Parent = B.PublishedRevision locator
 C.RelocatedBase(Object X)
-    -> B.PublishedRevision locator
+    -> containing Revision shared locator
     -> LookupLive(B.OVD, ObjectId X)
     -> exact prior ObjectVersion in A or B
 ```
@@ -69,7 +71,8 @@ preview 只有 L2 信任，最多作为 routing hint；权威 OVD/ObjectVersion 
   RelaySet、RelayRevision 或 B capacity debt；
 - `ImmediateRotationAppender` 在所有 source/candidate preflight 后完成 in-memory 首帧 C file registration；
   `MaterializeLive(C)` 是 append 后唯一 StateMap 来源，本切片不发布 StateStore head；
-- 所有 evacuated Base 都以 B PublishedRevision 为 per-record locator；
+- C OVD 以 B PublishedRevision 为 shared prior-snapshot anchor，evacuated Base 不再保存
+  per-record parent；
 - 唯一 `InspectObjectLineage` 对 Delta 走 exact parent、对 Base 走 Revision OVD locator；
 - Delta 必须有正 payload 且 logical ordinal 为 `parent + 1`；same-version maintenance 只允许
   RelocatedBase；
@@ -89,10 +92,10 @@ BB: current head remains B; C full OVD binds External(B)
   forwarding Relay，不删除分批降低 EvacuationSet 的能力；
 - 当前只闭合 immediate one-C-Frame 路径；尚无一般 completion search、publication/reopen 或
   crash atomicity；
-- Remove 后同 DurableId 重新接入是否延续旧 lineage 仍未裁决；`LookupLive` 必须在 Remove
-  处停止，当前不实现 `LookupHistoricalPredecessor`；
-- 是否把 Base per-record locator 合并到 Revision 的共同 prior-snapshot anchor，见
-  [`DB-010`](0010-base-lineage-anchor-scope.md)。
+- 当前模型明确拒绝 Remove 后复用同一 DurableId；prior OVD chain 中可见的 Remove decisive。
+  OVD Base checkpoint 后若要永久证明 ID 从未使用，需要未来独立 ID authority；
+- DB-010 已选择把 Base per-record locator 合并到 Revision 的共同 prior-snapshot anchor；
+  mixed-provenance import/rescue 是明确重访条件。
 
 ## 重访触发条件
 

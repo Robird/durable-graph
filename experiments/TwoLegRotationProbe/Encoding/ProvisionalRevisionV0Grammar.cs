@@ -14,7 +14,7 @@ internal readonly record struct ProvisionalDomainRecordInput(
     uint ObjectId,
     ProvisionalDomainRecordRole Role,
     int SyntheticPayloadBytes,
-    RelativeFrameTicket? ParentFrameTicket);
+    RelativeFrameTicket? DeltaParentFrameTicket);
 
 /// <summary>One-byte semantic kind of the provisional object-version dictionary.</summary>
 internal enum ProvisionalObjectVersionDictionaryKind : byte {

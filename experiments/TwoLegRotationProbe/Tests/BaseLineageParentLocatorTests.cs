@@ -10,7 +10,7 @@ public sealed class BaseLineageParentLocatorTests {
     private const uint BbObjectId = 3;
 
     [Fact]
-    public void Revision_locator_layout_preserves_current_heads_and_resolves_exact_lineage() {
+    public void Shared_B_anchor_preserves_canonical_AA_and_BA_exact_lineage() {
         CanonicalLayout layout = BuildCanonicalLayout(reverseEntryOrder: false);
 
         AssertCurrentReconstructionReadsOnlyC(layout);
@@ -22,47 +22,164 @@ public sealed class BaseLineageParentLocatorTests {
         Assert.Equal(new LogicalObjectState(10, 1), aa.HeadState);
         Assert.Equal(layout.A, aa.RootAddress);
         Assert.Equal([layout.C, layout.A], aa.ObjectVersionLineageAddresses);
-        AssertLookup(aa, [layout.B, layout.A]);
+        AssertLookup(
+            Assert.Single(aa.BaseParentLookups),
+            ObjectVersionDictionaryLookupDisposition.Found,
+            [layout.B, layout.A]);
 
         Assert.Equal(new LogicalObjectState(22, 2), ba.HeadState);
         Assert.Equal(layout.A, ba.RootAddress);
         Assert.Equal([layout.C, layout.B, layout.A], ba.ObjectVersionLineageAddresses);
-        AssertLookup(ba, [layout.B]);
+        AssertLookup(
+            Assert.Single(ba.BaseParentLookups),
+            ObjectVersionDictionaryLookupDisposition.Found,
+            [layout.B]);
     }
 
     [Fact]
-    public void Removed_and_absent_locator_results_fail_lineage_but_not_reconstruction() {
+    public void One_shared_anchor_accepts_new_domain_relocated_and_delta_versions() {
+        const uint relocatedId = 10;
+        const uint domainBaseId = 11;
+        const uint deltaId = 12;
+        const uint newId = 13;
+
+        RbfFileStore store = new();
+        RbfFile aFile = store.CreateFile();
+        ObjectVersionDictionaryBuilder aDictionary = new();
+        aDictionary.BindSelf(relocatedId);
+        aDictionary.BindSelf(domainBaseId);
+        aDictionary.BindSelf(deltaId);
+        FrameBuilder aBuilder = new() { ObjectVersionDictionary = aDictionary };
+        AddBase(aBuilder, relocatedId, payloadBytes: 10, logicalVersionOrdinal: 1);
+        AddBase(aBuilder, domainBaseId, payloadBytes: 20, logicalVersionOrdinal: 1);
+        AddBase(aBuilder, deltaId, payloadBytes: 30, logicalVersionOrdinal: 1);
+        AbsoluteFrameAddress a = Append(aFile, aBuilder);
+
+        RbfFile bFile = store.CreateFile();
+        ObjectVersionDictionaryBuilder bDictionary = new() {
+            Kind = ObjectVersionDictionaryKind.Delta,
+            ParentRevisionFrameTicket = Previous(a.FrameTicket),
+        };
+        bDictionary.BindSelf(deltaId);
+        FrameBuilder bBuilder = new() { ObjectVersionDictionary = bDictionary };
+        AddBase(bBuilder, deltaId, payloadBytes: 30, logicalVersionOrdinal: 1);
+        AbsoluteFrameAddress b = Append(bFile, bBuilder);
+
+        RbfFile cFile = store.CreateFile();
+        ObjectVersionDictionaryBuilder cDictionary = new() {
+            Kind = ObjectVersionDictionaryKind.Base,
+            ParentRevisionFrameTicket = Previous(b.FrameTicket),
+        };
+        cDictionary.BindSelf(relocatedId);
+        cDictionary.BindSelf(domainBaseId);
+        cDictionary.BindSelf(deltaId);
+        cDictionary.BindSelf(newId);
+        FrameBuilder cBuilder = new() { ObjectVersionDictionary = cDictionary };
+        AddBase(cBuilder, relocatedId, payloadBytes: 10, logicalVersionOrdinal: 1);
+        AddBase(cBuilder, domainBaseId, payloadBytes: 25, logicalVersionOrdinal: 2);
+        AddDelta(
+            cBuilder,
+            deltaId,
+            payloadBytes: 3,
+            reconstructionPayloadBytes: 33,
+            resultBasePayloadBytes: 33,
+            expectedParentBasePayloadBytes: 30,
+            logicalVersionOrdinal: 2,
+            Previous(b.FrameTicket));
+        AddBase(cBuilder, newId, payloadBytes: 5, logicalVersionOrdinal: 1);
+        AbsoluteFrameAddress c = Append(cFile, cBuilder);
+
+        ObjectLineageInspection relocated = Inspect(store, c, relocatedId);
+        Assert.Equal([c, a], relocated.ObjectVersionLineageAddresses);
+        AssertLookup(
+            Assert.Single(relocated.BaseParentLookups),
+            ObjectVersionDictionaryLookupDisposition.Found,
+            [b, a]);
+
+        ObjectLineageInspection domainBase = Inspect(store, c, domainBaseId);
+        Assert.Equal(new LogicalObjectState(25, 2), domainBase.HeadState);
+        Assert.Equal([c, a], domainBase.ObjectVersionLineageAddresses);
+        AssertLookup(
+            Assert.Single(domainBase.BaseParentLookups),
+            ObjectVersionDictionaryLookupDisposition.Found,
+            [b, a]);
+
+        ObjectLineageInspection delta = Inspect(store, c, deltaId);
+        Assert.Equal(new LogicalObjectState(33, 2), delta.HeadState);
+        Assert.Equal([c, b, a], delta.ObjectVersionLineageAddresses);
+        AssertLookup(
+            Assert.Single(delta.BaseParentLookups),
+            ObjectVersionDictionaryLookupDisposition.Found,
+            [a]);
+
+        ObjectLineageInspection newlyCreated = Inspect(store, c, newId);
+        Assert.Equal(c, newlyCreated.RootAddress);
+        Assert.Equal([c], newlyCreated.ObjectVersionLineageAddresses);
+        AssertLookup(
+            Assert.Single(newlyCreated.BaseParentLookups),
+            ObjectVersionDictionaryLookupDisposition.AbsentAtBase,
+            [b, a]);
+    }
+
+    [Fact]
+    public void Genesis_and_absent_prior_snapshot_bindings_form_only_V1_roots() {
+        RbfFileStore genesisStore = new();
+        RbfFile genesisFile = genesisStore.CreateFile();
+        FrameBuilder genesisBuilder = NewBaseRevision(AaObjectId);
+        AddBase(
+            genesisBuilder,
+            AaObjectId,
+            payloadBytes: 10,
+            logicalVersionOrdinal: 1);
+        AbsoluteFrameAddress genesis = Append(genesisFile, genesisBuilder);
+
+        ObjectLineageInspection genesisLineage = Inspect(
+            genesisStore,
+            genesis,
+            AaObjectId);
+        Assert.Equal(genesis, genesisLineage.RootAddress);
+        Assert.Empty(genesisLineage.BaseParentLookups);
+
+        CanonicalLayout absentV1 = BuildAbsentPriorLayout(logicalVersionOrdinal: 1);
+        ObjectLineageInspection absentLineage = Inspect(absentV1, AaObjectId);
+        Assert.Equal(absentV1.C, absentLineage.RootAddress);
+        AssertLookup(
+            Assert.Single(absentLineage.BaseParentLookups),
+            ObjectVersionDictionaryLookupDisposition.AbsentAtBase,
+            [absentV1.B]);
+
+        CanonicalLayout absentV2 = BuildAbsentPriorLayout(logicalVersionOrdinal: 2);
+        AssertHeadStillReconstructs(absentV2, AaObjectId, expectedBytes: 10);
+        Assert.Throws<InvalidDataException>(() => Inspect(absentV2, AaObjectId));
+    }
+
+    [Fact]
+    public void Visible_remove_rejects_installed_base_but_not_current_reconstruction() {
         CanonicalLayout removed = BuildCanonicalLayout(
             reverseEntryOrder: false,
             removeAaInB: true);
-        CanonicalLayout absent = BuildAbsentLocatorLayout();
 
         AssertHeadStillReconstructs(removed, AaObjectId, expectedBytes: 10);
-        AssertHeadStillReconstructs(absent, AaObjectId, expectedBytes: 10);
-
         Assert.Throws<InvalidDataException>(() => Inspect(removed, AaObjectId));
-        Assert.Throws<InvalidDataException>(() => Inspect(absent, AaObjectId));
     }
 
     [Fact]
-    public void Null_missing_and_non_earlier_locator_frames_fail_lineage_but_not_reconstruction() {
-        CanonicalLayout nullDictionary = BuildMalformedLocatorLayout(
-            locatorKind: LocatorKind.NullDictionary);
-        CanonicalLayout missing = BuildMalformedLocatorLayout(locatorKind: LocatorKind.Missing);
-        CanonicalLayout nonEarlier = BuildMalformedLocatorLayout(
-            locatorKind: LocatorKind.NonEarlier);
+    public void Null_missing_non_earlier_and_absent_shared_anchors_fail_lineage_only() {
+        CanonicalLayout nullDictionary = BuildMalformedAnchorLayout(
+            AnchorKind.NullDictionary);
+        CanonicalLayout missing = BuildMalformedAnchorLayout(AnchorKind.Missing);
+        CanonicalLayout nonEarlier = BuildMalformedAnchorLayout(AnchorKind.NonEarlier);
+        CanonicalLayout absentAnchor = BuildMalformedAnchorLayout(AnchorKind.Absent);
 
-        AssertHeadStillReconstructs(nullDictionary, AaObjectId, expectedBytes: 10);
-        AssertHeadStillReconstructs(missing, AaObjectId, expectedBytes: 10);
-        AssertHeadStillReconstructs(nonEarlier, AaObjectId, expectedBytes: 10);
-
-        Assert.Throws<InvalidDataException>(() => Inspect(nullDictionary, AaObjectId));
-        Assert.Throws<InvalidDataException>(() => Inspect(missing, AaObjectId));
-        Assert.Throws<InvalidDataException>(() => Inspect(nonEarlier, AaObjectId));
+        foreach (CanonicalLayout layout in
+            new[] { nullDictionary, missing, nonEarlier, absentAnchor }) {
+            AssertHeadStillReconstructs(layout, AaObjectId, expectedBytes: 10);
+            Assert.Throws<InvalidDataException>(() => Inspect(layout, AaObjectId));
+        }
     }
 
     [Fact]
-    public void Revision_locator_inspection_is_frozen_repeatable_and_entry_order_independent() {
+    public void Shared_anchor_inspection_is_frozen_repeatable_and_entry_order_independent() {
         CanonicalLayout forward = BuildCanonicalLayout(reverseEntryOrder: false);
         CanonicalLayout reverse = BuildCanonicalLayout(reverseEntryOrder: true);
 
@@ -94,8 +211,8 @@ public sealed class BaseLineageParentLocatorTests {
         ObjectVersionDictionaryBuilder aDictionary = new();
         BindSelf(aDictionary, reverseEntryOrder, AaObjectId, BaObjectId);
         FrameBuilder aBuilder = new() { ObjectVersionDictionary = aDictionary };
-        AddBase(aBuilder, AaObjectId, payloadBytes: 10, logicalVersionOrdinal: 1, null);
-        AddBase(aBuilder, BaObjectId, payloadBytes: 20, logicalVersionOrdinal: 1, null);
+        AddBase(aBuilder, AaObjectId, payloadBytes: 10, logicalVersionOrdinal: 1);
+        AddBase(aBuilder, BaObjectId, payloadBytes: 20, logicalVersionOrdinal: 1);
         AbsoluteFrameAddress a = Append(aFile, aBuilder);
 
         RbfFile bFile = store.CreateFile();
@@ -118,14 +235,13 @@ public sealed class BaseLineageParentLocatorTests {
             expectedParentBasePayloadBytes: 20,
             logicalVersionOrdinal: 2,
             Previous(a.FrameTicket));
-        AddBase(bBuilder, BbObjectId, payloadBytes: 30, logicalVersionOrdinal: 1, null);
+        AddBase(bBuilder, BbObjectId, payloadBytes: 30, logicalVersionOrdinal: 1);
         AbsoluteFrameAddress b = Append(bFile, bBuilder);
 
         RbfFile cFile = store.CreateFile();
-        RelativeFrameTicket locator = Previous(b.FrameTicket);
         ObjectVersionDictionaryBuilder cDictionary = new() {
             Kind = ObjectVersionDictionaryKind.Base,
-            ParentRevisionFrameTicket = locator,
+            ParentRevisionFrameTicket = Previous(b.FrameTicket),
         };
         if (reverseEntryOrder) {
             cDictionary.BindExternal(BbObjectId, Previous(b.FrameTicket));
@@ -138,70 +254,74 @@ public sealed class BaseLineageParentLocatorTests {
         }
 
         FrameBuilder cBuilder = new() { ObjectVersionDictionary = cDictionary };
-        AddBase(cBuilder, AaObjectId, payloadBytes: 10, logicalVersionOrdinal: 1, locator);
-        AddBase(cBuilder, BaObjectId, payloadBytes: 22, logicalVersionOrdinal: 2, locator);
+        AddBase(cBuilder, AaObjectId, payloadBytes: 10, logicalVersionOrdinal: 1);
+        AddBase(cBuilder, BaObjectId, payloadBytes: 22, logicalVersionOrdinal: 2);
         AbsoluteFrameAddress c = Append(cFile, cBuilder);
 
         return new CanonicalLayout(store, a, b, c);
     }
 
-    private static CanonicalLayout BuildAbsentLocatorLayout() {
+    private static CanonicalLayout BuildAbsentPriorLayout(int logicalVersionOrdinal) {
         RbfFileStore store = new();
-        RbfFile aFile = store.CreateFile();
-        FrameBuilder aBuilder = new() {
-            ObjectVersionDictionary = new ObjectVersionDictionaryBuilder(),
-        };
-        AbsoluteFrameAddress a = Append(aFile, aBuilder);
-        RbfFile bFile = store.CreateFile();
-        FrameBuilder bBuilder = new() {
-            ObjectVersionDictionary = new ObjectVersionDictionaryBuilder(),
-        };
-        AbsoluteFrameAddress b = Append(bFile, bBuilder);
-        RbfFile cFile = store.CreateFile();
-        RelativeFrameTicket locator = Previous(b.FrameTicket);
-        ObjectVersionDictionaryBuilder cDictionary = new() {
-            Kind = ObjectVersionDictionaryKind.Base,
-            ParentRevisionFrameTicket = locator,
-        };
-        cDictionary.BindSelf(AaObjectId);
-        FrameBuilder cBuilder = new() { ObjectVersionDictionary = cDictionary };
+        RbfFile priorFile = store.CreateFile();
+        AbsoluteFrameAddress prior = Append(
+            priorFile,
+            new FrameBuilder {
+                ObjectVersionDictionary = new ObjectVersionDictionaryBuilder(),
+            });
+
+        RbfFile currentFile = store.CreateFile();
+        FrameBuilder currentBuilder = NewBaseRevision(
+            AaObjectId,
+            Previous(prior.FrameTicket));
         AddBase(
-            cBuilder,
+            currentBuilder,
             AaObjectId,
             payloadBytes: 10,
-            logicalVersionOrdinal: 1,
-            locator);
-        AbsoluteFrameAddress c = Append(cFile, cBuilder);
-        return new CanonicalLayout(store, a, b, c);
+            logicalVersionOrdinal);
+        AbsoluteFrameAddress current = Append(currentFile, currentBuilder);
+        return new CanonicalLayout(store, prior, prior, current);
     }
 
-    private static CanonicalLayout BuildMalformedLocatorLayout(LocatorKind locatorKind) {
+    private static CanonicalLayout BuildMalformedAnchorLayout(AnchorKind anchorKind) {
         RbfFileStore store = new();
         RbfFile aFile = store.CreateFile();
         AbsoluteFrameAddress a = Append(aFile, new FrameBuilder());
         RbfFile bFile = store.CreateFile();
         AbsoluteFrameAddress b = Append(bFile, new FrameBuilder());
         RbfFile cFile = store.CreateFile();
-        RelativeFrameTicket locator = locatorKind switch {
-            LocatorKind.NullDictionary => Previous(b.FrameTicket),
-            LocatorKind.Missing => Previous(new FrameTicket(100, 24)),
-            LocatorKind.NonEarlier => Current(new FrameTicket(4, 24)),
-            _ => throw new ArgumentOutOfRangeException(nameof(locatorKind)),
-        };
-        ObjectVersionDictionaryBuilder cDictionary = new() {
-            Kind = ObjectVersionDictionaryKind.Base,
-            ParentRevisionFrameTicket = locator,
-        };
-        cDictionary.BindSelf(AaObjectId);
-        FrameBuilder cBuilder = new() { ObjectVersionDictionary = cDictionary };
+
+        FrameBuilder cBuilder;
+        if (anchorKind == AnchorKind.Absent) {
+            cBuilder = NewBaseRevision(AaObjectId);
+        } else {
+            RelativeFrameTicket anchor = anchorKind switch {
+                AnchorKind.NullDictionary => Previous(b.FrameTicket),
+                AnchorKind.Missing => Previous(new FrameTicket(100, 24)),
+                AnchorKind.NonEarlier => Current(new FrameTicket(4, 24)),
+                _ => throw new ArgumentOutOfRangeException(nameof(anchorKind)),
+            };
+            cBuilder = NewBaseRevision(AaObjectId, anchor);
+        }
+
         AddBase(
             cBuilder,
             AaObjectId,
             payloadBytes: 10,
-            logicalVersionOrdinal: 1,
-            locator);
+            logicalVersionOrdinal: 2);
         AbsoluteFrameAddress c = Append(cFile, cBuilder);
         return new CanonicalLayout(store, a, b, c);
+    }
+
+    private static FrameBuilder NewBaseRevision(
+        uint objectId,
+        RelativeFrameTicket? priorSnapshot = null) {
+        ObjectVersionDictionaryBuilder dictionary = new() {
+            Kind = ObjectVersionDictionaryKind.Base,
+            ParentRevisionFrameTicket = priorSnapshot,
+        };
+        dictionary.BindSelf(objectId);
+        return new FrameBuilder { ObjectVersionDictionary = dictionary };
     }
 
     private static void AssertCurrentReconstructionReadsOnlyC(CanonicalLayout layout) {
@@ -233,6 +353,12 @@ public sealed class BaseLineageParentLocatorTests {
             currentHead);
     }
 
+    private static ObjectLineageInspection Inspect(
+        RbfFileStore store,
+        AbsoluteFrameAddress head,
+        uint objectId) =>
+        PhysicalStateOracle.InspectObjectLineage(store, objectId, head);
+
     private static AbsoluteFrameAddress LookupCurrentHead(
         CanonicalLayout layout,
         uint objectId) {
@@ -257,11 +383,10 @@ public sealed class BaseLineageParentLocatorTests {
     }
 
     private static void AssertLookup(
-        ObjectLineageInspection lineage,
+        ObjectVersionDictionaryLookupInspection lookup,
+        ObjectVersionDictionaryLookupDisposition expectedDisposition,
         AbsoluteFrameAddress[] expectedRevisionReads) {
-        ObjectVersionDictionaryLookupInspection lookup =
-            Assert.Single(lineage.BaseParentLookups);
-        Assert.Equal(ObjectVersionDictionaryLookupDisposition.Found, lookup.Disposition);
+        Assert.Equal(expectedDisposition, lookup.Disposition);
         Assert.Equal(expectedRevisionReads, lookup.DictionaryRevisionAddresses);
     }
 
@@ -277,6 +402,9 @@ public sealed class BaseLineageParentLocatorTests {
             actual.ObjectVersionLineageAddresses);
         Assert.Equal(expected.BaseParentLookups.Count, actual.BaseParentLookups.Count);
         for (int index = 0; index < expected.BaseParentLookups.Count; index++) {
+            Assert.Equal(
+                expected.BaseParentLookups[index].Disposition,
+                actual.BaseParentLookups[index].Disposition);
             Assert.Equal(
                 expected.BaseParentLookups[index].DictionaryRevisionAddresses,
                 actual.BaseParentLookups[index].DictionaryRevisionAddresses);
@@ -304,15 +432,13 @@ public sealed class BaseLineageParentLocatorTests {
         FrameBuilder builder,
         uint objectId,
         int payloadBytes,
-        int logicalVersionOrdinal,
-        RelativeFrameTicket? parent) {
+        int logicalVersionOrdinal) {
         ObjectVersionBuilder version = builder.Add(objectId);
         version.Kind = ObjectVersionKind.Base;
         version.PayloadBytes = payloadBytes;
         version.ReconstructionObjectPayloadBytes = payloadBytes;
         version.ResultBasePayloadBytes = payloadBytes;
         version.LogicalVersionOrdinal = logicalVersionOrdinal;
-        version.ParentFrameTicket = parent;
     }
 
     private static void AddDelta(
@@ -331,7 +457,7 @@ public sealed class BaseLineageParentLocatorTests {
         version.ResultBasePayloadBytes = resultBasePayloadBytes;
         version.ExpectedParentBasePayloadBytes = expectedParentBasePayloadBytes;
         version.LogicalVersionOrdinal = logicalVersionOrdinal;
-        version.ParentFrameTicket = parent;
+        version.DeltaParentFrameTicket = parent;
     }
 
     private static AbsoluteFrameAddress Append(RbfFile file, FrameBuilder builder) =>
@@ -349,9 +475,10 @@ public sealed class BaseLineageParentLocatorTests {
         AbsoluteFrameAddress B,
         AbsoluteFrameAddress C);
 
-    private enum LocatorKind {
+    private enum AnchorKind {
         NullDictionary,
         Missing,
         NonEarlier,
+        Absent,
     }
 }

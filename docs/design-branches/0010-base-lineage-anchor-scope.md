@@ -1,39 +1,55 @@
 # DB-010：Base lineage anchor 是 per-record 还是 Revision prior snapshot
 
-> 状态：Open
+> 状态：Chosen
 >
 > 创建日期：2026-08-29
 >
-> 当前方向：DB-009 已选择 relay-free，但本轮仍保留 per-record Base locator；单独验证后再
-> 决定是否合并到 containing Revision 的唯一 OVD parent。Delta direct parent 不在本分叉中。
+> 裁决日期：2026-08-29
+>
+> 选择：Base 不保存 direct parent；统一使用 containing Revision 的 OVD parent 作为
+> prior-snapshot anchor。Delta 继续保存 exact per-record parent。
 
-## 问题
+## 裁决
 
-若每个 Save 形成一个 Revision，且全部 records 都从同一个 accepted pre-save snapshot 派生，
-那么每条 Base 单独保存 lineage locator 可能与 `Revision.OVD.ParentRevisionTicket` 重复。
+当前 single-writer 模型规定：一个 Revision 的全部 changes 都从同一个 accepted pre-save
+snapshot 派生。因此每个 Base 的 prior 只能是：
 
-候选 A：每条非首 Base 保存自己的 parent Revision locator。
+```text
+priorRevision = containingRevision.OVD.ParentRevisionFrameTicket
+priorObject   = LookupLive(priorRevision, ObjectId)
+```
 
-候选 B：Base 不保存 parent；统一使用 containing Revision 的 OVD parent 作为 prior-snapshot
-anchor，再按 ObjectId 执行 `LookupLive`。Delta 仍直接保存 exact parent，因为它是 current
-reconstruction 热依赖。
+每条 Base 再保存相同 Revision ticket 是重复 authority。当前实现删除这份 per-record ticket，
+并将运行时属性明确命名为 `DeltaParentFrameTicket`：Base 必须为 null，Delta 必须存在。
 
-## 当前成立的推演
+OVD parent 的两个用途保持分层：
 
-对一个共同 anchor `P`：
+- OVD Delta：作为 live-map replay parent，同时也是该 Revision 的 prior snapshot；
+- OVD Base：live-map materialization 在 Base 停止，不继承 parent；Base lineage 仍使用它查询
+  prior snapshot。
 
-- new Base：`LookupLive(P, id)` absent，logical ordinal 1，形成 root；
-- domain Base：lookup 得 exact old head，ordinal `+1`；
-- maintenance/relocated Base：lookup 得 exact old head，ordinal 与状态相同；
-- 不同 objects 的 old heads 可分别位于 A/B；共享的是 prior snapshot，不是同一物理地址；
-- rotation C Revision 中的多个 relocated Bases 可共享 B PublishedRevision prior anchor，并分别解析到 A/B exact heads。
+## Base lineage 判定
 
-当前 simulator 的 single writer、one Save/Revision、每 Save 同 ObjectId 至多一次、禁止 ID reuse
-均与该模型一致。尚无 branch merge、historical import 或 rescue consumer。
+- containing OVD 无 parent：仅 ordinal 1 Base 可成为 genesis root；
+- prior lookup `Found`：只允许同 ordinal/同状态 relocation，或严格 `parent + 1` domain Base；
+- prior lookup `AbsentAtBase`：仅 ordinal 1 可成为本 Revision 新建的 root；
+- prior lookup `Removed`：fail closed，不把显式删除解释成新对象；
+- OVD/anchor missing、non-earlier、cycle 或 malformed：current Base reconstruction 仍停止于
+  自身，但 lineage diagnostic fail closed。
 
-## 真实表示力差异
+## 可执行证据
 
-共同 anchor 无法表达一个 Revision 中的 Base 来自多个历史 snapshots：
+- 一个 shared anchor 同时覆盖 new Base、domain Base、relocated Base 与 exact-parent Delta；
+- canonical AA/BA 通过同一个 B PublishedRevision 分别解析到 A/B exact prior heads；
+- genesis、absent V1、absent V2、visible Remove 与 malformed anchor 均有边界测试；
+- immediate runtime C 的 logical state、reconstruction 与 lineage 地址序列保持不变；
+- model/grammar 拒绝 Base direct parent；provisional Base record 不再编码 `NoneToken` 占位，
+  `DeltaParentTokenBytes == 0`；Delta token 规则不变；
+- 完整 probe 211/211。
+
+## 明确拒绝的当前能力
+
+shared anchor 不表达一个 Revision 从多个历史 snapshots 拼装 Base。例如：
 
 ```text
 R0: X1, Y1
@@ -41,26 +57,19 @@ R1: X2, Remove(Y)
 R2: Base(X2 from R1), rescue Base(Y1 from R0)
 ```
 
-`R2.OVD.Parent=R1` 可解析 X，却在 Y 处命中 Remove。per-record locator 可以分别指 R1.X2 与
-R0.Y1。这不是当前反例，但说明候选 B 是明确的单一 prior-snapshot product law，而非纯机械压缩。
+当前不支持 stale-snapshot Save、branch/multiwriter merge、historical import/rescue restore、
+mixed-provenance Base 或 Remove 后复用同一 DurableId。若这些成为真实消费者，再重访 record
+shape；未发布原型不保留双语义 discriminant 或兼容层。
 
-Remove 后复用同一 DurableId 并延续旧 lineage 也会要求不同的 historical lookup；当前仍未裁决。
+## DurableId 边界
 
-## 最小裁决实验
-
-1. 一个 Revision 同时含 new、domain Base 与 maintenance Base，只给一个 OVD parent；
-2. prior OVD 把不同 ObjectIds 解析到 A/B 不同 exact versions；
-3. OVD Base 的 live lookup 缺项不继承，与 `ResolveBasePrior` 从 OVD parent 查询严格分离；
-4. canonical AA/BA 以同一个 B PublishedRevision anchor 分别解析到 A/B exact heads；
-5. Remove 后创建 installed Base fail closed，不静默当作 never-seen root；
-6. out-of-snapshot import/rescue 作为明确拒绝案例和重访触发条件。
-
-若上述通过，应删除 Base per-record parent 及其 wire bytes，不增加 direct/locator durable tag。
-只有长期并存两种 Base parent 语义时才需要 discriminant；未发布原型不应为过渡兼容冻结它。
+`Removed` 只在 prior OVD chain 中仍可见时具有决定性。后续 OVD Base checkpoint 会省略 dead
+ID，使更早 tombstone 退化为 `AbsentAtBase`；当前 `_seenObjectIds` 只在 workload producer
+中禁止复用。若未来要求 reader 跨 reopen 永久证明 ID 从未复用，需要独立的 monotonic
+allocator、epoch 或 retired-ID authority；per-record Base parent 同样不能自动解决该问题。
 
 ## 重访触发条件
 
-- planned C 的 runtime materialize/append 与 OVD/lineage 复验已完成；DB-010 现在可以进入独立
-  discriminator，但尚未据此裁决；
-- branch merge、historical import、rescue restore 或 stale-snapshot Save 成为真实消费者；
-- DurableId reuse 的 lineage 语义被裁决。
+- branch merge、historical import/rescue restore、stale-snapshot Save 或 mixed-provenance Revision；
+- DurableId reuse/epoch 成为产品能力；
+- Revision 不再严格派生自唯一 accepted prior snapshot。

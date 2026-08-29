@@ -6,4 +6,4 @@ internal readonly record struct ProvisionalDomainRecordEstimate(
     int SyntheticObjectPayloadBytes,
     int HeaderBytes,
     int FullRecordBytes,
-    int ParentTokenBytes);
+    int DeltaParentTokenBytes);

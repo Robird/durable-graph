@@ -35,7 +35,7 @@ internal static class ProvisionalRevisionV0Estimator {
                         $"Object {pair.Key} has unsupported version kind {pair.Value.Kind}."),
                 },
                 pair.Value.PayloadBytes,
-                pair.Value.ParentFrameTicket))
+                pair.Value.DeltaParentFrameTicket))
             .ToArray();
         ProvisionalObjectVersionDictionaryEntry[] ovdEntries = dictionary.Entries
             .OrderBy(static pair => pair.Key)
@@ -86,10 +86,11 @@ internal static class ProvisionalRevisionV0Estimator {
         long addressTokenBytes = 0;
 
         foreach (ProvisionalDomainRecordInput record in canonicalDomainInputs) {
-            ulong parentToken = record.ParentFrameTicket is RelativeFrameTicket parent
-                ? ProvisionalRelativeFrameTicketCodec.EncodeRequired(parent)
-                : ProvisionalRelativeFrameTicketCodec.NoneToken;
-            int parentTokenWidth = CanonicalUnsignedBase128.GetEncodedWidth(parentToken);
+            int parentTokenWidth = record.Role == ProvisionalDomainRecordRole.Delta
+                ? CanonicalUnsignedBase128.GetEncodedWidth(
+                    ProvisionalRelativeFrameTicketCodec.EncodeRequired(
+                        record.DeltaParentFrameTicket!.Value))
+                : 0;
             long bodyLengthBytes = checked(
                 1L + parentTokenWidth + record.SyntheticPayloadBytes);
             int bodyLengthPrefixBytes = CanonicalUnsignedBase128.GetEncodedWidth(
@@ -225,8 +226,13 @@ internal static class ProvisionalRevisionV0Estimator {
                     $"Object {record.ObjectId} has negative synthetic payload bytes.");
             }
 
+            if (index > 0 && records[index - 1].ObjectId == record.ObjectId) {
+                throw new InvalidDataException(
+                    $"Domain record ObjectId {record.ObjectId} occurs more than once.");
+            }
+
             if (record.Role == ProvisionalDomainRecordRole.Delta) {
-                if (record.ParentFrameTicket is null) {
+                if (record.DeltaParentFrameTicket is null) {
                     throw new InvalidDataException(
                         $"Delta domain record {record.ObjectId} requires a parent frame ticket.");
                 }
@@ -235,11 +241,13 @@ internal static class ProvisionalRevisionV0Estimator {
                     throw new InvalidDataException(
                         $"Delta domain record {record.ObjectId} requires a positive synthetic payload.");
                 }
+
+                continue;
             }
 
-            if (index > 0 && records[index - 1].ObjectId == record.ObjectId) {
+            if (record.DeltaParentFrameTicket is not null) {
                 throw new InvalidDataException(
-                    $"Domain record ObjectId {record.ObjectId} occurs more than once.");
+                    $"Base domain record {record.ObjectId} cannot carry a direct Delta parent.");
             }
         }
     }

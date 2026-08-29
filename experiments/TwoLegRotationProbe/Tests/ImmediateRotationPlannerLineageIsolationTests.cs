@@ -9,13 +9,17 @@ public sealed class ImmediateRotationPlannerLineageIsolationTests {
     private const uint ObjectId = 1;
 
     [Fact]
-    public void Broken_historical_Base_locator_does_not_block_current_state_rotation() {
+    public void Broken_historical_prior_snapshot_does_not_block_current_state_rotation() {
         RbfFileStore store = new();
         RbfFile previous = store.CreateFile();
         AbsoluteFrameAddress unreadableLocator = Append(previous, new FrameBuilder());
 
         RbfFile current = store.CreateFile();
-        ObjectVersionDictionaryBuilder currentDictionary = new();
+        ObjectVersionDictionaryBuilder currentDictionary = new() {
+            ParentRevisionFrameTicket = new RelativeFrameTicket(
+                IsPreviousFile: true,
+                unreadableLocator.FrameTicket),
+        };
         currentDictionary.BindSelf(ObjectId);
         FrameBuilder currentBuilder = new() {
             ObjectVersionDictionary = currentDictionary,
@@ -26,9 +30,6 @@ public sealed class ImmediateRotationPlannerLineageIsolationTests {
         currentVersion.ReconstructionObjectPayloadBytes = 10;
         currentVersion.ResultBasePayloadBytes = 10;
         currentVersion.LogicalVersionOrdinal = 2;
-        currentVersion.ParentFrameTicket = new RelativeFrameTicket(
-            IsPreviousFile: true,
-            unreadableLocator.FrameTicket);
         AbsoluteFrameAddress publishedRevision = Append(current, currentBuilder);
 
         ObjectReconstructionInspection reconstruction =

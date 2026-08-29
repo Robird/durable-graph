@@ -170,7 +170,6 @@ internal static class ImmediateRotationPlanner {
             version.ReconstructionObjectPayloadBytes = inspection.State.BasePayloadBytes;
             version.ResultBasePayloadBytes = inspection.State.BasePayloadBytes;
             version.LogicalVersionOrdinal = inspection.State.LogicalVersionOrdinal;
-            version.ParentFrameTicket = publishedRevisionLocator;
             dictionary.BindSelf(objectId);
         }
 

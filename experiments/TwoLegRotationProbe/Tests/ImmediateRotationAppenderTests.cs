@@ -40,6 +40,9 @@ public sealed class ImmediateRotationAppenderTests {
         Assert.Same(
             plan.EvacuationRevision.Frame,
             source.Store.ReadFrame(appended));
+        Assert.All(
+            source.Store.ReadFrame(appended).ObjectVersions.Values,
+            static version => Assert.Null(version.DeltaParentFrameTicket));
         Assert.Equal(
             plan.EvacuationRevision.Estimate.RbfLayout,
             source.Store.ReadLayout(appended));
@@ -272,7 +275,7 @@ public sealed class ImmediateRotationAppenderTests {
         version.ResultBasePayloadBytes = resultBasePayloadBytes;
         version.ExpectedParentBasePayloadBytes = parentBasePayloadBytes;
         version.LogicalVersionOrdinal = logicalVersionOrdinal;
-        version.ParentFrameTicket = parent;
+        version.DeltaParentFrameTicket = parent;
     }
 
     private static void AssertExactState(

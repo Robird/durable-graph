@@ -21,7 +21,7 @@ public sealed class ProvisionalRevisionV0GrammarTests {
                     7,
                     ProvisionalDomainRecordRole.Base,
                     SyntheticPayloadBytes: 5,
-                    ParentFrameTicket: null),
+                    DeltaParentFrameTicket: null),
             ],
             new ProvisionalObjectVersionDictionaryInput(
                 ProvisionalObjectVersionDictionaryKind.Base,
@@ -41,13 +41,80 @@ public sealed class ProvisionalRevisionV0GrammarTests {
         Assert.Equal([7U, 99U], estimate.DomainRecords.Select(static record => record.ObjectId));
         Assert.Equal(2, estimate.DomainRecordCount);
         Assert.Equal(6, estimate.SyntheticObjectPayloadBytes);
-        Assert.Equal(7, estimate.DomainRecordHeaderBytes);
-        Assert.Equal(13, estimate.ObjectVersionDictionaryPayloadOffsetBytes);
+        Assert.Equal(6, estimate.DomainRecordHeaderBytes);
+        Assert.Equal(12, estimate.ObjectVersionDictionaryPayloadOffsetBytes);
         Assert.Equal(10, estimate.ObjectVersionDictionaryRecordBytes);
         Assert.Equal(6, estimate.TailMetaDirectoryBytes);
-        Assert.Equal(8, estimate.AddressTokenBytes);
-        Assert.Equal(23, estimate.PayloadLengthBytes);
-        Assert.Equal(56, estimate.RbfLayout.FrameLengthBytes);
+        Assert.Equal(7, estimate.AddressTokenBytes);
+        Assert.Equal(22, estimate.PayloadLengthBytes);
+        Assert.Equal(52, estimate.RbfLayout.FrameLengthBytes);
+    }
+
+    [Fact]
+    public void Base_domain_record_has_no_Delta_parent_token_or_NoneToken_placeholder() {
+        ProvisionalRevisionV0Input input = CreateInput(
+            [new ProvisionalDomainRecordInput(
+                7,
+                ProvisionalDomainRecordRole.Base,
+                SyntheticPayloadBytes: 5,
+                DeltaParentFrameTicket: null)],
+            ProvisionalObjectVersionDictionaryKind.Base,
+            parentFrameTicket: null,
+            [ProvisionalObjectVersionDictionaryEntry.BindSelf(7)]);
+
+        ProvisionalDomainRecordEstimate record = Assert.Single(
+            ProvisionalRevisionV0Estimator.Estimate(input, frameStartOffsetBytes: 4)
+                .DomainRecords);
+
+        Assert.Equal(0, record.DeltaParentTokenBytes);
+        Assert.Equal(2, record.HeaderBytes);
+        Assert.Equal(7, record.FullRecordBytes);
+    }
+
+    [Fact]
+    public void Delta_domain_record_requires_and_encodes_its_exact_parent_token() {
+        ProvisionalDomainRecordInput delta = new(
+            7,
+            ProvisionalDomainRecordRole.Delta,
+            SyntheticPayloadBytes: 1,
+            PreviousFirstFrame);
+        ProvisionalRevisionV0Input valid = CreateInput(
+            [delta],
+            ProvisionalObjectVersionDictionaryKind.Base,
+            parentFrameTicket: null,
+            [ProvisionalObjectVersionDictionaryEntry.BindSelf(7)]);
+        ProvisionalRevisionV0Input missingParent = CreateInput(
+            [delta with { DeltaParentFrameTicket = null }],
+            ProvisionalObjectVersionDictionaryKind.Base,
+            parentFrameTicket: null,
+            []);
+
+        ProvisionalDomainRecordEstimate record = Assert.Single(
+            ProvisionalRevisionV0Estimator.Estimate(valid, frameStartOffsetBytes: 4)
+                .DomainRecords);
+
+        Assert.Equal(2, record.DeltaParentTokenBytes);
+        Assert.Equal(4, record.HeaderBytes);
+        Assert.Throws<InvalidDataException>(
+            () => ProvisionalRevisionV0Estimator.Estimate(
+                missingParent,
+                frameStartOffsetBytes: 4));
+    }
+
+    [Fact]
+    public void Base_domain_record_rejects_a_direct_Delta_parent() {
+        ProvisionalRevisionV0Input input = CreateInput(
+            [new ProvisionalDomainRecordInput(
+                7,
+                ProvisionalDomainRecordRole.Base,
+                SyntheticPayloadBytes: 5,
+                DeltaParentFrameTicket: PreviousFirstFrame)],
+            ProvisionalObjectVersionDictionaryKind.Base,
+            parentFrameTicket: null,
+            []);
+
+        Assert.Throws<InvalidDataException>(
+            () => ProvisionalRevisionV0Estimator.Estimate(input, frameStartOffsetBytes: 4));
     }
 
     [Fact]
@@ -162,6 +229,16 @@ public sealed class ProvisionalRevisionV0GrammarTests {
             ProvisionalObjectVersionDictionaryKind.Base,
             parentFrameTicket: null,
             []);
+        ProvisionalDomainRecordInput delta = new(
+            8,
+            ProvisionalDomainRecordRole.Delta,
+            1,
+            PreviousFirstFrame);
+        ProvisionalRevisionV0Input duplicateDeltaDomain = CreateInput(
+            [delta, delta],
+            ProvisionalObjectVersionDictionaryKind.Base,
+            parentFrameTicket: null,
+            []);
         ProvisionalRevisionV0Input duplicateBinding = CreateInput(
             [record],
             ProvisionalObjectVersionDictionaryKind.Base,
@@ -174,6 +251,10 @@ public sealed class ProvisionalRevisionV0GrammarTests {
         Assert.Throws<InvalidDataException>(
             () => ProvisionalRevisionV0Estimator.Estimate(
                 duplicateDomain,
+                frameStartOffsetBytes: 4));
+        Assert.Throws<InvalidDataException>(
+            () => ProvisionalRevisionV0Estimator.Estimate(
+                duplicateDeltaDomain,
                 frameStartOffsetBytes: 4));
         Assert.Throws<InvalidDataException>(
             () => ProvisionalRevisionV0Estimator.Estimate(

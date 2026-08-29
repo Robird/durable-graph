@@ -84,7 +84,9 @@ encoded == 1  -> invalid
 encoded >= 2  -> required frame ticket
 ```
 
-`None` 只允许用于 optional parent，例如新创建对象的首个 Base。Revision head、ObjectVersionDict live entry 和 required parent/locator 都必须 non-zero；DB-010 若删除 per-record Base anchor，则该字段整体不存在而不是编码为另一种 None。
+`None` 只允许用于 optional Revision prior snapshot，例如 genesis OVD parent。Revision head、
+ObjectVersionDict live entry、Delta exact parent 与 required shared anchor 都必须 non-zero。Base
+record 没有 parent 字段，不能用 `None` 占位。
 
 `encoded == 1` 相当于 `selector=Previous` 且 `frameCode=0`，必须拒绝，避免产生第二种 None 表示。
 
@@ -202,10 +204,9 @@ else:
 若一个显式 relative token 又解析回 containing frame，reader 必须拒绝，避免同一 value
 存在两种 canonical 表示。
 
-这个 `Self` 只属于 OVD binding 字段。ObjectVersion 的 direct Delta parent 与当前选择的
-per-record Base Revision locator 都使用通用 `RelativeFrameTicket`：optional root 为 `None=0`，
-required target 必须是更早的 same/previous frame，不接受 `Self`。DB-010 若选择 Revision 共同
-prior-snapshot anchor，Base 将不再单独编码该 ticket；通用地址 grammar 本身不变。
+这个 `Self` 只属于 OVD binding 字段。ObjectVersion 的 direct Delta parent 与 Revision OVD 的
+shared prior-snapshot anchor 使用通用 `RelativeFrameTicket`；required target 必须是更早的
+same/previous frame，不接受 `Self`。Base 不再单独编码 ticket；通用地址 grammar 本身不变。
 
 旧 Map version 中未修改的 entry 先前已经 absolute-normalized；不得把旧 raw relative bits 原样复制到新的 origin。若 target 超出 same/previous horizon，planner 必须先安排对应 ObjectVersion 的 relocation/Rebase；codec 只负责 fail closed，不自行改变图状态。
 

@@ -164,7 +164,7 @@ public sealed class RbfFileTests {
     }
 
     [Fact]
-    public void ParentTicket_locates_the_same_object_in_the_previous_file() {
+    public void Delta_parent_ticket_locates_the_same_object_in_the_previous_file() {
         const uint objectId = 42;
         RbfFileStore store = new();
         RbfFile previousFile = store.CreateFile();
@@ -176,16 +176,21 @@ public sealed class RbfFileTests {
         RbfFile currentFile = store.CreateFile();
         FrameBuilder childBuilder = new();
         ObjectVersionBuilder childVersion = childBuilder.Add(objectId);
-        childVersion.ReconstructionObjectPayloadBytes = 0;
+        childVersion.Kind = ObjectVersionKind.Delta;
+        childVersion.PayloadBytes = 1;
+        childVersion.ReconstructionObjectPayloadBytes = 1;
+        childVersion.ResultBasePayloadBytes = 0;
+        childVersion.ExpectedParentBasePayloadBytes = 0;
         childVersion.LogicalVersionOrdinal = 2;
-        childVersion.ParentFrameTicket = new RelativeFrameTicket(
+        childVersion.DeltaParentFrameTicket = new RelativeFrameTicket(
             IsPreviousFile: true,
             FrameTicket: rootTicket);
         Frame child = childBuilder.Build();
         currentFile.Append(child);
         FileScope scope = new(currentFile.FileNumber);
 
-        RelativeFrameTicket? parentTicket = child.ObjectVersions[objectId].ParentFrameTicket;
+        RelativeFrameTicket? parentTicket =
+            child.ObjectVersions[objectId].DeltaParentFrameTicket;
 
         Assert.NotNull(parentTicket);
         Assert.Same(

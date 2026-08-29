@@ -133,8 +133,6 @@ internal static class WorkloadSimulator {
                         logicalCursor.GetLiveObjectState(update.ObjectId),
                         GetHeadObjectVersion(store, stateMap[update.ObjectId], update.ObjectId),
                         stateMap[update.ObjectId],
-                        previousRevisionAddress ?? throw new InvalidOperationException(
-                            "An update requires a previous published Revision."),
                         currentFileNumber,
                         policy);
                     dictionary.BindSelf(update.ObjectId);
@@ -164,7 +162,6 @@ internal static class WorkloadSimulator {
         LogicalObjectState previousState,
         ObjectVersion previousVersion,
         AbsoluteFrameAddress previousAddress,
-        AbsoluteFrameAddress previousRevisionAddress,
         uint currentFileNumber,
         BaselinePolicy policy) {
         builder.ResultBasePayloadBytes = update.ResultBasePayloadBytes;
@@ -183,13 +180,12 @@ internal static class WorkloadSimulator {
 
         if (writeBase) {
             builder.Kind = ObjectVersionKind.Base;
-            builder.ParentFrameTicket =
-                ToRelativeCurrentFile(currentFileNumber, previousRevisionAddress);
             builder.PayloadBytes = update.ResultBasePayloadBytes;
             builder.ReconstructionObjectPayloadBytes = update.ResultBasePayloadBytes;
         } else {
             builder.Kind = ObjectVersionKind.Delta;
-            builder.ParentFrameTicket = ToRelativeCurrentFile(currentFileNumber, previousAddress);
+            builder.DeltaParentFrameTicket =
+                ToRelativeCurrentFile(currentFileNumber, previousAddress);
             builder.PayloadBytes = update.DeltaPayloadBytes;
             builder.ReconstructionObjectPayloadBytes = checked(
                 previousVersion.ReconstructionObjectPayloadBytes + update.DeltaPayloadBytes);

@@ -214,7 +214,7 @@ materialized root 是可丢弃 working graph，不是 baseline、StateMap 或第
 
 ### S1：内存自适应双腿轮转策略模拟
 
-状态：In Progress。当前优先研究切片；deterministic workload、三条 Base/Delta 基线、runtime OVD authority、symbolic materialization 与 provisional RBF v0.40 size envelope 已形成逐 Save 闭环。DB-009 已选择 relay-free；immediate A/B→B/C 路径现在以 immutable runtime Frame 为 plan authority，完成 preflight、in-memory 首帧 C file registration、`MaterializeLive(C)`、reconstruction 与 lineage 复验，但不发布 StateStore head。尚未实现 OVD/object bytes writer/parser、publication/reopen/crash、shared-frame-aware 或 rotation-aware 自适应策略、一般 two-file completion search 或 `CanPrepareAndRotate` gate。不修改 R1–R3 已验证结论，也不把 StateStore working design 描述为产品实现事实。
+状态：In Progress。当前优先研究切片；deterministic workload、三条 Base/Delta 基线、runtime OVD authority、symbolic materialization 与 provisional RBF v0.40 size envelope 已形成逐 Save 闭环。DB-009 已选择 relay-free，DB-010 已选择 Revision shared prior-snapshot anchor；immediate A/B→B/C 路径现在以 immutable runtime Frame 为 plan authority，完成 preflight、in-memory 首帧 C file registration、`MaterializeLive(C)`、reconstruction 与 lineage 复验，但不发布 StateStore head。尚未实现 OVD/object bytes writer/parser、publication/reopen/crash、shared-frame-aware 或 rotation-aware 自适应策略、一般 two-file completion search 或 `CanPrepareAndRotate` gate。不修改 R1–R3 已验证结论，也不把 StateStore working design 描述为产品实现事实。
 
 问题：在不先引入固定 `MaxLogicalChainBytes`、`TargetFileBytes` 或 migration-byte budget 的情况下，能否用无权重事实量设计并比较 Base、Delta、渐进 cold Base migration 与正式 rotation 的候选策略？
 
@@ -239,55 +239,24 @@ failed plan leaves published state unchanged
 
 模拟记录原始 bytes、frame sets、lineage、evacuation debt、useful/unused reads 与布局事实；所有比例和加权 score 后算。至少比较 AlwaysBase、AlwaysDelta-when-legal、StateJournal-style local cost、Previous-ratio、渐进 cold Base migration 与统一策略候选。
 
-S1a preparatory baseline 明确区分：StateMap 保存 `AbsoluteFrameAddress`，ObjectVersion 内 parent 保存由承载 frame 的 `FileScope` 解释的 `RelativeFrameTicket`；Create 写 Base，Update 由当前三种 policy 选择 Base/Delta，Remove 只删 live binding 但仍产生空 Revision Frame。Delta 以 `(ExpectedParentBasePayloadBytes, ResultBasePayloadBytes)` 构成可校验的尺寸态变换，`PayloadBytes` 只表示写成本。每个 Save prefix 均先 materialize 并与唯一 logical replay cursor exact compare，再成为下一步输入；整次 Run 失败不暴露 private candidate Store。该 baseline 当时只具备 object-payload-only 必要容量 preflight；S1d 补当前单文件 Save 的 provisional metadata gate，S1e 另建 immediate rotation planner，但尚未把 rotation legality 接入这些 policy runs。因此 `AlwaysDeltaWhenLegal` 在现有输入内仍仅等价于 AlwaysDelta，不代表一般 legality planner。
+当前 executable baseline：
 
-S1b 将 `FrameTicket` 推进为 offset/length，并按本地 RBF draft v0.40 精确建模 HeaderFence、24-byte frame fixed overhead、4B padding、trailing Fence、TailOffset、native start 与 DurableGraph 512 GiB relative-start 边界。Simulation 的输入仍严格标记为 `ObjectPayloadOnly`：只把 synthetic ObjectVersion payload 放入 RBF Payload，TailMeta=0，明确排除 ObjectVersion headers、OVD、index、VarUInt 与 self-ticket fixed point。因此当前可比较的是 synthetic payload write、frame sharing、reconstruction closure 与 co-read；不能从这些数字推出完整 Revision bytes、真实容量安全或策略 winner。write metrics 是逐 Save event；post-save read metrics 是状态快照，默认不跨 Save 求和。
+- deterministic Field/List workload 与三条 policy baseline；
+- one Revision/one in-memory RBF Frame、runtime OVD authority、absolute StateMap、symbolic Delta apply；
+- exact v0.40 envelope 与 size-only `ProvisionalRevisionV0`，但无 bytes writer/parser；
+- relay-free immediate A/B→B/C plan/apply/runtime verification；
+- Revision shared prior-snapshot anchor，Base 无 direct parent/token，Delta 保留 exact parent；
+- canonical AA/BA/BB、mixed new/domain/relocated/Delta、genesis/Absent/visible Remove/malformed anchor；
+- Probe 211/211。
 
-S1c 新增 `ObjectPayloadReadAmplification3`。它保留 StateJournal `ShouldRebase` 的 ratio=3 与判据形状，但把 cumulative cost 明确定义为单对象 reconstruction chain 的 synthetic payload sum，不移植 one-object-per-frame 模型中的 38-byte estimated overhead。Base 重置累计，Delta 累加；该派生值随 ObjectVersion 保存并由 oracle 从 terminating Base 重算校验，但仍不计入 `ObjectPayloadOnly` layout，也不是 wire 字段决定。
+当前 provisional matrix（modeled file/final full-frame read）为 hot/cold
+`1864/1132`、`1428/1396`、`1500/1132`，fixed mixed
+`516/176`、`460/444`、`460/296`。它只展示 tradeoff，不选择 winner。
 
-四场景 executable matrix 覆盖 exact threshold/tie/reset、增长/缩小/等尺寸的 `Base <= Delta`、hot-one/cold-eight shared Frame，以及 fixed-seed Field/List mixed。输出只汇总可加的 write events，并单列 final post-save reconstruction snapshot，不提供跨 Save `TotalReadBytes`。首轮结果显示第三策略能落在两条极端基线之间，但它尚不能看到 shared-frame co-read、OVD/index bytes、rotation debt 或容量完成性，因此不构成 winner 或统一策略结论。
-
-S1d 对本地 Atelia RBF commit `fec021295828fcfe638434d69d04ff078c87c8ce` 的实际接口做了复核：完整 L3 读取仍以整个 Frame 为边界，TailMeta-only preview 只有 L2 信任；append、`IRbfFrame` 与 `IRbfTailMeta` 都提供 containing ticket。因此 OVD 用字段级 `BindSelf` 即可还原同帧 binding，不再在 Frame 内重复序列化 self-ticket。literal-self 的 executable 反例出现两个稳定宽度，证明 fixed-point 方案还需要额外的 least/canonical 规则；当前以更小的 contextual-self 方案取代，详见 DB-008。
-
-`ProvisionalRevisionV0` 使用同一冻结 trace 的独立 run-level accounting scope，component estimate、RBF append ticket/layout 与 reconstruction provenance 必须一致。hot/cold 三策略 modeled file/final read 分别为 `1900/1148`、`1440/1408`、`1516/1148`；fixed-seed mixed 为 `536/184`、`464/448`、`468/300`。该 profile 对其临时尺寸语法是精确的，但尚无 bytes round-trip，也未冻结 Tag/opcode/record layout。
-
-S1e（现由 tag `research/relay-vs-relay-free-20260829` 归档）把 V0 尺寸算法改接显式 grammar IR，使 OVD Base/Delta、parent 与
-Self/External/Remove 不再由 `SaveStep` 或“是否首 Revision”隐式推导。纯
-`ImmediateRotationPlanner` 从 source reconstruction facts 得到
-`EvacuationSet=Base@A`、`RelaySet=EvacuationSet∩Head@A`，在 B 估算 zero-synthetic-payload helpers +
-empty OVD Delta，再在 C 估算 evacuation Bases + 覆盖全部 live IDs 的 mixed full OVD Base；
-Projected StateMap 只从该 OVD 解码。AA/BA/BB golden 得到 relay `ticket=32/40`、C
-`ticket=4/88`，并执行性覆盖 B TailMeta 与 C combined-capacity fail-closed、零 mutation 和
-retry。
-
-这只是“最多一个 B relay Frame + 一个 C evacuation Frame”的 immediate constructive
-witness。成功证明存在一条具体 preparation path；失败不排除多个 relay Frames 或先在 B
-做若干 published maintenance，因此还不是一般 `CanPrepareAndRotate` oracle。
-
-S1f 将属性明确改名为 `LogicalVersionOrdinal`，物理次序继续由 address/parent/cycle gate
-表达。历史 discriminator 曾验证 transparent Delta/Base；DB-009 裁决后只保留 same-version
-RelocatedBase，Delta 必须正 payload 且 ordinal 为 `parent + 1`。Base reconstruction 不读取其
-lineage locator，lineage inspection 则经 B OVD 找 exact prior ObjectVersion。
-
-S1g 已实现 nullable runtime OVD authority 与不接收 StateMap 的 `LookupLive`/`MaterializeLive`：Base/Delta、
-Self/External/Remove、decisive stop、Delta inheritance、Base absence、source-scope normalization
-及 malformed address/object fail-close 均有 executable evidence。canonical C full OVD 是唯一
-current authority，AA/BA 由 C Self、BB 由 C External(B) 取得 head。
-
-显式 Base Revision-locator oracle 对比了三种形状：用户澄清的 relay + OVD Self 得到
-`C -> Relay -> A` 且 parent lookup 只读 Relay；relay-free 得到 `C -> A` 且 lookup 读 B/A；
-relay record + empty OVD 会读 Relay/B/A 但跳过 helper。前两者 current state、logical ordinal 与
-lineage root 相同，current reconstruction 对 relocated Base 仍只读 C。完整 probe 为 194 tests。
-
-因此 DB-009 已选择 relay-free。`WorkloadSimulator` 的 StateMap 由 runtime OVD replay 派生；
-runtime/grammar/planner 均已删除 forwarding 机制。后续 immediate runtime slice 删除 plan 内重复的
-ProjectedStateMap：planner 构造完整 immutable C Frame，provisional grammar 只作单向尺寸投影；
-appender 在 source/candidate preflight 后才把带首 Frame 的 C 加入 store，随后只以
-`MaterializeLive(C)` 安装派生 map。旧历史 lineage 损坏仍由诊断暴露，但不再阻塞 current
-reconstruction/rotation。Probe 当前 204 tests。DB-010 现已满足 runtime-C 前置条件，可在下一
-独立 discriminator 中研究 shared prior-snapshot anchor。
-
-本切片不实现真实 `DurableFlush`、atomic HEAD、reopen/truncate 或文件删除。逻辑策略收敛后，S2/S3 分别验证地址/layout 与 filesystem publication；文件被物理删除后不可访问不属于格式需要抵抗的故障模型。
+S1 当前未闭合：一般 B Base migration / `CanPrepareAndRotate` reference oracle、连续多次轮转、
+rotation-aware policy comparison，以及真实 bytes/publication/reopen/crash。旧 Relay discriminator
+由 tag `research/relay-vs-relay-free-20260829`、DB-009 和实验簿归档；本 live roadmap 不重复历史
+golden。文件被物理删除后不可访问仍不属于格式故障模型。
 
 ### R4：内存 StateMap 与重复逻辑 delta apply
 

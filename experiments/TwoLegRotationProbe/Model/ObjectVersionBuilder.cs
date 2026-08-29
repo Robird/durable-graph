@@ -13,7 +13,7 @@ internal sealed class ObjectVersionBuilder {
 
     public int LogicalVersionOrdinal { get; set; } = 1;
 
-    public RelativeFrameTicket? ParentFrameTicket { get; set; }
+    public RelativeFrameTicket? DeltaParentFrameTicket { get; set; }
 
     public ObjectVersion Build() => new(
         Kind,
@@ -24,5 +24,5 @@ internal sealed class ObjectVersionBuilder {
         ResultBasePayloadBytes,
         ExpectedParentBasePayloadBytes,
         LogicalVersionOrdinal,
-        ParentFrameTicket);
+        DeltaParentFrameTicket);
 }

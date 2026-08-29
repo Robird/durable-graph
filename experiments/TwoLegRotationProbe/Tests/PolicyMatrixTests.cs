@@ -158,10 +158,10 @@ public sealed class PolicyMatrixTests {
         SimulationRun[] second = RunProvisionalPolicyMatrix(trace);
 
         Assert.Equal(
-            "AlwaysBase:BodyW1500/MetaW179/F1900:FinalR900/1000/100/1148/9/2|" +
-            "AlwaysDeltaWhenLegal:BodyW1050/MetaW177/F1440:FinalR1050/1050/0/1408/15/7|" +
-            "ObjectPayloadReadAmplification3:BodyW1125/MetaW177/F1516:" +
-            "FinalR900/1000/100/1148/9/2",
+            "AlwaysBase:BodyW1500/MetaW152/F1864:FinalR900/1000/100/1132/9/2|" +
+            "AlwaysDeltaWhenLegal:BodyW1050/MetaW168/F1428:FinalR1050/1050/0/1396/15/7|" +
+            "ObjectPayloadReadAmplification3:BodyW1125/MetaW165/F1500:" +
+            "FinalR900/1000/100/1132/9/2",
             DescribeProvisionalComparison(first));
         Assert.Equal(
             DescribeProvisionalComparison(first),
@@ -180,10 +180,10 @@ public sealed class PolicyMatrixTests {
         SimulationRun[] second = RunProvisionalPolicyMatrix(trace);
 
         Assert.Equal(
-            "AlwaysBase:BodyW342/MetaW99/F536:FinalR123/123/0/184/3/1|" +
-            "AlwaysDeltaWhenLegal:BodyW274/MetaW97/F464:FinalR171/274/103/448/6/3|" +
-            "ObjectPayloadReadAmplification3:BodyW279/MetaW97/F468:" +
-            "FinalR147/181/34/300/4/2",
+            "AlwaysBase:BodyW342/MetaW81/F516:FinalR123/123/0/176/3/1|" +
+            "AlwaysDeltaWhenLegal:BodyW274/MetaW92/F460:FinalR171/274/103/444/6/3|" +
+            "ObjectPayloadReadAmplification3:BodyW279/MetaW89/F460:" +
+            "FinalR147/181/34/296/4/2",
             DescribeProvisionalComparison(first));
         Assert.Equal(
             DescribeProvisionalComparison(first),

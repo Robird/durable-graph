@@ -33,8 +33,8 @@ internal static class PhysicalStateOracle {
     }
 
     /// <summary>
-    /// Follows exact Delta parents and resolves Base lineage parents through the referenced
-    /// Revision's authoritative object-version dictionary.
+    /// Follows exact Delta parents and resolves each Base against the prior-snapshot anchor
+    /// carried by its containing Revision's authoritative object-version dictionary.
     /// </summary>
     public static ObjectLineageInspection InspectObjectLineage(
         RbfFileStore store,
@@ -55,27 +55,35 @@ internal static class PhysicalStateOracle {
         while (true) {
             if (!visited.Add(address)) {
                 throw new InvalidDataException(
-                    $"Object {objectId} has a cycle in its Revision-locator lineage chain.");
+                    $"Object {objectId} has a cycle in its shared-anchor lineage chain.");
             }
 
             objectVersionLineageAddresses.Add(address);
-            ObjectVersion version = ReadObjectVersion(store, objectId, address);
-            if (version.ParentFrameTicket is not RelativeFrameTicket parentTicket) {
-                return new ObjectLineageInspection(
-                    objectId,
-                    headState,
-                    headAddress,
-                    address,
-                    objectVersionLineageAddresses,
-                    baseParentLookups);
-            }
-
+            Frame containingFrame = ReadObjectVersionFrame(store, objectId, address);
+            ObjectVersion version = containingFrame.ObjectVersions[objectId];
             AbsoluteFrameAddress parentAddress;
             if (version.Kind == ObjectVersionKind.Delta) {
-                parentAddress = ResolveParent(address, parentTicket);
+                RelativeFrameTicket directParent = version.DeltaParentFrameTicket
+                    ?? throw new InvalidDataException(
+                        $"Delta for object {objectId} has no exact lineage parent.");
+                parentAddress = ResolveParent(address, directParent);
             } else {
+                ObjectVersionDictionary dictionary = containingFrame.ObjectVersionDictionary
+                    ?? throw new InvalidDataException(
+                        $"Base for object {objectId} is not contained in an authoritative Revision.");
+                if (dictionary.ParentRevisionFrameTicket is not RelativeFrameTicket priorSnapshot) {
+                    ValidateRootBase(objectId, version, "a Revision without a prior snapshot");
+                    return new ObjectLineageInspection(
+                        objectId,
+                        headState,
+                        headAddress,
+                        address,
+                        objectVersionLineageAddresses,
+                        baseParentLookups);
+                }
+
                 AbsoluteFrameAddress locatorRevisionAddress =
-                    ResolveParent(address, parentTicket);
+                    ResolveParent(address, priorSnapshot);
                 ObjectVersionDictionaryLookupInspection lookup =
                     ObjectVersionDictionaryReader.LookupLive(
                         store,
@@ -83,16 +91,27 @@ internal static class PhysicalStateOracle {
                         objectId);
                 baseParentLookups.Add(lookup);
 
+                if (lookup.Disposition ==
+                    ObjectVersionDictionaryLookupDisposition.AbsentAtBase) {
+                    ValidateRootBase(objectId, version, "an absent prior-snapshot binding");
+                    return new ObjectLineageInspection(
+                        objectId,
+                        headState,
+                        headAddress,
+                        address,
+                        objectVersionLineageAddresses,
+                        baseParentLookups);
+                }
+
                 if (lookup.Disposition != ObjectVersionDictionaryLookupDisposition.Found ||
-                    lookup.ResolvedObjectVersionAddress is not AbsoluteFrameAddress
-                        resolvedObjectVersionAddress) {
+                    lookup.ResolvedObjectVersionAddress is not AbsoluteFrameAddress resolved) {
                     throw new InvalidDataException(
-                        $"Base for object {objectId} uses Revision {locatorRevisionAddress} " +
-                        $"as a lineage-parent locator, but its OVD lookup resolved " +
+                        $"Base for object {objectId} uses prior snapshot {locatorRevisionAddress}, " +
+                        $"but its OVD lookup resolved " +
                         $"{lookup.Disposition}.");
                 }
 
-                parentAddress = resolvedObjectVersionAddress;
+                parentAddress = resolved;
             }
 
             ObjectVersion parent = ReadObjectVersion(store, objectId, parentAddress);
@@ -460,7 +479,7 @@ internal static class PhysicalStateOracle {
         AbsoluteFrameAddress childAddress,
         ObjectVersion version,
         uint objectId) {
-        RelativeFrameTicket parentTicket = version.ParentFrameTicket
+        RelativeFrameTicket parentTicket = version.DeltaParentFrameTicket
             ?? throw new InvalidDataException(
                 $"Delta for object {objectId} has no reconstruction parent.");
         return ResolveParent(childAddress, parentTicket);
@@ -490,6 +509,12 @@ internal static class PhysicalStateOracle {
     private static ObjectVersion ReadObjectVersion(
         RbfFileStore store,
         uint objectId,
+        AbsoluteFrameAddress address) =>
+        ReadObjectVersionFrame(store, objectId, address).ObjectVersions[objectId];
+
+    private static Frame ReadObjectVersionFrame(
+        RbfFileStore store,
+        uint objectId,
         AbsoluteFrameAddress address) {
         Frame frame;
         try {
@@ -506,7 +531,18 @@ internal static class PhysicalStateOracle {
                 $"Frame {address} does not contain object {objectId}.");
         }
 
-        return version;
+        return frame;
+    }
+
+    private static void ValidateRootBase(
+        uint objectId,
+        ObjectVersion version,
+        string context) {
+        if (version.LogicalVersionOrdinal != 1) {
+            throw new InvalidDataException(
+                $"Base for object {objectId} has logical version " +
+                $"{version.LogicalVersionOrdinal} in {context}; only version 1 can form a root.");
+        }
     }
 
     private readonly record struct VisitedObjectVersion(

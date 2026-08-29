@@ -84,19 +84,21 @@ public sealed class SimulationTests {
         Assert.Equal(
             thirdReconstructionPayloadBytes,
             thirdUpdate.ReconstructionObjectPayloadBytes);
-        Assert.Equal(
-            new RelativeFrameTicket(false, run.RevisionAddresses[0].FrameTicket),
-            firstUpdate.ParentFrameTicket);
-        Assert.Equal(
-            new RelativeFrameTicket(
-                false,
-                policy == BaselinePolicy.AlwaysBase
-                    ? run.RevisionAddresses[2].FrameTicket
-                    : run.RevisionAddresses[1].FrameTicket),
-            secondUpdate.ParentFrameTicket);
-        Assert.Equal(
-            new RelativeFrameTicket(false, run.RevisionAddresses[3].FrameTicket),
-            thirdUpdate.ParentFrameTicket);
+        if (policy == BaselinePolicy.AlwaysBase) {
+            Assert.Null(firstUpdate.DeltaParentFrameTicket);
+            Assert.Null(secondUpdate.DeltaParentFrameTicket);
+            Assert.Null(thirdUpdate.DeltaParentFrameTicket);
+        } else {
+            Assert.Equal(
+                new RelativeFrameTicket(false, run.RevisionAddresses[0].FrameTicket),
+                firstUpdate.DeltaParentFrameTicket);
+            Assert.Equal(
+                new RelativeFrameTicket(false, run.RevisionAddresses[1].FrameTicket),
+                secondUpdate.DeltaParentFrameTicket);
+            Assert.Equal(
+                new RelativeFrameTicket(false, run.RevisionAddresses[3].FrameTicket),
+                thirdUpdate.DeltaParentFrameTicket);
+        }
         Assert.Equal(4, thirdUpdate.LogicalVersionOrdinal);
 
         if (policy == BaselinePolicy.AlwaysDeltaWhenLegal) {
@@ -220,22 +222,29 @@ public sealed class SimulationTests {
     }
 
     [Fact]
-    public void Base_materialization_does_not_read_its_lineage_parent() {
+    public void Base_materialization_does_not_read_its_corrupt_prior_snapshot_anchor() {
         RbfFileStore store = new();
-        RbfFile file = store.CreateFile();
-        FrameBuilder frame = new();
+        RbfFile previous = store.CreateFile();
+        AbsoluteFrameAddress corruptPriorSnapshot = new(
+            previous.FileNumber,
+            previous.Append(new FrameBuilder().Build()));
+        RbfFile current = store.CreateFile();
+        ObjectVersionDictionaryBuilder dictionary = new() {
+            ParentRevisionFrameTicket = new RelativeFrameTicket(
+                IsPreviousFile: true,
+                corruptPriorSnapshot.FrameTicket),
+        };
+        dictionary.BindSelf(1);
+        FrameBuilder frame = new() { ObjectVersionDictionary = dictionary };
         ObjectVersionBuilder rebased = frame.Add(1);
         rebased.Kind = ObjectVersionKind.Base;
         rebased.PayloadBytes = 100;
         rebased.ReconstructionObjectPayloadBytes = 100;
         rebased.ResultBasePayloadBytes = 100;
         rebased.LogicalVersionOrdinal = 2;
-        rebased.ParentFrameTicket = new RelativeFrameTicket(
-            IsPreviousFile: true,
-            FrameTicket: new FrameTicket(4, 24));
-        FrameTicket headTicket = file.Append(frame.Build());
+        FrameTicket headTicket = current.Append(frame.Build());
         Dictionary<uint, AbsoluteFrameAddress> stateMap = new() {
-            [1] = new AbsoluteFrameAddress(file.FileNumber, headTicket),
+            [1] = new AbsoluteFrameAddress(current.FileNumber, headTicket),
         };
 
         IReadOnlyDictionary<uint, LogicalObjectState> materialized =
@@ -408,7 +417,7 @@ public sealed class SimulationTests {
         builder.ResultBasePayloadBytes = resultBasePayloadBytes;
         builder.ExpectedParentBasePayloadBytes = expectedParentBasePayloadBytes;
         builder.LogicalVersionOrdinal = logicalVersionOrdinal;
-        builder.ParentFrameTicket = new RelativeFrameTicket(false, parentFrameTicket);
+        builder.DeltaParentFrameTicket = new RelativeFrameTicket(false, parentFrameTicket);
     }
 
     private static string Describe(SimulationRun run) {
@@ -424,7 +433,7 @@ public sealed class SimulationTests {
                         $"{pair.Value.ReconstructionObjectPayloadBytes}:" +
                         $"{pair.Value.ResultBasePayloadBytes}:" +
                         $"{pair.Value.ExpectedParentBasePayloadBytes}:" +
-                        $"{pair.Value.LogicalVersionOrdinal}:{pair.Value.ParentFrameTicket}")));
+                        $"{pair.Value.LogicalVersionOrdinal}:{pair.Value.DeltaParentFrameTicket}")));
         }
 
         descriptions.Add(string.Join(

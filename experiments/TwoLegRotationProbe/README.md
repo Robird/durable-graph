@@ -16,10 +16,10 @@ The first scaffold deliberately models only a few container facts:
   means this older/raw probe frame did not model OVD authority and is not an
   authoritative empty map;
 - `ObjectVersion` distinguishes Base from Delta and records synthetic payload
-  cost, resulting Base size, logical version ordinal, and lineage parent;
-- `ObjectVersion.ParentFrameTicket` is nullable for a first version, otherwise
-  it is `(bool IsPreviousFile, FrameTicket)` interpreted in the containing
-  frame's file scope;
+  cost, resulting Base size and logical version ordinal;
+- only Delta carries `DeltaParentFrameTicket`, an exact
+  `(bool IsPreviousFile, FrameTicket)` reconstruction parent; Base has no
+  per-record parent;
 - the live in-memory StateMap uses `AbsoluteFrameAddress(FileNumber,
   FrameTicket)`, rather than retaining a context-dependent relative ticket;
 - mutable `FrameBuilder` and `ObjectVersionBuilder` instances are copied into
@@ -29,9 +29,9 @@ The first scaffold deliberately models only a few container facts:
 always has positive payload and advances exactly one logical version. A
 same-version Base is a relocated full value; it is the only transparent
 maintenance record retained by the selected model. Reconstruction follows
-exact Delta parents and stops at Base. Lineage resolves a Base parent as an
-earlier Revision locator, then uses that Revision's OVD to find the exact prior
-ObjectVersion. In this size-only probe, logical equality means exact
+exact Delta parents and stops at Base. Base lineage uses the containing
+Revision OVD's parent as one shared prior-snapshot anchor, then looks up the
+ObjectId there. In this size-only probe, logical equality means exact
 `(BasePayloadBytes, LogicalVersionOrdinal)` equality, not future field-value
 equality.
 
@@ -95,11 +95,11 @@ SaveStep
 ```
 
 Create always writes a Base. Update writes the strategy-selected Base or Delta
-and points to that object's previous head, which can skip unrelated or
-remove-only frames. Remove only deletes the live StateMap binding; its SaveStep
-still appends an empty physical Frame and old frames remain readable history.
-Every non-create Base also retains its lineage parent, although reconstruction
-stops at the newest Base.
+from the containing Revision's accepted prior snapshot. Delta points to that
+object's exact previous head, which can skip unrelated or remove-only frames;
+Base relies on the Revision OVD's shared anchor. Remove only deletes the live
+StateMap binding; its SaveStep still appends an empty physical Frame and old
+frames remain readable history.
 
 Delta payload bytes remain a storage-cost observation, not a value transform.
 For an executable size-only oracle, each Delta separately records its expected
@@ -185,7 +185,8 @@ self-consistent physical address space and accounts for one experimental
 grammar:
 
 ```text
-domain record = U(body length) + kind + U(parent) + opaque synthetic body
+Base record   = U(body length) + kind + opaque synthetic body
+Delta record  = U(body length) + kind + U(exact parent) + opaque synthetic body
 OVD record    = U(body length) + kind + U(parent) + sorted mutations
 TailMeta      = U(OVD offset) + sorted ObjectId -> record-offset directory
 ```
@@ -236,12 +237,12 @@ address-token diagnostic subset:
 
 | Workload | Policy | Body write | Metadata write | Modeled file bytes | Final modeled frame bytes read |
 |---|---|---:|---:|---:|---:|
-| fixed-seed mixed | AlwaysBase | 342 | 99 | 536 | 184 |
-| fixed-seed mixed | AlwaysDelta | 274 | 97 | 464 | 448 |
-| fixed-seed mixed | ObjectPayloadReadAmplification3 | 279 | 97 | 468 | 300 |
-| hot-one/cold-eight | AlwaysBase | 1500 | 179 | 1900 | 1148 |
-| hot-one/cold-eight | AlwaysDelta | 1050 | 177 | 1440 | 1408 |
-| hot-one/cold-eight | ObjectPayloadReadAmplification3 | 1125 | 177 | 1516 | 1148 |
+| fixed-seed mixed | AlwaysBase | 342 | 81 | 516 | 176 |
+| fixed-seed mixed | AlwaysDelta | 274 | 92 | 460 | 444 |
+| fixed-seed mixed | ObjectPayloadReadAmplification3 | 279 | 89 | 460 | 296 |
+| hot-one/cold-eight | AlwaysBase | 1500 | 152 | 1864 | 1132 |
+| hot-one/cold-eight | AlwaysDelta | 1050 | 168 | 1428 | 1396 |
+| hot-one/cold-eight | ObjectPayloadReadAmplification3 | 1125 | 165 | 1500 | 1132 |
 
 Both tables demonstrate tradeoffs rather than a winner. Reports sum write
 events and show only the final post-save read snapshot; no `TotalReadBytes` is
@@ -260,8 +261,8 @@ EvacuationSet = live objects whose terminating Base is in A
 
 The plan owns one immutable runtime candidate `Frame`; the provisional grammar
 is only its derived size projection. The C Revision writes a full Base for every
-evacuated object and preserves its logical ordinal. Every such Base uses the B
-PublishedRevision as its lineage locator. C also writes a full OVD Base:
+evacuated object and preserves its logical ordinal. C's full OVD Base uses the B
+PublishedRevision as the single shared prior-snapshot anchor:
 evacuated bindings use contextual Self, while retained objects bind Previous to
 unchanged B heads. `ImmediateRotationAppender` revalidates the candidate against
 the source, then constructs and appends the first C Frame before installing the
@@ -298,8 +299,9 @@ projection is a versioned research input, not a durable-format commitment.
 
 The rejected forwarding alternatives and their executable comparison are
 preserved by annotated tag `research/relay-vs-relay-free-20260829` and DB-009.
-DB-010 remains open: this slice deliberately retains each Base's per-record
-Revision locator instead of adopting a shared Revision prior-snapshot anchor.
+DB-010 has selected the shared anchor and removed Base parent tokens. This also
+explicitly rejects mixed-snapshot Base import/rescue in the current model;
+durable proof of never-reused ObjectIds remains a separate open problem.
 
 Run from the repository root:
 

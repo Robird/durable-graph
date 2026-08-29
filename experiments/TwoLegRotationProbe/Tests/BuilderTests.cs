@@ -9,7 +9,7 @@ public sealed class BuilderTests {
         const uint secondObjectId = 12;
         FrameBuilder builder = new();
         ObjectVersionBuilder firstVersion = builder.Add(firstObjectId);
-        RelativeFrameTicket originalParentFrameTicket = new(
+        RelativeFrameTicket originalDeltaParentFrameTicket = new(
             IsPreviousFile: true,
             FrameTicket: new FrameTicket(4, 24));
         firstVersion.Kind = ObjectVersionKind.Delta;
@@ -18,7 +18,7 @@ public sealed class BuilderTests {
         firstVersion.ResultBasePayloadBytes = 100;
         firstVersion.ExpectedParentBasePayloadBytes = 95;
         firstVersion.LogicalVersionOrdinal = 2;
-        firstVersion.ParentFrameTicket = originalParentFrameTicket;
+        firstVersion.DeltaParentFrameTicket = originalDeltaParentFrameTicket;
 
         Frame frame = builder.Build();
         firstVersion.Kind = ObjectVersionKind.Base;
@@ -27,7 +27,7 @@ public sealed class BuilderTests {
         firstVersion.ResultBasePayloadBytes = 0;
         firstVersion.ExpectedParentBasePayloadBytes = null;
         firstVersion.LogicalVersionOrdinal = 1;
-        firstVersion.ParentFrameTicket = new RelativeFrameTicket(
+        firstVersion.DeltaParentFrameTicket = new RelativeFrameTicket(
             IsPreviousFile: false,
             FrameTicket: new FrameTicket(32, 24));
         builder.Add(secondObjectId);
@@ -39,7 +39,7 @@ public sealed class BuilderTests {
         Assert.Equal(100, persistedVersion.ResultBasePayloadBytes);
         Assert.Equal(95, persistedVersion.ExpectedParentBasePayloadBytes);
         Assert.Equal(2, persistedVersion.LogicalVersionOrdinal);
-        Assert.Equal(originalParentFrameTicket, persistedVersion.ParentFrameTicket);
+        Assert.Equal(originalDeltaParentFrameTicket, persistedVersion.DeltaParentFrameTicket);
         Assert.False(frame.ObjectVersions.ContainsKey(secondObjectId));
     }
 
@@ -59,11 +59,10 @@ public sealed class BuilderTests {
                 ResultBasePayloadBytes = 1,
                 ExpectedParentBasePayloadBytes = 0,
             },
-            new() { ReconstructionObjectPayloadBytes = 0, LogicalVersionOrdinal = 2 },
             new() {
                 ReconstructionObjectPayloadBytes = 0,
                 LogicalVersionOrdinal = 2,
-                ParentFrameTicket = parent,
+                DeltaParentFrameTicket = parent,
                 ExpectedParentBasePayloadBytes = 0,
             },
             new() {
@@ -77,7 +76,7 @@ public sealed class BuilderTests {
                 ReconstructionObjectPayloadBytes = 1,
                 ResultBasePayloadBytes = 1,
                 LogicalVersionOrdinal = 2,
-                ParentFrameTicket = parent,
+                DeltaParentFrameTicket = parent,
             },
             new() {
                 Kind = ObjectVersionKind.Delta,
@@ -86,7 +85,7 @@ public sealed class BuilderTests {
                 ResultBasePayloadBytes = 1,
                 ExpectedParentBasePayloadBytes = -1,
                 LogicalVersionOrdinal = 2,
-                ParentFrameTicket = parent,
+                DeltaParentFrameTicket = parent,
             },
             new() {
                 Kind = ObjectVersionKind.Delta,
@@ -94,7 +93,7 @@ public sealed class BuilderTests {
                 ResultBasePayloadBytes = 1,
                 ExpectedParentBasePayloadBytes = 0,
                 LogicalVersionOrdinal = 2,
-                ParentFrameTicket = parent,
+                DeltaParentFrameTicket = parent,
             },
         ];
 
@@ -121,7 +120,7 @@ public sealed class BuilderTests {
             ResultBasePayloadBytes = 10,
             ExpectedParentBasePayloadBytes = 10,
             LogicalVersionOrdinal = 2,
-            ParentFrameTicket = parent,
+            DeltaParentFrameTicket = parent,
         };
 
         Assert.Throws<InvalidOperationException>(() => missing.Build());
@@ -138,13 +137,44 @@ public sealed class BuilderTests {
             ResultBasePayloadBytes = 10,
             ExpectedParentBasePayloadBytes = 10,
             LogicalVersionOrdinal = 2,
-            ParentFrameTicket = new RelativeFrameTicket(
+            DeltaParentFrameTicket = new RelativeFrameTicket(
                 IsPreviousFile: false,
                 FrameTicket: new FrameTicket(4, 24)),
         };
 
         ArgumentException exception = Assert.Throws<ArgumentException>(() => builder.Build());
         Assert.Equal("payloadBytes", exception.ParamName);
+    }
+
+    [Fact]
+    public void Build_accepts_a_non_root_Base_without_a_direct_parent() {
+        ObjectVersion version = new ObjectVersionBuilder {
+            Kind = ObjectVersionKind.Base,
+            PayloadBytes = 10,
+            ReconstructionObjectPayloadBytes = 10,
+            ResultBasePayloadBytes = 10,
+            LogicalVersionOrdinal = 2,
+        }.Build();
+
+        Assert.Equal(2, version.LogicalVersionOrdinal);
+        Assert.Null(version.DeltaParentFrameTicket);
+    }
+
+    [Fact]
+    public void Build_rejects_a_direct_parent_on_Base() {
+        ObjectVersionBuilder builder = new() {
+            Kind = ObjectVersionKind.Base,
+            PayloadBytes = 10,
+            ReconstructionObjectPayloadBytes = 10,
+            ResultBasePayloadBytes = 10,
+            LogicalVersionOrdinal = 2,
+            DeltaParentFrameTicket = new RelativeFrameTicket(
+                IsPreviousFile: false,
+                FrameTicket: new FrameTicket(4, 24)),
+        };
+
+        ArgumentException exception = Assert.Throws<ArgumentException>(() => builder.Build());
+        Assert.Equal("deltaParentFrameTicket", exception.ParamName);
     }
 
     [Fact]

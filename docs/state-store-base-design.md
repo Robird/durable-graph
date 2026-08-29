@@ -82,18 +82,22 @@ ObjectId -> OffsetOfObjectVersion
 每个引用类型拥有独立 ObjectVersion chain。ObjectVersion 头部保存：
 
 - `VersionKind`：`Base` 或 `Delta`；
-- parent `RelativeFrameTicket`：Delta 指 exact ObjectVersion Frame，Base 指 earlier Revision locator；
+- `DeltaParentFrameTicket`：仅 Delta 保存，指 exact ObjectVersion Frame；Base 禁止 direct parent；
 - `LogicalVersionOrdinal`：只随领域状态变化递增，不充当物理 chain depth；
 - 后续 RebaseOrDeltify 策略所需、但尚未冻结的度量信息。
 
-首次 ObjectVersion 的 parent 使用特殊值 0。后续 Delta 直接指 exact parent；后续 Base parent 指 earlier Revision locator，再由该 Revision OVD 按 ObjectId 找 exact parent：
+每个 Revision 的 OVD parent 是唯一 accepted pre-save snapshot。Delta 直接指 exact parent；Base
+从 containing Revision 的 OVD parent 查询 prior ObjectVersion：
 
 ```text
 Delta -> reconstruction 跟随 exact parent
-Base  -> 已包含完整值；reconstruction 停止，lineage 才解析 Revision locator
+Base  -> reconstruction 停止；lineage 才用 Revision.OVD.Parent + ObjectId 查 prior
 ```
 
-`VersionKind` 决定 parent ticket 的解释与它是否属于 reconstruction dependency，不增加第二个 tag。若 DB-010 选择 Revision 共同 prior-snapshot anchor，Base per-record ticket 将进一步删除。
+Genesis Revision 无 prior；只有 ordinal 1 Base 可成为 root。非首 Revision 的 prior lookup
+`AbsentAtBase` 也只允许 ordinal 1 新对象；`Found` 必须满足 same-version relocation 或严格 `+1`
+domain change；可见的 `Removed` fail closed。DB-010 已选择这条 shared prior-snapshot law，
+不增加 Base parent tag 或兼容层。
 
 runtime probes 进一步验证了不需要 maintenance kind 或 physical ordinal：
 
@@ -104,32 +108,35 @@ Base child ordinal  = parent           -> transparent relocation
 ```
 
 Delta 必须有正 payload，不能保留 logical ordinal。same-version Base 是 RelocatedBase，自身包含
-完整状态并停止 reconstruction，但 lineage 仍通过 Revision locator 找到 exact prior version。
+完整状态并停止 reconstruction，但 lineage 仍通过 containing Revision 的 shared anchor 找到
+exact prior version。
 物理先后和无环性由 append address、parent 与 cycle validation 表达。该结论目前只在 synthetic
 size-state probe 中证明；未来真实 payload 的 RelocatedBase 仍必须来自 authoritative exact value，
 不能用“尺寸相同”代替值相同。
 
-## 5. 跨 A/B/C 的 Base Lineage Locator
+## 5. 跨 A/B/C 的 Base Shared Prior-Snapshot Anchor
 
 从 A/B 轮转到 B/C 时，某个长期未修改对象的 latest ObjectVersion 可能仍在 A。把它以 Base
 写入 C 后，C 中的 1-bit relative address 不能直接表达 A；但 C 可以表达 B 中一个 earlier
-Revision。已选择只对 Base 使用 Revision locator：
+Revision。C 的 OVD 统一保存这个 prior snapshot，C 中各 Base 不再重复保存 ticket：
 
 ```text
+C.Revision.OVD.Parent = B.PublishedRevision
 C.Base(Object X)
-    -> B.PublishedRevision locator
+    -> containing Revision shared anchor
     -> LookupLive(B.OVD, ObjectId X)
     -> A.PreviousVersion(Object X)
 ```
 
 Delta parent 仍直接指 exact ObjectVersion，因为它是 current reconstruction dependency。Base
-已经包含完整状态，locator 只用于 lineage；current reconstruction 在 C Base 停止，不把 B/A
+已经包含完整状态，shared anchor 只用于 lineage；current reconstruction 在 C Base 停止，不把 B/A
 OVD reads 计入 two-file reconstruction closure。
 
 runtime OVD 与 planner 已以 PublishedRevision OVD 作为唯一 current authority，执行性验证 AA/BA/BB：
 B OVD 可分别把 prior exact head 解析到 A 或 B，relative binding 始终按其 source Revision scope
-absolute-normalize。Remove 与 OVD Base absence 是 decisive absent；missing/malformed locator
-fail closed。
+absolute-normalize。prior chain 中可见的 Remove decisive；AbsentAtBase 仅可创建 ordinal 1 root；
+missing/malformed anchor fail closed。OVD Base checkpoint 不保留更早 tombstone，durable ID reuse
+证明仍是独立问题。
 
 `WorkloadSimulator` 每个 Revision 都写 runtime OVD，StateMap 只作为 `MaterializeLive` 的派生
 快照。one-shot planner 不接收 caller StateMap，构造 immutable runtime C candidate：evacuated
@@ -141,9 +148,8 @@ in-memory 首帧 C file registration；append 后只从 `MaterializeLive(C)` 取
 文件 retention/GC 仍是独立问题：文件被物理删除后，其内部数据自然不可访问；StateStore
 格式不承诺抵抗删文件，也不为此增加额外寻址或冗余机制。
 
-裁决依据与被拒绝方案归档见 [`DB-009`](design-branches/0009-base-lineage-parent-locator.md)；把 Base
-per-record locator 进一步合并到 Revision 共同 prior-snapshot anchor 的分叉见
-[`DB-010`](design-branches/0010-base-lineage-anchor-scope.md)。
+Revision locator 与 forwarding 裁决见 [`DB-009`](design-branches/0009-base-lineage-parent-locator.md)；
+shared prior-snapshot anchor 裁决见 [`DB-010`](design-branches/0010-base-lineage-anchor-scope.md)。
 
 ## 6. ObjectVersionDict
 
@@ -154,6 +160,10 @@ ObjectId -> latest ObjectVersion address
 ```
 
 ObjectVersionDict 拥有固定 ObjectId 和元数据身份，并复用 Object-Level Version Chain；它是当前对象成员集合与最新 record binding 的 authority。
+
+其 `ParentRevisionFrameTicket` 同时标识该 Revision 的 prior snapshot。OVD Delta 用它 replay
+live-map mutations；OVD Base 的 current map 不继承 parent，但 containing Base records 的 lineage
+仍使用它。两种读取路径不得混淆。
 
 内存中的 ObjectVersionDict value 必须是 `AbsoluteFrameAddress`。`RelativeFrameTicket` 只属于某个具体 ObjectVersionDict version 的 wire encoding：
 
@@ -193,7 +203,7 @@ self-ticket fixed point 的依据见 [`state-store-addressing-design.md`](state-
 1. 规划普通 Save 后的 live ObjectVersionDict；
 2. 找出 reconstruction chain 的 Base 位于 A 的全部 live objects；
 3. 若 C 暂时无法容纳全部 EvacuationSet，在 B 通过有限、published Base migrations 分批降低集合，并重算 authority；
-4. 选择最终 B PublishedRevision 作为 Base lineage locator；
+4. 选择最终 B PublishedRevision 作为 C Revision 的 shared prior-snapshot anchor；
 5. 将剩余 EvacuationSet 以完整 Base 写入 C；
 6. 本次其他新增、Base 或 Delta 也只写入 C；
 7. 完全自包含于 B 的 unchanged objects 可以继续复用 B 中的版本；
@@ -212,7 +222,7 @@ self-ticket fixed point 的依据见 [`state-store-addressing-design.md`](state-
 - current/previous 两条腿各自承担的有效与无效读取；
 - 本次 Rebase 对下一次轮转 evacuation 的边际影响；
 - CurrentFile 剩余的格式可寻址容量；
-- ObjectVersionDict、Base-parent OVD lookup 与 TailMeta index 的实际成本。
+- ObjectVersionDict、shared-anchor OVD lookup 与 TailMeta index 的实际成本。
 
 候选方向包括在普通 Save 中提前迁移少量 cold objects，把集中 evacuation 转化为渐进过程。该方向目前是待实验假说，不是已选算法；详见 [`DB-007`](design-branches/0007-adaptive-two-leg-rotation-policy.md)。
 

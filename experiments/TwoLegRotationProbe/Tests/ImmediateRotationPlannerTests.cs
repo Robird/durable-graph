@@ -11,7 +11,7 @@ public sealed class ImmediateRotationPlannerTests {
     private const uint BbObjectId = 33;
 
     [Fact]
-    public void Mixed_AA_BA_BB_plan_uses_one_C_revision_and_B_revision_locators() {
+    public void Mixed_AA_BA_BB_plan_uses_one_C_revision_and_a_shared_B_anchor() {
         SourceFixture source = CreateCanonicalSource();
         StoreSnapshot storeBefore = CaptureStore(source.Store);
         KeyValuePair<uint, AbsoluteFrameAddress>[] sourceMap = SnapshotMap(
@@ -41,9 +41,7 @@ public sealed class ImmediateRotationPlannerTests {
             evacuation.Frame.ObjectVersions.Keys.Order());
         foreach (ObjectVersion version in evacuation.Frame.ObjectVersions.Values) {
             Assert.Equal(ObjectVersionKind.Base, version.Kind);
-            Assert.Equal(
-                source.PublishedRevisionAddress,
-                ResolveRequiredParent(evacuation.FileNumber, version.ParentFrameTicket));
+            Assert.Null(version.DeltaParentFrameTicket);
         }
 
         Assert.Equal(10, evacuation.Frame.ObjectVersions[AaObjectId].PayloadBytes);
@@ -341,7 +339,7 @@ public sealed class ImmediateRotationPlannerTests {
         version.ResultBasePayloadBytes = resultBasePayloadBytes;
         version.ExpectedParentBasePayloadBytes = parentBasePayloadBytes;
         version.LogicalVersionOrdinal = logicalVersionOrdinal;
-        version.ParentFrameTicket = parent;
+        version.DeltaParentFrameTicket = parent;
     }
 
     private static AbsoluteFrameAddress Append(RbfFile file, FrameBuilder builder) =>
@@ -420,7 +418,7 @@ public sealed class ImmediateRotationPlannerTests {
             pair.Value.ResultBasePayloadBytes,
             pair.Value.ExpectedParentBasePayloadBytes,
             pair.Value.LogicalVersionOrdinal,
-            pair.Value.ParentFrameTicket,
+            pair.Value.DeltaParentFrameTicket,
         })
         .ToArray();
 

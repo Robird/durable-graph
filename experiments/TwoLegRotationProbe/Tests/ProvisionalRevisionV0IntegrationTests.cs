@@ -248,13 +248,13 @@ public sealed class ProvisionalRevisionV0IntegrationTests {
 
     [Fact]
     public void TailMeta_directory_accepts_65535_bytes_and_rejects_65536() {
-        const int objectCount = 14_232;
+        const int objectCount = 14_782;
         uint[] exactlyAtLimit = Enumerable.Range(1, objectCount)
             .Select(static value => (uint)value)
             .ToArray();
-        exactlyAtLimit[0] = 20_000;
+        exactlyAtLimit[0] = 3_000_000;
         uint[] oneByteOverLimit = (uint[])exactlyAtLimit.Clone();
-        oneByteOverLimit[0] = 3_000_000;
+        oneByteOverLimit[0] = 300_000_000;
         Frame acceptedFrame = BuildZeroPayloadFirstRevision(exactlyAtLimit);
         Frame rejectedFrame = BuildZeroPayloadFirstRevision(oneByteOverLimit);
 

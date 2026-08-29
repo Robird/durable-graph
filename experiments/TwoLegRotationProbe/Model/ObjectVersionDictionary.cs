@@ -37,6 +37,10 @@ internal sealed class ObjectVersionDictionary {
 
     public ObjectVersionDictionaryKind Kind { get; }
 
+    /// <summary>
+    /// The containing Revision's prior snapshot. OVD Delta also uses it as its replay parent;
+    /// OVD Base does not inherit live bindings from it, but Base lineage still uses it.
+    /// </summary>
     public RelativeFrameTicket? ParentRevisionFrameTicket { get; }
 
     public IReadOnlyDictionary<uint, ObjectVersionDictionaryBinding> Entries => _entries;

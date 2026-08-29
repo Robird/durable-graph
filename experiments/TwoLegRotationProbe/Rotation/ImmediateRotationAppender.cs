@@ -88,7 +88,7 @@ internal static class ImmediateRotationAppender {
                         relocated.Kind != ObjectVersionKind.Base ||
                         relocated.ResultBasePayloadBytes != source.State.BasePayloadBytes ||
                         relocated.LogicalVersionOrdinal != source.State.LogicalVersionOrdinal ||
-                        relocated.ParentFrameTicket != anchor) {
+                        relocated.DeltaParentFrameTicket is not null) {
                         throw new InvalidDataException(
                             $"Planned relocated Base {objectId} does not preserve its source state and anchor.");
                     }

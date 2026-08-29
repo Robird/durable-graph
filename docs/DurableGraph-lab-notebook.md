@@ -50,7 +50,7 @@
 - Stored Graph Normalization R3a：test-only mixed V1/V2 record table 经全表 exact preflight、typed decode/upgrade 与 source-reference gate 归一化成 current-Snapshot baseline。
 - CLR Graph Materialization R3b：只对 normalized current root closure allocate-all/hydrate-all，恢复 sharing/cycles 后 root-only exposure；disconnected source rows 不分配。
 - StateStore 基础设计：选择 one-Revision/one-RBF-frame、object-level version chains、ObjectVersionDict authority、LSB-tagged `RelativeFrameTicket` 与 current-head two-file reconstruction closure；产品实现尚未开始，TwoLegRotationProbe 已进入 provisional layout 模拟。
-- 双腿轮转派生说明：记录 A/B/C evacuation、Base Revision locator、absolute-normalized ObjectVersionDict、one-frame bounds 与 `CanPrepareAndRotate` safety gate。
+- 双腿轮转派生说明：记录 A/B/C evacuation、Revision shared prior-snapshot anchor、absolute-normalized ObjectVersionDict、one-frame bounds 与 `CanPrepareAndRotate` safety gate。
 - Adaptive rotation branch DB-007：隔离尚未裁决的统一 Base/Delta/cold-migration/rotation 策略和内存模拟输入。
 - Two-leg rotation probe：以独立 xUnit 项目建立 exact RBF v0.40 envelope、相邻 FileScope、runtime OVD authority、Frame/ObjectVersion 父链、deterministic workload 和三种 policy；StateMap 由 OVD replay 派生，并保留 contextual-self `ProvisionalRevisionV0` 组件尺寸/provenance。
 - Candidate design branches：在 `docs/design-branches/` 隔离尚未裁决的架构分叉。
@@ -77,10 +77,12 @@
 - **Decided**：首版只保证 latest published Revision，采用进程独占 single writer；一次 Revision 暂为一个 RBF Frame，越过约 256 MiB payload/TailMeta 或 64 KiB TailMeta 边界时 fail closed，Extent 留待容量证据。
 - **Decided**：持久地址使用 LSB-tagged `RelativeFrameTicket = (SizedPtr.Serialize() << 1) | same/previous`，进程内 authority 使用 `AbsoluteFrameAddress`；接受约 512 GiB 最大 frame-start 的容量代价。
 - **Decided**：同 Revision 的 OVD binding 用字段级 `BindSelf=1`，不把 Self 加入通用 RelativeFrameTicket；RBF context 已提供 containing ticket，TailMeta 保存 OVD/record offset。literal self-ticket 因重复信息和多固定点 canonicality 被当前 Working Design 淘汰，multi-frame 时重访 DB-008。
-- **Decided**：Delta parent 直接指 exact ObjectVersion；Base parent 指 earlier Revision locator，并由该 Revision OVD 按 ObjectId 找 exact prior version。从 A/B 轮转到 B/C 时，Base 位于 A 的 live objects 以 Base 写 C，locator 统一指最终 B PublishedRevision；不写 per-Object forwarding record。
+- **Decided**：Delta 以 `DeltaParentFrameTicket` 直接指 exact ObjectVersion；Base 不保存 direct
+  parent，lineage 统一使用 containing Revision OVD 的 shared prior-snapshot anchor。从 A/B 轮转到
+  B/C 时，C OVD anchor 指最终 B PublishedRevision；不写 per-Object forwarding record。
 - **Rejected**：B 中 forwarding RelayRevision 只优化罕见 lineage/TailMeta reads，却扩大写入、容量、durable 顺序与恢复状态；竞争实现由 tag `research/relay-vs-relay-free-20260829` 保存，裁决见 DB-009。
 - **Decided**：物理删除文件后的数据不可访问不属于地址格式需要抵抗的故障模型；Base locator 只承诺 retained files 之间的 lineage 可导航。
-- **Observed**：S1 preparatory baseline 已把冻结 workload 的每个 Save 编译为带 runtime OVD 的单个 Frame；live StateMap 从 OVD replay 派生，Base/Delta parent 分别按 locator/exact 解释，并以 checked symbolic Delta apply 逐 prefix 对照 logical replay。
+- **Observed**：S1 preparatory baseline 已把冻结 workload 的每个 Save 编译为带 runtime OVD 的单个 Frame；live StateMap 从 OVD replay 派生，Base lineage 读取 Revision shared anchor，Delta reconstruction/lineage 读取 exact parent，并以 checked symbolic Delta apply 逐 prefix 对照 logical replay。
 - **Observed**：S1b 已对给定 Payload/TailMeta 长度复刻 exact RBF v0.40 envelope，并把 synthetic workload 接入逐 Save write 与 post-save reconstruction/co-read observations；accounting 明示排除 DG header/OVD/index/VarUInt，所以尚不能证明完整 Revision bytes、容量安全或策略 winner。
 - **Observed**：S1c 已加入 ratio=3 的 `ObjectPayloadReadAmplification3` 与四场景 matrix；per-object reconstruction payload 随 ObjectVersion 保存并由 oracle 重算，但不计入 layout。结果只证明局部策略形成可复现 tradeoff，不代表 exact StateJournal port 或 winner。
 - **Observed**：S1d `ProvisionalRevisionV0` 已按临时 grammar 计入 domain headers、OVD、TailMeta directory、relative VarUInt 与 exact RBF envelope；run-level provenance、layout、capacity gates、contextual Self 和旧 baseline 回归均有 executable evidence。它仍是 size-only estimator，不是 byte codec 或 rotation capacity proof。
@@ -759,13 +761,21 @@
 
 ## 6. 船长日志
 
+### 2026-08-29：选择 Revision shared prior-snapshot anchor
+
+- DB-010 选择 one-Revision/one-accepted-prior law；Base 删除 per-record parent，Delta 属性明确为 `DeltaParentFrameTicket`。
+- Base lineage 从 containing OVD parent 查询 prior ObjectId；mixed new/domain/relocated Base 与 exact-parent Delta、AA/BA、genesis/Absent/visible Remove/malformed anchor 均有 executable evidence。
+- provisional Base record 删除 `NoneToken` 占位；更新后的 hot/cold modeled file/final-read 为 `1864/1132`、`1428/1396`、`1500/1132`，fixed mixed 为 `516/176`、`460/444`、`460/296`。
+- OVD Base checkpoint 会丢弃旧 tombstone；跨 reopen 的 no-ID-reuse 仍需未来独立 ID epoch/retired-ID authority。mixed-snapshot import/rescue/stale Save 明确不在当前模型。
+- Probe 211/211；下一风险切片回到一般 B Base migration 与 `CanPrepareAndRotate` completion oracle。
+
 ### 2026-08-29：闭合 relay-free runtime C append
 
 - planned C 改以 immutable runtime `Frame` 为唯一语义 authority；provisional grammar 仅作尺寸投影，删除 plan 内重复的 `ProjectedStateMap`。
 - `ImmediateRotationAppender` 在 source/candidate preflight 后，通过“首帧成功再注册文件”的 in-memory store seam 加入 C；不发布 StateStore head。
-- append 后只由 `MaterializeLive(C)` 产生 B/C StateMap；AA/BA/BB 的 logical state、reconstruction 与 lineage 已闭合，Probe 204/204。
+- append 后只由 `MaterializeLive(C)` 产生 B/C StateMap；AA/BA/BB 的 logical state、reconstruction 与 lineage 已闭合，当时 Probe 204/204。
 - 完整历史 lineage 损坏仍由离线诊断暴露，但不再阻塞 current reconstruction 或 immediate rotation。
-- 下一步转向 DB-010 discriminator，再研究一般 B Base migration/`CanPrepareAndRotate`；bytes codec、publication/reopen/crash 继续分离。
+- 当时的下一步 DB-010 已由后一切片裁决；一般 B Base migration/`CanPrepareAndRotate`、bytes codec 与 publication/reopen/crash 继续分离。
 
 ### 2026-08-29：选择 relay-free 并删除 forwarding 主线
 
@@ -774,7 +784,7 @@
 - OVD 新增 `MaterializeLive(PublishedRevision)`；WorkloadSimulator 每次 Save 写 runtime OVD，StateMap 只由 OVD replay 派生，并以 point lookup 交叉校验。V0 Frame adapter 直接投影同一 OVD，不再从 SaveStep 重造计费副本。
 - relay-free `ImmediateRotationPlanner` 删除 caller StateMap、RelaySet、RelayRevision、B capacity debt 与 Relay grammar role；source 只来自 B PublishedRevision OVD，所有 evacuation Bases 以 B 为 locator，planner 只产生 C full Base/OVD。
 - canonical AA/BA/BB、Published Remove、OVD insertion order、C capacity、B exhausted tail、source scope 与零 mutation 均有 executable tests；Probe 198/198，独立 correctness review 无 blocker/high/medium。
-- preparatory B Base migration 仍是一般 `CanPrepareAndRotate` 的 correctness path；当时遗留的 runtime C append 缺口已由后一切片闭合，DB-010 shared Revision anchor 继续 Open。
+- preparatory B Base migration 仍是一般 `CanPrepareAndRotate` 的 correctness path；当时遗留的 runtime C append 与仍 Open 的 DB-010 均已由后续切片闭合/裁决。
 
 ### 2026-08-29：历史 discriminator：建立 OVD authority 并比较 forwarding/relay-free（已归档）
 
@@ -807,7 +817,7 @@
 - 复核本地 Atelia RBF commit `fec021295828fcfe638434d69d04ff078c87c8ce`：现有 envelope 常量与边界正确；完整 L3 read 仍读取整个 Frame，TailMeta preview 只有 L2；append/read context 均提供 containing ticket。
 - literal self-ticket 反例在 `start=4, non-self=98, count=1` 下同时得到 width/frame `2/124` 与 `3/128` 两个 fixed points，故“迭代至稳定”不能独自定义 canonical wire。采用 OVD 字段级 `BindSelf=1`，通用 relative grammar 不变。
 - 新增 `ProvisionalRevisionV0` run scope：domain record、OVD record、TailMeta directory、address-token subset 与 RBF layout 分项计量；preflight 后 Append 必须返回完全相同 ticket/layout，reconstruction 按逐地址 provenance 统计 unique full frames。
-- 默认和显式 `ObjectPayloadOnly` goldens 完全一致；V0 hot/cold 三策略 modeled file/final read 为 Base `1900/1148`、Delta `1440/1408`、local `1516/1148`，fixed mixed 为 `536/184`、`464/448`、`468/300`。metadata 未改变 tradeoff 方向，也未选出 winner。
+- 默认和显式 `ObjectPayloadOnly` goldens 完全一致；当时仍含 Base `NoneToken` 的旧 V0 grammar 得到 hot/cold `1900/1148`、`1440/1408`、`1516/1148` 与 fixed mixed `536/184`、`464/448`、`468/300`；DB-010 后的当前数字见较新的船长日志。
 - executable tests 覆盖 Base128/SizedPtr projection、same/previous、contextual Self/external alias 拒绝、component conservation、remove-only、canonical order、TailMeta 65535/65536、combined capacity、512 GiB start 和 policy matrix；真实 bytes writer/parser、mixed-binding full OVD、relay/two-file planner 与 publication 仍未实现。
 - 验证：Probe 133/133、root tests 147/147、root solution build 0 warning/0 error、两套 format verify 与 diff check 通过；两路独立复核最终无 blocker/medium。
 
@@ -830,8 +840,8 @@
 
 ### 2026-08-28：跑通单文件 Base/Delta physical baseline
 
-- 同一冻结 `WorkloadTrace` 可分别编译为 fresh `AlwaysBase` 与 `AlwaysDeltaWhenLegal` runs；每个 Save 都产生一个 Frame，remove-only Save 产生空 Frame，object parent 指向自己的旧 head 而非全局上一 Frame。
-- live StateMap 使用 `AbsoluteFrameAddress`；ObjectVersion 内 parent 保持 `RelativeFrameTicket`，由承载 Frame 的文件号解析。Base/Delta 都保留 lineage，reconstruction 遇最新 Base 停止。
+- 当时的单文件 baseline 将同一冻结 `WorkloadTrace` 分别编译为 fresh `AlwaysBase` 与 `AlwaysDeltaWhenLegal` runs；每个 Save 都产生一个 Frame，remove-only Save 产生空 Frame。当时 Base/Delta 都保存 object parent；DB-010 后 Base direct parent 已删除。
+- 当时 live StateMap 使用 `AbsoluteFrameAddress`，ObjectVersion parent 使用 `RelativeFrameTicket`；当前只保留 Delta exact parent，Base lineage 已改由 Revision shared anchor 承担。
 - Delta payload size 只作写成本；symbolic apply 先重建并校验 expected parent size、ordinal 与无压缩增长下界，再产生 result size。每个 Save prefix exact-match logical cursor 后才推进 private run。
 - 本切片只是 S1 前置基线；frame bytes/layout、capacity/representability、two-file closure、relay、rotation 与自适应策略仍未实现。
 - 验证：Probe 74/74、root tests 147/147、root solution build 0 warning/0 error、两套 solution format check 与 diff check 通过；独立复核最终无 blocker/medium。
@@ -850,7 +860,7 @@
 
 - 建立隔离的 `experiments/TwoLegRotationProbe` .NET 10/xUnit 项目，不改产品 runtime 或根 solution 项目集合。
 - 首轮只固定 one-based 单调 FileNumber、RbfFile append-only/random-read 容器和 `PreviousFileNumber = CurrentFileNumber - 1` 的相邻语义。
-- `FrameBuilder/ObjectVersionBuilder` 是落盘前可变态；`Build()` 防御性复制为只读 ObjectId→ObjectVersion map，并冻结 nullable `ParentFrameTicket`。
+- `FrameBuilder/ObjectVersionBuilder` 是落盘前可变态；`Build()` 防御性复制为只读 ObjectId→ObjectVersion map，并冻结 Delta-only `DeltaParentFrameTicket`。
 - `RelativeFrameTicket` 已建模为 `(IsPreviousFile, FrameTicket)`；`FileScope.ReadFrame` 以承载 ParentId 的 origin file 选择 Current/Previous。FileScope 固定 origin，迈腿时创建新文件与新 scope，旧 frame 仍使用旧 scope 解读。
 - `FrameTicket` 暂为文件内零基 List key；ParentId/FileScope pair 不冒充 `SizedPtr` 或已经冻结的 durable ticket encoding。
 - 下一步可从该骨架逐层加入 Base/Delta 内容、跨文件地址、Revision layout estimator 和可替换策略，不提前把候选 heuristic 写入容器层。
@@ -859,7 +869,7 @@
 
 - 根据 StateJournal/RBF 本地实现复核，选择 A=OldPrevious、B=Current、C=Next 的 current-head two-file reconstruction 模型；R4 logical StateMap/apply 保留但暂缓。
 - 地址层选择独立 `RelativeFrameTicket` / `AbsoluteFrameAddress`，以 LSB selector + 左移后的 `SizedPtr.Serialize()` 保留 VarUInt 紧凑性，并接受约 512 GiB frame-start 上限。
-- 轮转时把 terminating Base 位于 A 的 live objects 以 Base 写 C；latest head 仍在 A 的对象经 B 中 lightweight per-ObjectId RelayRevision 保留 direct lineage parent。
+- 当时的候选轮转模型把 terminating Base 位于 A 的 live objects 以 Base 写 C，并设想用 B 中 lightweight per-ObjectId RelayRevision 保留 direct lineage；该方案后来由 DB-009 拒绝并归档于 tag `research/relay-vs-relay-free-20260829`。
 - one Revision/one RBF Frame 保持为有界首版，Extent、固定性能阈值与持久 `TotalPersistBytes` 均等待模拟或容量证据。
 - 建立 `state-store-base-design.md`、`state-store-base-derived.md`、`state-store-addressing-design.md` 与 DB-007；下一步先商定纯内存策略模拟模型，不宣称持久 Store 已实现。
 

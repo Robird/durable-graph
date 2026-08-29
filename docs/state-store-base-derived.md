@@ -43,23 +43,26 @@ ReconstructionFiles(NewHead) ⊆ {B, C}
 
 这个推导不依赖 Previous-byte ratio、链长阈值或特定 RebaseOrDeltify 收益公式；那些量只影响何时以及以何种节奏迁移。
 
-## 3. Base Revision locator
+## 3. Base Revision shared prior-snapshot anchor
 
 ```text
 EvacuationSet
     = reconstruction Base 位于 A 的 live objects
 ```
 
-EvacuationSet 全部需要在 C 写 Base。C 不能直接编码 A address，但可以编码 B PublishedRevision：
+EvacuationSet 全部需要在 C 写 Base。C 不能直接编码 A address，但 C Revision 的 OVD 可以把
+B PublishedRevision 保存为唯一 prior snapshot：
 
 ```text
+C.OVD.Parent = B.PublishedRevision
 C.Base(X)
-    -> B.PublishedRevision locator
+    -> containing Revision shared anchor
     -> LookupLive(B.OVD, X)
     -> exact X version in A or B
 ```
 
-因此，current reconstruction 在 C Base 停止；lineage 才读取 B OVD，并可能继续到 A。每张
+Base 自身不保存 direct parent。current reconstruction 在 C Base 停止；lineage 才读取 B OVD，
+并可能继续到 A。每张
 relative ticket 仍只跨 same/previous file：C→B 与 B→A 是两个独立 scope 的合法跳转。
 
 该模型不要求 B 写 forwarding record，所以 immediate rotation 只有 C evacuation capacity debt。
@@ -115,7 +118,7 @@ CanEncodeEvacuationRevision(postSaveState, C)
 
 CanPrepareAndRotate(postSaveState, A, B, C)
     存在有限、容量合法的 B published Base migration plan，
-    随后 B OVD 可作 lineage locator，且 C candidate 可合法发布
+    随后 B PublishedRevision 可作 C shared prior snapshot，且 C candidate 可合法发布
 ```
 
 B preparatory Base migration 可能是把过大 EvacuationSet 分批转移、最终让 C 可编码的

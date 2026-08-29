@@ -127,7 +127,7 @@ public sealed class ObjectReconstructionInspectionTests {
         builder.ResultBasePayloadBytes = resultBasePayloadBytes;
         builder.ExpectedParentBasePayloadBytes = parentBasePayloadBytes;
         builder.LogicalVersionOrdinal = logicalVersionOrdinal;
-        builder.ParentFrameTicket = new RelativeFrameTicket(false, parentTicket);
+        builder.DeltaParentFrameTicket = new RelativeFrameTicket(false, parentTicket);
         return file.Append(frame.Build());
     }
 }

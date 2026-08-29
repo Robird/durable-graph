@@ -8,7 +8,7 @@ public sealed class MaintenanceObjectVersionSemanticsTests {
     private const uint ObjectId = 7;
 
     [Fact]
-    public void Relocated_base_reconstructs_from_C_and_resolves_B_locator_to_A() {
+    public void Relocated_base_reconstructs_from_C_and_resolves_shared_B_anchor_to_A() {
         RelocationChain chain = CreateRelocationChain();
 
         ObjectReconstructionInspection reconstruction =
@@ -35,7 +35,8 @@ public sealed class MaintenanceObjectVersionSemanticsTests {
     public void Domain_delta_after_relocated_base_advances_logical_version_once() {
         RelocationChain chain = CreateRelocationChain();
         RbfFile next = chain.Store.CreateFile();
-        FrameBuilder builder = NewFullRevision();
+        FrameBuilder builder = NewFullRevision(
+            Previous(chain.RelocatedBaseAddress.FrameTicket));
         AddDelta(
             builder,
             payloadBytes: 5,
@@ -70,12 +71,12 @@ public sealed class MaintenanceObjectVersionSemanticsTests {
     public void Domain_base_after_relocated_base_advances_logical_version_once() {
         RelocationChain chain = CreateRelocationChain();
         RbfFile next = chain.Store.CreateFile();
-        FrameBuilder builder = NewFullRevision();
+        FrameBuilder builder = NewFullRevision(
+            Previous(chain.RelocatedBaseAddress.FrameTicket));
         AddBase(
             builder,
             payloadBytes: 17,
-            logicalVersionOrdinal: 2,
-            Previous(chain.RelocatedBaseAddress.FrameTicket));
+            logicalVersionOrdinal: 2);
         AbsoluteFrameAddress domainBase = Append(next, builder);
 
         ObjectReconstructionInspection reconstruction =
@@ -107,7 +108,7 @@ public sealed class MaintenanceObjectVersionSemanticsTests {
         RbfFileStore store = new();
         RbfFile aFile = store.CreateFile();
         FrameBuilder aBuilder = NewFullRevision();
-        AddBase(aBuilder, payloadBytes: 10, logicalVersionOrdinal: 1, parent: null);
+        AddBase(aBuilder, payloadBytes: 10, logicalVersionOrdinal: 1);
         AbsoluteFrameAddress a = Append(aFile, aBuilder);
 
         RbfFile bFile = store.CreateFile();
@@ -124,12 +125,11 @@ public sealed class MaintenanceObjectVersionSemanticsTests {
         AbsoluteFrameAddress b = Append(bFile, bBuilder);
 
         RbfFile cFile = store.CreateFile();
-        FrameBuilder cBuilder = NewFullRevision();
+        FrameBuilder cBuilder = NewFullRevision(Previous(b.FrameTicket));
         AddBase(
             cBuilder,
             payloadBytes: 100,
-            logicalVersionOrdinal: 2,
-            Previous(b.FrameTicket));
+            logicalVersionOrdinal: 2);
         AbsoluteFrameAddress c = Append(cFile, cBuilder);
 
         ObjectReconstructionInspection reconstruction =
@@ -144,12 +144,12 @@ public sealed class MaintenanceObjectVersionSemanticsTests {
     public void Same_version_relocated_base_that_changes_result_fails_lineage() {
         RelocationChain chain = CreateRelocationChain(includeRelocatedBase: false);
         RbfFile cFile = chain.Store.CreateFile();
-        FrameBuilder cBuilder = NewFullRevision();
+        FrameBuilder cBuilder = NewFullRevision(
+            Previous(chain.LocatorRevisionAddress.FrameTicket));
         AddBase(
             cBuilder,
             payloadBytes: 11,
-            logicalVersionOrdinal: 1,
-            Previous(chain.LocatorRevisionAddress.FrameTicket));
+            logicalVersionOrdinal: 1);
         AbsoluteFrameAddress malformed = Append(cFile, cBuilder);
 
         ObjectReconstructionInspection reconstruction =
@@ -168,10 +168,10 @@ public sealed class MaintenanceObjectVersionSemanticsTests {
         RbfFileStore skippedStore = new();
         RbfFile skippedAFile = skippedStore.CreateFile();
         FrameBuilder skippedABuilder = NewFullRevision();
-        AddBase(skippedABuilder, payloadBytes: 10, logicalVersionOrdinal: 1, parent: null);
+        AddBase(skippedABuilder, payloadBytes: 10, logicalVersionOrdinal: 1);
         AbsoluteFrameAddress skippedA = Append(skippedAFile, skippedABuilder);
         RbfFile skippedBFile = skippedStore.CreateFile();
-        FrameBuilder skippedBBuilder = NewFullRevision();
+        FrameBuilder skippedBBuilder = NewFullRevision(Previous(skippedA.FrameTicket));
         AddDelta(
             skippedBBuilder,
             payloadBytes: 1,
@@ -188,7 +188,7 @@ public sealed class MaintenanceObjectVersionSemanticsTests {
         RbfFileStore regressedStore = new();
         RbfFile regressedAFile = regressedStore.CreateFile();
         FrameBuilder regressedABuilder = NewFullRevision();
-        AddBase(regressedABuilder, payloadBytes: 10, logicalVersionOrdinal: 1, parent: null);
+        AddBase(regressedABuilder, payloadBytes: 10, logicalVersionOrdinal: 1);
         AbsoluteFrameAddress regressedA = Append(regressedAFile, regressedABuilder);
         RbfFile regressedBFile = regressedStore.CreateFile();
         FrameBuilder regressedBBuilder = NewDeltaRevision(Previous(regressedA.FrameTicket));
@@ -203,12 +203,11 @@ public sealed class MaintenanceObjectVersionSemanticsTests {
             Previous(regressedA.FrameTicket));
         AbsoluteFrameAddress regressedB = Append(regressedBFile, regressedBBuilder);
         RbfFile regressedCFile = regressedStore.CreateFile();
-        FrameBuilder regressedCBuilder = NewFullRevision();
+        FrameBuilder regressedCBuilder = NewFullRevision(Previous(regressedB.FrameTicket));
         AddBase(
             regressedCBuilder,
             payloadBytes: 11,
-            logicalVersionOrdinal: 1,
-            Previous(regressedB.FrameTicket));
+            logicalVersionOrdinal: 1);
         AbsoluteFrameAddress regressed = Append(regressedCFile, regressedCBuilder);
 
         Assert.Throws<InvalidDataException>(() =>
@@ -219,7 +218,7 @@ public sealed class MaintenanceObjectVersionSemanticsTests {
         RbfFileStore store = new();
         RbfFile aFile = store.CreateFile();
         FrameBuilder aBuilder = NewFullRevision();
-        AddBase(aBuilder, payloadBytes: 10, logicalVersionOrdinal: 1, parent: null);
+        AddBase(aBuilder, payloadBytes: 10, logicalVersionOrdinal: 1);
         AbsoluteFrameAddress a = Append(aFile, aBuilder);
 
         RbfFile bFile = store.CreateFile();
@@ -230,18 +229,20 @@ public sealed class MaintenanceObjectVersionSemanticsTests {
         }
 
         RbfFile cFile = store.CreateFile();
-        FrameBuilder cBuilder = NewFullRevision();
+        FrameBuilder cBuilder = NewFullRevision(Previous(b.FrameTicket));
         AddBase(
             cBuilder,
             payloadBytes: 10,
-            logicalVersionOrdinal: 1,
-            Previous(b.FrameTicket));
+            logicalVersionOrdinal: 1);
         AbsoluteFrameAddress c = Append(cFile, cBuilder);
         return new RelocationChain(store, a, b, c);
     }
 
-    private static FrameBuilder NewFullRevision() {
-        ObjectVersionDictionaryBuilder dictionary = new();
+    private static FrameBuilder NewFullRevision(
+        RelativeFrameTicket? priorSnapshot = null) {
+        ObjectVersionDictionaryBuilder dictionary = new() {
+            ParentRevisionFrameTicket = priorSnapshot,
+        };
         dictionary.BindSelf(ObjectId);
         return new FrameBuilder { ObjectVersionDictionary = dictionary };
     }
@@ -256,15 +257,13 @@ public sealed class MaintenanceObjectVersionSemanticsTests {
     private static void AddBase(
         FrameBuilder builder,
         int payloadBytes,
-        int logicalVersionOrdinal,
-        RelativeFrameTicket? parent) {
+        int logicalVersionOrdinal) {
         ObjectVersionBuilder version = builder.Add(ObjectId);
         version.Kind = ObjectVersionKind.Base;
         version.PayloadBytes = payloadBytes;
         version.ReconstructionObjectPayloadBytes = payloadBytes;
         version.ResultBasePayloadBytes = payloadBytes;
         version.LogicalVersionOrdinal = logicalVersionOrdinal;
-        version.ParentFrameTicket = parent;
     }
 
     private static void AddDelta(
@@ -282,7 +281,7 @@ public sealed class MaintenanceObjectVersionSemanticsTests {
         version.ResultBasePayloadBytes = resultBasePayloadBytes;
         version.ExpectedParentBasePayloadBytes = expectedParentBasePayloadBytes;
         version.LogicalVersionOrdinal = logicalVersionOrdinal;
-        version.ParentFrameTicket = parent;
+        version.DeltaParentFrameTicket = parent;
     }
 
     private static AbsoluteFrameAddress Append(RbfFile file, FrameBuilder builder) =>
