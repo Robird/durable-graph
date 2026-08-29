@@ -10,8 +10,31 @@ internal static class SaveStepNormalizer {
         uint currentFileNumber,
         AbsoluteFrameAddress publishedRevisionAddress,
         SaveStep step) {
-        ArgumentNullException.ThrowIfNull(store);
         ArgumentNullException.ThrowIfNull(step);
+
+        return NormalizeCore(
+            store,
+            currentFileNumber,
+            publishedRevisionAddress,
+            step.Changes);
+    }
+
+    public static NormalizedSaveFacts NormalizeMaintenanceOnly(
+        RbfFileStore store,
+        uint currentFileNumber,
+        AbsoluteFrameAddress publishedRevisionAddress) => NormalizeCore(
+            store,
+            currentFileNumber,
+            publishedRevisionAddress,
+            []);
+
+    private static NormalizedSaveFacts NormalizeCore(
+        RbfFileStore store,
+        uint currentFileNumber,
+        AbsoluteFrameAddress publishedRevisionAddress,
+        IReadOnlyList<WorkloadChange> changes) {
+        ArgumentNullException.ThrowIfNull(store);
+        ArgumentNullException.ThrowIfNull(changes);
 
         uint previousFileNumber = ValidateFileScope(store, currentFileNumber);
         ValidatePublishedRevision(
@@ -35,9 +58,9 @@ internal static class SaveStepNormalizer {
             currentFileNumber,
             liveBindings);
 
-        List<NormalizedSaveFact> explicitFacts = new(step.Changes.Count);
+        List<NormalizedSaveFact> explicitFacts = new(changes.Count);
         HashSet<uint> changedObjectIds = [];
-        foreach (WorkloadChange change in step.Changes) {
+        foreach (WorkloadChange change in changes) {
             _ = changedObjectIds.Add(change.ObjectId);
             explicitFacts.Add(change switch {
                 CreateObject create => NormalizeInsert(parentLive, create),

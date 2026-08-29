@@ -761,6 +761,14 @@
 
 ## 6. 船长日志
 
+### 2026-08-29：闭合显式 Rotate-C candidate 与 maintenance 统一入口
+
+- **Observed**：`RotateCRevisionPlanner` 只消费与 Stay-B 相同的 normalized facts；A-dependent PostLive 强制写 Base@C，B-contained Update 才接受显式 Base/Delta，B-contained NoChange 可选 same-state Base，否则 External 到精确旧 B head。
+- **Observed**：候选写 full OVD Base，entries 恰等 PostLive，Remove 完全省略，source PublishedRevision@B 只作为 shared lineage anchor；mixed fixture 以“B-local head 早于 PublishedRevision”和“head@B/Base@A”两个 discriminator 证明 exact-head encoding 与 B/C current reconstruction closure。
+- **Observed**：独立 `NormalizeMaintenanceOnly` 复用普通 Save 的唯一 source inspection，不放宽 `SaveStep` 非空约束；默认 Rotate-C decision 与旧 ImmediateRotation candidate 在 runtime Frame、OVD、address 和 estimate 上等价。
+- **Observed**：共享 mechanical record builder 保持 Stay-B 行为；聚焦复核 15/15、TwoLegRotationProbe 236/236、solution build 0 warning / 0 error，独立审查无 blocking/high。
+- **Decided / Next**：下一切片建立同一 facts 下的 caller-explicit Stay-B/Rotate-C paired evaluation，分别表达 exact physical feasibility 与原始 observations，不自动选 winner、不搜索 capacity repair，也不提前实现 durable publication。
+
 ### 2026-08-29：闭合 normalized Save 与显式 Stay-B candidate
 
 - **Observed**：`parent PublishedRevision@B + SaveStep` 已归一化为单一 ObjectId-ordered immutable fact sequence，四个 typed views 与 Parent/PostLive states 均由它派生；source addresses 只来自 runtime OVD，并对 OVD replay chain 与全部 parent-live object 验证 A/B reconstruction closure。

@@ -109,20 +109,25 @@ PublishedRevision 为 shared prior-snapshot anchor。accepted new head 的 curre
 - provisional RBF v0.40 whole-frame estimator；无 bytes writer/parser；
 - 从 PublishedRevision OVD authority 派生的 immutable canonical
   `Insert / Update / Remove / NoChange` facts；
+- 独立 `NormalizeMaintenanceOnly` 入口复用同一 source inspection，并在不放宽 `SaveStep` 非空约束的
+  前提下产生全 NoChange facts；
 - caller-explicit Stay-B candidate：同一 B Revision 合并 domain changes、Update Base/Delta、OVD Remove 与
   selected unchanged A-debt same-state Base；
+- caller-explicit Rotate-C candidate：同一 fresh-C Revision 合并 domain changes、mandatory A-dependent
+  Bases、B-contained Update Base/Delta 与 NoChange External/optional Base，并写 full OVD Base；
 - caller-selected B same-state Base migration plan/append witness；
 - relay-free immediate A/B -> B/C plan/append、shared anchor、B/C closure witness；
 - 多批 B migration 使原本放不下的 C evacuation 可编码的容量 witness；
 - terminal sizing 反例：high-ticket External 不支配 zero-payload Base+Self。
 
-Stay-B 已接入统一 per-Save facts，但 Rotate-C、candidate pair comparison 与连续 Save 策略循环仍未闭合。
+Stay-B 与 Rotate-C 已接入同一 per-Save facts；candidate pair evaluation、连续 Save 策略循环与统一 apply
+边界仍未闭合。
 当前三条 policy matrix 只是 Base/Deltify baseline，不是 rotation-policy comparison。
 
 ## 当前研究焦点
 
-把已经分离验证的 domain Save、B migration 和 C rotation 合成一个真实 Save 节奏下的纵向闭环，
-并尽快画出：
+下一步先让同一 normalized Save 的 Stay-B / Rotate-C 两个显式候选进入同一个无权重、无自动 winner 的
+evaluation seam，再把选定动作接入真实 Save 节奏，尽快画出：
 
 ```text
 A debt 随连续 Save 变化
@@ -136,63 +141,64 @@ A debt 随连续 Save 变化
 
 ## 下一编码切片
 
-闭合 **explicit-decision Rotate-C candidate**，复用现有 normalized facts 与 `PlannedRevisionV0`：
+闭合一个 **caller-explicit paired candidate evaluation**，不自动选择 winner：
 
 ```text
 NormalizedSaveFacts
-    -> mandatory A-dependent PostLive Bases@C
-    -> caller-explicit B-contained Update Base/Delta
-    -> B-contained NoChange External or explicit same-state Base+Self
-    -> one pure runtime C Revision candidate at a fresh-file tail
+    + StayBSaveDecision
+    + RotateCSaveDecision
+    -> independently attempt Stay-B and Rotate-C
+    -> typed exact-feasibility outcome for each target
+    -> raw, non-weighted candidate observations
 ```
 
-Rotate-C 写 full OVD Base，并以 source PublishedRevision@B 作为 shared prior-snapshot anchor；Remove 不进入
-full OVD，也没有 domain record。所有 A-dependent PostLive objects 必须在 C 写 Base，B-contained objects
-才能保留 External 或合法 Delta@C->B。最小 mixed fixture 应证明 candidate 的逻辑 PostLive、B/C current
-reconstruction closure、whole-candidate estimate 和 planning purity，并让现有 ImmediateRotation 的空领域变化
-语义成为可表达的后续特例。
+两侧必须从同一 facts 构建；一侧因 Frame/address/file hard gate 不可行，不能阻止另一侧被评估。合法但放不下
+的候选需要与 caller decision 错误、source corruption 和模型 bug 分开表达；后几类仍直接 fail closed。首版只保留
+原始 whole-candidate layout、target、domain/migration write bytes、PostLive reconstruction 与 A-debt 等事实，
+不引入总分、隐含权重或自动策略选择。
 
-本切片仍不造 heuristic、PreferredStayB/PreferredRotateC 比较、capacity repair、completion search 或
-publication/head。`SaveStep` 当前禁止空批次；是否为 maintenance-only rotation 增加独立 normalized 入口，
-在实现 Rotate-C 时按最小接缝处理，不借机放宽 generated workload 的现有不变量。
+该 seam 仍只评估 pure candidates，不 append/publish，也不把 `RejectedCapacityUnsearched` 宣称为一般无解。
+completion certificate、次优 capacity repair 与 continuous runner 留给后续切片。
 
 ## 近期 roadmap
 
 1. **Normalized input + unified per-Save candidate**
-   - 已完成 parent authority -> canonical facts 与 Stay-B mixed Revision；
-   - Rotate-C：同一 Revision 合并领域变更、mandatory A-debt Bases、B-local External/optional Base；
-   - 复用现有 OVD、reconstruction、layout 与 no-mutation oracle；现有 immediate path 成为空变更特例。
-2. **Two-phase plan / feasibility**
-   - 假设可容纳，分别生成一个 PreferredStayB 与 PreferredRotateC；
-   - 随后 exact-filter 地址、Frame/File 容量、closure 与 completion certificate；
-   - 不搜索同一 target 的次优 capacity repair；两个偏好候选都失败时保守 fail closed。
-3. **Scripted continuous runner**
+   - 已完成 parent authority -> canonical facts、maintenance-only facts 与 Stay-B / Rotate-C mixed Revision；
+   - 两个 planner 复用同一 OVD、reconstruction、layout 与 no-mutation oracle；现有 immediate path 已有
+     executable empty-foreground candidate equivalence。
+2. **Paired candidate attempt / exact physical feasibility**
+   - 先由 caller 显式给出两侧动作，不声称 Preferred 或 heuristic；
+   - 独立 exact-filter 地址与 Frame/File hard gate，保留两侧原始 observation；
+   - 不搜索同一 target 的次优 capacity repair；失败只标为具体 bounded rejection。
+3. **Completion certificate + explicit apply seam**
+   - 为可选 Stay-B candidate 附带一个保守、有限、可重放的 prepare-and-rotate witness；
+   - 再建立仅供 probe runner 使用的显式 mutation boundary，不冒充 durable publication/head。
+4. **Scripted continuous runner**
    - 先由测试脚本显式给出动作，不声称 heuristic；
    - 至少跑通 `A/B -> B/C -> C/D`，验证每步 logical state、FileScope closure 和 role rollover；
    - 每个 accepted Save 附带保守的具体 completion certificate，不先建立一般搜索器。
-4. **Rotation observations**
+5. **Rotation observations**
    - 记录 debt count/full-Base bytes、Previous unique frames/bytes、B tail/headroom、domain/migration bytes、
      exact terminal-C estimate、per-Save/rotation peak、leg length、rotation count 与保守拒绝；
    - 保留原始量，不预设总分。
-5. **简单策略基线**
+6. **简单策略基线**
    - Lazy/no cold migration；
    - Touch/ChangedDebtFirst；
    - deterministic PacedCold（例如每 Save 一个）与 DebtZeroThenRotate；
    - 全部重放同一 frozen traces，报告 Pareto 与明显 dead-end/振荡。
-6. **按证据加入 bounded explorer**
+7. **按证据加入 bounded explorer**
    - 仅在出现具体 `RejectedUnproven`、`RejectedCapacityUnsearched` 或疑似 heuristic false-negative 后，
      冻结该小状态；
    - 用同一 unified action builder 做 canonical bounded search；`NotFoundWithinBounds` 不外推一般无解。
-7. **再研究自适应策略**
+8. **再研究自适应策略**
    - 根据连续运行暴露的压力、峰值和反例设计 capacity/pressure-aware 候选，而不是先冻结权重。
 
 ## 未闭合事项
 
-- Rotate-C 如何复用现有 facts/plan shape，而不复制 source inspection 或建立第二 authority；
-- maintenance-only ImmediateRotation 如何表达空 foreground，同时保持 generated `SaveStep` 非空；
+- paired evaluation 应如何窄化 physical-capacity rejection，而不把 decision/source/model errors 吞成普通不可行；
+- 哪一组 raw candidate observations 足以支撑后续 Pareto 比较，同时不建立第二尺寸 authority；
 - unbounded preference cost 如何比较两个 target，同时保持原始多目标事实而不偷渡权重；
 - `RejectedCapacityUnsearched` 出现多频繁时值得加入次优 action menu 或 constraint-aware repair；
-- rotation Save 中 changed object 何时允许 Delta，何时因其 reconstruction 仍触 A 而必须 Base；
 - 初版保守 completion certificate 如何表达且不偷偷演化成通用 search framework；
 - stable hot/cold、burst、size distribution 与长 trace 是否先用 handwritten fixture，何时扩充 generator；
 - `PacedCold` 的 fixed-count baseline 之后，何种无隐藏权重的 pressure facts 最值得比较；

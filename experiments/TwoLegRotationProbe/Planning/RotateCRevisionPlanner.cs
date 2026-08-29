@@ -4,29 +4,28 @@ using Atelia.TwoLegRotationProbe.Rotation;
 namespace Atelia.TwoLegRotationProbe.Planning;
 
 /// <summary>
-/// Builds one pure B-local Revision candidate from normalized Save facts and
-/// caller-explicit actions. It never appends or publishes.
+/// Builds one pure first-Revision candidate for fresh file C. It consumes only frozen
+/// normalized facts and never rematerializes, appends, creates a file, or publishes.
 /// </summary>
-internal static class StayBRevisionPlanner {
-    public static StayBRevisionPlan Create(
+internal static class RotateCRevisionPlanner {
+    public static RotateCRevisionPlan Create(
         RbfFileStore store,
         NormalizedSaveFacts facts,
-        StayBSaveDecision decision) {
+        RotateCSaveDecision decision) {
         ArgumentNullException.ThrowIfNull(store);
         ArgumentNullException.ThrowIfNull(facts);
         ArgumentNullException.ThrowIfNull(decision);
 
-        RbfFile currentFile = ValidateSource(store, facts);
-        SortedDictionary<uint, UpdateWriteMode> updateModes =
+        uint nextFileNumber = ValidateSource(store, facts);
+        SortedDictionary<uint, UpdateWriteMode> bContainedUpdateModes =
             ValidateUpdateDecisions(facts, decision);
-        HashSet<uint> migrationObjectIds = ValidateMigrationDecisions(
-            facts,
-            decision);
+        HashSet<uint> bContainedNoChangeBaseObjectIds =
+            ValidateNoChangeBaseDecisions(facts, decision);
 
-        FileScope currentScope = new(facts.CurrentFileNumber);
+        FileScope nextScope = new(nextFileNumber);
         ObjectVersionDictionaryBuilder dictionary = new() {
-            Kind = ObjectVersionDictionaryKind.Delta,
-            ParentRevisionFrameTicket = currentScope.Relativize(
+            Kind = ObjectVersionDictionaryKind.Base,
+            ParentRevisionFrameTicket = nextScope.Relativize(
                 facts.PublishedRevisionAddress),
         };
         FrameBuilder frame = new() { ObjectVersionDictionary = dictionary };
@@ -40,26 +39,36 @@ internal static class StayBRevisionPlanner {
                         insert.ResultState);
                     dictionary.BindSelf(insert.ObjectId);
                     break;
+                case NormalizedUpdateFact update when IsADependent(facts, update.Source):
+                    RevisionCandidateRecordBuilder.AddBase(
+                        frame,
+                        update.ObjectId,
+                        update.ResultState);
+                    dictionary.BindSelf(update.ObjectId);
+                    break;
                 case NormalizedUpdateFact update:
                     RevisionCandidateRecordBuilder.AddUpdate(
                         frame,
-                        currentScope,
+                        nextScope,
                         update,
-                        updateModes[update.ObjectId]);
+                        bContainedUpdateModes[update.ObjectId]);
                     dictionary.BindSelf(update.ObjectId);
                     break;
-                case NormalizedRemoveFact remove:
-                    dictionary.Remove(remove.ObjectId);
+                case NormalizedRemoveFact:
                     break;
                 case NormalizedNoChangeFact noChange
-                    when migrationObjectIds.Contains(noChange.ObjectId):
+                    when IsADependent(facts, noChange.Source) ||
+                        bContainedNoChangeBaseObjectIds.Contains(noChange.ObjectId):
                     RevisionCandidateRecordBuilder.AddBase(
                         frame,
                         noChange.ObjectId,
                         noChange.Source.State);
                     dictionary.BindSelf(noChange.ObjectId);
                     break;
-                case NormalizedNoChangeFact:
+                case NormalizedNoChangeFact noChange:
+                    dictionary.BindExternal(
+                        noChange.ObjectId,
+                        nextScope.Relativize(noChange.Source.HeadAddress));
                     break;
                 default:
                     throw new InvalidDataException(
@@ -68,20 +77,20 @@ internal static class StayBRevisionPlanner {
         }
 
         PlannedRevisionV0 revision = new(
-            facts.CurrentFileNumber,
+            nextFileNumber,
             frame.Build(),
-            currentFile.TailOffsetBytes);
-        return new StayBRevisionPlan(facts, decision, revision);
+            RbfV040Layout.InitialTailOffsetBytes);
+        return new RotateCRevisionPlan(facts, decision, revision);
     }
 
-    private static RbfFile ValidateSource(
+    private static uint ValidateSource(
         RbfFileStore store,
         NormalizedSaveFacts facts) {
         if (facts.PreviousFileNumber == 0 ||
             facts.CurrentFileNumber != checked(facts.PreviousFileNumber + 1) ||
             facts.PublishedRevisionAddress.FileNumber != facts.CurrentFileNumber) {
             throw new InvalidDataException(
-                "Stay-B planning requires normalized facts for one adjacent A/B scope " +
+                "Rotate-C planning requires normalized facts for one adjacent A/B scope " +
                 "and a PublishedRevision in B.");
         }
 
@@ -92,7 +101,7 @@ internal static class StayBRevisionPlanner {
         }
 
         _ = store.GetFile(facts.PreviousFileNumber);
-        RbfFile currentFile = store.GetFile(facts.CurrentFileNumber);
+        _ = store.GetFile(facts.CurrentFileNumber);
         try {
             _ = store.ReadFrame(facts.PublishedRevisionAddress);
         } catch (Exception exception) when (
@@ -103,64 +112,74 @@ internal static class StayBRevisionPlanner {
         }
 
         foreach (SourceObjectFact source in facts.ParentLive.Values) {
-            EnsureAddressInScope(facts, source.ObjectId, source.HeadAddress, "head");
-            EnsureAddressInScope(facts, source.ObjectId, source.BaseAddress, "Base");
+            EnsureAddressInSourceScope(facts, source.ObjectId, source.HeadAddress, "head");
+            EnsureAddressInSourceScope(facts, source.ObjectId, source.BaseAddress, "Base");
             foreach (AbsoluteFrameAddress reconstructionAddress in
                 source.ReconstructionFrameAddresses) {
-                EnsureAddressInScope(
+                EnsureAddressInSourceScope(
                     facts,
                     source.ObjectId,
                     reconstructionAddress,
                     "reconstruction");
             }
+
+            if (source.BaseAddress.FileNumber == facts.CurrentFileNumber &&
+                source.ReconstructionFrameAddresses.Any(address =>
+                    address.FileNumber != facts.CurrentFileNumber)) {
+                throw new InvalidDataException(
+                    $"Source object {source.ObjectId} claims a B-contained Base but its " +
+                    "reconstruction escapes Current file B.");
+            }
         }
 
-        return currentFile;
+        return checked(facts.CurrentFileNumber + 1);
     }
 
     private static SortedDictionary<uint, UpdateWriteMode> ValidateUpdateDecisions(
         NormalizedSaveFacts facts,
-        StayBSaveDecision decision) {
+        RotateCSaveDecision decision) {
         uint[] expectedObjectIds = facts.Updates
+            .Where(update => !IsADependent(facts, update.Source))
             .Select(static update => update.ObjectId)
             .ToArray();
-        uint[] actualObjectIds = decision.UpdateDecisions
+        uint[] actualObjectIds = decision.BContainedUpdateDecisions
             .Select(static update => update.ObjectId)
             .ToArray();
         if (!expectedObjectIds.SequenceEqual(actualObjectIds)) {
             throw new ArgumentException(
-                "Update write decisions must cover exactly the normalized Update ObjectIds.",
+                "B-contained Update decisions must cover exactly the normalized " +
+                "B-contained Update ObjectIds.",
                 nameof(decision));
         }
 
         SortedDictionary<uint, UpdateWriteMode> result = [];
-        foreach (UpdateWriteDecision update in decision.UpdateDecisions) {
+        foreach (UpdateWriteDecision update in decision.BContainedUpdateDecisions) {
             result.Add(update.ObjectId, update.Mode);
         }
 
         return result;
     }
 
-    private static HashSet<uint> ValidateMigrationDecisions(
+    private static HashSet<uint> ValidateNoChangeBaseDecisions(
         NormalizedSaveFacts facts,
-        StayBSaveDecision decision) {
+        RotateCSaveDecision decision) {
         Dictionary<uint, NormalizedSaveFact> factsByObjectId = facts.AllFacts
             .ToDictionary(static fact => fact.ObjectId);
         HashSet<uint> result = [];
-        foreach (uint objectId in decision.UnchangedMigrationObjectIds) {
+        foreach (uint objectId in decision.BContainedNoChangeBaseObjectIds) {
             if (!factsByObjectId.TryGetValue(
                 objectId,
                 out NormalizedSaveFact? fact) ||
                 fact is not NormalizedNoChangeFact noChange) {
                 throw new ArgumentException(
-                    $"Migration ObjectId {objectId} must be a normalized NoChange object.",
+                    $"Optional Base ObjectId {objectId} must be a normalized NoChange object.",
                     nameof(decision));
             }
 
-            if (noChange.Source.BaseAddress.FileNumber != facts.PreviousFileNumber) {
+            if (IsADependent(facts, noChange.Source)) {
                 throw new ArgumentException(
-                    $"Migration ObjectId {objectId} is already based in Current file " +
-                    $"{facts.CurrentFileNumber}.",
+                    $"NoChange ObjectId {objectId} is A-dependent and therefore already " +
+                    "requires a Base in C.",
                     nameof(decision));
             }
 
@@ -170,7 +189,12 @@ internal static class StayBRevisionPlanner {
         return result;
     }
 
-    private static void EnsureAddressInScope(
+    private static bool IsADependent(
+        NormalizedSaveFacts facts,
+        SourceObjectFact source) =>
+        source.BaseAddress.FileNumber == facts.PreviousFileNumber;
+
+    private static void EnsureAddressInSourceScope(
         NormalizedSaveFacts facts,
         uint objectId,
         AbsoluteFrameAddress address,
@@ -182,5 +206,4 @@ internal static class StayBRevisionPlanner {
                 $"{facts.PreviousFileNumber}/{facts.CurrentFileNumber}.");
         }
     }
-
 }

@@ -270,7 +270,7 @@ events and show only the final post-save read snapshot; no `TotalReadBytes` is
 defined. The matrix lives in executable tests; a ScenarioCatalog or report
 format waits for a CLI, persisted artifact, or batch-run consumer.
 
-## Normalized Save facts and Stay-B candidate
+## Normalized Save facts and explicit Stay-B / Rotate-C candidates
 
 `SaveStepNormalizer` now turns one `parent PublishedRevision@B + SaveStep` into
 one immutable, ObjectId-ordered fact sequence. `Insert`, `Update`, `Remove`, and
@@ -285,6 +285,11 @@ The normalizer can prove that an Insert is absent from the parent snapshot; it
 cannot prove from that snapshot alone that an ObjectId was never used in older
 history. Globally fresh Insert IDs therefore remain an upstream session/workload
 precondition rather than a caller-supplied second authority.
+
+`NormalizeMaintenanceOnly` reuses the same source inspection but supplies no
+foreground changes, producing all-`NoChange` facts without weakening the
+generated workload rule that a `SaveStep` is nonempty. An empty live graph is
+also legal through this separate entry point.
 
 `StayBSaveDecision` is deliberately caller-explicit. It must choose exactly one
 Base/Delta mode for every Update and may select only `NoChange` objects whose
@@ -312,9 +317,36 @@ and proves an A-debt set reduction from five exact ObjectIds to two. It also
 checks canonical input-order independence, decision conflicts, capacity failure,
 and success/failure planning purity.
 
-This closes only the Stay-B half of the unified per-Save seam. It is not yet an
-automatic policy, a Rotate-C candidate, a durable head publication path, or a
-continuous multi-rotation runner.
+`RotateCSaveDecision` exposes only real C-side choices: every B-contained Update
+must choose Base or Delta, and selected B-contained `NoChange` objects may be
+written as same-state Bases instead of remaining External. A-dependent Updates
+and `NoChange` objects are not caller choices: the planner forces them to Base@C
+so current reconstruction cannot retain A.
+
+`RotateCRevisionPlanner` consumes the same frozen facts without rematerializing
+the source OVD or rerunning the reconstruction oracle. It writes one fresh-C
+candidate with a full OVD Base anchored at the source PublishedRevision@B:
+
+```text
+Insert                     -> Base + Self
+A-dependent Update         -> new Base + Self
+B-contained Update         -> explicit Base or Delta to exact B head + Self
+Remove                     -> omitted from full OVD and domain records
+A-dependent NoChange       -> same-state Base + Self
+B-contained NoChange       -> exact-head External or explicit Base + Self
+```
+
+The full OVD entries equal `PostLive`; its parent is a shared historical-lineage
+anchor, not an OVD replay parent. A mixed executable fixture uses B-local heads
+that predate PublishedRevision, proving Delta and External encode the exact old
+head rather than the shared anchor. It also proves logical PostLive equality,
+B/C reconstruction closure, canonical decisions, exact whole-frame sizing,
+capacity-failure purity, and maintenance-candidate equivalence with the older
+ImmediateRotation planner.
+
+This closes both pure explicit candidate builders. It is not yet an automatic
+policy, paired feasibility result, durable head publication path, or continuous
+multi-rotation runner.
 
 ## Preparatory B migration witness
 
@@ -343,8 +375,9 @@ It does not establish that an untried batch ordering cannot complete.
 
 ## Relay-free immediate rotation witness
 
-`ImmediateRotationPlanner` is a pure planner for the narrow case that fits in
-one C evacuation Frame. Its only source of live bindings is
+`ImmediateRotationPlanner` remains the older pure planner/appender witness for
+the narrow maintenance-only case that fits in one C evacuation Frame. Its only
+source of live bindings is
 `MaterializeLive(B PublishedRevision)`; it does not accept a caller StateMap.
 
 ```text
@@ -393,12 +426,13 @@ projection is a versioned research input, not a durable-format commitment.
 not a law of whether an already-published format is readable. A concrete finite
 B-migration-plus-C-rotation witness proves it true for that source state.
 Failure of a bounded explorer to find one must remain `NotFoundWithinBounds`,
-not a proof that no completion exists. The next slice should merge domain changes,
-same-Revision B migration, and terminal C actions by adding a Rotate-C builder
-over the same normalized facts and candidate value shape. It can then feed a
-scripted continuous multi-rotation run. A bounded
-reference explorer waits for a concrete conservative rejection or suspected
-heuristic false-negative; it does not block the first strategy loop.
+not a proof that no completion exists. The next slice should evaluate the
+explicit Stay-B and Rotate-C candidates independently for the same normalized
+Save, preserving typed exact-feasibility outcomes and raw observations without
+choosing a weighted winner. It can then support a conservative completion
+certificate and scripted continuous multi-rotation run. A bounded reference
+explorer waits for a concrete conservative rejection or suspected heuristic
+false-negative; it does not block the first strategy loop.
 
 The rejected forwarding alternatives and their executable comparison are
 preserved by annotated tag `research/relay-vs-relay-free-20260829` and DB-009.
