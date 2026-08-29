@@ -6,8 +6,9 @@
 >
 > 更新日期：2026-08-29
 >
-> 当前方向：先定尺 terminal C 的 `RelocatedBase` / `External` 两种动作，再建立诚实命名的
-> bounded/canonical completion explorer；不先写 heuristic，也不冻结链长、目标文件大小或迁移预算。
+> 当前方向：先用最小 terminal candidate seam 把 `RelocatedBase` / `External` 定尺反例变成
+> physically realizable runtime + shared-anchor/closure witness，并封死或明确界定 B-migration escape；
+> 随后才建立 bounded/canonical completion explorer，不先写 heuristic 或冻结调优参数。
 
 ## 问题
 
@@ -89,7 +90,16 @@ reference explorer 必须显式标注边界，并在小状态上 canonical 枚�
   same-logical-ordinal Base，OVD Delta 指向 source PublishedRevision；plan 与 append 前都复验全部 live
   reconstruction 和 A/B closure，lineage 不作为 current-state gate；
 - `3 x 140,000,000` payload witness 证明 immediate C 与合并两对象 B batch 均失败；两个单对象 B
-  batches 后 C 成功，一批后仍失败。`head@B / Base@A` 也已覆盖。
+  batches 后 C 成功，一批后仍失败。`head@B / Base@A` 也已覆盖；
+- terminal C exact-sizing discriminator 使用合法最大 Previous ticket（10-byte VarUInt）：mandatory
+  payload `268,435,390` 时 External total 恰为 `268,435,428`，加一后溢出；同一加一候选改用
+  zero-payload same-state Base + Self 后 total 为 `268,435,427`，padding 后 frame 恰达上限，address
+  tokens `21 -> 12`。
+
+该 discriminator 只证明当前 provisional v0 grammar 下 External 不支配 optional same-state
+relocation；未实现 runtime optional action，不证明扩大 `CanPrepareAndRotate` 可达集、planner
+completeness 或未来 wire format。尺寸裁决始终以 whole-candidate estimator 为唯一 authority，不从
+单对象 token 差推导 additive savings。
 
 当前 provisional matrix（`modeled file / final full-frame read`）：
 
@@ -98,11 +108,12 @@ reference explorer 必须显式标注边界，并在小状态上 canonical 枚�
 | hot-one/cold-eight | 1864 / 1132 | 1428 / 1396 | 1500 / 1132 |
 | fixed-seed mixed | 516 / 176 | 460 / 444 | 460 / 296 |
 
-这些数字只证明 write/read tradeoff 可观测，不选择 winner。完整 probe 当前 220/220。
+这些数字只证明 write/read tradeoff 可观测，不选择 winner。完整 probe 当前 221/221。
 
 ## 未闭合事项与顺序
 
-1. 用 optional terminal C `RelocatedBase` versus `External` 的 exact sizing discriminator 明确动作 grammar；
+1. 通过最小/正式 terminal candidate seam，形成 physically realizable optional relocation、shared-anchor
+   与 A/B -> B/C reconstruction-closure witness；fixture 同时封死或明确界定 B-migration escape；
 2. 建立 small-state bounded/canonical completion explorer；找到的 concrete witness 足以证明 true，
    `NotFound` 不冒充无解；
 3. 把 completion legality 接入连续多 Save、多次 A/B→B/C 的模拟；

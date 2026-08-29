@@ -208,6 +208,22 @@ does not write or parse bytes. It is exact for this named provisional grammar,
 not a production wire-format or compatibility promise. RBF Tag values,
 opcodes, final record fields and Extent behavior remain unchosen.
 
+An exact terminal-C grammar discriminator uses the largest legal Previous-file
+ticket, whose relative address needs a 10-byte VarUInt. With 268,435,390 bytes
+of mandatory payload, retaining a zero-payload B-local object as External makes
+Payload+TailMeta exactly 268,435,428 bytes; one more mandatory byte overflows.
+For that same one-byte-larger candidate, encoding the object as a same-state
+Base plus Self reduces Payload+TailMeta to 268,435,427 bytes and address-token
+bytes from 21 to 12. Padding still makes the resulting frame exactly
+`MaxFrameLength`.
+
+This proves only that External does not dominate optional same-state relocation
+under the current provisional v0 grammar. It does not implement that runtime
+action, enlarge the proven `CanPrepareAndRotate` reachable set, establish a
+complete planner, or constrain a future wire format. The whole-candidate
+estimator remains the sole sizing authority; the address-token difference is
+not a composable per-object savings rule.
+
 Each `RevisionObservation` separates a write event from the post-save
 reconstruction snapshot. Writes record Base/Delta object payload and the
 selected profile's frame/append layout. Reconstruction records required object
@@ -327,10 +343,11 @@ projection is a versioned research input, not a durable-format commitment.
 not a law of whether an already-published format is readable. A concrete finite
 B-migration-plus-C-rotation witness proves it true for that source state.
 Failure of a bounded explorer to find one must remain `NotFound`, not a proof
-that no completion exists. The next discriminator will first give terminal C
-`RelocatedBase` versus `External` actions exact sizing, then build an honestly
-bounded/canonical reference
-explorer before comparing heuristics.
+that no completion exists. The next slice must expose a minimal terminal
+candidate seam and turn the sizing discriminator into a physically realizable
+runtime, shared-anchor, and reconstruction-closure witness. Its fixture should
+also close or explicitly bound any B-migration escape. Only then should an
+honestly bounded/canonical reference explorer precede heuristic comparison.
 
 The rejected forwarding alternatives and their executable comparison are
 preserved by annotated tag `research/relay-vs-relay-free-20260829` and DB-009.

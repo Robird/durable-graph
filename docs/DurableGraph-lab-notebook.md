@@ -761,9 +761,9 @@
 
 ## 6. 船长日志
 
-### 2026-08-29：闭合 caller-selected B Base migration witness
+### 2026-08-29：B migration witness 与 terminal C 定尺
 
-- **Observed / Next**：explicit nonempty A-debt migration 已能在 B 写 same-state/same-ordinal Base 与 OVD Delta，并在 plan/append 前复验全部 live reconstruction/A/B closure；真实 `3 x 140,000,000` payload 案例由两个单对象 B batches 使原本失败的 C evacuation 最终成功，`head@B / Base@A` 也通过，Probe 220/220。它不是 search 或 `CanPrepareAndRotate` decision procedure；下一步先定尺 terminal C `RelocatedBase`/`External`，再做 bounded/canonical explorer，且 `NotFound` 不解释为一般无解。
+- **Observed / Next**：caller-selected B Base migration witness 已闭合；terminal C 定尺反例进一步证明 provisional v0 下 high-ticket External 不支配 zero-payload same-state Base + Self（overflowing External total `268,435,429` 对 relocated `268,435,427`，address tokens `21 -> 12`），但尚无 runtime optional action、可达集或未来 wire-format 结论，完整 Probe 221/221。下一步先以 terminal candidate seam 形成 shared-anchor/closure runtime witness，并封死或界定 B-migration escape；随后才做 bounded/canonical explorer，且 `NotFound` 不解释为一般无解。
 
 ### 2026-08-29：选择 Revision shared prior-snapshot anchor
 

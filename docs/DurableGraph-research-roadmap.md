@@ -255,15 +255,24 @@ true 必须有具体有限 completion witness。未来 bounded explorer 的 `Not
 - canonical AA/BA/BB、mixed new/domain/relocated/Delta、genesis/Absent/visible Remove/malformed anchor；
 - 真实 `3 x 140,000,000` payload witness：immediate C 与合并两对象 B batch 失败，一批 B migration
   后 C 仍失败，两批后 C 成功；`head@B / Base@A` 也通过；
-- Probe 220/220。
+- terminal C exact-sizing discriminator：合法最大 Previous ticket 需要 10-byte VarUInt；mandatory
+  payload `268,435,390` 时 External total 恰为 `268,435,428`，加一后溢出；同一加一候选使用
+  zero-payload same-state Base + Self 后 total 为 `268,435,427`，padding 后 frame 恰达上限，address
+  tokens `21 -> 12`；
+- 完整 Probe 221/221。
 
 当前 provisional matrix（modeled file/final full-frame read）为 hot/cold
 `1864/1132`、`1428/1396`、`1500/1132`，fixed mixed
 `516/176`、`460/444`、`460/296`。它只展示 tradeoff，不选择 winner。
 
-S1 下一步先用 optional terminal C `RelocatedBase` versus `External` 的 exact sizing discriminator
-明确动作 grammar，再建立 small-state bounded/canonical completion explorer；找到的 witness 可证明
-true，`NotFound` 不证明一般无解。之后才把 legality 接入连续多 Save/多次轮转并比较 heuristics。
+该 sizing discriminator 只证明当前 provisional v0 grammar 下 External 不支配 optional same-state
+relocation；未实现 runtime action，不证明扩大 `CanPrepareAndRotate` 可达集、planner completeness 或
+未来 wire format。whole-candidate estimator 是唯一尺寸 authority，不引入 per-object additive savings。
+
+S1 下一步通过最小/正式 terminal candidate seam，形成 physically realizable runtime + shared-anchor/
+closure witness，并封死或明确界定 fixture 的 B-migration escape；随后才建立 small-state
+bounded/canonical completion explorer。找到的 witness 可证明 true，`NotFound` 不证明一般无解。之后才把
+legality 接入连续多 Save/多次轮转并比较 heuristics。
 真实 bytes/publication/reopen/crash 继续分离。旧 Relay discriminator 由 tag
 `research/relay-vs-relay-free-20260829`、DB-009 和实验簿归档；本 live roadmap 不重复历史 golden。
 文件被物理删除后不可访问仍不属于格式故障模型。

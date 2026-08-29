@@ -51,6 +51,61 @@ public sealed class ProvisionalRevisionV0GrammarTests {
     }
 
     [Fact]
+    public void Terminal_C_zero_Base_can_fit_when_high_ticket_External_overflows() {
+        const int largestExternalPayloadBytes =
+            RbfV040Layout.MaxPayloadAndTailMetaLengthBytes - 38;
+        RelativeFrameTicket highPreviousTicket = new(
+            IsPreviousFile: true,
+            new FrameTicket(
+                RbfV040Layout.MaxDurableGraphRelativeFrameStartOffsetBytes,
+                RbfV040Layout.MinFrameLengthBytes));
+        ulong encodedHighTicket =
+            ProvisionalRelativeFrameTicketCodec.EncodeRequired(highPreviousTicket);
+
+        Assert.Equal(10, CanonicalUnsignedBase128.GetEncodedWidth(encodedHighTicket));
+
+        ProvisionalRevisionV0Estimate externalAtLimit =
+            ProvisionalRevisionV0Estimator.Estimate(
+                CreateTerminalCInput(
+                    largestExternalPayloadBytes,
+                    highPreviousTicket,
+                    relocateZeroPayloadObject: false),
+                frameStartOffsetBytes: RbfV040Layout.InitialTailOffsetBytes);
+
+        Assert.Equal(268_435_421, externalAtLimit.PayloadLengthBytes);
+        Assert.Equal(7, externalAtLimit.TailMetaDirectoryBytes);
+        Assert.Equal(21, externalAtLimit.AddressTokenBytes);
+        Assert.Equal(
+            RbfV040Layout.MaxPayloadAndTailMetaLengthBytes,
+            externalAtLimit.PayloadLengthBytes + externalAtLimit.TailMetaDirectoryBytes);
+
+        int overflowingExternalPayloadBytes = checked(largestExternalPayloadBytes + 1);
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            ProvisionalRevisionV0Estimator.Estimate(
+                CreateTerminalCInput(
+                    overflowingExternalPayloadBytes,
+                    highPreviousTicket,
+                    relocateZeroPayloadObject: false),
+                frameStartOffsetBytes: RbfV040Layout.InitialTailOffsetBytes));
+
+        ProvisionalRevisionV0Estimate relocated =
+            ProvisionalRevisionV0Estimator.Estimate(
+                CreateTerminalCInput(
+                    overflowingExternalPayloadBytes,
+                    highPreviousTicket,
+                    relocateZeroPayloadObject: true),
+                frameStartOffsetBytes: RbfV040Layout.InitialTailOffsetBytes);
+
+        Assert.Equal(268_435_415, relocated.PayloadLengthBytes);
+        Assert.Equal(12, relocated.TailMetaDirectoryBytes);
+        Assert.Equal(12, relocated.AddressTokenBytes);
+        Assert.Equal(
+            RbfV040Layout.MaxPayloadAndTailMetaLengthBytes - 1,
+            relocated.PayloadLengthBytes + relocated.TailMetaDirectoryBytes);
+        Assert.Equal(RbfV040Layout.MaxFrameLengthBytes, relocated.RbfLayout.FrameLengthBytes);
+    }
+
+    [Fact]
     public void Base_domain_record_has_no_Delta_parent_token_or_NoneToken_placeholder() {
         ProvisionalRevisionV0Input input = CreateInput(
             [new ProvisionalDomainRecordInput(
@@ -375,4 +430,38 @@ public sealed class ProvisionalRevisionV0GrammarTests {
                 ovdKind,
                 parentFrameTicket,
                 entries));
+
+    private static ProvisionalRevisionV0Input CreateTerminalCInput(
+        int mandatoryPayloadBytes,
+        RelativeFrameTicket highPreviousTicket,
+        bool relocateZeroPayloadObject) {
+        List<ProvisionalDomainRecordInput> records = [
+            new ProvisionalDomainRecordInput(
+                1,
+                ProvisionalDomainRecordRole.Base,
+                mandatoryPayloadBytes,
+                DeltaParentFrameTicket: null),
+        ];
+        List<ProvisionalObjectVersionDictionaryEntry> bindings = [
+            ProvisionalObjectVersionDictionaryEntry.BindSelf(1),
+        ];
+        if (relocateZeroPayloadObject) {
+            records.Add(new ProvisionalDomainRecordInput(
+                2,
+                ProvisionalDomainRecordRole.Base,
+                SyntheticPayloadBytes: 0,
+                DeltaParentFrameTicket: null));
+            bindings.Add(ProvisionalObjectVersionDictionaryEntry.BindSelf(2));
+        } else {
+            bindings.Add(ProvisionalObjectVersionDictionaryEntry.BindExternal(
+                2,
+                highPreviousTicket));
+        }
+
+        return CreateInput(
+            records,
+            ProvisionalObjectVersionDictionaryKind.Base,
+            highPreviousTicket,
+            bindings);
+    }
 }
