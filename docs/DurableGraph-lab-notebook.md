@@ -763,12 +763,19 @@
 
 ## 6. 船长日志
 
+### 2026-08-29：建立单步策略 seam 与固定日程迁债对照
+
+- **Observed**：无状态 `ExplicitRotationPolicyStepHarness` 只在 caller 选定 target 后组合 selected capacity、Stay completion certificate 与 exact apply；四类 typed outcome 保留 applied Stay/Rotate、capacity rejection 与 `RejectedUnproven`，不 fallback、不执行 certificate 的虚拟 maintenance/final chain。
+- **Observed**：同一三步 Insert trace 与固定 `[Stay, Stay, Rotate]` 日程下，no-migration 的 Previous debt 为 `{10,20,30} -> {10,20,30} -> {1001,1002}`，paced-one-debt 为 `{20,30} -> {30} -> {10,20,1001,1002}`。
+- **Observed**：paced 将相同的三个 maintenance Base domain records 分散到三步，降低 realized peak 与最终 Rotate append；代价是换腿后 Previous debt/base bytes/frame bytes 更高。迁债早期虽减少 debt bytes，却因剩余对象共用 A Frame 而未减少 Previous-frame IO。
+- **Decided**：固定日程仅是隔离 migration pacing 的实验控制，不裁决产品 rotation trigger；ObjectId 顺序也不代表真实冷热。下一切片单独研究 `DebtZeroThenRotate` 的 progress/stall 行为，不将延迟到观察窗外的写入视为策略优势。
+
 ### 2026-08-29：用现有 seams 跑通连续两次换腿
 
 - **Observed**：test-local caller script 依次执行 Stay-B、Rotate-C、Stay-C、Rotate-D，跑通 `A/B -> B/C -> C/D`；每步 physical materialization 等于 normalized PostLive，current reconstruction 保持在结果 FileScope 内。
 - **Observed**：两个 accepted Stay 都先取得 exact `CanPrepareAndRotate` certificate，规划不改变 caller Store；live run 只应用 caller 选择的 initial Stay，certificate 的 maintenance/final chain 保持 admission witness 角色。
 - **Observed**：同一四步脚本的 Previous debt 为 `{10} -> {20} -> {} -> {20}`，直接展示迁债与换腿后的锯齿，而无需先定义 score。
-- **Decided**：当前只有一个 caller，不新增通用 Runner、transcript 或 observation schema；下一切片先让两个简单策略重放同一 frozen trace，出现真实重复后再提取最小复用 seam。
+- **Decided（当时）**：先不新增通用 Runner、transcript 或 observation schema；后续两个迁债 caller 暴露的 admission/apply 重复已提取为上一条日志所述的无状态单步 seam，仍未建立有状态 Runner 或 policy interface。
 
 ### 2026-08-29：闭合显式 apply 与保守 CanPrepareAndRotate 证书
 

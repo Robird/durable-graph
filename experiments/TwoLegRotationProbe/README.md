@@ -420,6 +420,45 @@ every Save, and a Previous-debt sawtooth of `{10} -> {20} -> {} -> {20}`.
 The script retains the selected candidates' existing raw observations locally;
 it does not define a policy, score, transcript format, or durable head.
 
+## Explicit policy step harness and controlled migration pacing
+
+`ExplicitRotationPolicyStepHarness` is the first deliberately reusable policy
+scaffold. It remains a stateless, single-step seam: the caller supplies an exact
+pair and an explicit target, and receives one of four typed outcomes—applied
+Stay-B, applied Rotate-C, selected-target capacity rejection, or Stay-B
+completion `RejectedUnproven`. It never chooses a target, falls back to the
+other candidate, executes certificate maintenance/final steps, caches a
+StateMap, or owns a publication cursor.
+
+The first comparison keeps target timing outside the policies and fixed at
+`[Stay-B, Stay-B, Rotate-C]`. Both runs replay the same three-Insert
+`WorkloadTrace` on independent Store forks. The control performs no cold
+migration; `PacedOneDebtByObjectId` migrates the smallest eligible NoChange
+A-debt object on each Stay. ObjectId ordering is only a deterministic treatment
+assignment—it is not evidence that an object is cold.
+
+| Save | Target | Control Previous debt | Paced Previous debt |
+|---|---|---|---|
+| 1 | Stay-B | `{10,20,30}` / 600 B | `{20,30}` / 500 B |
+| 2 | Stay-B | `{10,20,30}` / 600 B | `{30}` / 300 B |
+| 3 | Rotate-C | `{1001,1002}` / 2 B | `{10,20,1001,1002}` / 302 B |
+
+The paced run spreads the same three maintenance Base domain records across
+the three Saves, producing a smaller realized peak append and a smaller final
+Rotate-C append. It then pays the opposite side of the tradeoff: the Bases
+moved into B become Previous debt after rotation, and the required Previous
+frames contain more bytes. Before rotation, reducing debt bytes does not reduce
+Previous-frame reads because the remaining debt still shares the same A Frame.
+
+For a selected Stay, its pair's alternate Rotate-C is a same-Save alternative,
+not a post-Stay terminal estimate. The comparison uses the certificate's final
+Rotate-C observation only after proving that the certificate has zero extra
+maintenance steps. Those terminal observations are counterfactual facts, not
+realized writes. Deterministic replay is currently claimed only for the test's
+selected raw projection, not a canonical transcript. No aggregate score or
+winner is defined, and the fixed rotation schedule is an experimental control,
+not a proposed product trigger.
+
 ## Preparatory B migration witness
 
 `PreparatoryBaseMigrationPlanner` accepts an explicit, nonempty set of live
@@ -499,11 +538,11 @@ not a law of whether an already-published format is readable. A concrete finite
 B-migration-plus-C-rotation witness proves it true for that source state.
 The current canonical prefix proof reports `RejectedUnproven` when it cannot
 construct that witness; this is not a proof that no completion exists. The
-continuous caller script is now closed without choosing a weighted winner. The
-next slice can give two simple rotation-policy baselines the same frozen trace;
-only after they expose real duplicated orchestration should a minimal reusable
-runner be extracted. A bounded reference explorer still waits for a concrete
-conservative rejection or suspected heuristic false-negative.
+continuous caller script and fixed-schedule migration comparison are now closed
+without choosing a weighted winner. The next slice can isolate a
+`DebtZeroThenRotate` target rule and distinguish policy progress from merely
+finishing a finite trace with deferred debt. A bounded reference explorer still
+waits for a concrete conservative rejection or suspected heuristic false-negative.
 
 The rejected forwarding alternatives and their executable comparison are
 preserved by annotated tag `research/relay-vs-relay-free-20260829` and DB-009.
