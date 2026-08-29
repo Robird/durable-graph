@@ -763,13 +763,20 @@
 
 ## 6. 船长日志
 
+### 2026-08-30：闭合 source payload-Frame partition discriminator
+
+- **Observed**：两种 source 都使用 metadata-only full-OVD A anchor 和六个 External bindings；shared accepted chain 为 `shared payload -> anchor -> B published`，split 为 `cold payload -> changed OVD Delta -> anchor -> B published`。split 不从无关 snapshots 拼装 source，OVD materialization 与 lineage validator 均通过。
+- **Observed**：相同 trace、四 treatment 与 target 下，逐步 old-A debt ObjectIds/Base payload bytes 完全相同。第三次 Stay 的 shared/split required Previous-Frame bytes 为：Delta+none `1276/1308`、Delta+paced `1276/656`、Base+none `1276/652`、Base+paced `0/0`；exact addresses、count 与 stored FrameLength sum 一致，neutral anchor 不进入 object reconstruction metric。
+- **Concluded**：object-debt summary 不是 exact coarse full-Frame reconstruction pressure 的充分统计量。这是 current-reconstruction source provenance/layout 反例，不是总 IO、纯 record-packing 因果、multi-frame Revision 或产品策略输入裁决。
+- **Decided / Next**：构造等 payload、每步只迁一个对象的选择冲突，让 ObjectId-first 选择无法释放 Frame 的对象，frame-release-aware treatment 选择能完整释放另一 Frame 的对象；先比较无权重原始事实，不定义 winner。
+
 ### 2026-08-30：闭合 changed-write x cold-migration 2x2 因果对照
 
 - **Observed**：六对象共享 A Frame fixture 将 migration-only `{1,2,3}` 与 changed `{10,20,30}` 按 100/200/300 B 等尺寸配对；四条运行共享 `Update 10/20/30 + Create` trace 与 `[Stay, Stay, Stay, Rotate]`，paced 两格固定迁移 `1/2/3`，不存在 Update/migration assignment 重叠或 selector mediation。
 - **Observed**：三次 Stay 后，Delta+none 的 old-A debt 保持 1200 B；Delta+paced 与 Base+none 各从 1100/900 降至互不重叠的 600 B；Base+paced 为 1000/600/0 B。组合格每一步退休的 ObjectId 都是两个单轴格退休集合的不相交并集，只能称该 fixture 上的 set-additive retirement。
 - **Observed**：六个 Base 共居同一个 1276 B A Frame；三个非组合格第三次 Stay 后仍需该 Frame，只有组合格清掉最后一个依赖后释放。换腿后的 B/C Previous debt 分别为 none、cold 600 B/3 Frames、changed 600 B/3 Frames、all 1200 B/3 Frames；组合格每个 B Frame 共居一个 changed Base 与一个 cold Base。
 - **Observed**：realized append vectors 依次为 Delta+none `48/48/48/1292`、Delta+paced `152/256/356/680`、Base+none `144/244/344/680`、Base+paced `248/452/652/72` B；这些只属于当前 provisional v0 grammar，不定义 winner，也不归因成总读取 IO 或一般机制协同。
-- **Decided / Next**：保持逻辑对象、trace、四 treatment 与 target 日程不变，只把 source 从单一共享 A Frame 改成 changed/migration role-separated A Frames；比较 exact Previous Frame address sets，验证 coarse-frame masking 对物理 packing 的敏感性，再据此选择 pressure-aware facts。
+- **Decided（当时）**：该条提出的 source layout discriminator 已由上方日志闭合；结果证明 object debt 与 exact Frame pressure 非等价，但不要求产品策略采用某一字段组合。
 
 ### 2026-08-30：闭合 changed A-debt Base/Delta 因果对照
 

@@ -144,6 +144,9 @@ PublishedRevision 为 shared prior-snapshot anchor。accepted new head 的 curre
 - role-disjoint 2x2 interaction witness：changed `{10,20,30}` 与 migration-only `{1,2,3}` 共居一个 A Frame，
   四个命名 treatment 证明两种机制在该 trace 上逐步退休 old-A debt 的集合互斥且可加；只有组合格在第三次
   Stay 后释放共享 Frame，换腿后各自在 B 写过的对象按新 scope 形成 Previous debt；
+- current-reconstruction source-layout discriminator：两侧使用同构的 metadata-only full-OVD A anchor，
+  shared 将六个 payload Base 共置一个 Frame，split 以唯一 accepted chain 把 cold/changed 分置两个
+  payload Frames；同一四格的 object-debt 轨迹完全相同，而 required unique Previous Frames 不同；
 - caller-selected B same-state Base migration plan/append witness；
 - relay-free immediate A/B -> B/C plan/append、shared anchor、B/C closure witness；
 - 多批 B migration 使原本放不下的 C evacuation 可编码的容量 witness；
@@ -156,37 +159,44 @@ rotation trigger 已解决。
 
 ## 当前研究焦点
 
-changed-write x cold-migration 2x2 已闭合。六个等尺寸配对对象共居一个 1276 B A Frame；changed IDs
-`10/20/30` 只接受 foreground Update，migration-only IDs `1/2/3` 只接受 paced same-state Base。三次 Stay
-后，Delta+none 保留 1200 B old-A debt，两个单轴 treatment 各保留互不重叠的 600 B，组合格清零；逐步
-退休集合严格为两个单轴集合的不相交并集。三个非组合格仍需同一个 A Frame，只有组合格清掉最后一个
-依赖后才释放它。这称为 fixture-level set-additive retirement 与 joint shared-frame release，不外推为机制
-一般独立、协同或总读取 IO 改善。
+source payload-Frame partition discriminator 已闭合。为避免让 final A authority 偏向某个 role，两种 source
+都在 payload-bearing Revisions 之后追加 metadata-only full OVD anchor，六个 live binding 全为 External；
+shared 的 accepted chain 为 `shared payload -> anchor -> B published`，split 为
+`cold payload -> changed Delta snapshot -> anchor -> B published`。这保持 DB-010 的唯一 prior-snapshot
+provenance，不把两个无关 snapshot 拼成一个假 source。
 
-换腿后，Delta+none 无 B reconstruction debt；Delta+paced、Base+none 各留下不同的 600 B / 3 Frames；
-组合格把全部六个对象留在 B，形成 1200 B / 3 Frames。每个组合 Stay 的 changed Base 与 cold Base 共居
-一个 B Frame，所以新 scope 的 Frame 数不是 debt Object 数。当前 exact append 仍只属于 provisional v0
-grammar；四格没有统一 winner。
+同一 trace、四 treatment 与固定 target 下，两种 layout 的逐步 old-A debt ObjectIds/Base payload bytes
+完全相同。第三次 Stay 后：Delta+none 分别需要 shared `1276 B` 或 split `652+656=1308 B` payload
+Frames；Delta+paced 分别需要 `1276 B` 或 changed `656 B`；Base+none 分别需要 `1276 B` 或 cold
+`652 B`；组合格均为零。exact Frame identity、count 与 stored `FrameLengthBytes` 一致，neutral anchor
+不进入 object reconstruction Frame 指标。
+
+因此 object-debt summary 不是 exact coarse full-Frame reconstruction pressure 的充分统计量；两类观察非
+等价，值得在后续 treatment 中分别保留为候选事实。这仍不是总/实际 IO 结论，也不证明产品策略必须消费
+两个独立字段：Frame pressure 可以从更细的 canonical source facts 派生。split 还改变 payload-bearing
+Revision 数、local OVD、tickets 与 envelope；在 one-Revision/one-Frame 下不能称为“同一 Revision 只改
+record packing”。
 
 ## 下一编码切片
 
-闭合一个 **source Frame-packing sensitivity discriminator**：
+闭合一个 **equal-byte one-object migration selection conflict**：
 
 ```text
-same six logical objects + same trace + same four treatments + same targets
-    source layout: all roles share one A Frame | changed/migration roles use separate A Frames
-    compare exact result-Previous Frame address sets and existing raw reductions
+same source + same pure-Insert Save + fixed Stay target + one migrated object
+    ObjectId-first: choose one object from a Frame that still has another A-debt object
+    Frame-release-first: choose an equal-payload object that alone occupies another A Frame
 ```
 
-目标是判断本轮观察到的 coarse-frame masking 是否只来自共居布局，检验 object debt 是否不足以单独表征
-exact unique Frame pressure，并据结果判断哪些 facts 值得保留为后续 treatment 的候选输入。只增加
-test-local multi-Frame source fixture；不改变四个 selector，不引入 score、winner、自动 target trigger、
-通用 policy interface 或有状态 Runner。
+两个 treatment 写同数量、同 logical payload 的 same-state Base，只改变 caller-selected migration member。
+目标是验证现有 smallest-ObjectId pacing 与一个明确命名的 frame-release-aware treatment 是否会产生不同的
+即时 required Previous-Frame set，并保留 exact append、completion 与换腿后 debt 作为无权重原始事实。
+这不是温度推断、score、winner 或产品默认策略；若 whole-candidate bytes 因 tickets/metadata 不同，按实际
+结果记录而不强求相等。
 
 ## 近期 roadmap
 
 1. **扩充策略与 workload**
-   - 先做相同 2x2 treatment 的 source Frame-packing discriminator；
+   - 先做 equal-byte one-object migration selection conflict；
    - 再加入 payload skew、stable hot/cold、burst 与更长 fixed-seed traces；
    - 由这些布局/尺寸反例塑造少量明确命名的 pressure-aware target/migration 候选。
 2. **按证据加入 bounded explorer**
@@ -210,7 +220,8 @@ test-local multi-Frame source fixture；不改变四个 selector，不引入 sco
 - counterfactual terminal 当前只投影 final-C append/result 与 preparatory Stay count，不聚合互斥未来，
   也不声称已观测 preparatory writes 或 terminal-source pressure；
 - stable hot/cold、burst、size distribution 与长 trace 是否先用 handwritten fixture，何时扩充 generator；
-- shared 与 role-separated A Frames 是否足以证明 object debt 与 exact Frame pressure 必须共同进入策略输入；
+- frame-release-aware treatment 在等写入 payload 下是否形成稳定、可重放的即时压力优势，以及换腿后如何
+  重新形成 B/C Previous debt；
 - 布局/尺寸矩阵之后，何种无隐藏权重的 pressure facts 最值得驱动 target/migration treatment；
 - 多个不可支配策略出现后，何时需要用户用真实 workload/SLO 选择产品默认值。
 

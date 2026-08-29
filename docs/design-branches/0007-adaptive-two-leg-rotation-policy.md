@@ -7,8 +7,9 @@
 > 更新日期：2026-08-30
 >
 > 当前方向：统一 per-Save candidate、连续换腿、scope-safe observations、changed A-debt
-> Base/Delta 与 role-disjoint cold-migration 2x2 已闭合；下一步固定逻辑 treatment，比较 source Frame
-> packing。bounded explorer 只在出现具体保守拒绝或疑似 false-negative 后介入。
+> Base/Delta、role-disjoint cold-migration 2x2 与 source payload-Frame partition discriminator 已闭合；
+> 下一步比较等写入 payload 下的 ObjectId-first 与 frame-release-aware 单对象迁移选择。bounded explorer
+> 只在出现具体保守拒绝或疑似 false-negative 后介入。
 
 ## 问题
 
@@ -118,6 +119,11 @@ heuristic 不能自行宣称 completeness，但 explorer 不再作为首个连�
   A Frame；两个单轴 treatment 到第三次 Stay 各退休互不重叠的 600 B old-A debt，组合格退休两者并集并
   清零。单轴仍依赖共享 A Frame，组合格才释放；换腿后 Delta+paced、Base+none、组合格分别形成
   600/600/1200 B new-scope Previous debt，且组合格六对象只占前三个 realized B candidate Frames。
+- source payload-Frame partition discriminator 用同构的 metadata-only full-OVD anchor 控制 latest A
+  authority，并让 split source 保持唯一 accepted chain。相同 logical debt 下，第三次 Stay 的 shared/split
+  required Previous-Frame bytes 分别为：Delta+none `1276/1308`、Delta+paced `1276/656`、Base+none
+  `1276/652`、Base+paced `0/0`。这证明 object debt 不是 exact coarse Frame pressure 的充分统计量；不把
+  OVD lookup、累计 IO 或产品策略输入一并宣称为已解决。
 
 上述 terminal C exact-sizing discriminator 只证明当前 provisional v0 grammar 下 External 不支配 optional same-state
 relocation；未实现 runtime optional action，不证明扩大 `CanPrepareAndRotate` 可达集、planner
@@ -135,8 +141,8 @@ completeness 或未来 wire format。尺寸裁决始终以 whole-candidate estim
 
 ## 未闭合事项与顺序
 
-1. 保持六对象逻辑状态、mixed trace、四 treatment 与固定 target 日程不变，只把 source 从共享 A Frame
-   改为 changed/migration role-separated A Frames，比较 exact Frame release 与既有 raw reductions；
+1. 构造等 Base payload、固定单对象迁移数量的选择冲突：ObjectId-first 选中仍与其他 debt 共帧的对象，
+   frame-release-aware 选中独占另一 Frame 的对象；比较即时 exact Frame release、append 与换腿后 debt；
 2. 扩充 payload skew、stable hot/cold、burst、size-distribution 与 longer traces，再接入少量明确命名的
    pressure-aware treatments，保留原始事实而不预设总分；
 3. 捕获具体 `RejectedUnproven`、`RejectedCapacityUnsearched` 或疑似 heuristic false-negative 后，再建立 small-state bounded/canonical

@@ -929,6 +929,307 @@ public sealed class RotationPolicyComparisonTests {
         Assert.Equal(1, source.Store.GetFile(2).FrameCount);
     }
 
+    [Fact]
+    public void Source_payload_frame_partition_changes_required_previous_frames_not_object_debt() {
+        AnchoredInteractionFixture shared = CreateAnchoredInteractionFixture(
+            AnchoredInteractionPacking.Shared);
+        AnchoredInteractionFixture split = CreateAnchoredInteractionFixture(
+            AnchoredInteractionPacking.Split);
+        WorkloadTrace trace = CreateChangedDebtTrace();
+        var sharedRuns = RunInteractionTreatments(shared.Source, trace);
+        var splitRuns = RunInteractionTreatments(split.Source, trace);
+        PolicyRun[] allRuns = [
+            sharedRuns.DeltaNone,
+            sharedRuns.DeltaPaced,
+            sharedRuns.BaseNone,
+            sharedRuns.BasePaced,
+            splitRuns.DeltaNone,
+            splitRuns.DeltaPaced,
+            splitRuns.BaseNone,
+            splitRuns.BasePaced,
+        ];
+
+        AssertExactState(
+            shared.Source.InitialExpectedState,
+            split.Source.InitialExpectedState);
+        Assert.Equal(
+            shared.ColdPayloadAddress,
+            shared.ChangedPayloadAddress);
+        Assert.NotEqual(
+            split.ColdPayloadAddress,
+            split.ChangedPayloadAddress);
+        AssertAnchoredInteractionSource(
+            shared,
+            sharedRuns.DeltaNone.Steps[0].SelectedObservation.Facts);
+        AssertAnchoredInteractionSource(
+            split,
+            splitRuns.DeltaNone.Steps[0].SelectedObservation.Facts);
+        Assert.Equal(
+            1276,
+            shared.Source.Store.ReadLayout(shared.ColdPayloadAddress)
+                .FrameLengthBytes);
+        Assert.Equal(
+            652,
+            split.Source.Store.ReadLayout(split.ColdPayloadAddress)
+                .FrameLengthBytes);
+        Assert.Equal(
+            656,
+            split.Source.Store.ReadLayout(split.ChangedPayloadAddress)
+                .FrameLengthBytes);
+
+        (PolicyRun Shared, PolicyRun Split)[] matchingTreatments = [
+            (sharedRuns.DeltaNone, splitRuns.DeltaNone),
+            (sharedRuns.DeltaPaced, splitRuns.DeltaPaced),
+            (sharedRuns.BaseNone, splitRuns.BaseNone),
+            (sharedRuns.BasePaced, splitRuns.BasePaced),
+        ];
+        foreach ((PolicyRun sharedRun, PolicyRun splitRun) in matchingTreatments) {
+            Assert.Equal(DescribeDebt(sharedRun), DescribeDebt(splitRun));
+            Assert.Equal(
+                DescribeDebtBaseBytes(sharedRun),
+                DescribeDebtBaseBytes(splitRun));
+        }
+
+        AbsoluteFrameAddress sharedPayload = shared.ColdPayloadAddress;
+        AssertPreviousFrameSequence(
+            shared.Source.Store,
+            sharedRuns.DeltaNone,
+            [[sharedPayload], [sharedPayload], [sharedPayload]]);
+        AssertPreviousFrameSequence(
+            shared.Source.Store,
+            sharedRuns.DeltaPaced,
+            [[sharedPayload], [sharedPayload], [sharedPayload]]);
+        AssertPreviousFrameSequence(
+            shared.Source.Store,
+            sharedRuns.BaseNone,
+            [[sharedPayload], [sharedPayload], [sharedPayload]]);
+        AssertPreviousFrameSequence(
+            shared.Source.Store,
+            sharedRuns.BasePaced,
+            [[sharedPayload], [sharedPayload], []]);
+
+        AbsoluteFrameAddress coldPayload = split.ColdPayloadAddress;
+        AbsoluteFrameAddress changedPayload = split.ChangedPayloadAddress;
+        AssertPreviousFrameSequence(
+            split.Source.Store,
+            splitRuns.DeltaNone,
+            [
+                [coldPayload, changedPayload],
+                [coldPayload, changedPayload],
+                [coldPayload, changedPayload],
+            ]);
+        AssertPreviousFrameSequence(
+            split.Source.Store,
+            splitRuns.DeltaPaced,
+            [
+                [coldPayload, changedPayload],
+                [coldPayload, changedPayload],
+                [changedPayload],
+            ]);
+        AssertPreviousFrameSequence(
+            split.Source.Store,
+            splitRuns.BaseNone,
+            [
+                [coldPayload, changedPayload],
+                [coldPayload, changedPayload],
+                [coldPayload],
+            ]);
+        AssertPreviousFrameSequence(
+            split.Source.Store,
+            splitRuns.BasePaced,
+            [
+                [coldPayload, changedPayload],
+                [coldPayload, changedPayload],
+                [],
+            ]);
+
+        foreach (PolicyRun run in allRuns) {
+            AssertRunObservationConsistency(run);
+        }
+    }
+
+    private static (
+        PolicyRun DeltaNone,
+        PolicyRun DeltaPaced,
+        PolicyRun BaseNone,
+        PolicyRun BasePaced) RunInteractionTreatments(
+            PolicySource source,
+            WorkloadTrace trace) => (
+        Run(
+            trace,
+            source.Store.ForkForProbe(),
+            CreateCursor(source),
+            source.InitialExpectedState,
+            SelectDeltaNoMigrationDecisions,
+            SelectChangedDebtTarget),
+        Run(
+            trace,
+            source.Store.ForkForProbe(),
+            CreateCursor(source),
+            source.InitialExpectedState,
+            SelectDeltaPacedOneDebtDecisions,
+            SelectChangedDebtTarget),
+        Run(
+            trace,
+            source.Store.ForkForProbe(),
+            CreateCursor(source),
+            source.InitialExpectedState,
+            SelectBaseADebtNoMigrationDecisions,
+            SelectChangedDebtTarget),
+        Run(
+            trace,
+            source.Store.ForkForProbe(),
+            CreateCursor(source),
+            source.InitialExpectedState,
+            SelectBaseADebtPacedOneDebtDecisions,
+            SelectChangedDebtTarget));
+
+    private static void AssertAnchoredInteractionSource(
+        AnchoredInteractionFixture fixture,
+        NormalizedSaveFacts facts) {
+        PolicySource source = fixture.Source;
+        Assert.Equal(fixture.AnchorAddress, source.PreviousRevisionAddress);
+        Frame anchor = source.Store.ReadFrame(fixture.AnchorAddress);
+        Assert.Empty(anchor.ObjectVersions);
+        ObjectVersionDictionary anchorDictionary = Assert.IsType<
+            ObjectVersionDictionary>(anchor.ObjectVersionDictionary);
+        Assert.Equal(ObjectVersionDictionaryKind.Base, anchorDictionary.Kind);
+        Assert.Equal(
+            new RelativeFrameTicket(
+                IsPreviousFile: false,
+                fixture.ChangedPayloadAddress.FrameTicket),
+            anchorDictionary.ParentRevisionFrameTicket);
+        Assert.Equal(
+            [1U, 2U, 3U, 10U, 20U, 30U],
+            anchorDictionary.Entries.Keys.Order());
+        foreach ((uint objectId, ObjectVersionDictionaryBinding binding) in
+            anchorDictionary.Entries) {
+            AbsoluteFrameAddress expectedPayload = objectId < 10
+                ? fixture.ColdPayloadAddress
+                : fixture.ChangedPayloadAddress;
+            Assert.Equal(ObjectVersionDictionaryBindingKind.External, binding.Kind);
+            Assert.Equal(
+                new RelativeFrameTicket(
+                    IsPreviousFile: false,
+                    expectedPayload.FrameTicket),
+                binding.ExternalFrameTicket);
+        }
+
+        AssertPayloadFrame(
+            fixture,
+            fixture.ColdPayloadAddress,
+            fixture.ColdPayloadAddress == fixture.ChangedPayloadAddress
+                ? [1, 2, 3, 10, 20, 30]
+                : [1, 2, 3],
+            ObjectVersionDictionaryKind.Base,
+            parentAddress: null);
+        if (fixture.ColdPayloadAddress != fixture.ChangedPayloadAddress) {
+            AssertPayloadFrame(
+                fixture,
+                fixture.ChangedPayloadAddress,
+                [10, 20, 30],
+                ObjectVersionDictionaryKind.Delta,
+                fixture.ColdPayloadAddress);
+        }
+
+        Frame published = source.Store.ReadFrame(source.PublishedRevisionAddress);
+        Assert.Empty(published.ObjectVersions);
+        ObjectVersionDictionary publishedDictionary = Assert.IsType<
+            ObjectVersionDictionary>(published.ObjectVersionDictionary);
+        Assert.Equal(ObjectVersionDictionaryKind.Delta, publishedDictionary.Kind);
+        Assert.Empty(publishedDictionary.Entries);
+        Assert.Equal(
+            new RelativeFrameTicket(
+                IsPreviousFile: true,
+                fixture.AnchorAddress.FrameTicket),
+            publishedDictionary.ParentRevisionFrameTicket);
+
+        ObjectVersionDictionaryMaterializationInspection priorSnapshot =
+            ObjectVersionDictionaryReader.MaterializeLive(
+                source.Store,
+                fixture.ChangedPayloadAddress);
+        ObjectVersionDictionaryMaterializationInspection anchoredSnapshot =
+            ObjectVersionDictionaryReader.MaterializeLive(
+                source.Store,
+                fixture.AnchorAddress);
+        ObjectVersionDictionaryMaterializationInspection publishedSnapshot =
+            ObjectVersionDictionaryReader.MaterializeLive(
+                source.Store,
+                source.PublishedRevisionAddress);
+        Assert.Equal(
+            [source.PublishedRevisionAddress, fixture.AnchorAddress],
+            publishedSnapshot.DictionaryRevisionAddresses);
+        Assert.Equal(6, priorSnapshot.Bindings.Count);
+        Assert.Equal(6, anchoredSnapshot.Bindings.Count);
+        Assert.Equal(6, publishedSnapshot.Bindings.Count);
+
+        foreach (SourceObjectFact fact in facts.ParentLive.Values) {
+            AbsoluteFrameAddress expectedPayload = fact.ObjectId < 10
+                ? fixture.ColdPayloadAddress
+                : fixture.ChangedPayloadAddress;
+            Assert.Equal(expectedPayload, priorSnapshot.Bindings[fact.ObjectId]);
+            Assert.Equal(expectedPayload, anchoredSnapshot.Bindings[fact.ObjectId]);
+            Assert.Equal(expectedPayload, publishedSnapshot.Bindings[fact.ObjectId]);
+            Assert.Equal(expectedPayload, fact.BaseAddress);
+            Assert.Equal([expectedPayload], fact.ReconstructionFrameAddresses);
+            Assert.DoesNotContain(
+                fixture.AnchorAddress,
+                fact.ReconstructionFrameAddresses);
+        }
+
+        PhysicalStateOracle.ValidateLineage(
+            source.Store,
+            publishedSnapshot.Bindings);
+    }
+
+    private static void AssertPayloadFrame(
+        AnchoredInteractionFixture fixture,
+        AbsoluteFrameAddress address,
+        uint[] expectedObjectIds,
+        ObjectVersionDictionaryKind expectedDictionaryKind,
+        AbsoluteFrameAddress? parentAddress) {
+        Frame payload = fixture.Source.Store.ReadFrame(address);
+        Assert.Equal(expectedObjectIds, payload.ObjectVersions.Keys.Order());
+        ObjectVersionDictionary dictionary = Assert.IsType<
+            ObjectVersionDictionary>(payload.ObjectVersionDictionary);
+        Assert.Equal(expectedDictionaryKind, dictionary.Kind);
+        Assert.Equal(
+            parentAddress is AbsoluteFrameAddress parent
+                ? new RelativeFrameTicket(
+                    IsPreviousFile: false,
+                    parent.FrameTicket)
+                : null,
+            dictionary.ParentRevisionFrameTicket);
+        Assert.Equal(expectedObjectIds, dictionary.Entries.Keys.Order());
+        Assert.All(dictionary.Entries.Values, binding => {
+            Assert.Equal(ObjectVersionDictionaryBindingKind.Self, binding.Kind);
+            Assert.Null(binding.ExternalFrameTicket);
+        });
+    }
+
+    private static void AssertPreviousFrameSequence(
+        RbfFileStore store,
+        PolicyRun run,
+        AbsoluteFrameAddress[][] expectedByStay) {
+        Assert.Equal(3, expectedByStay.Length);
+        for (int index = 0; index < expectedByStay.Length; index++) {
+            AbsoluteFrameAddress[] expected = expectedByStay[index]
+                .OrderBy(static address => address.FileNumber)
+                .ThenBy(static address => address.FrameTicket.OffsetBytes)
+                .ThenBy(static address => address.FrameTicket.LengthBytes)
+                .ToArray();
+            PolicyStep step = run.Steps[index];
+            Assert.Equal(expected, GetResultPreviousFrameAddresses(step));
+            Assert.Equal(
+                expected.Length,
+                step.Observation.Result.PreviousUniqueFrameCount);
+            Assert.Equal(
+                expected.Sum(address =>
+                    (long)store.ReadLayout(address).FrameLengthBytes),
+                step.Observation.Result.PreviousFrameBytes);
+        }
+    }
+
     private static void AssertInteractionAssignments(
         PolicyRun run,
         ObjectVersionKind expectedUpdateKind,
@@ -1824,14 +2125,120 @@ public sealed class RotationPolicyComparisonTests {
         new InitialObjectSeed(30, 300),
     ]);
 
-    private static PolicySource CreateInteractionSource() => CreateSource([
+    private static PolicySource CreateInteractionSource() => CreateSource(
+        CreateInteractionSeeds());
+
+    private static InitialObjectSeed[] CreateInteractionSeeds() => [
         new InitialObjectSeed(1, 100),
         new InitialObjectSeed(2, 200),
         new InitialObjectSeed(3, 300),
         new InitialObjectSeed(10, 100),
         new InitialObjectSeed(20, 200),
         new InitialObjectSeed(30, 300),
-    ]);
+    ];
+
+    private static AnchoredInteractionFixture CreateAnchoredInteractionFixture(
+        AnchoredInteractionPacking packing) {
+        InitialObjectSeed[] seeds = CreateInteractionSeeds();
+        InitialObjectSeed[] coldSeeds = seeds
+            .Where(static seed => seed.ObjectId < 10)
+            .ToArray();
+        InitialObjectSeed[] changedSeeds = seeds
+            .Where(static seed => seed.ObjectId >= 10)
+            .ToArray();
+        RbfFileStore store = new();
+        RbfFile previous = store.CreateFile();
+        AbsoluteFrameAddress coldPayloadAddress;
+        AbsoluteFrameAddress changedPayloadAddress;
+        switch (packing) {
+            case AnchoredInteractionPacking.Shared:
+                coldPayloadAddress = AppendPayloadFrame(
+                    previous,
+                    seeds,
+                    parentAddress: null);
+                changedPayloadAddress = coldPayloadAddress;
+                break;
+            case AnchoredInteractionPacking.Split:
+                coldPayloadAddress = AppendPayloadFrame(
+                    previous,
+                    coldSeeds,
+                    parentAddress: null);
+                changedPayloadAddress = AppendPayloadFrame(
+                    previous,
+                    changedSeeds,
+                    coldPayloadAddress);
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(packing), packing, null);
+        }
+
+        ObjectVersionDictionaryBuilder anchorDictionary = new() {
+            ParentRevisionFrameTicket = new RelativeFrameTicket(
+                IsPreviousFile: false,
+                changedPayloadAddress.FrameTicket),
+        };
+        foreach (InitialObjectSeed seed in seeds) {
+            AbsoluteFrameAddress payloadAddress = seed.ObjectId < 10
+                ? coldPayloadAddress
+                : changedPayloadAddress;
+            anchorDictionary.BindExternal(
+                seed.ObjectId,
+                new RelativeFrameTicket(
+                    IsPreviousFile: false,
+                    payloadAddress.FrameTicket));
+        }
+
+        AbsoluteFrameAddress anchorAddress = AppendExact(
+            previous,
+            new FrameBuilder { ObjectVersionDictionary = anchorDictionary });
+        RbfFile current = store.CreateFile();
+        AbsoluteFrameAddress publishedRevisionAddress = AppendExact(
+            current,
+            new FrameBuilder {
+                ObjectVersionDictionary = new ObjectVersionDictionaryBuilder {
+                    Kind = ObjectVersionDictionaryKind.Delta,
+                    ParentRevisionFrameTicket = new RelativeFrameTicket(
+                        IsPreviousFile: true,
+                        anchorAddress.FrameTicket),
+                },
+            });
+        Dictionary<uint, LogicalObjectState> initialExpectedState = seeds
+            .ToDictionary(
+                static seed => seed.ObjectId,
+                static seed => new LogicalObjectState(seed.PayloadBytes, 1));
+        PolicySource source = new(
+            store,
+            current,
+            anchorAddress,
+            publishedRevisionAddress,
+            new ReadOnlyDictionary<uint, LogicalObjectState>(initialExpectedState));
+        return new AnchoredInteractionFixture(
+            source,
+            coldPayloadAddress,
+            changedPayloadAddress,
+            anchorAddress);
+    }
+
+    private static AbsoluteFrameAddress AppendPayloadFrame(
+        RbfFile file,
+        IEnumerable<InitialObjectSeed> seeds,
+        AbsoluteFrameAddress? parentAddress) {
+        ObjectVersionDictionaryBuilder dictionary = parentAddress is { } parent
+            ? new ObjectVersionDictionaryBuilder {
+                Kind = ObjectVersionDictionaryKind.Delta,
+                ParentRevisionFrameTicket = new RelativeFrameTicket(
+                    IsPreviousFile: false,
+                    parent.FrameTicket),
+            }
+            : new ObjectVersionDictionaryBuilder();
+        FrameBuilder frame = new() { ObjectVersionDictionary = dictionary };
+        foreach (InitialObjectSeed seed in seeds) {
+            dictionary.BindSelf(seed.ObjectId);
+            AddBase(frame, seed.ObjectId, seed.PayloadBytes);
+        }
+
+        return AppendExact(file, frame);
+    }
 
     private static PolicySource CreateSource(
         IEnumerable<InitialObjectSeed> initialObjects) {
@@ -1953,6 +2360,17 @@ public sealed class RotationPolicyComparisonTests {
     private readonly record struct InitialObjectSeed(
         uint ObjectId,
         int PayloadBytes);
+
+    private enum AnchoredInteractionPacking {
+        Shared,
+        Split,
+    }
+
+    private sealed record AnchoredInteractionFixture(
+        PolicySource Source,
+        AbsoluteFrameAddress ColdPayloadAddress,
+        AbsoluteFrameAddress ChangedPayloadAddress,
+        AbsoluteFrameAddress AnchorAddress);
 
     private delegate SaveDecisionPair DecisionSelector(
         NormalizedSaveFacts facts);

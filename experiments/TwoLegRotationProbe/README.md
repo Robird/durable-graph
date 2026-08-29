@@ -634,10 +634,53 @@ vectors are `1280/1280/1280`, `1180/976/672`, `1180/976/672`, and
 separate from realized totals.
 
 The comparison does not define an interaction score, winner, automatic target
-trigger, persisted report, or product policy. Its next discriminator can hold
-the logical fixture and treatments fixed while separating the two roles into
-different A Frames, testing how much of the observed threshold comes from
-physical packing.
+trigger, persisted report, or product policy. The follow-up below keeps the
+logical fixture and treatments fixed while changing the source payload-Frame
+partition, closing the previously proposed layout discriminator.
+
+## Source payload-Frame partition discriminator
+
+A follow-up keeps the same six logical objects, frozen trace, four treatments,
+and `[Stay, Stay, Stay, Rotate]` targets, but changes the source's physical
+provenance layout. Both source variants end at a metadata-only full-OVD A
+anchor whose six entries are External, followed by the same-shaped empty B
+PublishedRevision Delta. The accepted histories are:
+
+```text
+shared payload -> full-OVD anchor -> B published
+cold payload -> changed OVD Delta -> full-OVD anchor -> B published
+```
+
+The split changed Revision inherits the cold snapshot before the anchor is
+created. This preserves the selected unique-prior-snapshot lineage rule; the
+fixture does not assemble a source from unrelated snapshots. The anchor is an
+OVD authority/lookup Frame and is intentionally absent from the current object
+reconstruction Frame metric.
+
+The old-A debt ObjectIds and logical Base payload bytes are identical between
+the layouts at every step. Their required unique Previous Frames after the
+third Stay are not:
+
+| Treatment | Old-A debt | Shared payload Frame | Split payload Frames |
+|---|---|---:|---:|
+| Delta + none | all six / 1200 B | 1276 B | cold 652 B + changed 656 B |
+| Delta + paced | changed / 600 B | 1276 B | changed 656 B |
+| Base + none | cold / 600 B | 1276 B | cold 652 B |
+| Base + paced | empty / 0 B | none | none |
+
+The executable assertion uses exact Frame addresses as well as count and the
+stored `FrameLengthBytes` sum. The whole Frame sizes include the provisional
+domain records, local OVD, TailMeta directory, envelope and padding; they are
+not pure object payload or measured IO.
+
+This is an object-debt-equivalent, Frame-pressure-distinct counterexample:
+object debt alone is not a sufficient statistic for exact coarse full-Frame
+reconstruction pressure. It does not imply total or actual read IO, prove that
+packing is the only physical difference, require a product policy to consume
+two independent fields, or select a winner. Under the current one-Revision /
+one-Frame model, splitting payload heads also changes Revision count, OVD shape,
+tickets and offsets; this is a current-reconstruction source-layout probe, not
+a production multi-frame Revision design.
 
 ## Preparatory B migration witness
 
@@ -722,8 +765,10 @@ continuous caller script, fixed-schedule migration comparison, and
 `DebtZeroThenRotate` progress baseline are now closed without choosing a weighted
 winner. Their scope-safe realized/counterfactual observation reductions are also
 closed, as are the changed A-debt Base-versus-Delta discriminator and its
-role-disjoint 2x2 composition with paced cold migration. The next slice can keep
-that logical experiment fixed while varying source Frame packing. A bounded
+role-disjoint 2x2 composition with paced cold migration. The source payload-Frame
+partition discriminator is closed as well. The next slice can keep one source,
+one pure-Insert Stay, equal-payload one-object migration choices and a fixed target
+while comparing ObjectId-first with frame-release-aware selection. A bounded
 reference explorer still waits for a concrete conservative rejection or suspected
 heuristic false-negative.
 
