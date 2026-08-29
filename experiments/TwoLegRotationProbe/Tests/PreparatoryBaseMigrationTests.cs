@@ -162,17 +162,23 @@ public sealed class PreparatoryBaseMigrationTests {
         IReadOnlyDictionary<uint, LogicalObjectState> sourceState =
             PhysicalStateOracle.Materialize(source.Store, sourceMap);
 
-        Assert.Throws<ArgumentOutOfRangeException>(() =>
+        RevisionCandidateCapacityException immediateCapacity =
+            Assert.Throws<RevisionCandidateCapacityException>(() =>
             ImmediateRotationPlanner.Create(
                 source.Store,
                 source.Current.FileNumber,
                 source.PublishedRevisionAddress));
-        Assert.Throws<ArgumentOutOfRangeException>(() =>
+        Assert.Equal(
+            RevisionCandidateCapacityLimit.PayloadAndTailMetaLength,
+            immediateCapacity.Rejection.Limit);
+        RevisionCandidateCapacityException migrationCapacity =
+            Assert.Throws<RevisionCandidateCapacityException>(() =>
             PreparatoryBaseMigrationPlanner.Create(
                 source.Store,
                 source.Current.FileNumber,
                 source.PublishedRevisionAddress,
                 [source.ObjectIds[0], source.ObjectIds[1]]));
+        Assert.Equal(immediateCapacity.Rejection.Limit, migrationCapacity.Rejection.Limit);
 
         PreparatoryBaseMigrationPlan firstPlan =
             PreparatoryBaseMigrationPlanner.Create(
@@ -185,11 +191,13 @@ public sealed class PreparatoryBaseMigrationTests {
                 source.Store,
                 firstPlan);
 
-        Assert.Throws<ArgumentOutOfRangeException>(() =>
+        RevisionCandidateCapacityException remainingCapacity =
+            Assert.Throws<RevisionCandidateCapacityException>(() =>
             ImmediateRotationPlanner.Create(
                 source.Store,
                 source.Current.FileNumber,
                 firstMigration));
+        Assert.Equal(immediateCapacity.Rejection.Limit, remainingCapacity.Rejection.Limit);
 
         PreparatoryBaseMigrationPlan secondPlan =
             PreparatoryBaseMigrationPlanner.Create(

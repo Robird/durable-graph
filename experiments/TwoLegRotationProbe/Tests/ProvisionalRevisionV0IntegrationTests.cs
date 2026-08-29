@@ -233,11 +233,20 @@ public sealed class ProvisionalRevisionV0IntegrationTests {
             AccountingScope.ObjectPayloadOnly);
 
         Assert.Single(payloadOnly.Observations);
-        Assert.Throws<ArgumentOutOfRangeException>(
+        RevisionCandidateCapacityException capacity =
+            Assert.Throws<RevisionCandidateCapacityException>(
             () => WorkloadSimulator.Run(
                 tooLargeForProvisional,
                 BaselinePolicy.AlwaysBase,
                 AccountingScope.ProvisionalRevisionV0));
+        Assert.Equal(
+            RevisionCandidateCapacityLimit.PayloadAndTailMetaLength,
+            capacity.Rejection.Limit);
+        Assert.True(
+            capacity.Rejection.AttemptedValue > capacity.Rejection.MaximumValue);
+        Assert.Equal(
+            RbfV040Layout.MaxPayloadAndTailMetaLengthBytes,
+            capacity.Rejection.MaximumValue);
 
         SimulationRun retry = WorkloadSimulator.Run(
             CreateThreeStepTrace(),
@@ -263,11 +272,17 @@ public sealed class ProvisionalRevisionV0IntegrationTests {
             frameStartOffsetBytes: 4);
 
         Assert.Equal(RbfV040Layout.MaxTailMetaLengthBytes, accepted.TailMetaDirectoryBytes);
-        ArgumentOutOfRangeException exception = Assert.Throws<ArgumentOutOfRangeException>(
+        RevisionCandidateCapacityException exception =
+            Assert.Throws<RevisionCandidateCapacityException>(
             () => ProvisionalRevisionV0Estimator.Estimate(
                 rejectedFrame,
                 frameStartOffsetBytes: 4));
-        Assert.Equal("tailMetaLengthBytes", exception.ParamName);
+        Assert.Equal(
+            new RevisionCandidateCapacityRejection(
+                RevisionCandidateCapacityLimit.TailMetaLength,
+                AttemptedValue: RbfV040Layout.MaxTailMetaLengthBytes + 1L,
+                MaximumValue: RbfV040Layout.MaxTailMetaLengthBytes),
+            exception.Rejection);
     }
 
     [Fact]
@@ -287,12 +302,90 @@ public sealed class ProvisionalRevisionV0IntegrationTests {
         Assert.True(
             accepted.RbfLayout.TailOffsetAfterBytes >
                 RbfV040Layout.MaxDurableGraphRelativeFrameStartOffsetBytes);
-        Assert.Throws<InvalidDataException>(
+        RevisionCandidateCapacityException relativeException =
+            Assert.Throws<RevisionCandidateCapacityException>(
             () => ProvisionalRevisionV0Estimator.Estimate(
                 frame,
                 frameStartOffsetBytes:
                     RbfV040Layout.MaxDurableGraphRelativeFrameStartOffsetBytes +
                     RbfV040Layout.AlignmentBytes));
+        Assert.Equal(
+            new RevisionCandidateCapacityRejection(
+                RevisionCandidateCapacityLimit.TargetFrameStartRelative,
+                AttemptedValue:
+                    RbfV040Layout.MaxDurableGraphRelativeFrameStartOffsetBytes +
+                    RbfV040Layout.AlignmentBytes,
+                MaximumValue:
+                    RbfV040Layout.MaxDurableGraphRelativeFrameStartOffsetBytes),
+            relativeException.Rejection);
+
+        RevisionCandidateCapacityException nativeException =
+            Assert.Throws<RevisionCandidateCapacityException>(
+                () => ProvisionalRevisionV0Estimator.Estimate(
+                    frame,
+                    frameStartOffsetBytes:
+                        RbfV040Layout.MaxNativeFrameStartOffsetBytes +
+                        RbfV040Layout.AlignmentBytes));
+        Assert.Equal(
+            new RevisionCandidateCapacityRejection(
+                RevisionCandidateCapacityLimit.TargetFrameStartNative,
+                AttemptedValue:
+                    RbfV040Layout.MaxNativeFrameStartOffsetBytes +
+                    RbfV040Layout.AlignmentBytes,
+                MaximumValue: RbfV040Layout.MaxNativeFrameStartOffsetBytes),
+            nativeException.Rejection);
+    }
+
+    [Fact]
+    public void Estimator_marks_only_scoped_high_references_as_relative_capacity() {
+        RelativeFrameTicket nativeOnlyTicket = new(
+            IsPreviousFile: true,
+            new FrameTicket(
+                RbfV040Layout.MaxDurableGraphRelativeFrameStartOffsetBytes +
+                    RbfV040Layout.AlignmentBytes,
+                RbfV040Layout.MinFrameLengthBytes));
+        FrameBuilder builder = new() {
+            ObjectVersionDictionary = new ObjectVersionDictionaryBuilder() {
+                ParentRevisionFrameTicket = nativeOnlyTicket,
+            },
+        };
+
+        RevisionCandidateCapacityException exception =
+            Assert.Throws<RevisionCandidateCapacityException>(
+                () => ProvisionalRevisionV0Estimator.Estimate(
+                    builder.Build(),
+                    RbfV040Layout.InitialTailOffsetBytes));
+
+        Assert.Equal(
+            new RevisionCandidateCapacityRejection(
+                RevisionCandidateCapacityLimit.ReferencedFrameTicketRelative,
+                nativeOnlyTicket.FrameTicket.OffsetBytes,
+                RbfV040Layout.MaxDurableGraphRelativeFrameStartOffsetBytes),
+            exception.Rejection);
+        Assert.IsType<ArgumentOutOfRangeException>(exception.InnerException);
+    }
+
+    [Fact]
+    public void Int32_max_component_is_a_frame_capacity_rejection() {
+        FrameBuilder builder = new();
+        ConfigureBase(builder.Add(1), payloadBytes: int.MaxValue);
+        ConfigureFullSelfOvd(builder);
+
+        RevisionCandidateCapacityException exception =
+            Assert.Throws<RevisionCandidateCapacityException>(
+                () => ProvisionalRevisionV0Estimator.Estimate(
+                    builder.Build(),
+                    RbfV040Layout.InitialTailOffsetBytes));
+
+        Assert.Equal(
+            RevisionCandidateCapacityLimit.PayloadAndTailMetaLength,
+            exception.Rejection.Limit);
+        Assert.True(
+            exception.Rejection.AttemptedValue >
+                RbfV040Layout.MaxPayloadAndTailMetaLengthBytes);
+        Assert.Equal(
+            RbfV040Layout.MaxPayloadAndTailMetaLengthBytes,
+            exception.Rejection.MaximumValue);
     }
 
     private static WorkloadTrace CreateThreeStepTrace() => new(

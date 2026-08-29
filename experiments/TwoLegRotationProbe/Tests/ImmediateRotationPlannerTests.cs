@@ -149,16 +149,27 @@ public sealed class ImmediateRotationPlannerTests {
             aaPayloadBytes: RbfV040Layout.MaxPayloadAndTailMetaLengthBytes);
         StoreSnapshot storeBefore = CaptureStore(source.Store);
 
-        Assert.Throws<ArgumentOutOfRangeException>(() => ImmediateRotationPlanner.Create(
-            source.Store,
-            source.Current.FileNumber,
-            source.PublishedRevisionAddress));
+        RevisionCandidateCapacityException first =
+            Assert.Throws<RevisionCandidateCapacityException>(() =>
+                ImmediateRotationPlanner.Create(
+                    source.Store,
+                    source.Current.FileNumber,
+                    source.PublishedRevisionAddress));
+        Assert.Equal(
+            RevisionCandidateCapacityLimit.PayloadAndTailMetaLength,
+            first.Rejection.Limit);
+        Assert.Equal(
+            RbfV040Layout.MaxPayloadAndTailMetaLengthBytes,
+            first.Rejection.MaximumValue);
         AssertStoreSnapshot(storeBefore, CaptureStore(source.Store));
 
-        Assert.Throws<ArgumentOutOfRangeException>(() => ImmediateRotationPlanner.Create(
-            source.Store,
-            source.Current.FileNumber,
-            source.PublishedRevisionAddress));
+        RevisionCandidateCapacityException second =
+            Assert.Throws<RevisionCandidateCapacityException>(() =>
+                ImmediateRotationPlanner.Create(
+                    source.Store,
+                    source.Current.FileNumber,
+                    source.PublishedRevisionAddress));
+        Assert.Equal(first.Rejection, second.Rejection);
         AssertStoreSnapshot(storeBefore, CaptureStore(source.Store));
     }
 

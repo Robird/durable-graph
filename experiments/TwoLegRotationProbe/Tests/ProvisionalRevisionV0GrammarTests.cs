@@ -80,13 +80,23 @@ public sealed class ProvisionalRevisionV0GrammarTests {
             externalAtLimit.PayloadLengthBytes + externalAtLimit.TailMetaDirectoryBytes);
 
         int overflowingExternalPayloadBytes = checked(largestExternalPayloadBytes + 1);
-        Assert.Throws<ArgumentOutOfRangeException>(() =>
+        RevisionCandidateCapacityException exception =
+            Assert.Throws<RevisionCandidateCapacityException>(() =>
             ProvisionalRevisionV0Estimator.Estimate(
                 CreateTerminalCInput(
                     overflowingExternalPayloadBytes,
                     highPreviousTicket,
                     relocateZeroPayloadObject: false),
                 frameStartOffsetBytes: RbfV040Layout.InitialTailOffsetBytes));
+        Assert.Equal(
+            RevisionCandidateCapacityLimit.PayloadAndTailMetaLength,
+            exception.Rejection.Limit);
+        Assert.Equal(
+            RbfV040Layout.MaxPayloadAndTailMetaLengthBytes + 1L,
+            exception.Rejection.AttemptedValue);
+        Assert.Equal(
+            RbfV040Layout.MaxPayloadAndTailMetaLengthBytes,
+            exception.Rejection.MaximumValue);
 
         ProvisionalRevisionV0Estimate relocated =
             ProvisionalRevisionV0Estimator.Estimate(

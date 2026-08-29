@@ -344,9 +344,44 @@ B/C reconstruction closure, canonical decisions, exact whole-frame sizing,
 capacity-failure purity, and maintenance-candidate equivalence with the older
 ImmediateRotation planner.
 
-This closes both pure explicit candidate builders. It is not yet an automatic
-policy, paired feasibility result, durable head publication path, or continuous
-multi-rotation runner.
+This closes both pure explicit candidate builders. They are not yet an automatic
+policy, durable head publication path, or continuous multi-rotation runner.
+
+## Explicit paired evaluation
+
+`ExplicitCandidatePairEvaluator` now attempts the caller-supplied Stay-B and
+Rotate-C actions independently over the same `NormalizedSaveFacts`. A feasible
+attempt retains the exact plan, runtime candidate and the candidate's existing
+`ProvisionalRevisionV0Estimate`; it does not rebuild the candidate or invoke a
+second sizing authority. The pair deliberately has no winner, aggregate score,
+fallback, append, or publication behavior.
+
+The provisional estimator now reports five narrowly typed physical limits:
+native target-frame start, DurableGraph-relative target-frame start, referenced
+relative ticket, TailMeta length, and combined Payload+TailMeta length. The pair
+turns only this marker into a bounded capacity rejection and continues with the
+other target. Caller-decision errors, stale or corrupt source state, invalid
+runtime grammar, and other model errors still escape and fail closed. Rejecting
+one explicit candidate is not a proof that no alternate action can fit.
+
+For each feasible candidate, raw observations join the estimator's already
+sized domain records with the normalized fact kinds to separate foreground and
+same-state maintenance record bytes. Post-live reconstruction observations use
+only the candidate Frame and the frozen source reconstruction paths: they
+report required versions and payload, canonical unique full Frames and bytes,
+and the live objects whose reconstruction still reaches the Previous file in
+the candidate's result `FileScope`. The candidate estimate is reused by
+identity; each stored source Frame is checked against the same sole estimator
+before its layout is admitted as `ProvisionalRevisionV0` provenance. A mismatch
+is source/accounting corruption, not a capacity outcome. Historical lineage is
+excluded.
+
+Executable pair fixtures prove both-success, either one-sided capacity
+rejection while the other side is still evaluated, two independent capacity
+rejections, non-capacity errors escaping, input-order determinism, exact
+candidate/estimate identity, and no Store mutation. Completion certificates,
+an explicit probe-only apply seam, and a continuous multi-rotation runner remain
+the next slices.
 
 ## Preparatory B migration witness
 

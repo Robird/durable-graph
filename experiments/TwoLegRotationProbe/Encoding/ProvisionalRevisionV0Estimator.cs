@@ -72,6 +72,12 @@ internal static class ProvisionalRevisionV0Estimator {
         ProvisionalRevisionV0Input input,
         long frameStartOffsetBytes) {
         ArgumentNullException.ThrowIfNull(input);
+        if (frameStartOffsetBytes > RbfV040Layout.MaxNativeFrameStartOffsetBytes) {
+            ThrowCapacity(
+                RevisionCandidateCapacityLimit.TargetFrameStartNative,
+                frameStartOffsetBytes,
+                RbfV040Layout.MaxNativeFrameStartOffsetBytes);
+        }
 
         ProvisionalDomainRecordInput[] canonicalDomainInputs = input.DomainRecords
             .OrderBy(static record => record.ObjectId)
@@ -88,7 +94,7 @@ internal static class ProvisionalRevisionV0Estimator {
         foreach (ProvisionalDomainRecordInput record in canonicalDomainInputs) {
             int parentTokenWidth = record.Role == ProvisionalDomainRecordRole.Delta
                 ? CanonicalUnsignedBase128.GetEncodedWidth(
-                    ProvisionalRelativeFrameTicketCodec.EncodeRequired(
+                    EncodeReferencedFrameTicket(
                         record.DeltaParentFrameTicket!.Value))
                 : 0;
             long bodyLengthBytes = checked(
@@ -128,7 +134,7 @@ internal static class ProvisionalRevisionV0Estimator {
         ValidateOvdEntries(canonicalOvdEntries, ovd.Kind, canonicalDomainInputs);
 
         ulong ovdParentToken = ovd.ParentFrameTicket is RelativeFrameTicket ovdParent
-            ? ProvisionalRelativeFrameTicketCodec.EncodeRequired(ovdParent)
+            ? EncodeReferencedFrameTicket(ovdParent)
             : ProvisionalRelativeFrameTicketCodec.NoneToken;
         int ovdParentTokenWidth = CanonicalUnsignedBase128.GetEncodedWidth(ovdParentToken);
         long ovdBodyLengthBytes = checked(
@@ -180,6 +186,7 @@ internal static class ProvisionalRevisionV0Estimator {
                     checked((ulong)record.RecordOffsetBytes)));
         }
 
+        ValidateFrameEnvelope(payloadLengthBytes, tailMetaDirectoryBytes);
         int payloadLength = CheckedInt(payloadLengthBytes, "revision payload");
         int tailMetaLength = CheckedInt(tailMetaDirectoryBytes, "TailMeta directory");
         RbfFrameLayoutEstimate layout = RbfV040Layout.Estimate(
@@ -187,8 +194,16 @@ internal static class ProvisionalRevisionV0Estimator {
             payloadLength,
             tailMetaLength);
         if (!RbfV040Layout.IsDurableGraphRelativeStartRepresentable(layout.Ticket)) {
+            if (frameStartOffsetBytes >
+                RbfV040Layout.MaxDurableGraphRelativeFrameStartOffsetBytes) {
+                ThrowCapacity(
+                    RevisionCandidateCapacityLimit.TargetFrameStartRelative,
+                    frameStartOffsetBytes,
+                    RbfV040Layout.MaxDurableGraphRelativeFrameStartOffsetBytes);
+            }
+
             throw new InvalidDataException(
-                $"Candidate frame at {frameStartOffsetBytes} exceeds the DurableGraph relative-ticket range.");
+                $"Candidate frame at {frameStartOffsetBytes} is not a valid DurableGraph relative ticket.");
         }
 
         foreach (ProvisionalObjectVersionDictionaryEntry entry in canonicalOvdEntries) {
@@ -329,17 +344,70 @@ internal static class ProvisionalRevisionV0Estimator {
                 ProvisionalObjectVersionDictionaryBinding.EncodeSelf(),
             ProvisionalObjectVersionDictionaryBindingKind.External
                 when entry.ExternalFrameTicket is RelativeFrameTicket external =>
-                ProvisionalObjectVersionDictionaryBinding.EncodeExternal(external),
+                EncodeReferencedFrameTicket(external),
             _ => throw new InvalidDataException(
                 $"Object {entry.ObjectId} does not carry an encodable OVD binding."),
         };
 
+    private static ulong EncodeReferencedFrameTicket(
+        RelativeFrameTicket ticket) {
+        try {
+            return ProvisionalRelativeFrameTicketCodec.EncodeRequired(ticket);
+        } catch (ArgumentOutOfRangeException exception) when (
+            ticket.FrameTicket.OffsetBytes >
+                RbfV040Layout.MaxDurableGraphRelativeFrameStartOffsetBytes) {
+            throw new RevisionCandidateCapacityException(
+                new RevisionCandidateCapacityRejection(
+                    RevisionCandidateCapacityLimit.ReferencedFrameTicketRelative,
+                    ticket.FrameTicket.OffsetBytes,
+                    RbfV040Layout.MaxDurableGraphRelativeFrameStartOffsetBytes),
+                exception);
+        }
+    }
+
+    private static void ValidateFrameEnvelope(
+        long payloadLengthBytes,
+        long tailMetaLengthBytes) {
+        if (tailMetaLengthBytes > RbfV040Layout.MaxTailMetaLengthBytes) {
+            ThrowCapacity(
+                RevisionCandidateCapacityLimit.TailMetaLength,
+                tailMetaLengthBytes,
+                RbfV040Layout.MaxTailMetaLengthBytes);
+        }
+
+        long payloadAndTailMetaLengthBytes = checked(
+            payloadLengthBytes + tailMetaLengthBytes);
+        if (payloadAndTailMetaLengthBytes >
+            RbfV040Layout.MaxPayloadAndTailMetaLengthBytes) {
+            ThrowCapacity(
+                RevisionCandidateCapacityLimit.PayloadAndTailMetaLength,
+                payloadAndTailMetaLengthBytes,
+                RbfV040Layout.MaxPayloadAndTailMetaLengthBytes);
+        }
+    }
+
     private static int CheckedInt(long value, string componentName) {
-        if ((ulong)value > int.MaxValue) {
+        if (value < 0) {
             throw new InvalidDataException(
-                $"The provisional {componentName} size {value} exceeds Int32.MaxValue.");
+                $"The provisional {componentName} size {value} is negative.");
+        }
+
+        if (value > int.MaxValue) {
+            ThrowCapacity(
+                RevisionCandidateCapacityLimit.PayloadAndTailMetaLength,
+                value,
+                RbfV040Layout.MaxPayloadAndTailMetaLengthBytes);
         }
 
         return (int)value;
     }
+
+    private static void ThrowCapacity(
+        RevisionCandidateCapacityLimit limit,
+        long attemptedValue,
+        long maximumValue) => throw new RevisionCandidateCapacityException(
+            new RevisionCandidateCapacityRejection(
+                limit,
+                attemptedValue,
+                maximumValue));
 }

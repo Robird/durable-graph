@@ -423,8 +423,17 @@ public sealed class StayBRevisionCandidateTests {
         StayBSaveDecision decision = new([], []);
         StoreSnapshot before = CaptureStore(source.Store);
 
-        Assert.Throws<ArgumentOutOfRangeException>(() =>
+        RevisionCandidateCapacityException exception =
+            Assert.Throws<RevisionCandidateCapacityException>(() =>
             StayBRevisionPlanner.Create(source.Store, facts, decision));
+        Assert.Equal(
+            RevisionCandidateCapacityLimit.PayloadAndTailMetaLength,
+            exception.Rejection.Limit);
+        Assert.True(
+            exception.Rejection.AttemptedValue > exception.Rejection.MaximumValue);
+        Assert.Equal(
+            RbfV040Layout.MaxPayloadAndTailMetaLengthBytes,
+            exception.Rejection.MaximumValue);
 
         AssertStoreSnapshot(before, CaptureStore(source.Store));
     }

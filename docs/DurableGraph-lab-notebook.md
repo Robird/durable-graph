@@ -86,6 +86,8 @@
 - **Observed**：S1b 已对给定 Payload/TailMeta 长度复刻 exact RBF v0.40 envelope，并把 synthetic workload 接入逐 Save write 与 post-save reconstruction/co-read observations；accounting 明示排除 DG header/OVD/index/VarUInt，所以尚不能证明完整 Revision bytes、容量安全或策略 winner。
 - **Observed**：S1c 已加入 ratio=3 的 `ObjectPayloadReadAmplification3` 与四场景 matrix；per-object reconstruction payload 随 ObjectVersion 保存并由 oracle 重算，但不计入 layout。结果只证明局部策略形成可复现 tradeoff，不代表 exact StateJournal port 或 winner。
 - **Observed**：S1d `ProvisionalRevisionV0` 已按临时 grammar 计入 domain headers、OVD、TailMeta directory、relative VarUInt 与 exact RBF envelope；run-level provenance、layout、capacity gates、contextual Self 和旧 baseline 回归均有 executable evidence。它仍是 size-only estimator，不是 byte codec 或 rotation capacity proof。
+- **Observed**：caller-explicit Stay-B/Rotate-C 已在同一 normalized facts 上进入 paired evaluation；五类 Frame/address hard gate 使用窄 typed rejection，其他 decision/source/model 错误仍 fail closed。一侧容量失败不阻止另一侧尝试，成功侧保留 exact plan/candidate/estimate identity。
+- **Decided**：paired raw observations 不重估 candidate 或重放 source authority；foreground/maintenance bytes 只 join 既有 domain-record estimate，PostLive read/debt 只 union candidate 与冻结 reconstruction paths。source stored layout 在纳入 provisional read metrics 前由同一唯一 estimator 复核，provenance 不一致直接 fail closed。结果无 winner、总分、repair、append 或 publication。
 - **Decided**：当前不引入 `MaxLogicalChainBytes`、`TargetFileBytes` 或固定 migration budget；先在纯内存模拟中采集无权重原始量，比较自适应统一策略。
 - **Open**：统一策略能否仅依靠 two-file pressure、lineage/reconstruction overhead 与渐进 cold Base migration 自动收敛；`CanPrepareAndRotate == true` 必须有具体 completion witness，bounded explorer 的 `NotFoundWithinBounds` 不证明一般无解。
 - **Open**：Schema runtime representation 与 canonical authority 的候选分叉记录在 `DB-001`，等待 exact codec/persistent format 实验裁决。
