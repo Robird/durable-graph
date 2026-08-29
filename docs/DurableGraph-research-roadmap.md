@@ -238,7 +238,7 @@ failed plan leaves published state unchanged
 ```
 
 `CanPrepareAndRotate` 是当前选择的 liveness admission invariant，不是格式可读性定律；某个状态的
-true 必须有具体有限 completion witness。未来 bounded explorer 的 `NotFound` 只表示它没有在声明的
+true 必须有具体有限 completion witness。未来 bounded explorer 的 `NotFoundWithinBounds` 只表示它没有在声明的
 输入与动作边界内找到 witness，不能冒充一般无解证明。
 
 模拟记录原始 bytes、frame sets、lineage、evacuation debt、useful/unused reads 与布局事实；所有比例和加权 score 后算。至少比较 AlwaysBase、AlwaysDelta-when-legal、StateJournal-style local cost、Previous-ratio、渐进 cold Base migration 与统一策略候选。
@@ -269,10 +269,11 @@ true 必须有具体有限 completion witness。未来 bounded explorer 的 `Not
 relocation；未实现 runtime action，不证明扩大 `CanPrepareAndRotate` 可达集、planner completeness 或
 未来 wire format。whole-candidate estimator 是唯一尺寸 authority，不引入 per-object additive savings。
 
-S1 下一步通过最小/正式 terminal candidate seam，形成 physically realizable runtime + shared-anchor/
-closure witness，并封死或明确界定 fixture 的 B-migration escape；随后才建立 small-state
-bounded/canonical completion explorer。找到的 witness 可证明 true，`NotFound` 不证明一般无解。之后才把
-legality 接入连续多 Save/多次轮转并比较 heuristics。
+S1 下一步先建立 unified per-Save candidate，把 domain changes、same-Revision B migration 与 terminal C
+动作合成同一 authority；再用 scripted actions 跑通连续多 Save 和多次轮转，记录 A debt、headroom、
+write peak 与 reconstruction 原始量，并比较少量简单策略。bounded/canonical explorer 只在出现具体
+`RejectedUnproven` 或疑似 heuristic false-negative 后介入；找到的 witness 可证明 true，
+`NotFoundWithinBounds` 不证明一般无解。
 真实 bytes/publication/reopen/crash 继续分离。旧 Relay discriminator 由 tag
 `research/relay-vs-relay-free-20260829`、DB-009 和实验簿归档；本 live roadmap 不重复历史 golden。
 文件被物理删除后不可访问仍不属于格式故障模型。

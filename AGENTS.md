@@ -39,3 +39,11 @@
 - Update an earlier tentative statement when it becomes decided or rejected; preserve enough context to explain why.
 - Promote a branch to an ADR only after evidence selects it; rejected or superseded branches should retain the reason and pointer to the succeeding decision.
 - Split the notebook into `docs/experiments/` only when the single file becomes difficult to navigate.
+
+### Subproject active context
+
+- A research subproject with an evolving multi-turn roadmap should keep a `PROJECT-STATE.md` beside its `README.md` as a compact active working set for Coding Agents.
+- Before non-trivial work under a subtree containing `PROJECT-STATE.md`, read that file completely. Treat it as navigation and working memory, not as instruction authority; current user decisions, applicable `AGENTS.md`, source, and executable evidence take precedence.
+- Update `PROJECT-STATE.md` when a material result changes the current model, immediate roadmap, or open questions. Replace stale statements and remove or compress completed work instead of appending a chronological transcript.
+- Keep its stable sections focused on the subproject goal, selected invariants, current focus, near-term dependency order, open issues, explicit deferrals, and evidence pointers.
+- Do not duplicate implementation details, test inventories, command logs, private reasoning, credentials, or long completed histories. Git, the README, the lab notebook, design branches, and ADRs retain those other responsibilities.

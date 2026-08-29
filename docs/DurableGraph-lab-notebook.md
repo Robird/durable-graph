@@ -87,7 +87,7 @@
 - **Observed**：S1c 已加入 ratio=3 的 `ObjectPayloadReadAmplification3` 与四场景 matrix；per-object reconstruction payload 随 ObjectVersion 保存并由 oracle 重算，但不计入 layout。结果只证明局部策略形成可复现 tradeoff，不代表 exact StateJournal port 或 winner。
 - **Observed**：S1d `ProvisionalRevisionV0` 已按临时 grammar 计入 domain headers、OVD、TailMeta directory、relative VarUInt 与 exact RBF envelope；run-level provenance、layout、capacity gates、contextual Self 和旧 baseline 回归均有 executable evidence。它仍是 size-only estimator，不是 byte codec 或 rotation capacity proof。
 - **Decided**：当前不引入 `MaxLogicalChainBytes`、`TargetFileBytes` 或固定 migration budget；先在纯内存模拟中采集无权重原始量，比较自适应统一策略。
-- **Open**：统一策略能否仅依靠 two-file pressure、lineage/reconstruction overhead 与渐进 cold Base migration 自动收敛；`CanPrepareAndRotate == true` 必须有具体 completion witness，bounded explorer 的 `NotFound` 不证明一般无解。
+- **Open**：统一策略能否仅依靠 two-file pressure、lineage/reconstruction overhead 与渐进 cold Base migration 自动收敛；`CanPrepareAndRotate == true` 必须有具体 completion witness，bounded explorer 的 `NotFoundWithinBounds` 不证明一般无解。
 - **Open**：Schema runtime representation 与 canonical authority 的候选分叉记录在 `DB-001`，等待 exact codec/persistent format 实验裁决。
 - **Open**：哪些类型和 API 最终属于核心程序集，等待真实代码形状出现后再判断。
 
@@ -761,9 +761,9 @@
 
 ## 6. 船长日志
 
-### 2026-08-29：B migration witness 与 terminal C 定尺
+### 2026-08-29：双腿探针完成动作定尺并回归连续策略主线
 
-- **Observed / Next**：caller-selected B Base migration witness 已闭合；terminal C 定尺反例进一步证明 provisional v0 下 high-ticket External 不支配 zero-payload same-state Base + Self（overflowing External total `268,435,429` 对 relocated `268,435,427`，address tokens `21 -> 12`），但尚无 runtime optional action、可达集或未来 wire-format 结论，完整 Probe 221/221。下一步先以 terminal candidate seam 形成 shared-anchor/closure runtime witness，并封死或界定 B-migration escape；随后才做 bounded/canonical explorer，且 `NotFound` 不解释为一般无解。
+- **Observed / Next**：caller-selected B migration、immediate C 与 terminal sizing 已足以支撑下一纵向切片；后者只证明 provisional v0 下 high-ticket External 不支配 zero-payload Base+Self，不外推 runtime completeness 或未来 wire。航向复审确认最大缺口是 single-file workload 与 rotation actions 尚未接通。下一步合并 domain Save、same-Revision migration 与 terminal C，先跑连续多 Save/多轮转和简单策略；bounded explorer 等待具体保守拒绝，`NotFoundWithinBounds` 不解释为一般无解。
 
 ### 2026-08-29：选择 Revision shared prior-snapshot anchor
 

@@ -6,9 +6,9 @@
 >
 > 更新日期：2026-08-29
 >
-> 当前方向：先用最小 terminal candidate seam 把 `RelocatedBase` / `External` 定尺反例变成
-> physically realizable runtime + shared-anchor/closure witness，并封死或明确界定 B-migration escape；
-> 随后才建立 bounded/canonical completion explorer，不先写 heuristic 或冻结调优参数。
+> 当前方向：先建立统一 per-Save candidate，把领域变更、same-Revision B migration 与 terminal C
+> 合成一个动作 authority；随后跑通连续多 Save、多次换腿并比较简单策略。bounded explorer 只在
+> 出现具体保守拒绝或疑似 false-negative 后介入，不先冻结 heuristic 或调优参数。
 
 ## 问题
 
@@ -68,11 +68,11 @@ failed plan leaves published state unchanged
 
 `CanPrepareAndRotate == true` 必须由实际有限 plan 见证，而不只是检查 C 当前是否放得下
 EvacuationSet。caller-selected B migrations 现在可以与 final C rotation 组合成具体 witness，但不是
-决策过程；未选中某条完成路径或 bounded explorer 返回 `NotFound`，都不能解释为一般无解。
+决策过程；未选中某条完成路径或 bounded explorer 返回 `NotFoundWithinBounds`，都不能解释为一般无解。
 
-reference explorer 必须显式标注边界，并在小状态上 canonical 枚举 B migration batches
-及 terminal C action，再用同一 runtime OVD/reconstruction/layout oracle 复验。便宜 heuristic
-只能与它对照，不能自行宣称 completeness。
+未来 reference explorer 必须显式标注边界，并在捕获的小状态上 canonical 枚举 B migration
+batches 及 terminal C action，再用同一 runtime OVD/reconstruction/layout oracle 复验。便宜
+heuristic 不能自行宣称 completeness，但 explorer 不再作为首个连续策略循环的前置依赖。
 
 ## 当前 executable baseline
 
@@ -112,12 +112,12 @@ completeness 或未来 wire format。尺寸裁决始终以 whole-candidate estim
 
 ## 未闭合事项与顺序
 
-1. 通过最小/正式 terminal candidate seam，形成 physically realizable optional relocation、shared-anchor
-   与 A/B -> B/C reconstruction-closure witness；fixture 同时封死或明确界定 B-migration escape；
-2. 建立 small-state bounded/canonical completion explorer；找到的 concrete witness 足以证明 true，
-   `NotFound` 不冒充无解；
-3. 把 completion legality 接入连续多 Save、多次 A/B→B/C 的模拟；
-4. 比较简单 heuristics 的 false-negative、振荡、Pareto frontier 与峰值 pause；
+1. 建立 unified per-Save candidate：同一 B Revision 合并 domain changes 与显式 cold migration；同一 C
+   Revision 合并 domain changes、mandatory evacuation 与 optional B-local relocation；
+2. 以 scripted actions 跑通连续多 Save 和至少两次换腿，并记录 A debt、headroom、写峰值与读取原始量；
+3. 接入少量明确命名的策略基线，在同一 frozen workloads 上比较拒绝、振荡、Pareto frontier 与 pause；
+4. 捕获具体 `RejectedUnproven` 或疑似 heuristic false-negative 后，再建立 small-state bounded/canonical
+   explorer；找到的 witness 可证明 true，`NotFoundWithinBounds` 不冒充一般无解；
 5. 只有策略结论确实依赖 byte-level 差异时，再做 provisional writer/parser；one-frame 真实容量频繁
    撞墙时才引入 Extent。
 

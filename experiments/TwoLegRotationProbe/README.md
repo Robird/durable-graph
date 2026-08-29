@@ -3,6 +3,10 @@
 This isolated .NET 10/xUnit project is the in-memory workbench for exploring
 two-leg StateStore file rotation and Base-or-Deltify policies.
 
+The compact current goal, near-term roadmap, and unresolved work live in
+[`PROJECT-STATE.md`](PROJECT-STATE.md). This README describes the implemented
+model and executable evidence; it is not the active backlog.
+
 The first scaffold deliberately models only a few container facts:
 
 - RBF file numbers start at 1 and increase monotonically;
@@ -342,12 +346,12 @@ projection is a versioned research input, not a durable-format commitment.
 `CanPrepareAndRotate` is the currently selected liveness admission invariant,
 not a law of whether an already-published format is readable. A concrete finite
 B-migration-plus-C-rotation witness proves it true for that source state.
-Failure of a bounded explorer to find one must remain `NotFound`, not a proof
-that no completion exists. The next slice must expose a minimal terminal
-candidate seam and turn the sizing discriminator into a physically realizable
-runtime, shared-anchor, and reconstruction-closure witness. Its fixture should
-also close or explicitly bound any B-migration escape. Only then should an
-honestly bounded/canonical reference explorer precede heuristic comparison.
+Failure of a bounded explorer to find one must remain `NotFoundWithinBounds`,
+not a proof that no completion exists. The next slice should merge domain changes,
+same-Revision B migration, and terminal C actions behind one per-Save candidate
+seam, then use it in a scripted continuous multi-rotation run. A bounded
+reference explorer waits for a concrete conservative rejection or suspected
+heuristic false-negative; it does not block the first strategy loop.
 
 The rejected forwarding alternatives and their executable comparison are
 preserved by annotated tag `research/relay-vs-relay-free-20260829` and DB-009.
