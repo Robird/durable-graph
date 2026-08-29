@@ -120,19 +120,23 @@ PublishedRevision 为 shared prior-snapshot anchor。accepted new head 的 curre
 - 无权重 raw candidate observations：从既有 estimate 的 domain records 与冻结 reconstruction paths
   派生 foreground/maintenance record bytes、PostLive full-frame reads 和相对结果 FileScope 的 Previous debt；
   candidate 不重估，source stored layout 则用同一唯一 estimator 验证 provisional provenance；
+- caller-owned volatile probe cursor 与强类型 Stay-B / Rotate-C apply seam：变异前重验 source、tail、facts、
+  candidate state/layout/anchor，失败不追加；不写 Store head，不声称并发、crash 或 durable publication；
+- 保守 `CanPrepareAndRotate` certificate：在 exact scratch fork 上先试零迁移 Rotate-C，再按 ObjectId 升序
+  每次迁一个 A-debt object；成功冻结完整 exact candidate chain，容量受阻只返回 `RejectedUnproven`；
 - caller-selected B same-state Base migration plan/append witness；
 - relay-free immediate A/B -> B/C plan/append、shared anchor、B/C closure witness；
 - 多批 B migration 使原本放不下的 C evacuation 可编码的容量 witness；
 - terminal sizing 反例：high-ticket External 不支配 zero-payload Base+Self。
 
-Stay-B 与 Rotate-C 已接入同一 per-Save facts 和 paired evaluation；completion certificate、连续 Save
-策略循环与统一 apply 边界仍未闭合。
+Stay-B 与 Rotate-C 已接入同一 per-Save facts、paired evaluation、显式 apply 与保守 completion proof；
+连续 Save / 多次轮转策略循环仍未闭合。
 当前三条 policy matrix 只是 Base/Deltify baseline，不是 rotation-policy comparison。
 
 ## 当前研究焦点
 
-下一步为 caller 选择的 feasible Stay-B candidate 生成保守、有限、可重放的 prepare-and-rotate
-completion certificate，并建立仅供 probe runner 使用的显式 apply seam；随后接入连续 Save 节奏，尽快画出：
+下一步接入 caller-scripted 的连续 Save 节奏，复用现有 cursor、paired evaluation、completion certificate
+与 apply seam，尽快画出：
 
 ```text
 A debt 随连续 Save 变化
@@ -146,64 +150,48 @@ A debt 随连续 Save 变化
 
 ## 下一编码切片
 
-闭合一个 **conservative completion certificate + explicit probe apply seam**：
+闭合一个 **scripted continuous multi-rotation runner**：
 
 ```text
-Feasible Stay-B plan
-    -> one concrete finite B-migration sequence
-    -> one exact final Rotate-C plan
-    -> replayable CanPrepareAndRotate certificate
-
-caller-selected feasible plan + expected source/tail
-    -> explicit probe-only append/apply
-    -> next PublishedRevision address and FileScope
+caller script + frozen SaveSteps
+    -> normalize + explicit paired candidates
+    -> caller selects an exact feasible action
+    -> require concrete completion certificate when accepting Stay-B
+    -> explicit apply advances the volatile cursor
+    -> repeat across A/B -> B/C -> C/D
 ```
 
-首版 certificate 只需证明一条具体 continuation，不追求完备搜索；找不到仍称 `RejectedUnproven`。apply
-必须重验 source PublishedRevision、目标 file/tail 与 candidate layout，且失败不改变 Store。它可以为连续 runner
-提供明确 mutation boundary，但不得冒充 crash-safe durable publication/head。paired evaluation 继续保持无 winner、
-无隐含权重；次优 capacity repair 和一般 explorer 仍暂缓。
+首版由测试脚本明确给出每步 decision 与 target，不建立 automatic winner 或 heuristic。runner 必须逐步验证
+logical PostLive、FileScope closure、cursor/source continuity 和 certificate 可重放性，并只记录原始 observations；
+不在本切片加入权重、一般 explorer、durable head、crash/reopen 或文件删除。
 
 ## 近期 roadmap
 
-1. **Normalized input + unified per-Save candidate**
-   - 已完成 parent authority -> canonical facts、maintenance-only facts 与 Stay-B / Rotate-C mixed Revision；
-   - 两个 planner 复用同一 OVD、reconstruction、layout 与 no-mutation oracle；现有 immediate path 已有
-     executable empty-foreground candidate equivalence。
-2. **Paired candidate attempt / exact physical feasibility**
-   - 已完成 caller-explicit 双候选独立尝试、窄化的五类 physical-capacity marker 与 typed rejection；
-   - 已保留 exact plan/estimate、whole layout、foreground/maintenance record bytes、PostLive reconstruction
-     与结果 Previous-file debt；无 winner、score 或同 target repair。
-3. **Completion certificate + explicit apply seam**
-   - 为可选 Stay-B candidate 附带一个保守、有限、可重放的 prepare-and-rotate witness；
-   - 再建立仅供 probe runner 使用的显式 mutation boundary，不冒充 durable publication/head。
-4. **Scripted continuous runner**
+1. **Scripted continuous runner**
    - 先由测试脚本显式给出动作，不声称 heuristic；
    - 至少跑通 `A/B -> B/C -> C/D`，验证每步 logical state、FileScope closure 和 role rollover；
-   - 每个 accepted Save 附带保守的具体 completion certificate，不先建立一般搜索器。
-5. **Rotation observations**
+   - 每个 accepted Stay-B 附带保守的具体 completion certificate；Rotate-C 自身完成换腿，不先建立一般搜索器。
+2. **Rotation observations**
    - 记录 debt count/full-Base bytes、Previous unique frames/bytes、B tail/headroom、domain/migration bytes、
      exact terminal-C estimate、per-Save/rotation peak、leg length、rotation count 与保守拒绝；
    - 保留原始量，不预设总分。
-6. **简单策略基线**
+3. **简单策略基线**
    - Lazy/no cold migration；
    - Touch/ChangedDebtFirst；
    - deterministic PacedCold（例如每 Save 一个）与 DebtZeroThenRotate；
    - 全部重放同一 frozen traces，报告 Pareto 与明显 dead-end/振荡。
-7. **按证据加入 bounded explorer**
+4. **按证据加入 bounded explorer**
    - 仅在出现具体 `RejectedUnproven`、`RejectedCapacityUnsearched` 或疑似 heuristic false-negative 后，
      冻结该小状态；
    - 用同一 unified action builder 做 canonical bounded search；`NotFoundWithinBounds` 不外推一般无解。
-8. **再研究自适应策略**
+5. **再研究自适应策略**
    - 根据连续运行暴露的压力、峰值和反例设计 capacity/pressure-aware 候选，而不是先冻结权重。
 
 ## 未闭合事项
 
 - unbounded preference cost 如何比较两个 target，同时保持原始多目标事实而不偷渡权重；
 - `RejectedCapacityUnsearched` 出现多频繁时值得加入次优 action menu 或 constraint-aware repair；
-- 初版保守 completion certificate 如何绑定尚未 append 的 exact Stay-B candidate、后续 B migration batches
-  与最终 Rotate-C candidate，而不偷偷演化成通用 search framework；
-- probe-only apply seam 应持有哪些 expected source/tail identity，才能拒绝 stale candidate 且不提前设计 durable head；
+- scripted runner 如何显式表达“caller 选 action + Stay-B 必须有 certificate”的 admission 顺序，而不偷渡 winner；
 - stable hot/cold、burst、size distribution 与长 trace 是否先用 handwritten fixture，何时扩充 generator；
 - `PacedCold` 的 fixed-count baseline 之后，何种无隐藏权重的 pressure facts 最值得比较；
 - 多个不可支配策略出现后，何时需要用户用真实 workload/SLO 选择产品默认值。

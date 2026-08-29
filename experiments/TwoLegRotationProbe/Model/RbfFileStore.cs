@@ -52,4 +52,18 @@ internal sealed class RbfFileStore {
 
     public RbfFrameLayoutEstimate ReadLayout(AbsoluteFrameAddress address) =>
         GetFile(address.FileNumber).ReadLayout(address.FrameTicket);
+
+    /// <summary>
+    /// Creates a volatile in-memory scratch fork for probe planning. Existing Frame
+    /// instances, tickets, stored layouts, tails, and file numbering are preserved while
+    /// later appends affect only the fork. This is not a durable or crash-safe snapshot.
+    /// </summary>
+    public RbfFileStore ForkForProbe() {
+        RbfFileStore fork = new();
+        foreach (RbfFile file in _files) {
+            fork._files.Add(file.ForkForProbe());
+        }
+
+        return fork;
+    }
 }

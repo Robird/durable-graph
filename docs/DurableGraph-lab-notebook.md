@@ -763,6 +763,13 @@
 
 ## 6. 船长日志
 
+### 2026-08-29：闭合显式 apply 与保守 CanPrepareAndRotate 证书
+
+- **Observed**：caller-owned volatile cursor 以 `{FileScope, PublishedRevision, Current tail}` 绑定实验 runner 的当前点；强类型 Stay-B / Rotate-C apply 在唯一变异前重验 source facts、reconstruction、candidate state/layout/anchor 与 target tail，失败不产生本次追加，但不声称 durable publication、并发或 crash safety。
+- **Observed**：certificate planner 在 exact scratch fork 上实际重放同一 apply；先试零迁移 Rotate-C，容量拒绝后按 ObjectId 升序逐个生成统一 maintenance Stay-B candidate，每个 prefix 再试 Rotate-C，首次成功即冻结 exact chain。
+- **Observed**：3 x 140,000,000-byte A debt 反例稳定生成两次单对象 B migration 后的 final C；relative-start 边界则稳定返回带 stage/count/ObjectId/capacity 的 `RejectedUnproven`。证书生成不改 caller Store，成功 chain 可在真实 Store 上重放到 B/C closure。
+- **Observed / Next**：apply 8/8、certificate 5/5、TwoLegRotationProbe 259/259，solution build 0 warning / 0 error；独立复审无 blocker/high/medium。下一切片接 caller-scripted `A/B -> B/C -> C/D` 连续 runner 与原始 rotation observations，仍不建立 weighted winner 或一般 solver。
+
 ### 2026-08-29：闭合显式 Rotate-C candidate 与 maintenance 统一入口
 
 - **Observed**：`RotateCRevisionPlanner` 只消费与 Stay-B 相同的 normalized facts；A-dependent PostLive 强制写 Base@C，B-contained Update 才接受显式 Base/Delta，B-contained NoChange 可选 same-state Base，否则 External 到精确旧 B head。

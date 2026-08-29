@@ -45,5 +45,20 @@ internal sealed class RbfFile {
         return stored.Layout;
     }
 
+    /// <summary>
+    /// Creates a volatile in-memory scratch fork for probe planning. The fork preserves
+    /// exact tickets, layouts, tail, and immutable Frame references. It is not a durable,
+    /// crash-consistent, or concurrent snapshot contract.
+    /// </summary>
+    public RbfFile ForkForProbe() {
+        RbfFile fork = new(FileNumber);
+        foreach ((FrameTicket ticket, StoredFrame stored) in _frames) {
+            fork._frames.Add(ticket, stored);
+        }
+
+        fork.TailOffsetBytes = TailOffsetBytes;
+        return fork;
+    }
+
     private sealed record StoredFrame(Frame Frame, RbfFrameLayoutEstimate Layout);
 }
