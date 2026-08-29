@@ -496,6 +496,55 @@ debt alone. This baseline demonstrates a progress dependency between the trigger
 and migration treatment; it does not establish a product trigger, cost winner,
 capacity policy, or the physical ability to append forever.
 
+## Scoped rotation observation reductions
+
+The comparison fixture now reduces each successfully applied step into a
+test-local, unweighted value projection. Source and result observations each
+carry their own `(Previous, Current)` scope, Previous-debt ObjectIds and logical
+Base payload bytes, Previous-file unique object-reconstruction Frames and
+`FrameLengthBytes`, Current tail, and signed next-relative-frame-start slack.
+The slack is only
+`MaxDurableGraphRelativeFrameStartOffsetBytes - CurrentTailOffsetBytes`: zero
+still permits a Frame to start at the boundary, and a negative value after that
+append means no later relative Frame start is representable. It is not general
+file or payload capacity.
+
+Previous Frame observations cover only unique full Frames on live objects'
+current reconstruction paths in that observation's Previous file. They exclude
+OVD lookup/replay, historical lineage, Current/C Frames, trailing fences, cache
+behavior, and cumulative IO; no `TotalReadBytes` is defined.
+
+Each realized step also separates foreground domain-record bytes, maintenance
+NoChange domain-record bytes, the remaining non-domain append bytes, and the
+whole RBF append. Contiguous steps with the same source scope form one observed
+epoch. A realized Rotate belongs to and closes its old source epoch; the run may
+begin partway through a physical file leg, so the count is deliberately an
+observed Save count rather than a complete leg length. Executable evidence now
+covers one open four-Stay epoch, closed three- and four-Save epochs, and two
+consecutive closed epochs:
+
+```text
+source scopes 1/2, 1/2, 2/3, 2/3
+targets       Stay, Rotate, Stay, Rotate
+result scopes 1/2, 2/3, 2/3, 3/4
+```
+
+A successful Stay's completion certificate contributes a separately named
+counterfactual terminal-C projection. It records the number of additional
+preparatory Stay steps and the exact final-C append/result observation. It does
+not include preparatory writes or terminal-source pressure, and no
+counterfactual candidate contributes to realized totals, peaks, epochs, or
+rotation count. The current comparison reductions exercise the zero-preparation
+case; the certificate subsystem separately has a two-preparation capacity
+witness.
+
+The same frozen traces and fresh Store forks reproduce the complete primitive
+projection. This is deterministic value-projection evidence, not a canonical
+transcript, persisted report, Store identity, or cross-process format. The
+records remain private to the test fixture until a report, CLI, or batch runner
+becomes a real consumer. Successful-run reductions also do not yet represent
+typed capacity or completion rejection outcomes.
+
 ## Preparatory B migration witness
 
 `PreparatoryBaseMigrationPlanner` accepts an explicit, nonempty set of live
@@ -577,10 +626,10 @@ The current canonical prefix proof reports `RejectedUnproven` when it cannot
 construct that witness; this is not a proof that no completion exists. The
 continuous caller script, fixed-schedule migration comparison, and
 `DebtZeroThenRotate` progress baseline are now closed without choosing a weighted
-winner. The next slice can reduce their realized and counterfactual observations
-into explicitly labelled, unweighted epoch/run facts. A bounded reference explorer
-still waits for a concrete conservative rejection or suspected heuristic
-false-negative.
+winner. Their scope-safe realized/counterfactual observation reductions are also
+closed. The next slice can isolate changed A-debt Update Base-versus-Delta behavior
+under one frozen workload and target schedule. A bounded reference explorer still
+waits for a concrete conservative rejection or suspected heuristic false-negative.
 
 The rejected forwarding alternatives and their executable comparison are
 preserved by annotated tag `research/relay-vs-relay-free-20260829` and DB-009.

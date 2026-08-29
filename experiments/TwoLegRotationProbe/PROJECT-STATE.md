@@ -2,7 +2,7 @@
 
 > 状态：Active Research Context
 >
-> 最近校准：2026-08-29
+> 最近校准：2026-08-30
 >
 > 读者：继续研究本子项目的 Coding Agent 与维护者
 
@@ -55,8 +55,8 @@ current reconstruction dependency。
 - changed object 写 Delta@B：保留原 debt 状态；
 - selected unchanged debt object 写 same-state Base@B：移除 debt。
 
-因此同一 epoch 内 debt ObjectId set 单调不增，但 debt 对象的完整 Base bytes、exact terminal-C cost
-和 B headroom 未必单调。
+因此同一 epoch 内 debt ObjectId set 单调不增，但 debt 对象的 Base payload bytes、exact terminal-C cost
+和 Current-file next-start slack 未必单调。
 
 规划前把 parent snapshot 与本次 changes 归一化为四个互斥集合：
 
@@ -134,6 +134,10 @@ PublishedRevision 为 shared prior-snapshot anchor。accepted new head 的 curre
 - test-local `DebtZeroThenRotate` 进展基线：target 只读本次 Save 之前的 source A-debt；四步 all-cold
   trace 中 no-migration 完成有限前缀但保留 deferred debt，paced-one-debt 前三步清债并只在第四次 Save
   真正轮转；completion certificate 明确保持为反事实可行性证据，不算策略进展；
+- test-local rotation observation reductions：每个 realized step 冻结各自 scope 下的 source/result debt、
+  live-object reconstruction Previous Frames、Current tail/next-start slack 与写入分项；连续 SourceScope
+  归成 observed epoch，Rotate 属于并关闭旧 epoch；certificate terminal-C 单独标记为 counterfactual，
+  不进入 realized totals/peaks；一个两 epoch witness 已验证 `A/B -> B/C -> C/D` 的跨步连续性；
 - caller-selected B same-state Base migration plan/append witness；
 - relay-free immediate A/B -> B/C plan/append、shared anchor、B/C closure witness；
 - 多批 B migration 使原本放不下的 C evacuation 可编码的容量 witness；
@@ -141,52 +145,48 @@ PublishedRevision 为 shared prior-snapshot anchor。accepted new head 的 curre
 
 Stay-B 与 Rotate-C 已接入同一 per-Save facts、paired evaluation、显式 apply、保守 completion proof 与
 连续多轮转调用节奏。当前连续 witness 仍是 test-local caller script，不是自动策略或通用 Runner。
-当前新增对照只研究外部固定轮转日程下的迁债节奏，不代表自动 rotation trigger 已解决。
+当前对照覆盖外部固定日程与故意保守的 `DebtZeroThenRotate` trigger，仍不代表自动 pressure-aware
+rotation trigger 已解决。
 
 ## 当前研究焦点
 
-固定日程和 `DebtZeroThenRotate` 两个因果基线已经闭合。后者证明：只看 source debt 的保守 trigger
-本身不会替策略清债；在无 foreground 清债且 accepted Save 持续发生的有限前缀中，no-migration 会把
-轮转义务留到观察窗外，而 paced-one-debt 能在清零后的下一次 Save 真正换腿。
+rotation observation reductions 已闭合 scope、写入量和 realized/counterfactual 分栏：换腿后的 debt
+必须在新 scope 中解释；`PreviousFrameBytes` 只表示 live-object current reconstruction 所需的去重完整
+Frame，不是累计 IO；next-start slack 只表示地址起点可编码余量，不是文件容量。当前类型继续 test-local，
+因为尚无报告、CLI 或 batch consumer。
 
-下一步转向 **rotation observation reductions**：从 realized steps、source facts、cursor 和已标注为
-counterfactual 的 certificate terminal observation 中整理 epoch/run 级无权重原始量，先验证指标定义和
-参照系，再比较 pressure-aware 候选。target 与 migration selection 继续留在 test-local caller；已提取的
-单步 harness 仍只负责 admission/apply，不升级为有状态 Runner 或 policy interface。
+下一步转向首个 **changed A-debt write-mode discriminator**：在同一 handwritten Update trace 与固定
+target 日程下，只改变仍以 A 为 terminating Base 的 changed object 写 Delta 还是 Base，观察 foreground
+写入、A debt、Previous reconstruction Frames、terminal-C 与 realized peak 的事实差异。这个 treatment
+用于隔离“自然领域变化能否顺便清债”，不选择 winner，也不把固定日程升级为产品 trigger。
 
 ## 下一编码切片
 
-闭合一个 **rotation observation reductions probe**：
+闭合一个 **changed A-debt write-mode probe**：
 
 ```text
-realized step facts
-    -> source/result scope + debt count/full-Base bytes
-    -> Previous unique frames/bytes + B tail/headroom
-    -> foreground/migration/append bytes + realized rotation count/leg length
-counterfactual certificate terminal
-    -> separately labelled exact terminal-C estimate
+same frozen Update trace + same fixed target schedule
+    control: changed A-debt -> legal Delta
+    treatment: changed A-debt -> Base
+    unchanged migration: none in both runs
+    compare: foreground/append + scoped debt/reconstruction + terminal-C
 ```
 
-先让现有两个比较实验产出 test-local value projection，并用定义守恒、scope 切换和 deterministic replay
-锁定语义。不得把 counterfactual terminal 当 realized write，不定义 `TotalReadBytes`、加权总分或 winner；
-只有出现报告、CLI 或 batch consumer 后才提取稳定 run/epoch 类型。
+只为第三种结构不同的 decision caller 做必要的 test-local selector 收口；不建立通用 policy interface 或
+有状态 Runner。Update Base/Delta 两侧都走现有 exact candidate、completion admission 与 apply seam；
+保持 input-order/deterministic projection、逻辑状态与两文件 closure 闸门。
 
 ## 近期 roadmap
 
-1. **Rotation observation reductions**
-   - 记录 debt count/full-Base bytes、Previous unique frames/bytes、B tail/headroom、domain/migration bytes、
-     exact terminal-C estimate、per-Save/rotation peak、leg length、rotation count 与保守拒绝；
-   - 首先由现有 `CandidateRawObservation` 与 cursor/certificate 做 test-local value projection；只有报告或
-     batch consumer 出现后才固化 run/epoch 类型；
-   - 保留原始量，不预设总分，报告 Pareto 与明显 dead-end/振荡。
-2. **扩充策略与 workload**
-   - Touch/ChangedDebtFirst 与 pressure-aware target/migration 候选；
+1. **扩充策略与 workload**
+   - 先做 changed A-debt Base/Delta 因果对照，再组合 paced cold migration；
+   - 随证据加入 pressure-aware target/migration 候选；
    - stable hot/cold、burst、size distribution 和更长 fixed-seed traces。
-3. **按证据加入 bounded explorer**
+2. **按证据加入 bounded explorer**
    - 仅在出现具体 `RejectedUnproven`、`RejectedCapacityUnsearched` 或疑似 heuristic false-negative 后，
      冻结该小状态；
    - 用同一 unified action builder 做 canonical bounded search；`NotFoundWithinBounds` 不外推一般无解。
-4. **再研究自适应策略**
+3. **再研究自适应策略**
    - 根据连续运行暴露的压力、峰值和反例设计 capacity/pressure-aware 候选，而不是先冻结权重。
 
 ## 未闭合事项
@@ -196,8 +196,12 @@ counterfactual certificate terminal
 - 除 `DebtZeroThenRotate` 这个故意保守的 baseline 外，哪些无隐藏权重的 pressure facts 足以触发轮转；
 - selected action 的 `RejectedUnproven` 在 batch report 中如何表达；当前 harness 只 typed stop、不 fallback，
   何时值得另立 repair policy 或交给 bounded explorer 仍待证据；
-- 第三个结构不同的 caller、报告或 batch consumer 是否会证明需要提取稳定 trace runner/run outcome；当前
-  只有同一比较 fixture 内的 test-local target selector、value projection 和无状态单步 admission/apply；
+- changed-debt 第三个结构不同的 decision caller 是否足以证明需要收口 test-local decision selector；稳定
+  trace runner/run outcome 仍等待报告、CLI 或 batch consumer；
+- successful-run reduction 尚不表达 selected capacity / completion `RejectedUnproven`；出现真实 batch
+  termination consumer 时应另建 outcome，而不是伪造没有 result scope 的 realized step；
+- counterfactual terminal 当前只投影 final-C append/result 与 preparatory Stay count，不聚合互斥未来，
+  也不声称已观测 preparatory writes 或 terminal-source pressure；
 - stable hot/cold、burst、size distribution 与长 trace 是否先用 handwritten fixture，何时扩充 generator；
 - paced-one-debt baseline 之后，何种无隐藏权重的 pressure facts 最值得比较；
 - 多个不可支配策略出现后，何时需要用户用真实 workload/SLO 选择产品默认值。

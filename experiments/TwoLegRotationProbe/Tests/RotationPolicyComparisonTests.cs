@@ -15,6 +15,13 @@ public sealed class RotationPolicyComparisonTests {
         CandidateTarget.RotateC,
     ];
 
+    private static readonly CandidateTarget[] TwoEpochTargets = [
+        CandidateTarget.StayB,
+        CandidateTarget.RotateC,
+        CandidateTarget.StayB,
+        CandidateTarget.RotateC,
+    ];
+
     [Fact]
     public void Paced_one_debt_comparison_is_causal_over_one_shared_trace() {
         PolicySource source = CreateSource();
@@ -106,13 +113,36 @@ public sealed class RotationPolicyComparisonTests {
 
         Assert.Equal([2, 2, 3], lazy.Steps.Select(static step => step.FileCountAfterApply));
         Assert.Equal([2, 2, 3], paced.Steps.Select(static step => step.FileCountAfterApply));
-        AssertImmediatePostStayTerminalCandidates(lazy);
-        AssertImmediatePostStayTerminalCandidates(paced);
+        AssertCounterfactualTerminalCandidates(lazy);
+        AssertCounterfactualTerminalCandidates(paced);
         Assert.All(
             lazy.Steps.Take(2).Zip(paced.Steps.Take(2)),
             pair => Assert.True(
-                pair.Second.ImmediatePostStayTerminal!.Layout.AppendLengthBytes <
-                pair.First.ImmediatePostStayTerminal!.Layout.AppendLengthBytes));
+                pair.Second.Observation.CounterfactualTerminalC!.AppendBytes <
+                pair.First.Observation.CounterfactualTerminalC!.AppendBytes));
+
+        AssertRunObservationConsistency(lazy);
+        AssertRunObservationConsistency(paced);
+        AssertSingleObservedEpoch(
+            lazy,
+            expectedSaveCount: 3,
+            expectedStayCount: 2,
+            expectedClosedByRotation: true);
+        AssertSingleObservedEpoch(
+            paced,
+            expectedSaveCount: 3,
+            expectedStayCount: 2,
+            expectedClosedByRotation: true);
+        Assert.Equal(1, lazy.Reduction.RotationCount);
+        Assert.Equal(1, paced.Reduction.RotationCount);
+        Assert.Equal(2, CountCounterfactualTerminals(lazy));
+        Assert.Equal(2, CountCounterfactualTerminals(paced));
+        Assert.True(
+            paced.Reduction.PeakRealizedSaveAppendBytes <
+            lazy.Reduction.PeakRealizedSaveAppendBytes);
+        Assert.True(
+            paced.Reduction.PeakRealizedRotationAppendBytes <
+            lazy.Reduction.PeakRealizedRotationAppendBytes);
 
         PolicyRun lazyReplay = Run(
             trace,
@@ -126,8 +156,14 @@ public sealed class RotationPolicyComparisonTests {
             CreateCursor(source),
             paceOneDebtObject: true,
             SelectFixedTarget);
-        Assert.Equal(DescribeRun(lazy), DescribeRun(lazyReplay));
-        Assert.Equal(DescribeRun(paced), DescribeRun(pacedReplay));
+        // This compares the explicit observation value projection, not a Store or
+        // execution transcript.
+        Assert.Equal(
+            DescribeReduction(lazy.Reduction),
+            DescribeReduction(lazyReplay.Reduction));
+        Assert.Equal(
+            DescribeReduction(paced.Reduction),
+            DescribeReduction(pacedReplay.Reduction));
 
         Assert.Equal(2, source.Store.FileCount);
         Assert.Equal(1, source.Store.GetFile(2).FrameCount);
@@ -175,9 +211,7 @@ public sealed class RotationPolicyComparisonTests {
             lazy.Steps,
             step => {
                 Assert.NotNull(step.CompletionCertificate);
-                CandidateRawObservation terminal = Assert.IsType<
-                    CandidateRawObservation>(step.ImmediatePostStayTerminal);
-                Assert.Equal(CandidateTarget.RotateC, terminal.Target);
+                Assert.NotNull(step.Observation.CounterfactualTerminalC);
                 Assert.Equal(2, step.FileCountAfterApply);
             });
         Assert.Equal(
@@ -213,6 +247,23 @@ public sealed class RotationPolicyComparisonTests {
         Assert.Equal(1, CountActualRotations(paced));
         Assert.Equal(PolicyRunProgress.RealizedRotation, ClassifyProgress(paced));
 
+        AssertRunObservationConsistency(lazy);
+        AssertRunObservationConsistency(paced);
+        AssertSingleObservedEpoch(
+            lazy,
+            expectedSaveCount: 4,
+            expectedStayCount: 4,
+            expectedClosedByRotation: false);
+        AssertSingleObservedEpoch(
+            paced,
+            expectedSaveCount: 4,
+            expectedStayCount: 3,
+            expectedClosedByRotation: true);
+        Assert.Equal(0, lazy.Reduction.RotationCount);
+        Assert.Equal(1, paced.Reduction.RotationCount);
+        Assert.Equal(4, CountCounterfactualTerminals(lazy));
+        Assert.Equal(3, CountCounterfactualTerminals(paced));
+
         PolicyStep pacedThird = paced.Steps[2];
         Assert.Empty(
             pacedThird.SelectedObservation.PostLiveReconstruction
@@ -221,10 +272,7 @@ public sealed class RotationPolicyComparisonTests {
         Assert.Equal(2U, pacedThird.ResultCursor.FileScope.CurrentFileNumber);
         Assert.Equal(2, pacedThird.FileCountAfterApply);
         Assert.NotNull(pacedThird.CompletionCertificate);
-        Assert.Equal(
-            CandidateTarget.RotateC,
-            Assert.IsType<CandidateRawObservation>(
-                pacedThird.ImmediatePostStayTerminal).Target);
+        Assert.NotNull(pacedThird.Observation.CounterfactualTerminalC);
         Assert.False(pacedThird.ActualRotation);
         WorkloadTrace pacedPrefixTrace = new(
             scenarioName: "debt-zero-awaiting-next-save",
@@ -251,7 +299,7 @@ public sealed class RotationPolicyComparisonTests {
         Assert.Equal(3, pacedFourth.FileCountAfterApply);
         Assert.True(pacedFourth.ActualRotation);
         Assert.Null(pacedFourth.CompletionCertificate);
-        Assert.Null(pacedFourth.ImmediatePostStayTerminal);
+        Assert.Null(pacedFourth.Observation.CounterfactualTerminalC);
         Assert.Equal(
             [10U, 20U, 30U, 1001U, 1002U, 1003U],
             pacedFourth.SelectedObservation.PostLiveReconstruction
@@ -264,6 +312,13 @@ public sealed class RotationPolicyComparisonTests {
             3,
             pacedFourth.SelectedObservation.PostLiveReconstruction
                 .PreviousFileUniqueFrameCount);
+        Assert.Equal(
+            new CanonicalObjectIds([10, 20, 30, 1001, 1002, 1003]),
+            pacedFourth.Observation.Result.PreviousDebtObjectIds);
+        Assert.Equal(
+            603L,
+            pacedFourth.Observation.Result.PreviousDebtBasePayloadBytes);
+        Assert.Equal(3, pacedFourth.Observation.Result.PreviousUniqueFrameCount);
 
         PolicyRun lazyReplay = Run(
             trace,
@@ -277,12 +332,58 @@ public sealed class RotationPolicyComparisonTests {
             CreateCursor(source),
             paceOneDebtObject: true,
             SelectDebtZeroThenRotateTarget);
-        Assert.Equal(DescribeRun(lazy), DescribeRun(lazyReplay));
-        Assert.Equal(DescribeRun(paced), DescribeRun(pacedReplay));
+        // This compares the explicit observation value projection, not a Store or
+        // execution transcript.
+        Assert.Equal(
+            DescribeReduction(lazy.Reduction),
+            DescribeReduction(lazyReplay.Reduction));
+        Assert.Equal(
+            DescribeReduction(paced.Reduction),
+            DescribeReduction(pacedReplay.Reduction));
 
         Assert.Equal(2, source.Store.FileCount);
         Assert.Equal(1, source.Store.GetFile(1).FrameCount);
         Assert.Equal(1, source.Store.GetFile(2).FrameCount);
+    }
+
+    [Fact]
+    public void Reduction_groups_two_realized_rotation_epochs() {
+        PolicySource source = CreateSource();
+        WorkloadTrace trace = CreateDebtZeroThenRotateTrace();
+        PolicyRun run = Run(
+            trace,
+            source.Store.ForkForProbe(),
+            CreateCursor(source),
+            paceOneDebtObject: false,
+            static (index, _) => TwoEpochTargets[index]);
+
+        AssertRunObservationConsistency(run);
+        Assert.Equal(2, run.Reduction.Epochs.Count);
+        RotationEpochObservation first = run.Reduction.Epochs[0];
+        RotationEpochObservation second = run.Reduction.Epochs[1];
+        Assert.Equal(new ScopeValue(1, 2), first.SourceScope);
+        Assert.Equal(new ScopeValue(2, 3), second.SourceScope);
+        Assert.Equal(2, first.ObservedSaveCount);
+        Assert.Equal(2, second.ObservedSaveCount);
+        Assert.Equal(1, first.StayCount);
+        Assert.Equal(1, second.StayCount);
+        Assert.True(first.ClosedByRotation);
+        Assert.True(second.ClosedByRotation);
+        Assert.Equal(
+            run.Steps[1].Observation.Result,
+            run.Steps[2].Observation.Source);
+        Assert.Equal(new ScopeValue(3, 4), run.Steps[^1].Observation.Result.Scope);
+        Assert.Equal(2, run.Reduction.RotationCount);
+
+        PolicyRun replay = Run(
+            trace,
+            source.Store.ForkForProbe(),
+            CreateCursor(source),
+            paceOneDebtObject: false,
+            static (index, _) => TwoEpochTargets[index]);
+        Assert.Equal(
+            DescribeReduction(run.Reduction),
+            DescribeReduction(replay.Reduction));
     }
 
     private static PolicyRun Run(
@@ -308,6 +409,10 @@ public sealed class RotationPolicyComparisonTests {
                 cursor.FileScope.CurrentFileNumber,
                 cursor.PublishedRevisionAddress,
                 saveStep);
+            ScopedStateObservation sourceObservation = ObserveSource(
+                store,
+                facts,
+                cursor);
             uint[] sourcePreviousDebtObjectIds =
                 GetSourcePreviousDebtObjectIds(facts);
             CandidateTarget target = selectTarget(index, facts);
@@ -331,9 +436,7 @@ public sealed class RotationPolicyComparisonTests {
                     pair,
                     target);
             CandidateRawObservation selectedObservation;
-            CandidateRawObservation? immediatePostStayTerminal = null;
             CanPrepareAndRotateCertificate? completionCertificate = null;
-            bool actualRotation = false;
             switch (attempt) {
                 case AppliedStayBPolicyStep appliedStay:
                     Assert.Equal(CandidateTarget.StayB, target);
@@ -342,8 +445,6 @@ public sealed class RotationPolicyComparisonTests {
                     Assert.Empty(appliedStay.CompletionCertificate.MaintenanceStayBSteps);
                     selectedObservation = appliedStay.Selected.Observation;
                     completionCertificate = appliedStay.CompletionCertificate;
-                    immediatePostStayTerminal =
-                        appliedStay.CompletionCertificate.FinalRotateC.Observation;
                     cursor = appliedStay.ResultCursor;
                     break;
                 case AppliedRotateCPolicyStep appliedRotate:
@@ -351,7 +452,6 @@ public sealed class RotationPolicyComparisonTests {
                     Assert.Same(pair, appliedRotate.Evaluation);
                     selectedObservation = appliedRotate.Selected.Observation;
                     cursor = appliedRotate.ResultCursor;
-                    actualRotation = true;
                     break;
                 default:
                     throw new InvalidOperationException(
@@ -361,16 +461,29 @@ public sealed class RotationPolicyComparisonTests {
             ApplyExpectedState(expectedState, saveStep);
             AssertExactState(expectedState, facts.PostLiveStates);
             AssertRuntimeStateAndClosure(store, cursor, expectedState);
+            bool actualRotation = attempt is AppliedRotateCPolicyStep;
+            RealizedStepObservation observation = new(
+                index,
+                target,
+                sourceObservation,
+                ObserveResult(selectedObservation, cursor),
+                selectedObservation.ForegroundDomainRecordBytes,
+                selectedObservation.MaintenanceDomainRecordBytes,
+                GetNonDomainAppendBytes(selectedObservation),
+                selectedObservation.Layout.AppendLengthBytes,
+                actualRotation,
+                completionCertificate is null
+                    ? null
+                    : ObserveCounterfactualTerminal(completionCertificate));
             steps.Add(new PolicyStep(
                 target,
                 sourcePreviousDebtObjectIds,
                 GetMaintenanceObjectIds(facts, selectedObservation),
                 selectedObservation,
-                immediatePostStayTerminal,
                 completionCertificate,
                 cursor,
                 store.FileCount,
-                actualRotation));
+                observation));
         }
 
         return new PolicyRun(trace, store, steps);
@@ -395,6 +508,89 @@ public sealed class RotationPolicyComparisonTests {
         .Order()
         .ToArray();
 
+    private static ScopedStateObservation ObserveSource(
+        RbfFileStore store,
+        NormalizedSaveFacts facts,
+        ProbeRevisionCursor cursor) {
+        ScopeValue scope = ScopeValue.From(cursor.FileScope);
+        if (scope.PreviousFileNumber != facts.PreviousFileNumber ||
+            scope.CurrentFileNumber != facts.CurrentFileNumber ||
+            cursor.PublishedRevisionAddress != facts.PublishedRevisionAddress ||
+            store.GetFile(scope.CurrentFileNumber).TailOffsetBytes !=
+                cursor.CurrentFileTailOffsetBytes) {
+            throw new InvalidDataException(
+                "Source observation requires facts, cursor, and Store at one exact source.");
+        }
+
+        SourceObjectFact[] debt = facts.ParentLive.Values
+            .Where(source => source.BaseAddress.FileNumber == scope.PreviousFileNumber)
+            .OrderBy(static source => source.ObjectId)
+            .ToArray();
+        AbsoluteFrameAddress[] previousFrames = facts.ParentLive.Values
+            .SelectMany(static source => source.ReconstructionFrameAddresses)
+            .Where(address => address.FileNumber == scope.PreviousFileNumber)
+            .Distinct()
+            .OrderBy(static address => address.FrameTicket.OffsetBytes)
+            .ThenBy(static address => address.FrameTicket.LengthBytes)
+            .ToArray();
+        long previousFrameBytes = previousFrames.Sum(address =>
+            (long)store.ReadLayout(address).FrameLengthBytes);
+        return new ScopedStateObservation(
+            scope,
+            new CanonicalObjectIds(debt.Select(static source => source.ObjectId)),
+            debt.Sum(static source => (long)source.State.BasePayloadBytes),
+            previousFrames.Length,
+            previousFrameBytes,
+            cursor.CurrentFileTailOffsetBytes,
+            GetNextFrameStartSlack(cursor.CurrentFileTailOffsetBytes));
+    }
+
+    private static ScopedStateObservation ObserveResult(
+        CandidateRawObservation observation,
+        ProbeRevisionCursor resultCursor) => ProjectResult(
+            observation,
+            resultCursor.CurrentFileTailOffsetBytes);
+
+    private static ScopedStateObservation ProjectResult(
+        CandidateRawObservation observation,
+        long currentTailOffsetBytes) {
+        CandidateReconstructionObservation reconstruction =
+            observation.PostLiveReconstruction;
+        return new ScopedStateObservation(
+            ScopeValue.From(reconstruction.ResultScope),
+            new CanonicalObjectIds(
+                reconstruction.PreviousFileDependentObjectIds),
+            reconstruction.PreviousFileDependentBasePayloadBytes,
+            reconstruction.PreviousFileUniqueFrameCount,
+            reconstruction.PreviousFileFrameBytes,
+            currentTailOffsetBytes,
+            GetNextFrameStartSlack(currentTailOffsetBytes));
+    }
+
+    private static CounterfactualTerminalCObservation
+        ObserveCounterfactualTerminal(
+            CanPrepareAndRotateCertificate certificate) {
+        CandidateRawObservation terminal = certificate.FinalRotateC.Observation;
+        return new CounterfactualTerminalCObservation(
+            certificate.MaintenanceStayBSteps.Count,
+            ScopeValue.FromFacts(terminal.Facts),
+            ProjectResult(terminal, terminal.Layout.TailOffsetAfterBytes),
+            terminal.ForegroundDomainRecordBytes,
+            terminal.MaintenanceDomainRecordBytes,
+            GetNonDomainAppendBytes(terminal),
+            terminal.Layout.AppendLengthBytes);
+    }
+
+    private static int GetNonDomainAppendBytes(
+        CandidateRawObservation observation) => checked(
+        observation.Layout.AppendLengthBytes -
+        observation.ForegroundDomainRecordBytes -
+        observation.MaintenanceDomainRecordBytes);
+
+    private static long GetNextFrameStartSlack(long currentTailOffsetBytes) =>
+        RbfV040Layout.MaxDurableGraphRelativeFrameStartOffsetBytes -
+        currentTailOffsetBytes;
+
     private static uint[] SelectSmallestPreviousDebtNoChange(
         NormalizedSaveFacts facts) => facts.NoChanges
         .Where(fact => fact.Source.BaseAddress.FileNumber == facts.PreviousFileNumber)
@@ -415,21 +611,24 @@ public sealed class RotationPolicyComparisonTests {
             .ToArray();
     }
 
-    private static void AssertImmediatePostStayTerminalCandidates(PolicyRun run) {
+    private static void AssertCounterfactualTerminalCandidates(PolicyRun run) {
         foreach (PolicyStep step in run.Steps.Take(2)) {
             CanPrepareAndRotateCertificate certificate = Assert.IsType<
                 CanPrepareAndRotateCertificate>(step.CompletionCertificate);
-            CandidateRawObservation terminal = Assert.IsType<
-                CandidateRawObservation>(step.ImmediatePostStayTerminal);
+            CandidateRawObservation terminal = certificate.FinalRotateC.Observation;
+            CounterfactualTerminalCObservation projected = Assert.IsType<
+                CounterfactualTerminalCObservation>(
+                    step.Observation.CounterfactualTerminalC);
             Assert.Empty(certificate.MaintenanceStayBSteps);
-            Assert.Same(certificate.FinalRotateC.Observation, terminal);
             Assert.Equal(CandidateTarget.RotateC, terminal.Target);
+            Assert.Equal(0, projected.PreparatoryStayCount);
+            Assert.Equal(terminal.Layout.AppendLengthBytes, projected.AppendBytes);
             Assert.Equal(3U, terminal.Candidate.FileNumber);
             Assert.Equal(2, step.FileCountAfterApply);
         }
 
         Assert.Null(run.Steps[^1].CompletionCertificate);
-        Assert.Null(run.Steps[^1].ImmediatePostStayTerminal);
+        Assert.Null(run.Steps[^1].Observation.CounterfactualTerminalC);
     }
 
     private static int MaxRealizedAppendBytes(PolicyRun run) => run.Steps
@@ -458,6 +657,9 @@ public sealed class RotationPolicyComparisonTests {
     private static int CountActualRotations(PolicyRun run) => run.Steps
         .Count(static step => step.ActualRotation);
 
+    private static int CountCounterfactualTerminals(PolicyRun run) => run.Steps
+        .Count(static step => step.Observation.CounterfactualTerminalC is not null);
+
     private static PolicyRunProgress ClassifyProgress(PolicyRun run) {
         ArgumentNullException.ThrowIfNull(run);
         if (run.Steps.Count == 0) {
@@ -483,23 +685,329 @@ public sealed class RotationPolicyComparisonTests {
             "A debt-free run without an applied Rotate awaits another Save and is not stalled.");
     }
 
-    private static string[] DescribeRun(PolicyRun run) => run.Steps
-        .Select(static step =>
-            $"{step.Target}:{string.Join(',', step.MaintenanceObjectIds)}:" +
-            $"source={string.Join(',', step.SourcePreviousDebtObjectIds)}:" +
-            $"rotated={step.ActualRotation}:" +
-            $"scope={step.SelectedObservation.Facts.PreviousFileNumber}/" +
-            $"{step.SelectedObservation.Facts.CurrentFileNumber}->" +
-            $"{step.ResultCursor.FileScope.PreviousFileNumber}/" +
-            $"{step.ResultCursor.FileScope.CurrentFileNumber}:" +
-            $"{step.SelectedObservation.ForegroundDomainRecordBytes}:" +
-            $"{step.SelectedObservation.MaintenanceDomainRecordBytes}:" +
-            $"{step.SelectedObservation.Layout.AppendLengthBytes}:" +
-            $"{string.Join(',', step.SelectedObservation.PostLiveReconstruction.PreviousFileDependentObjectIds)}:" +
-            $"{step.SelectedObservation.PostLiveReconstruction.PreviousFileDependentBasePayloadBytes}:" +
-            $"{step.SelectedObservation.PostLiveReconstruction.PreviousFileFrameBytes}:" +
-            $"terminal={step.ImmediatePostStayTerminal?.Layout.AppendLengthBytes}")
-        .ToArray();
+    private static RotationRunReduction Reduce(IReadOnlyList<PolicyStep> steps) {
+        RealizedStepObservation[] realized = steps
+            .Select(static step => step.Observation)
+            .ToArray();
+        List<RotationEpochObservation> epochs = [];
+        int epochStart = 0;
+        while (epochStart < realized.Length) {
+            ScopeValue scope = realized[epochStart].Source.Scope;
+            int epochEnd = epochStart + 1;
+            while (epochEnd < realized.Length &&
+                realized[epochEnd].Source.Scope == scope) {
+                epochEnd++;
+            }
+
+            RealizedStepObservation[] epochSteps = realized[epochStart..epochEnd];
+            int rotationCount = epochSteps.Count(static step => step.ActualRotation);
+            if (rotationCount > 1 ||
+                (rotationCount == 1 && !epochSteps[^1].ActualRotation)) {
+                throw new InvalidDataException(
+                    "A realized Rotate must be the last and only scope-closing Save in its epoch.");
+            }
+
+            RealizedByteTotals totals = SumRealizedBytes(epochSteps);
+            epochs.Add(new RotationEpochObservation(
+                scope,
+                epochSteps,
+                epochSteps.Length,
+                epochSteps.Count(static step =>
+                    step.Target == CandidateTarget.StayB),
+                rotationCount == 1,
+                totals,
+                epochSteps.Max(static step => step.AppendBytes),
+                rotationCount == 1 ? epochSteps[^1].AppendBytes : null));
+            epochStart = epochEnd;
+        }
+
+        int[] rotationAppends = realized
+            .Where(static step => step.ActualRotation)
+            .Select(static step => step.AppendBytes)
+            .ToArray();
+        return new RotationRunReduction(
+            realized,
+            epochs.ToArray(),
+            SumRealizedBytes(realized),
+            realized.Length == 0
+                ? 0
+                : realized.Max(static step => step.AppendBytes),
+            rotationAppends.Length == 0 ? null : rotationAppends.Max(),
+            rotationAppends.Length);
+    }
+
+    private static RealizedByteTotals SumRealizedBytes(
+        IEnumerable<RealizedStepObservation> steps) => new(
+        steps.Sum(static step => (long)step.ForegroundDomainRecordBytes),
+        steps.Sum(static step => (long)step.MaintenanceDomainRecordBytes),
+        steps.Sum(static step => (long)step.NonDomainAppendBytes),
+        steps.Sum(static step => (long)step.AppendBytes));
+
+    private static void AssertRunObservationConsistency(PolicyRun run) {
+        Assert.Equal(run.Steps.Count, run.Reduction.Steps.Count);
+        for (int index = 0; index < run.Steps.Count; index++) {
+            PolicyStep step = run.Steps[index];
+            RealizedStepObservation observed = step.Observation;
+            CandidateRawObservation raw = step.SelectedObservation;
+            ScopeValue sourceScope = ScopeValue.FromFacts(raw.Facts);
+            ScopeValue resultScope = ScopeValue.From(
+                raw.PostLiveReconstruction.ResultScope);
+
+            Assert.Equal(index, observed.StepIndex);
+            Assert.Equal(step.Target, observed.Target);
+            Assert.Equal(sourceScope, observed.Source.Scope);
+            Assert.Equal(resultScope, observed.Result.Scope);
+            Assert.Equal(resultScope, ScopeValue.From(step.ResultCursor.FileScope));
+            Assert.Equal(raw.Candidate.FileNumber, resultScope.CurrentFileNumber);
+            Assert.Equal(
+                raw.Layout.TailOffsetAfterBytes,
+                observed.Result.CurrentTailOffsetBytes);
+            Assert.Equal(
+                GetNextFrameStartSlack(observed.Source.CurrentTailOffsetBytes),
+                observed.Source.NextFrameStartSlackBytes);
+            Assert.Equal(
+                GetNextFrameStartSlack(observed.Result.CurrentTailOffsetBytes),
+                observed.Result.NextFrameStartSlackBytes);
+            Assert.Equal(
+                new CanonicalObjectIds(step.SourcePreviousDebtObjectIds),
+                observed.Source.PreviousDebtObjectIds);
+            Assert.Equal(
+                new CanonicalObjectIds(
+                    raw.PostLiveReconstruction.PreviousFileDependentObjectIds),
+                observed.Result.PreviousDebtObjectIds);
+            Assert.Equal(
+                raw.PostLiveReconstruction.PreviousFileDependentBasePayloadBytes,
+                observed.Result.PreviousDebtBasePayloadBytes);
+            Assert.Equal(
+                raw.PostLiveReconstruction.PreviousFileUniqueFrameCount,
+                observed.Result.PreviousUniqueFrameCount);
+            Assert.Equal(
+                raw.PostLiveReconstruction.PreviousFileFrameBytes,
+                observed.Result.PreviousFrameBytes);
+            Assert.Equal(
+                raw.Estimate.DomainRecords.Sum(static record =>
+                    record.FullRecordBytes),
+                observed.ForegroundDomainRecordBytes +
+                    observed.MaintenanceDomainRecordBytes);
+            Assert.Equal(
+                observed.AppendBytes,
+                observed.ForegroundDomainRecordBytes +
+                    observed.MaintenanceDomainRecordBytes +
+                    observed.NonDomainAppendBytes);
+            Assert.True(observed.NonDomainAppendBytes >= 0);
+            Assert.Equal(step.ActualRotation, observed.ActualRotation);
+            Assert.Equal(
+                step.Target == CandidateTarget.RotateC,
+                observed.ActualRotation);
+
+            if (observed.Target == CandidateTarget.StayB) {
+                Assert.Equal(observed.Source.Scope, observed.Result.Scope);
+                Assert.Equal(
+                    observed.Source.CurrentTailOffsetBytes + observed.AppendBytes,
+                    observed.Result.CurrentTailOffsetBytes);
+                Assert.True(observed.Result.PreviousDebtObjectIds.IsSubsetOf(
+                    observed.Source.PreviousDebtObjectIds));
+            } else {
+                Assert.Equal(
+                    observed.Source.Scope.CurrentFileNumber,
+                    observed.Result.Scope.PreviousFileNumber);
+                Assert.Equal(
+                    checked(observed.Source.Scope.CurrentFileNumber + 1),
+                    observed.Result.Scope.CurrentFileNumber);
+                Assert.Equal(
+                    RbfV040Layout.InitialTailOffsetBytes,
+                    raw.Layout.FrameStartOffsetBytes);
+            }
+
+            AssertCounterfactualConsistency(step);
+            if (index != 0) {
+                Assert.Equal(
+                    run.Steps[index - 1].Observation.Result,
+                    observed.Source);
+            }
+        }
+
+        AssertReductionConservation(run.Reduction);
+    }
+
+    private static void AssertCounterfactualConsistency(PolicyStep step) {
+        if (step.CompletionCertificate is null) {
+            Assert.Null(step.Observation.CounterfactualTerminalC);
+            return;
+        }
+
+        CanPrepareAndRotateCertificate certificate = step.CompletionCertificate;
+        CandidateRawObservation raw = certificate.FinalRotateC.Observation;
+        CounterfactualTerminalCObservation projected = Assert.IsType<
+            CounterfactualTerminalCObservation>(
+                step.Observation.CounterfactualTerminalC);
+        Assert.Equal(CandidateTarget.RotateC, raw.Target);
+        Assert.Equal(
+            certificate.MaintenanceStayBSteps.Count,
+            projected.PreparatoryStayCount);
+        AbsoluteFrameAddress expectedTerminalSource =
+            certificate.MaintenanceStayBSteps.Count == 0
+                ? step.ResultCursor.PublishedRevisionAddress
+                : certificate.MaintenanceStayBSteps[^1].Plan.Revision.Address;
+        Assert.Equal(
+            expectedTerminalSource,
+            raw.Facts.PublishedRevisionAddress);
+        Assert.Equal(ScopeValue.FromFacts(raw.Facts), projected.SourceScope);
+        Assert.Equal(
+            ScopeValue.From(raw.PostLiveReconstruction.ResultScope),
+            projected.Result.Scope);
+        Assert.Equal(
+            projected.SourceScope.CurrentFileNumber,
+            projected.Result.Scope.PreviousFileNumber);
+        Assert.Equal(
+            checked(projected.SourceScope.CurrentFileNumber + 1),
+            projected.Result.Scope.CurrentFileNumber);
+        Assert.Equal(
+            RbfV040Layout.InitialTailOffsetBytes,
+            raw.Layout.FrameStartOffsetBytes);
+        Assert.Equal(
+            raw.Layout.TailOffsetAfterBytes,
+            projected.Result.CurrentTailOffsetBytes);
+        Assert.Equal(
+            raw.ForegroundDomainRecordBytes,
+            projected.ForegroundDomainRecordBytes);
+        Assert.Equal(
+            raw.MaintenanceDomainRecordBytes,
+            projected.MaintenanceDomainRecordBytes);
+        Assert.Equal(GetNonDomainAppendBytes(raw), projected.NonDomainAppendBytes);
+        Assert.Equal(raw.Layout.AppendLengthBytes, projected.AppendBytes);
+        Assert.Equal(
+            projected.AppendBytes,
+            projected.ForegroundDomainRecordBytes +
+                projected.MaintenanceDomainRecordBytes +
+                projected.NonDomainAppendBytes);
+    }
+
+    private static void AssertReductionConservation(
+        RotationRunReduction reduction) {
+        RealizedByteTotals expectedTotals = SumRealizedBytes(reduction.Steps);
+        Assert.Equal(expectedTotals, reduction.RealizedTotals);
+        Assert.Equal(
+            reduction.Steps.Count == 0
+                ? 0
+                : reduction.Steps.Max(static step => step.AppendBytes),
+            reduction.PeakRealizedSaveAppendBytes);
+        int[] realizedRotationAppends = reduction.Steps
+            .Where(static step => step.ActualRotation)
+            .Select(static step => step.AppendBytes)
+            .ToArray();
+        Assert.Equal(realizedRotationAppends.Length, reduction.RotationCount);
+        Assert.Equal(
+            realizedRotationAppends.Length == 0
+                ? null
+                : realizedRotationAppends.Max(),
+            reduction.PeakRealizedRotationAppendBytes);
+        Assert.Equal(
+            reduction.Steps.Count(step => step.Source.Scope != step.Result.Scope),
+            reduction.RotationCount);
+        Assert.Equal(
+            reduction.Epochs.Count(static epoch => epoch.ClosedByRotation),
+            reduction.RotationCount);
+        Assert.Equal(reduction.Steps.Count, reduction.Epochs.Sum(static epoch =>
+            epoch.ObservedSaveCount));
+        RealizedStepObservation[] flattenedEpochSteps = reduction.Epochs
+            .SelectMany(static epoch => epoch.Steps)
+            .ToArray();
+        Assert.Equal(reduction.Steps.Count, flattenedEpochSteps.Length);
+        for (int index = 0; index < reduction.Steps.Count; index++) {
+            Assert.Same(reduction.Steps[index], flattenedEpochSteps[index]);
+        }
+
+        Assert.Equal(
+            reduction.RealizedTotals,
+            new RealizedByteTotals(
+                reduction.Epochs.Sum(static epoch =>
+                    epoch.RealizedTotals.ForegroundDomainRecordBytes),
+                reduction.Epochs.Sum(static epoch =>
+                    epoch.RealizedTotals.MaintenanceDomainRecordBytes),
+                reduction.Epochs.Sum(static epoch =>
+                    epoch.RealizedTotals.NonDomainAppendBytes),
+                reduction.Epochs.Sum(static epoch =>
+                    epoch.RealizedTotals.AppendBytes)));
+        foreach (RotationEpochObservation epoch in reduction.Epochs) {
+            Assert.NotEmpty(epoch.Steps);
+            Assert.Equal(epoch.ObservedSaveCount, epoch.Steps.Count);
+            Assert.All(
+                epoch.Steps,
+                step => Assert.Equal(epoch.SourceScope, step.Source.Scope));
+            Assert.Equal(
+                epoch.Steps.Count(static step =>
+                    step.Target == CandidateTarget.StayB),
+                epoch.StayCount);
+            Assert.Equal(SumRealizedBytes(epoch.Steps), epoch.RealizedTotals);
+            Assert.Equal(
+                epoch.Steps.Max(static step => step.AppendBytes),
+                epoch.PeakRealizedSaveAppendBytes);
+            Assert.Equal(
+                epoch.ClosedByRotation
+                    ? epoch.Steps[^1].AppendBytes
+                    : null,
+                epoch.RotationAppendBytes);
+            Assert.Equal(
+                epoch.ClosedByRotation,
+                epoch.Steps[^1].ActualRotation);
+            Assert.DoesNotContain(
+                epoch.Steps.Take(epoch.Steps.Count - 1),
+                static step => step.ActualRotation);
+        }
+    }
+
+    private static void AssertSingleObservedEpoch(
+        PolicyRun run,
+        int expectedSaveCount,
+        int expectedStayCount,
+        bool expectedClosedByRotation) {
+        RotationEpochObservation epoch = Assert.Single(run.Reduction.Epochs);
+        Assert.Equal(expectedSaveCount, epoch.ObservedSaveCount);
+        Assert.Equal(expectedStayCount, epoch.StayCount);
+        Assert.Equal(expectedClosedByRotation, epoch.ClosedByRotation);
+        Assert.Equal(
+            expectedClosedByRotation ? epoch.Steps[^1].AppendBytes : null,
+            epoch.RotationAppendBytes);
+    }
+
+    private static string[] DescribeReduction(RotationRunReduction reduction) => [
+        .. reduction.Steps.Select(static step =>
+            $"step={step.StepIndex}:{step.Target}:" +
+            $"source={DescribeScopedState(step.Source)}:" +
+            $"result={DescribeScopedState(step.Result)}:" +
+            $"bytes={step.ForegroundDomainRecordBytes}/" +
+            $"{step.MaintenanceDomainRecordBytes}/" +
+            $"{step.NonDomainAppendBytes}/{step.AppendBytes}:" +
+            $"rotation={step.ActualRotation}:" +
+            $"counterfactual={DescribeCounterfactual(step.CounterfactualTerminalC)}"),
+        .. reduction.Epochs.Select(static epoch =>
+            $"epoch={epoch.SourceScope}:saves={epoch.ObservedSaveCount}:" +
+            $"stays={epoch.StayCount}:closed={epoch.ClosedByRotation}:" +
+            $"totals={epoch.RealizedTotals}:" +
+            $"peak={epoch.PeakRealizedSaveAppendBytes}:" +
+            $"rotation={epoch.RotationAppendBytes}"),
+        $"run:totals={reduction.RealizedTotals}:" +
+            $"peak={reduction.PeakRealizedSaveAppendBytes}:" +
+            $"rotationPeak={reduction.PeakRealizedRotationAppendBytes}:" +
+            $"rotations={reduction.RotationCount}",
+    ];
+
+    private static string DescribeScopedState(ScopedStateObservation observed) =>
+        $"{observed.Scope}:debt={observed.PreviousDebtObjectIds}:" +
+        $"base={observed.PreviousDebtBasePayloadBytes}:" +
+        $"frames={observed.PreviousUniqueFrameCount}/" +
+        $"{observed.PreviousFrameBytes}:tail={observed.CurrentTailOffsetBytes}:" +
+        $"slack={observed.NextFrameStartSlackBytes}";
+
+    private static string DescribeCounterfactual(
+        CounterfactualTerminalCObservation? observed) => observed is null
+        ? "none"
+        : $"prep={observed.PreparatoryStayCount}:source={observed.SourceScope}:" +
+            $"result={DescribeScopedState(observed.Result)}:" +
+            $"bytes={observed.ForegroundDomainRecordBytes}/" +
+            $"{observed.MaintenanceDomainRecordBytes}/" +
+            $"{observed.NonDomainAppendBytes}/{observed.AppendBytes}";
 
     private static void ApplyExpectedState(
         IDictionary<uint, LogicalObjectState> expected,
@@ -662,7 +1170,9 @@ public sealed class RotationPolicyComparisonTests {
     private sealed record PolicyRun(
         WorkloadTrace SourceTrace,
         RbfFileStore Store,
-        IReadOnlyList<PolicyStep> Steps);
+        IReadOnlyList<PolicyStep> Steps) {
+        public RotationRunReduction Reduction => Reduce(Steps);
+    }
 
     private enum PolicyRunProgress {
         CompletedTraceWithDeferredPreviousDebt,
@@ -674,9 +1184,113 @@ public sealed class RotationPolicyComparisonTests {
         IReadOnlyList<uint> SourcePreviousDebtObjectIds,
         IReadOnlyList<uint> MaintenanceObjectIds,
         CandidateRawObservation SelectedObservation,
-        CandidateRawObservation? ImmediatePostStayTerminal,
         CanPrepareAndRotateCertificate? CompletionCertificate,
         ProbeRevisionCursor ResultCursor,
         int FileCountAfterApply,
-        bool ActualRotation);
+        RealizedStepObservation Observation) {
+        public bool ActualRotation => Observation.ActualRotation;
+    }
+
+    private readonly record struct ScopeValue(
+        uint PreviousFileNumber,
+        uint CurrentFileNumber) {
+        public static ScopeValue From(FileScope scope) => new(
+            scope.PreviousFileNumber ?? throw new InvalidDataException(
+                "Rotation observations require a two-file scope."),
+            scope.CurrentFileNumber);
+
+        public static ScopeValue FromFacts(NormalizedSaveFacts facts) => new(
+            facts.PreviousFileNumber,
+            facts.CurrentFileNumber);
+
+        public override string ToString() =>
+            $"{PreviousFileNumber}/{CurrentFileNumber}";
+    }
+
+    private sealed class CanonicalObjectIds : IEquatable<CanonicalObjectIds> {
+        private readonly uint[] _values;
+
+        public CanonicalObjectIds(IEnumerable<uint> values) {
+            ArgumentNullException.ThrowIfNull(values);
+            _values = values.Distinct().Order().ToArray();
+        }
+
+        public int Count => _values.Length;
+
+        public bool IsSubsetOf(CanonicalObjectIds other) {
+            ArgumentNullException.ThrowIfNull(other);
+            return _values.All(other._values.Contains);
+        }
+
+        public bool Equals(CanonicalObjectIds? other) => other is not null &&
+            _values.SequenceEqual(other._values);
+
+        public override bool Equals(object? obj) =>
+            obj is CanonicalObjectIds other && Equals(other);
+
+        public override int GetHashCode() {
+            HashCode hash = new();
+            foreach (uint value in _values) {
+                hash.Add(value);
+            }
+
+            return hash.ToHashCode();
+        }
+
+        public override string ToString() => string.Join(',', _values);
+    }
+
+    private sealed record ScopedStateObservation(
+        ScopeValue Scope,
+        CanonicalObjectIds PreviousDebtObjectIds,
+        long PreviousDebtBasePayloadBytes,
+        int PreviousUniqueFrameCount,
+        long PreviousFrameBytes,
+        long CurrentTailOffsetBytes,
+        long NextFrameStartSlackBytes);
+
+    private sealed record CounterfactualTerminalCObservation(
+        int PreparatoryStayCount,
+        ScopeValue SourceScope,
+        ScopedStateObservation Result,
+        int ForegroundDomainRecordBytes,
+        int MaintenanceDomainRecordBytes,
+        int NonDomainAppendBytes,
+        int AppendBytes);
+
+    private sealed record RealizedStepObservation(
+        int StepIndex,
+        CandidateTarget Target,
+        ScopedStateObservation Source,
+        ScopedStateObservation Result,
+        int ForegroundDomainRecordBytes,
+        int MaintenanceDomainRecordBytes,
+        int NonDomainAppendBytes,
+        int AppendBytes,
+        bool ActualRotation,
+        CounterfactualTerminalCObservation? CounterfactualTerminalC);
+
+    private readonly record struct RealizedByteTotals(
+        long ForegroundDomainRecordBytes,
+        long MaintenanceDomainRecordBytes,
+        long NonDomainAppendBytes,
+        long AppendBytes);
+
+    private sealed record RotationEpochObservation(
+        ScopeValue SourceScope,
+        IReadOnlyList<RealizedStepObservation> Steps,
+        int ObservedSaveCount,
+        int StayCount,
+        bool ClosedByRotation,
+        RealizedByteTotals RealizedTotals,
+        int PeakRealizedSaveAppendBytes,
+        int? RotationAppendBytes);
+
+    private sealed record RotationRunReduction(
+        IReadOnlyList<RealizedStepObservation> Steps,
+        IReadOnlyList<RotationEpochObservation> Epochs,
+        RealizedByteTotals RealizedTotals,
+        int PeakRealizedSaveAppendBytes,
+        int? PeakRealizedRotationAppendBytes,
+        int RotationCount);
 }

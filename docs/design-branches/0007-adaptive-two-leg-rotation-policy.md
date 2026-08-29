@@ -4,11 +4,11 @@
 >
 > 创建日期：2026-08-28
 >
-> 更新日期：2026-08-29
+> 更新日期：2026-08-30
 >
-> 当前方向：先建立统一 per-Save candidate，把领域变更、same-Revision B migration 与 terminal C
-> 合成一个动作 authority；随后跑通连续多 Save、多次换腿并比较简单策略。bounded explorer 只在
-> 出现具体保守拒绝或疑似 false-negative 后介入，不先冻结 heuristic 或调优参数。
+> 当前方向：统一 per-Save candidate、连续换腿与 scope-safe observation reductions 已闭合；下一步
+> 用固定 target 日程隔离 changed A-debt Update 写 Base/Delta 的差异，再扩充 pressure-aware treatment。
+> bounded explorer 只在出现具体保守拒绝或疑似 false-negative 后介入。
 
 ## 问题
 
@@ -107,6 +107,9 @@ heuristic 不能自行宣称 completeness，但 explorer 不再作为首个连�
   payload `268,435,390` 时 External total 恰为 `268,435,428`，加一后溢出；同一加一候选改用
   zero-payload same-state Base + Self 后 total 为 `268,435,427`，padding 后 frame 恰达上限，address
   tokens `21 -> 12`。
+- realized step/observed epoch/run 的 test-local reduction 已明确 source/result scope、debt Base payload、
+  live-object reconstruction Previous Frames、Current tail/next-start slack 与 append 分项；counterfactual
+  final-C 不进入 realized 聚合。两 epoch witness 已验证 `A/B -> B/C -> C/D` 连续性。
 
 该 discriminator 只证明当前 provisional v0 grammar 下 External 不支配 optional same-state
 relocation；未实现 runtime optional action，不证明扩大 `CanPrepareAndRotate` 可达集、planner
@@ -120,18 +123,16 @@ completeness 或未来 wire format。尺寸裁决始终以 whole-candidate estim
 | hot-one/cold-eight | 1864 / 1132 | 1428 / 1396 | 1500 / 1132 |
 | fixed-seed mixed | 516 / 176 | 460 / 444 | 460 / 296 |
 
-这些数字只证明 write/read tradeoff 可观测，不选择 winner。完整 probe 当前 221/221。
+这些数字只证明 write/read tradeoff 可观测，不选择 winner。
 
 ## 未闭合事项与顺序
 
-1. 建立 normalized input 与 unified per-Save candidate：同一 B Revision 合并 domain changes 与显式 cold migration；同一 C
-   Revision 合并 domain changes、mandatory evacuation 与 optional B-local relocation；
-2. 分别生成 PreferredStayB/PreferredRotateC 后 exact-filter；容量失败暂不搜索同一 target 的次优修补；
-3. 以 scripted actions 跑通连续多 Save 和至少两次换腿，并记录 A debt、headroom、写峰值与读取原始量；
-4. 接入少量明确命名的策略基线，在同一 frozen workloads 上比较拒绝、振荡、Pareto frontier 与 pause；
-5. 捕获具体 `RejectedUnproven`、`RejectedCapacityUnsearched` 或疑似 heuristic false-negative 后，再建立 small-state bounded/canonical
+1. 用 changed A-debt Update Base/Delta 因果对照验证自然领域变化的清债收益与 foreground 代价；
+2. 扩充 stable hot/cold、burst、size-distribution 与 longer traces，再接入少量明确命名的
+   pressure-aware treatments，保留原始事实而不预设总分；
+3. 捕获具体 `RejectedUnproven`、`RejectedCapacityUnsearched` 或疑似 heuristic false-negative 后，再建立 small-state bounded/canonical
    explorer；找到的 witness 可证明 true，`NotFoundWithinBounds` 不冒充一般无解；
-6. 只有策略结论确实依赖 byte-level 差异时，再做 provisional writer/parser；one-frame 真实容量频繁
+4. 只有策略结论确实依赖 byte-level 差异时，再做 provisional writer/parser；one-frame 真实容量频繁
    撞墙时才引入 Extent。
 
 尚无真实 workload/SLO 时，不要求用户预填 read/write/pause 权重；当多个不可支配策略必须选择

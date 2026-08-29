@@ -18,7 +18,7 @@
 
 ## 2. 当前基线
 
-记录日期：2026-08-29
+记录日期：2026-08-30
 
 - **Observed**：仓库已跑通 boxed-value 的内存 Save/Load 与 read-time upgrade demo，并以隔离探针跑通单类型 Flat Graph Delta R1、generated graph operations R2、StoredGraphImage normalization R3a 与 two-pass CLR materialization R3b；production runtime/default Generator 仍无对象身份、reference graph、wire format 或持久化实现。
 - **Observed**：`DurableGraph.slnx` 包含 runtime、Generator、Build tool、CLI 和 Tests 五个项目；Build tool 是随 NuGet 包部署的私有 snapshot-history publisher/verifier，不承载运行时持久化语义。
@@ -763,19 +763,27 @@
 
 ## 6. 船长日志
 
+### 2026-08-30：闭合 scope-safe rotation observation reductions
+
+- **Observed**：现有固定日程与 `DebtZeroThenRotate` runs 已归约为 test-local realized step / observed epoch / run 原始量；source/result 各带自己的 FileScope，Rotate 属于并关闭旧 epoch。额外 `[Stay, Rotate, Stay, Rotate]` witness 验证 `A/B -> B/C -> C/D` 的跨 epoch result/source 连续性。
+- **Observed**：source debt/Previous Frames 从 normalized source paths 与当步 Store layout 冻结，result 复用 selected candidate 的既有 raw observation；foreground、maintenance、non-domain 与 whole append 在 step、epoch、run 三层守恒，不建立第二 sizing authority。
+- **Decided**：Previous Frame bytes 只表示 live-object current reconstruction 的去重完整 Frames，不是累计 IO；next-frame-start slack 只表示 relative start 的可编码余量，不是文件容量。
+- **Decided**：certificate final-C 以 `Counterfactual` 独立投影，只记录额外 preparatory Stay 数和 final-C append/result；不计入 realized totals/peaks/rotation，也不聚合互斥未来。当前归约只执行了零 prep，既有 certificate 测试另有两 prep witness。
+- **Decided / Next**：这些值类型继续留在测试内；下一切片以相同 Update trace 和固定 target 日程隔离 changed A-debt 写 Base/Delta 的事实差异，不定义 score、winner 或产品 trigger。
+
 ### 2026-08-29：闭合 DebtZeroThenRotate 进展/停滞基线
 
 - **Observed**：同一四步纯 Insert trace 上，target 只从本次 Save 之前的 source A-debt 派生；no-migration 四步均 Stay 并以 `{10,20,30}` deferred debt 结束，paced-one-debt 的 source debt 为 `{10,20,30} -> {20,30} -> {30} -> {}`，第三步清零、第四步才真实轮转。
 - **Observed**：paced 换腿后的 Previous debt 重新成为 `{10,20,30,1001,1002,1003}` / 603 B / 3 Frames；这是相对 B/C 新 scope 的正常锯齿，不能用最终 debt 非空否定已经发生的轮转。
 - **Observed**：no-migration 的每个 accepted Stay 都有可行 terminal Rotate certificate，但 caller Store 始终只有 A/B；certificate 是反事实 completion witness，不是 realized action 或自动进展。
-- **Decided**：有限证据只称 `CompletedTraceWithDeferredPreviousDebt`，不外推“可永远追加”；该基线不比较成本 winner，也不成为产品默认 trigger。下一切片整理 realized/counterfactual 分栏的无权重 rotation observation reductions，继续暂缓通用 Runner、policy interface 与总分。
+- **Decided（当时）**：有限证据只称 `CompletedTraceWithDeferredPreviousDebt`，不外推“可永远追加”；该基线不比较成本 winner，也不成为产品默认 trigger。该条提出的 rotation observation reductions 已由上方 2026-08-30 日志闭合。
 
 ### 2026-08-29：建立单步策略 seam 与固定日程迁债对照
 
 - **Observed**：无状态 `ExplicitRotationPolicyStepHarness` 只在 caller 选定 target 后组合 selected capacity、Stay completion certificate 与 exact apply；四类 typed outcome 保留 applied Stay/Rotate、capacity rejection 与 `RejectedUnproven`，不 fallback、不执行 certificate 的虚拟 maintenance/final chain。
 - **Observed**：同一三步 Insert trace 与固定 `[Stay, Stay, Rotate]` 日程下，no-migration 的 Previous debt 为 `{10,20,30} -> {10,20,30} -> {1001,1002}`，paced-one-debt 为 `{20,30} -> {30} -> {10,20,1001,1002}`。
 - **Observed**：paced 将相同的三个 maintenance Base domain records 分散到三步，降低 realized peak 与最终 Rotate append；代价是换腿后 Previous debt/base bytes/frame bytes 更高。迁债早期虽减少 debt bytes，却因剩余对象共用 A Frame 而未减少 Previous-frame IO。
-- **Decided（当时）**：固定日程仅是隔离 migration pacing 的实验控制，不裁决产品 rotation trigger；ObjectId 顺序也不代表真实冷热。该日志提出的 `DebtZeroThenRotate` progress/stall 切片已由上一条日志闭合，当前转向 rotation observation reductions。
+- **Decided（当时）**：固定日程仅是隔离 migration pacing 的实验控制，不裁决产品 rotation trigger；ObjectId 顺序也不代表真实冷热。该日志提出的 `DebtZeroThenRotate` 与后续 rotation observation reductions 均已由较新的日志闭合。
 
 ### 2026-08-29：用现有 seams 跑通连续两次换腿
 
