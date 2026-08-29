@@ -763,13 +763,21 @@
 
 ## 6. 船长日志
 
+### 2026-08-30：闭合 changed-write x cold-migration 2x2 因果对照
+
+- **Observed**：六对象共享 A Frame fixture 将 migration-only `{1,2,3}` 与 changed `{10,20,30}` 按 100/200/300 B 等尺寸配对；四条运行共享 `Update 10/20/30 + Create` trace 与 `[Stay, Stay, Stay, Rotate]`，paced 两格固定迁移 `1/2/3`，不存在 Update/migration assignment 重叠或 selector mediation。
+- **Observed**：三次 Stay 后，Delta+none 的 old-A debt 保持 1200 B；Delta+paced 与 Base+none 各从 1100/900 降至互不重叠的 600 B；Base+paced 为 1000/600/0 B。组合格每一步退休的 ObjectId 都是两个单轴格退休集合的不相交并集，只能称该 fixture 上的 set-additive retirement。
+- **Observed**：六个 Base 共居同一个 1276 B A Frame；三个非组合格第三次 Stay 后仍需该 Frame，只有组合格清掉最后一个依赖后释放。换腿后的 B/C Previous debt 分别为 none、cold 600 B/3 Frames、changed 600 B/3 Frames、all 1200 B/3 Frames；组合格每个 B Frame 共居一个 changed Base 与一个 cold Base。
+- **Observed**：realized append vectors 依次为 Delta+none `48/48/48/1292`、Delta+paced `152/256/356/680`、Base+none `144/244/344/680`、Base+paced `248/452/652/72` B；这些只属于当前 provisional v0 grammar，不定义 winner，也不归因成总读取 IO 或一般机制协同。
+- **Decided / Next**：保持逻辑对象、trace、四 treatment 与 target 日程不变，只把 source 从单一共享 A Frame 改成 changed/migration role-separated A Frames；比较 exact Previous Frame address sets，验证 coarse-frame masking 对物理 packing 的敏感性，再据此选择 pressure-aware facts。
+
 ### 2026-08-30：闭合 changed A-debt Base/Delta 因果对照
 
 - **Observed**：同一 `Update 10/20/30 + Create` trace 与固定 `[Stay, Stay, Stay, Rotate]` 日程下，Delta control 的 realized append 为 `48/48/48/668` B；Base treatment 为 `144/244/344/60` B。前者在 final C 以 608 B maintenance domain records 集中 evacuation，后者把完整值写入分散到前三次 foreground Save；本 witness 不定义总分或 winner。
 - **Observed**：Base treatment 的旧 A debt 从 600 B 依次降为 500/300/0 B，但 10/20/30 共居一个 652 B A Frame，因此 object-reconstruction Previous-frame bytes 在最后一个 A 依赖消失前不下降。对象级 debt 不是粗粒度 RBF read pressure 的充分代理。
 - **Observed**：换腿后，Base treatment 的三个 Base@B 在新 B/C scope 中成为 600 B / 3 Frames / 720 frame bytes Previous debt；Delta control 因 C mandatory evacuation 而得到零 B reconstruction debt。zero-prep counterfactual terminal 同样以更小 append 换取 `{10} -> {10,20} -> {10,20,30}` 新-scope debt。
 - **Decided**：第三种 action caller 只促成 test-local、stateless decision selector；target selection 继续正交，未引入 policy interface、Runner、score 或自动 trigger。
-- **Decided / Next**：用一个 mixed Update/NoChange trace 和固定 target 日程做 `changed A-debt Delta/Base x optional cold migration none/paced-one` 的四个命名 treatment，研究自然 rebase 与 cold migration 的替代/互补关系。
+- **Decided（当时）**：该条提出的 mixed Update/NoChange 2x2 已由上方日志闭合；结论保持 fixture-level，不外推一般替代/互补关系。
 
 ### 2026-08-30：闭合 scope-safe rotation observation reductions
 

@@ -141,6 +141,9 @@ PublishedRevision 为 shared prior-snapshot anchor。accepted new head 的 curre
 - test-local decision selector：只从 canonical facts 投影完整 Stay-B/Rotate-C decisions，与 target selector
   正交；changed A-debt 固定对照已验证 Base@B 能把旧 A evacuation 分摊到自然 Update，但换腿后会成为
   新 B/C scope 的 Previous debt；
+- role-disjoint 2x2 interaction witness：changed `{10,20,30}` 与 migration-only `{1,2,3}` 共居一个 A Frame，
+  四个命名 treatment 证明两种机制在该 trace 上逐步退休 old-A debt 的集合互斥且可加；只有组合格在第三次
+  Stay 后释放共享 Frame，换腿后各自在 B 写过的对象按新 scope 形成 Previous debt；
 - caller-selected B same-state Base migration plan/append witness；
 - relay-free immediate A/B -> B/C plan/append、shared anchor、B/C closure witness；
 - 多批 B migration 使原本放不下的 C evacuation 可编码的容量 witness；
@@ -153,38 +156,39 @@ rotation trigger 已解决。
 
 ## 当前研究焦点
 
-changed A-debt write-mode discriminator 已闭合：同一四步 trace、固定 `[Stay, Stay, Stay, Rotate]` 下，
-Delta control 把 608 B mandatory evacuation 集中到最终 Rotate，峰值 append 为 668 B；Base treatment
-把三个完整值作为 foreground 分散到前三次 Stay，最终 Rotate append 为 60 B，峰值为 344 B。处理组的
-旧 A debt 依次 `600 -> 500 -> 300 -> 0`，但对象共居同一个 A Frame 时，Previous-frame bytes 在最后
-一个依赖消失前不下降。换腿后三个 Base@B 又成为新 scope 的 600 B / 3 Frames / 720 B Previous debt。
-这些都是当前 provisional grammar 的因果事实，不构成总分或 winner。
+changed-write x cold-migration 2x2 已闭合。六个等尺寸配对对象共居一个 1276 B A Frame；changed IDs
+`10/20/30` 只接受 foreground Update，migration-only IDs `1/2/3` 只接受 paced same-state Base。三次 Stay
+后，Delta+none 保留 1200 B old-A debt，两个单轴 treatment 各保留互不重叠的 600 B，组合格清零；逐步
+退休集合严格为两个单轴集合的不相交并集。三个非组合格仍需同一个 A Frame，只有组合格清掉最后一个
+依赖后才释放它。这称为 fixture-level set-additive retirement 与 joint shared-frame release，不外推为机制
+一般独立、协同或总读取 IO 改善。
 
-下一步研究自然 foreground rebase 与 paced cold migration 的 **交互**：在同一 mixed Update/NoChange
-trace 与固定 target 日程下做命名的 2x2 treatment，判断两种清债机制是替代、互补，还是只移动写入峰值
-与换腿后的 debt 锯齿。继续保留原始事实，不引入自动 target trigger。
+换腿后，Delta+none 无 B reconstruction debt；Delta+paced、Base+none 各留下不同的 600 B / 3 Frames；
+组合格把全部六个对象留在 B，形成 1200 B / 3 Frames。每个组合 Stay 的 changed Base 与 cold Base 共居
+一个 B Frame，所以新 scope 的 Frame 数不是 debt Object 数。当前 exact append 仍只属于 provisional v0
+grammar；四格没有统一 winner。
 
 ## 下一编码切片
 
-闭合一个 **changed-write × cold-migration interaction probe**：
+闭合一个 **source Frame-packing sensitivity discriminator**：
 
 ```text
-same frozen mixed Update/NoChange trace + same fixed target schedule
-    changed A-debt: legal Delta | Base
-    optional unchanged A-debt migration: none | paced one
-    compare four named treatments with existing raw reductions
+same six logical objects + same trace + same four treatments + same targets
+    source layout: all roles share one A Frame | changed/migration roles use separate A Frames
+    compare exact result-Previous Frame address sets and existing raw reductions
 ```
 
-优先验证 treatment assignment 互不重叠、四条运行共享 trace/targets/逻辑状态，以及各自 completion
-certificate 仍可比较；不先引入交互 score、winner、通用 policy interface 或有状态 Runner。若 2x2 fixture
-开始重复大量 expectation plumbing，再按证据提取 test-local projection helper。
+目标是判断本轮观察到的 coarse-frame masking 是否只来自共居布局，检验 object debt 是否不足以单独表征
+exact unique Frame pressure，并据结果判断哪些 facts 值得保留为后续 treatment 的候选输入。只增加
+test-local multi-Frame source fixture；不改变四个 selector，不引入 score、winner、自动 target trigger、
+通用 policy interface 或有状态 Runner。
 
 ## 近期 roadmap
 
 1. **扩充策略与 workload**
-   - 先做 changed A-debt Base/Delta 与 paced cold migration 的 2x2 交互对照；
-   - 随证据加入 pressure-aware target/migration 候选；
-   - stable hot/cold、burst、size distribution 和更长 fixed-seed traces。
+   - 先做相同 2x2 treatment 的 source Frame-packing discriminator；
+   - 再加入 payload skew、stable hot/cold、burst 与更长 fixed-seed traces；
+   - 由这些布局/尺寸反例塑造少量明确命名的 pressure-aware target/migration 候选。
 2. **按证据加入 bounded explorer**
    - 仅在出现具体 `RejectedUnproven`、`RejectedCapacityUnsearched` 或疑似 heuristic false-negative 后，
      冻结该小状态；
@@ -206,7 +210,8 @@ certificate 仍可比较；不先引入交互 score、winner、通用 policy int
 - counterfactual terminal 当前只投影 final-C append/result 与 preparatory Stay count，不聚合互斥未来，
   也不声称已观测 preparatory writes 或 terminal-source pressure；
 - stable hot/cold、burst、size distribution 与长 trace 是否先用 handwritten fixture，何时扩充 generator；
-- 2x2 interaction 之后，何种无隐藏权重的 pressure facts 最值得驱动 target/migration treatment；
+- shared 与 role-separated A Frames 是否足以证明 object debt 与 exact Frame pressure 必须共同进入策略输入；
+- 布局/尺寸矩阵之后，何种无隐藏权重的 pressure facts 最值得驱动 target/migration treatment；
 - 多个不可支配策略出现后，何时需要用户用真实 workload/SLO 选择产品默认值。
 
 ## 明确暂缓

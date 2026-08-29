@@ -6,9 +6,9 @@
 >
 > 更新日期：2026-08-30
 >
-> 当前方向：统一 per-Save candidate、连续换腿、scope-safe observations 与 changed A-debt
-> Base/Delta discriminator 已闭合；下一步比较自然 foreground rebase 与 paced cold migration 的交互。
-> bounded explorer 只在出现具体保守拒绝或疑似 false-negative 后介入。
+> 当前方向：统一 per-Save candidate、连续换腿、scope-safe observations、changed A-debt
+> Base/Delta 与 role-disjoint cold-migration 2x2 已闭合；下一步固定逻辑 treatment，比较 source Frame
+> packing。bounded explorer 只在出现具体保守拒绝或疑似 false-negative 后介入。
 
 ## 问题
 
@@ -114,8 +114,12 @@ heuristic 不能自行宣称 completeness，但 explorer 不再作为首个连�
   Delta control append `48/48/48/668` B，并在 Rotate 集中写 608 B maintenance records；Base treatment
   append `144/244/344/60` B，把旧 A debt 在前三步清零。三个对象共用 A Frame，故 debt bytes 下降不使
   Previous-frame bytes 同步下降；换腿后 Base@B 又形成新 B/C scope 的 600 B / 3 Frames debt。
+- role-disjoint 2x2 将 migration-only `{1,2,3}` 与 changed `{10,20,30}` 等尺寸配对并共置一个 1276 B
+  A Frame；两个单轴 treatment 到第三次 Stay 各退休互不重叠的 600 B old-A debt，组合格退休两者并集并
+  清零。单轴仍依赖共享 A Frame，组合格才释放；换腿后 Delta+paced、Base+none、组合格分别形成
+  600/600/1200 B new-scope Previous debt，且组合格六对象只占前三个 realized B candidate Frames。
 
-该 discriminator 只证明当前 provisional v0 grammar 下 External 不支配 optional same-state
+上述 terminal C exact-sizing discriminator 只证明当前 provisional v0 grammar 下 External 不支配 optional same-state
 relocation；未实现 runtime optional action，不证明扩大 `CanPrepareAndRotate` 可达集、planner
 completeness 或未来 wire format。尺寸裁决始终以 whole-candidate estimator 为唯一 authority，不从
 单对象 token 差推导 additive savings。
@@ -131,9 +135,9 @@ completeness 或未来 wire format。尺寸裁决始终以 whole-candidate estim
 
 ## 未闭合事项与顺序
 
-1. 在同一 mixed Update/NoChange trace 与固定 target 日程上，比较 changed A-debt Delta/Base 与
-   paced cold migration none/one 的四个命名 treatment，判断两种机制的替代或互补关系；
-2. 扩充 stable hot/cold、burst、size-distribution 与 longer traces，再接入少量明确命名的
+1. 保持六对象逻辑状态、mixed trace、四 treatment 与固定 target 日程不变，只把 source 从共享 A Frame
+   改为 changed/migration role-separated A Frames，比较 exact Frame release 与既有 raw reductions；
+2. 扩充 payload skew、stable hot/cold、burst、size-distribution 与 longer traces，再接入少量明确命名的
    pressure-aware treatments，保留原始事实而不预设总分；
 3. 捕获具体 `RejectedUnproven`、`RejectedCapacityUnsearched` 或疑似 heuristic false-negative 后，再建立 small-state bounded/canonical
    explorer；找到的 witness 可证明 true，`NotFoundWithinBounds` 不冒充一般无解；

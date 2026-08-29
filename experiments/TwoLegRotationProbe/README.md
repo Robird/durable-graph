@@ -590,6 +590,55 @@ This witness demonstrates causal write placement and scope-relative debt under
 one synthetic trace. It does not choose a winner, define total read IO, predict
 another wire grammar, or supply an automatic Base/Delta or rotation trigger.
 
+## Changed-write and cold-migration interaction witness
+
+A role-disjoint 2x2 comparison now composes the two preceding mechanisms. One
+six-object A Frame contains two equal-payload groups:
+
+```text
+migration-only  1/2/3      payload 100/200/300
+changed         10/20/30  payload 100/200/300
+```
+
+The frozen trace updates 10, 20 and 30 once each, then creates 1001; every run
+uses `[Stay, Stay, Stay, Rotate]`. The paced arms select 1, 2 and 3 respectively,
+so no optional migration object is updated by the trace. Four named test-local
+decision selectors vary only changed A-debt `Delta/Base` and optional unchanged
+migration `none/paced-one`.
+
+Under the current provisional grammar, the realized evidence is:
+
+| Treatment | Old-A debt after the three Stays | Append bytes | Result B/C Previous debt |
+|---|---|---|---|
+| Delta + none | `1200, 1200, 1200` | `48, 48, 48, 1292` | none |
+| Delta + paced | `1100, 900, 600` | `152, 256, 356, 680` | `{1,2,3}` / 600 B / 3 Frames |
+| Base + none | `1100, 900, 600` | `144, 244, 344, 680` | `{10,20,30}` / 600 B / 3 Frames |
+| Base + paced | `1000, 600, 0` | `248, 452, 652, 72` | all six / 1200 B / 3 Frames |
+
+At every pre-rotation boundary, the combined arm's retired old-A ObjectIds are
+exactly the disjoint union of the two single-axis arms. This is a fixture-level
+set-additive result, not a general claim that the mechanisms are independent.
+
+All six source Bases share one exact 1276-byte A Frame. The two single-axis arms
+each retire half of the old-A payload by the third Stay but still require that
+whole Frame; only the combined arm retires the last dependency and releases it.
+This is joint shared-frame release, or coarse-frame masking, rather than evidence
+of general synergy or total read-IO reduction.
+
+After rotation, the exact Previous Frames are the realized B candidates that
+contained earlier Bases. In the combined arm, each Stay co-locates one changed
+Base and one same-state migration Base, so six Previous-debt objects occupy three
+Frames rather than six. The zero-preparation counterfactual terminal-C append
+vectors are `1280/1280/1280`, `1180/976/672`, `1180/976/672`, and
+`1076/668/60` in the table's order; their corresponding new-scope debt is kept
+separate from realized totals.
+
+The comparison does not define an interaction score, winner, automatic target
+trigger, persisted report, or product policy. Its next discriminator can hold
+the logical fixture and treatments fixed while separating the two roles into
+different A Frames, testing how much of the observed threshold comes from
+physical packing.
+
 ## Preparatory B migration witness
 
 `PreparatoryBaseMigrationPlanner` accepts an explicit, nonempty set of live
@@ -672,9 +721,9 @@ construct that witness; this is not a proof that no completion exists. The
 continuous caller script, fixed-schedule migration comparison, and
 `DebtZeroThenRotate` progress baseline are now closed without choosing a weighted
 winner. Their scope-safe realized/counterfactual observation reductions are also
-closed, as is the changed A-debt Base-versus-Delta discriminator. The next slice
-can compare that foreground rebase mechanism with paced unchanged-object migration
-as four named treatments over one mixed trace and fixed target schedule. A bounded
+closed, as are the changed A-debt Base-versus-Delta discriminator and its
+role-disjoint 2x2 composition with paced cold migration. The next slice can keep
+that logical experiment fixed while varying source Frame packing. A bounded
 reference explorer still waits for a concrete conservative rejection or suspected
 heuristic false-negative.
 
