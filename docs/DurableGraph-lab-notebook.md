@@ -761,6 +761,13 @@
 
 ## 6. 船长日志
 
+### 2026-08-29：闭合 normalized Save 与显式 Stay-B candidate
+
+- **Observed**：`parent PublishedRevision@B + SaveStep` 已归一化为单一 ObjectId-ordered immutable fact sequence，四个 typed views 与 Parent/PostLive states 均由它派生；source addresses 只来自 runtime OVD，并对 OVD replay chain 与全部 parent-live object 验证 A/B reconstruction closure。
+- **Observed**：caller-explicit Stay-B candidate 在同一 B Revision 中合并 Insert、Update Base/Delta、Remove OVD mutation 与 unchanged A-debt same-state Base；对象 Delta 精确指向 source object head，OVD Delta 精确指向 source PublishedRevision，最终只由 `PlannedRevisionV0` 定尺。
+- **Observed**：mixed fixture append 后 OVD/materialization 与独立 logical replay 一致，A debt exact set 从五个对象降为两个；canonical ordering、decision conflicts、oversized candidate 和 planning no-mutation 均有 executable evidence。
+- **Decided / Next**：该 seam 仍是纯 candidate，不 append/publish，也不选择策略。下一切片在同一 normalized facts/plan shape 上实现 Rotate-C；heuristic、capacity repair、completion search 与 continuous runner 继续后置。
+
 ### 2026-08-29：双腿探针收敛输入分区与两阶段规划
 
 - **Observed / Next**：caller-selected B migration、immediate C 与 terminal sizing 已足够；最大缺口仍是 workload 与 rotation actions 未接通。策略输入现按 `Insert / Update / Remove / NoChange` 建模，Remove 先改变 PostLive，NoChange 由 parent ObjectMap/OVD 派生。首版分别在假设可容纳下生成 Stay-B/Rotate-C 偏好计划，再 exact-filter；容量失败暂不搜索次优修补，只保守 fail closed。下一步建立 unified candidate 和连续多轮转 runner；搜索等待真实 `RejectedUnproven` 或 `RejectedCapacityUnsearched`。

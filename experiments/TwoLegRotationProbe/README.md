@@ -270,6 +270,52 @@ events and show only the final post-save read snapshot; no `TotalReadBytes` is
 defined. The matrix lives in executable tests; a ScenarioCatalog or report
 format waits for a CLI, persisted artifact, or batch-run consumer.
 
+## Normalized Save facts and Stay-B candidate
+
+`SaveStepNormalizer` now turns one `parent PublishedRevision@B + SaveStep` into
+one immutable, ObjectId-ordered fact sequence. `Insert`, `Update`, `Remove`, and
+`NoChange` are typed views of that sequence rather than separate caller inputs.
+Every parent-live address comes from runtime OVD materialization. Both the
+source OVD replay chain and every object reconstruction are validated to remain
+inside the A/B `FileScope` before the facts are exposed. The facts freeze the
+exact source head and terminating Base, logical state, head reconstruction
+payload cost, parent state, and post-Save state.
+
+The normalizer can prove that an Insert is absent from the parent snapshot; it
+cannot prove from that snapshot alone that an ObjectId was never used in older
+history. Globally fresh Insert IDs therefore remain an upstream session/workload
+precondition rather than a caller-supplied second authority.
+
+`StayBSaveDecision` is deliberately caller-explicit. It must choose exactly one
+Base/Delta mode for every Update and may select only `NoChange` objects whose
+terminating Base is still in A for same-state migration. Missing, extra,
+duplicate, conflicting, B-local, or unknown decisions fail before any Store
+mutation.
+
+`StayBRevisionPlanner` traverses the canonical facts once and constructs one
+pure B-local runtime candidate:
+
+```text
+Insert             -> Base + OVD Self
+Update(Base)        -> new Base + OVD Self
+Update(Delta)       -> Delta to the exact source object head + OVD Self
+Remove              -> OVD Remove, no domain record
+selected NoChange   -> same-state Base + OVD Self
+other NoChange      -> inherit through the OVD Delta
+```
+
+The candidate OVD Delta points to the exact source PublishedRevision. Its final
+immutable `Frame` is sized only through `PlannedRevisionV0`; planning does not
+append or publish. An executable mixed fixture appends the candidate through a
+test-only mutation boundary, replays its OVD, reconstructs the logical state,
+and proves an A-debt set reduction from five exact ObjectIds to two. It also
+checks canonical input-order independence, decision conflicts, capacity failure,
+and success/failure planning purity.
+
+This closes only the Stay-B half of the unified per-Save seam. It is not yet an
+automatic policy, a Rotate-C candidate, a durable head publication path, or a
+continuous multi-rotation runner.
+
 ## Preparatory B migration witness
 
 `PreparatoryBaseMigrationPlanner` accepts an explicit, nonempty set of live
@@ -348,8 +394,9 @@ not a law of whether an already-published format is readable. A concrete finite
 B-migration-plus-C-rotation witness proves it true for that source state.
 Failure of a bounded explorer to find one must remain `NotFoundWithinBounds`,
 not a proof that no completion exists. The next slice should merge domain changes,
-same-Revision B migration, and terminal C actions behind one per-Save candidate
-seam, then use it in a scripted continuous multi-rotation run. A bounded
+same-Revision B migration, and terminal C actions by adding a Rotate-C builder
+over the same normalized facts and candidate value shape. It can then feed a
+scripted continuous multi-rotation run. A bounded
 reference explorer waits for a concrete conservative rejection or suspected
 heuristic false-negative; it does not block the first strategy loop.
 

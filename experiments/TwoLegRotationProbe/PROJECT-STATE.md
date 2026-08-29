@@ -107,13 +107,17 @@ PublishedRevision 为 shared prior-snapshot anchor。accepted new head 的 curre
 - single-file `AlwaysBase`、`AlwaysDeltaWhenLegal`、local read-amplification=3 基线；
 - runtime OVD、absolute StateMap projection、symbolic reconstruction 与 raw read/write observations；
 - provisional RBF v0.40 whole-frame estimator；无 bytes writer/parser；
+- 从 PublishedRevision OVD authority 派生的 immutable canonical
+  `Insert / Update / Remove / NoChange` facts；
+- caller-explicit Stay-B candidate：同一 B Revision 合并 domain changes、Update Base/Delta、OVD Remove 与
+  selected unchanged A-debt same-state Base；
 - caller-selected B same-state Base migration plan/append witness；
 - relay-free immediate A/B -> B/C plan/append、shared anchor、B/C closure witness；
 - 多批 B migration 使原本放不下的 C evacuation 可编码的容量 witness；
 - terminal sizing 反例：high-ticket External 不支配 zero-payload Base+Self。
 
-这些组件目前仍未接入同一条连续 Save 策略循环。当前三条 policy matrix 只是 Base/Deltify baseline，
-不是 rotation-policy comparison。
+Stay-B 已接入统一 per-Save facts，但 Rotate-C、candidate pair comparison 与连续 Save 策略循环仍未闭合。
+当前三条 policy matrix 只是 Base/Deltify baseline，不是 rotation-policy comparison。
 
 ## 当前研究焦点
 
@@ -130,32 +134,32 @@ A debt 随连续 Save 变化
 
 不再单独扩张 terminal planner、lineage 语义或 provisional wire grammar。
 
-## 压缩后下一编码切片
+## 下一编码切片
 
-先闭合 **normalized input + explicit-decision Stay-B candidate**，暂不同时实现策略选择：
+闭合 **explicit-decision Rotate-C candidate**，复用现有 normalized facts 与 `PlannedRevisionV0`：
 
 ```text
-parent PublishedRevision@B + SaveStep
-    -> immutable Insert / Update / Remove / NoChange facts
-    -> caller-explicit Update Base/Delta modes
-    -> caller-explicit unchanged A-debt migration IDs
-    -> one pure runtime B Revision candidate at the current tail
+NormalizedSaveFacts
+    -> mandatory A-dependent PostLive Bases@C
+    -> caller-explicit B-contained Update Base/Delta
+    -> B-contained NoChange External or explicit same-state Base+Self
+    -> one pure runtime C Revision candidate at a fresh-file tail
 ```
 
-最小验收 fixture 在同一个 Revision 中同时包含 Insert、Update、Remove 和一个 unchanged A-debt
-same-state Base migration，并证明：OVD Delta 精确指向 source PublishedRevision；PostLive 与逻辑 replay
-一致；Remove 无 domain record；NoChange 只在显式迁移时写 record；A debt 按预期减少；whole-candidate
-estimate 与 runtime Frame 一致；planning failure 不修改 Store。
+Rotate-C 写 full OVD Base，并以 source PublishedRevision@B 作为 shared prior-snapshot anchor；Remove 不进入
+full OVD，也没有 domain record。所有 A-dependent PostLive objects 必须在 C 写 Base，B-contained objects
+才能保留 External 或合法 Delta@C->B。最小 mixed fixture 应证明 candidate 的逻辑 PostLive、B/C current
+reconstruction closure、whole-candidate estimate 和 planning purity，并让现有 ImmediateRotation 的空领域变化
+语义成为可表达的后续特例。
 
-本切片只冻结下一依赖 seam，不先造策略接口或通用 planner framework。`BuildRotateC` 应在下一切片复用
-同一 normalized facts 与 candidate value shape；heuristic、PreferredStayB/PreferredRotateC 比较、capacity
-repair、completion search、publication/head 均暂缓。完成后删除或压缩本节。
+本切片仍不造 heuristic、PreferredStayB/PreferredRotateC 比较、capacity repair、completion search 或
+publication/head。`SaveStep` 当前禁止空批次；是否为 maintenance-only rotation 增加独立 normalized 入口，
+在实现 Rotate-C 时按最小接缝处理，不借机放宽 generated workload 的现有不变量。
 
 ## 近期 roadmap
 
 1. **Normalized input + unified per-Save candidate**
-   - 从 parent authority 派生 `Insert / Update / Remove / NoChange` 与 object reconstruction facts；
-   - Stay-B：同一 Revision 合并领域变更、changed-object Base/Delta 与显式 unchanged A-debt migrations；
+   - 已完成 parent authority -> canonical facts 与 Stay-B mixed Revision；
    - Rotate-C：同一 Revision 合并领域变更、mandatory A-debt Bases、B-local External/optional Base；
    - 复用现有 OVD、reconstruction、layout 与 no-mutation oracle；现有 immediate path 成为空变更特例。
 2. **Two-phase plan / feasibility**
@@ -184,8 +188,8 @@ repair、completion search、publication/head 均暂缓。完成后删除或压�
 
 ## 未闭合事项
 
-- unified candidate 的最小输入形状，以及如何避免与现有 builders/planners 形成第二 authority；
-- foreground change 与同一 ObjectId maintenance selection 的冲突规则；
+- Rotate-C 如何复用现有 facts/plan shape，而不复制 source inspection 或建立第二 authority；
+- maintenance-only ImmediateRotation 如何表达空 foreground，同时保持 generated `SaveStep` 非空；
 - unbounded preference cost 如何比较两个 target，同时保持原始多目标事实而不偷渡权重；
 - `RejectedCapacityUnsearched` 出现多频繁时值得加入次优 action menu 或 constraint-aware repair；
 - rotation Save 中 changed object 何时允许 Delta，何时因其 reconstruction 仍触 A 而必须 Base；
