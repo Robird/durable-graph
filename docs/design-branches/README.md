@@ -30,4 +30,5 @@
 | [DB-006](0006-flat-graph-delta-prototype.md) | Flat Graph Delta 原型 | Chosen | R4 logical StateMap/apply、production reference adapter、persistent head 或 measured baseline cost |
 | [DB-007](0007-adaptive-two-leg-rotation-policy.md) | 自适应双腿轮转与 Rebase/Deltify 策略 | Open | 内存策略模拟、真实 RBF read log、relay completion 反例或 one-frame 容量证据 |
 | [DB-008](0008-revision-contextual-self-address.md) | Revision 内的 contextual self address | Chosen | multi-frame Revision、脱离 containing ticket 的裸 OVD 消费者或真实 codec 对照数据 |
-| [DB-009](0009-base-lineage-parent-locator.md) | Base lineage direct parent 与 Revision locator | Open | 可回放 OVD reader、planner materialization、multi-frame relay planning 或 DurableId 重新接入裁决 |
+| [DB-009](0009-base-lineage-parent-locator.md) | Base lineage direct parent 与 Revision locator | Open | planner source authority 迁移、lineage read amplification 或 DurableId 重新接入裁决 |
+| [DB-010](0010-base-lineage-anchor-scope.md) | Base lineage anchor 的作用域 | Open | locator planner materialization、multi-snapshot Revision consumer 或 DurableId reuse 裁决 |

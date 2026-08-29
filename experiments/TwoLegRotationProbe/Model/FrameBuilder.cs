@@ -3,6 +3,8 @@ namespace Atelia.TwoLegRotationProbe.Model;
 internal sealed class FrameBuilder {
     public Dictionary<uint, ObjectVersionBuilder> ObjectVersions { get; } = [];
 
+    public ObjectVersionDictionaryBuilder? ObjectVersionDictionary { get; set; }
+
     public ObjectVersionBuilder Add(uint objectId) {
         ObjectVersionBuilder objectVersion = new();
         ObjectVersions.Add(objectId, objectVersion);
@@ -15,6 +17,6 @@ internal sealed class FrameBuilder {
             objectVersions.Add(objectId, builder.Build());
         }
 
-        return new Frame(objectVersions);
+        return new Frame(objectVersions, ObjectVersionDictionary?.Build());
     }
 }

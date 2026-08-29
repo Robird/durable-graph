@@ -12,6 +12,9 @@ The first scaffold deliberately models only a few container facts:
 - a `FileScope` has a readonly `CurrentFileNumber`, derives its
   `PreviousFileNumber`, and resolves relative parent IDs against the store;
 - a built `Frame` owns a read-only `ObjectId` (`uint`) to `ObjectVersion` map;
+- a Revision-like `Frame` may explicitly carry an immutable runtime OVD; `null`
+  means this older/raw probe frame did not model OVD authority and is not an
+  authoritative empty map;
 - `ObjectVersion` distinguishes Base from Delta and records synthetic payload
   cost, resulting Base size, logical version ordinal, and lineage parent;
 - `ObjectVersion.ParentFrameTicket` is nullable for a first version, otherwise
@@ -31,6 +34,14 @@ the separate lineage inspection continues through Base parents and validates
 the full physical chain. In this size-only probe, logical equality means exact
 `(BasePayloadBytes, LogicalVersionOrdinal)` equality, not future field-value
 equality.
+
+The runtime OVD probe models Base/Delta dictionaries and Self/External/Remove
+bindings. `LookupLive(revision, objectId)` takes no caller StateMap. Self,
+External, and Remove are decisive; only a Delta miss follows its parent, while
+a Base miss is definitive absence. Every inherited relative ticket is decoded
+in the file scope of the Revision that contains that binding. Missing OVDs,
+non-earlier addresses, external aliases, and bindings to a frame without the
+same ObjectId fail closed.
 
 ## Generated workload traces
 
@@ -248,8 +259,9 @@ EvacuationSet = live objects whose terminating Base is in A
 RelaySet      = EvacuationSet objects whose latest head is still in A
 ```
 
-The optional B relay Revision contains one zero-synthetic-payload helper per
-RelaySet object, an empty OVD Delta whose parent is the old B head, and a
+The optional B relay Revision in this earlier direct-parent planner contains
+one zero-synthetic-payload helper per RelaySet object, an empty OVD Delta whose
+parent is the old B head, and a
 TailMeta directory for those helpers. The C Revision writes a full Base for
 every evacuated object and a full OVD Base: evacuated bindings use contextual
 Self, while retained objects bind Previous to their unchanged B heads. The
@@ -275,19 +287,46 @@ This preparatory slice still does not implement a byte writer/parser, append,
 publication, maintenance-record materialization, general two-file completion
 search, rotation-aware policy scoring, or the `CanPrepareAndRotate` safety gate.
 Generated Base/Delta sizes remain synthetic payload observations, not serializer
-output. The caller-supplied StateMap is the current in-memory authority; there is
-not yet a persisted OVD reader that can derive it from the supplied head.
+output. The caller-supplied StateMap remains the planner's current in-memory
+authority; the newer runtime OVD reader has not yet been integrated into this
+planner.
 `RelativeFrameTicket` is interpreted relative to the file containing it:
 stepping creates a new file and a new `FileScope`; an old frame must still be
 read with the scope of its own origin file. The V0 projection is a versioned
 research input, not a durable-format commitment.
 
-The runtime model now has executable transparent Relay/RelocatedBase semantics,
-but the planned rotation records are still not materialized or appended. A
-separate open branch, DB-009, asks whether an earlier Revision's authoritative
-OVD can serve as a Base-only lineage locator and remove dedicated relay records.
-That alternative is not implemented because the probe does not yet have a
-replayable persisted OVD reader; the caller StateMap must not impersonate one.
+The runtime model has executable transparent Relay/RelocatedBase semantics,
+but the planned rotation records are still not materialized or appended.
+
+## Runtime OVD and Base lineage locator discriminator
+
+The newer runtime discriminator keeps the existing direct-lineage oracle and
+adds a separate experimental interpretation: Delta parents remain exact
+ObjectVersion addresses, while a Base parent addresses an earlier Revision and
+uses that Revision's OVD to resolve the exact prior ObjectVersion by ObjectId.
+
+The canonical C Revision is itself the only current authority: AA/BA bind Self
+and BB binds External to B. Every current head is obtained through
+`LookupLive(C, objectId)` before reconstruction or lineage inspection; there is
+no separately authored StateMap.
+
+Three shapes are now distinguishable:
+
+| Shape | AA ObjectVersion lineage | Base-parent OVD reads | B maintenance |
+|---|---|---|---|
+| relay + OVD Self + locator | `C -> Relay -> A` | `Relay` | one O(N) Revision |
+| relay-free locator | `C -> A` | `B -> A` | none |
+| relay + empty OVD + locator | `C -> A` | `Relay -> B -> A` | helper is skipped |
+
+The relay and relay-free variants produce the same current logical state,
+logical version, and lineage root in this synthetic size-state probe. No
+current correctness consumer requires the explicit physical no-op hop. The
+relay-free locator is therefore the leading candidate; the only observed relay
+benefit is potentially fewer historical OVD reads. DB-009 remains open until
+the rotation planner itself consumes the runtime OVD authority and its plan is
+materialized. DB-010 records a further candidate simplification: Base lineage
+may use the containing Revision's single prior-snapshot anchor instead of a
+per-record locator.
 
 Run from the repository root:
 

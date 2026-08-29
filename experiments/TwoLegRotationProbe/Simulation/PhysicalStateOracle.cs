@@ -71,6 +71,76 @@ internal static class PhysicalStateOracle {
         }
     }
 
+    /// <summary>
+    /// Experiments with a hybrid lineage-parent interpretation: Delta parents address an
+    /// exact ObjectVersion, while Base parents address an earlier Revision whose OVD resolves
+    /// the exact ObjectVersion parent for <paramref name="objectId"/>.
+    /// </summary>
+    public static RevisionLocatorLineageInspection InspectObjectLineageViaRevisionLocator(
+        RbfFileStore store,
+        uint objectId,
+        AbsoluteFrameAddress headAddress) {
+        ArgumentNullException.ThrowIfNull(store);
+
+        LogicalObjectState headState = Reconstruct(
+            store,
+            objectId,
+            headAddress,
+            visit: null);
+        List<AbsoluteFrameAddress> objectVersionLineageAddresses = [];
+        List<ObjectVersionDictionaryLookupInspection> baseParentLookups = [];
+        HashSet<AbsoluteFrameAddress> visited = [];
+        AbsoluteFrameAddress address = headAddress;
+
+        while (true) {
+            if (!visited.Add(address)) {
+                throw new InvalidDataException(
+                    $"Object {objectId} has a cycle in its Revision-locator lineage chain.");
+            }
+
+            objectVersionLineageAddresses.Add(address);
+            ObjectVersion version = ReadObjectVersion(store, objectId, address);
+            if (version.ParentFrameTicket is not RelativeFrameTicket parentTicket) {
+                return new RevisionLocatorLineageInspection(
+                    objectId,
+                    headState,
+                    headAddress,
+                    address,
+                    objectVersionLineageAddresses,
+                    baseParentLookups);
+            }
+
+            AbsoluteFrameAddress parentAddress;
+            if (version.Kind == ObjectVersionKind.Delta) {
+                parentAddress = ResolveParent(address, parentTicket);
+            } else {
+                AbsoluteFrameAddress locatorRevisionAddress =
+                    ResolveParent(address, parentTicket);
+                ObjectVersionDictionaryLookupInspection lookup =
+                    ObjectVersionDictionaryReader.LookupLive(
+                        store,
+                        locatorRevisionAddress,
+                        objectId);
+                baseParentLookups.Add(lookup);
+
+                if (lookup.Disposition != ObjectVersionDictionaryLookupDisposition.Found ||
+                    lookup.ResolvedObjectVersionAddress is not AbsoluteFrameAddress
+                        resolvedObjectVersionAddress) {
+                    throw new InvalidDataException(
+                        $"Base for object {objectId} uses Revision {locatorRevisionAddress} " +
+                        $"as a lineage-parent locator, but its OVD lookup resolved " +
+                        $"{lookup.Disposition}.");
+                }
+
+                parentAddress = resolvedObjectVersionAddress;
+            }
+
+            ObjectVersion parent = ReadObjectVersion(store, objectId, parentAddress);
+            ValidateLineageEdge(objectId, version, parent);
+            address = parentAddress;
+        }
+    }
+
     public static IReadOnlyDictionary<uint, LogicalObjectState> Materialize(SimulationRun run) {
         ArgumentNullException.ThrowIfNull(run);
         return Materialize(run.FileStore, run.StateMap);

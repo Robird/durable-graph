@@ -36,7 +36,7 @@
 
 R1–R3 已经使 logical graph 的后续状态律相对清晰。当前最大设计不确定性转为 StateStore 的 two-leg file rotation：在每个 published current Revision 最多引用 current/previous 两文件的前提下，能否以渐进 Base/Delta/relay 行为避免集中 full checkpoint，并形成稳定的自适应策略。
 
-首轮仍使用纯内存、deterministic 模拟，不绑定真实 RBF I/O。模拟必须把 two-file reconstruction closure、`RelativeFrameTicket` 可表示范围、one-frame bounds 与 relay completion 当作 correctness oracle；Base/Delta、cold migration 与 rotation 时机只是被比较的 policy。
+首轮仍使用纯内存、deterministic 模拟，不绑定真实 RBF I/O。模拟必须把 two-file reconstruction closure、`RelativeFrameTicket` 可表示范围、one-frame bounds、C evacuation capacity 与 B OVD locator 可解析性当作 correctness oracle；Base/Delta、cold migration、optional relay/checkpoint 与 rotation 时机只是被比较的 policy。
 
 相关基础设计与开放分叉：
 
@@ -214,7 +214,7 @@ materialized root 是可丢弃 working graph，不是 baseline、StateMap 或第
 
 ### S1：内存自适应双腿轮转策略模拟
 
-状态：In Progress。当前优先研究切片；已建立 deterministic workload generation/replay substrate，以单文件 preparatory baseline 跑通 `AlwaysBase` / `AlwaysDeltaWhenLegal` / `ObjectPayloadReadAmplification3` 到 Frame、absolute live StateMap 与 symbolic materialization 的逐 Save 前缀闭环，并加入 exact RBF v0.40 envelope。`ObjectPayloadOnly` baseline 继续保留，另有 `ProvisionalRevisionV0` 对一个实验 grammar 计入 ObjectVersion headers、OVD、TailMeta directory 与 relative VarUInt。S1e 已能纯规划一个至多包含单 B relay Frame 与单 C evacuation Frame 的 immediate witness，并覆盖 mixed full OVD 与两侧容量失败；S1f 已在 synthetic size-state 模型中证明 `LogicalVersionOrdinal` 与物理维护 hop 可分离，same-version Delta/Base 可分别表达 transparent Relay/RelocatedBase，logical equality 只观测 `(BasePayloadBytes, LogicalVersionOrdinal)`，且 current reconstruction 与 historical lineage inspection 分层。尚未实现 byte writer/parser、planned maintenance record 的 materialization/append、replayable OVD reader、shared-frame-aware 或 rotation-aware 自适应策略、一般 two-file completion search 或 `CanPrepareAndRotate` gate。不修改 R1–R3 已验证结论，也不把 StateStore working design 描述为产品实现事实。
+状态：In Progress。当前优先研究切片；已建立 deterministic workload generation/replay substrate，以单文件 preparatory baseline 跑通 `AlwaysBase` / `AlwaysDeltaWhenLegal` / `ObjectPayloadReadAmplification3` 到 Frame、absolute live StateMap 与 symbolic materialization 的逐 Save 前缀闭环，并加入 exact RBF v0.40 envelope。`ObjectPayloadOnly` baseline 继续保留，另有 `ProvisionalRevisionV0` 对一个实验 grammar 计入 ObjectVersion headers、OVD、TailMeta directory 与 relative VarUInt。S1e 已能纯规划一个至多包含单 B relay Frame 与单 C evacuation Frame 的 immediate witness，并覆盖 mixed full OVD 与两侧容量失败；S1f 已在 synthetic size-state 模型中证明 `LogicalVersionOrdinal` 与物理维护 hop 可分离，same-version Delta/Base 可分别表达 transparent Relay/RelocatedBase，logical equality 只观测 `(BasePayloadBytes, LogicalVersionOrdinal)`，且 current reconstruction 与 historical lineage inspection 分层；S1g 已建立内存 runtime OVD authority、`LookupLive` 与 Base Revision-locator discriminator。尚未实现 OVD/object bytes writer/parser 与 persisted decoder、runtime OVD 到 planner 的 authority integration、planned maintenance record 的 materialization/append、shared-frame-aware 或 rotation-aware 自适应策略、一般 two-file completion search 或 `CanPrepareAndRotate` gate。不修改 R1–R3 已验证结论，也不把 StateStore working design 描述为产品实现事实。
 
 问题：在不先引入固定 `MaxLogicalChainBytes`、`TargetFileBytes` 或 migration-byte budget 的情况下，能否用无权重事实量设计并比较 Base、Delta、渐进 cold migration、RelayRevision 与正式 rotation 的候选策略？
 
@@ -271,12 +271,21 @@ payload/result/cumulative、skip 或 regression 异常；logical equality 只观
 `(BasePayloadBytes, LogicalVersionOrdinal)`，probe 累计 170 tests。该语义不增加 runtime maintenance kind 或
 physical ordinal，planned records 仍未 materialize/append。
 
-交叉化简审查未找到 Revision-locator 在 AA/BA/BB 上的致命反例：若 Base lineage parent 指向
-old B PublishedRevision，再用该 Revision 的 OVD point lookup prior ObjectVersion，可能删除
-dedicated relay。当前缺少可回放 OVD authority，且 Remove 后同 DurableId 重新接入的 historical
-predecessor 语义未裁决，因此 DB-009 保持 Open。下一高价值 discriminator 应先做单一 authority
-的 OVD Base/Delta point-lookup probe，再决定 materialize existing relay plan 还是删除 relay，
-不应先扩展 multi-frame completion planner 或 heuristic scoring。
+S1g 已实现 nullable runtime OVD authority 与不接收 StateMap 的 `LookupLive`：Base/Delta、
+Self/External/Remove、decisive stop、Delta inheritance、Base absence、source-scope normalization
+及 malformed address/object fail-close 均有 executable evidence。canonical C full OVD 是唯一
+current authority，AA/BA 由 C Self、BB 由 C External(B) 取得 head。
+
+显式 Base Revision-locator oracle 对比了三种形状：用户澄清的 relay + OVD Self 得到
+`C -> Relay -> A` 且 parent lookup 只读 Relay；relay-free 得到 `C -> A` 且 lookup 读 B/A；
+relay record + empty OVD 会读 Relay/B/A 但跳过 helper。前两者 current state、logical ordinal 与
+lineage root 相同，current reconstruction 对 relocated Base 仍只读 C。完整 probe 为 194 tests。
+
+因此 DB-009 的 relay-free locator 成为领先候选：relay 当前只显示为减少历史 OVD reads 的
+optimization，不是 correctness requirement。planner 尚由 caller StateMap 驱动且 planned records
+未 materialize，所以 DB-009 保持 Open；下一步应先把普通 Revision 与 planner source state
+迁到同一 runtime OVD authority，再删除 relay machinery。DB-010 另记录把 Base per-record
+locator 合并到 Revision 唯一 prior-snapshot anchor 的进一步化简。
 
 本切片不实现真实 `DurableFlush`、atomic HEAD、reopen/truncate 或文件删除。逻辑策略收敛后，S2/S3 分别验证地址/layout 与 filesystem publication；文件被物理删除后不可访问不属于格式需要抵抗的故障模型。
 

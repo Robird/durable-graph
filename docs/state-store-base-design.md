@@ -82,20 +82,20 @@ ObjectId -> OffsetOfObjectVersion
 每个引用类型拥有独立 ObjectVersion chain。ObjectVersion 头部保存：
 
 - `VersionKind`：`Base` 或 `Delta`；
-- `ParentVersion` 的 `RelativeFrameTicket`；
+- 当前 probe 中复用的 parent `RelativeFrameTicket`；direct 与 Revision-locator 两套 inspection 对 Base 的解释仍并存；
 - `LogicalVersionOrdinal`：只随领域状态变化递增，不充当物理 chain depth；
 - 后续 RebaseOrDeltify 策略所需、但尚未冻结的度量信息。
 
-首次 ObjectVersion 的 Parent 使用特殊值 0。后续 Base 与 Delta 都保留 lineage parent，因此 Base 不在结构上断开版本关系；但重建当前值时：
+首次 ObjectVersion 的 parent 使用特殊值 0。后续 Delta 直接指 exact parent。DB-009 的领先候选把后续 Base parent 解释为 earlier Revision locator，再由该 Revision OVD 按 ObjectId 找 exact parent：
 
 ```text
-Delta -> 跟随 ParentVersion
-Base  -> 已包含完整值，不跟随 ParentVersion
+Delta -> reconstruction 跟随 exact parent
+Base  -> 已包含完整值；reconstruction 停止，lineage 才解析 Revision locator
 ```
 
-也就是说，`ParentVersion` 同时携带 lineage，而 `VersionKind` 决定它是否属于 reconstruction dependency。
+locator discriminator 中，`VersionKind` 决定 parent ticket 的解释与它是否属于 reconstruction dependency；现有 direct oracle/旧 planner 仍把 Base parent 当 exact frame。未发布 wire 尚未裁决是否永久由 `VersionKind` 承担该 discriminant，也不为实验并存增加 tag。若 DB-010 选择 Revision 共同 prior-snapshot anchor，Base per-record ticket 将进一步删除。
 
-当前 direct-parent runtime probe 进一步验证了不需要 maintenance kind 或 physical ordinal：
+runtime probes 进一步验证了不需要 maintenance kind 或 physical ordinal：
 
 ```text
 child logical ordinal = parent + 1  -> domain change
@@ -108,37 +108,44 @@ Base 是 RelocatedBase，自身包含完整状态并停止 reconstruction，但 
 size-state probe 中证明；未来真实 payload 的 RelocatedBase 仍必须来自 authoritative exact value，
 不能用“尺寸相同”代替值相同。
 
-## 5. 跨 A/B/C 的 Lineage Relay
+## 5. 跨 A/B/C 的 Base Lineage Locator
 
-从 A/B 轮转到 B/C 时，某个长期未修改对象的最新 ObjectVersion 可能仍在 A。把它以 Base 写入 C 后，C 中的 1-bit relative address 不能直接表达 A。
-
-为保留 Base 的直接 lineage parent，在 B 中先追加一个未发布的 `RelayRevision`：
+从 A/B 轮转到 B/C 时，某个长期未修改对象的 latest ObjectVersion 可能仍在 A。把它以 Base
+写入 C 后，C 中的 1-bit relative address 不能直接表达 A；但 C 可以表达 B 中一个 earlier
+Revision。当前领先方向只对 Base 使用 Revision locator：
 
 ```text
 C.Base(Object X)
-    -> B.Relay(Object X)
+    -> B.PublishedRevision locator
+    -> LookupLive(B.OVD, ObjectId X)
     -> A.PreviousVersion(Object X)
 ```
 
-紧邻轮转创建的 dedicated `RelayRevision` 是物理上合法、但不会成为 PublishedHead 的 maintenance Revision。它为需要跨两代寻址的 ObjectId 保存轻量 forwarding ObjectVersion；forwarder 自身不重复领域状态，只把 lineage/reconstruction parent 指回 A。
+Delta parent 仍直接指 exact ObjectVersion，因为它是 current reconstruction dependency。Base
+已经包含完整状态，locator 只用于 lineage；current reconstruction 在 C Base 停止，不把 B/A
+OVD reads 计入 two-file reconstruction closure。
 
-当前 one-shot 尺寸原型把 dedicated relay 的 ObjectVersionDict 建模为以旧 B head 为 parent
-的 empty Delta：relay helpers 进入 TailMeta directory，但不被这份未发布 OVD 安装；随后 C
-Base 的 lineage parent 直接引用它们。C 的 full OVD Base 以该 relay Revision 为 parent，并
-把 evacuated objects 安装为 C Self。这样 dedicated relay 不制造一份马上被覆盖的中间
-latest-map。该选择目前是 provisional record grammar 的工作形状，不冻结 numeric opcode。
+runtime OVD discriminator 已以 C full OVD 作为唯一 current authority，执行性验证 AA/BA/BB：
+B OVD 可分别把 prior exact head 解析到 A 或 B，relative binding 始终按其 source Revision scope
+absolute-normalize。Remove 与 OVD Base absence 是 decisive absent；missing/malformed locator
+fail closed。
 
-轮转时只有“最新 ObjectVersion 仍在 A”的对象需要 relay。若对象最新版本已在 B、只是其 reconstruction Base 位于 A，则 C 中的新 Base 可以直接把 B 中的最新版本作为 parent，不需要额外中继。
+旧 one-shot planner 仍使用 `direct C Base -> B relay helper -> A`，并把未发布 relay Revision
+建模为 zero-payload helpers + empty OVD Delta。用户澄清的原始 relay 设想则是 helper + OVD
+Self，再由 C Base 把该 relay Revision 当 locator。这两种形状不能混叫：locator 遇 empty relay
+OVD 会继承 old B OVD 并跳过 helper。
 
-若自适应策略在普通 Save 中渐进创建 relay，则 relay entry 必须进入该次 B 中普通 published Revision，并由同次 ObjectVersionDict 把对应 ObjectId 的 latest binding 更新到该 relay。未被 published ObjectVersionDict 或随后 C Base parent 引用的 relay 只是 orphan，不得减少 RelaySet 或 relay debt。
+对比实验中，relay + Self 与 relay-free locator 的 current state、logical ordinal 和 lineage root
+相同。relay 额外产生 O(N) B records/OVD/TailMeta，但可能减少历史 OVD reads；当前没有
+correctness consumer 要求显式物理 no-op hop。因此 relay 不再是硬约束，只作为可测的 lineage
+read optimization 保留。planner 尚未迁移到 runtime OVD authority，旧 path 暂不删除。
 
-Relay 解决的是 C 对直接父版本的 1-bit 可编码性，并在相关文件仍被保留时保持 lineage 连续可导航。文件 retention/GC 是独立问题：文件被物理删除后，其内部数据自然不可访问；StateStore 格式不承诺抵抗删文件，也不为此增加额外寻址或冗余机制。
+文件 retention/GC 仍是独立问题：文件被物理删除后，其内部数据自然不可访问；StateStore
+格式不承诺抵抗删文件，也不为此增加额外寻址或冗余机制。
 
-更多推导、成本与边界见 [`state-store-base-derived.md`](state-store-base-derived.md)。
-
-一个可能删除 dedicated relay 的竞争方案是：只把 Base 的 lineage parent 解释为 earlier
-Revision locator，再由该 Revision 的 OVD 按 ObjectId 找到 prior ObjectVersion。该方案尚缺
-可回放 OVD authority，不属于当前 Working Design；见 [`DB-009`](design-branches/0009-base-lineage-parent-locator.md)。
+候选证据与后续裁决门见 [`DB-009`](design-branches/0009-base-lineage-parent-locator.md)；把 Base
+per-record locator 进一步合并到 Revision 共同 prior-snapshot anchor 的分叉见
+[`DB-010`](design-branches/0010-base-lineage-anchor-scope.md)。
 
 ## 6. ObjectVersionDict
 
@@ -175,7 +182,7 @@ self-ticket fixed point 的依据见 [`state-store-addressing-design.md`](state-
 
 - RBF 单 Frame 的 Payload + TailMeta 约小于 256 MiB；
 - TailMeta 小于等于 65,535 bytes；
-- relay、普通 Save 与轮转 evacuation 都必须在写入前 preflight 这些边界。
+- 普通 Save 与轮转 evacuation 都必须在写入前 preflight 这些边界；若策略选择额外 relay/checkpoint，也同样受限。
 
 越界时 Save fail closed，PublishedHead 不变。当前不自动拆 frame；Extent 是容量证据出现后的重访方案。
 
@@ -187,13 +194,14 @@ self-ticket fixed point 的依据见 [`state-store-addressing-design.md`](state-
 
 1. 规划普通 Save 后的 live ObjectVersionDict；
 2. 找出 reconstruction chain 的 Base 位于 A 的全部 live objects；
-3. 必要时在 B 追加 RelayRevision，并在写 C 之前使其 durable；
-4. 将这些 objects 以完整 Base 写入 C；
-5. 本次其他新增、Base 或 Delta 也只写入 C；
-6. 完全自包含于 B 的 unchanged objects 可以继续复用 B 中的版本；
-7. ObjectVersionDict 在 C 写完整 Base，并相对于 C 重新编码全部地址；
-8. 发布前验证 new head 的 reconstruction closure 只包含 B/C；
-9. candidate durable 并发布 new head 后，A 才具备 retirement 资格。
+3. 若 C 暂时无法容纳全部 EvacuationSet，在 B 通过有限、published Base migrations 分批降低集合，并重算 authority；
+4. 选择最终 B PublishedRevision 作为 Base lineage locator；只有测量证明有益时才附加可选 relay/checkpoint，并在写 C 前使其 durable；
+5. 将剩余 EvacuationSet 以完整 Base 写入 C；
+6. 本次其他新增、Base 或 Delta 也只写入 C；
+7. 完全自包含于 B 的 unchanged objects 可以继续复用 B 中的版本；
+8. ObjectVersionDict 在 C 写完整 Base，并相对于 C 重新编码全部地址；
+9. 发布前验证 new head 的 reconstruction closure 只包含 B/C；
+10. candidate durable 并发布 new head 后，A 才具备 retirement 资格。
 
 轮转过程中物理上允许短暂同时存在 A/B/C。双文件约束描述的是 published current Revision 的读取闭包，不是每个瞬间目录里只能存在两个文件。
 
@@ -206,14 +214,14 @@ self-ticket fixed point 的依据见 [`state-store-addressing-design.md`](state-
 - current/previous 两条腿各自承担的有效与无效读取；
 - 本次 Rebase 对下一次轮转 evacuation 的边际影响；
 - CurrentFile 剩余的格式可寻址容量；
-- RelayRevision、ObjectVersionDict 与 TailMeta index 的实际成本。
+- optional relay/checkpoint、ObjectVersionDict 与 TailMeta index 的实际成本。
 
 候选方向包括在普通 Save 中提前迁移少量 cold objects，把集中 evacuation 转化为渐进过程。该方向目前是待实验假说，不是已选算法；详见 [`DB-007`](design-branches/0007-adaptive-two-leg-rotation-policy.md)。
 
 无论最终策略为何，下列条件不受 heuristic 支配：
 
 - 任意已发布 candidate 都必须 exact、可重建且满足 two-file reconstruction closure；
-- RelayRevision 与 candidate frame 必须在各自目标文件的硬容量内；
-- 任意成功 Save 后必须满足 `CanPrepareAndRotate`：存在一条有限的合法计划，可在 Current 中通过普通 published maintenance Base/relay 降低债务，并最终在 Next 中容纳剩余 EvacuationSet 的完整 Bases、ObjectVersionDict 与索引；
+- candidate frame 必须在目标文件的硬容量内；若选择额外 B maintenance，它也必须完整 preflight；
+- 任意成功 Save 后必须满足 `CanPrepareAndRotate`：存在有限、合法且容量可承受的 Current published Base migration/checkpoint plan，随后能在 Next 中容纳剩余 EvacuationSet 的完整 Bases、ObjectVersionDict 与索引；dedicated relay 可选，但 preparatory Base migration 可能是 correctness 所需；
 - 容量、算术或编码越界必须在发布前 fail closed；
 - 失败不替换 PublishedHead，也不安装 clean in-memory baseline。

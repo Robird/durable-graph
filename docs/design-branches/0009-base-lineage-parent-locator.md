@@ -4,9 +4,11 @@
 >
 > 创建日期：2026-08-29
 >
-> 当前方向：runtime probe 继续使用 direct ObjectVersion parent；在扩大 relay completion
-> planner 前，用同一份可回放 OVD authority 单独验证 Revision locator，不以 caller StateMap
-> 冒充历史 OVD。
+> 更新日期：2026-08-29
+>
+> 当前方向：Revision-locator runtime discriminator 已通过，relay-free 是领先候选；在
+> `ImmediateRotationPlanner` 改由可回放 OVD authority 驱动前，不删除旧 direct-relay
+> planner，也不把候选宣称为最终格式。
 
 ## 问题
 
@@ -17,69 +19,97 @@ A/B → B/C 轮转是否真的需要为每个 `head@A` object 在 B 创建 relay
 不可约约束：
 
 - current reconstruction 遇 Base 停止；Base 后的 parent 不计入 two-file reconstruction gate；
-- retained files 存在时，Base lineage 必须能定位 prior ObjectVersion；
-- 内存 StateMap 和历史 OVD 不能成为两份可漂移的 authority；
+- retained files 存在时，Base lineage 必须能定位 prior exact ObjectVersion；
+- 当前 head 与历史 binding 都必须来自同一份可回放 OVD authority，不能由 caller StateMap 补洞；
 - `LogicalVersionOrdinal` 只在领域状态变化时递增，物理维护边保持相同；
-- relative binding 必须按承载它的 Revision scope 解码并立即 absolute-normalize。
+- relative binding 必须按承载它的 Revision scope 解码并立即 absolute-normalize；
+- ObjectVersion hops、OVD parent-resolution reads 与 current reconstruction reads 分开观测。
 
-## 候选 A：direct ObjectVersion parent + B relay helper
+## 三个必须区分的形状
 
-当前 Working Design 与 `ImmediateRotationPlanner` 使用：
+### A0：当前 direct relay planner
+
+当前 `ImmediateRotationPlanner` 生成：
 
 ```text
-C.RelocatedBase(X)
-    -> B.Relay(X)
-    -> A.PreviousObjectVersion(X)
+B.RelayRevision:
+    AA = zero-payload Delta -> A.AA
+    OVD Delta(parent = old B head) { }  // empty
+
+C.RelocatedBase(AA) -> exact B.RelayRevision/AA
 ```
 
-优点：与当前 `Frame.ObjectVersions[ObjectId]` 和 `PhysicalStateOracle` 闭合；parent 始终是
-exact `(FrameAddress, ObjectId)`。代价是 O(N) relay records、TailMeta、B append/durable flush、
-容量 preflight、orphan/reopen 规则和未来 multi-frame completion planning。
+C Base 直接以 `(FrameAddress, ObjectId)` 找 relay，所以 relay OVD 不安装 helper。该形状已完成
+尺寸 planning，但尚未 materialize/append；planner 的 source authority 仍是 caller StateMap。
 
-runtime probe 已在 synthetic size-state 模型中证明无需新增 kind：same-version zero-payload
-Delta 可表达 transparent Relay，same-version Base 可表达 RelocatedBase；logical equality
-只观测 `(BasePayloadBytes, LogicalVersionOrdinal)`，地址和 parent 链已经表达物理顺序。
+### A1：用户澄清的 relay + OVD Self + locator
 
-## 候选 B：仅 Base 使用 Revision-scoped lineage locator
+用户原设想实际是：
 
-Delta 继续 direct；非首 Base 的 parent ticket 指向一个 earlier Revision。lineage 导航以隐含
-ObjectId 对该 Revision 的 OVD 做 point lookup：
+```text
+B.RelayRevision:
+    AA = zero-payload Delta -> A.AA
+    OVD Delta(parent = old B head) { AA = Self }
+
+C.RelocatedBase(AA)
+    -> B.RelayRevision locator
+    -> LookupLive(B.RelayRevision, AA)
+    -> exact B.RelayRevision/AA
+```
+
+这里 `Self` 不是重复信息：Base parent 的语义已经改成 Revision locator，必须由 OVD 把 AA
+安装到 relay record。若 relay OVD 仍为空，lookup 会继承 old B OVD 并跳过 relay。
+
+### B：relay-free Revision locator
+
+不创建 dedicated relay。C Base 指 old B PublishedRevision，lineage 导航以隐含 ObjectId
+做 OVD point lookup：
 
 ```text
 ResolveBaseParent(parentRevision, objectId)
-    = LookupLiveObjectVersion(parentRevision.OVD, objectId)
-```
+    = LookupLive(parentRevision, objectId)
 
-canonical AA/BA/BB 推演中，旧 B PublishedHead 可以直接充当中继：
-
-```text
 B.OVD[AA] -> A.Base(AA)
 B.OVD[BA] -> B.Delta(BA)
 
-C.RelocatedBase(AA) -> B.PublishedHead.OVD[AA]
-C.RelocatedBase(BA) -> B.PublishedHead.OVD[BA]
+C.RelocatedBase(AA) -> B.PublishedRevision locator -> A.AA
+C.RelocatedBase(BA) -> B.PublishedRevision locator -> B.BA
 ```
 
-C current reconstruction 对 AA/BA 都在自身 Base 停止；历史 lineage 分别导航到 A 和 B。
-该形状可删除 dedicated RelayRevision、RelaySet、B relay capacity debt 与 `CanCompleteRelay`
-子问题。它不会删除 C evacuation Base、same-version relocation、C full OVD 或 B/C closure gate。
+C current reconstruction 对 AA/BA 都在自身 Base 停止。该形状可删除 dedicated
+RelayRevision、RelaySet、B relay capacity debt 与 `CanCompleteRelay` 子问题；它不会删除 C
+evacuation Base、same-version relocation、C full OVD 或 B/C reconstruction closure gate。
 
-## 为什么尚未选择候选 B
+## S1g 可执行证据
 
-当前 probe 的 `Frame` 不保存可回放 OVD；V0 OVD 只是尺寸 grammar，planner 仍由 caller
-StateMap 提供当前 authority。用这份 StateMap 同时回答历史 `B.OVD[ObjectId]` 会伪造第二
-authority，不能构成证据。
+`TwoLegRotationProbe` 现有显式 nullable runtime OVD：`null` 表示 raw/legacy Frame 未建模
+authority，不能冒充 authoritative empty Base。OVD 支持 Base/Delta 与 Self/External/Remove；
+`LookupLive` 不接收 StateMap，并执行：
 
-诚实探针必须至少实现：
+- Self、External、Remove decisive stop；
+- Delta 缺项才跟 parent，Base 缺项得到 `AbsentAtBase`；
+- 每层 binding 按自身 Revision origin 解码；
+- External 必须落到含同 ObjectId record 的 earlier Frame；
+- null/missing/non-earlier/wrong-object/alias 与不闭合 inspection fail closed。
 
-1. OVD Base/Delta 的单一 decoded authority；
-2. object-specific point lookup，命中 decisive Self/External/Remove 后立即停止；
-3. 每层 binding 按自身 Revision origin absolute-normalize；
-4. missing/cycle/non-earlier/future binding fail closed；
-5. current reconstruction frames、parent-resolution frames 与 lineage hops 分开观测。
+canonical A/B/C fixture 由 C full OVD 作为 current authority：AA/BA 是 C Self，BB 是
+External(B)。所有 current heads 都先从 `LookupLive(C, ObjectId)` 取得，没有 caller StateMap。
 
-这套 OVD reader 本来就是未来 persisted StateMap 的依赖；届时复用它可能使候选 B 的总复杂度
-显著低于 relay。但在它出现前，候选 B 只是有力的化简假说，不是当前实现事实。
+观察：
+
+| 形状 | AA exact ObjectVersion hops | AA Base-parent OVD reads | B maintenance write |
+|---|---|---|---|
+| A1 relay + Self | `C -> Relay -> A` | `Relay` | 一个 O(N) relay Revision |
+| B relay-free | `C -> A` | `B -> A` | 无 |
+| relay record + empty OVD | `C -> A` | `Relay -> B -> A` | 有，但 helper 被跳过 |
+
+A1 与 B 的 current state、`LogicalVersionOrdinal`、lineage root 相同。A1 当前唯一观察到的优势是
+可能缩短历史 OVD lookup；没有 current correctness 消费者要求每次物理跨文件都暴露一个
+no-op ObjectVersion hop。因此 B 成为领先候选，relay 降为待测的 lineage-read optimization，
+而不是 correctness 必需机制。
+
+该证据仍是 synthetic size-state、内存 Frame probe；没有真实 bytes、publication、reopen 或
+planner materialization。完整 probe 为 194 tests。
 
 ## 未裁决的对象重新接入
 
@@ -91,24 +121,22 @@ R2: Remove(X)
 R3: X reachable again
 ```
 
-`LookupLive(R2, X)` 必须在 Remove 处得到 absent，不能错误继承 X1；但若 R3 要延续旧
-lineage，则 Base parent 需要不同的 `LookupHistoricalPredecessor` 语义，遇 Remove 时继续向
-OVD parent 搜索。候选选择不能偷偷决定“重新接入获得新 ID”“断开 lineage”或“延续旧
-lineage”；这是后续 DurableId 生命周期实验的独立输入。
+`LookupLive(R2, X)` 必须在 Remove 处得到 `Removed`，不能复活 X1。若 R3 要延续旧 lineage，
+则需要明确不同的 `LookupHistoricalPredecessor`；显式 relay 在创建时同样需要这项能力，不能
+自动裁决问题。本轮不实现 historical lookup。
 
-## 可执行裁决门
+## 后续裁决门
 
-- AA/BA/BB 使用 OVD Delta inheritance，无 caller StateMap 副本；
-- lookup 命中 B decisive binding 时不继续读取 A；
-- Base lineage locator 可解析 A binding，而 current Base reconstruction 仍只读 C；
-- Remove 的 live lookup definitive absent；若支持 historical lookup，两者结果明确分离；
-- OVD Base absence、cycle、missing parent、future binding 与同 ObjectId record mismatch fail closed；
-- dedicated relay 与 locator 对同一 frozen workload 输出相同 logical state/lineage，分别记录
-  B write bytes、TailMeta debt 与 lineage OVD read frames。
+- 普通 simulation Revision 由同一 runtime OVD authority 产生 current heads；
+- `ImmediateRotationPlanner` 从 PublishedRevision OVD 派生 source state，不再接收 caller map；
+- relay-free plan materialize 后仍满足 A/B → B/C reconstruction closure 与 lineage oracle；
+- 记录真实 workload 的 lineage OVD read amplification；只有稳定读劣势才重访 relay/checkpoint；
+- Base per-record locator 与 Revision 共同 prior-snapshot anchor 的进一步化简见
+  [`DB-010`](0010-base-lineage-anchor-scope.md)。
 
 ## 重访触发条件
 
-- 首个可回放 OVD Base/Delta reader；
-- `ImmediateRotationPlan` 开始真实 materialize/append；
-- multi-frame relay completion planner 准备扩展；
-- DurableId 离开 StateMap 后重新接入的语义被实验裁决。
+- planner source authority 迁移到 runtime OVD；
+- locator 读放大在真实 lineage consumer 中成为可测问题；
+- DurableId 离开 StateMap 后重新接入的语义被裁决；
+- merge/import/rescue 需要一个 Revision 内的 Base 来自多个 prior snapshots。

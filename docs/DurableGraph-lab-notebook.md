@@ -758,6 +758,15 @@
 
 ## 6. 船长日志
 
+### 2026-08-29：建立 OVD authority 并验证 relay-free Base locator
+
+- 用户澄清原始中继设想是 `B zero-payload Delta + OVD Self`，C Base 把 B Revision 当 locator；这与当前 planner 的 `direct parent + empty OVD` 不是同一形状。
+- runtime `Frame` 新增显式 nullable OVD；`null` 表示未建模 authority，不冒充 empty Base。`LookupLive` 不接收 caller StateMap，区分 Found/Removed/AbsentAtBase，并验证 decisive binding、source-scope relative decode、same ObjectId 与 earlier address。
+- canonical C full OVD 成为唯一 current authority：AA/BA Self、BB External(B)，所有 current heads 先经 C OVD lookup。24 个聚焦 cases 覆盖 OVD model/lookup、AA/BA/BB、Remove/Base absence、malformed locator、确定性与只读 inspection；完整 probe 194/194。
+- Base Revision-locator discriminator 证明：relay + OVD Self 的 AA exact lineage 为 `C/Relay/A`、OVD read 为 `Relay`；relay-free 为 `C/A`、OVD read 为 `B/A`；relay + empty OVD 会跳过 helper。两者 current state、logical ordinal 和 root 相同，且 current reconstruction 只读 C。
+- 当前没有产品律要求每次物理跨文件都暴露 no-op ObjectVersion hop，故 relay-free 成为领先方向；relay 只保留为可能降低 historical OVD read amplification 的候选 optimization。planner 仍依赖 caller StateMap，尚不能删除旧 relay path。
+- 新增 DB-010：在 single-prior-snapshot Revision 法律下，Base per-record locator 还可能与 `Revision.OVD.ParentRevisionTicket` 合并；merge/import/rescue 与 DurableId reuse 是明确重访条件。
+
 ### 2026-08-29：分离 logical version 与 transparent maintenance lineage
 
 - 将 probe 的 `VersionOrdinal` 明确重命名为 `LogicalVersionOrdinal`；物理先后继续由 append address、direct parent 与 cycle gate 表达，不增加 physical ordinal、maintenance flag 或 runtime kind。
