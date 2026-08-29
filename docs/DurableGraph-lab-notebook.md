@@ -761,9 +761,9 @@
 
 ## 6. 船长日志
 
-### 2026-08-29：双腿探针完成动作定尺并回归连续策略主线
+### 2026-08-29：双腿探针收敛输入分区与两阶段规划
 
-- **Observed / Next**：caller-selected B migration、immediate C 与 terminal sizing 已足以支撑下一纵向切片；后者只证明 provisional v0 下 high-ticket External 不支配 zero-payload Base+Self，不外推 runtime completeness 或未来 wire。航向复审确认最大缺口是 single-file workload 与 rotation actions 尚未接通。下一步合并 domain Save、same-Revision migration 与 terminal C，先跑连续多 Save/多轮转和简单策略；bounded explorer 等待具体保守拒绝，`NotFoundWithinBounds` 不解释为一般无解。
+- **Observed / Next**：caller-selected B migration、immediate C 与 terminal sizing 已足够；最大缺口仍是 workload 与 rotation actions 未接通。策略输入现按 `Insert / Update / Remove / NoChange` 建模，Remove 先改变 PostLive，NoChange 由 parent ObjectMap/OVD 派生。首版分别在假设可容纳下生成 Stay-B/Rotate-C 偏好计划，再 exact-filter；容量失败暂不搜索次优修补，只保守 fail closed。下一步建立 unified candidate 和连续多轮转 runner；搜索等待真实 `RejectedUnproven` 或 `RejectedCapacityUnsearched`。
 
 ### 2026-08-29：选择 Revision shared prior-snapshot anchor
 

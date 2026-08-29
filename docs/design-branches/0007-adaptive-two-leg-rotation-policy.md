@@ -46,6 +46,18 @@
   消耗 B 空间后仍收敛。
 - **统一边际规划**：比较 Base/Delta/Stay/Rotate 的事实性变化；不得把隐藏权重伪装成算法事实。
 
+## 当前 workload 分区与两阶段规划方向
+
+策略先把 parent snapshot 与本次变更归一化为 `Insert / Update / Remove / NoChange`：Remove 先从
+PostLive 删除，之后没有 ObjectVersion placement；NoChange 不属于 foreground workload，但仍参与 A debt、
+cold migration、C evacuation 与 Meta ObjectMap/OVD。
+
+首版分别在“假设目标文件可容纳”下生成一个 PreferredStayB 与 PreferredRotateC，再用唯一
+whole-candidate estimator 检查地址、Frame/File capacity、closure 与 completion certificate。容量不进入
+首版 action 组合优化；两个偏好 candidate 都失败时保守 fail closed，不搜索同一 target 的次优修补，
+也不把拒绝表述成一般无解。具体分叉、风险和重访触发见
+[`DB-011`](0011-two-phase-save-planning-and-capacity.md)。
+
 ## 无权重观测量
 
 - File/Frame：A/B/C tail、candidate start、payload/TailMeta/padding/fence、full-frame reads、cache hit；
@@ -112,13 +124,14 @@ completeness 或未来 wire format。尺寸裁决始终以 whole-candidate estim
 
 ## 未闭合事项与顺序
 
-1. 建立 unified per-Save candidate：同一 B Revision 合并 domain changes 与显式 cold migration；同一 C
+1. 建立 normalized input 与 unified per-Save candidate：同一 B Revision 合并 domain changes 与显式 cold migration；同一 C
    Revision 合并 domain changes、mandatory evacuation 与 optional B-local relocation；
-2. 以 scripted actions 跑通连续多 Save 和至少两次换腿，并记录 A debt、headroom、写峰值与读取原始量；
-3. 接入少量明确命名的策略基线，在同一 frozen workloads 上比较拒绝、振荡、Pareto frontier 与 pause；
-4. 捕获具体 `RejectedUnproven` 或疑似 heuristic false-negative 后，再建立 small-state bounded/canonical
+2. 分别生成 PreferredStayB/PreferredRotateC 后 exact-filter；容量失败暂不搜索同一 target 的次优修补；
+3. 以 scripted actions 跑通连续多 Save 和至少两次换腿，并记录 A debt、headroom、写峰值与读取原始量；
+4. 接入少量明确命名的策略基线，在同一 frozen workloads 上比较拒绝、振荡、Pareto frontier 与 pause；
+5. 捕获具体 `RejectedUnproven`、`RejectedCapacityUnsearched` 或疑似 heuristic false-negative 后，再建立 small-state bounded/canonical
    explorer；找到的 witness 可证明 true，`NotFoundWithinBounds` 不冒充一般无解；
-5. 只有策略结论确实依赖 byte-level 差异时，再做 provisional writer/parser；one-frame 真实容量频繁
+6. 只有策略结论确实依赖 byte-level 差异时，再做 provisional writer/parser；one-frame 真实容量频繁
    撞墙时才引入 Extent。
 
 尚无真实 workload/SLO 时，不要求用户预填 read/write/pause 权重；当多个不可支配策略必须选择

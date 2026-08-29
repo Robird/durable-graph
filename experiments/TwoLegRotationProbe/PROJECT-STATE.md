@@ -58,6 +58,26 @@ current reconstruction dependency。
 因此同一 epoch 内 debt ObjectId set 单调不增，但 debt 对象的完整 Base bytes、exact terminal-C cost
 和 B headroom 未必单调。
 
+规划前把 parent snapshot 与本次 changes 归一化为四个互斥集合：
+
+```text
+Insert / Update / Remove / NoChange
+PostLive = Insert + Update + NoChange
+```
+
+Remove 先从 post-Save live set 删除，后续沿 candidate bindings 统计时自然不可达；它没有 ObjectVersion
+保存动作，但仍改变 Meta ObjectMap/OVD、debt 和 whole-candidate size。NoChange 不属于 foreground
+workload，却必须作为 parent snapshot 的显式派生集合参与 cold migration 和 C evacuation。
+
+StateJournal 的 `_objectMap` 说明了可整合形状：unchanged objects 不写新版本，changed/new 更新 map，
+unreachable keys 删除，ObjectMap 自己再按普通 VersionChain 增量保存。Probe 当前以 runtime OVD 承担
+同类 live-binding authority，并把 Meta bytes 纳入 candidate 定尺。
+
+外层 `Commit(rootObject)` 可以处理 CLR graph/session validation、diff 与 payload freezing；TwoLeg 策略
+边界只消费相对同一 parent snapshot 验证过的 immutable、canonical object facts。parent 的 contextual
+relative locator 在进入规划 view 时 absolute-normalize；NoChange/live facts 由 PublishedRevision OVD
+authority 派生，caller cache 只能加速而不能成为第二 authority。
+
 Rotate-C Save 必须把本次领域变化与轮转动作合在同一个 candidate 中：剩余 A debt 写完整 Base@C；
 B-contained objects 可 External，必要时也可选择 same-state Base+Self；C 写 full OVD Base，并以 B
 PublishedRevision 为 shared prior-snapshot anchor。accepted new head 的 current reconstruction closure
@@ -71,6 +91,11 @@ PublishedRevision 为 shared prior-snapshot anchor。accepted new head 的 curre
 - one Revision / one provisional RBF Frame；frame-start、Payload+TailMeta、TailMeta 与地址范围是硬 gate；
 - whole-candidate `ProvisionalRevisionV0Estimator` 是当前唯一尺寸 authority，不建立 per-object additive
   savings authority；
+- preference Plan 可以暂时假设目标文件可容纳；accepted candidate 仍必须在 append 前通过唯一 exact
+  feasibility filter。容量不参与首版组合优化，不等于放松 hard gate；
+- 固定 target、membership、OVD Self binding 与其他 decisions 时，若合法 Base 的完整 encoded domain
+  record 不长于 Delta，则 Base 在当前一步的 append、current reconstruction 与 debt 上弱支配 Delta；
+  该规则不外推到正式 wire、CPU/内存或任意未来 continuation；
 - failed candidate 不改变 accepted store/head；
 - accepted post-Save state 必须有具体、有限、可重放的 `CanPrepareAndRotate` continuation certificate。
   当前不要求完备 solver；找不到证书只能称 `RejectedUnproven`，不能称一般无解；
@@ -107,33 +132,41 @@ A debt 随连续 Save 变化
 
 ## 近期 roadmap
 
-1. **Unified per-Save candidate**
+1. **Normalized input + unified per-Save candidate**
+   - 从 parent authority 派生 `Insert / Update / Remove / NoChange` 与 object reconstruction facts；
    - Stay-B：同一 Revision 合并领域变更、changed-object Base/Delta 与显式 unchanged A-debt migrations；
    - Rotate-C：同一 Revision 合并领域变更、mandatory A-debt Bases、B-local External/optional Base；
    - 复用现有 OVD、reconstruction、layout 与 no-mutation oracle；现有 immediate path 成为空变更特例。
-2. **Scripted continuous runner**
+2. **Two-phase plan / feasibility**
+   - 假设可容纳，分别生成一个 PreferredStayB 与 PreferredRotateC；
+   - 随后 exact-filter 地址、Frame/File 容量、closure 与 completion certificate；
+   - 不搜索同一 target 的次优 capacity repair；两个偏好候选都失败时保守 fail closed。
+3. **Scripted continuous runner**
    - 先由测试脚本显式给出动作，不声称 heuristic；
    - 至少跑通 `A/B -> B/C -> C/D`，验证每步 logical state、FileScope closure 和 role rollover；
    - 每个 accepted Save 附带保守的具体 completion certificate，不先建立一般搜索器。
-3. **Rotation observations**
+4. **Rotation observations**
    - 记录 debt count/full-Base bytes、Previous unique frames/bytes、B tail/headroom、domain/migration bytes、
      exact terminal-C estimate、per-Save/rotation peak、leg length、rotation count 与保守拒绝；
    - 保留原始量，不预设总分。
-4. **简单策略基线**
+5. **简单策略基线**
    - Lazy/no cold migration；
    - Touch/ChangedDebtFirst；
    - deterministic PacedCold（例如每 Save 一个）与 DebtZeroThenRotate；
    - 全部重放同一 frozen traces，报告 Pareto 与明显 dead-end/振荡。
-5. **按证据加入 bounded explorer**
-   - 仅在出现具体 `RejectedUnproven` 或疑似 heuristic false-negative 后，冻结该小状态；
+6. **按证据加入 bounded explorer**
+   - 仅在出现具体 `RejectedUnproven`、`RejectedCapacityUnsearched` 或疑似 heuristic false-negative 后，
+     冻结该小状态；
    - 用同一 unified action builder 做 canonical bounded search；`NotFoundWithinBounds` 不外推一般无解。
-6. **再研究自适应策略**
+7. **再研究自适应策略**
    - 根据连续运行暴露的压力、峰值和反例设计 capacity/pressure-aware 候选，而不是先冻结权重。
 
 ## 未闭合事项
 
 - unified candidate 的最小输入形状，以及如何避免与现有 builders/planners 形成第二 authority；
 - foreground change 与同一 ObjectId maintenance selection 的冲突规则；
+- unbounded preference cost 如何比较两个 target，同时保持原始多目标事实而不偷渡权重；
+- `RejectedCapacityUnsearched` 出现多频繁时值得加入次优 action menu 或 constraint-aware repair；
 - rotation Save 中 changed object 何时允许 Delta，何时因其 reconstruction 仍触 A 而必须 Base；
 - 初版保守 completion certificate 如何表达且不偷偷演化成通用 search framework；
 - stable hot/cold、burst、size distribution 与长 trace 是否先用 handwritten fixture，何时扩充 generator；
@@ -153,6 +186,7 @@ A debt 随连续 Save 变化
 
 - 已实现模型与运行方式：[`README.md`](README.md)
 - 活跃设计分叉：[`../../docs/design-branches/0007-adaptive-two-leg-rotation-policy.md`](../../docs/design-branches/0007-adaptive-two-leg-rotation-policy.md)
+- Plan/容量分层：[`../../docs/design-branches/0011-two-phase-save-planning-and-capacity.md`](../../docs/design-branches/0011-two-phase-save-planning-and-capacity.md)
 - StateStore 基础约束：[`../../docs/state-store-base-design.md`](../../docs/state-store-base-design.md)
 - 地址 authority：[`../../docs/state-store-addressing-design.md`](../../docs/state-store-addressing-design.md)
 - 阶段历史：[`../../docs/DurableGraph-lab-notebook.md`](../../docs/DurableGraph-lab-notebook.md)

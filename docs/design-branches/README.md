@@ -32,3 +32,4 @@
 | [DB-008](0008-revision-contextual-self-address.md) | Revision 内的 contextual self address | Chosen | multi-frame Revision、脱离 containing ticket 的裸 OVD 消费者或真实 codec 对照数据 |
 | [DB-009](0009-base-lineage-parent-locator.md) | Base lineage direct parent 与 Revision locator | Chosen | 真实 lineage consumer 出现且 OVD/TailMeta lookup 成为稳定瓶颈 |
 | [DB-010](0010-base-lineage-anchor-scope.md) | Base lineage anchor 的作用域 | Chosen | mixed-provenance Revision、import/rescue/stale Save 或 DurableId reuse/epoch |
+| [DB-011](0011-two-phase-save-planning-and-capacity.md) | Save 策略规划与容量可行性分层 | Open | 普通 workload 中稳定出现 capacity false-negative、次优可行候选或 continuation 证书差异 |

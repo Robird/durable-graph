@@ -44,6 +44,7 @@ R1–R3 已经使 logical graph 的后续状态律相对清晰。当前最大设
 - `state-store-base-derived.md`
 - `state-store-addressing-design.md`
 - `design-branches/0007-adaptive-two-leg-rotation-policy.md`
+- `design-branches/0011-two-phase-save-planning-and-capacity.md`
 
 ### 2.2 继续闭合 logical graph 语义，再固定产品 bytes
 
@@ -269,11 +270,12 @@ true 必须有具体有限 completion witness。未来 bounded explorer 的 `Not
 relocation；未实现 runtime action，不证明扩大 `CanPrepareAndRotate` 可达集、planner completeness 或
 未来 wire format。whole-candidate estimator 是唯一尺寸 authority，不引入 per-object additive savings。
 
-S1 下一步先建立 unified per-Save candidate，把 domain changes、same-Revision B migration 与 terminal C
-动作合成同一 authority；再用 scripted actions 跑通连续多 Save 和多次轮转，记录 A debt、headroom、
-write peak 与 reconstruction 原始量，并比较少量简单策略。bounded/canonical explorer 只在出现具体
-`RejectedUnproven` 或疑似 heuristic false-negative 后介入；找到的 witness 可证明 true，
-`NotFoundWithinBounds` 不证明一般无解。
+S1 下一步先从 parent snapshot 派生 `Insert / Update / Remove / NoChange`，并建立 unified per-Save
+candidate。首版在假设可容纳下分别生成 PreferredStayB/PreferredRotateC，再 exact-filter 地址、Frame/File
+capacity、closure 与 completion certificate；不搜索同一 target 的次优容量修补。随后用 scripted actions
+跑通连续多 Save 和多次轮转，记录 A debt、headroom、write peak 与 reconstruction 原始量，并比较简单
+策略。bounded/canonical explorer 只在出现具体 `RejectedUnproven`、`RejectedCapacityUnsearched` 或疑似
+heuristic false-negative 后介入；找到的 witness 可证明 true，`NotFoundWithinBounds` 不证明一般无解。
 真实 bytes/publication/reopen/crash 继续分离。旧 Relay discriminator 由 tag
 `research/relay-vs-relay-free-20260829`、DB-009 和实验簿归档；本 live roadmap 不重复历史 golden。
 文件被物理删除后不可访问仍不属于格式故障模型。
