@@ -763,12 +763,19 @@
 
 ## 6. 船长日志
 
+### 2026-08-29：闭合 DebtZeroThenRotate 进展/停滞基线
+
+- **Observed**：同一四步纯 Insert trace 上，target 只从本次 Save 之前的 source A-debt 派生；no-migration 四步均 Stay 并以 `{10,20,30}` deferred debt 结束，paced-one-debt 的 source debt 为 `{10,20,30} -> {20,30} -> {30} -> {}`，第三步清零、第四步才真实轮转。
+- **Observed**：paced 换腿后的 Previous debt 重新成为 `{10,20,30,1001,1002,1003}` / 603 B / 3 Frames；这是相对 B/C 新 scope 的正常锯齿，不能用最终 debt 非空否定已经发生的轮转。
+- **Observed**：no-migration 的每个 accepted Stay 都有可行 terminal Rotate certificate，但 caller Store 始终只有 A/B；certificate 是反事实 completion witness，不是 realized action 或自动进展。
+- **Decided**：有限证据只称 `CompletedTraceWithDeferredPreviousDebt`，不外推“可永远追加”；该基线不比较成本 winner，也不成为产品默认 trigger。下一切片整理 realized/counterfactual 分栏的无权重 rotation observation reductions，继续暂缓通用 Runner、policy interface 与总分。
+
 ### 2026-08-29：建立单步策略 seam 与固定日程迁债对照
 
 - **Observed**：无状态 `ExplicitRotationPolicyStepHarness` 只在 caller 选定 target 后组合 selected capacity、Stay completion certificate 与 exact apply；四类 typed outcome 保留 applied Stay/Rotate、capacity rejection 与 `RejectedUnproven`，不 fallback、不执行 certificate 的虚拟 maintenance/final chain。
 - **Observed**：同一三步 Insert trace 与固定 `[Stay, Stay, Rotate]` 日程下，no-migration 的 Previous debt 为 `{10,20,30} -> {10,20,30} -> {1001,1002}`，paced-one-debt 为 `{20,30} -> {30} -> {10,20,1001,1002}`。
 - **Observed**：paced 将相同的三个 maintenance Base domain records 分散到三步，降低 realized peak 与最终 Rotate append；代价是换腿后 Previous debt/base bytes/frame bytes 更高。迁债早期虽减少 debt bytes，却因剩余对象共用 A Frame 而未减少 Previous-frame IO。
-- **Decided**：固定日程仅是隔离 migration pacing 的实验控制，不裁决产品 rotation trigger；ObjectId 顺序也不代表真实冷热。下一切片单独研究 `DebtZeroThenRotate` 的 progress/stall 行为，不将延迟到观察窗外的写入视为策略优势。
+- **Decided（当时）**：固定日程仅是隔离 migration pacing 的实验控制，不裁决产品 rotation trigger；ObjectId 顺序也不代表真实冷热。该日志提出的 `DebtZeroThenRotate` progress/stall 切片已由上一条日志闭合，当前转向 rotation observation reductions。
 
 ### 2026-08-29：用现有 seams 跑通连续两次换腿
 

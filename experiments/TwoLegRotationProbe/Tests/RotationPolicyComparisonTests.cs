@@ -26,12 +26,14 @@ public sealed class RotationPolicyComparisonTests {
             trace,
             lazyStore,
             CreateCursor(source),
-            paceOneDebtObject: false);
+            paceOneDebtObject: false,
+            SelectFixedTarget);
         PolicyRun paced = Run(
             trace,
             pacedStore,
             CreateCursor(source),
-            paceOneDebtObject: true);
+            paceOneDebtObject: true,
+            SelectFixedTarget);
 
         Assert.Same(trace, lazy.SourceTrace);
         Assert.Same(trace, paced.SourceTrace);
@@ -116,12 +118,14 @@ public sealed class RotationPolicyComparisonTests {
             trace,
             source.Store.ForkForProbe(),
             CreateCursor(source),
-            paceOneDebtObject: false);
+            paceOneDebtObject: false,
+            SelectFixedTarget);
         PolicyRun pacedReplay = Run(
             trace,
             source.Store.ForkForProbe(),
             CreateCursor(source),
-            paceOneDebtObject: true);
+            paceOneDebtObject: true,
+            SelectFixedTarget);
         Assert.Equal(DescribeRun(lazy), DescribeRun(lazyReplay));
         Assert.Equal(DescribeRun(paced), DescribeRun(pacedReplay));
 
@@ -129,11 +133,166 @@ public sealed class RotationPolicyComparisonTests {
         Assert.Equal(1, source.Store.GetFile(2).FrameCount);
     }
 
+    [Fact]
+    public void Debt_zero_then_rotate_exposes_lazy_stall_and_paced_progress() {
+        PolicySource source = CreateSource();
+        WorkloadTrace trace = CreateDebtZeroThenRotateTrace();
+        RbfFileStore lazyStore = source.Store.ForkForProbe();
+        RbfFileStore pacedStore = source.Store.ForkForProbe();
+
+        PolicyRun lazy = Run(
+            trace,
+            lazyStore,
+            CreateCursor(source),
+            paceOneDebtObject: false,
+            SelectDebtZeroThenRotateTarget);
+        PolicyRun paced = Run(
+            trace,
+            pacedStore,
+            CreateCursor(source),
+            paceOneDebtObject: true,
+            SelectDebtZeroThenRotateTarget);
+
+        Assert.Same(trace, lazy.SourceTrace);
+        Assert.Same(trace, paced.SourceTrace);
+        Assert.NotSame(lazy.Store, paced.Store);
+        Assert.NotSame(lazy.Store.GetFile(1), paced.Store.GetFile(1));
+        Assert.Equal(trace.Steps.Count, lazy.Steps.Count);
+        Assert.Equal(trace.Steps.Count, paced.Steps.Count);
+
+        Assert.Equal(
+            ["10,20,30", "10,20,30", "10,20,30", "10,20,30"],
+            DescribeSourceDebt(lazy));
+        Assert.Equal(
+            [3, 3, 3, 3],
+            lazy.Steps.Select(static step => step.SourcePreviousDebtObjectIds.Count));
+        Assert.All(
+            lazy.Steps,
+            step => Assert.Equal(CandidateTarget.StayB, step.Target));
+        Assert.Equal(["", "", "", ""], DescribeMigrations(lazy));
+        Assert.All(lazy.Steps, static step => Assert.False(step.ActualRotation));
+        Assert.All(
+            lazy.Steps,
+            step => {
+                Assert.NotNull(step.CompletionCertificate);
+                CandidateRawObservation terminal = Assert.IsType<
+                    CandidateRawObservation>(step.ImmediatePostStayTerminal);
+                Assert.Equal(CandidateTarget.RotateC, terminal.Target);
+                Assert.Equal(2, step.FileCountAfterApply);
+            });
+        Assert.Equal(
+            ["10,20,30", "10,20,30", "10,20,30", "10,20,30"],
+            DescribeDebt(lazy));
+        Assert.Equal(0, CountActualRotations(lazy));
+        Assert.Equal(
+            PolicyRunProgress.CompletedTraceWithDeferredPreviousDebt,
+            ClassifyProgress(lazy));
+
+        Assert.Equal(
+            ["10,20,30", "20,30", "30", ""],
+            DescribeSourceDebt(paced));
+        Assert.Equal(
+            [3, 2, 1, 0],
+            paced.Steps.Select(static step => step.SourcePreviousDebtObjectIds.Count));
+        Assert.Equal(
+            [
+                CandidateTarget.StayB,
+                CandidateTarget.StayB,
+                CandidateTarget.StayB,
+                CandidateTarget.RotateC,
+            ],
+            paced.Steps.Select(static step => step.Target));
+        Assert.Equal(["10", "20", "30", ""], DescribeMigrations(paced));
+        Assert.Equal(
+            [false, false, false, true],
+            paced.Steps.Select(static step => step.ActualRotation));
+        Assert.Equal(
+            ["20,30", "30", "", "10,20,30,1001,1002,1003"],
+            DescribeDebt(paced));
+        Assert.Equal([500L, 300L, 0L, 603L], DescribeDebtBaseBytes(paced));
+        Assert.Equal(1, CountActualRotations(paced));
+        Assert.Equal(PolicyRunProgress.RealizedRotation, ClassifyProgress(paced));
+
+        PolicyStep pacedThird = paced.Steps[2];
+        Assert.Empty(
+            pacedThird.SelectedObservation.PostLiveReconstruction
+                .PreviousFileDependentObjectIds);
+        Assert.Equal(1U, pacedThird.ResultCursor.FileScope.PreviousFileNumber);
+        Assert.Equal(2U, pacedThird.ResultCursor.FileScope.CurrentFileNumber);
+        Assert.Equal(2, pacedThird.FileCountAfterApply);
+        Assert.NotNull(pacedThird.CompletionCertificate);
+        Assert.Equal(
+            CandidateTarget.RotateC,
+            Assert.IsType<CandidateRawObservation>(
+                pacedThird.ImmediatePostStayTerminal).Target);
+        Assert.False(pacedThird.ActualRotation);
+        WorkloadTrace pacedPrefixTrace = new(
+            scenarioName: "debt-zero-awaiting-next-save",
+            generatorId: "handwritten",
+            generatorVersion: 1,
+            seed: 0,
+            trace.Steps.Take(3));
+        PolicyRun debtFreeAwaitingNextSave = paced with {
+            SourceTrace = pacedPrefixTrace,
+            Steps = paced.Steps.Take(3).ToArray(),
+        };
+        Assert.Throws<InvalidOperationException>(
+            () => ClassifyProgress(debtFreeAwaitingNextSave));
+
+        PolicyStep pacedFourth = paced.Steps[3];
+        Assert.Equal(
+            1U,
+            pacedFourth.SelectedObservation.Facts.PreviousFileNumber);
+        Assert.Equal(
+            2U,
+            pacedFourth.SelectedObservation.Facts.CurrentFileNumber);
+        Assert.Equal(2U, pacedFourth.ResultCursor.FileScope.PreviousFileNumber);
+        Assert.Equal(3U, pacedFourth.ResultCursor.FileScope.CurrentFileNumber);
+        Assert.Equal(3, pacedFourth.FileCountAfterApply);
+        Assert.True(pacedFourth.ActualRotation);
+        Assert.Null(pacedFourth.CompletionCertificate);
+        Assert.Null(pacedFourth.ImmediatePostStayTerminal);
+        Assert.Equal(
+            [10U, 20U, 30U, 1001U, 1002U, 1003U],
+            pacedFourth.SelectedObservation.PostLiveReconstruction
+                .PreviousFileDependentObjectIds);
+        Assert.Equal(
+            603L,
+            pacedFourth.SelectedObservation.PostLiveReconstruction
+                .PreviousFileDependentBasePayloadBytes);
+        Assert.Equal(
+            3,
+            pacedFourth.SelectedObservation.PostLiveReconstruction
+                .PreviousFileUniqueFrameCount);
+
+        PolicyRun lazyReplay = Run(
+            trace,
+            source.Store.ForkForProbe(),
+            CreateCursor(source),
+            paceOneDebtObject: false,
+            SelectDebtZeroThenRotateTarget);
+        PolicyRun pacedReplay = Run(
+            trace,
+            source.Store.ForkForProbe(),
+            CreateCursor(source),
+            paceOneDebtObject: true,
+            SelectDebtZeroThenRotateTarget);
+        Assert.Equal(DescribeRun(lazy), DescribeRun(lazyReplay));
+        Assert.Equal(DescribeRun(paced), DescribeRun(pacedReplay));
+
+        Assert.Equal(2, source.Store.FileCount);
+        Assert.Equal(1, source.Store.GetFile(1).FrameCount);
+        Assert.Equal(1, source.Store.GetFile(2).FrameCount);
+    }
+
     private static PolicyRun Run(
         WorkloadTrace trace,
         RbfFileStore store,
         ProbeRevisionCursor initialCursor,
-        bool paceOneDebtObject) {
+        bool paceOneDebtObject,
+        Func<int, NormalizedSaveFacts, CandidateTarget> selectTarget) {
+        ArgumentNullException.ThrowIfNull(selectTarget);
+
         ProbeRevisionCursor cursor = initialCursor;
         Dictionary<uint, LogicalObjectState> expectedState = new() {
             [10] = new(100, 1),
@@ -144,12 +303,14 @@ public sealed class RotationPolicyComparisonTests {
 
         for (int index = 0; index < trace.Steps.Count; index++) {
             SaveStep saveStep = trace.Steps[index];
-            CandidateTarget target = FixedTargets[index];
             NormalizedSaveFacts facts = SaveStepNormalizer.Normalize(
                 store,
                 cursor.FileScope.CurrentFileNumber,
                 cursor.PublishedRevisionAddress,
                 saveStep);
+            uint[] sourcePreviousDebtObjectIds =
+                GetSourcePreviousDebtObjectIds(facts);
+            CandidateTarget target = selectTarget(index, facts);
             uint[] requestedMigrations = target == CandidateTarget.StayB &&
                 paceOneDebtObject
                 ? SelectSmallestPreviousDebtNoChange(facts)
@@ -172,6 +333,7 @@ public sealed class RotationPolicyComparisonTests {
             CandidateRawObservation selectedObservation;
             CandidateRawObservation? immediatePostStayTerminal = null;
             CanPrepareAndRotateCertificate? completionCertificate = null;
+            bool actualRotation = false;
             switch (attempt) {
                 case AppliedStayBPolicyStep appliedStay:
                     Assert.Equal(CandidateTarget.StayB, target);
@@ -189,6 +351,7 @@ public sealed class RotationPolicyComparisonTests {
                     Assert.Same(pair, appliedRotate.Evaluation);
                     selectedObservation = appliedRotate.Selected.Observation;
                     cursor = appliedRotate.ResultCursor;
+                    actualRotation = true;
                     break;
                 default:
                     throw new InvalidOperationException(
@@ -200,16 +363,37 @@ public sealed class RotationPolicyComparisonTests {
             AssertRuntimeStateAndClosure(store, cursor, expectedState);
             steps.Add(new PolicyStep(
                 target,
+                sourcePreviousDebtObjectIds,
                 GetMaintenanceObjectIds(facts, selectedObservation),
                 selectedObservation,
                 immediatePostStayTerminal,
                 completionCertificate,
                 cursor,
-                store.FileCount));
+                store.FileCount,
+                actualRotation));
         }
 
         return new PolicyRun(trace, store, steps);
     }
+
+    private static CandidateTarget SelectFixedTarget(
+        int index,
+        NormalizedSaveFacts _) => FixedTargets[index];
+
+    private static CandidateTarget SelectDebtZeroThenRotateTarget(
+        int _,
+        NormalizedSaveFacts facts) =>
+        GetSourcePreviousDebtObjectIds(facts).Length == 0
+            ? CandidateTarget.RotateC
+            : CandidateTarget.StayB;
+
+    private static uint[] GetSourcePreviousDebtObjectIds(
+        NormalizedSaveFacts facts) => facts.ParentLive.Values
+        .Where(source =>
+            source.BaseAddress.FileNumber == facts.PreviousFileNumber)
+        .Select(static source => source.ObjectId)
+        .Order()
+        .ToArray();
 
     private static uint[] SelectSmallestPreviousDebtNoChange(
         NormalizedSaveFacts facts) => facts.NoChanges
@@ -255,6 +439,10 @@ public sealed class RotationPolicyComparisonTests {
         .Select(static step => string.Join(',', step.MaintenanceObjectIds))
         .ToArray();
 
+    private static string[] DescribeSourceDebt(PolicyRun run) => run.Steps
+        .Select(static step => string.Join(',', step.SourcePreviousDebtObjectIds))
+        .ToArray();
+
     private static string[] DescribeDebt(PolicyRun run) => run.Steps
         .Select(static step => string.Join(
             ',',
@@ -267,9 +455,43 @@ public sealed class RotationPolicyComparisonTests {
             .PreviousFileDependentBasePayloadBytes)
         .ToArray();
 
+    private static int CountActualRotations(PolicyRun run) => run.Steps
+        .Count(static step => step.ActualRotation);
+
+    private static PolicyRunProgress ClassifyProgress(PolicyRun run) {
+        ArgumentNullException.ThrowIfNull(run);
+        if (run.Steps.Count == 0) {
+            throw new InvalidOperationException(
+                "An empty trace has no applied policy outcome to classify.");
+        }
+
+        if (run.Steps.Count != run.SourceTrace.Steps.Count) {
+            throw new InvalidOperationException(
+                "Policy progress is classified only after the complete frozen trace is consumed.");
+        }
+
+        if (CountActualRotations(run) != 0) {
+            return PolicyRunProgress.RealizedRotation;
+        }
+
+        if (run.Steps[^1].SelectedObservation.PostLiveReconstruction
+            .PreviousFileDependentObjectIds.Count != 0) {
+            return PolicyRunProgress.CompletedTraceWithDeferredPreviousDebt;
+        }
+
+        throw new InvalidOperationException(
+            "A debt-free run without an applied Rotate awaits another Save and is not stalled.");
+    }
+
     private static string[] DescribeRun(PolicyRun run) => run.Steps
         .Select(static step =>
             $"{step.Target}:{string.Join(',', step.MaintenanceObjectIds)}:" +
+            $"source={string.Join(',', step.SourcePreviousDebtObjectIds)}:" +
+            $"rotated={step.ActualRotation}:" +
+            $"scope={step.SelectedObservation.Facts.PreviousFileNumber}/" +
+            $"{step.SelectedObservation.Facts.CurrentFileNumber}->" +
+            $"{step.ResultCursor.FileScope.PreviousFileNumber}/" +
+            $"{step.ResultCursor.FileScope.CurrentFileNumber}:" +
             $"{step.SelectedObservation.ForegroundDomainRecordBytes}:" +
             $"{step.SelectedObservation.MaintenanceDomainRecordBytes}:" +
             $"{step.SelectedObservation.Layout.AppendLengthBytes}:" +
@@ -390,6 +612,18 @@ public sealed class RotationPolicyComparisonTests {
             new SaveStep([new CreateObject(1003, 1)]),
         ]);
 
+    private static WorkloadTrace CreateDebtZeroThenRotateTrace() => new(
+        scenarioName: "debt-zero-then-rotate",
+        generatorId: "handwritten",
+        generatorVersion: 1,
+        seed: 0,
+        [
+            new SaveStep([new CreateObject(1001, 1)]),
+            new SaveStep([new CreateObject(1002, 1)]),
+            new SaveStep([new CreateObject(1003, 1)]),
+            new SaveStep([new CreateObject(1004, 1)]),
+        ]);
+
     private static ProbeRevisionCursor CreateCursor(PolicySource source) => new(
         new FileScope(source.Current.FileNumber),
         source.PublishedRevisionAddress,
@@ -430,12 +664,19 @@ public sealed class RotationPolicyComparisonTests {
         RbfFileStore Store,
         IReadOnlyList<PolicyStep> Steps);
 
+    private enum PolicyRunProgress {
+        CompletedTraceWithDeferredPreviousDebt,
+        RealizedRotation,
+    }
+
     private sealed record PolicyStep(
         CandidateTarget Target,
+        IReadOnlyList<uint> SourcePreviousDebtObjectIds,
         IReadOnlyList<uint> MaintenanceObjectIds,
         CandidateRawObservation SelectedObservation,
         CandidateRawObservation? ImmediatePostStayTerminal,
         CanPrepareAndRotateCertificate? CompletionCertificate,
         ProbeRevisionCursor ResultCursor,
-        int FileCountAfterApply);
+        int FileCountAfterApply,
+        bool ActualRotation);
 }

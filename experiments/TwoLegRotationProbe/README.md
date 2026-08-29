@@ -459,6 +459,43 @@ selected raw projection, not a canonical transcript. No aggregate score or
 winner is defined, and the fixed rotation schedule is an experimental control,
 not a proposed product trigger.
 
+## Debt-zero trigger progress baseline
+
+A second comparison keeps the migration treatments but replaces the fixed target
+schedule with a deliberately conservative test-local rule:
+
+```text
+source snapshot has Previous-file debt -> Stay-B
+source snapshot has no Previous-file debt -> Rotate-C
+```
+
+The trigger reads only `NormalizedSaveFacts.ParentLive` before either candidate
+is evaluated. It does not use the current Save's prospective post-debt, candidate
+capacity, a score, or the completion certificate. Both runs replay the same four
+pure-Insert Saves on independent Store forks, so foreground Update/Remove cannot
+silently discharge the initial cold debt.
+
+| Save | No migration: source debt / target / post debt | Paced one: source debt / target / migration / post debt |
+|---|---|---|
+| 1 | `{10,20,30}` / Stay / `{10,20,30}` | `{10,20,30}` / Stay / `10` / `{20,30}` |
+| 2 | `{10,20,30}` / Stay / `{10,20,30}` | `{20,30}` / Stay / `20` / `{30}` |
+| 3 | `{10,20,30}` / Stay / `{10,20,30}` | `{30}` / Stay / `30` / `{}` |
+| 4 | `{10,20,30}` / Stay / `{10,20,30}` | `{}` / Rotate / none / `{10,20,30,1001,1002,1003}` |
+
+The third paced Save is the discriminator: it starts with debt and therefore
+must Stay even though that applied Save clears the old A/B debt. Only the fourth
+Save starts debt-free and creates C. After the `A/B -> B/C` scope change, the
+objects retained in B correctly become 603 bytes of new Previous debt across
+three Frames; this sawtooth is not a failed rotation.
+
+The no-migration run consumes this finite admitted trace with deferred debt and
+no realized rotation. Every one of its Stay steps nevertheless carries a proven
+counterfactual terminal Rotate candidate. The test-local progress projection
+therefore classifies actual applied outcomes, not certificate contents or final
+debt alone. This baseline demonstrates a progress dependency between the trigger
+and migration treatment; it does not establish a product trigger, cost winner,
+capacity policy, or the physical ability to append forever.
+
 ## Preparatory B migration witness
 
 `PreparatoryBaseMigrationPlanner` accepts an explicit, nonempty set of live
@@ -538,11 +575,12 @@ not a law of whether an already-published format is readable. A concrete finite
 B-migration-plus-C-rotation witness proves it true for that source state.
 The current canonical prefix proof reports `RejectedUnproven` when it cannot
 construct that witness; this is not a proof that no completion exists. The
-continuous caller script and fixed-schedule migration comparison are now closed
-without choosing a weighted winner. The next slice can isolate a
-`DebtZeroThenRotate` target rule and distinguish policy progress from merely
-finishing a finite trace with deferred debt. A bounded reference explorer still
-waits for a concrete conservative rejection or suspected heuristic false-negative.
+continuous caller script, fixed-schedule migration comparison, and
+`DebtZeroThenRotate` progress baseline are now closed without choosing a weighted
+winner. The next slice can reduce their realized and counterfactual observations
+into explicitly labelled, unweighted epoch/run facts. A bounded reference explorer
+still waits for a concrete conservative rejection or suspected heuristic
+false-negative.
 
 The rejected forwarding alternatives and their executable comparison are
 preserved by annotated tag `research/relay-vs-relay-free-20260829` and DB-009.
