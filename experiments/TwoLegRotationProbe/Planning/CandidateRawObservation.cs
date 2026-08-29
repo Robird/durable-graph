@@ -10,6 +10,7 @@ namespace Atelia.TwoLegRotationProbe.Planning;
 /// </summary>
 internal sealed class CandidateRawObservation {
     internal CandidateRawObservation(
+        NormalizedSaveFacts facts,
         CandidateTarget target,
         PlannedRevisionV0 candidate,
         int foregroundDomainRecordBytes,
@@ -21,6 +22,7 @@ internal sealed class CandidateRawObservation {
 
         ArgumentOutOfRangeException.ThrowIfNegative(foregroundDomainRecordBytes);
         ArgumentOutOfRangeException.ThrowIfNegative(maintenanceDomainRecordBytes);
+        Facts = facts ?? throw new ArgumentNullException(nameof(facts));
         Target = target;
         Candidate = candidate ?? throw new ArgumentNullException(nameof(candidate));
         ForegroundDomainRecordBytes = foregroundDomainRecordBytes;
@@ -34,6 +36,8 @@ internal sealed class CandidateRawObservation {
                 nameof(postLiveReconstruction));
         }
     }
+
+    public NormalizedSaveFacts Facts { get; }
 
     public CandidateTarget Target { get; }
 

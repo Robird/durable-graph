@@ -37,6 +37,7 @@ internal static class CandidateRawObservationBuilder {
             target,
             candidate);
         return new CandidateRawObservation(
+            facts,
             target,
             candidate,
             foregroundRecordBytes,

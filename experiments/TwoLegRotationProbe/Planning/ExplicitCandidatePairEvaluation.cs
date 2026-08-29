@@ -43,6 +43,7 @@ internal sealed class ExplicitCandidatePairEvaluation {
         if (feasible.Plan is null || feasible.Observation is null ||
             !ReferenceEquals(feasible.Plan.Facts, Facts) ||
             !ReferenceEquals(feasible.Plan.Decision, StayBDecision) ||
+            !ReferenceEquals(feasible.Observation.Facts, Facts) ||
             !ReferenceEquals(feasible.Plan.Revision, feasible.Observation.Candidate) ||
             feasible.Observation.Target != CandidateTarget.StayB) {
             throw new ArgumentException(
@@ -59,6 +60,7 @@ internal sealed class ExplicitCandidatePairEvaluation {
         if (feasible.Plan is null || feasible.Observation is null ||
             !ReferenceEquals(feasible.Plan.Facts, Facts) ||
             !ReferenceEquals(feasible.Plan.Decision, RotateCDecision) ||
+            !ReferenceEquals(feasible.Observation.Facts, Facts) ||
             !ReferenceEquals(feasible.Plan.Revision, feasible.Observation.Candidate) ||
             feasible.Observation.Target != CandidateTarget.RotateC) {
             throw new ArgumentException(
