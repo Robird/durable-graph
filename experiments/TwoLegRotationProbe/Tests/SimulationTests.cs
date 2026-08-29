@@ -92,7 +92,7 @@ public sealed class SimulationTests {
         Assert.Equal(
             new RelativeFrameTicket(false, run.RevisionAddresses[3].FrameTicket),
             thirdUpdate.ParentFrameTicket);
-        Assert.Equal(4, thirdUpdate.VersionOrdinal);
+        Assert.Equal(4, thirdUpdate.LogicalVersionOrdinal);
 
         if (policy == BaselinePolicy.AlwaysDeltaWhenLegal) {
             Assert.Equal(100, firstUpdate.ExpectedParentBasePayloadBytes);
@@ -118,7 +118,7 @@ public sealed class SimulationTests {
             resultBasePayloadBytes: 60,
             payloadBytes: 7,
             reconstructionObjectPayloadBytes: 107,
-            versionOrdinal: 2,
+            logicalVersionOrdinal: 2,
             parentFrameTicket: parentTicket);
         FrameTicket headTicket = file.Append(deltaFrame.Build());
         Dictionary<uint, AbsoluteFrameAddress> stateMap = new() {
@@ -143,7 +143,7 @@ public sealed class SimulationTests {
             resultBasePayloadBytes: 60,
             payloadBytes: 7,
             reconstructionObjectPayloadBytes: 106,
-            versionOrdinal: 2,
+            logicalVersionOrdinal: 2,
             parentFrameTicket: parentTicket);
         FrameTicket headTicket = file.Append(deltaFrame.Build());
         Dictionary<uint, AbsoluteFrameAddress> stateMap = new() {
@@ -166,7 +166,7 @@ public sealed class SimulationTests {
         rebased.PayloadBytes = 100;
         rebased.ReconstructionObjectPayloadBytes = 100;
         rebased.ResultBasePayloadBytes = 100;
-        rebased.VersionOrdinal = 2;
+        rebased.LogicalVersionOrdinal = 2;
         rebased.ParentFrameTicket = new RelativeFrameTicket(
             IsPreviousFile: true,
             FrameTicket: new FrameTicket(4, 24));
@@ -194,7 +194,7 @@ public sealed class SimulationTests {
             resultBasePayloadBytes: 60,
             payloadBytes: 7,
             reconstructionObjectPayloadBytes: 107,
-            versionOrdinal: 2,
+            logicalVersionOrdinal: 2,
             parentFrameTicket: new FrameTicket(32, 24));
         FrameTicket headTicket = file.Append(deltaFrame.Build());
         AppendBase(file, objectId: 1, resultBasePayloadBytes: 100);
@@ -223,7 +223,7 @@ public sealed class SimulationTests {
             resultBasePayloadBytes: 60,
             payloadBytes: 7,
             reconstructionObjectPayloadBytes: 107,
-            versionOrdinal: 2,
+            logicalVersionOrdinal: 2,
             parentFrameTicket: missingFrame
                 ? new FrameTicket(
                     availableParent.OffsetBytes,
@@ -328,7 +328,7 @@ public sealed class SimulationTests {
         builder.PayloadBytes = resultBasePayloadBytes;
         builder.ReconstructionObjectPayloadBytes = resultBasePayloadBytes;
         builder.ResultBasePayloadBytes = resultBasePayloadBytes;
-        builder.VersionOrdinal = 1;
+        builder.LogicalVersionOrdinal = 1;
     }
 
     private static void ConfigureDelta(
@@ -337,14 +337,14 @@ public sealed class SimulationTests {
         int resultBasePayloadBytes,
         int payloadBytes,
         long reconstructionObjectPayloadBytes,
-        int versionOrdinal,
+        int logicalVersionOrdinal,
         FrameTicket parentFrameTicket) {
         builder.Kind = ObjectVersionKind.Delta;
         builder.PayloadBytes = payloadBytes;
         builder.ReconstructionObjectPayloadBytes = reconstructionObjectPayloadBytes;
         builder.ResultBasePayloadBytes = resultBasePayloadBytes;
         builder.ExpectedParentBasePayloadBytes = expectedParentBasePayloadBytes;
-        builder.VersionOrdinal = versionOrdinal;
+        builder.LogicalVersionOrdinal = logicalVersionOrdinal;
         builder.ParentFrameTicket = new RelativeFrameTicket(false, parentFrameTicket);
     }
 
@@ -361,7 +361,7 @@ public sealed class SimulationTests {
                         $"{pair.Value.ReconstructionObjectPayloadBytes}:" +
                         $"{pair.Value.ResultBasePayloadBytes}:" +
                         $"{pair.Value.ExpectedParentBasePayloadBytes}:" +
-                        $"{pair.Value.VersionOrdinal}:{pair.Value.ParentFrameTicket}")));
+                        $"{pair.Value.LogicalVersionOrdinal}:{pair.Value.ParentFrameTicket}")));
         }
 
         descriptions.Add(string.Join(

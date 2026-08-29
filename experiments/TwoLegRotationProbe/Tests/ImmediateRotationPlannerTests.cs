@@ -363,7 +363,7 @@ public sealed class ImmediateRotationPlannerTests {
             resultBasePayloadBytes: 12,
             deltaPayloadBytes: 2,
             reconstructionPayloadBytes: 12,
-            versionOrdinal: 2);
+            logicalVersionOrdinal: 2);
         RbfFile current = store.CreateFile();
         FrameTicket publishedTicket = current.Append(new FrameBuilder().Build());
         AbsoluteFrameAddress published = new(current.FileNumber, publishedTicket);
@@ -433,7 +433,7 @@ public sealed class ImmediateRotationPlannerTests {
             resultBasePayloadBytes: 25,
             deltaPayloadBytes: 5,
             reconstructionPayloadBytes: 25,
-            versionOrdinal: 2);
+            logicalVersionOrdinal: 2);
         AddBase(currentFrame, BbObjectId, payloadBytes: 30);
         FrameTicket currentTicket = current.Append(currentFrame.Build());
 
@@ -473,7 +473,7 @@ public sealed class ImmediateRotationPlannerTests {
         int resultBasePayloadBytes,
         int deltaPayloadBytes,
         long reconstructionPayloadBytes,
-        int versionOrdinal) {
+        int logicalVersionOrdinal) {
         FrameBuilder frame = new();
         AddDelta(
             frame,
@@ -483,7 +483,7 @@ public sealed class ImmediateRotationPlannerTests {
             resultBasePayloadBytes,
             deltaPayloadBytes,
             reconstructionPayloadBytes,
-            versionOrdinal);
+            logicalVersionOrdinal);
         return file.Append(frame.Build());
     }
 
@@ -493,7 +493,7 @@ public sealed class ImmediateRotationPlannerTests {
         version.PayloadBytes = payloadBytes;
         version.ReconstructionObjectPayloadBytes = payloadBytes;
         version.ResultBasePayloadBytes = payloadBytes;
-        version.VersionOrdinal = 1;
+        version.LogicalVersionOrdinal = 1;
     }
 
     private static void AddDelta(
@@ -504,14 +504,14 @@ public sealed class ImmediateRotationPlannerTests {
         int resultBasePayloadBytes,
         int deltaPayloadBytes,
         long reconstructionPayloadBytes,
-        int versionOrdinal) {
+        int logicalVersionOrdinal) {
         ObjectVersionBuilder version = frame.Add(objectId);
         version.Kind = ObjectVersionKind.Delta;
         version.PayloadBytes = deltaPayloadBytes;
         version.ReconstructionObjectPayloadBytes = reconstructionPayloadBytes;
         version.ResultBasePayloadBytes = resultBasePayloadBytes;
         version.ExpectedParentBasePayloadBytes = parentBasePayloadBytes;
-        version.VersionOrdinal = versionOrdinal;
+        version.LogicalVersionOrdinal = logicalVersionOrdinal;
         version.ParentFrameTicket = parent;
     }
 

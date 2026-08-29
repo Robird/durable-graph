@@ -177,7 +177,7 @@ public sealed class RbfFileTests {
         FrameBuilder childBuilder = new();
         ObjectVersionBuilder childVersion = childBuilder.Add(objectId);
         childVersion.ReconstructionObjectPayloadBytes = 0;
-        childVersion.VersionOrdinal = 2;
+        childVersion.LogicalVersionOrdinal = 2;
         childVersion.ParentFrameTicket = new RelativeFrameTicket(
             IsPreviousFile: true,
             FrameTicket: rootTicket);

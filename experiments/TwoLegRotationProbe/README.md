@@ -22,6 +22,16 @@ The first scaffold deliberately models only a few container facts:
 - mutable `FrameBuilder` and `ObjectVersionBuilder` instances are copied into
   read-only built state.
 
+`LogicalVersionOrdinal` is deliberately not a physical chain ordinal. A parent
+edge with `child = parent + 1` represents a domain change; a same-version edge
+represents transparent physical maintenance. With no additional runtime kind,
+a zero-payload same-version Delta is a relay and a same-version Base is a
+relocated full value. Reconstruction follows Delta records and stops at Base;
+the separate lineage inspection continues through Base parents and validates
+the full physical chain. In this size-only probe, logical equality means exact
+`(BasePayloadBytes, LogicalVersionOrdinal)` equality, not future field-value
+equality.
+
 ## Generated workload traces
 
 The probe can now generate a complete workload trace before any storage policy
@@ -271,6 +281,13 @@ not yet a persisted OVD reader that can derive it from the supplied head.
 stepping creates a new file and a new `FileScope`; an old frame must still be
 read with the scope of its own origin file. The V0 projection is a versioned
 research input, not a durable-format commitment.
+
+The runtime model now has executable transparent Relay/RelocatedBase semantics,
+but the planned rotation records are still not materialized or appended. A
+separate open branch, DB-009, asks whether an earlier Revision's authoritative
+OVD can serve as a Base-only lineage locator and remove dedicated relay records.
+That alternative is not implemented because the probe does not yet have a
+replayable persisted OVD reader; the caller StateMap must not impersonate one.
 
 Run from the repository root:
 

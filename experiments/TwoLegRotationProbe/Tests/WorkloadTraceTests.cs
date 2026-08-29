@@ -26,7 +26,7 @@ public sealed class WorkloadTraceTests {
         LogicalObjectState state = WorkloadReplayer.Replay(trace)[7];
 
         Assert.Equal(100, state.BasePayloadBytes);
-        Assert.Equal(2, state.VersionOrdinal);
+        Assert.Equal(2, state.LogicalVersionOrdinal);
     }
 
     [Fact]

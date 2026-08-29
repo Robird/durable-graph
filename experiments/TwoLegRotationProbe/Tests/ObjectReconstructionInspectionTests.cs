@@ -38,7 +38,7 @@ public sealed class ObjectReconstructionInspectionTests {
             resultBasePayloadBytes: 40,
             payloadBytes: 10,
             reconstructionPayloadBytes: 40,
-            versionOrdinal: 2);
+            logicalVersionOrdinal: 2);
         FrameTicket secondDeltaTicket = AppendDelta(
             file,
             objectId: 7,
@@ -47,7 +47,7 @@ public sealed class ObjectReconstructionInspectionTests {
             resultBasePayloadBytes: 35,
             payloadBytes: 3,
             reconstructionPayloadBytes: 43,
-            versionOrdinal: 3);
+            logicalVersionOrdinal: 3);
         AbsoluteFrameAddress head = new(file.FileNumber, secondDeltaTicket);
         AbsoluteFrameAddress firstDelta = new(file.FileNumber, firstDeltaTicket);
         AbsoluteFrameAddress @base = new(file.FileNumber, baseTicket);
@@ -76,7 +76,7 @@ public sealed class ObjectReconstructionInspectionTests {
             resultBasePayloadBytes: 40,
             payloadBytes: 10,
             reconstructionPayloadBytes: 40,
-            versionOrdinal: 2);
+            logicalVersionOrdinal: 2);
         AbsoluteFrameAddress head = new(file.FileNumber, badDeltaTicket);
 
         InvalidDataException exception = Assert.Throws<InvalidDataException>(
@@ -106,7 +106,7 @@ public sealed class ObjectReconstructionInspectionTests {
         builder.PayloadBytes = resultBasePayloadBytes;
         builder.ReconstructionObjectPayloadBytes = resultBasePayloadBytes;
         builder.ResultBasePayloadBytes = resultBasePayloadBytes;
-        builder.VersionOrdinal = 1;
+        builder.LogicalVersionOrdinal = 1;
         return file.Append(frame.Build());
     }
 
@@ -118,7 +118,7 @@ public sealed class ObjectReconstructionInspectionTests {
         int resultBasePayloadBytes,
         int payloadBytes,
         long reconstructionPayloadBytes,
-        int versionOrdinal) {
+        int logicalVersionOrdinal) {
         FrameBuilder frame = new();
         ObjectVersionBuilder builder = frame.Add(objectId);
         builder.Kind = ObjectVersionKind.Delta;
@@ -126,7 +126,7 @@ public sealed class ObjectReconstructionInspectionTests {
         builder.ReconstructionObjectPayloadBytes = reconstructionPayloadBytes;
         builder.ResultBasePayloadBytes = resultBasePayloadBytes;
         builder.ExpectedParentBasePayloadBytes = parentBasePayloadBytes;
-        builder.VersionOrdinal = versionOrdinal;
+        builder.LogicalVersionOrdinal = logicalVersionOrdinal;
         builder.ParentFrameTicket = new RelativeFrameTicket(false, parentTicket);
         return file.Append(frame.Build());
     }

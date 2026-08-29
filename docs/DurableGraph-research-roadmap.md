@@ -214,7 +214,7 @@ materialized root 是可丢弃 working graph，不是 baseline、StateMap 或第
 
 ### S1：内存自适应双腿轮转策略模拟
 
-状态：In Progress。当前优先研究切片；已建立 deterministic workload generation/replay substrate，以单文件 preparatory baseline 跑通 `AlwaysBase` / `AlwaysDeltaWhenLegal` / `ObjectPayloadReadAmplification3` 到 Frame、absolute live StateMap 与 symbolic materialization 的逐 Save 前缀闭环，并加入 exact RBF v0.40 envelope。`ObjectPayloadOnly` baseline 继续保留，另有 `ProvisionalRevisionV0` 对一个实验 grammar 计入 ObjectVersion headers、OVD、TailMeta directory 与 relative VarUInt。S1e 已能纯规划一个至多包含单 B relay Frame 与单 C evacuation Frame 的 immediate witness，并覆盖 mixed full OVD 与两侧容量失败；尚未实现 byte writer/parser、planned maintenance record 的 materialization/append、shared-frame-aware 或 rotation-aware 自适应策略、一般 two-file completion search 或 `CanPrepareAndRotate` gate。不修改 R1–R3 已验证结论，也不把 StateStore working design 描述为产品实现事实。
+状态：In Progress。当前优先研究切片；已建立 deterministic workload generation/replay substrate，以单文件 preparatory baseline 跑通 `AlwaysBase` / `AlwaysDeltaWhenLegal` / `ObjectPayloadReadAmplification3` 到 Frame、absolute live StateMap 与 symbolic materialization 的逐 Save 前缀闭环，并加入 exact RBF v0.40 envelope。`ObjectPayloadOnly` baseline 继续保留，另有 `ProvisionalRevisionV0` 对一个实验 grammar 计入 ObjectVersion headers、OVD、TailMeta directory 与 relative VarUInt。S1e 已能纯规划一个至多包含单 B relay Frame 与单 C evacuation Frame 的 immediate witness，并覆盖 mixed full OVD 与两侧容量失败；S1f 已在 synthetic size-state 模型中证明 `LogicalVersionOrdinal` 与物理维护 hop 可分离，same-version Delta/Base 可分别表达 transparent Relay/RelocatedBase，logical equality 只观测 `(BasePayloadBytes, LogicalVersionOrdinal)`，且 current reconstruction 与 historical lineage inspection 分层。尚未实现 byte writer/parser、planned maintenance record 的 materialization/append、replayable OVD reader、shared-frame-aware 或 rotation-aware 自适应策略、一般 two-file completion search 或 `CanPrepareAndRotate` gate。不修改 R1–R3 已验证结论，也不把 StateStore working design 描述为产品实现事实。
 
 问题：在不先引入固定 `MaxLogicalChainBytes`、`TargetFileBytes` 或 migration-byte budget 的情况下，能否用无权重事实量设计并比较 Base、Delta、渐进 cold migration、RelayRevision 与正式 rotation 的候选策略？
 
@@ -262,10 +262,21 @@ retry。
 
 这只是“最多一个 B relay Frame + 一个 C evacuation Frame”的 immediate constructive
 witness。成功证明存在一条具体 preparation path；失败不排除多个 relay Frames 或先在 B
-做若干 published maintenance，因此还不是一般 `CanPrepareAndRotate` oracle。当前
-`ObjectVersion.VersionOrdinal` 也尚未拆分领域版本与 maintenance lineage 次序，所以 planned
-records 不 append、不 materialize；下一切片应先决定是继续构造多步 completion search，还是
-先建立透明 maintenance record 的独立逻辑模型，而不把两者与 heuristic/policy scoring 混做。
+做若干 published maintenance，因此还不是一般 `CanPrepareAndRotate` oracle。
+
+S1f 将属性明确改名为 `LogicalVersionOrdinal`，物理次序继续由 address/parent/cycle gate
+表达。12 个聚焦 cases 在 synthetic size-state 模型中证明 Relay/RelocatedBase 不推进领域版本、
+Base reconstruction 不读取其 lineage parent、lineage inspection 仍能跨 C/B/A，并拒绝
+payload/result/cumulative、skip 或 regression 异常；logical equality 只观测
+`(BasePayloadBytes, LogicalVersionOrdinal)`，probe 累计 170 tests。该语义不增加 runtime maintenance kind 或
+physical ordinal，planned records 仍未 materialize/append。
+
+交叉化简审查未找到 Revision-locator 在 AA/BA/BB 上的致命反例：若 Base lineage parent 指向
+old B PublishedRevision，再用该 Revision 的 OVD point lookup prior ObjectVersion，可能删除
+dedicated relay。当前缺少可回放 OVD authority，且 Remove 后同 DurableId 重新接入的 historical
+predecessor 语义未裁决，因此 DB-009 保持 Open。下一高价值 discriminator 应先做单一 authority
+的 OVD Base/Delta point-lookup probe，再决定 materialize existing relay plan 还是删除 relay，
+不应先扩展 multi-frame completion planner 或 heuristic scoring。
 
 本切片不实现真实 `DurableFlush`、atomic HEAD、reopen/truncate 或文件删除。逻辑策略收敛后，S2/S3 分别验证地址/layout 与 filesystem publication；文件被物理删除后不可访问不属于格式需要抵抗的故障模型。
 

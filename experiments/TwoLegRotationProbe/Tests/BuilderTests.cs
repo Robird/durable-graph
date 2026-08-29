@@ -17,7 +17,7 @@ public sealed class BuilderTests {
         firstVersion.ReconstructionObjectPayloadBytes = 103;
         firstVersion.ResultBasePayloadBytes = 100;
         firstVersion.ExpectedParentBasePayloadBytes = 95;
-        firstVersion.VersionOrdinal = 2;
+        firstVersion.LogicalVersionOrdinal = 2;
         firstVersion.ParentFrameTicket = originalParentFrameTicket;
 
         Frame frame = builder.Build();
@@ -26,7 +26,7 @@ public sealed class BuilderTests {
         firstVersion.ReconstructionObjectPayloadBytes = 0;
         firstVersion.ResultBasePayloadBytes = 0;
         firstVersion.ExpectedParentBasePayloadBytes = null;
-        firstVersion.VersionOrdinal = 1;
+        firstVersion.LogicalVersionOrdinal = 1;
         firstVersion.ParentFrameTicket = new RelativeFrameTicket(
             IsPreviousFile: false,
             FrameTicket: new FrameTicket(32, 24));
@@ -38,7 +38,7 @@ public sealed class BuilderTests {
         Assert.Equal(103, persistedVersion.ReconstructionObjectPayloadBytes);
         Assert.Equal(100, persistedVersion.ResultBasePayloadBytes);
         Assert.Equal(95, persistedVersion.ExpectedParentBasePayloadBytes);
-        Assert.Equal(2, persistedVersion.VersionOrdinal);
+        Assert.Equal(2, persistedVersion.LogicalVersionOrdinal);
         Assert.Equal(originalParentFrameTicket, persistedVersion.ParentFrameTicket);
         Assert.False(frame.ObjectVersions.ContainsKey(secondObjectId));
     }
@@ -51,7 +51,7 @@ public sealed class BuilderTests {
         ObjectVersionBuilder[] invalidBuilders = [
             new() { Kind = (ObjectVersionKind)99, ReconstructionObjectPayloadBytes = 0 },
             new() { ReconstructionObjectPayloadBytes = 0, ResultBasePayloadBytes = -1 },
-            new() { ReconstructionObjectPayloadBytes = 0, VersionOrdinal = 0 },
+            new() { ReconstructionObjectPayloadBytes = 0, LogicalVersionOrdinal = 0 },
             new() {
                 Kind = ObjectVersionKind.Delta,
                 PayloadBytes = 1,
@@ -59,11 +59,10 @@ public sealed class BuilderTests {
                 ResultBasePayloadBytes = 1,
                 ExpectedParentBasePayloadBytes = 0,
             },
-            new() { ReconstructionObjectPayloadBytes = 0, ParentFrameTicket = parent },
-            new() { ReconstructionObjectPayloadBytes = 0, VersionOrdinal = 2 },
+            new() { ReconstructionObjectPayloadBytes = 0, LogicalVersionOrdinal = 2 },
             new() {
                 ReconstructionObjectPayloadBytes = 0,
-                VersionOrdinal = 2,
+                LogicalVersionOrdinal = 2,
                 ParentFrameTicket = parent,
                 ExpectedParentBasePayloadBytes = 0,
             },
@@ -77,7 +76,7 @@ public sealed class BuilderTests {
                 PayloadBytes = 1,
                 ReconstructionObjectPayloadBytes = 1,
                 ResultBasePayloadBytes = 1,
-                VersionOrdinal = 2,
+                LogicalVersionOrdinal = 2,
                 ParentFrameTicket = parent,
             },
             new() {
@@ -86,7 +85,7 @@ public sealed class BuilderTests {
                 ReconstructionObjectPayloadBytes = 1,
                 ResultBasePayloadBytes = 1,
                 ExpectedParentBasePayloadBytes = -1,
-                VersionOrdinal = 2,
+                LogicalVersionOrdinal = 2,
                 ParentFrameTicket = parent,
             },
             new() {
@@ -94,7 +93,7 @@ public sealed class BuilderTests {
                 ReconstructionObjectPayloadBytes = 0,
                 ResultBasePayloadBytes = 1,
                 ExpectedParentBasePayloadBytes = 0,
-                VersionOrdinal = 2,
+                LogicalVersionOrdinal = 2,
                 ParentFrameTicket = parent,
             },
         ];
@@ -121,7 +120,7 @@ public sealed class BuilderTests {
             ReconstructionObjectPayloadBytes = 9,
             ResultBasePayloadBytes = 10,
             ExpectedParentBasePayloadBytes = 10,
-            VersionOrdinal = 2,
+            LogicalVersionOrdinal = 2,
             ParentFrameTicket = parent,
         };
 

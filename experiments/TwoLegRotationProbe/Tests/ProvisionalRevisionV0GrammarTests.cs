@@ -273,7 +273,7 @@ public sealed class ProvisionalRevisionV0GrammarTests {
         objectVersion.PayloadBytes = 0;
         objectVersion.ReconstructionObjectPayloadBytes = 0;
         objectVersion.ResultBasePayloadBytes = 0;
-        objectVersion.VersionOrdinal = 1;
+        objectVersion.LogicalVersionOrdinal = 1;
 
         Assert.Throws<InvalidDataException>(
             () => ProvisionalRevisionV0Estimator.Estimate(

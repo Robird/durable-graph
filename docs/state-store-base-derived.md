@@ -171,8 +171,18 @@ C full Bases、mixed Self/Previous full OVD 与两个 RBF envelopes。成功可�
 
 该 planner 目前纯读且不 append。其 projected StateMap 从 C full OVD binding 解码产生，但
 planned relay/relocated Base 仍是 size-only grammar records，尚未进入当前 CLR
-`ObjectVersion` materializer；这避免把领域 `VersionOrdinal` 错当成 maintenance lineage
-ordinal。真实执行与一般 completion search 分别留给后续实验。
+`ObjectVersion` materializer。
+
+后续 runtime semantic probe 已把 `VersionOrdinal` 明确收窄为 `LogicalVersionOrdinal`：
+same-version zero-payload Delta 可作为 transparent Relay，same-version Base 可作为
+RelocatedBase；两者不推进领域版本，且 reconstruction 与完整 lineage inspection 分开。
+该结果消除了额外 physical ordinal 或 maintenance kind 的需要，但尚未把 planner 产物
+materialize/append。
+
+独立化简审查还发现：若未来 Base 的 lineage-only parent 改指 B PublishedRevision，并通过
+该 Revision 的 OVD point lookup 找 prior ObjectVersion，可能整体删除 relay machinery。
+当前尚无 persisted/replayable OVD authority，不能用 caller StateMap 伪造证明；该分叉与对象
+Remove 后同 DurableId 重新接入问题记录于 [`DB-009`](design-branches/0009-base-lineage-parent-locator.md)。
 
 ## 6. 一个 Frame 一个 Revision 的派生边界
 

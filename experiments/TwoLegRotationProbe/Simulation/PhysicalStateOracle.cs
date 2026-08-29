@@ -32,6 +32,45 @@ internal static class PhysicalStateOracle {
             reconstructionFrameAddresses);
     }
 
+    public static ObjectLineageInspection InspectObjectLineage(
+        RbfFileStore store,
+        uint objectId,
+        AbsoluteFrameAddress headAddress) {
+        ArgumentNullException.ThrowIfNull(store);
+
+        LogicalObjectState headState = Reconstruct(
+            store,
+            objectId,
+            headAddress,
+            visit: null);
+        List<AbsoluteFrameAddress> headToRootFrameAddresses = [];
+        HashSet<AbsoluteFrameAddress> visited = [];
+        AbsoluteFrameAddress address = headAddress;
+
+        while (true) {
+            if (!visited.Add(address)) {
+                throw new InvalidDataException(
+                    $"Object {objectId} has a cycle in its lineage chain.");
+            }
+
+            headToRootFrameAddresses.Add(address);
+            ObjectVersion version = ReadObjectVersion(store, objectId, address);
+            if (version.ParentFrameTicket is not RelativeFrameTicket parentTicket) {
+                return new ObjectLineageInspection(
+                    objectId,
+                    headState,
+                    headAddress,
+                    address,
+                    headToRootFrameAddresses);
+            }
+
+            AbsoluteFrameAddress parentAddress = ResolveParent(address, parentTicket);
+            ObjectVersion parent = ReadObjectVersion(store, objectId, parentAddress);
+            ValidateLineageEdge(objectId, version, parent);
+            address = parentAddress;
+        }
+    }
+
     public static IReadOnlyDictionary<uint, LogicalObjectState> Materialize(SimulationRun run) {
         ArgumentNullException.ThrowIfNull(run);
         return Materialize(run.FileStore, run.StateMap);
@@ -63,7 +102,7 @@ internal static class PhysicalStateOracle {
         ArgumentNullException.ThrowIfNull(stateMap);
 
         foreach ((uint objectId, AbsoluteFrameAddress headAddress) in stateMap) {
-            ValidateObjectLineage(store, objectId, headAddress);
+            _ = InspectObjectLineage(store, objectId, headAddress);
         }
     }
 
@@ -217,25 +256,31 @@ internal static class PhysicalStateOracle {
 
             ObjectVersion version = ReadObjectVersion(store, objectId, address);
             visit?.Invoke(address, version);
-            if (version.Kind == ObjectVersionKind.Base) {
-                if (version.ReconstructionObjectPayloadBytes != version.PayloadBytes) {
+            switch (version.Kind) {
+                case ObjectVersionKind.Base:
+                    if (version.ReconstructionObjectPayloadBytes != version.PayloadBytes) {
+                        throw new InvalidDataException(
+                            $"Base for object {objectId} declares " +
+                            $"{version.ReconstructionObjectPayloadBytes} reconstruction payload bytes, " +
+                            $"but contains {version.PayloadBytes} payload bytes.");
+                    }
+
+                    current = new LogicalObjectState(
+                        version.ResultBasePayloadBytes,
+                        version.LogicalVersionOrdinal);
+                    currentReconstructionObjectPayloadBytes = version.PayloadBytes;
+                    goto ApplyDeltas;
+                case ObjectVersionKind.Delta:
+                    pendingDeltas.Add(version);
+                    address = ResolveRequiredParent(address, version, objectId);
+                    break;
+                default:
                     throw new InvalidDataException(
-                        $"Base for object {objectId} declares " +
-                        $"{version.ReconstructionObjectPayloadBytes} reconstruction payload bytes, " +
-                        $"but contains {version.PayloadBytes} payload bytes.");
-                }
-
-                current = new LogicalObjectState(
-                    version.ResultBasePayloadBytes,
-                    version.VersionOrdinal);
-                currentReconstructionObjectPayloadBytes = version.PayloadBytes;
-                break;
+                        $"Object {objectId} has unknown object version kind {version.Kind}.");
             }
-
-            pendingDeltas.Add(version);
-            address = ResolveRequiredParent(address, version, objectId);
         }
 
+    ApplyDeltas:
         for (int index = pendingDeltas.Count - 1; index >= 0; index--) {
             ObjectVersion delta = pendingDeltas[index];
             long expectedReconstructionObjectPayloadBytes;
@@ -267,11 +312,29 @@ internal static class PhysicalStateOracle {
                     $"but reconstructed {current.BasePayloadBytes} bytes.");
             }
 
-            int expectedVersionOrdinal = checked(current.VersionOrdinal + 1);
-            if (delta.VersionOrdinal != expectedVersionOrdinal) {
+            if (delta.LogicalVersionOrdinal == current.LogicalVersionOrdinal) {
+                if (delta.PayloadBytes != 0 ||
+                    delta.ResultBasePayloadBytes != current.BasePayloadBytes) {
+                    throw new InvalidDataException(
+                        $"Same-version Delta for object {objectId} must be fully transparent.");
+                }
+
+                currentReconstructionObjectPayloadBytes =
+                    expectedReconstructionObjectPayloadBytes;
+                continue;
+            }
+
+            if (current.LogicalVersionOrdinal == int.MaxValue ||
+                delta.LogicalVersionOrdinal != current.LogicalVersionOrdinal + 1) {
                 throw new InvalidDataException(
-                    $"Delta for object {objectId} has version ordinal {delta.VersionOrdinal}, " +
-                    $"but its parent requires {expectedVersionOrdinal}.");
+                    $"Delta for object {objectId} has logical version ordinal " +
+                    $"{delta.LogicalVersionOrdinal}, but its parent permits " +
+                    $"{current.LogicalVersionOrdinal} or the next logical version.");
+            }
+
+            if (delta.PayloadBytes == 0) {
+                throw new InvalidDataException(
+                    $"Domain Delta for object {objectId} must have a positive payload size.");
             }
 
             int minimumDeltaBytes = Math.Max(
@@ -285,7 +348,7 @@ internal static class PhysicalStateOracle {
 
             current = new LogicalObjectState(
                 delta.ResultBasePayloadBytes,
-                delta.VersionOrdinal);
+                delta.LogicalVersionOrdinal);
             currentReconstructionObjectPayloadBytes =
                 expectedReconstructionObjectPayloadBytes;
         }
@@ -293,40 +356,86 @@ internal static class PhysicalStateOracle {
         return current;
     }
 
-    private static void ValidateObjectLineage(
-        RbfFileStore store,
+    private static void ValidateLineageEdge(
         uint objectId,
-        AbsoluteFrameAddress headAddress) {
-        HashSet<AbsoluteFrameAddress> visited = [];
-        AbsoluteFrameAddress address = headAddress;
-
-        while (true) {
-            if (!visited.Add(address)) {
+        ObjectVersion version,
+        ObjectVersion parent) {
+        if (version.Kind == ObjectVersionKind.Delta) {
+            int expectedParentBytes = version.ExpectedParentBasePayloadBytes
+                ?? throw new InvalidDataException(
+                    $"Delta for object {objectId} has no expected parent size.");
+            if (expectedParentBytes != parent.ResultBasePayloadBytes) {
                 throw new InvalidDataException(
-                    $"Object {objectId} has a cycle in its lineage chain.");
+                    $"Delta for object {objectId} expected a {expectedParentBytes}-byte " +
+                    $"lineage parent, but its parent produces " +
+                    $"{parent.ResultBasePayloadBytes} bytes.");
             }
 
-            ObjectVersion version = ReadObjectVersion(store, objectId, address);
-            if (version.ParentFrameTicket is not RelativeFrameTicket parentTicket) {
-                if (version.VersionOrdinal != 1) {
-                    throw new InvalidDataException(
-                        $"Object {objectId} version {version.VersionOrdinal} has no lineage parent.");
-                }
-
-                return;
-            }
-
-            AbsoluteFrameAddress parentAddress = ResolveParent(address, parentTicket);
-            ObjectVersion parent = ReadObjectVersion(store, objectId, parentAddress);
-            if (parent.VersionOrdinal != version.VersionOrdinal - 1) {
+            long expectedReconstructionObjectPayloadBytes;
+            try {
+                expectedReconstructionObjectPayloadBytes = checked(
+                    parent.ReconstructionObjectPayloadBytes + version.PayloadBytes);
+            } catch (OverflowException exception) {
                 throw new InvalidDataException(
-                    $"Object {objectId} version {version.VersionOrdinal} points to lineage " +
-                    $"version {parent.VersionOrdinal}.");
+                    $"Lineage reconstruction payload size overflowed for object {objectId}.",
+                    exception);
             }
 
-            address = parentAddress;
+            if (version.ReconstructionObjectPayloadBytes !=
+                expectedReconstructionObjectPayloadBytes) {
+                throw new InvalidDataException(
+                    $"Delta for object {objectId} declares " +
+                    $"{version.ReconstructionObjectPayloadBytes} reconstruction payload bytes, " +
+                    $"but its lineage parent and payload require " +
+                    $"{expectedReconstructionObjectPayloadBytes} bytes.");
+            }
+        }
+
+        if (version.LogicalVersionOrdinal == parent.LogicalVersionOrdinal) {
+            LogicalObjectState state = ToLogicalState(version);
+            LogicalObjectState parentState = ToLogicalState(parent);
+            if (state != parentState) {
+                throw new InvalidDataException(
+                    $"Same-version maintenance record for object {objectId} changes " +
+                    "its logical state.");
+            }
+
+            if (version.Kind == ObjectVersionKind.Delta && version.PayloadBytes != 0) {
+                throw new InvalidDataException(
+                    $"Same-version Delta for object {objectId} must have zero payload bytes.");
+            }
+
+            return;
+        }
+
+        if (parent.LogicalVersionOrdinal == int.MaxValue ||
+            version.LogicalVersionOrdinal != parent.LogicalVersionOrdinal + 1) {
+            throw new InvalidDataException(
+                $"Object {objectId} logical version {version.LogicalVersionOrdinal} " +
+                $"points to logical version {parent.LogicalVersionOrdinal}; " +
+                "only same-version maintenance or a single domain-version advance is legal.");
+        }
+
+        if (version.Kind == ObjectVersionKind.Delta && version.PayloadBytes == 0) {
+            throw new InvalidDataException(
+                $"Domain Delta for object {objectId} must have a positive payload size.");
+        }
+
+        if (version.Kind == ObjectVersionKind.Delta) {
+            int minimumDeltaBytes = Math.Max(
+                0,
+                version.ResultBasePayloadBytes - parent.ResultBasePayloadBytes);
+            if (version.PayloadBytes < minimumDeltaBytes) {
+                throw new InvalidDataException(
+                    $"Delta for object {objectId} is {version.PayloadBytes} bytes but must be " +
+                    $"at least {minimumDeltaBytes} bytes for the modeled lineage growth.");
+            }
         }
     }
+
+    private static LogicalObjectState ToLogicalState(ObjectVersion version) => new(
+        version.ResultBasePayloadBytes,
+        version.LogicalVersionOrdinal);
 
     private static AbsoluteFrameAddress ResolveRequiredParent(
         AbsoluteFrameAddress childAddress,

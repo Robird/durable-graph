@@ -222,9 +222,19 @@ capacity overflow、失败零 mutation 与同 store 重试。
 该结果只构成“至多一个 B relay Frame + 一个 C evacuation Frame”的 immediate-rotation
 constructive witness。成功可证明这个具体 post-state 存在一条 preparation path；失败既不能
 排除多个 relay Frames，也不能排除先做若干 published B maintenance Bases，因此不能推出
-`CanPrepareAndRotate == false`。当前 `ObjectVersion.VersionOrdinal` 仍混合领域版本和物理
-lineage 次序，本切片有意不 append 或 materialize relay/relocated Base，避免提前裁决
-maintenance record 的 runtime 语义。
+`CanPrepareAndRotate == false`。
+
+后续 runtime semantic probe 已把属性明确改为 `LogicalVersionOrdinal`：在 synthetic
+size-state 模型中，same-version zero-payload Delta/Base 分别表达 Relay/RelocatedBase，
+不增加 maintenance kind 或 physical ordinal；logical equality 只观测
+`(BasePayloadBytes, LogicalVersionOrdinal)`，current reconstruction 与 historical lineage
+inspection 保持分层。该 probe 仍未
+append 或 materialize planner records。
+
+同时，DB-009 提出只让 Base parent 经 earlier Revision OVD point lookup 的候选化简；它可能
+删除 dedicated RelayRevision 和 `CanCompleteRelay`，但必须先有单一可回放 OVD authority，
+不能以 caller StateMap 替代。因此在扩展 multi-frame relay completion planner 前应优先做该
+discriminator probe。
 
 ## 重访触发条件
 

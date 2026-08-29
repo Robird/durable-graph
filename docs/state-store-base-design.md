@@ -83,6 +83,7 @@ ObjectId -> OffsetOfObjectVersion
 
 - `VersionKind`：`Base` 或 `Delta`；
 - `ParentVersion` 的 `RelativeFrameTicket`；
+- `LogicalVersionOrdinal`：只随领域状态变化递增，不充当物理 chain depth；
 - 后续 RebaseOrDeltify 策略所需、但尚未冻结的度量信息。
 
 首次 ObjectVersion 的 Parent 使用特殊值 0。后续 Base 与 Delta 都保留 lineage parent，因此 Base 不在结构上断开版本关系；但重建当前值时：
@@ -93,6 +94,19 @@ Base  -> 已包含完整值，不跟随 ParentVersion
 ```
 
 也就是说，`ParentVersion` 同时携带 lineage，而 `VersionKind` 决定它是否属于 reconstruction dependency。
+
+当前 direct-parent runtime probe 进一步验证了不需要 maintenance kind 或 physical ordinal：
+
+```text
+child logical ordinal = parent + 1  -> domain change
+child logical ordinal = parent      -> transparent physical maintenance
+```
+
+same-version zero-payload Delta 是 Relay，继续跟随 parent 但不改变 logical state；same-version
+Base 是 RelocatedBase，自身包含完整状态并停止 reconstruction，但 lineage 仍穿过 parent。
+物理先后和无环性由 append address、parent 与 cycle validation 表达。该结论目前只在 synthetic
+size-state probe 中证明；未来真实 payload 的 RelocatedBase 仍必须来自 authoritative exact value，
+不能用“尺寸相同”代替值相同。
 
 ## 5. 跨 A/B/C 的 Lineage Relay
 
@@ -121,6 +135,10 @@ latest-map。该选择目前是 provisional record grammar 的工作形状，不
 Relay 解决的是 C 对直接父版本的 1-bit 可编码性，并在相关文件仍被保留时保持 lineage 连续可导航。文件 retention/GC 是独立问题：文件被物理删除后，其内部数据自然不可访问；StateStore 格式不承诺抵抗删文件，也不为此增加额外寻址或冗余机制。
 
 更多推导、成本与边界见 [`state-store-base-derived.md`](state-store-base-derived.md)。
+
+一个可能删除 dedicated relay 的竞争方案是：只把 Base 的 lineage parent 解释为 earlier
+Revision locator，再由该 Revision 的 OVD 按 ObjectId 找到 prior ObjectVersion。该方案尚缺
+可回放 OVD authority，不属于当前 Working Design；见 [`DB-009`](design-branches/0009-base-lineage-parent-locator.md)。
 
 ## 6. ObjectVersionDict
 

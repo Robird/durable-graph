@@ -83,7 +83,7 @@ internal sealed class WorkloadReplayCursor {
                 $"{minimumDeltaBytes} bytes.");
         }
 
-        if (previous.VersionOrdinal == int.MaxValue) {
+        if (previous.LogicalVersionOrdinal == int.MaxValue) {
             throw new InvalidDataException(
                 $"Object {update.ObjectId} has exhausted the logical version ordinal range.");
         }
@@ -103,13 +103,13 @@ internal sealed class WorkloadReplayCursor {
                     _seenObjectIds.Add(create.ObjectId);
                     _liveObjects.Add(
                         create.ObjectId,
-                        new LogicalObjectState(create.BasePayloadBytes, VersionOrdinal: 1));
+                        new LogicalObjectState(create.BasePayloadBytes, LogicalVersionOrdinal: 1));
                     break;
                 case UpdateObject update:
                     LogicalObjectState previous = _liveObjects[update.ObjectId];
                     _liveObjects[update.ObjectId] = new LogicalObjectState(
                         update.ResultBasePayloadBytes,
-                        checked(previous.VersionOrdinal + 1));
+                        checked(previous.LogicalVersionOrdinal + 1));
                     break;
                 case RemoveObject remove:
                     _liveObjects.Remove(remove.ObjectId);

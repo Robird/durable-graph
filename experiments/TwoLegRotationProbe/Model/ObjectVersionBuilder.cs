@@ -11,7 +11,7 @@ internal sealed class ObjectVersionBuilder {
 
     public int? ExpectedParentBasePayloadBytes { get; set; }
 
-    public int VersionOrdinal { get; set; } = 1;
+    public int LogicalVersionOrdinal { get; set; } = 1;
 
     public RelativeFrameTicket? ParentFrameTicket { get; set; }
 
@@ -23,6 +23,6 @@ internal sealed class ObjectVersionBuilder {
                 $"{nameof(ReconstructionObjectPayloadBytes)} must be set before Build."),
         ResultBasePayloadBytes,
         ExpectedParentBasePayloadBytes,
-        VersionOrdinal,
+        LogicalVersionOrdinal,
         ParentFrameTicket);
 }

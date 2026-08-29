@@ -140,7 +140,7 @@ internal static class WorkloadSimulator {
         builder.PayloadBytes = create.BasePayloadBytes;
         builder.ReconstructionObjectPayloadBytes = create.BasePayloadBytes;
         builder.ResultBasePayloadBytes = create.BasePayloadBytes;
-        builder.VersionOrdinal = 1;
+        builder.LogicalVersionOrdinal = 1;
     }
 
     private static void ConfigureUpdate(
@@ -153,7 +153,7 @@ internal static class WorkloadSimulator {
         BaselinePolicy policy) {
         builder.ParentFrameTicket = ToRelativeCurrentFile(currentFileNumber, previousAddress);
         builder.ResultBasePayloadBytes = update.ResultBasePayloadBytes;
-        builder.VersionOrdinal = checked(previousState.VersionOrdinal + 1);
+        builder.LogicalVersionOrdinal = checked(previousState.LogicalVersionOrdinal + 1);
 
         bool writeBase = policy switch {
             BaselinePolicy.AlwaysBase => true,

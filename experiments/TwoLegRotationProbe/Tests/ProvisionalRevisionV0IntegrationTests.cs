@@ -381,6 +381,6 @@ public sealed class ProvisionalRevisionV0IntegrationTests {
         builder.PayloadBytes = payloadBytes;
         builder.ReconstructionObjectPayloadBytes = payloadBytes;
         builder.ResultBasePayloadBytes = payloadBytes;
-        builder.VersionOrdinal = 1;
+        builder.LogicalVersionOrdinal = 1;
     }
 }

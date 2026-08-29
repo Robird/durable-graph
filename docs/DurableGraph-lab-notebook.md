@@ -758,6 +758,14 @@
 
 ## 6. 船长日志
 
+### 2026-08-29：分离 logical version 与 transparent maintenance lineage
+
+- 将 probe 的 `VersionOrdinal` 明确重命名为 `LogicalVersionOrdinal`；物理先后继续由 append address、direct parent 与 cycle gate 表达，不增加 physical ordinal、maintenance flag 或 runtime kind。
+- executable semantics 选择 `same ordinal = maintenance`、`parent + 1 = domain change`：在 synthetic size-state 模型中，zero-payload Delta 可作 Relay，Base 可作 RelocatedBase；Base current reconstruction 停止，独立 lineage inspection 继续穿过 Base。
+- 12 个聚焦 cases 覆盖 C-only reconstruction / C-B-A lineage、Relay head、后续 Delta/Base 只推进一次、payload/result/cumulative/growth corruption、skip/regression 与确定性；logical equality 只观测 `(BasePayloadBytes, LogicalVersionOrdinal)`，完整 probe 170/170。
+- 独立化简审查提出 DB-009：Base lineage parent 或可改指 earlier Revision，再经其 OVD point lookup prior ObjectVersion，从而删除 relay。AA/BA/BB 未发现反例，但当前无 replayable OVD authority，caller StateMap 不能冒充历史 OVD；Remove 后同 DurableId 重新接入也尚待裁决。
+- 下一 discriminator 优先建立单一 authority 的 OVD Base/Delta point lookup，再决定 materialize relay plan 还是删除 relay；不先扩展 multi-frame completion planner 或策略 heuristic。
+
 ### 2026-08-29：构造首个 ImmediateRotationPlan
 
 - 将 `ProvisionalRevisionV0` 的唯一尺寸算法改接显式 grammar IR；普通 `Frame + SaveStep` 入口降为 adapter，旧 golden 不变。IR 现在能独立表达 domain Relay、带 parent 的 OVD Base/Delta，以及 Self/External/Remove。
