@@ -130,6 +130,27 @@ A debt 随连续 Save 变化
 
 不再单独扩张 terminal planner、lineage 语义或 provisional wire grammar。
 
+## 压缩后下一编码切片
+
+先闭合 **normalized input + explicit-decision Stay-B candidate**，暂不同时实现策略选择：
+
+```text
+parent PublishedRevision@B + SaveStep
+    -> immutable Insert / Update / Remove / NoChange facts
+    -> caller-explicit Update Base/Delta modes
+    -> caller-explicit unchanged A-debt migration IDs
+    -> one pure runtime B Revision candidate at the current tail
+```
+
+最小验收 fixture 在同一个 Revision 中同时包含 Insert、Update、Remove 和一个 unchanged A-debt
+same-state Base migration，并证明：OVD Delta 精确指向 source PublishedRevision；PostLive 与逻辑 replay
+一致；Remove 无 domain record；NoChange 只在显式迁移时写 record；A debt 按预期减少；whole-candidate
+estimate 与 runtime Frame 一致；planning failure 不修改 Store。
+
+本切片只冻结下一依赖 seam，不先造策略接口或通用 planner framework。`BuildRotateC` 应在下一切片复用
+同一 normalized facts 与 candidate value shape；heuristic、PreferredStayB/PreferredRotateC 比较、capacity
+repair、completion search、publication/head 均暂缓。完成后删除或压缩本节。
+
 ## 近期 roadmap
 
 1. **Normalized input + unified per-Save candidate**
