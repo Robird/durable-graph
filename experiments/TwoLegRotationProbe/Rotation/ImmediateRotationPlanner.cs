@@ -1,5 +1,3 @@
-using System.Collections.ObjectModel;
-using Atelia.TwoLegRotationProbe.Encoding;
 using Atelia.TwoLegRotationProbe.Model;
 using Atelia.TwoLegRotationProbe.Simulation;
 
@@ -27,7 +25,6 @@ internal static class ImmediateRotationPlanner {
             ObjectVersionDictionaryReader.MaterializeLive(
                 store,
                 publishedRevisionAddress).Bindings;
-        PhysicalStateOracle.ValidateLineage(store, sourceStateMap);
 
         SortedDictionary<uint, ObjectReconstructionInspection> inspections =
             InspectSourceState(
@@ -43,7 +40,6 @@ internal static class ImmediateRotationPlanner {
 
         FileScope nextScope = new(nextFileNumber);
         PlannedRevisionV0 evacuationRevision = CreateEvacuationRevision(
-            currentFileNumber,
             nextFileNumber,
             publishedRevisionAddress,
             nextScope,
@@ -51,25 +47,12 @@ internal static class ImmediateRotationPlanner {
             inspections,
             evacuationSet);
 
-        IReadOnlyDictionary<uint, AbsoluteFrameAddress> projectedStateMap =
-            ResolveProjectedStateMap(evacuationRevision);
-        ValidateProjection(
-            currentFileNumber,
-            nextFileNumber,
-            sourceStateMap,
-            inspections,
-            evacuationSet,
-            evacuationRevision,
-            projectedStateMap);
-
         return new ImmediateRotationPlan(
             previousFileNumber,
             currentFileNumber,
             nextFileNumber,
             publishedRevisionAddress,
-            evacuationObjectIds,
-            evacuationRevision,
-            projectedStateMap);
+            evacuationRevision);
     }
 
     private static (
@@ -157,7 +140,6 @@ internal static class ImmediateRotationPlanner {
     }
 
     private static PlannedRevisionV0 CreateEvacuationRevision(
-        uint currentFileNumber,
         uint nextFileNumber,
         AbsoluteFrameAddress publishedRevisionAddress,
         FileScope nextScope,
@@ -166,119 +148,35 @@ internal static class ImmediateRotationPlanner {
         IReadOnlySet<uint> evacuationSet) {
         RelativeFrameTicket publishedRevisionLocator =
             nextScope.Relativize(publishedRevisionAddress);
-        ProvisionalDomainRecordInput[] evacuationRecords = evacuationSet
-            .Order()
-            .Select(objectId => {
-                ObjectReconstructionInspection inspection = inspections[objectId];
-                return new ProvisionalDomainRecordInput(
+        ObjectVersionDictionaryBuilder dictionary = new() {
+            Kind = ObjectVersionDictionaryKind.Base,
+            ParentRevisionFrameTicket = publishedRevisionLocator,
+        };
+        FrameBuilder frame = new() { ObjectVersionDictionary = dictionary };
+
+        foreach ((uint objectId, AbsoluteFrameAddress sourceAddress) in
+            sourceStateMap.OrderBy(static pair => pair.Key)) {
+            if (!evacuationSet.Contains(objectId)) {
+                dictionary.BindExternal(
                     objectId,
-                    ProvisionalDomainRecordRole.Base,
-                    inspection.State.BasePayloadBytes,
-                    publishedRevisionLocator);
-            })
-            .ToArray();
-
-        ProvisionalObjectVersionDictionaryEntry[] bindings = sourceStateMap
-            .Select(pair => evacuationSet.Contains(pair.Key)
-                ? ProvisionalObjectVersionDictionaryEntry.BindSelf(pair.Key)
-                : ProvisionalObjectVersionDictionaryEntry.BindExternal(
-                    pair.Key,
-                    nextScope.Relativize(pair.Value)))
-            .ToArray();
-        ProvisionalRevisionV0Input input = new(
-            evacuationRecords,
-            new ProvisionalObjectVersionDictionaryInput(
-                ProvisionalObjectVersionDictionaryKind.Base,
-                publishedRevisionLocator,
-                bindings));
-        ProvisionalRevisionV0Estimate estimate = ProvisionalRevisionV0Estimator.Estimate(
-            input,
-            RbfV040Layout.InitialTailOffsetBytes);
-        AbsoluteFrameAddress address = new(nextFileNumber, estimate.RbfLayout.Ticket);
-        return new PlannedRevisionV0(
-            nextFileNumber,
-            address,
-            input,
-            estimate);
-    }
-
-    private static IReadOnlyDictionary<uint, AbsoluteFrameAddress> ResolveProjectedStateMap(
-        PlannedRevisionV0 evacuationRevision) {
-        ProvisionalObjectVersionDictionaryInput ovd =
-            evacuationRevision.GrammarInput.ObjectVersionDictionary;
-        if (ovd.Kind != ProvisionalObjectVersionDictionaryKind.Base) {
-            throw new InvalidDataException(
-                "An evacuation revision must carry a full OVD Base.");
-        }
-
-        Dictionary<uint, AbsoluteFrameAddress> projected = new(ovd.Entries.Count);
-        foreach (ProvisionalObjectVersionDictionaryEntry entry in ovd.Entries) {
-            ulong token = entry.BindingKind switch {
-                ProvisionalObjectVersionDictionaryBindingKind.Self =>
-                    ProvisionalObjectVersionDictionaryBinding.EncodeSelf(),
-                ProvisionalObjectVersionDictionaryBindingKind.External
-                    when entry.ExternalFrameTicket is RelativeFrameTicket external =>
-                    ProvisionalObjectVersionDictionaryBinding.EncodeExternal(external),
-                _ => throw new InvalidDataException(
-                    $"Evacuation OVD Base entry {entry.ObjectId} has invalid binding " +
-                    $"{entry.BindingKind}.")
-            };
-            AbsoluteFrameAddress resolved =
-                ProvisionalObjectVersionDictionaryBinding.Resolve(
-                    token,
-                    evacuationRevision.FileNumber,
-                    evacuationRevision.Address.FrameTicket);
-            projected.Add(entry.ObjectId, resolved);
-        }
-
-        return new ReadOnlyDictionary<uint, AbsoluteFrameAddress>(projected);
-    }
-
-    private static void ValidateProjection(
-        uint currentFileNumber,
-        uint nextFileNumber,
-        IReadOnlyDictionary<uint, AbsoluteFrameAddress> sourceStateMap,
-        IReadOnlyDictionary<uint, ObjectReconstructionInspection> inspections,
-        IReadOnlySet<uint> evacuationSet,
-        PlannedRevisionV0 evacuationRevision,
-        IReadOnlyDictionary<uint, AbsoluteFrameAddress> projectedStateMap) {
-        if (!sourceStateMap.Keys.SequenceEqual(projectedStateMap.Keys)) {
-            throw new InvalidDataException(
-                "The projected full OVD does not preserve the exact live ObjectId set.");
-        }
-
-        Dictionary<uint, ProvisionalDomainRecordInput> evacuationRecords =
-            evacuationRevision.GrammarInput.DomainRecords.ToDictionary(
-                static record => record.ObjectId);
-        foreach ((uint objectId, AbsoluteFrameAddress address) in projectedStateMap) {
-            if (evacuationSet.Contains(objectId)) {
-                if (address != evacuationRevision.Address ||
-                    !evacuationRecords.TryGetValue(
-                        objectId,
-                        out ProvisionalDomainRecordInput record) ||
-                    record.Role != ProvisionalDomainRecordRole.Base ||
-                    record.SyntheticPayloadBytes != inspections[objectId].State.BasePayloadBytes) {
-                    throw new InvalidDataException(
-                        $"Evacuated object {objectId} is not a self-contained Base in Next file.");
-                }
-
+                    nextScope.Relativize(sourceAddress));
                 continue;
             }
 
-            if (address.FileNumber != currentFileNumber ||
-                address != sourceStateMap[objectId] ||
-                inspections[objectId].ReconstructionFrameAddresses.Any(
-                    candidate => candidate.FileNumber != currentFileNumber)) {
-                throw new InvalidDataException(
-                    $"Retained object {objectId} is not reconstructible solely from Current file.");
-            }
+            ObjectReconstructionInspection inspection = inspections[objectId];
+            ObjectVersionBuilder version = frame.Add(objectId);
+            version.Kind = ObjectVersionKind.Base;
+            version.PayloadBytes = inspection.State.BasePayloadBytes;
+            version.ReconstructionObjectPayloadBytes = inspection.State.BasePayloadBytes;
+            version.ResultBasePayloadBytes = inspection.State.BasePayloadBytes;
+            version.LogicalVersionOrdinal = inspection.State.LogicalVersionOrdinal;
+            version.ParentFrameTicket = publishedRevisionLocator;
+            dictionary.BindSelf(objectId);
         }
 
-        if (projectedStateMap.Values.Any(address =>
-            address.FileNumber != currentFileNumber &&
-            address.FileNumber != nextFileNumber)) {
-            throw new InvalidDataException(
-                $"Projected reconstruction escapes files {currentFileNumber}/{nextFileNumber}.");
-        }
+        return new PlannedRevisionV0(
+            nextFileNumber,
+            frame.Build(),
+            RbfV040Layout.InitialTailOffsetBytes);
     }
 }

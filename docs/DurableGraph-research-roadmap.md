@@ -214,7 +214,7 @@ materialized root 是可丢弃 working graph，不是 baseline、StateMap 或第
 
 ### S1：内存自适应双腿轮转策略模拟
 
-状态：In Progress。当前优先研究切片；已建立 deterministic workload generation/replay substrate，以单文件 preparatory baseline 跑通 `AlwaysBase` / `AlwaysDeltaWhenLegal` / `ObjectPayloadReadAmplification3` 到 Frame、runtime OVD authority、symbolic materialization 与派生 StateMap 的逐 Save 前缀闭环，并加入 exact RBF v0.40 envelope。`ObjectPayloadOnly` baseline 继续保留，另有 `ProvisionalRevisionV0` 对一个实验 grammar 计入 ObjectVersion headers、OVD、TailMeta directory 与 relative VarUInt。S1e 的旧 forwarding immediate witness 已由 tag 归档；S1f/S1g 完成 logical ordinal、OVD lookup/materialization 与 Base Revision-locator discriminator。DB-009 已选择 relay-free，当前 planner 只从 B PublishedRevision OVD 取 source，并只规划 C evacuation Revision。尚未实现 OVD/object bytes writer/parser 与 persisted decoder、planned C 的 materialization/append、shared-frame-aware 或 rotation-aware 自适应策略、一般 two-file completion search 或 `CanPrepareAndRotate` gate。不修改 R1–R3 已验证结论，也不把 StateStore working design 描述为产品实现事实。
+状态：In Progress。当前优先研究切片；deterministic workload、三条 Base/Delta 基线、runtime OVD authority、symbolic materialization 与 provisional RBF v0.40 size envelope 已形成逐 Save 闭环。DB-009 已选择 relay-free；immediate A/B→B/C 路径现在以 immutable runtime Frame 为 plan authority，完成 preflight、in-memory 首帧 C file registration、`MaterializeLive(C)`、reconstruction 与 lineage 复验，但不发布 StateStore head。尚未实现 OVD/object bytes writer/parser、publication/reopen/crash、shared-frame-aware 或 rotation-aware 自适应策略、一般 two-file completion search 或 `CanPrepareAndRotate` gate。不修改 R1–R3 已验证结论，也不把 StateStore working design 描述为产品实现事实。
 
 问题：在不先引入固定 `MaxLogicalChainBytes`、`TargetFileBytes` 或 migration-byte budget 的情况下，能否用无权重事实量设计并比较 Base、Delta、渐进 cold Base migration 与正式 rotation 的候选策略？
 
@@ -280,9 +280,12 @@ relay record + empty OVD 会读 Relay/B/A 但跳过 helper。前两者 current s
 lineage root 相同，current reconstruction 对 relocated Base 仍只读 C。完整 probe 为 194 tests。
 
 因此 DB-009 已选择 relay-free。`WorkloadSimulator` 的 StateMap 由 runtime OVD replay 派生；
-planner 不接收 caller StateMap，只规划 C evacuation，runtime/grammar/planner 均已删除 forwarding
-机制。Probe 当前 198 tests。planned C 仍未 materialize/append；DB-010 另记录把 Base per-record
-locator 合并到 Revision 唯一 prior-snapshot anchor 的进一步化简。
+runtime/grammar/planner 均已删除 forwarding 机制。后续 immediate runtime slice 删除 plan 内重复的
+ProjectedStateMap：planner 构造完整 immutable C Frame，provisional grammar 只作单向尺寸投影；
+appender 在 source/candidate preflight 后才把带首 Frame 的 C 加入 store，随后只以
+`MaterializeLive(C)` 安装派生 map。旧历史 lineage 损坏仍由诊断暴露，但不再阻塞 current
+reconstruction/rotation。Probe 当前 204 tests。DB-010 现已满足 runtime-C 前置条件，可在下一
+独立 discriminator 中研究 shared prior-snapshot anchor。
 
 本切片不实现真实 `DurableFlush`、atomic HEAD、reopen/truncate 或文件删除。逻辑策略收敛后，S2/S3 分别验证地址/layout 与 filesystem publication；文件被物理删除后不可访问不属于格式需要抵抗的故障模型。
 

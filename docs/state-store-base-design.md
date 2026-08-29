@@ -132,9 +132,11 @@ absolute-normalize。Remove 与 OVD Base absence 是 decisive absent；missing/m
 fail closed。
 
 `WorkloadSimulator` 每个 Revision 都写 runtime OVD，StateMap 只作为 `MaterializeLive` 的派生
-快照。one-shot planner 不接收 caller StateMap，只产生 C evacuation Revision：evacuated objects
-写 Base+Self，retained B heads 写 External。主线不写 forwarding records，也不维护 B forwarding
-capacity、durable 顺序或 orphan 状态。被拒绝方案与裁决证据归档于 DB-009 及其 annotated tag。
+快照。one-shot planner 不接收 caller StateMap，构造 immutable runtime C candidate：evacuated
+objects 写 Base+Self，retained B heads 写 External。显式 appender 在全部 preflight 后完成
+in-memory 首帧 C file registration；append 后只从 `MaterializeLive(C)` 取得 B/C StateMap，但尚不发布 StateStore head。
+主线不写 forwarding records，也不维护 B forwarding capacity、durable 顺序或 orphan 状态。
+被拒绝方案与裁决证据归档于 DB-009 及其 annotated tag。
 
 文件 retention/GC 仍是独立问题：文件被物理删除后，其内部数据自然不可访问；StateStore
 格式不承诺抵抗删文件，也不为此增加额外寻址或冗余机制。

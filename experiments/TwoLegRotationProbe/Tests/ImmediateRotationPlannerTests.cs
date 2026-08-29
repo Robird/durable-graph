@@ -34,52 +34,45 @@ public sealed class ImmediateRotationPlannerTests {
         Assert.Equal(source.Current.FileNumber + 1, evacuation.FileNumber);
         Assert.Equal(RbfV040Layout.InitialTailOffsetBytes, evacuation.Address.FrameTicket.OffsetBytes);
         Assert.Equal(evacuation.Address.FrameTicket, evacuation.Estimate.RbfLayout.Ticket);
-        AssertEstimateMatchesGrammar(evacuation);
+        AssertEstimateMatchesFrame(evacuation);
 
         Assert.Equal(
             [AaObjectId, BaObjectId],
-            evacuation.GrammarInput.DomainRecords.Select(static record => record.ObjectId));
-        foreach (ProvisionalDomainRecordInput record in
-            evacuation.GrammarInput.DomainRecords) {
-            Assert.Equal(ProvisionalDomainRecordRole.Base, record.Role);
+            evacuation.Frame.ObjectVersions.Keys.Order());
+        foreach (ObjectVersion version in evacuation.Frame.ObjectVersions.Values) {
+            Assert.Equal(ObjectVersionKind.Base, version.Kind);
             Assert.Equal(
                 source.PublishedRevisionAddress,
-                ResolveRequiredParent(evacuation.FileNumber, record.ParentFrameTicket));
+                ResolveRequiredParent(evacuation.FileNumber, version.ParentFrameTicket));
         }
 
-        Assert.Equal(10, evacuation.GrammarInput.DomainRecords[0].SyntheticPayloadBytes);
-        Assert.Equal(25, evacuation.GrammarInput.DomainRecords[1].SyntheticPayloadBytes);
+        Assert.Equal(10, evacuation.Frame.ObjectVersions[AaObjectId].PayloadBytes);
+        Assert.Equal(25, evacuation.Frame.ObjectVersions[BaObjectId].PayloadBytes);
+        Assert.Equal(1, evacuation.Frame.ObjectVersions[AaObjectId].LogicalVersionOrdinal);
+        Assert.Equal(2, evacuation.Frame.ObjectVersions[BaObjectId].LogicalVersionOrdinal);
 
-        ProvisionalObjectVersionDictionaryInput ovd =
-            evacuation.GrammarInput.ObjectVersionDictionary;
-        Assert.Equal(ProvisionalObjectVersionDictionaryKind.Base, ovd.Kind);
+        ObjectVersionDictionary ovd = Assert.IsType<ObjectVersionDictionary>(
+            evacuation.Frame.ObjectVersionDictionary);
+        Assert.Equal(ObjectVersionDictionaryKind.Base, ovd.Kind);
         Assert.Equal(
             source.PublishedRevisionAddress,
-            ResolveRequiredParent(evacuation.FileNumber, ovd.ParentFrameTicket));
+            ResolveRequiredParent(
+                evacuation.FileNumber,
+                ovd.ParentRevisionFrameTicket));
         Assert.Equal(
             [AaObjectId, BaObjectId, BbObjectId],
-            ovd.Entries.Select(static entry => entry.ObjectId));
+            ovd.Entries.Keys.Order());
         Assert.Equal(
             [
-                ProvisionalObjectVersionDictionaryBindingKind.Self,
-                ProvisionalObjectVersionDictionaryBindingKind.Self,
-                ProvisionalObjectVersionDictionaryBindingKind.External,
+                ObjectVersionDictionaryBindingKind.Self,
+                ObjectVersionDictionaryBindingKind.Self,
+                ObjectVersionDictionaryBindingKind.External,
             ],
-            ovd.Entries.Select(static entry => entry.BindingKind));
-        Assert.Equal(evacuation.Address, ResolveOvdBinding(evacuation, ovd.Entries[0]));
-        Assert.Equal(evacuation.Address, ResolveOvdBinding(evacuation, ovd.Entries[1]));
-        Assert.Equal(source.BbHeadAddress, ResolveOvdBinding(evacuation, ovd.Entries[2]));
-
+            ovd.Entries.OrderBy(static pair => pair.Key)
+                .Select(static pair => pair.Value.Kind));
         Assert.Equal(
-            [
-                KeyValuePair.Create(AaObjectId, evacuation.Address),
-                KeyValuePair.Create(BaObjectId, evacuation.Address),
-                KeyValuePair.Create(BbObjectId, source.BbHeadAddress),
-            ],
-            SnapshotMap(plan.ProjectedStateMap));
-        Assert.True(
-            Assert.IsAssignableFrom<IDictionary<uint, AbsoluteFrameAddress>>(
-                plan.ProjectedStateMap).IsReadOnly);
+            source.BbHeadAddress,
+            ResolveOvdBinding(evacuation, ovd.Entries[BbObjectId]));
         Assert.Equal(sourceMap, SnapshotMap(
             ObjectVersionDictionaryReader.MaterializeLive(
                 source.Store,
@@ -97,12 +90,13 @@ public sealed class ImmediateRotationPlannerTests {
             source.PublishedRevisionAddress);
 
         Assert.Equal([BaObjectId], plan.EvacuationObjectIds);
-        Assert.Equal([BaObjectId, BbObjectId], plan.ProjectedStateMap.Keys.Order());
-        Assert.DoesNotContain(AaObjectId, plan.ProjectedStateMap.Keys);
+        ObjectVersionDictionary plannedOvd = Assert.IsType<ObjectVersionDictionary>(
+            plan.EvacuationRevision.Frame.ObjectVersionDictionary);
+        Assert.Equal([BaObjectId, BbObjectId], plannedOvd.Entries.Keys.Order());
+        Assert.DoesNotContain(AaObjectId, plannedOvd.Entries.Keys);
         Assert.Equal(
             [BaObjectId],
-            plan.EvacuationRevision.GrammarInput.DomainRecords
-                .Select(static record => record.ObjectId));
+            plan.EvacuationRevision.Frame.ObjectVersions.Keys.Order());
     }
 
     [Fact]
@@ -121,15 +115,16 @@ public sealed class ImmediateRotationPlannerTests {
             published);
 
         Assert.Empty(plan.EvacuationObjectIds);
-        Assert.Empty(plan.EvacuationRevision.GrammarInput.DomainRecords);
-        Assert.Empty(plan.EvacuationRevision.GrammarInput.ObjectVersionDictionary.Entries);
+        Assert.Empty(plan.EvacuationRevision.Frame.ObjectVersions);
+        ObjectVersionDictionary plannedOvd = Assert.IsType<ObjectVersionDictionary>(
+            plan.EvacuationRevision.Frame.ObjectVersionDictionary);
+        Assert.Empty(plannedOvd.Entries);
         Assert.Equal(
             published,
             ResolveRequiredParent(
                 plan.NextFileNumber,
-                plan.EvacuationRevision.GrammarInput.ObjectVersionDictionary.ParentFrameTicket));
-        Assert.Empty(plan.ProjectedStateMap);
-        AssertEstimateMatchesGrammar(plan.EvacuationRevision);
+                plannedOvd.ParentRevisionFrameTicket));
+        AssertEstimateMatchesFrame(plan.EvacuationRevision);
     }
 
     [Fact]
@@ -148,7 +143,6 @@ public sealed class ImmediateRotationPlannerTests {
 
         Assert.Equal(first.EvacuationObjectIds, second.EvacuationObjectIds);
         AssertPlannedRevisionEqual(first.EvacuationRevision, second.EvacuationRevision);
-        Assert.Equal(SnapshotMap(first.ProjectedStateMap), SnapshotMap(second.ProjectedStateMap));
     }
 
     [Fact]
@@ -363,26 +357,21 @@ public sealed class ImmediateRotationPlannerTests {
 
     private static AbsoluteFrameAddress ResolveOvdBinding(
         PlannedRevisionV0 revision,
-        ProvisionalObjectVersionDictionaryEntry entry) {
-        ulong token = entry.BindingKind switch {
-            ProvisionalObjectVersionDictionaryBindingKind.Self =>
-                ProvisionalObjectVersionDictionaryBinding.EncodeSelf(),
-            ProvisionalObjectVersionDictionaryBindingKind.External =>
-                ProvisionalObjectVersionDictionaryBinding.EncodeExternal(
-                    Assert.IsType<RelativeFrameTicket>(entry.ExternalFrameTicket)),
+        ObjectVersionDictionaryBinding binding) {
+        return binding.Kind switch {
+            ObjectVersionDictionaryBindingKind.Self => revision.Address,
+            ObjectVersionDictionaryBindingKind.External =>
+                new FileScope(revision.FileNumber).Resolve(
+                    Assert.IsType<RelativeFrameTicket>(binding.ExternalFrameTicket)),
             _ => throw new Xunit.Sdk.XunitException(
-                $"Binding {entry.BindingKind} cannot resolve to a live address."),
+                $"Binding {binding.Kind} cannot resolve to a live address."),
         };
-        return ProvisionalObjectVersionDictionaryBinding.Resolve(
-            token,
-            revision.FileNumber,
-            revision.Address.FrameTicket);
     }
 
-    private static void AssertEstimateMatchesGrammar(PlannedRevisionV0 revision) {
+    private static void AssertEstimateMatchesFrame(PlannedRevisionV0 revision) {
         ProvisionalRevisionV0Estimate actual = revision.Estimate;
         ProvisionalRevisionV0Estimate expected = ProvisionalRevisionV0Estimator.Estimate(
-            revision.GrammarInput,
+            revision.Frame,
             revision.Address.FrameTicket.OffsetBytes);
 
         Assert.Equal(expected.DomainRecords, actual.DomainRecords);
@@ -404,18 +393,36 @@ public sealed class ImmediateRotationPlannerTests {
         PlannedRevisionV0 actual) {
         Assert.Equal(expected.FileNumber, actual.FileNumber);
         Assert.Equal(expected.Address, actual.Address);
-        Assert.Equal(expected.GrammarInput.DomainRecords, actual.GrammarInput.DomainRecords);
         Assert.Equal(
-            expected.GrammarInput.ObjectVersionDictionary.Kind,
-            actual.GrammarInput.ObjectVersionDictionary.Kind);
+            DescribeObjectVersions(expected.Frame),
+            DescribeObjectVersions(actual.Frame));
+        ObjectVersionDictionary expectedOvd = Assert.IsType<ObjectVersionDictionary>(
+            expected.Frame.ObjectVersionDictionary);
+        ObjectVersionDictionary actualOvd = Assert.IsType<ObjectVersionDictionary>(
+            actual.Frame.ObjectVersionDictionary);
+        Assert.Equal(expectedOvd.Kind, actualOvd.Kind);
         Assert.Equal(
-            expected.GrammarInput.ObjectVersionDictionary.ParentFrameTicket,
-            actual.GrammarInput.ObjectVersionDictionary.ParentFrameTicket);
+            expectedOvd.ParentRevisionFrameTicket,
+            actualOvd.ParentRevisionFrameTicket);
         Assert.Equal(
-            expected.GrammarInput.ObjectVersionDictionary.Entries,
-            actual.GrammarInput.ObjectVersionDictionary.Entries);
+            expectedOvd.Entries.OrderBy(static pair => pair.Key),
+            actualOvd.Entries.OrderBy(static pair => pair.Key));
         Assert.Equal(expected.Estimate.RbfLayout, actual.Estimate.RbfLayout);
     }
+
+    private static object[] DescribeObjectVersions(Frame frame) => frame.ObjectVersions
+        .OrderBy(static pair => pair.Key)
+        .Select(static pair => (object)new {
+            ObjectId = pair.Key,
+            pair.Value.Kind,
+            pair.Value.PayloadBytes,
+            pair.Value.ReconstructionObjectPayloadBytes,
+            pair.Value.ResultBasePayloadBytes,
+            pair.Value.ExpectedParentBasePayloadBytes,
+            pair.Value.LogicalVersionOrdinal,
+            pair.Value.ParentFrameTicket,
+        })
+        .ToArray();
 
     private static StoreSnapshot CaptureStore(RbfFileStore store) => new(
         store.FileCount,

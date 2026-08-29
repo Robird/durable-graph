@@ -65,7 +65,10 @@ preview 只有 L2 信任，最多作为 routing hint；权威 OVD/ObjectVersion 
 - `MaterializeLive(PublishedRevision)` replay OVD chain，产生唯一 live binding map；
 - `WorkloadSimulator` 每次 Save 写 runtime OVD，`SimulationRun.StateMap` 只是 replay 后的派生快照；
 - `ImmediateRotationPlanner.Create` 不接收 caller StateMap，只从 B PublishedRevision OVD 取 source；
-- planner 只产生一个 C evacuation Revision，不存在 RelaySet、RelayRevision 或 B capacity debt；
+- planner 只产生一个 immutable runtime C evacuation Frame 及其派生尺寸估值，不存在
+  RelaySet、RelayRevision 或 B capacity debt；
+- `ImmediateRotationAppender` 在所有 source/candidate preflight 后完成 in-memory 首帧 C file registration；
+  `MaterializeLive(C)` 是 append 后唯一 StateMap 来源，本切片不发布 StateStore head；
 - 所有 evacuated Base 都以 B PublishedRevision 为 per-record locator；
 - 唯一 `InspectObjectLineage` 对 Delta 走 exact parent、对 Base 走 Revision OVD locator；
 - Delta 必须有正 payload 且 logical ordinal 为 `parent + 1`；same-version maintenance 只允许
@@ -84,7 +87,8 @@ BB: current head remains B; C full OVD binds External(B)
 
 - preparatory B Base migration 仍可能是 `CanPrepareAndRotate` 的 correctness path；本裁决只删除
   forwarding Relay，不删除分批降低 EvacuationSet 的能力；
-- planned C 仍是 grammar-level 产物，尚未 append/materialize 后由 runtime reader 复验；
+- 当前只闭合 immediate one-C-Frame 路径；尚无一般 completion search、publication/reopen 或
+  crash atomicity；
 - Remove 后同 DurableId 重新接入是否延续旧 lineage 仍未裁决；`LookupLive` 必须在 Remove
   处停止，当前不实现 `LookupHistoricalPredecessor`；
 - 是否把 Base per-record locator 合并到 Revision 的共同 prior-snapshot anchor，见

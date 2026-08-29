@@ -759,6 +759,14 @@
 
 ## 6. 船长日志
 
+### 2026-08-29：闭合 relay-free runtime C append
+
+- planned C 改以 immutable runtime `Frame` 为唯一语义 authority；provisional grammar 仅作尺寸投影，删除 plan 内重复的 `ProjectedStateMap`。
+- `ImmediateRotationAppender` 在 source/candidate preflight 后，通过“首帧成功再注册文件”的 in-memory store seam 加入 C；不发布 StateStore head。
+- append 后只由 `MaterializeLive(C)` 产生 B/C StateMap；AA/BA/BB 的 logical state、reconstruction 与 lineage 已闭合，Probe 204/204。
+- 完整历史 lineage 损坏仍由离线诊断暴露，但不再阻塞 current reconstruction 或 immediate rotation。
+- 下一步转向 DB-010 discriminator，再研究一般 B Base migration/`CanPrepareAndRotate`；bytes codec、publication/reopen/crash 继续分离。
+
 ### 2026-08-29：选择 relay-free 并删除 forwarding 主线
 
 - 为三方案并存的可执行岔口 `b84620b` 创建 annotated tag `research/relay-vs-relay-free-20260829`，随后把 DB-009 裁决为 Revision locator。
@@ -766,7 +774,7 @@
 - OVD 新增 `MaterializeLive(PublishedRevision)`；WorkloadSimulator 每次 Save 写 runtime OVD，StateMap 只由 OVD replay 派生，并以 point lookup 交叉校验。V0 Frame adapter 直接投影同一 OVD，不再从 SaveStep 重造计费副本。
 - relay-free `ImmediateRotationPlanner` 删除 caller StateMap、RelaySet、RelayRevision、B capacity debt 与 Relay grammar role；source 只来自 B PublishedRevision OVD，所有 evacuation Bases 以 B 为 locator，planner 只产生 C full Base/OVD。
 - canonical AA/BA/BB、Published Remove、OVD insertion order、C capacity、B exhausted tail、source scope 与零 mutation 均有 executable tests；Probe 198/198，独立 correctness review 无 blocker/high/medium。
-- preparatory B Base migration 仍是一般 `CanPrepareAndRotate` 的 correctness path；planned C 尚未 append/materialize 后由 runtime reader 复验。DB-010 shared Revision anchor 继续 Open，本轮未实现。
+- preparatory B Base migration 仍是一般 `CanPrepareAndRotate` 的 correctness path；当时遗留的 runtime C append 缺口已由后一切片闭合，DB-010 shared Revision anchor 继续 Open。
 
 ### 2026-08-29：历史 discriminator：建立 OVD authority 并比较 forwarding/relay-free（已归档）
 

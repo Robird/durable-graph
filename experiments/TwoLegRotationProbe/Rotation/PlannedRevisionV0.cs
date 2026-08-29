@@ -4,41 +4,30 @@ using Atelia.TwoLegRotationProbe.Model;
 namespace Atelia.TwoLegRotationProbe.Rotation;
 
 /// <summary>
-/// Pure, grammar-level description of one revision that a rotation would append.
-/// It is not a publication command and does not own mutable store state.
+/// Pure, immutable runtime Revision candidate plus its derived provisional size estimate.
+/// It is not an append or publication command and does not own mutable store state.
 /// </summary>
 internal sealed class PlannedRevisionV0 {
     public PlannedRevisionV0(
         uint fileNumber,
-        AbsoluteFrameAddress address,
-        ProvisionalRevisionV0Input grammarInput,
-        ProvisionalRevisionV0Estimate estimate) {
+        Frame frame,
+        long frameStartOffsetBytes) {
         ArgumentOutOfRangeException.ThrowIfZero(fileNumber);
-        ArgumentNullException.ThrowIfNull(grammarInput);
-        ArgumentNullException.ThrowIfNull(estimate);
-        if (address.FileNumber != fileNumber) {
-            throw new ArgumentException(
-                "The planned address must belong to the planned file.",
-                nameof(address));
-        }
-
-        if (address.FrameTicket != estimate.RbfLayout.Ticket) {
-            throw new ArgumentException(
-                "The planned address must match the estimated RBF ticket.",
-                nameof(address));
-        }
+        ArgumentNullException.ThrowIfNull(frame);
 
         FileNumber = fileNumber;
-        Address = address;
-        GrammarInput = grammarInput;
-        Estimate = estimate;
+        Frame = frame;
+        Estimate = ProvisionalRevisionV0Estimator.Estimate(
+            frame,
+            frameStartOffsetBytes);
+        Address = new AbsoluteFrameAddress(fileNumber, Estimate.RbfLayout.Ticket);
     }
 
     public uint FileNumber { get; }
 
     public AbsoluteFrameAddress Address { get; }
 
-    public ProvisionalRevisionV0Input GrammarInput { get; }
+    public Frame Frame { get; }
 
     public ProvisionalRevisionV0Estimate Estimate { get; }
 }

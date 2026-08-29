@@ -232,7 +232,8 @@ append 或 materialize planner records。
 
 S1g 建立不接收 caller StateMap 的 runtime OVD lookup/materialization，并完成 DB-009
 discriminator。随后已选择 relay-free：当前 planner 只从 B PublishedRevision OVD 取 source，
-只规划一个 C evacuation Revision；runtime/grammar 不再表达 transparent Delta forwarding。
+以 immutable runtime Frame 表达 C candidate；显式 appender 在 preflight 后加入首个 C Frame，
+append 后 StateMap 只由 `MaterializeLive(C)` 派生。runtime/grammar 不再表达 transparent Delta forwarding。
 竞争实现与本节旧 golden 由 tag `research/relay-vs-relay-free-20260829` 保存，不再是 active
 planner。进一步把 Base per-record locator 合并到 Revision 共同 prior-snapshot anchor 的分叉见
 DB-010。

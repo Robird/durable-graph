@@ -60,6 +60,7 @@ Remove 后复用同一 DurableId 并延续旧 lineage 也会要求不同的 hist
 
 ## 重访触发条件
 
-- planned C 被 materialize/append，并由 runtime OVD/lineage reader 复验；
+- planned C 的 runtime materialize/append 与 OVD/lineage 复验已完成；DB-010 现在可以进入独立
+  discriminator，但尚未据此裁决；
 - branch merge、historical import、rescue restore 或 stale-snapshot Save 成为真实消费者；
 - DurableId reuse 的 lineage 语义被裁决。

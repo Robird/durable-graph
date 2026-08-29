@@ -122,8 +122,9 @@ B preparatory Base migration 可能是把过大 EvacuationSet 分批转移、最
 correctness path。任何成功 Save 都必须保留至少一条这样的有限完成路径。
 
 当前 `ImmediateRotationPlanner` 是更窄的 executable witness：它从 B PublishedRevision OVD
-materialize source live map，只规划一个 C evacuation Revision，不写 B。planned C 仍是 size
-grammar，尚未 append/materialize 后由 runtime reader 复验。
+materialize source live map，构造一个 immutable runtime C evacuation Frame，并由显式 appender
+在全部 preflight 后把首 Frame 加入新 C 文件。append 后 StateMap 只由 `MaterializeLive(C)`
+产生；该路径不写 B，也不包含 publication/head、reopen 或一般 completion plan。
 
 ## 6. 一个 Frame 一个 Revision 的派生边界
 

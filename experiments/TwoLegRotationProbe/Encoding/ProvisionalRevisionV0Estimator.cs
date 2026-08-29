@@ -10,12 +10,22 @@ internal static class ProvisionalRevisionV0Estimator {
     public static ProvisionalRevisionV0Estimate Estimate(
         Frame frame,
         long frameStartOffsetBytes) {
+        return Estimate(Project(frame), frameStartOffsetBytes);
+    }
+
+    /// <summary>
+    /// Projects a runtime Revision Frame into the size-only provisional grammar.
+    /// Runtime state remains authoritative; this projection intentionally drops semantics
+    /// that do not affect the current byte estimate.
+    /// </summary>
+    public static ProvisionalRevisionV0Input Project(Frame frame) {
         ArgumentNullException.ThrowIfNull(frame);
         ObjectVersionDictionary dictionary = frame.ObjectVersionDictionary
             ?? throw new InvalidDataException(
                 "A provisional Revision Frame requires an explicit object-version dictionary.");
 
         ProvisionalDomainRecordInput[] domainRecords = frame.ObjectVersions
+            .OrderBy(static pair => pair.Key)
             .Select(static pair => new ProvisionalDomainRecordInput(
                 pair.Key,
                 pair.Value.Kind switch {
@@ -28,6 +38,7 @@ internal static class ProvisionalRevisionV0Estimator {
                 pair.Value.ParentFrameTicket))
             .ToArray();
         ProvisionalObjectVersionDictionaryEntry[] ovdEntries = dictionary.Entries
+            .OrderBy(static pair => pair.Key)
             .Select(static pair => pair.Value.Kind switch {
                 ObjectVersionDictionaryBindingKind.Self =>
                     ProvisionalObjectVersionDictionaryEntry.BindSelf(pair.Key),
@@ -41,7 +52,7 @@ internal static class ProvisionalRevisionV0Estimator {
             })
             .ToArray();
 
-        ProvisionalRevisionV0Input input = new(
+        return new ProvisionalRevisionV0Input(
             domainRecords,
             new ProvisionalObjectVersionDictionaryInput(
                 dictionary.Kind switch {
@@ -54,7 +65,6 @@ internal static class ProvisionalRevisionV0Estimator {
                 },
                 dictionary.ParentRevisionFrameTicket,
                 ovdEntries));
-        return Estimate(input, frameStartOffsetBytes);
     }
 
     /// <summary>The sole sizing algorithm for the provisional revision grammar.</summary>

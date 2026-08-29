@@ -113,10 +113,10 @@ walk older parents without turning those reads into reconstruction cost.
 The current single-file model can run either the historical
 `ObjectPayloadOnly` profile or the explicitly provisional full-frame
 `ProvisionalRevisionV0` size grammar described below. A separate pure planner
-now projects one immediate A/B to B/C step, but it is not wired into the
-single-file policy runs. Within those runs, `AlwaysDeltaWhenLegal` is presently
-equivalent to “always Delta.” The enum is intentionally not a general policy
-interface yet.
+and explicit appender now close one immediate A/B to B/C runtime step, but that
+step is not wired into the single-file policy runs. Within those runs,
+`AlwaysDeltaWhenLegal` is presently equivalent to “always Delta.” The enum is
+intentionally not a general policy interface yet.
 
 ## Object-local payload policy
 
@@ -250,20 +250,27 @@ format waits for a CLI, persisted artifact, or batch-run consumer.
 
 ## Relay-free immediate rotation witness
 
-`ImmediateRotationPlanner` is a pure grammar-level planner for the narrow case
-that fits in one C evacuation Frame. Its only source of live bindings is
+`ImmediateRotationPlanner` is a pure planner for the narrow case that fits in
+one C evacuation Frame. Its only source of live bindings is
 `MaterializeLive(B PublishedRevision)`; it does not accept a caller StateMap.
 
 ```text
 EvacuationSet = live objects whose terminating Base is in A
 ```
 
-The C Revision writes a full Base for every evacuated object. Every such Base
-uses the B PublishedRevision as its lineage locator. C also writes a full OVD
-Base: evacuated bindings use contextual Self, while retained objects bind
-Previous to unchanged B heads. The projected StateMap is decoded from this OVD.
-No B maintenance Frame, forwarding record, or B capacity preflight exists in
-the selected immediate plan.
+The plan owns one immutable runtime candidate `Frame`; the provisional grammar
+is only its derived size projection. The C Revision writes a full Base for every
+evacuated object and preserves its logical ordinal. Every such Base uses the B
+PublishedRevision as its lineage locator. C also writes a full OVD Base:
+evacuated bindings use contextual Self, while retained objects bind Previous to
+unchanged B heads. `ImmediateRotationAppender` revalidates the candidate against
+the source, then constructs and appends the first C Frame before installing the
+new file in the in-memory store. It does not publish a StateStore head.
+
+After append, `MaterializeLive(C)` is the sole source of the B/C StateMap; the
+plan no longer stores a parallel `ProjectedStateMap`. No B maintenance Frame,
+forwarding record, or B capacity preflight exists in the selected immediate
+path.
 
 The canonical `AA / BA / BB` fixture proves:
 
@@ -275,11 +282,17 @@ The canonical `AA / BA / BB` fixture proves:
   separately supplied map;
 - OVD insertion order does not affect the plan;
 - C capacity failures are repeatable and do not mutate the source store;
-- an exhausted B tail does not block a relay-free immediate plan.
+- an exhausted B tail does not block a relay-free immediate plan;
+- C append produces exactly the planned ticket/layout, and repeated or stale-
+  scope apply fails without adding another file;
+- historical lineage corruption remains visible to diagnostics but does not
+  block current-state reconstruction or immediate rotation.
 
-This slice still does not implement a byte writer/parser, append, publication,
-planned-record materialization, general multi-step B Base preparation,
-rotation-aware policy scoring, or the `CanPrepareAndRotate` safety gate.
+This slice still does not implement a byte writer/parser, publication/head or
+reopen semantics, general multi-step B Base preparation, rotation-aware policy
+scoring, or the `CanPrepareAndRotate` safety gate. The in-memory store also has
+no store identity or publication frontier, so it cannot detect an isomorphic
+wrong store or publication staleness that the model does not represent.
 Generated Base/Delta sizes remain synthetic payload observations. The V0
 projection is a versioned research input, not a durable-format commitment.
 
