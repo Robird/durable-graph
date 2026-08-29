@@ -214,7 +214,7 @@ materialized root 是可丢弃 working graph，不是 baseline、StateMap 或第
 
 ### S1：内存自适应双腿轮转策略模拟
 
-状态：In Progress。当前优先研究切片；deterministic workload、三条 Base/Delta 基线、runtime OVD authority、symbolic materialization 与 provisional RBF v0.40 size envelope 已形成逐 Save 闭环。DB-009 已选择 relay-free，DB-010 已选择 Revision shared prior-snapshot anchor；immediate A/B→B/C 路径现在以 immutable runtime Frame 为 plan authority，完成 preflight、in-memory 首帧 C file registration、`MaterializeLive(C)`、reconstruction 与 lineage 复验，但不发布 StateStore head。尚未实现 OVD/object bytes writer/parser、publication/reopen/crash、shared-frame-aware 或 rotation-aware 自适应策略、一般 two-file completion search 或 `CanPrepareAndRotate` gate。不修改 R1–R3 已验证结论，也不把 StateStore working design 描述为产品实现事实。
+状态：In Progress。当前优先研究切片；deterministic workload、三条 Base/Delta 基线、runtime OVD authority、symbolic materialization 与 provisional RBF v0.40 size envelope 已形成逐 Save 闭环。DB-009 已选择 relay-free，DB-010 已选择 Revision shared prior-snapshot anchor；immediate A/B→B/C 与 explicit caller-selected B Base migration 均已完成 pure plan、append、`MaterializeLive`、reconstruction/closure 复验，但不发布 StateStore head。尚未实现 OVD/object bytes writer/parser、publication/reopen/crash、shared-frame-aware 或 rotation-aware 自适应策略、completion search 或正式 `CanPrepareAndRotate` decision procedure。不修改 R1–R3 已验证结论，也不把 StateStore working design 描述为产品实现事实。
 
 问题：在不先引入固定 `MaxLogicalChainBytes`、`TargetFileBytes` 或 migration-byte budget 的情况下，能否用无权重事实量设计并比较 Base、Delta、渐进 cold Base migration 与正式 rotation 的候选策略？
 
@@ -237,6 +237,10 @@ all frame starts/tickets/layouts are representable
 failed plan leaves published state unchanged
 ```
 
+`CanPrepareAndRotate` 是当前选择的 liveness admission invariant，不是格式可读性定律；某个状态的
+true 必须有具体有限 completion witness。未来 bounded explorer 的 `NotFound` 只表示它没有在声明的
+输入与动作边界内找到 witness，不能冒充一般无解证明。
+
 模拟记录原始 bytes、frame sets、lineage、evacuation debt、useful/unused reads 与布局事实；所有比例和加权 score 后算。至少比较 AlwaysBase、AlwaysDelta-when-legal、StateJournal-style local cost、Previous-ratio、渐进 cold Base migration 与统一策略候选。
 
 当前 executable baseline：
@@ -245,18 +249,24 @@ failed plan leaves published state unchanged
 - one Revision/one in-memory RBF Frame、runtime OVD authority、absolute StateMap、symbolic Delta apply；
 - exact v0.40 envelope 与 size-only `ProvisionalRevisionV0`，但无 bytes writer/parser；
 - relay-free immediate A/B→B/C plan/apply/runtime verification；
+- caller-selected nonempty A-debt B migration plan/append：在 B 写 same-state/same-ordinal Base，
+  OVD Delta over source，并在 plan 与 append 前复验全部 live reconstruction/A-B closure；
 - Revision shared prior-snapshot anchor，Base 无 direct parent/token，Delta 保留 exact parent；
 - canonical AA/BA/BB、mixed new/domain/relocated/Delta、genesis/Absent/visible Remove/malformed anchor；
-- Probe 211/211。
+- 真实 `3 x 140,000,000` payload witness：immediate C 与合并两对象 B batch 失败，一批 B migration
+  后 C 仍失败，两批后 C 成功；`head@B / Base@A` 也通过；
+- Probe 220/220。
 
 当前 provisional matrix（modeled file/final full-frame read）为 hot/cold
 `1864/1132`、`1428/1396`、`1500/1132`，fixed mixed
 `516/176`、`460/444`、`460/296`。它只展示 tradeoff，不选择 winner。
 
-S1 当前未闭合：一般 B Base migration / `CanPrepareAndRotate` reference oracle、连续多次轮转、
-rotation-aware policy comparison，以及真实 bytes/publication/reopen/crash。旧 Relay discriminator
-由 tag `research/relay-vs-relay-free-20260829`、DB-009 和实验簿归档；本 live roadmap 不重复历史
-golden。文件被物理删除后不可访问仍不属于格式故障模型。
+S1 下一步先用 optional terminal C `RelocatedBase` versus `External` 的 exact sizing discriminator
+明确动作 grammar，再建立 small-state bounded/canonical completion explorer；找到的 witness 可证明
+true，`NotFound` 不证明一般无解。之后才把 legality 接入连续多 Save/多次轮转并比较 heuristics。
+真实 bytes/publication/reopen/crash 继续分离。旧 Relay discriminator 由 tag
+`research/relay-vs-relay-free-20260829`、DB-009 和实验簿归档；本 live roadmap 不重复历史 golden。
+文件被物理删除后不可访问仍不属于格式故障模型。
 
 ### R4：内存 StateMap 与重复逻辑 delta apply
 

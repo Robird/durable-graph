@@ -50,7 +50,7 @@
 - Stored Graph Normalization R3a：test-only mixed V1/V2 record table 经全表 exact preflight、typed decode/upgrade 与 source-reference gate 归一化成 current-Snapshot baseline。
 - CLR Graph Materialization R3b：只对 normalized current root closure allocate-all/hydrate-all，恢复 sharing/cycles 后 root-only exposure；disconnected source rows 不分配。
 - StateStore 基础设计：选择 one-Revision/one-RBF-frame、object-level version chains、ObjectVersionDict authority、LSB-tagged `RelativeFrameTicket` 与 current-head two-file reconstruction closure；产品实现尚未开始，TwoLegRotationProbe 已进入 provisional layout 模拟。
-- 双腿轮转派生说明：记录 A/B/C evacuation、Revision shared prior-snapshot anchor、absolute-normalized ObjectVersionDict、one-frame bounds 与 `CanPrepareAndRotate` safety gate。
+- 双腿轮转派生说明：记录 A/B/C evacuation、Revision shared prior-snapshot anchor、absolute-normalized ObjectVersionDict、one-frame bounds 与 `CanPrepareAndRotate` liveness admission invariant。
 - Adaptive rotation branch DB-007：隔离尚未裁决的统一 Base/Delta/cold-migration/rotation 策略和内存模拟输入。
 - Two-leg rotation probe：以独立 xUnit 项目建立 exact RBF v0.40 envelope、相邻 FileScope、runtime OVD authority、Frame/ObjectVersion 父链、deterministic workload 和三种 policy；StateMap 由 OVD replay 派生，并保留 contextual-self `ProvisionalRevisionV0` 组件尺寸/provenance。
 - Candidate design branches：在 `docs/design-branches/` 隔离尚未裁决的架构分叉。
@@ -87,7 +87,7 @@
 - **Observed**：S1c 已加入 ratio=3 的 `ObjectPayloadReadAmplification3` 与四场景 matrix；per-object reconstruction payload 随 ObjectVersion 保存并由 oracle 重算，但不计入 layout。结果只证明局部策略形成可复现 tradeoff，不代表 exact StateJournal port 或 winner。
 - **Observed**：S1d `ProvisionalRevisionV0` 已按临时 grammar 计入 domain headers、OVD、TailMeta directory、relative VarUInt 与 exact RBF envelope；run-level provenance、layout、capacity gates、contextual Self 和旧 baseline 回归均有 executable evidence。它仍是 size-only estimator，不是 byte codec 或 rotation capacity proof。
 - **Decided**：当前不引入 `MaxLogicalChainBytes`、`TargetFileBytes` 或固定 migration budget；先在纯内存模拟中采集无权重原始量，比较自适应统一策略。
-- **Open**：统一策略能否仅依靠 two-file pressure、lineage/reconstruction overhead 与渐进 cold Base migration 自动收敛；`CanPrepareAndRotate` 必须把 B Base migration 可完成性与 C evacuation Revision 可编码性一起作为策略无关的 safety oracle。
+- **Open**：统一策略能否仅依靠 two-file pressure、lineage/reconstruction overhead 与渐进 cold Base migration 自动收敛；`CanPrepareAndRotate == true` 必须有具体 completion witness，bounded explorer 的 `NotFound` 不证明一般无解。
 - **Open**：Schema runtime representation 与 canonical authority 的候选分叉记录在 `DB-001`，等待 exact codec/persistent format 实验裁决。
 - **Open**：哪些类型和 API 最终属于核心程序集，等待真实代码形状出现后再判断。
 
@@ -761,13 +761,16 @@
 
 ## 6. 船长日志
 
+### 2026-08-29：闭合 caller-selected B Base migration witness
+
+- **Observed / Next**：explicit nonempty A-debt migration 已能在 B 写 same-state/same-ordinal Base 与 OVD Delta，并在 plan/append 前复验全部 live reconstruction/A/B closure；真实 `3 x 140,000,000` payload 案例由两个单对象 B batches 使原本失败的 C evacuation 最终成功，`head@B / Base@A` 也通过，Probe 220/220。它不是 search 或 `CanPrepareAndRotate` decision procedure；下一步先定尺 terminal C `RelocatedBase`/`External`，再做 bounded/canonical explorer，且 `NotFound` 不解释为一般无解。
+
 ### 2026-08-29：选择 Revision shared prior-snapshot anchor
 
 - DB-010 选择 one-Revision/one-accepted-prior law；Base 删除 per-record parent，Delta 属性明确为 `DeltaParentFrameTicket`。
 - Base lineage 从 containing OVD parent 查询 prior ObjectId；mixed new/domain/relocated Base 与 exact-parent Delta、AA/BA、genesis/Absent/visible Remove/malformed anchor 均有 executable evidence。
 - provisional Base record 删除 `NoneToken` 占位；更新后的 hot/cold modeled file/final-read 为 `1864/1132`、`1428/1396`、`1500/1132`，fixed mixed 为 `516/176`、`460/444`、`460/296`。
 - OVD Base checkpoint 会丢弃旧 tombstone；跨 reopen 的 no-ID-reuse 仍需未来独立 ID epoch/retired-ID authority。mixed-snapshot import/rescue/stale Save 明确不在当前模型。
-- Probe 211/211；下一风险切片回到一般 B Base migration 与 `CanPrepareAndRotate` completion oracle。
 
 ### 2026-08-29：闭合 relay-free runtime C append
 
@@ -775,7 +778,7 @@
 - `ImmediateRotationAppender` 在 source/candidate preflight 后，通过“首帧成功再注册文件”的 in-memory store seam 加入 C；不发布 StateStore head。
 - append 后只由 `MaterializeLive(C)` 产生 B/C StateMap；AA/BA/BB 的 logical state、reconstruction 与 lineage 已闭合，当时 Probe 204/204。
 - 完整历史 lineage 损坏仍由离线诊断暴露，但不再阻塞 current reconstruction 或 immediate rotation。
-- 当时的下一步 DB-010 已由后一切片裁决；一般 B Base migration/`CanPrepareAndRotate`、bytes codec 与 publication/reopen/crash 继续分离。
+- 当时的下一步 DB-010 已由后一切片裁决；completion search/`CanPrepareAndRotate` decision procedure、bytes codec 与 publication/reopen/crash 继续分离。
 
 ### 2026-08-29：选择 relay-free 并删除 forwarding 主线
 

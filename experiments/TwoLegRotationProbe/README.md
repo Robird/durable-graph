@@ -112,9 +112,10 @@ walk older parents without turning those reads into reconstruction cost.
 
 The current single-file model can run either the historical
 `ObjectPayloadOnly` profile or the explicitly provisional full-frame
-`ProvisionalRevisionV0` size grammar described below. A separate pure planner
-and explicit appender now close one immediate A/B to B/C runtime step, but that
-step is not wired into the single-file policy runs. Within those runs,
+`ProvisionalRevisionV0` size grammar described below. Separate pure planners
+and explicit appenders now close caller-selected preparatory B Base migrations
+and one immediate A/B to B/C runtime step, but those steps are not wired into
+the single-file policy runs. Within those runs,
 `AlwaysDeltaWhenLegal` is presently equivalent to “always Delta.” The enum is
 intentionally not a general policy interface yet.
 
@@ -249,6 +250,31 @@ events and show only the final post-save read snapshot; no `TotalReadBytes` is
 defined. The matrix lives in executable tests; a ScenarioCatalog or report
 format waits for a CLI, persisted artifact, or batch-run consumer.
 
+## Preparatory B migration witness
+
+`PreparatoryBaseMigrationPlanner` accepts an explicit, nonempty set of live
+objects whose terminating Base is still in A. It reconstructs every live object
+to validate the complete A/B closure, then writes the selected objects as
+same-state, same-logical-ordinal Bases at B's current tail. The migration OVD is
+a Delta over the supplied B PublishedRevision and binds the relocated objects
+to contextual Self; all other live bindings are inherited.
+
+`PreparatoryBaseMigrationAppender` rechecks B's tail, source OVD, every live
+object's reconstruction closure, and each relocated Base before Append. A
+successful append does not publish a StateStore head; the caller may use its
+returned address as the source PublishedRevision for a later migration or
+rotation. Historical lineage is diagnostic rather than a current-state
+admission gate.
+
+An executable 3 x 140,000,000-byte fixture demonstrates the capacity shape:
+immediate C evacuation fails, one combined two-object B migration also fails,
+one single-object B migration leaves C unable to fit, and a second single-object
+B migration makes final C evacuation fit. A separate `head@B / Base@A` case
+closes the same migration path through a Delta head.
+
+This is a caller-selected witness, not a search procedure or Base/Delta policy.
+It does not establish that an untried batch ordering cannot complete.
+
 ## Relay-free immediate rotation witness
 
 `ImmediateRotationPlanner` is a pure planner for the narrow case that fits in
@@ -269,9 +295,9 @@ the source, then constructs and appends the first C Frame before installing the
 new file in the in-memory store. It does not publish a StateStore head.
 
 After append, `MaterializeLive(C)` is the sole source of the B/C StateMap; the
-plan no longer stores a parallel `ProjectedStateMap`. No B maintenance Frame,
-forwarding record, or B capacity preflight exists in the selected immediate
-path.
+plan no longer stores a parallel `ProjectedStateMap`. The immediate path itself
+does not append B maintenance or forwarding records; preparatory B migration is
+an explicit preceding operation.
 
 The canonical `AA / BA / BB` fixture proves:
 
@@ -289,13 +315,22 @@ The canonical `AA / BA / BB` fixture proves:
 - historical lineage corruption remains visible to diagnostics but does not
   block current-state reconstruction or immediate rotation.
 
-This slice still does not implement a byte writer/parser, publication/head or
-reopen semantics, general multi-step B Base preparation, rotation-aware policy
-scoring, or the `CanPrepareAndRotate` safety gate. The in-memory store also has
-no store identity or publication frontier, so it cannot detect an isomorphic
-wrong store or publication staleness that the model does not represent.
+These slices still do not implement a byte writer/parser, publication/head or
+reopen semantics, an automatic migration search, rotation-aware policy scoring,
+or durable atomicity. The in-memory store also has no store identity or
+publication frontier, so it cannot detect an isomorphic wrong store or
+publication staleness that the model does not represent.
 Generated Base/Delta sizes remain synthetic payload observations. The V0
 projection is a versioned research input, not a durable-format commitment.
+
+`CanPrepareAndRotate` is the currently selected liveness admission invariant,
+not a law of whether an already-published format is readable. A concrete finite
+B-migration-plus-C-rotation witness proves it true for that source state.
+Failure of a bounded explorer to find one must remain `NotFound`, not a proof
+that no completion exists. The next discriminator will first give terminal C
+`RelocatedBase` versus `External` actions exact sizing, then build an honestly
+bounded/canonical reference
+explorer before comparing heuristics.
 
 The rejected forwarding alternatives and their executable comparison are
 preserved by annotated tag `research/relay-vs-relay-free-20260829` and DB-009.

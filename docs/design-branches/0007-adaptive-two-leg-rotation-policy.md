@@ -6,8 +6,8 @@
 >
 > 更新日期：2026-08-29
 >
-> 当前方向：先完成一般 B Base migration / `CanPrepareAndRotate` correctness oracle，再比较
-> rotation-aware heuristics；不先冻结链长、目标文件大小或迁移预算。
+> 当前方向：先定尺 terminal C 的 `RelocatedBase` / `External` 两种动作，再建立诚实命名的
+> bounded/canonical completion explorer；不先写 heuristic，也不冻结链长、目标文件大小或迁移预算。
 
 ## 问题
 
@@ -31,7 +31,8 @@
    exact parent。
 5. OVD 内存使用 absolute address；输出时相对目标 Revision 编码。
 6. 约 512 GiB frame-start、RBF one-frame 与 TailMeta 上限是格式 gate，不是调优参数。
-7. 任意成功 Save 后必须保留有限、容量合法的 B Base migration + C evacuation 完成路径。
+7. 当前选择 `CanPrepareAndRotate` 作为成功 Save 的 liveness admission invariant：必须保留有限、
+   容量合法的 B Base migration + C evacuation 完成路径。它不是既有格式是否可读的格式定律。
 8. 文件被物理删除后不可访问不属于格式需要抵抗的故障模型。
 
 ## 待比较策略
@@ -64,10 +65,13 @@ all frame starts/tickets/layouts are representable
 failed plan leaves published state unchanged
 ```
 
-`CanPrepareAndRotate` 必须构造实际有限 plan，而不只是检查 C 当前是否放得下 EvacuationSet。
-首个 reference oracle 应在小状态上穷举/记忆化 B migration batches，并用同一 runtime
-OVD/reconstruction/layout oracle 复验。便宜 heuristic 只能与 reference oracle 对照，不能自行
-宣称 completeness。
+`CanPrepareAndRotate == true` 必须由实际有限 plan 见证，而不只是检查 C 当前是否放得下
+EvacuationSet。caller-selected B migrations 现在可以与 final C rotation 组合成具体 witness，但不是
+决策过程；未选中某条完成路径或 bounded explorer 返回 `NotFound`，都不能解释为一般无解。
+
+reference explorer 必须显式标注边界，并在小状态上 canonical 枚举 B migration batches
+及 terminal C action，再用同一 runtime OVD/reconstruction/layout oracle 复验。便宜 heuristic
+只能与它对照，不能自行宣称 completeness。
 
 ## 当前 executable baseline
 
@@ -80,7 +84,12 @@ OVD/reconstruction/layout oracle 复验。便宜 heuristic 只能与 reference o
 - `AlwaysBase`、`AlwaysDeltaWhenLegal`、`ObjectPayloadReadAmplification3` 三条基线；最后一条保留
   StateJournal ratio=3 的局部形状，但不移植 one-object-per-frame overhead；
 - relay-free immediate A/B→B/C 已完成 plan、in-memory first-frame registration、`MaterializeLive(C)`、
-  reconstruction 与 lineage；DB-010 已选择 Revision shared prior-snapshot anchor。
+  reconstruction 与 lineage；DB-010 已选择 Revision shared prior-snapshot anchor；
+- explicit caller-selected nonempty A-debt B migration 已完成 plan/append：B 写 same-state、
+  same-logical-ordinal Base，OVD Delta 指向 source PublishedRevision；plan 与 append 前都复验全部 live
+  reconstruction 和 A/B closure，lineage 不作为 current-state gate；
+- `3 x 140,000,000` payload witness 证明 immediate C 与合并两对象 B batch 均失败；两个单对象 B
+  batches 后 C 成功，一批后仍失败。`head@B / Base@A` 也已覆盖。
 
 当前 provisional matrix（`modeled file / final full-frame read`）：
 
@@ -89,15 +98,17 @@ OVD/reconstruction/layout oracle 复验。便宜 heuristic 只能与 reference o
 | hot-one/cold-eight | 1864 / 1132 | 1428 / 1396 | 1500 / 1132 |
 | fixed-seed mixed | 516 / 176 | 460 / 444 | 460 / 296 |
 
-这些数字只证明 write/read tradeoff 可观测，不选择 winner。完整 probe 当前 211/211。
+这些数字只证明 write/read tradeoff 可观测，不选择 winner。完整 probe 当前 220/220。
 
 ## 未闭合事项与顺序
 
-1. 一般 B Base migration / `CanPrepareAndRotate` reference oracle；
-2. 把 rotation legality 接入连续多 Save、多次 A/B→B/C 的模拟；
-3. 比较简单 heuristics 的 false-negative、振荡、Pareto frontier 与峰值 pause；
-4. 只有策略结论确实依赖 byte-level 差异时，再做 provisional writer/parser；
-5. one-frame 真实容量频繁撞墙时才引入 Extent。
+1. 用 optional terminal C `RelocatedBase` versus `External` 的 exact sizing discriminator 明确动作 grammar；
+2. 建立 small-state bounded/canonical completion explorer；找到的 concrete witness 足以证明 true，
+   `NotFound` 不冒充无解；
+3. 把 completion legality 接入连续多 Save、多次 A/B→B/C 的模拟；
+4. 比较简单 heuristics 的 false-negative、振荡、Pareto frontier 与峰值 pause；
+5. 只有策略结论确实依赖 byte-level 差异时，再做 provisional writer/parser；one-frame 真实容量频繁
+   撞墙时才引入 Extent。
 
 尚无真实 workload/SLO 时，不要求用户预填 read/write/pause 权重；当多个不可支配策略必须选择
 产品默认值时再请求裁决。
