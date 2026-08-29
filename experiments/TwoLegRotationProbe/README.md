@@ -545,6 +545,51 @@ records remain private to the test fixture until a report, CLI, or batch runner
 becomes a real consumer. Successful-run reductions also do not yet represent
 typed capacity or completion rejection outcomes.
 
+## Changed A-debt Base-versus-Delta discriminator
+
+A second fixed-schedule comparison now isolates whether a natural foreground
+Update may also retire old A debt. Both treatments replay the same handwritten
+trace on independent Store forks:
+
+```text
+Update 10, Update 20, Update 30, Create 1001
+Stay,      Stay,      Stay,      Rotate
+```
+
+Every Update has the same logical result size as its source and a legal
+one-byte Delta. Both treatments select no optional same-state migration. The
+control writes each changed A-debt object as Delta@B; the treatment writes it
+as Base@B. A private decision selector supplies the complete existing Stay-B
+and Rotate-C decision values from canonical facts, while target selection stays
+independent. This is fixture plumbing, not a policy interface or runner.
+
+Under the current provisional v0 grammar, the realized observations are:
+
+| Treatment | Old-A debt after three Stays | Realized append bytes | Final Rotate maintenance records | Result B/C Previous debt |
+|---|---|---|---:|---|
+| changed A-debt Delta | `600, 600, 600` | `48, 48, 48, 668` | 608 B | none |
+| changed A-debt Base | `500, 300, 0` | `144, 244, 344, 60` | 0 B | 600 B / 3 Frames / 720 frame bytes |
+
+Objects 10, 20, and 30 initially share one 652-byte A Frame. Consequently the
+Base treatment reduces debt ObjectIds and logical Base payload bytes after its
+first two Stays, but Previous-file object-reconstruction Frame bytes do not fall
+until the last A dependency disappears. Debt amount is therefore not a direct
+proxy for coarse RBF read pressure.
+
+The lower final Rotate is also not free or permanent debt removal. The Base
+treatment moves full-value writes into earlier foreground Saves. After
+`A/B -> B/C`, its three Base@B records become new-scope Previous debt; the Delta
+control instead pays mandatory C evacuation for all three objects and ends that
+rotation with no object-reconstruction dependency on B. Zero-preparation
+counterfactual terminal-C append bytes similarly change from the control's
+`660, 660, 660` to the treatment's `556, 352, 48`, while the treatment terminal
+results accumulate new Previous debt `{10} -> {10,20} -> {10,20,30}`. Those
+counterfactual candidates remain outside realized totals and peaks.
+
+This witness demonstrates causal write placement and scope-relative debt under
+one synthetic trace. It does not choose a winner, define total read IO, predict
+another wire grammar, or supply an automatic Base/Delta or rotation trigger.
+
 ## Preparatory B migration witness
 
 `PreparatoryBaseMigrationPlanner` accepts an explicit, nonempty set of live
@@ -627,9 +672,11 @@ construct that witness; this is not a proof that no completion exists. The
 continuous caller script, fixed-schedule migration comparison, and
 `DebtZeroThenRotate` progress baseline are now closed without choosing a weighted
 winner. Their scope-safe realized/counterfactual observation reductions are also
-closed. The next slice can isolate changed A-debt Update Base-versus-Delta behavior
-under one frozen workload and target schedule. A bounded reference explorer still
-waits for a concrete conservative rejection or suspected heuristic false-negative.
+closed, as is the changed A-debt Base-versus-Delta discriminator. The next slice
+can compare that foreground rebase mechanism with paced unchanged-object migration
+as four named treatments over one mixed trace and fixed target schedule. A bounded
+reference explorer still waits for a concrete conservative rejection or suspected
+heuristic false-negative.
 
 The rejected forwarding alternatives and their executable comparison are
 preserved by annotated tag `research/relay-vs-relay-free-20260829` and DB-009.

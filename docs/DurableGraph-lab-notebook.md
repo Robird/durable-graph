@@ -763,13 +763,21 @@
 
 ## 6. 船长日志
 
+### 2026-08-30：闭合 changed A-debt Base/Delta 因果对照
+
+- **Observed**：同一 `Update 10/20/30 + Create` trace 与固定 `[Stay, Stay, Stay, Rotate]` 日程下，Delta control 的 realized append 为 `48/48/48/668` B；Base treatment 为 `144/244/344/60` B。前者在 final C 以 608 B maintenance domain records 集中 evacuation，后者把完整值写入分散到前三次 foreground Save；本 witness 不定义总分或 winner。
+- **Observed**：Base treatment 的旧 A debt 从 600 B 依次降为 500/300/0 B，但 10/20/30 共居一个 652 B A Frame，因此 object-reconstruction Previous-frame bytes 在最后一个 A 依赖消失前不下降。对象级 debt 不是粗粒度 RBF read pressure 的充分代理。
+- **Observed**：换腿后，Base treatment 的三个 Base@B 在新 B/C scope 中成为 600 B / 3 Frames / 720 frame bytes Previous debt；Delta control 因 C mandatory evacuation 而得到零 B reconstruction debt。zero-prep counterfactual terminal 同样以更小 append 换取 `{10} -> {10,20} -> {10,20,30}` 新-scope debt。
+- **Decided**：第三种 action caller 只促成 test-local、stateless decision selector；target selection 继续正交，未引入 policy interface、Runner、score 或自动 trigger。
+- **Decided / Next**：用一个 mixed Update/NoChange trace 和固定 target 日程做 `changed A-debt Delta/Base x optional cold migration none/paced-one` 的四个命名 treatment，研究自然 rebase 与 cold migration 的替代/互补关系。
+
 ### 2026-08-30：闭合 scope-safe rotation observation reductions
 
 - **Observed**：现有固定日程与 `DebtZeroThenRotate` runs 已归约为 test-local realized step / observed epoch / run 原始量；source/result 各带自己的 FileScope，Rotate 属于并关闭旧 epoch。额外 `[Stay, Rotate, Stay, Rotate]` witness 验证 `A/B -> B/C -> C/D` 的跨 epoch result/source 连续性。
 - **Observed**：source debt/Previous Frames 从 normalized source paths 与当步 Store layout 冻结，result 复用 selected candidate 的既有 raw observation；foreground、maintenance、non-domain 与 whole append 在 step、epoch、run 三层守恒，不建立第二 sizing authority。
 - **Decided**：Previous Frame bytes 只表示 live-object current reconstruction 的去重完整 Frames，不是累计 IO；next-frame-start slack 只表示 relative start 的可编码余量，不是文件容量。
 - **Decided**：certificate final-C 以 `Counterfactual` 独立投影，只记录额外 preparatory Stay 数和 final-C append/result；不计入 realized totals/peaks/rotation，也不聚合互斥未来。当前归约只执行了零 prep，既有 certificate 测试另有两 prep witness。
-- **Decided / Next**：这些值类型继续留在测试内；下一切片以相同 Update trace 和固定 target 日程隔离 changed A-debt 写 Base/Delta 的事实差异，不定义 score、winner 或产品 trigger。
+- **Decided（当时）**：这些值类型继续留在测试内；该条提出的 changed A-debt Base/Delta 切片已由上方 2026-08-30 日志闭合，仍未定义 score、winner 或产品 trigger。
 
 ### 2026-08-29：闭合 DebtZeroThenRotate 进展/停滞基线
 

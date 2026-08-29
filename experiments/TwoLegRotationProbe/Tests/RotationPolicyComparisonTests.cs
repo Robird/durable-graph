@@ -22,6 +22,13 @@ public sealed class RotationPolicyComparisonTests {
         CandidateTarget.RotateC,
     ];
 
+    private static readonly CandidateTarget[] ChangedDebtTargets = [
+        CandidateTarget.StayB,
+        CandidateTarget.StayB,
+        CandidateTarget.StayB,
+        CandidateTarget.RotateC,
+    ];
+
     [Fact]
     public void Paced_one_debt_comparison_is_causal_over_one_shared_trace() {
         PolicySource source = CreateSource();
@@ -33,13 +40,13 @@ public sealed class RotationPolicyComparisonTests {
             trace,
             lazyStore,
             CreateCursor(source),
-            paceOneDebtObject: false,
+            SelectNoMigrationDecisions,
             SelectFixedTarget);
         PolicyRun paced = Run(
             trace,
             pacedStore,
             CreateCursor(source),
-            paceOneDebtObject: true,
+            SelectPacedOneDebtDecisions,
             SelectFixedTarget);
 
         Assert.Same(trace, lazy.SourceTrace);
@@ -113,8 +120,8 @@ public sealed class RotationPolicyComparisonTests {
 
         Assert.Equal([2, 2, 3], lazy.Steps.Select(static step => step.FileCountAfterApply));
         Assert.Equal([2, 2, 3], paced.Steps.Select(static step => step.FileCountAfterApply));
-        AssertCounterfactualTerminalCandidates(lazy);
-        AssertCounterfactualTerminalCandidates(paced);
+        AssertCounterfactualTerminalCandidates(lazy, expectedStayCount: 2);
+        AssertCounterfactualTerminalCandidates(paced, expectedStayCount: 2);
         Assert.All(
             lazy.Steps.Take(2).Zip(paced.Steps.Take(2)),
             pair => Assert.True(
@@ -148,13 +155,13 @@ public sealed class RotationPolicyComparisonTests {
             trace,
             source.Store.ForkForProbe(),
             CreateCursor(source),
-            paceOneDebtObject: false,
+            SelectNoMigrationDecisions,
             SelectFixedTarget);
         PolicyRun pacedReplay = Run(
             trace,
             source.Store.ForkForProbe(),
             CreateCursor(source),
-            paceOneDebtObject: true,
+            SelectPacedOneDebtDecisions,
             SelectFixedTarget);
         // This compares the explicit observation value projection, not a Store or
         // execution transcript.
@@ -180,13 +187,13 @@ public sealed class RotationPolicyComparisonTests {
             trace,
             lazyStore,
             CreateCursor(source),
-            paceOneDebtObject: false,
+            SelectNoMigrationDecisions,
             SelectDebtZeroThenRotateTarget);
         PolicyRun paced = Run(
             trace,
             pacedStore,
             CreateCursor(source),
-            paceOneDebtObject: true,
+            SelectPacedOneDebtDecisions,
             SelectDebtZeroThenRotateTarget);
 
         Assert.Same(trace, lazy.SourceTrace);
@@ -324,13 +331,13 @@ public sealed class RotationPolicyComparisonTests {
             trace,
             source.Store.ForkForProbe(),
             CreateCursor(source),
-            paceOneDebtObject: false,
+            SelectNoMigrationDecisions,
             SelectDebtZeroThenRotateTarget);
         PolicyRun pacedReplay = Run(
             trace,
             source.Store.ForkForProbe(),
             CreateCursor(source),
-            paceOneDebtObject: true,
+            SelectPacedOneDebtDecisions,
             SelectDebtZeroThenRotateTarget);
         // This compares the explicit observation value projection, not a Store or
         // execution transcript.
@@ -354,7 +361,7 @@ public sealed class RotationPolicyComparisonTests {
             trace,
             source.Store.ForkForProbe(),
             CreateCursor(source),
-            paceOneDebtObject: false,
+            SelectNoMigrationDecisions,
             static (index, _) => TwoEpochTargets[index]);
 
         AssertRunObservationConsistency(run);
@@ -379,19 +386,261 @@ public sealed class RotationPolicyComparisonTests {
             trace,
             source.Store.ForkForProbe(),
             CreateCursor(source),
-            paceOneDebtObject: false,
+            SelectNoMigrationDecisions,
             static (index, _) => TwoEpochTargets[index]);
         Assert.Equal(
             DescribeReduction(run.Reduction),
             DescribeReduction(replay.Reduction));
     }
 
+    [Fact]
+    public void Changed_a_debt_base_writes_clear_debt_before_the_fixed_rotation() {
+        PolicySource source = CreateSource();
+        WorkloadTrace trace = CreateChangedDebtTrace();
+        PolicyRun deltaControl = Run(
+            trace,
+            source.Store.ForkForProbe(),
+            CreateCursor(source),
+            SelectNoMigrationDecisions,
+            SelectChangedDebtTarget);
+        PolicyRun baseTreatment = Run(
+            trace,
+            source.Store.ForkForProbe(),
+            CreateCursor(source),
+            SelectChangedADebtBaseDecisions,
+            SelectChangedDebtTarget);
+
+        Assert.Same(trace, deltaControl.SourceTrace);
+        Assert.Same(trace, baseTreatment.SourceTrace);
+        Assert.NotSame(deltaControl.Store, baseTreatment.Store);
+        Assert.Equal(
+            ChangedDebtTargets,
+            deltaControl.Steps.Select(static step => step.Target));
+        Assert.Equal(
+            ChangedDebtTargets,
+            baseTreatment.Steps.Select(static step => step.Target));
+        Assert.Equal(
+            [6, 6, 6, 3],
+            deltaControl.Steps.Select(static step =>
+                step.Observation.ForegroundDomainRecordBytes));
+        Assert.Equal(
+            [102, 203, 303, 3],
+            baseTreatment.Steps.Select(static step =>
+                step.Observation.ForegroundDomainRecordBytes));
+        Assert.Equal(
+            [0, 0, 0, 608],
+            deltaControl.Steps.Select(static step =>
+                step.Observation.MaintenanceDomainRecordBytes));
+        Assert.Equal(
+            [0, 0, 0, 0],
+            baseTreatment.Steps.Select(static step =>
+                step.Observation.MaintenanceDomainRecordBytes));
+        Assert.Equal(
+            [48, 48, 48, 668],
+            deltaControl.Steps.Select(static step => step.Observation.AppendBytes));
+        Assert.Equal(
+            [144, 244, 344, 60],
+            baseTreatment.Steps.Select(static step => step.Observation.AppendBytes));
+
+        uint[] updatedObjectIds = [10, 20, 30];
+        for (int index = 0; index < updatedObjectIds.Length; index++) {
+            uint objectId = updatedObjectIds[index];
+            PolicyStep controlStep = deltaControl.Steps[index];
+            PolicyStep treatmentStep = baseTreatment.Steps[index];
+            NormalizedUpdateFact controlUpdate = Assert.Single(
+                controlStep.SelectedObservation.Facts.Updates);
+            NormalizedUpdateFact treatmentUpdate = Assert.Single(
+                treatmentStep.SelectedObservation.Facts.Updates);
+            Assert.Equal(objectId, controlUpdate.ObjectId);
+            Assert.Equal(objectId, treatmentUpdate.ObjectId);
+            Assert.Equal(1, controlUpdate.DeltaPayloadBytes);
+            Assert.Equal(1, treatmentUpdate.DeltaPayloadBytes);
+
+            ObjectVersion controlVersion = Assert.Single(
+                controlStep.SelectedObservation.Candidate.Frame.ObjectVersions).Value;
+            ObjectVersion treatmentVersion = Assert.Single(
+                treatmentStep.SelectedObservation.Candidate.Frame.ObjectVersions).Value;
+            Assert.Equal(ObjectVersionKind.Delta, controlVersion.Kind);
+            Assert.Equal(ObjectVersionKind.Base, treatmentVersion.Kind);
+            Assert.Equal(1, controlVersion.PayloadBytes);
+            Assert.Equal(
+                treatmentUpdate.ResultState.BasePayloadBytes,
+                treatmentVersion.PayloadBytes);
+            Assert.Equal(
+                new FileScope(controlStep.SelectedObservation.Facts.CurrentFileNumber)
+                    .Relativize(controlUpdate.Source.HeadAddress),
+                controlVersion.DeltaParentFrameTicket);
+            Assert.Null(treatmentVersion.DeltaParentFrameTicket);
+            Assert.Empty(controlStep.MaintenanceObjectIds);
+            Assert.Empty(treatmentStep.MaintenanceObjectIds);
+            Assert.Equal(0, controlStep.Observation.MaintenanceDomainRecordBytes);
+            Assert.Equal(0, treatmentStep.Observation.MaintenanceDomainRecordBytes);
+            Assert.True(
+                controlStep.Observation.ForegroundDomainRecordBytes <
+                treatmentStep.Observation.ForegroundDomainRecordBytes);
+            Assert.True(
+                controlStep.Observation.AppendBytes <
+                treatmentStep.Observation.AppendBytes);
+        }
+
+        Assert.Equal(
+            ["10,20,30", "10,20,30", "10,20,30"],
+            DescribeDebt(deltaControl)[..3]);
+        Assert.Equal([600L, 600L, 600L], DescribeDebtBaseBytes(deltaControl)[..3]);
+        Assert.Equal(
+            ["20,30", "30", ""],
+            DescribeDebt(baseTreatment)[..3]);
+        Assert.Equal([500L, 300L, 0L], DescribeDebtBaseBytes(baseTreatment)[..3]);
+        Assert.Equal(
+            [1, 1, 0],
+            baseTreatment.Steps.Take(3).Select(static step =>
+                step.Observation.Result.PreviousUniqueFrameCount));
+        long sharedAFrameBytes = baseTreatment.Steps[0]
+            .Observation.Source.PreviousFrameBytes;
+        Assert.Equal(
+            [sharedAFrameBytes, sharedAFrameBytes, 0L],
+            baseTreatment.Steps.Take(3).Select(static step =>
+                step.Observation.Result.PreviousFrameBytes));
+        Assert.Equal(
+            [1, 1, 1],
+            deltaControl.Steps.Take(3).Select(static step =>
+                step.Observation.Result.PreviousUniqueFrameCount));
+        Assert.Equal(
+            [sharedAFrameBytes, sharedAFrameBytes, sharedAFrameBytes],
+            deltaControl.Steps.Take(3).Select(static step =>
+                step.Observation.Result.PreviousFrameBytes));
+
+        PolicyStep controlRotate = deltaControl.Steps[^1];
+        PolicyStep treatmentRotate = baseTreatment.Steps[^1];
+        Assert.Equal([10U, 20U, 30U], controlRotate.MaintenanceObjectIds);
+        Assert.Empty(treatmentRotate.MaintenanceObjectIds);
+        Assert.True(
+            treatmentRotate.Observation.AppendBytes <
+            controlRotate.Observation.AppendBytes);
+        Assert.True(
+            baseTreatment.Reduction.PeakRealizedSaveAppendBytes <
+            deltaControl.Reduction.PeakRealizedSaveAppendBytes);
+        Assert.Equal(new ScopeValue(2, 3), controlRotate.Observation.Result.Scope);
+        Assert.Equal(new ScopeValue(2, 3), treatmentRotate.Observation.Result.Scope);
+        Assert.Equal(new CanonicalObjectIds([]),
+            controlRotate.Observation.Result.PreviousDebtObjectIds);
+        Assert.Equal(0L,
+            controlRotate.Observation.Result.PreviousDebtBasePayloadBytes);
+        Assert.Equal(0, controlRotate.Observation.Result.PreviousUniqueFrameCount);
+        Assert.Equal(new CanonicalObjectIds([10, 20, 30]),
+            treatmentRotate.Observation.Result.PreviousDebtObjectIds);
+        Assert.Equal(600L,
+            treatmentRotate.Observation.Result.PreviousDebtBasePayloadBytes);
+        Assert.Equal(3,
+            treatmentRotate.Observation.Result.PreviousUniqueFrameCount);
+        Assert.Equal(720L,
+            treatmentRotate.Observation.Result.PreviousFrameBytes);
+        Assert.Equal(668, deltaControl.Reduction.PeakRealizedSaveAppendBytes);
+        Assert.Equal(344, baseTreatment.Reduction.PeakRealizedSaveAppendBytes);
+
+        AssertCounterfactualTerminalCandidates(
+            deltaControl,
+            expectedStayCount: 3);
+        AssertCounterfactualTerminalCandidates(
+            baseTreatment,
+            expectedStayCount: 3);
+        Assert.Equal(
+            [660, 660, 660],
+            deltaControl.Steps.Take(3).Select(static step =>
+                step.Observation.CounterfactualTerminalC!.AppendBytes));
+        Assert.Equal(
+            [556, 352, 48],
+            baseTreatment.Steps.Take(3).Select(static step =>
+                step.Observation.CounterfactualTerminalC!.AppendBytes));
+        Assert.Equal(
+            ["", "", ""],
+            deltaControl.Steps.Take(3).Select(static step =>
+                step.Observation.CounterfactualTerminalC!
+                    .Result.PreviousDebtObjectIds.ToString()));
+        Assert.Equal(
+            ["10", "10,20", "10,20,30"],
+            baseTreatment.Steps.Take(3).Select(static step =>
+                step.Observation.CounterfactualTerminalC!
+                    .Result.PreviousDebtObjectIds.ToString()));
+        Assert.Equal(
+            [100L, 300L, 600L],
+            baseTreatment.Steps.Take(3).Select(static step =>
+                step.Observation.CounterfactualTerminalC!
+                    .Result.PreviousDebtBasePayloadBytes));
+        Assert.Equal(
+            [1, 2, 3],
+            baseTreatment.Steps.Take(3).Select(static step =>
+                step.Observation.CounterfactualTerminalC!
+                    .Result.PreviousUniqueFrameCount));
+        Assert.All(
+            deltaControl.Steps.Take(3).Zip(baseTreatment.Steps.Take(3)),
+            pair => Assert.True(
+                pair.Second.Observation.CounterfactualTerminalC!.AppendBytes <
+                pair.First.Observation.CounterfactualTerminalC!.AppendBytes));
+        AssertRunObservationConsistency(deltaControl);
+        AssertRunObservationConsistency(baseTreatment);
+        AssertSingleObservedEpoch(
+            deltaControl,
+            expectedSaveCount: 4,
+            expectedStayCount: 3,
+            expectedClosedByRotation: true);
+        AssertSingleObservedEpoch(
+            baseTreatment,
+            expectedSaveCount: 4,
+            expectedStayCount: 3,
+            expectedClosedByRotation: true);
+        Assert.Equal(1, deltaControl.Reduction.RotationCount);
+        Assert.Equal(1, baseTreatment.Reduction.RotationCount);
+        Assert.Equal(3, CountCounterfactualTerminals(deltaControl));
+        Assert.Equal(3, CountCounterfactualTerminals(baseTreatment));
+
+        IReadOnlyDictionary<uint, LogicalObjectState> expectedFinalState =
+            new Dictionary<uint, LogicalObjectState> {
+                [10] = new(100, 2),
+                [20] = new(200, 2),
+                [30] = new(300, 2),
+                [1001] = new(1, 1),
+            };
+        AssertRuntimeStateAndClosure(
+            deltaControl.Store,
+            controlRotate.ResultCursor,
+            expectedFinalState);
+        AssertRuntimeStateAndClosure(
+            baseTreatment.Store,
+            treatmentRotate.ResultCursor,
+            expectedFinalState);
+
+        PolicyRun deltaReplay = Run(
+            trace,
+            source.Store.ForkForProbe(),
+            CreateCursor(source),
+            SelectNoMigrationDecisions,
+            SelectChangedDebtTarget);
+        PolicyRun baseReplay = Run(
+            trace,
+            source.Store.ForkForProbe(),
+            CreateCursor(source),
+            SelectChangedADebtBaseDecisions,
+            SelectChangedDebtTarget);
+        Assert.Equal(
+            DescribeReduction(deltaControl.Reduction),
+            DescribeReduction(deltaReplay.Reduction));
+        Assert.Equal(
+            DescribeReduction(baseTreatment.Reduction),
+            DescribeReduction(baseReplay.Reduction));
+
+        Assert.Equal(2, source.Store.FileCount);
+        Assert.Equal(1, source.Store.GetFile(1).FrameCount);
+        Assert.Equal(1, source.Store.GetFile(2).FrameCount);
+    }
+
     private static PolicyRun Run(
         WorkloadTrace trace,
         RbfFileStore store,
         ProbeRevisionCursor initialCursor,
-        bool paceOneDebtObject,
+        DecisionSelector selectDecisions,
         Func<int, NormalizedSaveFacts, CandidateTarget> selectTarget) {
+        ArgumentNullException.ThrowIfNull(selectDecisions);
         ArgumentNullException.ThrowIfNull(selectTarget);
 
         ProbeRevisionCursor cursor = initialCursor;
@@ -416,18 +665,13 @@ public sealed class RotationPolicyComparisonTests {
             uint[] sourcePreviousDebtObjectIds =
                 GetSourcePreviousDebtObjectIds(facts);
             CandidateTarget target = selectTarget(index, facts);
-            uint[] requestedMigrations = target == CandidateTarget.StayB &&
-                paceOneDebtObject
-                ? SelectSmallestPreviousDebtNoChange(facts)
-                : [];
-            StayBSaveDecision stayDecision = new([], requestedMigrations);
-            RotateCSaveDecision rotateDecision = new([], []);
+            SaveDecisionPair decisions = selectDecisions(facts);
             ExplicitCandidatePairEvaluation pair =
                 ExplicitCandidatePairEvaluator.Evaluate(
                     store,
                     facts,
-                    stayDecision,
-                    rotateDecision);
+                    decisions.StayB,
+                    decisions.RotateC);
 
             RotationPolicyStepAttempt attempt =
                 ExplicitRotationPolicyStepHarness.TryApplySelected(
@@ -499,6 +743,57 @@ public sealed class RotationPolicyComparisonTests {
         GetSourcePreviousDebtObjectIds(facts).Length == 0
             ? CandidateTarget.RotateC
             : CandidateTarget.StayB;
+
+    private static CandidateTarget SelectChangedDebtTarget(
+        int index,
+        NormalizedSaveFacts _) => ChangedDebtTargets[index];
+
+    private static SaveDecisionPair SelectNoMigrationDecisions(
+        NormalizedSaveFacts facts) => SelectDeltaUpdateDecisions(facts, []);
+
+    private static SaveDecisionPair SelectPacedOneDebtDecisions(
+        NormalizedSaveFacts facts) => SelectDeltaUpdateDecisions(
+        facts,
+        SelectSmallestPreviousDebtNoChange(facts));
+
+    private static SaveDecisionPair SelectChangedADebtBaseDecisions(
+        NormalizedSaveFacts facts) => CreateDecisions(
+        facts,
+        facts.Updates.Select(update => new UpdateWriteDecision(
+            update.ObjectId,
+            IsPreviousDebt(facts, update.Source)
+                ? UpdateWriteMode.Base
+                : UpdateWriteMode.Delta)),
+        []);
+
+    private static SaveDecisionPair SelectDeltaUpdateDecisions(
+        NormalizedSaveFacts facts,
+        IEnumerable<uint> unchangedMigrationObjectIds) => CreateDecisions(
+        facts,
+        facts.Updates.Select(static update => new UpdateWriteDecision(
+            update.ObjectId,
+            UpdateWriteMode.Delta)),
+        unchangedMigrationObjectIds);
+
+    private static SaveDecisionPair CreateDecisions(
+        NormalizedSaveFacts facts,
+        IEnumerable<UpdateWriteDecision> stayBUpdateDecisions,
+        IEnumerable<uint> unchangedMigrationObjectIds) => new(
+        new StayBSaveDecision(
+            stayBUpdateDecisions,
+            unchangedMigrationObjectIds),
+        new RotateCSaveDecision(
+            facts.Updates
+                .Where(update => !IsPreviousDebt(facts, update.Source))
+                .Select(static update => new UpdateWriteDecision(
+                    update.ObjectId,
+                    UpdateWriteMode.Delta)),
+            []));
+
+    private static bool IsPreviousDebt(
+        NormalizedSaveFacts facts,
+        SourceObjectFact source) =>
+        source.BaseAddress.FileNumber == facts.PreviousFileNumber;
 
     private static uint[] GetSourcePreviousDebtObjectIds(
         NormalizedSaveFacts facts) => facts.ParentLive.Values
@@ -611,8 +906,11 @@ public sealed class RotationPolicyComparisonTests {
             .ToArray();
     }
 
-    private static void AssertCounterfactualTerminalCandidates(PolicyRun run) {
-        foreach (PolicyStep step in run.Steps.Take(2)) {
+    private static void AssertCounterfactualTerminalCandidates(
+        PolicyRun run,
+        int expectedStayCount) {
+        Assert.Equal(expectedStayCount + 1, run.Steps.Count);
+        foreach (PolicyStep step in run.Steps.Take(expectedStayCount)) {
             CanPrepareAndRotateCertificate certificate = Assert.IsType<
                 CanPrepareAndRotateCertificate>(step.CompletionCertificate);
             CandidateRawObservation terminal = certificate.FinalRotateC.Observation;
@@ -627,8 +925,12 @@ public sealed class RotationPolicyComparisonTests {
             Assert.Equal(2, step.FileCountAfterApply);
         }
 
-        Assert.Null(run.Steps[^1].CompletionCertificate);
-        Assert.Null(run.Steps[^1].Observation.CounterfactualTerminalC);
+        Assert.All(
+            run.Steps.Skip(expectedStayCount),
+            step => {
+                Assert.Null(step.CompletionCertificate);
+                Assert.Null(step.Observation.CounterfactualTerminalC);
+            });
     }
 
     private static int MaxRealizedAppendBytes(PolicyRun run) => run.Steps
@@ -1132,6 +1434,18 @@ public sealed class RotationPolicyComparisonTests {
             new SaveStep([new CreateObject(1004, 1)]),
         ]);
 
+    private static WorkloadTrace CreateChangedDebtTrace() => new(
+        scenarioName: "changed-a-debt-base-vs-delta",
+        generatorId: "handwritten",
+        generatorVersion: 1,
+        seed: 0,
+        [
+            new SaveStep([new UpdateObject(10, 100, 1)]),
+            new SaveStep([new UpdateObject(20, 200, 1)]),
+            new SaveStep([new UpdateObject(30, 300, 1)]),
+            new SaveStep([new CreateObject(1001, 1)]),
+        ]);
+
     private static ProbeRevisionCursor CreateCursor(PolicySource source) => new(
         new FileScope(source.Current.FileNumber),
         source.PublishedRevisionAddress,
@@ -1166,6 +1480,13 @@ public sealed class RotationPolicyComparisonTests {
         RbfFileStore Store,
         RbfFile Current,
         AbsoluteFrameAddress PublishedRevisionAddress);
+
+    private delegate SaveDecisionPair DecisionSelector(
+        NormalizedSaveFacts facts);
+
+    private sealed record SaveDecisionPair(
+        StayBSaveDecision StayB,
+        RotateCSaveDecision RotateC);
 
     private sealed record PolicyRun(
         WorkloadTrace SourceTrace,

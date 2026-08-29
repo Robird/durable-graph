@@ -6,8 +6,8 @@
 >
 > 更新日期：2026-08-30
 >
-> 当前方向：统一 per-Save candidate、连续换腿与 scope-safe observation reductions 已闭合；下一步
-> 用固定 target 日程隔离 changed A-debt Update 写 Base/Delta 的差异，再扩充 pressure-aware treatment。
+> 当前方向：统一 per-Save candidate、连续换腿、scope-safe observations 与 changed A-debt
+> Base/Delta discriminator 已闭合；下一步比较自然 foreground rebase 与 paced cold migration 的交互。
 > bounded explorer 只在出现具体保守拒绝或疑似 false-negative 后介入。
 
 ## 问题
@@ -110,6 +110,10 @@ heuristic 不能自行宣称 completeness，但 explorer 不再作为首个连�
 - realized step/observed epoch/run 的 test-local reduction 已明确 source/result scope、debt Base payload、
   live-object reconstruction Previous Frames、Current tail/next-start slack 与 append 分项；counterfactual
   final-C 不进入 realized 聚合。两 epoch witness 已验证 `A/B -> B/C -> C/D` 连续性。
+- changed A-debt 固定对照在同一三 Update + 一 Create trace 上只切换 Stay-B Update 的 Delta/Base：
+  Delta control append `48/48/48/668` B，并在 Rotate 集中写 608 B maintenance records；Base treatment
+  append `144/244/344/60` B，把旧 A debt 在前三步清零。三个对象共用 A Frame，故 debt bytes 下降不使
+  Previous-frame bytes 同步下降；换腿后 Base@B 又形成新 B/C scope 的 600 B / 3 Frames debt。
 
 该 discriminator 只证明当前 provisional v0 grammar 下 External 不支配 optional same-state
 relocation；未实现 runtime optional action，不证明扩大 `CanPrepareAndRotate` 可达集、planner
@@ -127,7 +131,8 @@ completeness 或未来 wire format。尺寸裁决始终以 whole-candidate estim
 
 ## 未闭合事项与顺序
 
-1. 用 changed A-debt Update Base/Delta 因果对照验证自然领域变化的清债收益与 foreground 代价；
+1. 在同一 mixed Update/NoChange trace 与固定 target 日程上，比较 changed A-debt Delta/Base 与
+   paced cold migration none/one 的四个命名 treatment，判断两种机制的替代或互补关系；
 2. 扩充 stable hot/cold、burst、size-distribution 与 longer traces，再接入少量明确命名的
    pressure-aware treatments，保留原始事实而不预设总分；
 3. 捕获具体 `RejectedUnproven`、`RejectedCapacityUnsearched` 或疑似 heuristic false-negative 后，再建立 small-state bounded/canonical

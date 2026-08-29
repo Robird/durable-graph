@@ -138,6 +138,9 @@ PublishedRevision 为 shared prior-snapshot anchor。accepted new head 的 curre
   live-object reconstruction Previous Frames、Current tail/next-start slack 与写入分项；连续 SourceScope
   归成 observed epoch，Rotate 属于并关闭旧 epoch；certificate terminal-C 单独标记为 counterfactual，
   不进入 realized totals/peaks；一个两 epoch witness 已验证 `A/B -> B/C -> C/D` 的跨步连续性；
+- test-local decision selector：只从 canonical facts 投影完整 Stay-B/Rotate-C decisions，与 target selector
+  正交；changed A-debt 固定对照已验证 Base@B 能把旧 A evacuation 分摊到自然 Update，但换腿后会成为
+  新 B/C scope 的 Previous debt；
 - caller-selected B same-state Base migration plan/append witness；
 - relay-free immediate A/B -> B/C plan/append、shared anchor、B/C closure witness；
 - 多批 B migration 使原本放不下的 C evacuation 可编码的容量 witness；
@@ -150,36 +153,36 @@ rotation trigger 已解决。
 
 ## 当前研究焦点
 
-rotation observation reductions 已闭合 scope、写入量和 realized/counterfactual 分栏：换腿后的 debt
-必须在新 scope 中解释；`PreviousFrameBytes` 只表示 live-object current reconstruction 所需的去重完整
-Frame，不是累计 IO；next-start slack 只表示地址起点可编码余量，不是文件容量。当前类型继续 test-local，
-因为尚无报告、CLI 或 batch consumer。
+changed A-debt write-mode discriminator 已闭合：同一四步 trace、固定 `[Stay, Stay, Stay, Rotate]` 下，
+Delta control 把 608 B mandatory evacuation 集中到最终 Rotate，峰值 append 为 668 B；Base treatment
+把三个完整值作为 foreground 分散到前三次 Stay，最终 Rotate append 为 60 B，峰值为 344 B。处理组的
+旧 A debt 依次 `600 -> 500 -> 300 -> 0`，但对象共居同一个 A Frame 时，Previous-frame bytes 在最后
+一个依赖消失前不下降。换腿后三个 Base@B 又成为新 scope 的 600 B / 3 Frames / 720 B Previous debt。
+这些都是当前 provisional grammar 的因果事实，不构成总分或 winner。
 
-下一步转向首个 **changed A-debt write-mode discriminator**：在同一 handwritten Update trace 与固定
-target 日程下，只改变仍以 A 为 terminating Base 的 changed object 写 Delta 还是 Base，观察 foreground
-写入、A debt、Previous reconstruction Frames、terminal-C 与 realized peak 的事实差异。这个 treatment
-用于隔离“自然领域变化能否顺便清债”，不选择 winner，也不把固定日程升级为产品 trigger。
+下一步研究自然 foreground rebase 与 paced cold migration 的 **交互**：在同一 mixed Update/NoChange
+trace 与固定 target 日程下做命名的 2x2 treatment，判断两种清债机制是替代、互补，还是只移动写入峰值
+与换腿后的 debt 锯齿。继续保留原始事实，不引入自动 target trigger。
 
 ## 下一编码切片
 
-闭合一个 **changed A-debt write-mode probe**：
+闭合一个 **changed-write × cold-migration interaction probe**：
 
 ```text
-same frozen Update trace + same fixed target schedule
-    control: changed A-debt -> legal Delta
-    treatment: changed A-debt -> Base
-    unchanged migration: none in both runs
-    compare: foreground/append + scoped debt/reconstruction + terminal-C
+same frozen mixed Update/NoChange trace + same fixed target schedule
+    changed A-debt: legal Delta | Base
+    optional unchanged A-debt migration: none | paced one
+    compare four named treatments with existing raw reductions
 ```
 
-只为第三种结构不同的 decision caller 做必要的 test-local selector 收口；不建立通用 policy interface 或
-有状态 Runner。Update Base/Delta 两侧都走现有 exact candidate、completion admission 与 apply seam；
-保持 input-order/deterministic projection、逻辑状态与两文件 closure 闸门。
+优先验证 treatment assignment 互不重叠、四条运行共享 trace/targets/逻辑状态，以及各自 completion
+certificate 仍可比较；不先引入交互 score、winner、通用 policy interface 或有状态 Runner。若 2x2 fixture
+开始重复大量 expectation plumbing，再按证据提取 test-local projection helper。
 
 ## 近期 roadmap
 
 1. **扩充策略与 workload**
-   - 先做 changed A-debt Base/Delta 因果对照，再组合 paced cold migration；
+   - 先做 changed A-debt Base/Delta 与 paced cold migration 的 2x2 交互对照；
    - 随证据加入 pressure-aware target/migration 候选；
    - stable hot/cold、burst、size distribution 和更长 fixed-seed traces。
 2. **按证据加入 bounded explorer**
@@ -196,14 +199,14 @@ same frozen Update trace + same fixed target schedule
 - 除 `DebtZeroThenRotate` 这个故意保守的 baseline 外，哪些无隐藏权重的 pressure facts 足以触发轮转；
 - selected action 的 `RejectedUnproven` 在 batch report 中如何表达；当前 harness 只 typed stop、不 fallback，
   何时值得另立 repair policy 或交给 bounded explorer 仍待证据；
-- changed-debt 第三个结构不同的 decision caller 是否足以证明需要收口 test-local decision selector；稳定
-  trace runner/run outcome 仍等待报告、CLI 或 batch consumer；
+- test-local decision selector 已有三个结构不同的 caller；是否提取稳定 runner/run outcome 仍等待报告、
+  CLI 或 batch consumer，不能仅因下一 fixture 变长就升级为产品 API；
 - successful-run reduction 尚不表达 selected capacity / completion `RejectedUnproven`；出现真实 batch
   termination consumer 时应另建 outcome，而不是伪造没有 result scope 的 realized step；
 - counterfactual terminal 当前只投影 final-C append/result 与 preparatory Stay count，不聚合互斥未来，
   也不声称已观测 preparatory writes 或 terminal-source pressure；
 - stable hot/cold、burst、size distribution 与长 trace 是否先用 handwritten fixture，何时扩充 generator；
-- paced-one-debt baseline 之后，何种无隐藏权重的 pressure facts 最值得比较；
+- 2x2 interaction 之后，何种无隐藏权重的 pressure facts 最值得驱动 target/migration treatment；
 - 多个不可支配策略出现后，何时需要用户用真实 workload/SLO 选择产品默认值。
 
 ## 明确暂缓
