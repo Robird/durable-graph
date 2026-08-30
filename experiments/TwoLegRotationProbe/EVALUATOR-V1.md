@@ -1,6 +1,6 @@
 # TwoLeg evaluator v1 admissibility and accounting contract
 
-> Status: typed outcome, closed-horizon session, registry-backed batch runner, and
+> Status: typed outcome, closed-horizon session, registry-backed matched batch, and
 > canonical machine-readable manifest/report implemented.
 
 This document fixes the first executable protocol and raw measurement schedule for
@@ -183,20 +183,35 @@ dump of `FinalColdHeadReadObservation` or candidate diagnostics. Rejected leaves
 no metrics/cursor/settlement properties. V1 is writer-only: external parsing, file I/O,
 and CLI publication remain outside this slice.
 
-The initial smoke corpus freezes canonical hashes and two admitted cases:
+Corpus revision 2 runs both decision treatments over two matched inputs. Within each
+pair the source fixture, exact expanded trace, target treatment, evaluator protocols,
+and accounting horizon are identical; apart from the case ID, the only experimental
+input that changes is the decision treatment. The canonical raw outcomes are:
 
-- handwritten four-step `debt-zero-then-rotate` with paced one-debt migration;
-- generator-v1 `mixed-small`, seed `12345`, with no migration.
+| Trace | Decision treatment | W | P | F | R | Final scope |
+|---|---|---:|---:|---:|---:|---|
+| `debt-zero-then-rotate` | no migration | 856 | 680 | 680 | 832 | 2/3 |
+| `debt-zero-then-rotate` | paced one debt | 1536 | 696 | 804 | 756 | 3/4 |
+| `mixed-small` seed 12345 | no migration | 368 | 164 | 344 | 352 | 2/3 |
+| `mixed-small` seed 12345 | paced one debt | 368 | 164 | 344 | 352 | 2/3 |
 
-They prove batch wiring and deterministic replay, not a policy winner: the cases do
-not yet form a matched treatment comparison.
+All four cases are admitted. `mixed-small` is a negative control: neither evaluated
+step contains an eligible A-debt `NoChange`, so the two treatment labels execute the
+same decisions and produce the same result. The handwritten pair is active, but it
+also exposes the current horizon coupling: pacing rotates once during the workload,
+then the unconditional terminal settlement rotates again. Its higher W/P/F and lower
+R therefore cannot be attributed to a general pacing effect or used to name a winner.
 
-## Still open before strategy comparison
+The manifest revision changed without changing the v1 JSON schemas. Pair identity is
+currently enforced by corpus construction and executable tests; no duplicate
+`ComparisonGroupId`, generic policy interface, or score was introduced. The report
+also rejects an outcome whose declared workload horizon differs from its manifest, or
+whose admitted/capacity phase cannot be emitted by evaluator v1.
 
-- run both decision treatments over the same fixture/trace groups before comparing
-  their W/P/F/R vectors;
-- compare terminal settlement with complete-cycle/long-run schedules before treating
-  its economic tail as neutral;
+## Still open before strategy selection
+
+- compare the current one-terminal-settlement horizon with an equal-scope-advance,
+  complete-cycle, or long-run schedule before treating its economic tail as neutral;
 - add more source-layout and workload families only when they answer a named policy
   question;
 - retain Pareto/raw outcomes until workload/SLO evidence justifies guardrails or a

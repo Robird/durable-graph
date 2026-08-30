@@ -763,6 +763,12 @@
 
 ## 6. 船长日志
 
+### 2026-08-30：形成 benchmark-v1 首组 matched treatment 证据
+
+- **Observed**：corpus revision 2 把 handwritten 与 seed12345 mixed traces 各自扩为 no-migration/paced pair；组内共享同一 frozen trace，且 source、target、protocol 与 horizon 相同。四例均 admitted，manifest/report 与两条 expanded trace 均有 literal SHA-256 goldens。
+- **Observed**：mixed pair 没有 eligible A-debt `NoChange`，两侧严格同为 `W/P/F/R=368/164/344/352`。handwritten control 为 `856/680/680/832 @ scope 2/3`，paced 为 `1536/696/804/756 @ scope 3/4`。
+- **Concluded / Next**：active pair 混合了 paced migration、workload 内额外轮转与无条件 terminal rotation，不能选择 winner；下一 named witness 先让两侧完成相同次数的 scope advance，再判断 terminal-liability bias。canonical report 同时补上 outcome horizon/phase 与 manifest 的 fail-close 一致性校验。
+
 ### 2026-08-30：建立 benchmark-v1 manifest、batch runner 与 canonical raw report
 
 - **Observed**：closed registry 已把 step0 Create-only workload bootstrap 成单一 full-OVD A Frame + metadata-only B anchor，并让 evaluator 只消费后续 steps；target 仅按 source A-debt 决定 Stay/Rotate，decision 仅含 Delta no-migration 或 smallest-ObjectId paced migration，不读取未来 trace、feasibility 或 candidate observation。

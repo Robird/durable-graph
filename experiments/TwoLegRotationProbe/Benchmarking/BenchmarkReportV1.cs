@@ -43,6 +43,11 @@ internal sealed class BenchmarkReportV1 {
                     "match its manifest trace SHA-256.",
                     nameof(cases));
             }
+
+            ValidateOutcomePosition(
+                manifest.Cases[index],
+                canonicalCases[index],
+                nameof(cases));
         }
 
         Schema = BenchmarkV1Identities.ReportSchema;
@@ -56,6 +61,37 @@ internal sealed class BenchmarkReportV1 {
         FrameLayout = manifest.FrameLayout;
         RevisionGrammar = manifest.RevisionGrammar;
         _cases = Array.AsReadOnly(canonicalCases);
+    }
+
+    private static void ValidateOutcomePosition(
+        BenchmarkCaseManifestV1 manifestCase,
+        BenchmarkCaseReportV1 reportCase,
+        string parameterName) {
+        EvaluatorPositionReportV1 position = reportCase.Outcome.Position;
+        if (position.TotalWorkloadStepCount !=
+            manifestCase.EvaluatedWorkloadStepCount) {
+            throw new ArgumentException(
+                $"Benchmark case '{reportCase.CaseId}' outcome declares " +
+                $"{position.TotalWorkloadStepCount} workload steps, but its " +
+                $"manifest declares {manifestCase.EvaluatedWorkloadStepCount}.",
+                parameterName);
+        }
+
+        if (reportCase.Outcome is AdmittedOutcomeReportV1 &&
+            position.Phase != EvaluatorRunPhase.TerminalSettlement) {
+            throw new ArgumentException(
+                $"Admitted benchmark case '{reportCase.CaseId}' must be at " +
+                "terminal settlement.",
+                parameterName);
+        }
+
+        if (reportCase.Outcome is CapacityRejectedOutcomeReportV1 &&
+            position.Phase != EvaluatorRunPhase.Workload) {
+            throw new ArgumentException(
+                $"Capacity-rejected benchmark case '{reportCase.CaseId}' " +
+                "must identify a workload step.",
+                parameterName);
+        }
     }
 
     public BenchmarkComponentIdentityV1 Schema { get; }

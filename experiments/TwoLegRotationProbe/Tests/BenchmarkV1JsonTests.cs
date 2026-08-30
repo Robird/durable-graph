@@ -136,10 +136,16 @@ public sealed class BenchmarkV1JsonTests {
     [Fact]
     public void Four_outcome_leaves_have_disjoint_machine_readable_shapes() {
         BenchmarkManifestV1 manifest = Manifest([
-            Case("admitted"),
+            Case(
+                "admitted",
+                traceStepCount: 1,
+                evaluatedWorkloadStepCount: 0),
             Case("capacity"),
             Case("incomplete"),
-            Case("unproven"),
+            Case(
+                "unproven",
+                traceStepCount: 1,
+                evaluatedWorkloadStepCount: 0),
         ]);
         const string traceHash =
             "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
@@ -202,7 +208,7 @@ public sealed class BenchmarkV1JsonTests {
         byte[] bytes = BenchmarkV1Json.WriteReport(report);
         string json = System.Text.Encoding.UTF8.GetString(bytes);
         Assert.Equal(
-            "495054987653cc28dcd69cf36bb69caec2dc60fc5af28ebd8cd4eb9d763024c8",
+            "fd49d80c2cb4bf10f36ba32273a4cb58bec8a547720b793104c2f0885c629948",
             BenchmarkV1Json.ComputeSha256(bytes));
         using JsonDocument document = JsonDocument.Parse(bytes);
         JsonElement cases = document.RootElement.GetProperty("cases");
@@ -266,6 +272,101 @@ public sealed class BenchmarkV1JsonTests {
                 new IncompleteOutcomeReportV1(position))]));
     }
 
+    [Fact]
+    public void Report_rejects_an_outcome_horizon_that_differs_from_its_manifest() {
+        BenchmarkManifestV1 manifest = Manifest([Case("one")]);
+        EvaluatorPositionReportV1 wrongHorizon = new(
+            EvaluatorRunPhase.Workload,
+            completedWorkloadStepCount: 0,
+            totalWorkloadStepCount: 2);
+
+        Assert.Throws<ArgumentException>(() => new BenchmarkReportV1(
+            manifest,
+            [new BenchmarkCaseReportV1(
+                "one",
+                manifest.Cases[0].ResolvedTraceSha256,
+                new IncompleteOutcomeReportV1(wrongHorizon))]));
+    }
+
+    [Fact]
+    public void Report_rejects_outcome_phases_the_evaluator_cannot_emit() {
+        BenchmarkManifestV1 admittedManifest = Manifest([Case("admitted")]);
+        BenchmarkManifestV1 capacityManifest = Manifest([
+            Case(
+                "capacity",
+                traceStepCount: 1,
+                evaluatedWorkloadStepCount: 0),
+        ]);
+        EvaluatorPositionReportV1 workload = new(
+            EvaluatorRunPhase.Workload,
+            completedWorkloadStepCount: 0,
+            totalWorkloadStepCount: 1);
+        EvaluatorPositionReportV1 terminal = new(
+            EvaluatorRunPhase.TerminalSettlement,
+            completedWorkloadStepCount: 0,
+            totalWorkloadStepCount: 0);
+        CapacityRejectionReportV1 rejection = new(
+            RevisionCandidateCapacityLimit.PayloadAndTailMetaLength,
+            attemptedValue: 2,
+            maximumValue: 1);
+
+        Assert.Throws<ArgumentException>(() => new BenchmarkReportV1(
+            admittedManifest,
+            [new BenchmarkCaseReportV1(
+                "admitted",
+                admittedManifest.Cases[0].ResolvedTraceSha256,
+                Admitted(workload))]));
+        Assert.Throws<ArgumentException>(() => new BenchmarkReportV1(
+            capacityManifest,
+            [new BenchmarkCaseReportV1(
+                "capacity",
+                capacityManifest.Cases[0].ResolvedTraceSha256,
+                new CapacityRejectedOutcomeReportV1(
+                    terminal,
+                    CandidateTarget.RotateC,
+                    rejection))]));
+    }
+
+    [Fact]
+    public void Report_accepts_both_phases_emitted_by_unproven_and_incomplete_outcomes() {
+        BenchmarkManifestV1 workloadManifest = Manifest([Case("workload")]);
+        BenchmarkManifestV1 terminalManifest = Manifest([
+            Case(
+                "terminal",
+                traceStepCount: 1,
+                evaluatedWorkloadStepCount: 0),
+        ]);
+        EvaluatorPositionReportV1 workload = new(
+            EvaluatorRunPhase.Workload,
+            completedWorkloadStepCount: 0,
+            totalWorkloadStepCount: 1);
+        EvaluatorPositionReportV1 terminal = new(
+            EvaluatorRunPhase.TerminalSettlement,
+            completedWorkloadStepCount: 0,
+            totalWorkloadStepCount: 0);
+        CompletionRejectionReportV1 rejection = new(
+            CanPrepareAndRotateRejectionStage.FinalRotateC,
+            completedMigrationCount: 0,
+            blockingObjectId: null,
+            new CapacityRejectionReportV1(
+                RevisionCandidateCapacityLimit.PayloadAndTailMetaLength,
+                attemptedValue: 2,
+                maximumValue: 1));
+
+        _ = new BenchmarkReportV1(
+            workloadManifest,
+            [new BenchmarkCaseReportV1(
+                "workload",
+                workloadManifest.Cases[0].ResolvedTraceSha256,
+                new RejectedUnprovenOutcomeReportV1(workload, rejection))]);
+        _ = new BenchmarkReportV1(
+            terminalManifest,
+            [new BenchmarkCaseReportV1(
+                "terminal",
+                terminalManifest.Cases[0].ResolvedTraceSha256,
+                new IncompleteOutcomeReportV1(terminal))]);
+    }
+
     private static JsonElement GetOutcome(JsonElement cases, string caseId) => cases
         .EnumerateArray()
         .Single(item => item.GetProperty("caseId").GetString() == caseId)
@@ -276,6 +377,25 @@ public sealed class BenchmarkV1JsonTests {
         Assert.False(outcome.TryGetProperty("finalCursor", out _));
         Assert.False(outcome.TryGetProperty("settlement", out _));
     }
+
+    private static AdmittedOutcomeReportV1 Admitted(
+        EvaluatorPositionReportV1 position) => new(
+        position,
+        new EvaluatorMetricsReportV1(
+            realizedCommitCount: 1,
+            totalPhysicalWriteBytes: 100,
+            peakCommitWriteBytes: 100,
+            maxCurrentFileTailBytes: 200,
+            finalColdHeadReadBytes: 24),
+        new FinalCursorReportV1(
+            previousFileNumber: 1,
+            currentFileNumber: 2,
+            new FrameAddressReportV1(
+                fileNumber: 2,
+                offsetBytes: 4,
+                lengthBytes: 24),
+            currentFileTailBytes: 32),
+        new TerminalSettlementReportV1([]));
 
     private static BenchmarkManifestV1 Manifest(
         IEnumerable<BenchmarkCaseManifestV1> cases) => new(

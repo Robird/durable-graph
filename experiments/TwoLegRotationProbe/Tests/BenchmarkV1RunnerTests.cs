@@ -10,32 +10,109 @@ namespace Atelia.TwoLegRotationProbe.Tests;
 
 public sealed class BenchmarkV1RunnerTests {
     [Fact]
-    public void Frozen_corpus_runs_both_cases_to_admitted_closed_horizons() {
+    public void Frozen_corpus_defines_two_pairs_with_only_decision_treatment_changed() {
+        BenchmarkV1BatchDefinition definition = BenchmarkV1Corpus.Create();
+
+        Assert.Equal(2, definition.Manifest.ManifestRevision);
+        Assert.Equal(BenchmarkV1ProtocolIdentities.Evaluator, definition.Manifest.Evaluator);
+        Assert.Equal(
+            BenchmarkV1ProtocolIdentities.TerminalSettlement,
+            definition.Manifest.TerminalSettlement);
+        Assert.Equal(
+            BenchmarkV1ProtocolIdentities.ReadSchedule,
+            definition.Manifest.ReadSchedule);
+        Assert.Equal(BenchmarkV1ProtocolIdentities.Metrics, definition.Manifest.Metrics);
+        Assert.Equal(
+            BenchmarkV1ProtocolIdentities.FrameLayout,
+            definition.Manifest.FrameLayout);
+        Assert.Equal(
+            BenchmarkV1ProtocolIdentities.RevisionGrammar,
+            definition.Manifest.RevisionGrammar);
+        Assert.Equal(4, definition.Cases.Count);
+        Assert.Equal(
+            [
+                BenchmarkV1Corpus.DebtZeroThenRotateNoMigrationCaseId,
+                BenchmarkV1Corpus.DebtZeroThenRotatePacedCaseId,
+                BenchmarkV1Corpus.MixedSmallNoMigrationCaseId,
+                BenchmarkV1Corpus.MixedSmallPacedCaseId,
+            ],
+            definition.Cases.Select(static benchmarkCase =>
+                benchmarkCase.ManifestCase.CaseId));
+        BenchmarkV1CaseDefinition debtNoMigration = FindCaseDefinition(
+            definition,
+            BenchmarkV1Corpus.DebtZeroThenRotateNoMigrationCaseId);
+        BenchmarkV1CaseDefinition debtPaced = FindCaseDefinition(
+            definition,
+            BenchmarkV1Corpus.DebtZeroThenRotatePacedCaseId);
+        BenchmarkV1CaseDefinition mixedNoMigration = FindCaseDefinition(
+            definition,
+            BenchmarkV1Corpus.MixedSmallNoMigrationCaseId);
+        BenchmarkV1CaseDefinition mixedPaced = FindCaseDefinition(
+            definition,
+            BenchmarkV1Corpus.MixedSmallPacedCaseId);
+        AssertMatchedPair(
+            debtNoMigration,
+            debtPaced);
+        AssertMatchedPair(mixedNoMigration, mixedPaced);
+        Assert.NotEqual(
+            debtNoMigration.ManifestCase.ResolvedTraceSha256,
+            mixedNoMigration.ManifestCase.ResolvedTraceSha256);
+    }
+
+    [Fact]
+    public void Frozen_corpus_runs_both_pairs_to_exact_admitted_raw_outcomes() {
         BenchmarkV1BatchDefinition definition = BenchmarkV1Corpus.Create();
 
         BenchmarkV1BatchRun run = BenchmarkV1Runner.Run(definition);
 
         Assert.Same(definition, run.Definition);
-        AdmittedOutcomeReportV1 named = Assert.IsType<AdmittedOutcomeReportV1>(
-            FindCase(run.Report, BenchmarkV1Corpus.DebtZeroThenRotatePacedCaseId)
-                .Outcome);
-        Assert.Equal(5, named.Metrics.RealizedCommitCount);
-        Assert.Equal(3U, named.FinalCursor.PreviousFileNumber);
-        Assert.Equal(4U, named.FinalCursor.CurrentFileNumber);
-        Assert.Empty(named.Settlement.MigratedObjectIds);
+        AdmittedOutcomeReportV1 debtNoMigration = AssertAdmitted(
+            run.Report,
+            BenchmarkV1Corpus.DebtZeroThenRotateNoMigrationCaseId,
+            realizedCommitCount: 5,
+            totalPhysicalWriteBytes: 856,
+            peakCommitWriteBytes: 680,
+            maxCurrentFileTailBytes: 680,
+            finalColdHeadReadBytes: 832,
+            previousFileNumber: 2,
+            currentFileNumber: 3);
+        AdmittedOutcomeReportV1 debtPaced = AssertAdmitted(
+            run.Report,
+            BenchmarkV1Corpus.DebtZeroThenRotatePacedCaseId,
+            realizedCommitCount: 5,
+            totalPhysicalWriteBytes: 1536,
+            peakCommitWriteBytes: 696,
+            maxCurrentFileTailBytes: 804,
+            finalColdHeadReadBytes: 756,
+            previousFileNumber: 3,
+            currentFileNumber: 4);
+        AdmittedOutcomeReportV1 mixedNoMigration = AssertAdmitted(
+            run.Report,
+            BenchmarkV1Corpus.MixedSmallNoMigrationCaseId,
+            realizedCommitCount: 3,
+            totalPhysicalWriteBytes: 368,
+            peakCommitWriteBytes: 164,
+            maxCurrentFileTailBytes: 344,
+            finalColdHeadReadBytes: 352,
+            previousFileNumber: 2,
+            currentFileNumber: 3);
+        AdmittedOutcomeReportV1 mixedPaced = AssertAdmitted(
+            run.Report,
+            BenchmarkV1Corpus.MixedSmallPacedCaseId,
+            realizedCommitCount: 3,
+            totalPhysicalWriteBytes: 368,
+            peakCommitWriteBytes: 164,
+            maxCurrentFileTailBytes: 344,
+            finalColdHeadReadBytes: 352,
+            previousFileNumber: 2,
+            currentFileNumber: 3);
 
-        AdmittedOutcomeReportV1 generated = Assert.IsType<AdmittedOutcomeReportV1>(
-            FindCase(run.Report, BenchmarkV1Corpus.MixedSmallNoMigrationCaseId)
-                .Outcome);
-        Assert.Equal(3, generated.Metrics.RealizedCommitCount);
-        Assert.Equal(2U, generated.FinalCursor.PreviousFileNumber);
-        Assert.Equal(3U, generated.FinalCursor.CurrentFileNumber);
-        Assert.Empty(generated.Settlement.MigratedObjectIds);
-        Assert.NotEqual(
-            FindCase(run.Report, BenchmarkV1Corpus.DebtZeroThenRotatePacedCaseId)
-                .ResolvedTraceSha256,
-            FindCase(run.Report, BenchmarkV1Corpus.MixedSmallNoMigrationCaseId)
-                .ResolvedTraceSha256);
+        Assert.NotEqual(debtNoMigration.Metrics, debtPaced.Metrics);
+        Assert.Equal(mixedNoMigration.Metrics, mixedPaced.Metrics);
+        Assert.Equal(mixedNoMigration.FinalCursor, mixedPaced.FinalCursor);
+        Assert.Equal(
+            mixedNoMigration.Settlement.MigratedObjectIds,
+            mixedPaced.Settlement.MigratedObjectIds);
     }
 
     [Fact]
@@ -52,12 +129,18 @@ public sealed class BenchmarkV1RunnerTests {
             BenchmarkV1Json.WriteReport(first.Report),
             BenchmarkV1Json.WriteReport(second.Report));
         Assert.Equal(
-            "438326877cedd8f7925c913d4c446fe02f8d50f4bf11c8b1e3227283b74d914c",
+            "a0486cdd61d182101b8c445807028fc1fff5eb32cae5f874639da93877cbda49",
             first.Report.ManifestSha256);
         Assert.Equal(
-            "01e6f2bca39fd3ed5225a2dc243fb85aa78f0d023a1586322389b4f0868ab842",
+            "d7b5755dfbff90ca5e7274b54b3a2450249190117af730f11434ef781c8c23d0",
             BenchmarkV1Json.ComputeSha256(
                 BenchmarkV1Json.WriteReport(first.Report)));
+        Assert.Equal(
+            "cd064c19d4cd94f0a25536481fa0c901ca77e7187b0ff9350b95a2b804d286e2",
+            FindCase(
+                first.Report,
+                BenchmarkV1Corpus.DebtZeroThenRotateNoMigrationCaseId)
+                .ResolvedTraceSha256);
         Assert.Equal(
             "cd064c19d4cd94f0a25536481fa0c901ca77e7187b0ff9350b95a2b804d286e2",
             FindCase(
@@ -69,6 +152,12 @@ public sealed class BenchmarkV1RunnerTests {
             FindCase(
                 first.Report,
                 BenchmarkV1Corpus.MixedSmallNoMigrationCaseId)
+                .ResolvedTraceSha256);
+        Assert.Equal(
+            "5bd76d8da2021ed92de43e3d34d08e47cfd6b8b2a79831a2b81cfc41e4d219fc",
+            FindCase(
+                first.Report,
+                BenchmarkV1Corpus.MixedSmallPacedCaseId)
                 .ResolvedTraceSha256);
     }
 
@@ -257,6 +346,76 @@ public sealed class BenchmarkV1RunnerTests {
         BenchmarkReportV1 report,
         string caseId) => report.Cases.Single(benchmarkCase =>
             benchmarkCase.CaseId == caseId);
+
+    private static BenchmarkV1CaseDefinition FindCaseDefinition(
+        BenchmarkV1BatchDefinition definition,
+        string caseId) => definition.Cases.Single(benchmarkCase =>
+            benchmarkCase.ManifestCase.CaseId == caseId);
+
+    private static void AssertMatchedPair(
+        BenchmarkV1CaseDefinition noMigration,
+        BenchmarkV1CaseDefinition paced) {
+        BenchmarkCaseManifestV1 noMigrationManifest = noMigration.ManifestCase;
+        BenchmarkCaseManifestV1 pacedManifest = paced.ManifestCase;
+
+        Assert.NotEqual(noMigrationManifest.CaseId, pacedManifest.CaseId);
+        Assert.Same(noMigration.Trace, paced.Trace);
+        Assert.Equal(noMigrationManifest.SourceFixture, pacedManifest.SourceFixture);
+        Assert.Equal(noMigrationManifest.TraceDefinition, pacedManifest.TraceDefinition);
+        Assert.Equal(noMigrationManifest.Generator, pacedManifest.Generator);
+        Assert.Equal(noMigrationManifest.Seed, pacedManifest.Seed);
+        Assert.Equal(
+            noMigrationManifest.ResolvedTraceSha256,
+            pacedManifest.ResolvedTraceSha256);
+        Assert.Equal(
+            noMigrationManifest.BootstrapStepCount,
+            pacedManifest.BootstrapStepCount);
+        Assert.Equal(
+            noMigrationManifest.TraceStepCount,
+            pacedManifest.TraceStepCount);
+        Assert.Equal(
+            noMigrationManifest.EvaluatedWorkloadStepCount,
+            pacedManifest.EvaluatedWorkloadStepCount);
+        Assert.Equal(
+            noMigrationManifest.TargetTreatment,
+            pacedManifest.TargetTreatment);
+        Assert.Equal(
+            BenchmarkV1TreatmentIdentities.DeltaNoMigration,
+            noMigrationManifest.DecisionTreatment);
+        Assert.Equal(
+            BenchmarkV1TreatmentIdentities.DeltaPacedOneDebtByObjectId,
+            pacedManifest.DecisionTreatment);
+    }
+
+    private static AdmittedOutcomeReportV1 AssertAdmitted(
+        BenchmarkReportV1 report,
+        string caseId,
+        int realizedCommitCount,
+        long totalPhysicalWriteBytes,
+        long peakCommitWriteBytes,
+        long maxCurrentFileTailBytes,
+        long finalColdHeadReadBytes,
+        uint previousFileNumber,
+        uint currentFileNumber) {
+        BenchmarkCaseReportV1 benchmarkCase = FindCase(report, caseId);
+        AdmittedOutcomeReportV1 admitted = Assert.IsType<AdmittedOutcomeReportV1>(
+            benchmarkCase.Outcome);
+        Assert.Equal(realizedCommitCount, admitted.Metrics.RealizedCommitCount);
+        Assert.Equal(
+            totalPhysicalWriteBytes,
+            admitted.Metrics.TotalPhysicalWriteBytes);
+        Assert.Equal(peakCommitWriteBytes, admitted.Metrics.PeakCommitWriteBytes);
+        Assert.Equal(
+            maxCurrentFileTailBytes,
+            admitted.Metrics.MaxCurrentFileTailBytes);
+        Assert.Equal(
+            finalColdHeadReadBytes,
+            admitted.Metrics.FinalColdHeadReadBytes);
+        Assert.Equal(previousFileNumber, admitted.FinalCursor.PreviousFileNumber);
+        Assert.Equal(currentFileNumber, admitted.FinalCursor.CurrentFileNumber);
+        Assert.Empty(admitted.Settlement.MigratedObjectIds);
+        return admitted;
+    }
 
     private static long TotalTailBytes(
         Atelia.TwoLegRotationProbe.Model.RbfFileStore store) => Enumerable

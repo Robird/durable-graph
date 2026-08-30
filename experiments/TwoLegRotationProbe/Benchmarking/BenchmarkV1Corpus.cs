@@ -56,15 +56,30 @@ internal static class BenchmarkV1ProtocolIdentities {
 
 internal static class BenchmarkV1Corpus {
     public const string ManifestId = "benchmark-v1";
-    public const int ManifestRevision = 1;
+    public const int ManifestRevision = 2;
+    public const string DebtZeroThenRotateNoMigrationCaseId =
+        "debt-zero-then-rotate-no-migration";
     public const string DebtZeroThenRotatePacedCaseId =
         "debt-zero-then-rotate-paced";
     public const string MixedSmallNoMigrationCaseId =
         "mixed-small-no-migration";
+    public const string MixedSmallPacedCaseId =
+        "mixed-small-paced";
 
     public static BenchmarkV1BatchDefinition Create() {
+        WorkloadTrace debtZeroThenRotateTrace = CreateDebtZeroThenRotateTrace();
         GeneratedScenario generated = ScenarioGenerator.Generate(
             CreateMixedSmallDefinition());
+        BenchmarkV1CaseDefinition[] debtZeroThenRotatePair = CreateDecisionPair(
+            DebtZeroThenRotateNoMigrationCaseId,
+            DebtZeroThenRotatePacedCaseId,
+            new BenchmarkComponentIdentityV1("debt-zero-then-rotate", 1),
+            debtZeroThenRotateTrace);
+        BenchmarkV1CaseDefinition[] mixedSmallPair = CreateDecisionPair(
+            MixedSmallNoMigrationCaseId,
+            MixedSmallPacedCaseId,
+            new BenchmarkComponentIdentityV1("mixed-small", 1),
+            generated.Trace);
         return new BenchmarkV1BatchDefinition(
             ManifestId,
             ManifestRevision,
@@ -75,23 +90,29 @@ internal static class BenchmarkV1Corpus {
             BenchmarkV1ProtocolIdentities.FrameLayout,
             BenchmarkV1ProtocolIdentities.RevisionGrammar,
             [
-                new BenchmarkV1CaseDefinition(
-                    DebtZeroThenRotatePacedCaseId,
-                    new BenchmarkComponentIdentityV1(
-                        "debt-zero-then-rotate",
-                        1),
-                    CreateDebtZeroThenRotateTrace(),
-                    BenchmarkV1TreatmentIdentities.DebtZeroThenRotate,
-                    BenchmarkV1TreatmentIdentities
-                        .DeltaPacedOneDebtByObjectId),
-                new BenchmarkV1CaseDefinition(
-                    MixedSmallNoMigrationCaseId,
-                    new BenchmarkComponentIdentityV1("mixed-small", 1),
-                    generated.Trace,
-                    BenchmarkV1TreatmentIdentities.DebtZeroThenRotate,
-                    BenchmarkV1TreatmentIdentities.DeltaNoMigration),
+                .. debtZeroThenRotatePair,
+                .. mixedSmallPair,
             ]);
     }
+
+    private static BenchmarkV1CaseDefinition[] CreateDecisionPair(
+        string noMigrationCaseId,
+        string pacedCaseId,
+        BenchmarkComponentIdentityV1 traceDefinition,
+        WorkloadTrace trace) => [
+            new BenchmarkV1CaseDefinition(
+                noMigrationCaseId,
+                traceDefinition,
+                trace,
+                BenchmarkV1TreatmentIdentities.DebtZeroThenRotate,
+                BenchmarkV1TreatmentIdentities.DeltaNoMigration),
+            new BenchmarkV1CaseDefinition(
+                pacedCaseId,
+                traceDefinition,
+                trace,
+                BenchmarkV1TreatmentIdentities.DebtZeroThenRotate,
+                BenchmarkV1TreatmentIdentities.DeltaPacedOneDebtByObjectId),
+        ];
 
     private static WorkloadTrace CreateDebtZeroThenRotateTrace() => new(
         scenarioName: "debt-zero-then-rotate",

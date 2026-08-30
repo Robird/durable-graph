@@ -173,7 +173,12 @@ PublishedRevision 为 shared prior-snapshot anchor。accepted new head 的 curre
   trace SHA-256、target/decision treatment 与 evaluator/settlement/accounting/layout/grammar/read-schedule identity；
   batch runner 只在 session Store 上 normalize/evaluate/apply，typed rejection 不 fallback；canonical UTF-8
   manifest/report 使用固定 tokens/order、16位 hex seed、manifest+trace SHA-256，只有 admitted 输出 W/P/F/R、
-  final cursor 与 settlement 摘要；首批 handwritten paced 和 seed12345 mixed no-migration case 均可确定重放；
+  final cursor 与 settlement 摘要；corpus revision 2 已形成 handwritten 与 seed12345 mixed 两组
+  no-migration/paced matched pair，并由构造与测试锁定除 CaseId 外唯一实验输入差异是 decision treatment；
+- 首组 matched evidence：mixed pair 因两个 workload step 都没有 eligible A-debt `NoChange` 而产出完全相同的
+  `W/P/F/R=368/164/344/352`，构成 negative control；handwritten no-migration 为
+  `856/680/680/832 @ scope 2/3`，paced 为 `1536/696/804/756 @ scope 3/4`。后者在 workload 内多轮转一次，
+  又被 terminal settlement 无条件轮转，因此证明的是 horizon/rotation coupling，不是 paced 的一般优劣；
 - terminal sizing 反例：high-ticket External 不支配 zero-payload Base+Self。
 
 Stay-B 与 Rotate-C 已接入同一 per-Save facts、paired evaluation、显式 apply、保守 completion proof 与
@@ -183,31 +188,32 @@ rotation trigger 已解决。
 
 ## 当前研究焦点
 
-benchmark-v1 的 manifest/batch/canonical raw report seam 已由两个 smoke cases 纵向跑通，并以 literal
-manifest/report/trace SHA-256 goldens 防止 schema-v1 和 corpus identity 静默漂移。当前两 case 使用不同 trace 与
-decision treatment，只证明 consumer wiring，不构成策略优劣对照。
+benchmark-v1 的两组 matched comparison 已跑通并冻结 canonical identity、四个 admitted case outcomes 与 raw vectors。
+这批证据同时覆盖无迁移机会时 treatment 等价，以及处理生效时 closed horizon 与额外 scope advance 的耦合。
 
-当前焦点转向第一个 matched comparison group：在相同 source fixture、expanded trace、target treatment 与
-evaluator protocol 下，同时运行 no-migration 和 paced-one-debt，直接比较两组 admissibility 与 W/P/F/R vectors。
-在此之前不建立 scalar score，也不把 smoke corpus 的数值解释成 winner。
+当前焦点转向 horizon discriminator：先让同一 handwritten pair 到达相同的 scope-advance 数量，再与现有
+“workload 后无条件关闭一个 source epoch”的结果对照，判断 W/P/F/R 中哪些差异属于策略行为，哪些由
+terminal liability 与结束位置造成。仍不建立 scalar score，也不把当前向量解释成 winner。
 
 ## 下一编码切片
 
-把现有两个 smoke traces 各自扩成 no-migration / paced-one-debt matched pair，冻结共同输入与唯一 treatment
-差异，产出四个 canonical raw outcomes；随后检查这些结果是否暴露新的 horizon/source-layout 偏差。暂不建立
-scalar score、candidate archive、产品 policy API 或 `/goal` 循环。
+先以 handwritten matched pair 建立一个 experiment-only、固定两次 scope advance 的 horizon diagnostic：
+从共同初始 A/B 出发，真实计费 workload 与必要的 maintenance-only terminal settlements，直到两侧都到达
+同一 final scope；W 累加、P/F 取全过程峰值、R 只测最终 head。先做 named witness，不修改 canonical report
+schema；用它与 v1 one-settlement 结果交叉检查后，再决定是否抽出通用 complete-cycle runner。
 
 ## 近期 roadmap
 
-1. **形成 matched comparison**：同 fixture/trace/target 下并跑 no-migration 与 paced-one-debt；
+1. **审视 horizon bias**：先做 fixed-two-scope-advances witness，再评估完整 epoch 或长周期协议；
 2. **扩展 corpus topology**：只按已知 causal witness 加 shared/split Frame 与更多 fixed-seed family；
-3. **审视 horizon bias**：对照 terminal settlement、完整 epoch 或长周期，确认尾债不会系统性偏袒策略；
+3. **形成 Pareto evidence**：在相同 horizon 下保留 raw vectors、inadmissibility 与反例，不提前合分；
 4. **再启动自动优化**：只允许修改窄 policy seam，保留 Pareto candidates/counterexamples，允许 `no winner`。
 
 ## 未闭合事项
 
-- `DirectRotateElseAscendingSingleDebt-v1` 关闭 terminal source epoch，却会形成新 scope 的 Previous debt；需要用
-  complete-cycle/long-run 对照量化 terminal liability bias，不能把它宣传成全局 debt-zero；
+- `DirectRotateElseAscendingSingleDebt-v1` 关闭 terminal source epoch，却会形成新 scope 的 Previous debt；首组
+  matched pair 已证明 paced 因 workload rotation + terminal rotation 比 control 多前进一个 scope。需要用相同
+  scope-advance count 与 complete-cycle/long-run 对照量化 terminal liability bias，不能把它宣传成全局 debt-zero；
 - 无 workload SLO 时采用 Pareto frontier，还是先给 peak/file/read guardrail 再主优化 total write；当前不接受
   裸加权和或会用 1B 总写收益购买任意峰值的严格字典序；
 - batch consumer 已形成 experiment-only runner/report seam，但仍不自动证明产品 API 边界；
