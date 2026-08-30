@@ -1,0 +1,298 @@
+using Atelia.TwoLegRotationProbe.Encoding;
+using Atelia.TwoLegRotationProbe.Evaluation;
+using Atelia.TwoLegRotationProbe.Model;
+using Atelia.TwoLegRotationProbe.Planning;
+using Atelia.TwoLegRotationProbe.Policies;
+using Atelia.TwoLegRotationProbe.Workloads;
+
+namespace Atelia.TwoLegRotationProbe.Tests;
+
+public sealed class EvaluatorRawMetricTests {
+    private const uint FirstObjectId = 10;
+    private const uint SecondObjectId = 20;
+
+    [Fact]
+    public void Stay_then_Rotate_measures_physical_writes_Current_tail_and_cold_head_union() {
+        SourceFixture source = CreateSource((FirstObjectId, 100));
+        EvaluatorRawMetricAccumulator metrics = new(source.Store, source.Cursor);
+
+        NormalizedSaveFacts stayFacts = SaveStepNormalizer.Normalize(
+            source.Store,
+            source.Current.FileNumber,
+            source.Cursor.PublishedRevisionAddress,
+            new SaveStep([new CreateObject(SecondObjectId, 40)]));
+        ExplicitCandidatePairEvaluation stayPair =
+            ExplicitCandidatePairEvaluator.Evaluate(
+                source.Store,
+                stayFacts,
+                new StayBSaveDecision([], []),
+                new RotateCSaveDecision([], []));
+        FeasibleCandidate<StayBRevisionPlan> stayCandidate =
+            Assert.IsType<FeasibleCandidate<StayBRevisionPlan>>(
+                stayPair.StayBAttempt);
+
+        metrics.BeginCommit(source.Store, source.Cursor);
+        AppliedStayBPolicyStep appliedStay = Assert.IsType<AppliedStayBPolicyStep>(
+            ExplicitRotationPolicyStepHarness.TryApplySelected(
+                source.Store,
+                source.Cursor,
+                stayPair,
+                CandidateTarget.StayB));
+        metrics.ObserveAcceptedRevision(source.Store, appliedStay.ResultCursor);
+        metrics.EndCommit(source.Store, appliedStay.ResultCursor);
+
+        NormalizedSaveFacts rotateFacts = SaveStepNormalizer.Normalize(
+            source.Store,
+            appliedStay.ResultCursor.FileScope.CurrentFileNumber,
+            appliedStay.ResultCursor.PublishedRevisionAddress,
+            new SaveStep([
+                new UpdateObject(SecondObjectId, 40, DeltaPayloadBytes: 1),
+            ]));
+        UpdateWriteDecision updateDelta = new(
+            SecondObjectId,
+            UpdateWriteMode.Delta);
+        ExplicitCandidatePairEvaluation rotatePair =
+            ExplicitCandidatePairEvaluator.Evaluate(
+                source.Store,
+                rotateFacts,
+                new StayBSaveDecision([updateDelta], []),
+                new RotateCSaveDecision([updateDelta], []));
+        FeasibleCandidate<RotateCRevisionPlan> rotateCandidate =
+            Assert.IsType<FeasibleCandidate<RotateCRevisionPlan>>(
+                rotatePair.RotateCAttempt);
+
+        metrics.BeginCommit(source.Store, appliedStay.ResultCursor);
+        AppliedRotateCPolicyStep appliedRotate = Assert.IsType<AppliedRotateCPolicyStep>(
+            ExplicitRotationPolicyStepHarness.TryApplySelected(
+                source.Store,
+                appliedStay.ResultCursor,
+                rotatePair,
+                CandidateTarget.RotateC));
+        metrics.ObserveAcceptedRevision(source.Store, appliedRotate.ResultCursor);
+        metrics.EndCommit(source.Store, appliedRotate.ResultCursor);
+
+        EvaluatorRawMetrics observed = metrics.Complete(
+            source.Store,
+            appliedRotate.ResultCursor);
+        long stayWriteBytes = stayCandidate.Observation.Layout.AppendLengthBytes;
+        long rotateWriteBytes = checked(
+            RbfV040Layout.InitialTailOffsetBytes +
+            rotateCandidate.Observation.Layout.AppendLengthBytes);
+        long expectedMaxCurrentTail = new[] {
+            source.InitialCurrentTailOffsetBytes,
+            appliedStay.ResultCursor.CurrentFileTailOffsetBytes,
+            appliedRotate.ResultCursor.CurrentFileTailOffsetBytes,
+        }.Max();
+
+        Assert.Equal(2, observed.RealizedCommitCount);
+        Assert.Equal(
+            stayWriteBytes + rotateWriteBytes,
+            observed.TotalPhysicalWriteBytes);
+        Assert.Equal(
+            Math.Max(stayWriteBytes, rotateWriteBytes),
+            observed.PeakCommitWriteBytes);
+        Assert.Equal(expectedMaxCurrentTail, observed.MaxCurrentFileTailBytes);
+
+        AbsoluteFrameAddress stayAddress = stayCandidate.Plan.Revision.Address;
+        AbsoluteFrameAddress rotateAddress = rotateCandidate.Plan.Revision.Address;
+        Assert.Equal(
+            [rotateAddress],
+            observed.FinalColdHeadRead.DictionaryFrameAddresses);
+        Assert.Equal(
+            CanonicalAddresses([stayAddress, rotateAddress]),
+            observed.FinalColdHeadRead.ObjectReconstructionFrameAddresses);
+        Assert.Equal(
+            CanonicalAddresses([stayAddress, rotateAddress]),
+            observed.FinalColdHeadRead.UniqueFrameAddresses);
+        long expectedColdReadBytes = checked(
+            (long)source.Store.ReadLayout(stayAddress).FrameLengthBytes +
+            source.Store.ReadLayout(rotateAddress).FrameLengthBytes);
+        Assert.Equal(expectedColdReadBytes, observed.FinalColdHeadReadBytes);
+        Assert.Equal(
+            source.Store.ReadLayout(rotateAddress).FrameLengthBytes,
+            observed.FinalColdHeadRead.DictionaryFrameBytes);
+        Assert.Equal(
+            expectedColdReadBytes,
+            observed.FinalColdHeadRead.ObjectReconstructionFrameBytes);
+    }
+
+    [Fact]
+    public void One_outer_Commit_groups_multiple_realized_Revisions_into_one_peak() {
+        SourceFixture source = CreateSource(
+            (FirstObjectId, 10),
+            (SecondObjectId, 20));
+        EvaluatorRawMetricAccumulator metrics = new(source.Store, source.Cursor);
+
+        metrics.BeginCommit(source.Store, source.Cursor);
+        FeasibleCandidate<StayBRevisionPlan> firstMigration = CreateMigration(
+            source.Store,
+            source.Cursor,
+            FirstObjectId);
+        ProbeRevisionCursor afterFirst = ExplicitProbeRevisionApplier.ApplyStayB(
+            source.Store,
+            source.Cursor,
+            firstMigration);
+        metrics.ObserveAcceptedRevision(source.Store, afterFirst);
+
+        FeasibleCandidate<StayBRevisionPlan> secondMigration = CreateMigration(
+            source.Store,
+            afterFirst,
+            SecondObjectId);
+        ProbeRevisionCursor afterSecond = ExplicitProbeRevisionApplier.ApplyStayB(
+            source.Store,
+            afterFirst,
+            secondMigration);
+        metrics.ObserveAcceptedRevision(source.Store, afterSecond);
+        metrics.EndCommit(source.Store, afterSecond);
+
+        EvaluatorRawMetrics observed = metrics.Complete(source.Store, afterSecond);
+        long expectedWriteBytes = checked(
+            (long)firstMigration.Observation.Layout.AppendLengthBytes +
+            secondMigration.Observation.Layout.AppendLengthBytes);
+        Assert.Equal(1, observed.RealizedCommitCount);
+        Assert.Equal(expectedWriteBytes, observed.TotalPhysicalWriteBytes);
+        Assert.Equal(expectedWriteBytes, observed.PeakCommitWriteBytes);
+        Assert.Equal(
+            afterSecond.CurrentFileTailOffsetBytes,
+            observed.MaxCurrentFileTailBytes);
+    }
+
+    [Fact]
+    public void Unrealized_Commit_cancels_without_creating_a_metric_sample() {
+        SourceFixture source = CreateSource((FirstObjectId, 10));
+        EvaluatorRawMetricAccumulator metrics = new(source.Store, source.Cursor);
+
+        metrics.BeginCommit(source.Store, source.Cursor);
+        metrics.CancelUnrealizedCommit(source.Store, source.Cursor);
+        EvaluatorRawMetrics observed = metrics.Complete(source.Store, source.Cursor);
+
+        Assert.Equal(0, observed.RealizedCommitCount);
+        Assert.Equal(0, observed.TotalPhysicalWriteBytes);
+        Assert.Equal(0, observed.PeakCommitWriteBytes);
+        Assert.Equal(
+            source.InitialCurrentTailOffsetBytes,
+            observed.MaxCurrentFileTailBytes);
+        Assert.True(observed.FinalColdHeadReadBytes > 0);
+    }
+
+    [Fact]
+    public void Empty_live_graph_still_reads_the_full_OVD_materialization_chain() {
+        SourceFixture source = CreateSource();
+
+        FinalColdHeadReadObservation observed = FinalColdHeadReadMeasurer.Measure(
+            source.Store,
+            source.Cursor.PublishedRevisionAddress);
+
+        AbsoluteFrameAddress[] expectedAddresses = CanonicalAddresses([
+            source.PreviousRevisionAddress,
+            source.Cursor.PublishedRevisionAddress,
+        ]);
+        Assert.Equal(expectedAddresses, observed.DictionaryFrameAddresses);
+        Assert.Empty(observed.ObjectReconstructionFrameAddresses);
+        Assert.Equal(expectedAddresses, observed.UniqueFrameAddresses);
+        long expectedBytes = expectedAddresses.Sum(address =>
+            (long)source.Store.ReadLayout(address).FrameLengthBytes);
+        Assert.Equal(expectedBytes, observed.DictionaryFrameBytes);
+        Assert.Equal(0, observed.ObjectReconstructionFrameBytes);
+        Assert.Equal(expectedBytes, observed.UniqueFrameBytes);
+        Assert.True(observed.UniqueFrameBytes > 0);
+    }
+
+    private static FeasibleCandidate<StayBRevisionPlan> CreateMigration(
+        RbfFileStore store,
+        ProbeRevisionCursor cursor,
+        uint objectId) {
+        NormalizedSaveFacts facts = SaveStepNormalizer.NormalizeMaintenanceOnly(
+            store,
+            cursor.FileScope.CurrentFileNumber,
+            cursor.PublishedRevisionAddress);
+        StayBRevisionPlan plan = StayBRevisionPlanner.Create(
+            store,
+            facts,
+            new StayBSaveDecision([], [objectId]));
+        CandidateRawObservation observation = CandidateRawObservationBuilder.Create(
+            store,
+            facts,
+            CandidateTarget.StayB,
+            plan.Revision);
+        return new FeasibleCandidate<StayBRevisionPlan>(plan, observation);
+    }
+
+    private static SourceFixture CreateSource(
+        params (uint ObjectId, int PayloadBytes)[] objects) {
+        RbfFileStore store = new();
+        RbfFile previous = store.CreateFile();
+        ObjectVersionDictionaryBuilder previousDictionary = new();
+        FrameBuilder previousBuilder = new() {
+            ObjectVersionDictionary = previousDictionary,
+        };
+        foreach ((uint objectId, int payloadBytes) in objects) {
+            previousDictionary.BindSelf(objectId);
+            AddBase(previousBuilder, objectId, payloadBytes);
+        }
+
+        AbsoluteFrameAddress previousRevision = AppendExact(
+            previous,
+            previousBuilder);
+        RbfFile current = store.CreateFile();
+        FrameBuilder publishedBuilder = new() {
+            ObjectVersionDictionary = new ObjectVersionDictionaryBuilder {
+                Kind = ObjectVersionDictionaryKind.Delta,
+                ParentRevisionFrameTicket = new RelativeFrameTicket(
+                    IsPreviousFile: true,
+                    previousRevision.FrameTicket),
+            },
+        };
+        AbsoluteFrameAddress published = AppendExact(current, publishedBuilder);
+        ProbeRevisionCursor cursor = new(
+            new FileScope(current.FileNumber),
+            published,
+            current.TailOffsetBytes);
+        return new SourceFixture(
+            store,
+            previousRevision,
+            current,
+            cursor,
+            current.TailOffsetBytes);
+    }
+
+    private static void AddBase(
+        FrameBuilder frame,
+        uint objectId,
+        int payloadBytes) {
+        ObjectVersionBuilder version = frame.Add(objectId);
+        version.Kind = ObjectVersionKind.Base;
+        version.PayloadBytes = payloadBytes;
+        version.ReconstructionObjectPayloadBytes = payloadBytes;
+        version.ResultBasePayloadBytes = payloadBytes;
+        version.LogicalVersionOrdinal = 1;
+    }
+
+    private static AbsoluteFrameAddress AppendExact(
+        RbfFile file,
+        FrameBuilder builder) {
+        Frame frame = builder.Build();
+        ProvisionalRevisionV0Estimate estimate =
+            ProvisionalRevisionV0Estimator.Estimate(frame, file.TailOffsetBytes);
+        FrameTicket ticket = file.Append(
+            frame,
+            estimate.RbfLayout.PayloadLengthBytes,
+            estimate.RbfLayout.TailMetaLengthBytes);
+        return new AbsoluteFrameAddress(file.FileNumber, ticket);
+    }
+
+    private static AbsoluteFrameAddress[] CanonicalAddresses(
+        IEnumerable<AbsoluteFrameAddress> addresses) => addresses
+        .Distinct()
+        .OrderBy(static address => address.FileNumber)
+        .ThenBy(static address => address.FrameTicket.OffsetBytes)
+        .ThenBy(static address => address.FrameTicket.LengthBytes)
+        .ToArray();
+
+    private sealed record SourceFixture(
+        RbfFileStore Store,
+        AbsoluteFrameAddress PreviousRevisionAddress,
+        RbfFile Current,
+        ProbeRevisionCursor Cursor,
+        long InitialCurrentTailOffsetBytes);
+}

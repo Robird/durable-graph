@@ -763,6 +763,12 @@
 
 ## 6. 船长日志
 
+### 2026-08-30：冻结 evaluator v1 的 W/P/F/R 原始指标
+
+- **Observed**：experiment-only accumulator 以 outer Commit 前后全文件 tail 总和之差计算 W/P，因而 fresh-C 的 4B header 会被计入；同一 Commit 内多个 realized Revision 合并为一个 peak sample，F 从初始与各 checkpoint 的 Current tail 取最大值。
+- **Observed**：`FinalHeadColdLoad` 将 OVD materialization chain 与所有 live-object current-reconstruction chains 的 full-Frame 地址去重后求和；空 live graph 仍因 OVD chain 产生非零 R，OVD/object 重叠 Frame 只计一次。
+- **Boundary / Next**：指标只接纳实际成功写入，typed rejection 不参与平均且没有 result scope；metric `Complete` 不证明 horizon 闭合。下一步先设计并执行 canonical terminal settlement/typed run outcome，再提取 evaluator runner/report。
+
 ### 2026-08-30：闭合 grouped-foreground Frame-envelope capacity witness
 
 - **Observed**：同一 source、同一份 normalized facts 与固定 Stay-B target 下，三个 B-contained Update 全写 Base 的 foreground-only exact candidate 距 `PayloadAndTailMetaLength` 上限不超过 32B；再加入一个 10B A-debt same-state migration 后得到该 exact limit 的 typed rejection。两侧 alternate Rotate-C 均可行。
