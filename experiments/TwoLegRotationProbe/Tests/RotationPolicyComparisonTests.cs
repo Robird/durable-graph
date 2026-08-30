@@ -9,7 +9,7 @@ using Atelia.TwoLegRotationProbe.Workloads;
 
 namespace Atelia.TwoLegRotationProbe.Tests;
 
-public sealed class RotationPolicyComparisonTests {
+public sealed partial class RotationPolicyComparisonTests {
     private static readonly CandidateTarget[] FixedTargets = [
         CandidateTarget.StayB,
         CandidateTarget.StayB,

@@ -763,6 +763,12 @@
 
 ## 6. 船长日志
 
+### 2026-08-30：闭合 source-layout/provenance fixed-horizon 2x2
+
+- **Observed**：role-disjoint 六对象 source 在 Shared 单 payload Frame 与 Split cold/changed 两 payload Revisions 下，分别运行 no-migration/paced；四格都执行四个 workload Stay 加两次 direct terminal settlement，以 6 个 Commits 从 scope 1/2 到 3/4。
+- **Observed**：Shared/Split 在同一 decision treatment 下最终 raw vectors 完全相同：no-migration 为 `W/P/F/R=1556/1288/1288/1352`，paced 为 `2284/788/956/1352`。但 workload 内 live-object reconstruction Previous payload-Frame bytes 不同：Shared 恒为 1276，Split/no-migration 恒为 1308，Split/paced 为 `1308,1308,656,656`。
+- **Concluded / Boundary**：v1 W 排除 bootstrap，R 只读 final head，两次换腿又把原 A 排出最终 closure，因此 raw-vector 相等是 measurement-boundary 的负结果，不证明 layout 无关。source Revision/OVD/ticket/offset 同时变化，不能称 pure packing；下一步转向 named complete-cycle/long-run terminal-liability 对照。
+
 ### 2026-08-30：闭合 fixed-two-scope-advances horizon discriminator
 
 - **Observed**：handwritten control 在 v1 scope 2/3 后真实追加一个 zero-workload direct settlement，得到 `commits/W/P/F/R=6/944/680/680/752 @ 3/4`；paced 已以 `5/1536/696/804/756 @ 3/4` 完成相同两次 scope advance。分段组合仅作 `W/commits=sum`、`P/F=max`、`R=final-only`，且全 Store tail growth 独立核对 W。

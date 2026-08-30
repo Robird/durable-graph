@@ -145,9 +145,11 @@ PublishedRevision 为 shared prior-snapshot anchor。accepted new head 的 curre
 - role-disjoint 2x2 interaction witness：changed `{10,20,30}` 与 migration-only `{1,2,3}` 共居一个 A Frame，
   四个命名 treatment 证明两种机制在该 trace 上逐步退休 old-A debt 的集合互斥且可加；只有组合格在第三次
   Stay 后释放共享 Frame，换腿后各自在 B 写过的对象按新 scope 形成 Previous debt；
-- current-reconstruction source-layout discriminator：两侧使用同构的 metadata-only full-OVD A anchor，
-  shared 将六个 payload Base 共置一个 Frame，split 以唯一 accepted chain 把 cold/changed 分置两个
-  payload Frames；同一四格的 object-debt 轨迹完全相同，而 required unique Previous Frames 不同；
+- current-reconstruction source-layout evidence：两侧使用同构的 metadata-only full-OVD A anchor，shared
+  将六个 payload Base 共置一个 Frame，split 以唯一 accepted chain 把 cold/changed 分置两个 payload
+  Revisions；相同 object-debt 轨迹可有不同 required unique Previous Frames。fixed-horizon 2x2 进一步
+  证明同 treatment 的 Shared/Split 最终 W/P/F/R 可以相同，同时仍保留不同的 intermediate live-object
+  Previous payload-Frame closure；该负结果限定了 final-only R/accounting 的观察边界，不证明 layout 无关；
 - migration membership 因果组：equal-byte source topology 证明同成本 membership 会改变即时 Previous-Frame
   closure；payload skew 暴露本步少写与退出更多 old-A full-Frame bytes 的局部冲突；known-future、等尺寸
   hot/cold oracle 则证明把迁移预算投给下一步会 Update 且被对照强制写 Base 的对象，会错过本 trace 内
@@ -192,35 +194,39 @@ rotation trigger 已解决。
 
 ## 当前研究焦点
 
-首个 equal-scope horizon discriminator 已闭合：同一 handwritten pair 都从 initial 1/2 完成两次 scope advance
-并停在 3/4，control 的四项 raw metrics 在这个 named trace 上均较低；但两侧 Commit placement、final debt、
-Frame placement 仍不同，single-A-Frame bootstrap 也继续掩盖局部退休收益，因此不能外推为策略 winner。
+source-layout/provenance fixed-horizon 2x2 已闭合：四格保持相同 logical state、trace、target、四个 workload
+Stay、两次 scope advance 与 6 个 outer Commits。no-migration 在 Shared/Split 均为
+`W/P/F/R=1556/1288/1288/1352`，paced 均为 `2284/788/956/1352`；paced 用更多总写入换取较低 P/F，
+但不是一般 winner。
 
-当前焦点转向 source-layout sensitivity：先用 test-local、anchor-normalized 的 shared/split A payload fixtures
-重复同一 matched/equal-scope 问题，观察 coarse full-Frame R 与迁债收益是否改变；获得第二个消费者前，不把
-fixed horizon 或 source fixture 泛化进 canonical report/schema。
+布局处理在 workload 内确实可见：Split/paced 的 live-object reconstruction Previous payload-Frame bytes 为
+`1308,1308,656,656`，Shared/paced 恒为 1276。最终四指标相等是因为 bootstrap 写不计 W、R 只读 final
+head，且两次换腿已把原 A 排出最终 closure；不能外推为 layout 无关或 actual IO 相同。当前焦点转向
+complete-cycle/long-run terminal liability：验证一次 horizon 内减少的 P/F，是否会在后续 epoch 以新
+Previous debt、额外 W 或新的峰值偿还。
 
 ## 下一编码切片
 
-建立一个 named、test-local 的 anchor-normalized source-layout discriminator：shared 与 split 两侧保持相同
-logical initial state、最终 metadata-only full-OVD A anchor shape、B anchor、trace、treatment 与
-fixed-two-advance horizon；treatment 改变 payload-head topology/provenance，并明确 source Revision/OVD path、
-tickets 与 offsets 也会随之变化。先验证 legal provenance、exact state/closure 与 raw vectors；不修改
-benchmark-v1 fixture registry、canonical report schema，也不抽通用 complete-cycle runner。
+先设计一个 named、test-local 的 repeated-epoch/complete-cycle discriminator：固定 shared source、frozen
+workload pattern、historical-facts-only treatments、outer Commit placement 与 scope-advance count，至少让首个
+terminal settlement 形成的新 Previous debt进入后续自然 Saves。分 epoch 保留 W/P/F、final-only R、debt 与
+typed inadmissibility；不新增 scalar score，不修改 benchmark-v1 registry/report schema，也不在第二个真实
+消费者出现前抽通用 long-run runner。
 
 ## 近期 roadmap
 
-1. **扩展 source topology**：先做 anchor-normalized shared/split named witness，再决定是否进入 corpus fixture registry；
-2. **选择下一 discriminator**：完成 topology witness 后按保持、消失或反转的结果选择 complete-cycle/long-run 等
-   下一 named probe；无第二个真实消费者前不抽通用 runner；
+1. **闭合 terminal liability**：先做一个 repeated-epoch/complete-cycle named witness，观察 paced 的 P/F 收益与
+   W/新 Previous debt 在后续 epoch 的偿还形状；
+2. **裁决 measurement set**：只有实际策略或 SLO 需要时，才把 intermediate reconstruction Frame pressure 提升为
+   named guardrail；不因 source-layout 负结果改写 v1 的 final-only R；
 3. **形成 Pareto evidence**：在相同 horizon 下保留 raw vectors、inadmissibility 与反例，不提前合分；
 4. **再启动自动优化**：只允许修改窄 policy seam，保留 Pareto candidates/counterexamples，允许 `no winner`。
 
 ## 未闭合事项
 
-- fixed-two-scope witness 已排除不同 final file generation，但 control 与 paced 分别以 6/5 个 Commits 到达 3/4，
-  final Previous debt 也分别为 `{10,20,30}` / `{1004}`；equal scope 不是 neutral horizon。仍需 source-layout 与
-  complete-cycle/long-run 对照量化 terminal liability，不能把 settlement 宣传成全局 debt-zero；
+- 两个 fixed-horizon witness 都不能把 settlement 宣传成全局 debt-zero：首个 matched pair 虽同到 3/4，仍有
+  6/5 Commit placement 差异；source-layout 2x2 消除了这个差异，却仍留下 no-migration `{1,2,3,10,20,30}`
+  与 paced `{20,30}` 的 final Previous debt。仍需 complete-cycle/long-run 对照量化 terminal liability；
 - 无 workload SLO 时采用 Pareto frontier，还是先给 peak/file/read guardrail 再主优化 total write；当前不接受
   裸加权和或会用 1B 总写收益购买任意峰值的严格字典序；
 - batch consumer 已形成 experiment-only runner/report seam，但仍不自动证明产品 API 边界；
@@ -229,7 +235,7 @@ benchmark-v1 fixture registry、canonical report schema，也不抽通用 comple
 - v1 writer 尚无外部 parser、文件落盘或 CLI publication；manifest/report 是一对以 SHA-256 关联的 canonical
   byte artifacts，而非 durable product format；
 - `trace-step0-single-a-full-base-then-b-anchor/1` 把 initial payload 共置一个 A Frame，会掩盖局部 Frame release；
-  后续 source-layout corpus 必须使用不同 versioned fixture identity；
+  test-local split witness 已证明 measurement boundary，但尚无证据把第二 fixture identity 提升进 canonical corpus；
 - 旧 rotation-comparison reduction 中的 counterfactual terminal 仍只投影 final-C append/result 与 preparatory
   Stay count，不聚合互斥未来，也不声称已观测 preparatory writes 或 terminal-source pressure；evaluator v1
   的 terminal settlement 是另一条已真实执行并计费的路径；

@@ -227,11 +227,47 @@ W. Equal scope removes the different-final-file-generation confounder, but not C
 placement, debt membership, Frame layout, terminal liability, or the single-A-Frame
 fixture bias. The vector is therefore a named discriminator, not a general winner.
 
+### Named source-layout/provenance 2x2 diagnostic
+
+A second test-local diagnostic uses the existing six-object role-disjoint source:
+cold objects `{1,2,3}` and later-changed objects `{10,20,30}` have equal aggregate
+Base payloads. The Shared source puts all six payload heads in one A Revision; the
+Split source uses one cold and one changed payload Revision in one legal accepted
+chain. Both end in a metadata-only full-OVD A anchor and the same-shaped metadata-only
+B anchor. Revision count, OVD path, tickets, offsets, and encoded source bytes also
+change, so this is a bundled source-layout/provenance treatment rather than pure
+Frame packing.
+
+Each cell runs the same four workload Stays, one terminal settlement, and one explicit
+zero-workload terminal settlement. All therefore have six outer Commits, exactly two
+scope advances, and final scope `3/4`:
+
+| Source layout | Decision treatment | W | P | F | R | Final Previous debt |
+|---|---|---:|---:|---:|---:|---|
+| Shared | no migration | 1556 | 1288 | 1288 | 1352 | 1, 2, 3, 10, 20, 30 |
+| Shared | paced one debt | 2284 | 788 | 956 | 1352 | 20, 30 |
+| Split | no migration | 1556 | 1288 | 1288 | 1352 | 1, 2, 3, 10, 20, 30 |
+| Split | paced one debt | 2284 | 788 | 956 | 1352 | 20, 30 |
+
+The source treatment is nevertheless observable before the horizon closes. Required
+Previous-file live-object reconstruction payload-Frame bytes after the four workload
+steps are `1276,1276,1276,1276` for both Shared cells, `1308,1308,1308,1308` for
+Split/no migration, and `1308,1308,656,656` for Split/paced. The paced Split treatment
+releases the cold payload Frame on the third workload step; object-debt membership
+alone does not express that closure.
+
+Cross-layout W/P/F/R equality is therefore a useful negative result, not evidence that
+source layout is generally irrelevant. Bootstrap writes are outside W, R reads only
+the final head, and two scope advances remove the original A from final current
+reconstruction. The intermediate Frame observations are diagnostics, not actual or
+cumulative IO and not a fifth score. Exact provenance and vector assertions live in
+[`SourceLayoutFixedHorizonTests.cs`](Tests/SourceLayoutFixedHorizonTests.cs).
+
 ## Still open before strategy selection
 
-- repeat the matched/equal-scope question over an anchor-normalized shared/split source
-  layout before promoting the diagnostic into the canonical corpus;
-- compare complete-cycle or long-run schedules before treating terminal economics as
-  neutral;
+- compare a named complete-cycle or longer repeated-epoch schedule before treating
+  terminal economics as neutral;
+- decide whether intermediate reconstruction Frame pressure needs a separately named
+  guardrail only after a workload or product requirement makes it decision-relevant;
 - retain Pareto/raw outcomes until workload/SLO evidence justifies guardrails or a
   ranking rule.
