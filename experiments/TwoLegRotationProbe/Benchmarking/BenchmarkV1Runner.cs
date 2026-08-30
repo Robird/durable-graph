@@ -1,4 +1,5 @@
 using Atelia.TwoLegRotationProbe.Evaluation;
+using Atelia.TwoLegRotationProbe.Model;
 using Atelia.TwoLegRotationProbe.Planning;
 using Atelia.TwoLegRotationProbe.Policies;
 using Atelia.TwoLegRotationProbe.Simulation;
@@ -20,6 +21,17 @@ internal static class BenchmarkV1Runner {
 
     private static BenchmarkCaseReportV1 RunCase(
         BenchmarkV1CaseDefinition definition) {
+        BenchmarkV1CaseExecution execution = ExecuteCase(definition);
+        BenchmarkCaseManifestV1 manifestCase = definition.ManifestCase;
+        return new BenchmarkCaseReportV1(
+            manifestCase.CaseId,
+            manifestCase.ResolvedTraceSha256,
+            BenchmarkOutcomeReportV1.Project(execution.Outcome));
+    }
+
+    internal static BenchmarkV1CaseExecution ExecuteCase(
+        BenchmarkV1CaseDefinition definition) {
+        ArgumentNullException.ThrowIfNull(definition);
         WorkloadTrace trace = definition.Trace;
         BenchmarkCaseManifestV1 manifestCase = definition.ManifestCase;
         BenchmarkV1BootstrappedSource source =
@@ -71,10 +83,7 @@ internal static class BenchmarkV1Runner {
             ValidateFinalState(session.Store, admitted, trace);
         }
 
-        return new BenchmarkCaseReportV1(
-            manifestCase.CaseId,
-            manifestCase.ResolvedTraceSha256,
-            BenchmarkOutcomeReportV1.Project(outcome));
+        return new BenchmarkV1CaseExecution(session.Store, outcome);
     }
 
     private static void ValidateDefinitionClosure(
@@ -90,7 +99,7 @@ internal static class BenchmarkV1Runner {
     }
 
     private static void ValidateFinalState(
-        Atelia.TwoLegRotationProbe.Model.RbfFileStore store,
+        RbfFileStore store,
         AdmittedEvaluatorRun admitted,
         WorkloadTrace trace) {
         IReadOnlyDictionary<uint, LogicalObjectState> expected =
@@ -109,3 +118,7 @@ internal static class BenchmarkV1Runner {
         }
     }
 }
+
+internal sealed record BenchmarkV1CaseExecution(
+    RbfFileStore Store,
+    EvaluatorRunOutcome Outcome);

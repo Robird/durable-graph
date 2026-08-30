@@ -763,6 +763,12 @@
 
 ## 6. 船长日志
 
+### 2026-08-30：闭合 fixed-two-scope-advances horizon discriminator
+
+- **Observed**：handwritten control 在 v1 scope 2/3 后真实追加一个 zero-workload direct settlement，得到 `commits/W/P/F/R=6/944/680/680/752 @ 3/4`；paced 已以 `5/1536/696/804/756 @ 3/4` 完成相同两次 scope advance。分段组合仅作 `W/commits=sum`、`P/F=max`、`R=final-only`，且全 Store tail growth 独立核对 W。
+- **Observed / Boundary**：control/paced final Previous debt 分别为 `{10,20,30}` / `{1004}`。equal scope 排除了不同 final file generation，却没有中性化 Commit placement、布局历史、terminal liability 或 single-A-Frame bias；该 trace 上 control 四项较低不构成一般 winner。
+- **Next**：先做 test-local、anchor-normalized shared/split source-layout discriminator；在第二个真实消费者出现前，不抽通用 horizon runner，也不修改 canonical benchmark schema。
+
 ### 2026-08-30：形成 benchmark-v1 首组 matched treatment 证据
 
 - **Observed**：corpus revision 2 把 handwritten 与 seed12345 mixed traces 各自扩为 no-migration/paced pair；组内共享同一 frozen trace，且 source、target、protocol 与 horizon 相同。四例均 admitted，manifest/report 与两条 expanded trace 均有 literal SHA-256 goldens。

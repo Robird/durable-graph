@@ -179,6 +179,10 @@ PublishedRevision 为 shared prior-snapshot anchor。accepted new head 的 curre
   `W/P/F/R=368/164/344/352`，构成 negative control；handwritten no-migration 为
   `856/680/680/832 @ scope 2/3`，paced 为 `1536/696/804/756 @ scope 3/4`。后者在 workload 内多轮转一次，
   又被 terminal settlement 无条件轮转，因此证明的是 horizon/rotation coupling，不是 paced 的一般优劣；
+- named fixed-two-scope-advances diagnostic：窄 `ExecuteCase` seam 复用 canonical benchmark-v1 执行路径，
+  test-local continuation 只为 control 真实追加一个 zero-workload terminal settlement。两侧最终同为 scope 3/4；
+  control `commits/W/P/F/R=6/944/680/680/752`、paced `5/1536/696/804/756`。control final Previous debt
+  `{10,20,30}`，paced 为 `{1004}`，所以 equal scope 排除了结束文件代际差异，却没有中性化布局历史或尾债；
 - terminal sizing 反例：high-ticket External 不支配 zero-payload Base+Self。
 
 Stay-B 与 Rotate-C 已接入同一 per-Save facts、paired evaluation、显式 apply、保守 completion proof 与
@@ -188,32 +192,35 @@ rotation trigger 已解决。
 
 ## 当前研究焦点
 
-benchmark-v1 的两组 matched comparison 已跑通并冻结 canonical identity、四个 admitted case outcomes 与 raw vectors。
-这批证据同时覆盖无迁移机会时 treatment 等价，以及处理生效时 closed horizon 与额外 scope advance 的耦合。
+首个 equal-scope horizon discriminator 已闭合：同一 handwritten pair 都从 initial 1/2 完成两次 scope advance
+并停在 3/4，control 的四项 raw metrics 在这个 named trace 上均较低；但两侧 Commit placement、final debt、
+Frame placement 仍不同，single-A-Frame bootstrap 也继续掩盖局部退休收益，因此不能外推为策略 winner。
 
-当前焦点转向 horizon discriminator：先让同一 handwritten pair 到达相同的 scope-advance 数量，再与现有
-“workload 后无条件关闭一个 source epoch”的结果对照，判断 W/P/F/R 中哪些差异属于策略行为，哪些由
-terminal liability 与结束位置造成。仍不建立 scalar score，也不把当前向量解释成 winner。
+当前焦点转向 source-layout sensitivity：先用 test-local、anchor-normalized 的 shared/split A payload fixtures
+重复同一 matched/equal-scope 问题，观察 coarse full-Frame R 与迁债收益是否改变；获得第二个消费者前，不把
+fixed horizon 或 source fixture 泛化进 canonical report/schema。
 
 ## 下一编码切片
 
-先以 handwritten matched pair 建立一个 experiment-only、固定两次 scope advance 的 horizon diagnostic：
-从共同初始 A/B 出发，真实计费 workload 与必要的 maintenance-only terminal settlements，直到两侧都到达
-同一 final scope；W 累加、P/F 取全过程峰值、R 只测最终 head。先做 named witness，不修改 canonical report
-schema；用它与 v1 one-settlement 结果交叉检查后，再决定是否抽出通用 complete-cycle runner。
+建立一个 named、test-local 的 anchor-normalized source-layout discriminator：shared 与 split 两侧保持相同
+logical initial state、最终 metadata-only full-OVD A anchor shape、B anchor、trace、treatment 与
+fixed-two-advance horizon；treatment 改变 payload-head topology/provenance，并明确 source Revision/OVD path、
+tickets 与 offsets 也会随之变化。先验证 legal provenance、exact state/closure 与 raw vectors；不修改
+benchmark-v1 fixture registry、canonical report schema，也不抽通用 complete-cycle runner。
 
 ## 近期 roadmap
 
-1. **审视 horizon bias**：先做 fixed-two-scope-advances witness，再评估完整 epoch 或长周期协议；
-2. **扩展 corpus topology**：只按已知 causal witness 加 shared/split Frame 与更多 fixed-seed family；
+1. **扩展 source topology**：先做 anchor-normalized shared/split named witness，再决定是否进入 corpus fixture registry；
+2. **选择下一 discriminator**：完成 topology witness 后按保持、消失或反转的结果选择 complete-cycle/long-run 等
+   下一 named probe；无第二个真实消费者前不抽通用 runner；
 3. **形成 Pareto evidence**：在相同 horizon 下保留 raw vectors、inadmissibility 与反例，不提前合分；
 4. **再启动自动优化**：只允许修改窄 policy seam，保留 Pareto candidates/counterexamples，允许 `no winner`。
 
 ## 未闭合事项
 
-- `DirectRotateElseAscendingSingleDebt-v1` 关闭 terminal source epoch，却会形成新 scope 的 Previous debt；首组
-  matched pair 已证明 paced 因 workload rotation + terminal rotation 比 control 多前进一个 scope。需要用相同
-  scope-advance count 与 complete-cycle/long-run 对照量化 terminal liability bias，不能把它宣传成全局 debt-zero；
+- fixed-two-scope witness 已排除不同 final file generation，但 control 与 paced 分别以 6/5 个 Commits 到达 3/4，
+  final Previous debt 也分别为 `{10,20,30}` / `{1004}`；equal scope 不是 neutral horizon。仍需 source-layout 与
+  complete-cycle/long-run 对照量化 terminal liability，不能把 settlement 宣传成全局 debt-zero；
 - 无 workload SLO 时采用 Pareto frontier，还是先给 peak/file/read guardrail 再主优化 total write；当前不接受
   裸加权和或会用 1B 总写收益购买任意峰值的严格字典序；
 - batch consumer 已形成 experiment-only runner/report seam，但仍不自动证明产品 API 边界；

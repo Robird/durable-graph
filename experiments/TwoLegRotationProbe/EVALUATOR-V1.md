@@ -208,11 +208,30 @@ currently enforced by corpus construction and executable tests; no duplicate
 also rejects an outcome whose declared workload horizon differs from its manifest, or
 whose admitted/capacity phase cannot be emitted by evaluator v1.
 
+### Named fixed-two-scope-advances diagnostic
+
+One test-local diagnostic continues the handwritten control from its admitted 2/3
+head through one additional zero-workload `EvaluatorV1Session`, while the paced case
+already ends at 3/4. Each session remains an independently accounted closed segment;
+the diagnostic concatenates them with Commit count/W as sums, P/F as maxima, and R
+from the final cold head only. It does not change the canonical v1 report schema.
+
+| Treatment | Commits | W | P | F | R | Final scope | Final Previous debt |
+|---|---:|---:|---:|---:|---:|---|---|
+| no migration | 6 | 944 | 680 | 680 | 752 | 3/4 | 10, 20, 30 |
+| paced one debt | 5 | 1536 | 696 | 804 | 756 | 3/4 | 1004 |
+
+The control's extra segment is one direct settlement Commit with
+`W/P/F/R=88/88/680/752`; full Store tail growth independently equals the concatenated
+W. Equal scope removes the different-final-file-generation confounder, but not Commit
+placement, debt membership, Frame layout, terminal liability, or the single-A-Frame
+fixture bias. The vector is therefore a named discriminator, not a general winner.
+
 ## Still open before strategy selection
 
-- compare the current one-terminal-settlement horizon with an equal-scope-advance,
-  complete-cycle, or long-run schedule before treating its economic tail as neutral;
-- add more source-layout and workload families only when they answer a named policy
-  question;
+- repeat the matched/equal-scope question over an anchor-normalized shared/split source
+  layout before promoting the diagnostic into the canonical corpus;
+- compare complete-cycle or long-run schedules before treating terminal economics as
+  neutral;
 - retain Pareto/raw outcomes until workload/SLO evidence justifies guardrails or a
   ranking rule.
