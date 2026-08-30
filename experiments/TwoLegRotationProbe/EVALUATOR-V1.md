@@ -63,8 +63,9 @@ Successful closure means terminal source `A/B` became result `B/C`, logical stat
 preserved, and the final OVD materialization plus every live current-reconstruction
 path use only B/C. It does **not** mean the result has zero Previous debt: legal C-side
 External bindings may make B the new Previous dependency. This v1 protocol closes one
-source epoch but retains a measurable terminal-liability bias; complete-cycle and
-long-run protocols remain candidates for later comparison.
+source epoch but retains a measurable terminal-liability bias. The named fixed-cadence
+witness below measures one such carry into the next epoch; general complete-cycle and
+long-run protocols remain outside v1.
 
 ## Raw metrics
 
@@ -263,10 +264,49 @@ reconstruction. The intermediate Frame observations are diagnostics, not actual 
 cumulative IO and not a fifth score. Exact provenance and vector assertions live in
 [`SourceLayoutFixedHorizonTests.cs`](Tests/SourceLayoutFixedHorizonTests.cs).
 
+### Named fixed-cadence two-epoch terminal-liability witness
+
+A third test-local diagnostic isolates migration scheduling from rotation-trigger
+selection. Both treatments start with the same three cold objects in one A Frame and
+the same metadata-only B head. Each epoch supplies three isomorphic, nonempty
+Create/Remove foreground Saves; every workload target is externally fixed to Stay-B,
+then one direct terminal settlement advances the scope. The foreground ObjectIds differ
+between epochs because this workload model forbids ObjectId reuse, but retain the same
+encoded widths and leave the live logical state unchanged at each epoch boundary.
+
+The no-migration and paced-one-debt treatments therefore both execute eight outer
+Commits and exactly two scope advances, ending at scope `3/4` with the same live state
+and Previous debt `{10,20,30}`:
+
+| Treatment | Segment | Commits | W | P | F | R |
+|---|---|---:|---:|---:|---:|---:|
+| no migration | epoch 1 | 4 | 796 | 664 | 664 | 656 |
+| no migration | epoch 2 | 4 | 188 | 52 | 800 | 700 |
+| no migration | combined | 8 | 984 | 664 | 800 | 700 |
+| paced one debt | epoch 1 | 4 | 812 | 348 | 800 | 792 |
+| paced one debt | epoch 2 | 4 | 812 | 348 | 812 | 792 |
+| paced one debt | combined | 8 | 1624 | 348 | 812 | 792 |
+
+After the first settlement, no-migration has no Previous debt while paced has
+`{10,20,30}`: its B-side migrations became the next scope's Previous dependency. The
+second epoch's three natural paced Saves then migrate exactly `10`, `20`, and `30`
+again. Thus the first epoch's terminal liability incurs repeated work in later natural
+Saves rather than merely being carried through another zero-workload settlement.
+
+Within this fixed cadence, pacing trades `+640 W` for `-316 P`, while horizon `F` and
+final-only `R` are respectively 12 and 92 bytes higher. This is a raw Pareto
+observation, not a winner: the cadence is an experimental control rather than
+`DebtZeroThenRotate` or a product rotation trigger, R remains final-head-only, and
+equal final debt membership does not imply equal retained physical layout/provenance
+state or a regenerative steady-state cycle. The exact debt/migration trajectory and
+vectors live in
+[`FixedCadenceTerminalLiabilityTests.cs`](Tests/FixedCadenceTerminalLiabilityTests.cs).
+
 ## Still open before strategy selection
 
-- compare a named complete-cycle or longer repeated-epoch schedule before treating
-  terminal economics as neutral;
+- continue both aligned logical/scope/debt endpoints through one identical third epoch
+  before deciding whether debt membership and payload bytes are sufficient continuation
+  state or retained physical layout/provenance state remains decision-relevant;
 - decide whether intermediate reconstruction Frame pressure needs a separately named
   guardrail only after a workload or product requirement makes it decision-relevant;
 - retain Pareto/raw outcomes until workload/SLO evidence justifies guardrails or a

@@ -2,7 +2,7 @@
 
 > 状态：Active Research Context
 >
-> 最近校准：2026-08-30
+> 最近校准：2026-08-31
 >
 > 读者：继续研究本子项目的 Coding Agent 与维护者
 
@@ -150,6 +150,10 @@ PublishedRevision 为 shared prior-snapshot anchor。accepted new head 的 curre
   Revisions；相同 object-debt 轨迹可有不同 required unique Previous Frames。fixed-horizon 2x2 进一步
   证明同 treatment 的 Shared/Split 最终 W/P/F/R 可以相同，同时仍保留不同的 intermediate live-object
   Previous payload-Frame closure；该负结果限定了 final-only R/accounting 的观察边界，不证明 layout 无关；
+- fixed-cadence two-epoch terminal-liability witness：共同的三对象 A Frame 上，每 epoch 固定三个非空
+  foreground Stay 与一次 direct settlement；no-migration/paced 都以 8 Commits、两次换腿到 3/4，并以相同
+  live state/debt IDs 收尾。paced 第一轮写入 B 的三个 same-state Base 在下一轮成为 Previous debt，又被三个
+  自然 Save 逐一迁移，证明削峰工作会跨腿重新出现；该 cadence 是实验控制，不是自动 trigger；
 - migration membership 因果组：equal-byte source topology 证明同成本 membership 会改变即时 Previous-Frame
   closure；payload skew 暴露本步少写与退出更多 old-A full-Frame bytes 的局部冲突；known-future、等尺寸
   hot/cold oracle 则证明把迁移预算投给下一步会 Update 且被对照强制写 Base 的对象，会错过本 trace 内
@@ -194,29 +198,29 @@ rotation trigger 已解决。
 
 ## 当前研究焦点
 
-source-layout/provenance fixed-horizon 2x2 已闭合：四格保持相同 logical state、trace、target、四个 workload
-Stay、两次 scope advance 与 6 个 outer Commits。no-migration 在 Shared/Split 均为
-`W/P/F/R=1556/1288/1288/1352`，paced 均为 `2284/788/956/1352`；paced 用更多总写入换取较低 P/F，
-但不是一般 winner。
+fixed-cadence two-epoch terminal-liability witness 已闭合。两侧都执行 `3 workload Stay + 1 direct
+settlement` 两次，最终 scope、live state 与 Previous debt `{10,20,30}` 对齐。no-migration combined
+`W/P/F/R=984/664/800/700`，paced 为 `1624/348/812/792`：paced 用 `+640 W` 换得 `-316 P`，同时
+horizon F 与 final-only R 分别高 12/92 bytes，形成 fixture 内的 raw Pareto trade，不选择一般 winner。
 
-布局处理在 workload 内确实可见：Split/paced 的 live-object reconstruction Previous payload-Frame bytes 为
-`1308,1308,656,656`，Shared/paced 恒为 1276。最终四指标相等是因为 bootstrap 写不计 W、R 只读 final
-head，且两次换腿已把原 A 排出最终 closure；不能外推为 layout 无关或 actual IO 相同。当前焦点转向
-complete-cycle/long-run terminal liability：验证一次 horizon 内减少的 P/F，是否会在后续 epoch 以新
-Previous debt、额外 W 或新的峰值偿还。
+关键因果证据不是终点向量，而是 paced 首个 settlement 后形成的 `{10,20,30}` 新 Previous debt，在第二
+epoch 的三个自然 Save 中又按 `10,20,30` 被实际迁移。no-migration 第二 epoch 无迁债工作。两侧最终 debt
+membership 虽相同，retained physical layout/provenance state 并未对齐，因此尚不能称 regenerative
+cycle、steady state，或把 debt IDs/bytes 当作充分 continuation state。
 
 ## 下一编码切片
 
-先设计一个 named、test-local 的 repeated-epoch/complete-cycle discriminator：固定 shared source、frozen
-workload pattern、historical-facts-only treatments、outer Commit placement 与 scope-advance count，至少让首个
-terminal settlement 形成的新 Previous debt进入后续自然 Saves。分 epoch 保留 W/P/F、final-only R、debt 与
-typed inadmissibility；不新增 scalar score，不修改 benchmark-v1 registry/report schema，也不在第二个真实
-消费者出现前抽通用 long-run runner。
+从上述两个已对齐 logical state/scope/debt membership、但物理来源不同的终点，各自继续一个完全相同的
+第三 epoch，并统一使用 no-migration decision 与固定 Stay cadence。该 named、test-local discriminator 只问：
+相同 debt IDs/bytes 是否足以预测下一段 W/P/F/R 与 terminal shape，还是 retained physical
+layout/provenance state 仍会造成可观测差异。继续保留 typed inadmissibility，不改 benchmark-v1
+registry/report schema，不抽通用 long-run
+runner，也不引入 scalar score。
 
 ## 近期 roadmap
 
-1. **闭合 terminal liability**：先做一个 repeated-epoch/complete-cycle named witness，观察 paced 的 P/F 收益与
-   W/新 Previous debt 在后续 epoch 的偿还形状；
+1. **闭合 continuation-state 充分性**：在 fixed-cadence 对齐终点上运行同一个第三 epoch，裁决 debt
+   membership/bytes 是否遗漏会影响后续成本的 retained physical layout/provenance state；
 2. **裁决 measurement set**：只有实际策略或 SLO 需要时，才把 intermediate reconstruction Frame pressure 提升为
    named guardrail；不因 source-layout 负结果改写 v1 的 final-only R；
 3. **形成 Pareto evidence**：在相同 horizon 下保留 raw vectors、inadmissibility 与反例，不提前合分；
@@ -224,9 +228,9 @@ typed inadmissibility；不新增 scalar score，不修改 benchmark-v1 registry
 
 ## 未闭合事项
 
-- 两个 fixed-horizon witness 都不能把 settlement 宣传成全局 debt-zero：首个 matched pair 虽同到 3/4，仍有
-  6/5 Commit placement 差异；source-layout 2x2 消除了这个差异，却仍留下 no-migration `{1,2,3,10,20,30}`
-  与 paced `{20,30}` 的 final Previous debt。仍需 complete-cycle/long-run 对照量化 terminal liability；
+- fixed-cadence witness 已用相同 Commit/scope/debt 终点量化 terminal liability，但没有对齐 retained
+  physical layout/provenance state；仍需第三 epoch continuation 判断这种物理历史是否会改变下一段 exact
+  costs，不能仅凭 debt IDs 宣称闭环；
 - 无 workload SLO 时采用 Pareto frontier，还是先给 peak/file/read guardrail 再主优化 total write；当前不接受
   裸加权和或会用 1B 总写收益购买任意峰值的严格字典序；
 - batch consumer 已形成 experiment-only runner/report seam，但仍不自动证明产品 API 边界；

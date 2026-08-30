@@ -763,11 +763,18 @@
 
 ## 6. 船长日志
 
+### 2026-08-31：闭合 fixed-cadence two-epoch terminal-liability witness
+
+- **Observed**：共同的三对象 A Frame 上，no-migration 与 paced-one-debt 都按 `3 workload Stay + 1 direct settlement` 运行两个 epoch；两侧同为 8 Commits、两次 scope advance，最终 scope `3/4`、live state 与 Previous debt `{10,20,30}` 对齐。
+- **Observed**：no-migration combined `W/P/F/R=984/664/800/700`，paced 为 `1624/348/812/792`。paced 以 `+640 W` 换得 `-316 P`，同时 horizon F/final-only R 高 12/92 bytes，形成当前 fixture 下的 raw Pareto trade，不选择 winner。
+- **Observed**：paced 首个 settlement 后形成的新 Previous debt `{10,20,30}`，在第二 epoch 的三个自然 Save 中又按 `10,20,30` 被实际迁移；terminal liability 因而进入了后续 workload，而不是只被另一个 zero-workload settlement 掩盖。
+- **Boundary / Next**：固定 Stay cadence 是实验控制，不是 `DebtZeroThenRotate` 或产品 trigger；相同 final debt membership 也不等于相同 retained physical layout/provenance state、steady state 或 regenerative cycle。下一步只追加一个同构第三 epoch，检验 aligned logical/scope/debt 终点的 retained physical state 是否仍改变 continuation cost。
+
 ### 2026-08-30：闭合 source-layout/provenance fixed-horizon 2x2
 
 - **Observed**：role-disjoint 六对象 source 在 Shared 单 payload Frame 与 Split cold/changed 两 payload Revisions 下，分别运行 no-migration/paced；四格都执行四个 workload Stay 加两次 direct terminal settlement，以 6 个 Commits 从 scope 1/2 到 3/4。
 - **Observed**：Shared/Split 在同一 decision treatment 下最终 raw vectors 完全相同：no-migration 为 `W/P/F/R=1556/1288/1288/1352`，paced 为 `2284/788/956/1352`。但 workload 内 live-object reconstruction Previous payload-Frame bytes 不同：Shared 恒为 1276，Split/no-migration 恒为 1308，Split/paced 为 `1308,1308,656,656`。
-- **Concluded / Boundary**：v1 W 排除 bootstrap，R 只读 final head，两次换腿又把原 A 排出最终 closure，因此 raw-vector 相等是 measurement-boundary 的负结果，不证明 layout 无关。source Revision/OVD/ticket/offset 同时变化，不能称 pure packing；下一步转向 named complete-cycle/long-run terminal-liability 对照。
+- **Concluded / Boundary**：v1 W 排除 bootstrap，R 只读 final head，两次换腿又把原 A 排出最终 closure，因此 raw-vector 相等是 measurement-boundary 的负结果，不证明 layout 无关。source Revision/OVD/ticket/offset 同时变化，不能称 pure packing；后续 fixed-cadence two-epoch witness 已由上方 2026-08-31 日志闭合，general complete-cycle/long-run protocol 仍未建立。
 
 ### 2026-08-30：闭合 fixed-two-scope-advances horizon discriminator
 
