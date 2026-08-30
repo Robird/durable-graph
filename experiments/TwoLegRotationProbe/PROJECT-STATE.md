@@ -155,6 +155,10 @@ PublishedRevision 为 shared prior-snapshot anchor。accepted new head 的 curre
 - caller-selected B same-state Base migration plan/append witness；
 - relay-free immediate A/B -> B/C plan/append、shared anchor、B/C closure witness；
 - 多批 B migration 使原本放不下的 C evacuation 可编码的容量 witness；
+- grouped-foreground Frame-envelope coupling witness：同一 canonical facts、固定 Stay-B target 下，三项
+  foreground Update 全写 Base 时 exact candidate 只剩不超过 32B envelope slack；再加入一个 10B
+  optional same-state migration 后命中 typed `PayloadAndTailMetaLength` rejection。失败不 fallback、不改变
+  Store/cursor；foreground-only 分支经 completion/apply 后只向 B 追加其 exact Frame；
 - terminal sizing 反例：high-ticket External 不支配 zero-payload Base+Self。
 
 Stay-B 与 Rotate-C 已接入同一 per-Save facts、paired evaluation、显式 apply、保守 completion proof 与
@@ -164,66 +168,42 @@ rotation trigger 已解决。
 
 ## 当前研究焦点
 
-natural-update opportunity / hot-cold oracle 已闭合。`cold=Id10/100 B` 与
-`future-hot=Id20/100 B` 各自独占同构 singleton A Frame；两侧共享 source、两步 trace 与 Stay target。
-第一步创建 1 B sentinel，只显式迁 hot 或 cold；第二步都强制 future-hot 写 `Base@B` 并移除 sentinel，
-避免它继续钉住第一步 B Frame。forced Base 与已知未来日程都只是因果 control。
+现有 named witnesses 已足以暴露写入、峰值、active-file pressure、reconstruction closure、scope shift 与
+hard feasibility 之间的真实冲突。当前转向冻结首版 evaluator 的语义边界，而不是继续靠 test-local
+fixture 隐式形成一把会漂移的尺子。
 
-两侧实际 append 序列完全相同（`[152,148]`，累计 300，峰值 152）。第二步后 hot-first 仍有
-`{cold}`/100 B/1 old-A Frame，cold-first 则借 hot 的 domain Update + forced Base 清空 old-A debt。两侧
-completion 都无需
-preparatory Stay；反事实 terminal-C 中 hot-first 仍需搬 cold，C append 更大，但换腿后只留下 hot/1 个
-new-Previous Frame，而 cold-first 把 cold+hot/2 个 B Frames 都变成新 Previous debt。
-
-因此 known-future Update-with-forced-Base opportunity 会改变当前 migration membership 的价值，但优势依赖观察 horizon
-和 FileScope；这不是在线 hotness 识别、稳定温度定义、实际/总 IO、长期 winner、forced-Base 产品规则或
-默认策略。
+需要先闭合四类契约：hard correctness/liveness/capacity gate；有限 trace 的 horizon 与实际计费的 terminal
+settlement；`W/P/F/R` 原始量的精确定义与 read schedule；版本化 benchmark manifest、determinism 与
+machine-readable outcome。capacity rejection / `RejectedUnproven` 必须是 typed inadmissible outcome，不能作为
+可被平均收益抵消的罚分，也没有 realized result scope。
 
 ## 下一编码切片
 
-闭合一个 **grouped foreground burst / optional maintenance capacity coupling witness**：
-
-```text
-same source + same foreground burst + fixed Stay target + near-boundary B tail
-    Foreground-only:             exact Stay candidate fits
-    Foreground + one migration:  exact Stay candidate hits typed capacity rejection
-```
-
-先用同一 normalized facts 与 whole-candidate estimator 冻结 grouped foreground 和 optional maintenance
-共享单 Frame/单文件容量的直接耦合。成功侧可按现有 exact apply/certificate seam 验证；失败侧保留 typed
-bounded rejection，不 fallback、不伪造 result scope。它只证明某个 near-boundary witness 中 maintenance
-并非免费，不立即设计 repair、通用 Runner 或基于隐藏权重的 admission score。
+在独立文档/测试中先冻结 evaluator v1 的 horizon、settlement、hard-gate outcome 与 `W/P/F/R` accounting；
+随后只为这个真实 consumer 提取 experiment-only runner/report seam。首个实现不建立产品 API、单一 scalar
+score、自动 repair/search、candidate archive 或 `/goal` 循环。
 
 ## 近期 roadmap
 
-1. **扩充策略与 workload**
-   - 先用 burst 观察 grouped foreground 与 maintenance 的峰值/容量耦合；
-   - 等少量 named online candidates 成形后，再跑更长 fixed-seed traces；
-   - 由这些布局/尺寸反例塑造少量明确命名的 pressure-aware target/migration 候选。
-2. **按证据加入 bounded explorer**
-   - 仅在出现具体 `RejectedUnproven`、`RejectedCapacityUnsearched` 或疑似 heuristic false-negative 后，
-     冻结该小状态；
-   - 用同一 unified action builder 做 canonical bounded search；`NotFoundWithinBounds` 不外推一般无解。
-3. **再研究自适应策略**
-   - 根据连续运行暴露的压力、峰值和反例设计 capacity/pressure-aware 候选，而不是先冻结权重。
+1. **冻结 evaluator v1 契约**：hard gates、closed horizon/settlement、exact `W/P/F/R` 与 manifest identity；
+2. **建立 experiment-only evaluator**：统一成功与 typed termination outcome，输出机器可读 raw per-case report；
+3. **冻结 benchmark-v1**：用现有 causal witnesses、named baselines 与固定种子 workload 做 evaluator dry-run；
+4. **再启动自动优化**：只允许修改窄 policy seam，保留 Pareto candidates/counterexamples，允许 `no winner`。
 
 ## 未闭合事项
 
-- unbounded preference cost 如何比较两个 target，同时保持原始多目标事实而不偷渡权重；
-- `RejectedCapacityUnsearched` 出现多频繁时值得加入次优 action menu 或 constraint-aware repair；
-- 除 `DebtZeroThenRotate` 这个故意保守的 baseline 外，哪些无隐藏权重的 pressure facts 足以触发轮转；
-- selected action 的 `RejectedUnproven` 在 batch report 中如何表达；当前 harness 只 typed stop、不 fallback，
-  何时值得另立 repair policy 或交给 bounded explorer 仍待证据；
-- test-local decision selector 已有多个结构不同的 caller；是否提取稳定 runner/run outcome 仍等待报告、
-  CLI 或 batch consumer，不能仅因下一 fixture 变长就升级为产品 API；
-- successful-run reduction 尚不表达 selected capacity / completion `RejectedUnproven`；出现真实 batch
-  termination consumer 时应另建 outcome，而不是伪造没有 result scope 的 realized step；
+- evaluator 的 closed horizon 是执行 canonical terminal settlement，还是以完整 epoch/long-run protocol
+  消除末端逃债；settlement 的全部写入与峰值必须实际计费；
+- 无 workload SLO 时采用 Pareto frontier，还是先给 peak/file/read guardrail 再主优化 total write；当前不接受
+  裸加权和或会用 1B 总写收益购买任意峰值的严格字典序；
+- `W/P/F/R` 中 file header、Current tail/epoch growth、OVD materialization 与 cold-load read schedule 的精确口径；
+- successful-run reduction 尚不表达 selected capacity / completion `RejectedUnproven`；evaluator outcome 必须把
+  typed rejection 与 realized metrics 分开，而不是伪造没有 result scope 的 realized step；
+- evaluator consumer 会证明 experiment-only runner/report seam 的必要性，但仍不自动证明产品 API 边界；
 - counterfactual terminal 当前只投影 final-C append/result 与 preparatory Stay count，不聚合互斥未来，
   也不声称已观测 preparatory writes 或 terminal-source pressure；
-- known-future oracle 已证明 Update-with-forced-Base opportunity 的 membership cost；在线策略能否只用历史可见的
-  recency/frequency facts 近似它，并同时考虑换腿后重新形成的 debt，仍待后续证据；
-- burst、size distribution 与长 trace 何时从 handwritten fixture 升级为 generator；
-- 布局/尺寸矩阵之后，何种无隐藏权重的 pressure facts 最值得驱动 target/migration treatment；
+- evaluator/benchmark 冻结后，哪些历史可见 pressure facts 足以驱动 rotation/migration，以及何时才有证据
+  为具体 rejection 加入 bounded repair/explorer；
 - 多个不可支配策略出现后，何时需要用户用真实 workload/SLO 选择产品默认值。
 
 ## 明确暂缓

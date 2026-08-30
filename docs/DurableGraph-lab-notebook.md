@@ -763,11 +763,17 @@
 
 ## 6. 船长日志
 
+### 2026-08-30：闭合 grouped-foreground Frame-envelope capacity witness
+
+- **Observed**：同一 source、同一份 normalized facts 与固定 Stay-B target 下，三个 B-contained Update 全写 Base 的 foreground-only exact candidate 距 `PayloadAndTailMetaLength` 上限不超过 32B；再加入一个 10B A-debt same-state migration 后得到该 exact limit 的 typed rejection。两侧 alternate Rotate-C 均可行。
+- **Observed**：rejected selected Stay 不 fallback 且不改变 Store/cursor；foreground-only 分支经 completion/apply 只向 B 追加 exact candidate，证书无需 preparatory Stay，也未隐式执行 final Rotate-C。
+- **Corrected / Next**：同一 source/tail 的两个候选拥有相同 Frame start，因此 B-tail relative-start gate 不能解释一侧拒绝；真正的因果是 one-Revision/one-Frame envelope。该结果是 evaluator 的 hard-feasibility 反例，不是 repair、score、file-size 或 rotation-trigger policy；下一阶段先冻结 evaluator v1 的 horizon、settlement 与 raw metric contract。
+
 ### 2026-08-30：闭合 natural-update hot/cold opportunity witness
 
 - **Observed**：两个 100 B A-debt objects 各自独占同构 singleton A Frame；同一两步 fixed-Stay trace 先显式迁 future-hot 或 cold，再在两侧强制 future-hot `Base@B` 并移除非空 Save sentinel。实际 append 都是 `[152,148]`，累计 300、峰值 152。
 - **Observed**：第二步后 hot-first 仍需 `{cold}`/1 old-A Frame，cold-first 已清空 old-A debt；两侧 completion 都零准备。反事实 terminal-C 中 hot-first 要搬 cold、C append 更大，但换腿后只留 hot/1 个 new-Previous Frame，cold-first 则留下 cold+hot/2 个 B Frames。
-- **Concluded / Next**：已知未来 Update + forced-Base control 会改变当前迁移 membership 的价值，但 scope shift 会反转部分压力；这不是在线温度推断、总 IO 或长期 winner。下一切片冻结 grouped foreground burst 与 optional maintenance 在 near-boundary B tail 上的 exact capacity coupling。
+- **Concluded / Next**：已知未来 Update + forced-Base control 会改变当前迁移 membership 的价值，但 scope shift 会反转部分压力；这不是在线温度推断、总 IO 或长期 winner。后续 burst witness 已把原先的 B-tail 假说纠正为 single-Frame envelope coupling。
 
 ### 2026-08-30：闭合 payload-skew migration Pareto witness
 
