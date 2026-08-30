@@ -1048,6 +1048,148 @@ public sealed class RotationPolicyComparisonTests {
         }
     }
 
+    [Fact]
+    public void Equal_byte_one_object_migration_selection_changes_immediate_previous_frames() {
+        MigrationSelectionConflictFixture fixture =
+            CreateMigrationSelectionConflictFixture();
+        WorkloadTrace trace = CreateMigrationSelectionConflictTrace();
+        PolicyRun objectIdFirst = Run(
+            trace,
+            fixture.Source.Store.ForkForProbe(),
+            CreateCursor(fixture.Source),
+            fixture.Source.InitialExpectedState,
+            SelectDeltaPacedOneDebtDecisions,
+            SelectStayBTarget);
+        PolicyRun frameReleaseFirst = Run(
+            trace,
+            fixture.Source.Store.ForkForProbe(),
+            CreateCursor(fixture.Source),
+            fixture.Source.InitialExpectedState,
+            SelectFrameReleaseFirstOneDebtMigrationDecisions,
+            SelectStayBTarget);
+
+        Assert.Same(trace, objectIdFirst.SourceTrace);
+        Assert.Same(trace, frameReleaseFirst.SourceTrace);
+        Assert.NotSame(objectIdFirst.Store, frameReleaseFirst.Store);
+        PolicyStep objectIdStep = Assert.Single(objectIdFirst.Steps);
+        PolicyStep frameReleaseStep = Assert.Single(frameReleaseFirst.Steps);
+        Assert.Equal(objectIdStep.Observation.Source, frameReleaseStep.Observation.Source);
+        Assert.Equal(
+            new CanonicalObjectIds([1, 2, 3]),
+            objectIdStep.Observation.Source.PreviousDebtObjectIds);
+        Assert.Equal(300L, objectIdStep.Observation.Source.PreviousDebtBasePayloadBytes);
+        Assert.Equal(2, objectIdStep.Observation.Source.PreviousUniqueFrameCount);
+
+        NormalizedSaveFacts sourceFacts = objectIdStep.SelectedObservation.Facts;
+        Assert.Equal(
+            fixture.Source.PublishedRevisionAddress,
+            sourceFacts.PublishedRevisionAddress);
+        Assert.Equal(
+            [fixture.SharedPayloadAddress],
+            sourceFacts.ParentLive[1].ReconstructionFrameAddresses);
+        Assert.Equal(
+            [fixture.SharedPayloadAddress],
+            sourceFacts.ParentLive[2].ReconstructionFrameAddresses);
+        Assert.Equal(
+            [fixture.SingletonPayloadAddress],
+            sourceFacts.ParentLive[3].ReconstructionFrameAddresses);
+        Assert.All(
+            sourceFacts.ParentLive.Values,
+            source => Assert.DoesNotContain(
+                fixture.AnchorAddress,
+                source.ReconstructionFrameAddresses));
+
+        Assert.Equal([1U], objectIdStep.MaintenanceObjectIds);
+        Assert.Equal([3U], frameReleaseStep.MaintenanceObjectIds);
+        CandidateRawObservation objectIdCandidate =
+            objectIdStep.SelectedObservation;
+        CandidateRawObservation frameReleaseCandidate =
+            frameReleaseStep.SelectedObservation;
+        ObjectVersion objectIdMigration =
+            objectIdCandidate.Candidate.Frame.ObjectVersions[1];
+        ObjectVersion frameReleaseMigration =
+            frameReleaseCandidate.Candidate.Frame.ObjectVersions[3];
+        Assert.Equal(100, objectIdMigration.PayloadBytes);
+        Assert.Equal(objectIdMigration.PayloadBytes, frameReleaseMigration.PayloadBytes);
+        Assert.Equal(
+            objectIdCandidate.ForegroundDomainRecordBytes,
+            frameReleaseCandidate.ForegroundDomainRecordBytes);
+        Assert.Equal(
+            objectIdCandidate.MaintenanceDomainRecordBytes,
+            frameReleaseCandidate.MaintenanceDomainRecordBytes);
+        Assert.Equal(objectIdCandidate.Layout, frameReleaseCandidate.Layout);
+
+        CandidateReconstructionObservation objectIdResult =
+            objectIdCandidate.PostLiveReconstruction;
+        CandidateReconstructionObservation frameReleaseResult =
+            frameReleaseCandidate.PostLiveReconstruction;
+        Assert.Equal([2U, 3U], objectIdResult.PreviousFileDependentObjectIds);
+        Assert.Equal([1U, 2U], frameReleaseResult.PreviousFileDependentObjectIds);
+        Assert.Equal(200L, objectIdResult.PreviousFileDependentBasePayloadBytes);
+        Assert.Equal(200L, frameReleaseResult.PreviousFileDependentBasePayloadBytes);
+        Assert.Equal(
+            [fixture.SharedPayloadAddress, fixture.SingletonPayloadAddress],
+            GetResultPreviousFrameAddresses(objectIdStep));
+        Assert.Equal(
+            [fixture.SharedPayloadAddress],
+            GetResultPreviousFrameAddresses(frameReleaseStep));
+        Assert.Equal(2, objectIdResult.PreviousFileUniqueFrameCount);
+        Assert.Equal(1, frameReleaseResult.PreviousFileUniqueFrameCount);
+        long singletonFrameBytes = fixture.Source.Store
+            .ReadLayout(fixture.SingletonPayloadAddress)
+            .FrameLengthBytes;
+        Assert.Equal(
+            singletonFrameBytes,
+            objectIdResult.PreviousFileFrameBytes -
+                frameReleaseResult.PreviousFileFrameBytes);
+        CanPrepareAndRotateCertificate objectIdCompletion = Assert.IsType<
+            CanPrepareAndRotateCertificate>(objectIdStep.CompletionCertificate);
+        CanPrepareAndRotateCertificate frameReleaseCompletion = Assert.IsType<
+            CanPrepareAndRotateCertificate>(frameReleaseStep.CompletionCertificate);
+        Assert.Empty(objectIdCompletion.MaintenanceStayBSteps);
+        Assert.Empty(frameReleaseCompletion.MaintenanceStayBSteps);
+        CandidateRawObservation objectIdTerminal =
+            objectIdCompletion.FinalRotateC.Observation;
+        CandidateRawObservation frameReleaseTerminal =
+            frameReleaseCompletion.FinalRotateC.Observation;
+        Assert.Equal(objectIdTerminal.Layout, frameReleaseTerminal.Layout);
+        Assert.Equal(
+            [1U, 1001U],
+            objectIdTerminal.PostLiveReconstruction.PreviousFileDependentObjectIds);
+        Assert.Equal(
+            [3U, 1001U],
+            frameReleaseTerminal.PostLiveReconstruction
+                .PreviousFileDependentObjectIds);
+        Assert.Equal(
+            objectIdTerminal.PostLiveReconstruction
+                .PreviousFileDependentBasePayloadBytes,
+            frameReleaseTerminal.PostLiveReconstruction
+                .PreviousFileDependentBasePayloadBytes);
+        Assert.Equal(
+            101L,
+            objectIdTerminal.PostLiveReconstruction
+                .PreviousFileDependentBasePayloadBytes);
+        Assert.Equal(
+            1,
+            objectIdTerminal.PostLiveReconstruction.PreviousFileUniqueFrameCount);
+        Assert.Equal(
+            objectIdTerminal.PostLiveReconstruction.PreviousFileUniqueFrameCount,
+            frameReleaseTerminal.PostLiveReconstruction.PreviousFileUniqueFrameCount);
+        Assert.Equal(
+            objectIdTerminal.PostLiveReconstruction.PreviousFileFrameBytes,
+            frameReleaseTerminal.PostLiveReconstruction.PreviousFileFrameBytes);
+        Assert.Equal(
+            objectIdCandidate.Layout.FrameLengthBytes,
+            objectIdTerminal.PostLiveReconstruction.PreviousFileFrameBytes);
+
+        Assert.False(objectIdStep.ActualRotation);
+        Assert.False(frameReleaseStep.ActualRotation);
+        Assert.Equal(2, objectIdFirst.Store.FileCount);
+        Assert.Equal(2, frameReleaseFirst.Store.FileCount);
+        AssertRunObservationConsistency(objectIdFirst);
+        AssertRunObservationConsistency(frameReleaseFirst);
+    }
+
     private static (
         PolicyRun DeltaNone,
         PolicyRun DeltaPaced,
@@ -1466,6 +1608,10 @@ public sealed class RotationPolicyComparisonTests {
         int index,
         NormalizedSaveFacts _) => FixedTargets[index];
 
+    private static CandidateTarget SelectStayBTarget(
+        int _,
+        NormalizedSaveFacts __) => CandidateTarget.StayB;
+
     private static CandidateTarget SelectDebtZeroThenRotateTarget(
         int _,
         NormalizedSaveFacts facts) =>
@@ -1488,6 +1634,21 @@ public sealed class RotationPolicyComparisonTests {
         facts,
         UpdateWriteMode.Delta,
         paceOneUnchangedDebtObject: true);
+
+    private static SaveDecisionPair SelectFrameReleaseFirstOneDebtMigrationDecisions(
+        NormalizedSaveFacts facts) {
+        if (facts.Inserts.Count == 0 ||
+            facts.Updates.Count != 0 ||
+            facts.Removes.Count != 0) {
+            throw new InvalidOperationException(
+                "The frame-release conflict treatment requires a nonempty Insert-only Save.");
+        }
+
+        return CreateDecisions(
+            facts,
+            [],
+            SelectPreviousDebtNoChangeReleasingMostFrames(facts));
+    }
 
     private static SaveDecisionPair SelectBaseADebtNoMigrationDecisions(
         NormalizedSaveFacts facts) => SelectChangedWriteAndMigrationDecisions(
@@ -1633,6 +1794,38 @@ public sealed class RotationPolicyComparisonTests {
         .Order()
         .Take(1)
         .ToArray();
+
+    private static uint[] SelectPreviousDebtNoChangeReleasingMostFrames(
+        NormalizedSaveFacts facts) {
+        Dictionary<AbsoluteFrameAddress, int> postLiveFrameUseCounts = [];
+        foreach (NormalizedNoChangeFact fact in facts.NoChanges) {
+            foreach (AbsoluteFrameAddress address in
+                fact.Source.ReconstructionFrameAddresses
+                    .Where(address =>
+                        address.FileNumber == facts.PreviousFileNumber)
+                    .Distinct()) {
+                postLiveFrameUseCounts[address] =
+                    postLiveFrameUseCounts.GetValueOrDefault(address) + 1;
+            }
+        }
+
+        return facts.NoChanges
+            .Where(fact =>
+                fact.Source.BaseAddress.FileNumber == facts.PreviousFileNumber)
+            .Select(fact => new {
+                fact.ObjectId,
+                ReleasedFrameCount = fact.Source.ReconstructionFrameAddresses
+                    .Where(address =>
+                        address.FileNumber == facts.PreviousFileNumber)
+                    .Distinct()
+                    .Count(address => postLiveFrameUseCounts[address] == 1),
+            })
+            .OrderByDescending(static candidate => candidate.ReleasedFrameCount)
+            .ThenBy(static candidate => candidate.ObjectId)
+            .Take(1)
+            .Select(static candidate => candidate.ObjectId)
+            .ToArray();
+    }
 
     private static uint[] GetMaintenanceObjectIds(
         NormalizedSaveFacts facts,
@@ -2137,6 +2330,72 @@ public sealed class RotationPolicyComparisonTests {
         new InitialObjectSeed(30, 300),
     ];
 
+    private static MigrationSelectionConflictFixture
+        CreateMigrationSelectionConflictFixture() {
+        InitialObjectSeed[] sharedSeeds = [
+            new InitialObjectSeed(1, 100),
+            new InitialObjectSeed(2, 100),
+        ];
+        InitialObjectSeed singletonSeed = new(3, 100);
+        InitialObjectSeed[] seeds = [.. sharedSeeds, singletonSeed];
+        RbfFileStore store = new();
+        RbfFile previous = store.CreateFile();
+        AbsoluteFrameAddress sharedPayloadAddress = AppendPayloadFrame(
+            previous,
+            sharedSeeds,
+            parentAddress: null);
+        AbsoluteFrameAddress singletonPayloadAddress = AppendPayloadFrame(
+            previous,
+            [singletonSeed],
+            sharedPayloadAddress);
+
+        ObjectVersionDictionaryBuilder anchorDictionary = new() {
+            ParentRevisionFrameTicket = new RelativeFrameTicket(
+                IsPreviousFile: false,
+                singletonPayloadAddress.FrameTicket),
+        };
+        foreach (InitialObjectSeed seed in seeds) {
+            AbsoluteFrameAddress payloadAddress = seed.ObjectId == singletonSeed.ObjectId
+                ? singletonPayloadAddress
+                : sharedPayloadAddress;
+            anchorDictionary.BindExternal(
+                seed.ObjectId,
+                new RelativeFrameTicket(
+                    IsPreviousFile: false,
+                    payloadAddress.FrameTicket));
+        }
+
+        AbsoluteFrameAddress anchorAddress = AppendExact(
+            previous,
+            new FrameBuilder { ObjectVersionDictionary = anchorDictionary });
+        RbfFile current = store.CreateFile();
+        AbsoluteFrameAddress publishedRevisionAddress = AppendExact(
+            current,
+            new FrameBuilder {
+                ObjectVersionDictionary = new ObjectVersionDictionaryBuilder {
+                    Kind = ObjectVersionDictionaryKind.Delta,
+                    ParentRevisionFrameTicket = new RelativeFrameTicket(
+                        IsPreviousFile: true,
+                        anchorAddress.FrameTicket),
+                },
+            });
+        Dictionary<uint, LogicalObjectState> initialExpectedState = seeds
+            .ToDictionary(
+                static seed => seed.ObjectId,
+                static seed => new LogicalObjectState(seed.PayloadBytes, 1));
+        PolicySource source = new(
+            store,
+            current,
+            anchorAddress,
+            publishedRevisionAddress,
+            new ReadOnlyDictionary<uint, LogicalObjectState>(initialExpectedState));
+        return new MigrationSelectionConflictFixture(
+            source,
+            sharedPayloadAddress,
+            singletonPayloadAddress,
+            anchorAddress);
+    }
+
     private static AnchoredInteractionFixture CreateAnchoredInteractionFixture(
         AnchoredInteractionPacking packing) {
         InitialObjectSeed[] seeds = CreateInteractionSeeds();
@@ -2320,6 +2579,13 @@ public sealed class RotationPolicyComparisonTests {
             new SaveStep([new CreateObject(1001, 1)]),
         ]);
 
+    private static WorkloadTrace CreateMigrationSelectionConflictTrace() => new(
+        scenarioName: "equal-byte-one-object-migration-selection-conflict",
+        generatorId: "handwritten",
+        generatorVersion: 1,
+        seed: 0,
+        [new SaveStep([new CreateObject(1001, 1)])]);
+
     private static ProbeRevisionCursor CreateCursor(PolicySource source) => new(
         new FileScope(source.Current.FileNumber),
         source.PublishedRevisionAddress,
@@ -2370,6 +2636,12 @@ public sealed class RotationPolicyComparisonTests {
         PolicySource Source,
         AbsoluteFrameAddress ColdPayloadAddress,
         AbsoluteFrameAddress ChangedPayloadAddress,
+        AbsoluteFrameAddress AnchorAddress);
+
+    private sealed record MigrationSelectionConflictFixture(
+        PolicySource Source,
+        AbsoluteFrameAddress SharedPayloadAddress,
+        AbsoluteFrameAddress SingletonPayloadAddress,
         AbsoluteFrameAddress AnchorAddress);
 
     private delegate SaveDecisionPair DecisionSelector(

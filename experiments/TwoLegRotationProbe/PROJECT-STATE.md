@@ -147,6 +147,9 @@ PublishedRevision 为 shared prior-snapshot anchor。accepted new head 的 curre
 - current-reconstruction source-layout discriminator：两侧使用同构的 metadata-only full-OVD A anchor，
   shared 将六个 payload Base 共置一个 Frame，split 以唯一 accepted chain 把 cold/changed 分置两个
   payload Frames；同一四格的 object-debt 轨迹完全相同，而 required unique Previous Frames 不同；
+- equal-byte migration membership conflict：同一 pure-Insert Stay 中迁移一个 100 B A-debt object；
+  smallest-ObjectId 选择共享 Frame 内的对象，frame-release-first 选择独占 Frame 的对象。两侧 exact Stay
+  layout、debt 数量与 payload 均相同，但即时 required Previous Frames 为 2 对 1；
 - caller-selected B same-state Base migration plan/append witness；
 - relay-free immediate A/B -> B/C plan/append、shared anchor、B/C closure witness；
 - 多批 B migration 使原本放不下的 C evacuation 可编码的容量 witness；
@@ -159,45 +162,40 @@ rotation trigger 已解决。
 
 ## 当前研究焦点
 
-source payload-Frame partition discriminator 已闭合。为避免让 final A authority 偏向某个 role，两种 source
-都在 payload-bearing Revisions 之后追加 metadata-only full OVD anchor，六个 live binding 全为 External；
-shared 的 accepted chain 为 `shared payload -> anchor -> B published`，split 为
-`cold payload -> changed Delta snapshot -> anchor -> B published`。这保持 DB-010 的唯一 prior-snapshot
-provenance，不把两个无关 snapshot 拼成一个假 source。
+equal-byte one-object migration selection conflict 已闭合。合法 source chain 依次为共享 `{1,2}` payload、
+独占 `{3}` payload、metadata-only full-OVD anchor 与 B PublishedRevision；三个 live object 都是 100 B。
+同一 frozen pure-Insert Save、固定 Stay target 下，既有 smallest-ObjectId pacing 迁移 `1`，test-local
+frame-release-first treatment 从 canonical source reconstruction paths 计算 Frame fanout 后迁移 `3`。
 
-同一 trace、四 treatment 与固定 target 下，两种 layout 的逐步 old-A debt ObjectIds/Base payload bytes
-完全相同。第三次 Stay 后：Delta+none 分别需要 shared `1276 B` 或 split `652+656=1308 B` payload
-Frames；Delta+paced 分别需要 `1276 B` 或 changed `656 B`；Base+none 分别需要 `1276 B` 或 cold
-`652 B`；组合格均为零。exact Frame identity、count 与 stored `FrameLengthBytes` 一致，neutral anchor
-不进入 object reconstruction Frame 指标。
+两个 candidate 的 maintenance bytes 与完整 exact Stay layout 相等，结果都剩两个 A-debt object、200 B
+Base payload；但前者仍依赖 shared+singleton 两个 A Frames，后者只依赖 shared Frame，差值正好是
+singleton 的 stored `FrameLengthBytes`。两侧 completion certificate 都无需 preparatory Stay，且 final-C
+反事实 layout 相等；换腿后分别形成 `{1,1001}` 与 `{3,1001}` 的 B/C Previous debt，均为 101 B/1 Frame。
 
-因此 object-debt summary 不是 exact coarse full-Frame reconstruction pressure 的充分统计量；两类观察非
-等价，值得在后续 treatment 中分别保留为候选事实。这仍不是总/实际 IO 结论，也不证明产品策略必须消费
-两个独立字段：Frame pressure 可以从更细的 canonical source facts 派生。split 还改变 payload-bearing
-Revision 数、local OVD、tickets 与 envelope；在 one-Revision/one-Frame 下不能称为“同一 Revision 只改
-record packing”。
+因此 smallest-ObjectId 只是确定性 assignment，不是对 coarse-Frame pressure 中性的 pacing。Frame topology
+已经足以在等写入成本下改变迁移 membership 的即时效果；这仍只是 test-local 单步因果 witness，不是温度
+推断、总/实际 IO、score、winner 或产品默认策略。
 
 ## 下一编码切片
 
-闭合一个 **equal-byte one-object migration selection conflict**：
+闭合一个 **payload-skew one-object migration tradeoff**：
 
 ```text
 same source + same pure-Insert Save + fixed Stay target + one migrated object
-    ObjectId-first: choose one object from a Frame that still has another A-debt object
-    Frame-release-first: choose an equal-payload object that alone occupies another A Frame
+    Lower-write treatment: migrate the smaller singleton A-debt object
+    Frame-byte-release treatment: migrate the larger singleton A-debt object
 ```
 
-两个 treatment 写同数量、同 logical payload 的 same-state Base，只改变 caller-selected migration member。
-目标是验证现有 smallest-ObjectId pacing 与一个明确命名的 frame-release-aware treatment 是否会产生不同的
-即时 required Previous-Frame set，并保留 exact append、completion 与换腿后 debt 作为无权重原始事实。
-这不是温度推断、score、winner 或产品默认策略；若 whole-candidate bytes 因 tickets/metadata 不同，按实际
-结果记录而不强求相等。
+两个 source object 各自独占一个 A Frame，但 Base payload/Frame bytes 明显偏斜。目标是冻结“较少本次
+maintenance 写入”与“立即释放较多 Previous full-Frame bytes”的 Pareto 冲突，并继续保留 terminal-C
+append、换腿后 debt 与 exact capacity 作为无权重事实。Frame 数两边都下降 1，避免把 byte-pressure 结果
+误写成 count-pressure；不定义换算权重、winner 或产品默认策略。
 
 ## 近期 roadmap
 
 1. **扩充策略与 workload**
-   - 先做 equal-byte one-object migration selection conflict；
-   - 再加入 payload skew、stable hot/cold、burst 与更长 fixed-seed traces；
+   - 先做 payload-skew one-object migration tradeoff；
+   - 再加入 stable hot/cold、burst 与更长 fixed-seed traces；
    - 由这些布局/尺寸反例塑造少量明确命名的 pressure-aware target/migration 候选。
 2. **按证据加入 bounded explorer**
    - 仅在出现具体 `RejectedUnproven`、`RejectedCapacityUnsearched` 或疑似 heuristic false-negative 后，
@@ -213,15 +211,15 @@ same source + same pure-Insert Save + fixed Stay target + one migrated object
 - 除 `DebtZeroThenRotate` 这个故意保守的 baseline 外，哪些无隐藏权重的 pressure facts 足以触发轮转；
 - selected action 的 `RejectedUnproven` 在 batch report 中如何表达；当前 harness 只 typed stop、不 fallback，
   何时值得另立 repair policy 或交给 bounded explorer 仍待证据；
-- test-local decision selector 已有三个结构不同的 caller；是否提取稳定 runner/run outcome 仍等待报告、
+- test-local decision selector 已有多个结构不同的 caller；是否提取稳定 runner/run outcome 仍等待报告、
   CLI 或 batch consumer，不能仅因下一 fixture 变长就升级为产品 API；
 - successful-run reduction 尚不表达 selected capacity / completion `RejectedUnproven`；出现真实 batch
   termination consumer 时应另建 outcome，而不是伪造没有 result scope 的 realized step；
 - counterfactual terminal 当前只投影 final-C append/result 与 preparatory Stay count，不聚合互斥未来，
   也不声称已观测 preparatory writes 或 terminal-source pressure；
 - stable hot/cold、burst、size distribution 与长 trace 是否先用 handwritten fixture，何时扩充 generator；
-- frame-release-aware treatment 在等写入 payload 下是否形成稳定、可重放的即时压力优势，以及换腿后如何
-  重新形成 B/C Previous debt；
+- payload skew 下，maintenance append 与立即释放的 Previous full-Frame bytes 是否形成稳定 Pareto 冲突，
+  以及 terminal-C/换腿后事实是否改变该局部判断；
 - 布局/尺寸矩阵之后，何种无隐藏权重的 pressure facts 最值得驱动 target/migration treatment；
 - 多个不可支配策略出现后，何时需要用户用真实 workload/SLO 选择产品默认值。
 

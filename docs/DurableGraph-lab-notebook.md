@@ -763,6 +763,13 @@
 
 ## 6. 船长日志
 
+### 2026-08-30：闭合 equal-byte migration membership conflict
+
+- **Observed**：合法 source 以共享 `{1,2}` payload、独占 `{3}` payload、metadata-only full-OVD anchor 与 B PublishedRevision 组成；三个 live object 都是 100 B。同一 pure-Insert、固定 Stay 只改变迁移 member：smallest-ObjectId 选 `1`，frame-release-first 按 source reconstruction Frame fanout 选 `3`。
+- **Observed**：两侧 maintenance bytes 与完整 Stay layout 相等，结果都剩 2 个 A-debt object/200 B；前者仍需 shared+singleton 两个 A Frames，后者只需 shared，差值等于 singleton stored Frame length。
+- **Observed**：两侧 completion certificate 都直接给出 terminal-C，无 preparatory Stay；反事实 C layout 相等，换腿后 Previous debt 分别为 `{1,1001}` 与 `{3,1001}`，均为 101 B/1 Frame。实际运行只 apply Stay，未把 certificate 算作 realized rotation。
+- **Concluded / Next**：smallest-ObjectId 不是对 coarse-Frame pressure 中性的 assignment；该结果只证明 equal-write membership 的局部因果差异。下一切片用 payload-skew singleton objects 冻结 maintenance append 与立即释放 Previous full-Frame bytes 的 Pareto 冲突，不预设换算权重或 winner。
+
 ### 2026-08-30：闭合 source payload-Frame partition discriminator
 
 - **Observed**：两种 source 都使用 metadata-only full-OVD A anchor 和六个 External bindings；shared accepted chain 为 `shared payload -> anchor -> B published`，split 为 `cold payload -> changed OVD Delta -> anchor -> B published`。split 不从无关 snapshots 拼装 source，OVD materialization 与 lineage validator 均通过。
