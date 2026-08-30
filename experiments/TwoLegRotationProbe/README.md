@@ -351,6 +351,21 @@ smallest eligible A-debt `NoChange` ObjectId; that ordering is deterministic
 assignment, not evidence of object temperature. Target schedules and source-debt
 triggers remain caller-owned experimental controls.
 
+## Benchmark-v1 consumer
+
+The experiment-only benchmark runner composes frozen workload traces, one named
+step-0 A/B bootstrap, the closed target/decision treatment registry, and
+`EvaluatorV1Session`. Step 0 creates one shared full-OVD A Frame and a metadata-only B
+anchor outside W/P; the evaluator consumes the remaining steps and actually charges
+terminal settlement. Selectors see only current normalized source facts and cannot
+inspect future steps, candidate feasibility, or observations.
+
+Each canonical manifest binds component IDs/versions, bootstrap/evaluated step counts,
+seed, and the exact expanded-trace SHA-256. The paired canonical report references the
+manifest SHA-256 and projects the four typed outcomes; only admitted cases contain
+W/P/F/R, final cursor, and settlement summary. This is a compact comparable projection,
+not a full diagnostic dump, parser, persisted product format, score, or winner.
+
 ## Scoped rotation observation reductions
 
 The comparison fixture reduces each successfully applied step into a
@@ -406,7 +421,8 @@ vectors and all edge cases remain authoritative in the linked tests.
 | Source payload-Frame partition | The same object-debt trajectory can require one shared A Frame or different role-local A Frames. | Object debt is not a sufficient statistic for exact Frame pressure; this is not pure packing or actual IO. [`RotationPolicyComparisonTests.cs`](Tests/RotationPolicyComparisonTests.cs) |
 | Migration membership and future opportunity | Equal-cost membership can change immediate Previous-Frame closure; payload skew exposes write-vs-released-byte pressure; a known-future equal-size trace shows that migrating the object about to be updated with a forced Base can leave old-A debt that remains unchanged in that trace. | Handwritten topology/size/oracle witnesses only—not physical reclamation, actual or total IO, online temperature inference, a weighted winner, or a default policy; rotation can reverse the apparent advantage by creating new-scope Previous debt. [`RotationPolicyComparisonTests.cs`](Tests/RotationPolicyComparisonTests.cs) |
 | Capacity coupling | Two one-object B migration batches can make a large C evacuation fit; conversely, one optional same-state B migration can push an otherwise feasible grouped-foreground Stay beyond the one-Frame envelope. | Handcrafted provisional-grammar witnesses only; they prove neither complete repair/search nor file-size or rotation-trigger policy. [`PreparatoryBaseMigrationTests.cs`](Tests/PreparatoryBaseMigrationTests.cs), [`CompletionCertificateTests.cs`](Tests/CompletionCertificateTests.cs), [`GroupedForegroundBurstCapacityCouplingTests.cs`](Tests/GroupedForegroundBurstCapacityCouplingTests.cs) |
-| Evaluator v1 admissibility | An isolated run fork exposes metrics only after all workload steps and one actually replayed canonical terminal settlement; direct Rotate has no empty Stay, multi-step preparation is one charged Commit, and hard rejections remain typed/non-scoring. | Closes the terminal source epoch `A/B -> B/C`, not all future Previous debt; no scalar score, batch manifest/report, or product evaluator. [`EVALUATOR-V1.md`](EVALUATOR-V1.md), [`EvaluatorV1SessionTests.cs`](Tests/EvaluatorV1SessionTests.cs) |
+| Evaluator v1 admissibility | An isolated run fork exposes metrics only after all workload steps and one actually replayed canonical terminal settlement; direct Rotate has no empty Stay, multi-step preparation is one charged Commit, and hard rejections remain typed/non-scoring. | Closes the terminal source epoch `A/B -> B/C`, not all future Previous debt; no scalar score or product evaluator. [`EVALUATOR-V1.md`](EVALUATOR-V1.md), [`EvaluatorV1SessionTests.cs`](Tests/EvaluatorV1SessionTests.cs) |
+| Benchmark-v1 consumer | A closed registry runs one handwritten paced case and one seed-12345 mixed case through evaluator v1, producing canonical manifest/report bytes with manifest and expanded-trace hashes; literal hash goldens detect v1 drift. | Smoke cases prove deterministic wiring, not a matched policy comparison; single-A-Frame bootstrap, writer-only JSON, no score/parser/CLI. [`BenchmarkV1RunnerTests.cs`](Tests/BenchmarkV1RunnerTests.cs), [`BenchmarkV1JsonTests.cs`](Tests/BenchmarkV1JsonTests.cs) |
 | Continuous rotation | A caller script crosses `A/B -> B/C -> C/D` while preserving exact state, reconstruction closure, and Stay certificates. | It is not a stateful runner or durable publication path. [`ContinuousMultiRotationTests.cs`](Tests/ContinuousMultiRotationTests.cs) |
 
 ### Accepted source-partition provenance

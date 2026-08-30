@@ -168,6 +168,12 @@ PublishedRevision 为 shared prior-snapshot anchor。accepted new head 的 curre
   无条件执行一次 `DirectRotateElseAscendingSingleDebt-v1` terminal settlement。直转优先，否则 ObjectId 升序
   单对象迁债；全部 preparation+Rotate 真实 apply 在同一个 synthetic Commit 中并计入 W/P/F，成功还验证
   terminal source A 已退出 final B/C current reconstruction；
+- benchmark-v1 consumer：closed registry 把 trace step0 Create-only population 共置为一个 full-OVD A Frame，
+  再写 metadata-only B anchor，evaluator 只消费 steps[1..]；manifest 固定 fixture/trace/generator/seed、expanded
+  trace SHA-256、target/decision treatment 与 evaluator/settlement/accounting/layout/grammar/read-schedule identity；
+  batch runner 只在 session Store 上 normalize/evaluate/apply，typed rejection 不 fallback；canonical UTF-8
+  manifest/report 使用固定 tokens/order、16位 hex seed、manifest+trace SHA-256，只有 admitted 输出 W/P/F/R、
+  final cursor 与 settlement 摘要；首批 handwritten paced 和 seed12345 mixed no-migration case 均可确定重放；
 - terminal sizing 反例：high-ticket External 不支配 zero-payload Base+Self。
 
 Stay-B 与 Rotate-C 已接入同一 per-Save facts、paired evaluation、显式 apply、保守 completion proof 与
@@ -177,23 +183,24 @@ rotation trigger 已解决。
 
 ## 当前研究焦点
 
-evaluator v1 已把 raw W/P/F/R、typed admissibility 与真实 terminal settlement 纵向闭合：只有成功完整消费
-workload 并关闭 terminal source epoch的 run 才暴露 metrics/cursor；bounded rejection 与 incomplete 不可评分。
+benchmark-v1 的 manifest/batch/canonical raw report seam 已由两个 smoke cases 纵向跑通，并以 literal
+manifest/report/trace SHA-256 goldens 防止 schema-v1 和 corpus identity 静默漂移。当前两 case 使用不同 trace 与
+decision treatment，只证明 consumer wiring，不构成策略优劣对照。
 
-当前焦点转向首个真实批量 consumer：用小型 manifest 固定 workload、seed、target/decision treatment、
-`DirectRotateElseAscendingSingleDebt-v1` 与 accounting/read-schedule 版本，重复运行 named cases 并输出机器可读
-raw outcome/report。该 consumer 用来发现最小 runner/report seam，不提前建立产品 policy API。
+当前焦点转向第一个 matched comparison group：在相同 source fixture、expanded trace、target treatment 与
+evaluator protocol 下，同时运行 no-migration 和 paced-one-debt，直接比较两组 admissibility 与 W/P/F/R vectors。
+在此之前不建立 scalar score，也不把 smoke corpus 的数值解释成 winner。
 
 ## 下一编码切片
 
-设计并实现 benchmark-v1 的最小 experiment-only batch runner/manifest/raw report：先接现有 named causal
-witness 与 fixed-seed workload，证明同一 case 可确定性重放，并保留四种 typed outcome。暂不建立产品 API、
-scalar score、candidate archive 或 `/goal` 循环。
+把现有两个 smoke traces 各自扩成 no-migration / paced-one-debt matched pair，冻结共同输入与唯一 treatment
+差异，产出四个 canonical raw outcomes；随后检查这些结果是否暴露新的 horizon/source-layout 偏差。暂不建立
+scalar score、candidate archive、产品 policy API 或 `/goal` 循环。
 
 ## 近期 roadmap
 
-1. **建立 benchmark-v1 consumer**：最小 manifest + batch runner + machine-readable raw per-case outcome；
-2. **冻结 benchmark-v1 corpus**：接入现有 causal witnesses、named baselines 与 fixed-seed workload，验证重跑；
+1. **形成 matched comparison**：同 fixture/trace/target 下并跑 no-migration 与 paced-one-debt；
+2. **扩展 corpus topology**：只按已知 causal witness 加 shared/split Frame 与更多 fixed-seed family；
 3. **审视 horizon bias**：对照 terminal settlement、完整 epoch 或长周期，确认尾债不会系统性偏袒策略；
 4. **再启动自动优化**：只允许修改窄 policy seam，保留 Pareto candidates/counterexamples，允许 `no winner`。
 
@@ -203,7 +210,13 @@ scalar score、candidate archive 或 `/goal` 循环。
   complete-cycle/long-run 对照量化 terminal liability bias，不能把它宣传成全局 debt-zero；
 - 无 workload SLO 时采用 Pareto frontier，还是先给 peak/file/read guardrail 再主优化 total write；当前不接受
   裸加权和或会用 1B 总写收益购买任意峰值的严格字典序；
-- batch consumer 会证明 experiment-only runner/report seam 的具体形状，但仍不自动证明产品 API 边界；
+- batch consumer 已形成 experiment-only runner/report seam，但仍不自动证明产品 API 边界；
+- v1 report 只保存 comparable W/P/F/R 与 admissibility/final-scope/settlement 摘要，不复制完整 cold-read Frame
+  diagnostics；需要时应另建 diagnostics artifact，不能悄悄扩张 comparable schema；
+- v1 writer 尚无外部 parser、文件落盘或 CLI publication；manifest/report 是一对以 SHA-256 关联的 canonical
+  byte artifacts，而非 durable product format；
+- `trace-step0-single-a-full-base-then-b-anchor/1` 把 initial payload 共置一个 A Frame，会掩盖局部 Frame release；
+  后续 source-layout corpus 必须使用不同 versioned fixture identity；
 - 旧 rotation-comparison reduction 中的 counterfactual terminal 仍只投影 final-C append/result 与 preparatory
   Stay count，不聚合互斥未来，也不声称已观测 preparatory writes 或 terminal-source pressure；evaluator v1
   的 terminal settlement 是另一条已真实执行并计费的路径；

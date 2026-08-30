@@ -763,6 +763,12 @@
 
 ## 6. 船长日志
 
+### 2026-08-30：建立 benchmark-v1 manifest、batch runner 与 canonical raw report
+
+- **Observed**：closed registry 已把 step0 Create-only workload bootstrap 成单一 full-OVD A Frame + metadata-only B anchor，并让 evaluator 只消费后续 steps；target 仅按 source A-debt 决定 Stay/Rotate，decision 仅含 Delta no-migration 或 smallest-ObjectId paced migration，不读取未来 trace、feasibility 或 candidate observation。
+- **Observed**：manifest 绑定 source/trace/generator/seed、expanded trace SHA-256、treatments 与实际 evaluator/settlement/accounting/layout/grammar/read identities；canonical UTF-8 report 以 manifest hash 关联，四叶 outcome 中只有 admitted 含 W/P/F/R。伪 protocol 标签、trace hash 漂移和 rejection metrics 泄漏均 fail closed。
+- **Observed / Boundary**：handwritten paced 与 seed12345 mixed no-migration smoke cases 分别以 5/3 realized Commits 到达 final scope 3/4 与 2/3，重跑 bytes 相同并有 literal SHA-256 goldens。它们使用不同 trace，不能比较策略优劣；下一步先在同一输入上形成 matched treatments，并保留 single-A-Frame bootstrap 与 terminal-horizon bias。
+
 ### 2026-08-30：闭合 evaluator v1 typed outcome 与 terminal settlement
 
 - **Observed**：`EvaluatorV1Session` 在独立 Store fork 上运行；只有完整 workload 加真实 terminal settlement 的 `AdmittedEvaluatorRun` 暴露 W/P/F/R 与 final cursor。selected capacity、有限路径 `RejectedUnproven` 和 incomplete 均为互斥、不可评分结果，stale/corrupt/programmer errors 继续 fail closed。

@@ -1,7 +1,7 @@
 # TwoLeg evaluator v1 admissibility and accounting contract
 
-> Status: typed outcome and closed-horizon session implemented; batch manifest and
-> machine-readable report remain future work.
+> Status: typed outcome, closed-horizon session, registry-backed batch runner, and
+> canonical machine-readable manifest/report implemented.
 
 This document fixes the first executable protocol and raw measurement schedule for
 comparing admitted TwoLeg policy runs. It does not define a scalar score, a winner,
@@ -152,12 +152,52 @@ queries beyond current reconstruction.
   one-Commit burst accounting, scope closure, deterministic rejection, prefix
   rejection, incompleteness, and source-Store isolation.
 
-## Still open before benchmark v1
+## Benchmark-v1 batch consumer
 
-- freeze manifest identity, protocol ID, workload families, seeds, and deterministic
-  rerun rules;
-- add an experiment-only batch runner and machine-readable raw report;
+`BenchmarkV1Runner` is the first real consumer of the evaluator seam. Every case is
+resolved from one closed registry and carries versioned identities for source fixture,
+trace definition, generator, target/decision treatments, evaluator, settlement,
+accounting, provisional frame layout/grammar, and read schedule. Its manifest also
+contains the SHA-256 of the exact expanded trace, so generator or handwritten payload
+drift changes the manifest hash before a result is accepted.
+
+The sole v1 bootstrap is named
+`trace-step0-single-a-full-base-then-b-anchor/1`: trace step 0 must contain only
+Creates; all resulting Bases share one full-OVD A Frame, followed by a metadata-only
+B anchor. Step 0 is outside W/P, while the evaluator consumes `steps[1..]`. This
+single-A-Frame topology is an explicit experimental treatment, not a general source
+layout claim; exceeding its one-Frame envelope fails the batch instead of becoming an
+evaluator capacity outcome.
+
+The closed policy registry currently exposes one historical-facts-only target,
+`debt-zero-then-rotate/1`, and two Delta decision treatments: no migration or migrate
+the smallest eligible A-debt NoChange ObjectId. Selectors receive only current
+`NormalizedSaveFacts`; they cannot inspect step index, future trace, candidate
+feasibility, or observations, and never fall back after rejection.
+
+`BenchmarkV1Json` writes compact canonical UTF-8 manifest/report documents with one
+trailing LF, fixed property/token order, ordinal case ordering, 16-digit hexadecimal
+seeds, manifest SHA-256, and resolved trace SHA-256. The report is deliberately the
+comparable W/P/F/R plus admissibility/final-scope/settlement projection—not a lossless
+dump of `FinalColdHeadReadObservation` or candidate diagnostics. Rejected leaves have
+no metrics/cursor/settlement properties. V1 is writer-only: external parsing, file I/O,
+and CLI publication remain outside this slice.
+
+The initial smoke corpus freezes canonical hashes and two admitted cases:
+
+- handwritten four-step `debt-zero-then-rotate` with paced one-debt migration;
+- generator-v1 `mixed-small`, seed `12345`, with no migration.
+
+They prove batch wiring and deterministic replay, not a policy winner: the cases do
+not yet form a matched treatment comparison.
+
+## Still open before strategy comparison
+
+- run both decision treatments over the same fixture/trace groups before comparing
+  their W/P/F/R vectors;
 - compare terminal settlement with complete-cycle/long-run schedules before treating
   its economic tail as neutral;
+- add more source-layout and workload families only when they answer a named policy
+  question;
 - retain Pareto/raw outcomes until workload/SLO evidence justifies guardrails or a
   ranking rule.
