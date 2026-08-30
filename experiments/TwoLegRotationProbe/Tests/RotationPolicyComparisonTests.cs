@@ -1398,6 +1398,262 @@ public sealed class RotationPolicyComparisonTests {
         AssertRunObservationConsistency(frameByteRelease);
     }
 
+    [Fact]
+    public void Natural_update_opportunity_makes_future_hot_first_leave_cold_A_debt() {
+        HotColdMigrationFixture fixture = CreateHotColdMigrationFixture();
+        WorkloadTrace trace = CreateHotColdMigrationTrace(fixture);
+        PolicyRun futureHotFirst = Run(
+            trace,
+            fixture.Source.Store.ForkForProbe(),
+            CreateCursor(fixture.Source),
+            fixture.Source.InitialExpectedState,
+            facts => SelectHotColdOracleDecisions(
+                facts,
+                fixture.FutureHotObjectId,
+                fixture.FutureHotObjectId,
+                fixture.SentinelObjectId),
+            SelectStayBTarget);
+        PolicyRun coldFirst = Run(
+            trace,
+            fixture.Source.Store.ForkForProbe(),
+            CreateCursor(fixture.Source),
+            fixture.Source.InitialExpectedState,
+            facts => SelectHotColdOracleDecisions(
+                facts,
+                fixture.ColdObjectId,
+                fixture.FutureHotObjectId,
+                fixture.SentinelObjectId),
+            SelectStayBTarget);
+
+        Assert.Same(trace, futureHotFirst.SourceTrace);
+        Assert.Same(trace, coldFirst.SourceTrace);
+        Assert.NotSame(futureHotFirst.Store, coldFirst.Store);
+        Assert.Equal(2, futureHotFirst.Steps.Count);
+        Assert.Equal(2, coldFirst.Steps.Count);
+        Assert.True(fixture.ColdObjectId < fixture.FutureHotObjectId);
+
+        PolicyStep hotFirstMigration = futureHotFirst.Steps[0];
+        PolicyStep coldFirstMigration = coldFirst.Steps[0];
+        Assert.Equal(
+            hotFirstMigration.Observation.Source,
+            coldFirstMigration.Observation.Source);
+        Assert.Equal(
+            new CanonicalObjectIds([
+                fixture.ColdObjectId,
+                fixture.FutureHotObjectId,
+            ]),
+            hotFirstMigration.Observation.Source.PreviousDebtObjectIds);
+        Assert.Equal(200L, hotFirstMigration.Observation.Source
+            .PreviousDebtBasePayloadBytes);
+        Assert.Equal(2, hotFirstMigration.Observation.Source
+            .PreviousUniqueFrameCount);
+        NormalizedSaveFacts initialFacts = hotFirstMigration.SelectedObservation.Facts;
+        Assert.Equal(
+            [fixture.ColdPayloadAddress],
+            initialFacts.ParentLive[fixture.ColdObjectId]
+                .ReconstructionFrameAddresses);
+        Assert.Equal(
+            [fixture.FutureHotPayloadAddress],
+            initialFacts.ParentLive[fixture.FutureHotObjectId]
+                .ReconstructionFrameAddresses);
+        Assert.All(initialFacts.ParentLive.Values, source => Assert.DoesNotContain(
+            fixture.AnchorAddress,
+            source.ReconstructionFrameAddresses));
+        Assert.Equal(
+            [fixture.FutureHotObjectId],
+            hotFirstMigration.MaintenanceObjectIds);
+        Assert.Equal(
+            [fixture.ColdObjectId],
+            coldFirstMigration.MaintenanceObjectIds);
+        Assert.Equal(
+            hotFirstMigration.SelectedObservation.Layout,
+            coldFirstMigration.SelectedObservation.Layout);
+        Assert.Equal(
+            hotFirstMigration.SelectedObservation.MaintenanceDomainRecordBytes,
+            coldFirstMigration.SelectedObservation.MaintenanceDomainRecordBytes);
+        Assert.Equal(
+            ObjectVersionKind.Base,
+            hotFirstMigration.SelectedObservation.Candidate.Frame
+                .ObjectVersions[fixture.FutureHotObjectId].Kind);
+        Assert.Equal(
+            ObjectVersionKind.Base,
+            coldFirstMigration.SelectedObservation.Candidate.Frame
+                .ObjectVersions[fixture.ColdObjectId].Kind);
+
+        PolicyStep hotFirstUpdate = futureHotFirst.Steps[1];
+        PolicyStep coldFirstUpdate = coldFirst.Steps[1];
+        Assert.Empty(hotFirstUpdate.MaintenanceObjectIds);
+        Assert.Empty(coldFirstUpdate.MaintenanceObjectIds);
+        Assert.Equal(
+            [fixture.FutureHotObjectId],
+            hotFirstUpdate.SelectedObservation.Facts.Updates
+                .Select(static update => update.ObjectId));
+        Assert.Equal(
+            [fixture.SentinelObjectId],
+            hotFirstUpdate.SelectedObservation.Facts.Removes
+                .Select(static remove => remove.ObjectId));
+        Assert.Equal(
+            [fixture.ColdObjectId, fixture.FutureHotObjectId],
+            hotFirstUpdate.SelectedObservation.Facts.PostLiveStates.Keys.Order());
+        Assert.Equal(
+            hotFirstUpdate.SelectedObservation.Facts.PostLiveStates.Keys.Order(),
+            coldFirstUpdate.SelectedObservation.Facts.PostLiveStates.Keys.Order());
+        ObjectVersion hotFirstUpdatedVersion = hotFirstUpdate.SelectedObservation
+            .Candidate.Frame.ObjectVersions[fixture.FutureHotObjectId];
+        ObjectVersion coldFirstUpdatedVersion = coldFirstUpdate.SelectedObservation
+            .Candidate.Frame.ObjectVersions[fixture.FutureHotObjectId];
+        Assert.Equal(ObjectVersionKind.Base, hotFirstUpdatedVersion.Kind);
+        Assert.Equal(ObjectVersionKind.Base, coldFirstUpdatedVersion.Kind);
+        Assert.Equal(100, hotFirstUpdatedVersion.PayloadBytes);
+        Assert.Equal(
+            hotFirstUpdatedVersion.PayloadBytes,
+            coldFirstUpdatedVersion.PayloadBytes);
+        Assert.Equal(2, hotFirstUpdatedVersion.LogicalVersionOrdinal);
+        Assert.Equal(2, coldFirstUpdatedVersion.LogicalVersionOrdinal);
+        Assert.Null(hotFirstUpdatedVersion.DeltaParentFrameTicket);
+        Assert.Null(coldFirstUpdatedVersion.DeltaParentFrameTicket);
+        Assert.Equal(
+            hotFirstUpdate.SelectedObservation.Layout,
+            coldFirstUpdate.SelectedObservation.Layout);
+
+        Assert.Equal(
+            [fixture.ColdObjectId, fixture.ColdObjectId],
+            futureHotFirst.Steps
+                .SelectMany(static step => step.SelectedObservation
+                    .PostLiveReconstruction.PreviousFileDependentObjectIds));
+        Assert.Equal(
+            [fixture.FutureHotObjectId],
+            coldFirst.Steps
+                .SelectMany(static step => step.SelectedObservation
+                    .PostLiveReconstruction.PreviousFileDependentObjectIds));
+        Assert.Equal([100L, 100L], DescribeDebtBaseBytes(futureHotFirst));
+        Assert.Equal([100L, 0L], DescribeDebtBaseBytes(coldFirst));
+        Assert.Equal(
+            [1, 1],
+            futureHotFirst.Steps.Select(static step => step.SelectedObservation
+                .PostLiveReconstruction.PreviousFileUniqueFrameCount));
+        Assert.Equal(
+            [1, 0],
+            coldFirst.Steps.Select(static step => step.SelectedObservation
+                .PostLiveReconstruction.PreviousFileUniqueFrameCount));
+        int singletonFrameBytes = fixture.Source.Store
+            .ReadLayout(fixture.ColdPayloadAddress)
+            .FrameLengthBytes;
+        Assert.Equal(
+            singletonFrameBytes,
+            fixture.Source.Store.ReadLayout(fixture.FutureHotPayloadAddress)
+                .FrameLengthBytes);
+        Assert.Equal(
+            [singletonFrameBytes, singletonFrameBytes],
+            futureHotFirst.Steps.Select(static step => (int)step
+                .SelectedObservation.PostLiveReconstruction.PreviousFileFrameBytes));
+        Assert.Equal(
+            [singletonFrameBytes, 0],
+            coldFirst.Steps.Select(static step => (int)step
+                .SelectedObservation.PostLiveReconstruction.PreviousFileFrameBytes));
+
+        int[] hotFirstAppends = futureHotFirst.Steps
+            .Select(static step => step.SelectedObservation.Layout.AppendLengthBytes)
+            .ToArray();
+        int[] coldFirstAppends = coldFirst.Steps
+            .Select(static step => step.SelectedObservation.Layout.AppendLengthBytes)
+            .ToArray();
+        Assert.Equal([152, 148], hotFirstAppends);
+        Assert.Equal(hotFirstAppends, coldFirstAppends);
+        Assert.Equal(300L, futureHotFirst.Reduction.RealizedTotals.AppendBytes);
+        Assert.Equal(
+            futureHotFirst.Reduction.RealizedTotals,
+            coldFirst.Reduction.RealizedTotals);
+        Assert.Equal(152, futureHotFirst.Reduction.PeakRealizedSaveAppendBytes);
+        Assert.Equal(
+            futureHotFirst.Reduction.PeakRealizedSaveAppendBytes,
+            coldFirst.Reduction.PeakRealizedSaveAppendBytes);
+
+        CanPrepareAndRotateCertificate[] hotFirstCompletions = futureHotFirst.Steps
+            .Select(static step => Assert.IsType<CanPrepareAndRotateCertificate>(
+                step.CompletionCertificate))
+            .ToArray();
+        CanPrepareAndRotateCertificate[] coldFirstCompletions = coldFirst.Steps
+            .Select(static step => Assert.IsType<CanPrepareAndRotateCertificate>(
+                step.CompletionCertificate))
+            .ToArray();
+        Assert.All(hotFirstCompletions, static completion =>
+            Assert.Empty(completion.MaintenanceStayBSteps));
+        Assert.All(coldFirstCompletions, static completion =>
+            Assert.Empty(completion.MaintenanceStayBSteps));
+        Assert.Equal(
+            hotFirstCompletions[0].FinalRotateC.Observation.Layout,
+            coldFirstCompletions[0].FinalRotateC.Observation.Layout);
+        Assert.Equal(
+            152,
+            hotFirstCompletions[0].FinalRotateC.Observation.Layout
+                .AppendLengthBytes);
+
+        CandidateRawObservation hotFirstTerminal =
+            hotFirstCompletions[1].FinalRotateC.Observation;
+        CandidateRawObservation coldFirstTerminal =
+            coldFirstCompletions[1].FinalRotateC.Observation;
+        Assert.Equal(148, hotFirstTerminal.Layout.AppendLengthBytes);
+        Assert.Equal(44, coldFirstTerminal.Layout.AppendLengthBytes);
+        Assert.True(
+            hotFirstTerminal.Layout.AppendLengthBytes >
+                coldFirstTerminal.Layout.AppendLengthBytes);
+        Assert.Equal(102, hotFirstTerminal.MaintenanceDomainRecordBytes);
+        Assert.Equal(0, coldFirstTerminal.MaintenanceDomainRecordBytes);
+        Assert.True(
+            hotFirstTerminal.MaintenanceDomainRecordBytes >
+                coldFirstTerminal.MaintenanceDomainRecordBytes);
+        Assert.Equal(
+            [fixture.FutureHotObjectId],
+            hotFirstTerminal.PostLiveReconstruction
+                .PreviousFileDependentObjectIds);
+        Assert.Equal(
+            [fixture.ColdObjectId, fixture.FutureHotObjectId],
+            coldFirstTerminal.PostLiveReconstruction
+                .PreviousFileDependentObjectIds);
+        Assert.Equal(
+            100L,
+            hotFirstTerminal.PostLiveReconstruction
+                .PreviousFileDependentBasePayloadBytes);
+        Assert.Equal(
+            200L,
+            coldFirstTerminal.PostLiveReconstruction
+                .PreviousFileDependentBasePayloadBytes);
+        Assert.Equal(
+            1,
+            hotFirstTerminal.PostLiveReconstruction.PreviousFileUniqueFrameCount);
+        Assert.Equal(
+            2,
+            coldFirstTerminal.PostLiveReconstruction.PreviousFileUniqueFrameCount);
+        Assert.Equal(
+            144L,
+            hotFirstTerminal.PostLiveReconstruction.PreviousFileFrameBytes);
+        Assert.Equal(
+            292L,
+            coldFirstTerminal.PostLiveReconstruction.PreviousFileFrameBytes);
+        Assert.Equal(
+            hotFirstUpdate.SelectedObservation.Layout.FrameLengthBytes,
+            hotFirstTerminal.PostLiveReconstruction.PreviousFileFrameBytes);
+        Assert.Equal(
+            coldFirstMigration.SelectedObservation.Layout.FrameLengthBytes +
+                coldFirstUpdate.SelectedObservation.Layout.FrameLengthBytes,
+            coldFirstTerminal.PostLiveReconstruction.PreviousFileFrameBytes);
+        Assert.True(
+            hotFirstTerminal.PostLiveReconstruction.PreviousFileFrameBytes <
+                coldFirstTerminal.PostLiveReconstruction.PreviousFileFrameBytes);
+
+        Assert.All(futureHotFirst.Steps, static step => Assert.False(step.ActualRotation));
+        Assert.All(coldFirst.Steps, static step => Assert.False(step.ActualRotation));
+        Assert.All(futureHotFirst.Steps, static step =>
+            Assert.Equal(CandidateTarget.StayB, step.Target));
+        Assert.All(coldFirst.Steps, static step =>
+            Assert.Equal(CandidateTarget.StayB, step.Target));
+        Assert.Equal(2, futureHotFirst.Store.FileCount);
+        Assert.Equal(2, coldFirst.Store.FileCount);
+        AssertRunObservationConsistency(futureHotFirst);
+        AssertRunObservationConsistency(coldFirst);
+    }
+
     private static (
         PolicyRun DeltaNone,
         PolicyRun DeltaPaced,
@@ -1860,6 +2116,40 @@ public sealed class RotationPolicyComparisonTests {
         NormalizedNoChangeFact selected = facts.NoChanges.Single(fact =>
             fact.ObjectId == objectId && IsPreviousDebt(facts, fact.Source));
         return CreateDecisions(facts, [], [selected.ObjectId]);
+    }
+
+    private static SaveDecisionPair SelectHotColdOracleDecisions(
+        NormalizedSaveFacts facts,
+        uint firstMigrationObjectId,
+        uint futureHotObjectId,
+        uint sentinelObjectId) {
+        if (facts.Updates.Count == 0) {
+            ValidateInsertOnlyMigrationTreatment(facts, "hot-cold oracle");
+            NormalizedInsertFact insert = Assert.Single(facts.Inserts);
+            if (insert.ObjectId != sentinelObjectId) {
+                throw new InvalidOperationException(
+                    "The hot-cold oracle first Save must create its sentinel object.");
+            }
+
+            NormalizedNoChangeFact selected = facts.NoChanges.Single(fact =>
+                fact.ObjectId == firstMigrationObjectId &&
+                IsPreviousDebt(facts, fact.Source));
+            return CreateDecisions(facts, [], [selected.ObjectId]);
+        }
+
+        NormalizedUpdateFact update = facts.Updates.Single();
+        NormalizedRemoveFact remove = facts.Removes.Single();
+        if (facts.Inserts.Count != 0 ||
+            update.ObjectId != futureHotObjectId ||
+            remove.ObjectId != sentinelObjectId) {
+            throw new InvalidOperationException(
+                "The hot-cold oracle second Save must update future-hot and remove the sentinel.");
+        }
+
+        return CreateDecisions(
+            facts,
+            [new UpdateWriteDecision(futureHotObjectId, UpdateWriteMode.Base)],
+            []);
     }
 
     private static void ValidateInsertOnlyMigrationTreatment(
@@ -2679,6 +2969,67 @@ public sealed class RotationPolicyComparisonTests {
             anchorAddress);
     }
 
+    private static HotColdMigrationFixture CreateHotColdMigrationFixture() {
+        InitialObjectSeed coldSeed = new(10, 100);
+        InitialObjectSeed futureHotSeed = new(20, 100);
+        InitialObjectSeed[] seeds = [coldSeed, futureHotSeed];
+        RbfFileStore store = new();
+        RbfFile previous = store.CreateFile();
+        AbsoluteFrameAddress coldPayloadAddress = AppendPayloadFrame(
+            previous,
+            [coldSeed],
+            parentAddress: null);
+        AbsoluteFrameAddress futureHotPayloadAddress = AppendPayloadFrame(
+            previous,
+            [futureHotSeed],
+            parentAddress: null);
+
+        ObjectVersionDictionaryBuilder anchorDictionary = new();
+        anchorDictionary.BindExternal(
+            coldSeed.ObjectId,
+            new RelativeFrameTicket(
+                IsPreviousFile: false,
+                coldPayloadAddress.FrameTicket));
+        anchorDictionary.BindExternal(
+            futureHotSeed.ObjectId,
+            new RelativeFrameTicket(
+                IsPreviousFile: false,
+                futureHotPayloadAddress.FrameTicket));
+        AbsoluteFrameAddress anchorAddress = AppendExact(
+            previous,
+            new FrameBuilder { ObjectVersionDictionary = anchorDictionary });
+
+        RbfFile current = store.CreateFile();
+        AbsoluteFrameAddress publishedRevisionAddress = AppendExact(
+            current,
+            new FrameBuilder {
+                ObjectVersionDictionary = new ObjectVersionDictionaryBuilder {
+                    Kind = ObjectVersionDictionaryKind.Delta,
+                    ParentRevisionFrameTicket = new RelativeFrameTicket(
+                        IsPreviousFile: true,
+                        anchorAddress.FrameTicket),
+                },
+            });
+        Dictionary<uint, LogicalObjectState> initialExpectedState = seeds
+            .ToDictionary(
+                static seed => seed.ObjectId,
+                static seed => new LogicalObjectState(seed.PayloadBytes, 1));
+        PolicySource source = new(
+            store,
+            current,
+            anchorAddress,
+            publishedRevisionAddress,
+            new ReadOnlyDictionary<uint, LogicalObjectState>(initialExpectedState));
+        return new HotColdMigrationFixture(
+            source,
+            coldSeed.ObjectId,
+            futureHotSeed.ObjectId,
+            SentinelObjectId: 1001,
+            coldPayloadAddress,
+            futureHotPayloadAddress,
+            anchorAddress);
+    }
+
     private static AnchoredInteractionFixture CreateAnchoredInteractionFixture(
         AnchoredInteractionPacking packing) {
         InitialObjectSeed[] seeds = CreateInteractionSeeds();
@@ -2876,6 +3227,20 @@ public sealed class RotationPolicyComparisonTests {
         seed: 0,
         [new SaveStep([new CreateObject(1001, 1)])]);
 
+    private static WorkloadTrace CreateHotColdMigrationTrace(
+        HotColdMigrationFixture fixture) => new(
+        scenarioName: "natural-update-opportunity-hot-cold-oracle",
+        generatorId: "handwritten",
+        generatorVersion: 1,
+        seed: 0,
+        [
+            new SaveStep([new CreateObject(fixture.SentinelObjectId, 1)]),
+            new SaveStep([
+                new UpdateObject(fixture.FutureHotObjectId, 100, 1),
+                new RemoveObject(fixture.SentinelObjectId),
+            ]),
+        ]);
+
     private static ProbeRevisionCursor CreateCursor(PolicySource source) => new(
         new FileScope(source.Current.FileNumber),
         source.PublishedRevisionAddress,
@@ -2940,6 +3305,15 @@ public sealed class RotationPolicyComparisonTests {
         uint LargeObjectId,
         AbsoluteFrameAddress SmallPayloadAddress,
         AbsoluteFrameAddress LargePayloadAddress,
+        AbsoluteFrameAddress AnchorAddress);
+
+    private sealed record HotColdMigrationFixture(
+        PolicySource Source,
+        uint ColdObjectId,
+        uint FutureHotObjectId,
+        uint SentinelObjectId,
+        AbsoluteFrameAddress ColdPayloadAddress,
+        AbsoluteFrameAddress FutureHotPayloadAddress,
         AbsoluteFrameAddress AnchorAddress);
 
     private delegate SaveDecisionPair DecisionSelector(

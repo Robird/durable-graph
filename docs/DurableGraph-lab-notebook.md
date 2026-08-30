@@ -763,12 +763,18 @@
 
 ## 6. 船长日志
 
+### 2026-08-30：闭合 natural-update hot/cold opportunity witness
+
+- **Observed**：两个 100 B A-debt objects 各自独占同构 singleton A Frame；同一两步 fixed-Stay trace 先显式迁 future-hot 或 cold，再在两侧强制 future-hot `Base@B` 并移除非空 Save sentinel。实际 append 都是 `[152,148]`，累计 300、峰值 152。
+- **Observed**：第二步后 hot-first 仍需 `{cold}`/1 old-A Frame，cold-first 已清空 old-A debt；两侧 completion 都零准备。反事实 terminal-C 中 hot-first 要搬 cold、C append 更大，但换腿后只留 hot/1 个 new-Previous Frame，cold-first 则留下 cold+hot/2 个 B Frames。
+- **Concluded / Next**：已知未来 Update + forced-Base control 会改变当前迁移 membership 的价值，但 scope shift 会反转部分压力；这不是在线温度推断、总 IO 或长期 winner。下一切片冻结 grouped foreground burst 与 optional maintenance 在 near-boundary B tail 上的 exact capacity coupling。
+
 ### 2026-08-30：闭合 payload-skew migration Pareto witness
 
 - **Observed**：两个 A-debt objects 分别独占同构 full-OVD A Frames，large=`Id10/1000 B`、small=`Id20/100 B`，再由 metadata-only full anchor 合并；反向 ID 顺序与显式 membership 排除了 ObjectId treatment。同一 pure-Insert、fixed Stay 只选择迁 small 或 large。
 - **Observed**：small-first 的 exact maintenance/whole Stay append 更少、B slack 更多；large-first 同样只让一个对象/一个 Frame 退出 A debt，却退出更多 Previous full-Frame closure bytes。两侧都无需 preparatory Stay 即可形成 exact terminal-C。
 - **Observed**：small-first 的反事实 C append 更大，但换腿后新 Previous debt 为 `{20,1001}`/101 B/1 Frame；large-first 的 C append 更小，却留下 `{10,1001}`/1001 B/1 Frame。实际运行只 apply Stay，没有创建 C。
-- **Concluded / Next**：object count 与 Frame count 不是 byte pressure 的充分统计量；即时写入和 old-A reconstruction closure 形成局部 Pareto 冲突，轮转后压力还会反向重组。这不是物理回收、实际/总 IO、长期 winner 或产品默认。下一切片用已知未来日程的 oracle-style hot/cold 对照，验证自然 Base update 对当前迁移 membership 的 opportunity cost。
+- **Concluded / Next**：object count 与 Frame count 不是 byte pressure 的充分统计量；即时写入和 old-A reconstruction closure 形成局部 Pareto 冲突，轮转后压力还会反向重组。这不是物理回收、实际/总 IO、长期 winner 或产品默认。下一切片用已知未来日程的 oracle-style hot/cold 对照，验证 domain Update + forced-Base control 对当前迁移 membership 的 opportunity cost。
 
 ### 2026-08-30：闭合 equal-byte migration membership conflict
 

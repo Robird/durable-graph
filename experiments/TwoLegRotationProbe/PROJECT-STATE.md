@@ -147,12 +147,11 @@ PublishedRevision 为 shared prior-snapshot anchor。accepted new head 的 curre
 - current-reconstruction source-layout discriminator：两侧使用同构的 metadata-only full-OVD A anchor，
   shared 将六个 payload Base 共置一个 Frame，split 以唯一 accepted chain 把 cold/changed 分置两个
   payload Frames；同一四格的 object-debt 轨迹完全相同，而 required unique Previous Frames 不同；
-- equal-byte migration membership conflict：同一 pure-Insert Stay 中迁移一个 100 B A-debt object；
-  smallest-ObjectId 选择共享 Frame 内的对象，frame-release-first 选择独占 Frame 的对象。两侧 exact Stay
-  layout、debt 数量与 payload 均相同，但即时 required Previous Frames 为 2 对 1；
-- payload-skew migration tradeoff：同一 pure-Insert Stay 中显式迁移一个 singleton A-debt object；迁小对象
-  产生更少 exact Stay append，迁大对象则在同样只减少一个 Frame 时退出更多 Previous full-Frame closure
-  bytes。terminal-C 与换腿后 debt 暴露相反的后续压力，未选 winner；
+- migration membership 因果组：equal-byte source topology 证明同成本 membership 会改变即时 Previous-Frame
+  closure；payload skew 暴露本步少写与退出更多 old-A full-Frame bytes 的局部冲突；known-future、等尺寸
+  hot/cold oracle 则证明把迁移预算投给下一步会 Update 且被对照强制写 Base 的对象，会错过本 trace 内
+  保持不变的 cold debt。三者都保留
+  terminal-C/换腿后压力反转，不选择 winner，也不冒充在线温度推断；
 - caller-selected B same-state Base migration plan/append witness；
 - relay-free immediate A/B -> B/C plan/append、shared anchor、B/C closure witness；
 - 多批 B migration 使原本放不下的 C evacuation 可编码的容量 witness；
@@ -165,42 +164,40 @@ rotation trigger 已解决。
 
 ## 当前研究焦点
 
-payload-skew one-object migration tradeoff 已闭合。两个 A-debt 对象各自独占同构的 full-OVD A Frame，
-large=`Id10/1000 B`、small=`Id20/100 B`，再由 metadata-only full anchor 合成同一 source；反向 ObjectId
-顺序与显式 membership 排除了 smallest-ID assignment。两侧共享同一 frozen pure-Insert Save、起始 tail 与
-Stay target，只分别迁 small 或 large。
+natural-update opportunity / hot-cold oracle 已闭合。`cold=Id10/100 B` 与
+`future-hot=Id20/100 B` 各自独占同构 singleton A Frame；两侧共享 source、两步 trace 与 Stay target。
+第一步创建 1 B sentinel，只显式迁 hot 或 cold；第二步都强制 future-hot 写 `Base@B` 并移除 sentinel，
+避免它继续钉住第一步 B Frame。forced Base 与已知未来日程都只是因果 control。
 
-迁 small 的 exact maintenance/whole Stay append 更少并留下更多 B slack；迁 large 时两侧同样只剩一个
-A-debt object/一个 Previous Frame，却退出更多 Previous full-Frame closure bytes。两侧都可零准备地构造
-terminal-C：small-first 的 C append 更大但换腿后只留下 101 B 新 Previous debt，large-first 的 C append
-更小却留下 1001 B。实际运行只 apply Stay，C 仍是 certificate 中的反事实。
+两侧实际 append 序列完全相同（`[152,148]`，累计 300，峰值 152）。第二步后 hot-first 仍有
+`{cold}`/100 B/1 old-A Frame，cold-first 则借 hot 的 domain Update + forced Base 清空 old-A debt。两侧
+completion 都无需
+preparatory Stay；反事实 terminal-C 中 hot-first 仍需搬 cold，C append 更大，但换腿后只留下 hot/1 个
+new-Previous Frame，而 cold-first 把 cold+hot/2 个 B Frames 都变成新 Previous debt。
 
-因此 object/Frame count 都不足以表达 byte pressure；“本步少写”与“本步让更多 old-A full-Frame bytes
-退出 current reconstruction closure”构成局部 Pareto 冲突，而轮转还会重新定义 debt。这里没有物理回收、
-实际/总 IO、长期最优、温度推断、score、winner 或产品默认策略结论。
+因此 known-future Update-with-forced-Base opportunity 会改变当前 migration membership 的价值，但优势依赖观察 horizon
+和 FileScope；这不是在线 hotness 识别、稳定温度定义、实际/总 IO、长期 winner、forced-Base 产品规则或
+默认策略。
 
 ## 下一编码切片
 
-闭合一个 **natural-update opportunity / stable hot-cold witness**：
+闭合一个 **grouped foreground burst / optional maintenance capacity coupling witness**：
 
 ```text
-same source + same fixed Save/target trace + equal-size A-debt objects
-    Future-hot-first: 先迁随后会自然 Update 的对象
-    Cold-first:       先迁不会自然变化的对象
-    Next Save:        两侧都把 future-hot Update 固定写成 Base@B
+same source + same foreground burst + fixed Stay target + near-boundary B tail
+    Foreground-only:             exact Stay candidate fits
+    Foreground + one migration:  exact Stay candidate hits typed capacity rejection
 ```
 
-这样 future-hot-first 会在连续 Stay 中为同一对象写两次 Base，而 cold-first 把两次 Base 分别用于 cold 与
-future-hot。目标是验证自然领域 Update 的清债机会，是否会使“现在先迁 hot”错过真正 cold debt；先用
-handwritten、未来日程已知的 oracle-style 因果对照，冻结每步写入、debt/Frame closure、completion
-terminal-C 与换腿后事实。它只证明 opportunity cost，不假装在线策略已经知道未来，也不把强制 Base
-写法提升为一般 Update policy。
+先用同一 normalized facts 与 whole-candidate estimator 冻结 grouped foreground 和 optional maintenance
+共享单 Frame/单文件容量的直接耦合。成功侧可按现有 exact apply/certificate seam 验证；失败侧保留 typed
+bounded rejection，不 fallback、不伪造 result scope。它只证明某个 near-boundary witness 中 maintenance
+并非免费，不立即设计 repair、通用 Runner 或基于隐藏权重的 admission score。
 
 ## 近期 roadmap
 
 1. **扩充策略与 workload**
-   - 先做 natural-update opportunity / stable hot-cold 因果对照；
-   - 再用 burst 观察 grouped foreground 与 maintenance 的峰值/容量耦合；
+   - 先用 burst 观察 grouped foreground 与 maintenance 的峰值/容量耦合；
    - 等少量 named online candidates 成形后，再跑更长 fixed-seed traces；
    - 由这些布局/尺寸反例塑造少量明确命名的 pressure-aware target/migration 候选。
 2. **按证据加入 bounded explorer**
@@ -223,8 +220,8 @@ terminal-C 与换腿后事实。它只证明 opportunity cost，不假装在线�
   termination consumer 时应另建 outcome，而不是伪造没有 result scope 的 realized step；
 - counterfactual terminal 当前只投影 final-C append/result 与 preparatory Stay count，不聚合互斥未来，
   也不声称已观测 preparatory writes 或 terminal-source pressure；
-- future natural Base update 的机会，如何改变当前 migration membership 的价值；已知未来的 oracle 对照
-  不能直接成为在线温度判定，需要哪些只读历史 facts 仍待后续证据；
+- known-future oracle 已证明 Update-with-forced-Base opportunity 的 membership cost；在线策略能否只用历史可见的
+  recency/frequency facts 近似它，并同时考虑换腿后重新形成的 debt，仍待后续证据；
 - burst、size distribution 与长 trace 何时从 handwritten fixture 升级为 generator；
 - 布局/尺寸矩阵之后，何种无隐藏权重的 pressure facts 最值得驱动 target/migration treatment；
 - 多个不可支配策略出现后，何时需要用户用真实 workload/SLO 选择产品默认值。
