@@ -302,12 +302,42 @@ state or a regenerative steady-state cycle. The exact debt/migration trajectory 
 vectors live in
 [`FixedCadenceTerminalLiabilityTests.cs`](Tests/FixedCadenceTerminalLiabilityTests.cs).
 
+### Named adaptive payload-policy matched-cadence diagnostic
+
+The first `ReadAmplificationLimit=3`, `BaseBudgetFraction=5%` policy witness starts with
+four 100-byte old-A objects, updates one hot object four times with a 50-byte Delta, then
+inserts a sentinel. Adaptive naturally selects four Stays followed by one Rotate; the
+no-migration and paced controls are externally held to that same workload target cadence.
+All sides then execute one direct terminal settlement, so each has six outer Commits,
+two scope advances, final scope `3/4`, and the same logical state:
+
+| Decision treatment | W | P | F | R | Final Previous debt |
+|---|---:|---:|---:|---:|---|
+| Delta, no migration | 924 | 476 | 476 | 524 | 10,20,30,40,1001 |
+| Delta, paced one debt | 1248 | 372 | 748 | 524 | 10,1001 |
+| Adaptive `(3,5%)` | 1296 | 472 | 796 | 524 | 1001 |
+
+The adaptive action sequence migrates `20,30,40`, then writes hot object `10` as Base;
+its source reconstruction payload becomes `100,150,200,250,100`, versus
+`100,150,200,250,300` for both controls. Paced nevertheless strictly dominates adaptive
+in W/P/F with equal final-only R in this fixture. The two subsequent rotations make R
+blind to the intermediate reset; that is a measurement/horizon boundary, not evidence
+that read amplification has no value and not a general policy ranking.
+
+The selector uses payload proxies only. A separate B-contained hot-chain witness proves
+strictly above-limit Base selection through exact planning/apply, while a policy-selected
+oversized Rotate proves typed capacity rejection, no fallback, and zero Store mutation.
+None of these test-local diagnostics changes the v1 report schema. Executable authority
+lives in [`ReadAmplificationBaseBudgetPolicyIntegrationTests.cs`](Tests/ReadAmplificationBaseBudgetPolicyIntegrationTests.cs)
+and [`ReadAmplificationBaseBudgetPolicyCapacityTests.cs`](Tests/ReadAmplificationBaseBudgetPolicyCapacityTests.cs).
+
 ## Still open before strategy selection
 
 - continue both aligned logical/scope/debt endpoints through one identical third epoch
   before deciding whether debt membership and payload bytes are sufficient continuation
   state or retained physical layout/provenance state remains decision-relevant;
-- decide whether intermediate reconstruction Frame pressure needs a separately named
-  guardrail only after a workload or product requirement makes it decision-relevant;
+- define one test-local intermediate per-object reconstruction-amplification diagnostic,
+  now that an implemented strategy directly optimizes it; do not silently add a fifth
+  canonical score;
 - retain Pareto/raw outcomes until workload/SLO evidence justifies guardrails or a
   ranking rule.

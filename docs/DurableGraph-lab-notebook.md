@@ -763,6 +763,13 @@
 
 ## 6. 船长日志
 
+### 2026-08-31：落地 read-amplification + Base-budget policy v0
+
+- **Observed**：以 synthetic payload proxy 实现两参数纯 selector：严格读放大/轮转边界、5% soft Base envelope、`Base<=Delta` 弱支配、NoChange-first one-debt progress、target-specific Stay/Rotate decisions；最终仍由 existing whole-candidate hard gates 接纳。
+- **Observed**：独立 exact witness 证明 B-contained hot object 的 `(251+50)/100=3.01` 真由阈值选择 Base；policy-selected oversized Rotate 命中 typed `PayloadAndTailMetaLength`，不 fallback、不改变 Store。
+- **Observed**：首个 matched cadence 中 control/paced/adaptive 的 `W/P/F/R` 分别为 `924/476/476/524`、`1248/372/748/524`、`1296/472/796/524`；paced 在本 fixture 局部严格支配 adaptive。Adaptive 将 hot reconstruction payload 从 controls 的末值 300 重置到 100，但两次换腿使 final-only R 均为 524。
+- **Boundary / Next**：payload bytes 不是 encoded write 或物理 cold IO；soft budget、NoChange-first progress 是对原始草案的显式 v0 细化。下一步先建立 test-local intermediate per-object amplification diagnostic，再做小范围参数/workload matrix；不改 canonical report 或声明默认 winner。
+
 ### 2026-08-31：闭合 fixed-cadence two-epoch terminal-liability witness
 
 - **Observed**：共同的三对象 A Frame 上，no-migration 与 paced-one-debt 都按 `3 workload Stay + 1 direct settlement` 运行两个 epoch；两侧同为 8 Commits、两次 scope advance，最终 scope `3/4`、live state 与 Previous debt `{10,20,30}` 对齐。

@@ -6,7 +6,7 @@ using Atelia.TwoLegRotationProbe.Workloads;
 
 namespace Atelia.TwoLegRotationProbe.Tests;
 
-public sealed class GroupedForegroundBurstCapacityCouplingTests {
+public sealed partial class GroupedForegroundBurstCapacityCouplingTests {
     private const uint DebtObjectId = 10;
     private const uint FirstUpdateObjectId = 20;
     private const uint SecondUpdateObjectId = 30;
