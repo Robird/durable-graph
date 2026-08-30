@@ -97,8 +97,9 @@ PublishedRevision 为 shared prior-snapshot anchor。accepted new head 的 curre
   record 不长于 Delta，则 Base 在当前一步的 append、current reconstruction 与 debt 上弱支配 Delta；
   该规则不外推到正式 wire、CPU/内存或任意未来 continuation；
 - failed candidate 不改变 accepted store/head；
-- accepted post-Save state 必须有具体、有限、可重放的 `CanPrepareAndRotate` continuation certificate。
-  当前不要求完备 solver；找不到证书只能称 `RejectedUnproven`，不能称一般无解；
+- selected Stay-B 只有在存在具体、有限、可重放的 `CanPrepareAndRotate` continuation certificate 时才接受；
+  Rotate-C 可直接 apply。evaluator 在 workload 后另行执行 canonical terminal settlement。当前不要求完备
+  solver；找不到有限路径只能称 `RejectedUnproven`，不能称一般无解；
 - 文件被物理删除后的历史不可导航不属于格式需要抵抗的故障模型。
 
 ## 当前具备的实验积木
@@ -162,6 +163,11 @@ PublishedRevision 为 shared prior-snapshot anchor。accepted new head 的 curre
 - experiment-only raw metric accounting：显式 outer-Commit 边界按全文件 tail 增量计算 W/P，并在每个
   realized Revision checkpoint 跟踪 F；最终 `FinalHeadColdLoad` 以 OVD materialization 与所有 live-object
   reconstruction full Frames 的去重并集计算 R。fresh-file 4B header 计入写入，typed rejection 不进入指标；
+- evaluator v1 closed-horizon session：每次 run 在独立 Store fork 上消费 caller-selected workload Commits，
+  用互斥 typed outcome 分开 success、selected capacity、`RejectedUnproven` 与 incomplete；完整 workload 后
+  无条件执行一次 `DirectRotateElseAscendingSingleDebt-v1` terminal settlement。直转优先，否则 ObjectId 升序
+  单对象迁债；全部 preparation+Rotate 真实 apply 在同一个 synthetic Commit 中并计入 W/P/F，成功还验证
+  terminal source A 已退出 final B/C current reconstruction；
 - terminal sizing 反例：high-ticket External 不支配 zero-payload Base+Self。
 
 Stay-B 与 Rotate-C 已接入同一 per-Save facts、paired evaluation、显式 apply、保守 completion proof 与
@@ -171,39 +177,36 @@ rotation trigger 已解决。
 
 ## 当前研究焦点
 
-首版 `W/P/F/R` 原始量与 `FinalHeadColdLoad` read schedule 已形成独立、可执行的 experiment-only accounting
-seam；它只消费实际接受的物理状态，不把 counterfactual certificate 或 typed rejection 伪装成 realized
-metrics。
+evaluator v1 已把 raw W/P/F/R、typed admissibility 与真实 terminal settlement 纵向闭合：只有成功完整消费
+workload 并关闭 terminal source epoch的 run 才暴露 metrics/cursor；bounded rejection 与 incomplete 不可评分。
 
-当前焦点收窄到 evaluator 的 admissibility/closed-horizon 层：选择并实际执行 terminal settlement 或完整
-epoch/long-run protocol，统一表达 success、capacity rejection、`RejectedUnproven` 与 incomplete workload，
-再用 manifest 固定 workload、seed、accounting/read-schedule 版本。metric `Complete` 目前只是机械快照，
-不证明 horizon 已闭合。
+当前焦点转向首个真实批量 consumer：用小型 manifest 固定 workload、seed、target/decision treatment、
+`DirectRotateElseAscendingSingleDebt-v1` 与 accounting/read-schedule 版本，重复运行 named cases 并输出机器可读
+raw outcome/report。该 consumer 用来发现最小 runner/report seam，不提前建立产品 policy API。
 
 ## 下一编码切片
 
-设计并实现 evaluator v1 的 typed run outcome 与 canonical closed-horizon/terminal-settlement protocol，
-确保所有 deferred work 真实执行并归入既有 Commit accounting。随后才为该真实 consumer 提取
-experiment-only runner/report seam；不建立产品 API、scalar score、archive 或 `/goal` 循环。
+设计并实现 benchmark-v1 的最小 experiment-only batch runner/manifest/raw report：先接现有 named causal
+witness 与 fixed-seed workload，证明同一 case 可确定性重放，并保留四种 typed outcome。暂不建立产品 API、
+scalar score、candidate archive 或 `/goal` 循环。
 
 ## 近期 roadmap
 
-1. **闭合 evaluator v1 admissibility**：typed hard-gate outcome 与实际计费的 closed horizon/settlement；
-2. **建立 experiment-only evaluator**：把已冻结的 `W/P/F/R` accounting 接到 runner，输出机器可读 raw per-case report；
-3. **冻结 benchmark-v1**：用现有 causal witnesses、named baselines 与固定种子 workload 做 evaluator dry-run；
+1. **建立 benchmark-v1 consumer**：最小 manifest + batch runner + machine-readable raw per-case outcome；
+2. **冻结 benchmark-v1 corpus**：接入现有 causal witnesses、named baselines 与 fixed-seed workload，验证重跑；
+3. **审视 horizon bias**：对照 terminal settlement、完整 epoch 或长周期，确认尾债不会系统性偏袒策略；
 4. **再启动自动优化**：只允许修改窄 policy seam，保留 Pareto candidates/counterexamples，允许 `no winner`。
 
 ## 未闭合事项
 
-- evaluator 的 closed horizon 是执行 canonical terminal settlement，还是以完整 epoch/long-run protocol
-  消除末端逃债；settlement 的全部写入与峰值必须实际计费；
+- `DirectRotateElseAscendingSingleDebt-v1` 关闭 terminal source epoch，却会形成新 scope 的 Previous debt；需要用
+  complete-cycle/long-run 对照量化 terminal liability bias，不能把它宣传成全局 debt-zero；
 - 无 workload SLO 时采用 Pareto frontier，还是先给 peak/file/read guardrail 再主优化 total write；当前不接受
   裸加权和或会用 1B 总写收益购买任意峰值的严格字典序；
-- successful-run reduction 尚不表达 selected capacity / completion `RejectedUnproven`；evaluator outcome 必须把
-  typed rejection 与 realized metrics 分开，而不是伪造没有 result scope 的 realized step；
-- evaluator consumer 会证明 experiment-only runner/report seam 的必要性，但仍不自动证明产品 API 边界；
-- counterfactual terminal 当前只投影 final-C append/result 与 preparatory Stay count，不聚合互斥未来，
-  也不声称已观测 preparatory writes 或 terminal-source pressure；
+- batch consumer 会证明 experiment-only runner/report seam 的具体形状，但仍不自动证明产品 API 边界；
+- 旧 rotation-comparison reduction 中的 counterfactual terminal 仍只投影 final-C append/result 与 preparatory
+  Stay count，不聚合互斥未来，也不声称已观测 preparatory writes 或 terminal-source pressure；evaluator v1
+  的 terminal settlement 是另一条已真实执行并计费的路径；
 - evaluator/benchmark 冻结后，哪些历史可见 pressure facts 足以驱动 rotation/migration，以及何时才有证据
   为具体 rejection 加入 bounded repair/explorer；
 - 多个不可支配策略出现后，何时需要用户用真实 workload/SLO 选择产品默认值。
@@ -220,7 +223,7 @@ experiment-only runner/report seam；不建立产品 API、scalar score、archiv
 ## 证据入口
 
 - 已实现模型与运行方式：[`README.md`](README.md)
-- evaluator v1 原始指标口径：[`EVALUATOR-V1.md`](EVALUATOR-V1.md)
+- evaluator v1 admissibility/settlement/指标合约：[`EVALUATOR-V1.md`](EVALUATOR-V1.md)
 - 活跃设计分叉：[`../../docs/design-branches/0007-adaptive-two-leg-rotation-policy.md`](../../docs/design-branches/0007-adaptive-two-leg-rotation-policy.md)
 - Plan/容量分层：[`../../docs/design-branches/0011-two-phase-save-planning-and-capacity.md`](../../docs/design-branches/0011-two-phase-save-planning-and-capacity.md)
 - StateStore 基础约束：[`../../docs/state-store-base-design.md`](../../docs/state-store-base-design.md)

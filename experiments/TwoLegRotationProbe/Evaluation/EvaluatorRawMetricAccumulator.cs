@@ -152,19 +152,8 @@ internal sealed class EvaluatorRawMetricAccumulator {
         ProbeRevisionCursor finalCursor) {
         ArgumentNullException.ThrowIfNull(store);
         ArgumentNullException.ThrowIfNull(finalCursor);
-        if (_commitStartStore is not null) {
-            throw new InvalidOperationException(
-                "The evaluator run cannot complete inside an open Commit.");
-        }
+        ValidateClosedBoundary(store, finalCursor);
 
-        StoreTailSnapshot finalStore = StoreTailSnapshot.Capture(store);
-        finalStore.EnsureExactlyMatches(
-            _lastCompletedStore,
-            "The Store changed after the last completed evaluator Commit.");
-        CursorValue final = CursorValue.Capture(store, finalCursor);
-        final.EnsureExactlyMatches(
-            _lastCompletedCursor,
-            "The final cursor does not match the last completed evaluator Commit.");
         FinalColdHeadReadObservation coldRead = FinalColdHeadReadMeasurer.Measure(
             store,
             finalCursor.PublishedRevisionAddress);
@@ -174,6 +163,30 @@ internal sealed class EvaluatorRawMetricAccumulator {
             _peakCommitWriteBytes,
             _maxCurrentFileTailBytes,
             coldRead);
+    }
+
+    /// <summary>
+    /// Verifies that no unaccounted mutation occurred at the current run boundary.
+    /// This does not produce metrics or claim that the evaluation horizon is closed.
+    /// </summary>
+    public void ValidateClosedBoundary(
+        RbfFileStore store,
+        ProbeRevisionCursor cursor) {
+        ArgumentNullException.ThrowIfNull(store);
+        ArgumentNullException.ThrowIfNull(cursor);
+        if (_commitStartStore is not null) {
+            throw new InvalidOperationException(
+                "The evaluator run boundary cannot be inspected inside an open Commit.");
+        }
+
+        StoreTailSnapshot finalStore = StoreTailSnapshot.Capture(store);
+        finalStore.EnsureExactlyMatches(
+            _lastCompletedStore,
+            "The Store changed after the last completed evaluator Commit.");
+        CursorValue final = CursorValue.Capture(store, cursor);
+        final.EnsureExactlyMatches(
+            _lastCompletedCursor,
+            "The final cursor does not match the last completed evaluator Commit.");
     }
 
     private void ClearOpenCommit() {

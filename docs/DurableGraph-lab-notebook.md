@@ -763,6 +763,12 @@
 
 ## 6. 船长日志
 
+### 2026-08-30：闭合 evaluator v1 typed outcome 与 terminal settlement
+
+- **Observed**：`EvaluatorV1Session` 在独立 Store fork 上运行；只有完整 workload 加真实 terminal settlement 的 `AdmittedEvaluatorRun` 暴露 W/P/F/R 与 final cursor。selected capacity、有限路径 `RejectedUnproven` 和 incomplete 均为互斥、不可评分结果，stale/corrupt/programmer errors 继续 fail closed。
+- **Observed**：`DirectRotateElseAscendingSingleDebt-v1` 先尝试零 Stay 的 maintenance Rotate；容量阻塞后按 ObjectId 升序逐个迁 A-debt。large-A witness 的两次 Stay 与最终 Rotate 被实际 replay 为一个 synthetic Commit，P 因而包含整段 settlement burst，原 source Store 不变。
+- **Boundary / Next**：成功只保证 terminal source `A/B` 的旧 A 退出 final `B/C` current reconstruction，不保证新 scope Previous debt 为零。下一切片建立 manifest/batch/raw report，并在自动优化前用完整 epoch/long-run 对照量化 terminal-liability bias。
+
 ### 2026-08-30：冻结 evaluator v1 的 W/P/F/R 原始指标
 
 - **Observed**：experiment-only accumulator 以 outer Commit 前后全文件 tail 总和之差计算 W/P，因而 fresh-C 的 4B header 会被计入；同一 Commit 内多个 realized Revision 合并为一个 peak sample，F 从初始与各 checkpoint 的 Current tail 取最大值。

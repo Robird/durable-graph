@@ -117,7 +117,7 @@ internal static class ExplicitProbeRevisionApplier {
         return candidate;
     }
 
-    private static RbfFile ValidateSource(
+    internal static RbfFile ValidateSource(
         RbfFileStore store,
         ProbeRevisionCursor expectedSource,
         NormalizedSaveFacts facts) {
