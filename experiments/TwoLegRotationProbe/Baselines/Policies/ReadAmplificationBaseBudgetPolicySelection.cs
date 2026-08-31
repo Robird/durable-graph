@@ -11,15 +11,13 @@ internal sealed class ReadAmplificationBaseBudgetPolicySelection {
         ReadAmplificationBaseBudgetPolicyProjection projection,
         ReadAmplificationBaseBudgetPolicyParameters parameters,
         StrategySelectionV1 selection,
-        long preferredBasePayloadBudgetBytes,
-        uint? stayProgressOverrideObjectId) {
+        long preferredBasePayloadBudgetBytes) {
         Projection = projection ?? throw new ArgumentNullException(nameof(projection));
         Parameters = parameters ?? throw new ArgumentNullException(nameof(parameters));
         Selection = selection ?? throw new ArgumentNullException(nameof(selection));
         ArgumentOutOfRangeException.ThrowIfNegative(
             preferredBasePayloadBudgetBytes);
         PreferredBasePayloadBudgetBytes = preferredBasePayloadBudgetBytes;
-        StayProgressOverrideObjectId = stayProgressOverrideObjectId;
     }
 
     public ReadAmplificationBaseBudgetPolicyProjection Projection { get; }
@@ -31,8 +29,6 @@ internal sealed class ReadAmplificationBaseBudgetPolicySelection {
     public StrategyTargetV1 Target => Selection.Target;
 
     public long PreferredBasePayloadBudgetBytes { get; }
-
-    public uint? StayProgressOverrideObjectId { get; }
 
     public StrategyStayDecisionV1 StayB => Selection.Stay;
 

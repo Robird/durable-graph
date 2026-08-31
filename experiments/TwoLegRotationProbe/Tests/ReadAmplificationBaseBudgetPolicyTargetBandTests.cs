@@ -33,10 +33,6 @@ public sealed partial class RotationPolicyComparisonTests {
         Assert.All(adaptive44.Steps,
             static step => Assert.Equal(ObjectVersionKind.Base, step.SelectedKind));
         Assert.All(adaptive35.Steps,
-            static step => Assert.Null(step.ProgressOverrideObjectId));
-        Assert.All(adaptive44.Steps,
-            static step => Assert.Null(step.ProgressOverrideObjectId));
-        Assert.All(adaptive35.Steps,
             static step => Assert.Empty(step.StayMigrationObjectIds));
         Assert.All(adaptive44.Steps,
             static step => Assert.Empty(step.StayMigrationObjectIds));
@@ -127,7 +123,6 @@ public sealed partial class RotationPolicyComparisonTests {
             read3Fraction5,
             read4Fraction5,
         }) {
-            Assert.Null(selection.StayProgressOverrideObjectId);
             Assert.Empty(selection.StayB.UnchangedMigrationObjectIds);
             Assert.Equal(
                 new StrategyUpdateWriteDecisionV1(
@@ -217,7 +212,6 @@ public sealed partial class RotationPolicyComparisonTests {
                 projection.ADependentEvacuationBasePayloadBytes,
                 selection.PreferredBasePayloadBudgetBytes,
                 selection.Target,
-                selection.StayProgressOverrideObjectId,
                 selection.StayB.UnchangedMigrationObjectIds.ToArray(),
                 selection.RotateC.BContainedNoChangeBaseObjectIds.ToArray(),
                 selectedKind,
@@ -301,7 +295,6 @@ public sealed partial class RotationPolicyComparisonTests {
         long ADependentBasePayloadBytes,
         long PreferredBaseBudgetBytes,
         StrategyTargetV1 Target,
-        uint? ProgressOverrideObjectId,
         IReadOnlyList<uint> StayMigrationObjectIds,
         IReadOnlyList<uint> RotateOptionalBaseObjectIds,
         ObjectVersionKind SelectedKind,

@@ -12,7 +12,7 @@ public sealed partial class RotationPolicyComparisonTests {
     private const uint ThresholdBandHotObjectId = 1;
 
     [Fact]
-    public void Adaptive_threshold_band_trades_write_bytes_for_realized_hot_chain_amplification() {
+    public void Adaptive_threshold_band_uses_strict_limit_for_hot_chain_Base_motive() {
         PolicySource source = CreateSource([
             new InitialObjectSeed(ThresholdBandHotObjectId, 10),
             new InitialObjectSeed(2, 1),
@@ -58,13 +58,7 @@ public sealed partial class RotationPolicyComparisonTests {
         Assert.Equal(allStay, adaptive35.Targets);
         Assert.Equal(allStay, adaptive44.Targets);
         Assert.Equal(
-            new uint?[] { 1, 2, 3, 4, 5, 6, 7, 8 },
-            adaptive35.ProgressOverrideObjectIds);
-        Assert.Equal(
-            adaptive35.ProgressOverrideObjectIds,
-            adaptive44.ProgressOverrideObjectIds);
-        Assert.Equal(
-            new uint[][] { [1], [2], [3], [4], [5], [6], [7], [8] },
+            Enumerable.Repeat(Array.Empty<uint>(), steps.Length),
             adaptive35.MigrationObjectIdsByStep);
         Assert.Equal(
             adaptive35.MigrationObjectIdsByStep,
@@ -88,20 +82,19 @@ public sealed partial class RotationPolicyComparisonTests {
         Assert.Equal([15L, 20L, 25L, 30L, 35L, 40L],
             adaptive44.HotProspectiveReadPayloadBytes);
 
-        // Every Update has room for the 10-byte hot Base after the separate
-        // one-byte progress migration. The fifth Update therefore diverges
+        // Every Update has room for the 10-byte hot Base. The fifth Update diverges
         // only at 3.5 > 3 versus 3.5 <= 4; the sixth 4-limit decision is the
         // strict equality case 4 == 4 and remains Delta.
-        Assert.All(adaptive35.UpdateBudgetBytesAfterProgress,
+        Assert.All(adaptive35.AvailableUpdateBudgetBytes,
             remaining => Assert.True(remaining >= 10));
-        Assert.All(adaptive44.UpdateBudgetBytesAfterProgress,
+        Assert.All(adaptive44.AvailableUpdateBudgetBytes,
             remaining => Assert.True(remaining >= 10));
         Assert.Equal(
-            Enumerable.Repeat(49L, 6),
-            adaptive35.UpdateBudgetBytesAfterProgress);
+            Enumerable.Repeat(50L, 6),
+            adaptive35.AvailableUpdateBudgetBytes);
         Assert.Equal(
-            Enumerable.Repeat(39L, 6),
-            adaptive44.UpdateBudgetBytesAfterProgress);
+            Enumerable.Repeat(40L, 6),
+            adaptive44.AvailableUpdateBudgetBytes);
         Assert.Equal(35L, adaptive35.HotProspectiveReadPayloadBytes[4]);
         Assert.Equal(35L, adaptive44.HotProspectiveReadPayloadBytes[4]);
         Assert.Equal(40L, adaptive44.HotProspectiveReadPayloadBytes[5]);
@@ -121,18 +114,6 @@ public sealed partial class RotationPolicyComparisonTests {
         Assert.Equal(2, adaptive35.FinalHotReconstructionFrameCount);
         Assert.Equal(7, adaptive44.FinalHotReconstructionFrameCount);
 
-        Assert.Equal(
-            new FixedHorizonRawVector(9, 1516, 1056, 1056, 1212),
-            adaptive35.Raw);
-        Assert.Equal(
-            new FixedHorizonRawVector(9, 1512, 1056, 1056, 1472),
-            adaptive44.Raw);
-        Assert.True(
-            adaptive44.Raw.TotalPhysicalWriteBytes <
-                adaptive35.Raw.TotalPhysicalWriteBytes);
-        Assert.True(
-            adaptive44.Raw.FinalColdHeadReadBytes >
-                adaptive35.Raw.FinalColdHeadReadBytes);
     }
 
     private static ThresholdBandRun RunThresholdBand(
@@ -146,11 +127,10 @@ public sealed partial class RotationPolicyComparisonTests {
         Dictionary<uint, LogicalObjectState> expectedState = new(
             source.InitialExpectedState);
         List<StrategyTargetV1> targets = [];
-        List<uint?> progressOverrideObjectIds = [];
         List<uint[]> migrationObjectIdsByStep = [];
         List<StrategyUpdateWriteModeV1> hotUpdateModes = [];
         List<long> hotProspectiveReadPayloadBytes = [];
-        List<long> updateBudgetBytesAfterProgress = [];
+        List<long> availableUpdateBudgetBytes = [];
 
         foreach (SaveStep step in steps) {
             NormalizedSaveFacts facts = SaveStepNormalizer.Normalize(
@@ -165,14 +145,11 @@ public sealed partial class RotationPolicyComparisonTests {
                 ReadAmplificationBaseBudgetPolicy.Select(projection, parameters);
 
             targets.Add(selection.Target);
-            progressOverrideObjectIds.Add(
-                selection.StayProgressOverrideObjectId);
             if (step.Changes.OfType<UpdateObject>().SingleOrDefault() is { } update) {
                 ReadAmplificationBaseBudgetPolicyObjectFact hot = projection
                     .PostLiveObjects
                     .Single(fact => fact.ObjectId == ThresholdBandHotObjectId);
                 Assert.Equal(ThresholdBandHotObjectId, update.ObjectId);
-                Assert.False(hot.IsADependent);
                 Assert.Equal(10, hot.PostSaveBasePayloadBytes);
                 Assert.Equal(5, hot.DeltaPayloadBytes);
                 hotProspectiveReadPayloadBytes.Add(
@@ -181,14 +158,8 @@ public sealed partial class RotationPolicyComparisonTests {
                     .Single(decision =>
                         decision.ObjectId == ThresholdBandHotObjectId)
                     .Mode);
-                uint progressId = Assert.IsType<uint>(
-                    selection.StayProgressOverrideObjectId);
-                int progressBytes = projection.PostLiveObjects
-                    .Single(fact => fact.ObjectId == progressId)
-                    .PostSaveBasePayloadBytes;
-                Assert.Equal(1, progressBytes);
-                updateBudgetBytesAfterProgress.Add(
-                    selection.PreferredBasePayloadBudgetBytes - progressBytes);
+                availableUpdateBudgetBytes.Add(
+                    selection.PreferredBasePayloadBudgetBytes);
             }
 
             ExplicitCandidatePairEvaluation pair =
@@ -214,6 +185,27 @@ public sealed partial class RotationPolicyComparisonTests {
                 expectedState);
         }
 
+        NormalizedSaveFacts workloadEndFacts =
+            SaveStepNormalizer.NormalizeMaintenanceOnly(
+                session.Store,
+                session.Cursor.FileScope.CurrentFileNumber,
+                session.Cursor.PublishedRevisionAddress);
+        RealizedReconstructionPayloadAmplificationSample workloadEndHot =
+            RealizedReconstructionPayloadAmplificationDiagnostic
+                .Capture(workloadEndFacts)
+                .Samples
+                .Single(sample => sample.ObjectId == ThresholdBandHotObjectId);
+        AbsoluteFrameAddress hotHead = ObjectVersionDictionaryReader
+            .MaterializeLive(
+                session.Store,
+                session.Cursor.PublishedRevisionAddress)
+            .Bindings[ThresholdBandHotObjectId];
+        ObjectReconstructionInspection hotReconstruction =
+            PhysicalStateOracle.InspectObjectReconstruction(
+                session.Store,
+                ThresholdBandHotObjectId,
+                hotHead);
+
         AdmittedEvaluatorRun admitted = Assert.IsType<AdmittedEvaluatorRun>(
             session.Complete());
         Assert.Equal(steps.Count + 1, admitted.Metrics.RealizedCommitCount);
@@ -225,46 +217,22 @@ public sealed partial class RotationPolicyComparisonTests {
             admitted.FinalCursor,
             expectedState);
 
-        NormalizedSaveFacts finalFacts = SaveStepNormalizer.NormalizeMaintenanceOnly(
-            session.Store,
-            admitted.FinalCursor.FileScope.CurrentFileNumber,
-            admitted.FinalCursor.PublishedRevisionAddress);
-        RealizedReconstructionPayloadAmplificationSample finalHot =
-            RealizedReconstructionPayloadAmplificationDiagnostic
-                .Capture(finalFacts)
-                .Samples
-                .Single(sample => sample.ObjectId == ThresholdBandHotObjectId);
-        AbsoluteFrameAddress hotHead = ObjectVersionDictionaryReader
-            .MaterializeLive(
-                session.Store,
-                admitted.FinalCursor.PublishedRevisionAddress)
-            .Bindings[ThresholdBandHotObjectId];
-        ObjectReconstructionInspection hotReconstruction =
-            PhysicalStateOracle.InspectObjectReconstruction(
-                session.Store,
-                ThresholdBandHotObjectId,
-                hotHead);
-
         return new ThresholdBandRun(
-            ProjectFixedHorizonRaw(admitted),
             targets,
-            progressOverrideObjectIds,
             migrationObjectIdsByStep,
             hotUpdateModes,
             hotProspectiveReadPayloadBytes,
-            updateBudgetBytesAfterProgress,
-            finalHot,
+            availableUpdateBudgetBytes,
+            workloadEndHot,
             hotReconstruction.ReconstructionFrameAddresses.Count);
     }
 
     private sealed record ThresholdBandRun(
-        FixedHorizonRawVector Raw,
         IReadOnlyList<StrategyTargetV1> Targets,
-        IReadOnlyList<uint?> ProgressOverrideObjectIds,
         IReadOnlyList<uint[]> MigrationObjectIdsByStep,
         IReadOnlyList<StrategyUpdateWriteModeV1> HotUpdateModes,
         IReadOnlyList<long> HotProspectiveReadPayloadBytes,
-        IReadOnlyList<long> UpdateBudgetBytesAfterProgress,
+        IReadOnlyList<long> AvailableUpdateBudgetBytes,
         RealizedReconstructionPayloadAmplificationSample FinalHotAmplification,
         int FinalHotReconstructionFrameCount);
 }

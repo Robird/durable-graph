@@ -92,6 +92,23 @@ public sealed class ReadAmplificationBaseBudgetPolicySelectionTests {
     }
 
     [Fact]
+    public void NoChange_amplification_threshold_is_strict_at_decimal_equality() {
+        ReadAmplificationBaseBudgetPolicyProjection projection = Project(
+            NoChange(1, baseBytes: 100, isADependent: true, historyBytes: 300),
+            NoChange(2, baseBytes: 100, isADependent: true, historyBytes: 301),
+            NoChange(3, baseBytes: 100, isADependent: false, historyBytes: 300),
+            NoChange(4, baseBytes: 100, isADependent: false, historyBytes: 301));
+
+        ReadAmplificationBaseBudgetPolicySelection selection = Select(
+            projection,
+            readLimit: 3m,
+            budgetFraction: 1m);
+
+        Assert.Equal([2U], selection.StayB.UnchangedMigrationObjectIds);
+        Assert.Equal([4U], selection.RotateC.BContainedNoChangeBaseObjectIds);
+    }
+
+    [Fact]
     public void Base_no_larger_than_Delta_is_unbudgeted_dominant() {
         ReadAmplificationBaseBudgetPolicyProjection projection = Project(
             Update(1, baseBytes: 10, historyBytes: 0, deltaBytes: 10));
@@ -162,65 +179,78 @@ public sealed class ReadAmplificationBaseBudgetPolicySelectionTests {
     }
 
     [Fact]
-    public void Stay_progress_reserves_A_NoChange_before_higher_ratio_B_Update() {
+    public void Unmotivated_A_NoChange_is_not_selected() {
         ReadAmplificationBaseBudgetPolicyProjection projection = Project(
-            Update(10, baseBytes: 5, historyBytes: 49, deltaBytes: 1),
-            NoChange(20, baseBytes: 6, isADependent: true, historyBytes: 6));
+            NoChange(10, baseBytes: 600, isADependent: true,
+                historyBytes: 600),
+            Insert(20, baseBytes: 400));
 
         ReadAmplificationBaseBudgetPolicySelection selection = Select(
             projection,
-            readLimit: 2m,
-            budgetFraction: 0.5m);
+            readLimit: 3m,
+            budgetFraction: 0.05m);
 
         Assert.Equal(StrategyTargetV1.StayB, selection.Target);
-        Assert.Equal(5, selection.PreferredBasePayloadBudgetBytes);
-        Assert.Equal((uint)20, selection.StayProgressOverrideObjectId);
-        Assert.Equal([20U], selection.StayB.UnchangedMigrationObjectIds);
-        AssertMode(selection.StayB.UpdateDecisions, 10,
-            StrategyUpdateWriteModeV1.Delta);
-    }
-
-    [Fact]
-    public void Stay_progress_falls_back_to_A_Update_and_may_overshoot_budget() {
-        ReadAmplificationBaseBudgetPolicyProjection projection = Project(
-            Update(10, baseBytes: 5, historyBytes: 49, deltaBytes: 1),
-            Update(20, baseBytes: 6, historyBytes: 5, deltaBytes: 1,
-                isADependent: true));
-
-        ReadAmplificationBaseBudgetPolicySelection selection = Select(
-            projection,
-            readLimit: 2m,
-            budgetFraction: 0.5m);
-
-        Assert.Equal(5, selection.PreferredBasePayloadBudgetBytes);
-        Assert.Equal((uint)20, selection.StayProgressOverrideObjectId);
-        AssertMode(selection.StayB.UpdateDecisions, 20,
-            StrategyUpdateWriteModeV1.Base);
-        AssertMode(selection.StayB.UpdateDecisions, 10,
-            StrategyUpdateWriteModeV1.Delta);
+        Assert.Equal(50, selection.PreferredBasePayloadBudgetBytes);
         Assert.Empty(selection.StayB.UnchangedMigrationObjectIds);
     }
 
     [Fact]
-    public void Discretionary_selection_skips_oversized_candidate_and_keeps_scanning() {
+    public void Motivated_oversized_first_candidate_is_admitted_alone() {
+        ReadAmplificationBaseBudgetPolicyProjection projection = Project(
+            NoChange(10, baseBytes: 600, isADependent: true,
+                historyBytes: 2400),
+            Update(20, baseBytes: 10, historyBytes: 35, deltaBytes: 5),
+            Insert(30, baseBytes: 390));
+
+        ReadAmplificationBaseBudgetPolicySelection selection = Select(
+            projection,
+            readLimit: 3m,
+            budgetFraction: 0.05m);
+
+        Assert.Equal(50, selection.PreferredBasePayloadBudgetBytes);
+        Assert.Equal([10U], selection.StayB.UnchangedMigrationObjectIds);
+        AssertMode(selection.StayB.UpdateDecisions, 20,
+            StrategyUpdateWriteModeV1.Delta);
+    }
+
+    [Fact]
+    public void Motivated_selection_takes_longest_fitting_sorted_prefix() {
         ReadAmplificationBaseBudgetPolicyProjection projection = Project(
             Update(10, baseBytes: 6, historyBytes: 59, deltaBytes: 1),
-            Update(20, baseBytes: 5, historyBytes: 24, deltaBytes: 1),
-            Update(30, baseBytes: 10, historyBytes: 0, deltaBytes: 10,
-                isADependent: true));
+            NoChange(20, baseBytes: 5, isADependent: true, historyBytes: 25),
+            Update(30, baseBytes: 4, historyBytes: 15, deltaBytes: 1),
+            NoChange(35, baseBytes: 1, isADependent: true, historyBytes: 3),
+            Insert(40, baseBytes: 8));
 
         ReadAmplificationBaseBudgetPolicySelection selection = Select(
             projection,
             readLimit: 2m,
-            budgetFraction: 0.25m);
+            budgetFraction: 0.5m);
 
-        Assert.Equal(StrategyTargetV1.StayB, selection.Target);
-        Assert.Equal(5, selection.PreferredBasePayloadBudgetBytes);
-        Assert.Null(selection.StayProgressOverrideObjectId);
+        Assert.Equal(12, selection.PreferredBasePayloadBudgetBytes);
         AssertModes(selection.StayB.UpdateDecisions,
-            (10, StrategyUpdateWriteModeV1.Delta),
-            (20, StrategyUpdateWriteModeV1.Base),
-            (30, StrategyUpdateWriteModeV1.Base));
+            (10, StrategyUpdateWriteModeV1.Base),
+            (30, StrategyUpdateWriteModeV1.Delta));
+        Assert.Equal([20U], selection.StayB.UnchangedMigrationObjectIds);
+    }
+
+    [Fact]
+    public void Stay_orders_motivated_NoChange_and_Update_together() {
+        ReadAmplificationBaseBudgetPolicyProjection projection = Project(
+            Update(10, baseBytes: 5, historyBytes: 49, deltaBytes: 1),
+            NoChange(20, baseBytes: 6, isADependent: true,
+                historyBytes: 18));
+
+        ReadAmplificationBaseBudgetPolicySelection selection = Select(
+            projection,
+            readLimit: 2m,
+            budgetFraction: 0.5m);
+
+        Assert.Equal(5, selection.PreferredBasePayloadBudgetBytes);
+        AssertMode(selection.StayB.UpdateDecisions, 10,
+            StrategyUpdateWriteModeV1.Base);
+        Assert.Empty(selection.StayB.UnchangedMigrationObjectIds);
     }
 
     [Fact]
@@ -235,12 +265,11 @@ public sealed class ReadAmplificationBaseBudgetPolicySelectionTests {
             readLimit: 1m,
             budgetFraction: 0.5m);
 
-        Assert.Equal((uint)2, selection.StayProgressOverrideObjectId);
         Assert.Equal([2U], selection.StayB.UnchangedMigrationObjectIds);
     }
 
     [Fact]
-    public void Rotate_omits_mandatory_A_and_spends_only_Q_minus_E_on_B_updates() {
+    public void Rotate_omits_mandatory_A_and_stops_at_oversized_optional_prefix() {
         ReadAmplificationBaseBudgetPolicyProjection projection = Project(
             Insert(1, 9),
             Remove(2, baseBytes: 4, isADependent: true),
@@ -264,13 +293,64 @@ public sealed class ReadAmplificationBaseBudgetPolicySelectionTests {
         AssertModes(selection.RotateC.BContainedUpdateDecisions,
             (5, StrategyUpdateWriteModeV1.Base),
             (6, StrategyUpdateWriteModeV1.Delta),
-            (7, StrategyUpdateWriteModeV1.Base));
+            (7, StrategyUpdateWriteModeV1.Delta));
         Assert.DoesNotContain(selection.RotateC.BContainedUpdateDecisions,
             static decision => decision.ObjectId == 3);
         Assert.Empty(selection.RotateC.BContainedNoChangeBaseObjectIds);
         Assert.Equal([3U, 5U, 6U, 7U],
             selection.StayB.UpdateDecisions.Select(static decision =>
                 decision.ObjectId));
+    }
+
+    [Fact]
+    public void Rotate_can_select_motivated_B_contained_NoChange() {
+        ReadAmplificationBaseBudgetPolicyProjection projection = Project(
+            NoChange(10, baseBytes: 1, isADependent: true, historyBytes: 1),
+            NoChange(20, baseBytes: 4, isADependent: false, historyBytes: 20),
+            Insert(30, baseBytes: 15));
+
+        ReadAmplificationBaseBudgetPolicySelection selection = Select(
+            projection,
+            readLimit: 3m,
+            budgetFraction: 0.5m);
+
+        Assert.Equal(StrategyTargetV1.RotateC, selection.Target);
+        Assert.Equal([20U],
+            selection.RotateC.BContainedNoChangeBaseObjectIds);
+    }
+
+    [Fact]
+    public void Rotate_with_no_evacuation_admits_oversized_first_motive_alone() {
+        ReadAmplificationBaseBudgetPolicyProjection projection = Project(
+            NoChange(10, baseBytes: 10, isADependent: false, historyBytes: 40),
+            Insert(20, baseBytes: 90));
+
+        ReadAmplificationBaseBudgetPolicySelection selection = Select(
+            projection,
+            readLimit: 3m,
+            budgetFraction: 0.05m);
+
+        Assert.Equal(StrategyTargetV1.RotateC, selection.Target);
+        Assert.Equal(5, selection.PreferredBasePayloadBudgetBytes);
+        Assert.Equal([10U],
+            selection.RotateC.BContainedNoChangeBaseObjectIds);
+    }
+
+    [Fact]
+    public void Rotate_does_not_overshoot_optional_budget_after_mandatory_evacuation() {
+        ReadAmplificationBaseBudgetPolicyProjection projection = Project(
+            NoChange(10, baseBytes: 1, isADependent: true, historyBytes: 1),
+            NoChange(20, baseBytes: 10, isADependent: false, historyBytes: 40),
+            Insert(30, baseBytes: 89));
+
+        ReadAmplificationBaseBudgetPolicySelection selection = Select(
+            projection,
+            readLimit: 3m,
+            budgetFraction: 0.05m);
+
+        Assert.Equal(StrategyTargetV1.RotateC, selection.Target);
+        Assert.Equal(5, selection.PreferredBasePayloadBudgetBytes);
+        Assert.Empty(selection.RotateC.BContainedNoChangeBaseObjectIds);
     }
 
     [Fact]
@@ -291,8 +371,6 @@ public sealed class ReadAmplificationBaseBudgetPolicySelectionTests {
         Assert.Equal(first.Target, second.Target);
         Assert.Equal(first.PreferredBasePayloadBudgetBytes,
             second.PreferredBasePayloadBudgetBytes);
-        Assert.Equal(first.StayProgressOverrideObjectId,
-            second.StayProgressOverrideObjectId);
         Assert.Equal(first.StayB.UpdateDecisions, second.StayB.UpdateDecisions);
         Assert.Equal(first.StayB.UnchangedMigrationObjectIds,
             second.StayB.UnchangedMigrationObjectIds);

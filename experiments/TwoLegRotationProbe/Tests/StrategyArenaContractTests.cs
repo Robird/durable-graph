@@ -92,12 +92,12 @@ public sealed class StrategyArenaContractTests {
                 StrategyTargetV1.StayB,
                 StrategyTargetV1.StayB,
                 StrategyTargetV1.StayB,
-                StrategyTargetV1.RotateC,
+                StrategyTargetV1.StayB,
             ],
             product.WorkloadCommits.Select(static receipt =>
                 receipt.SelectedTarget));
         Assert.Equal(1, product.TerminalSettlementRevisionCount);
-        Assert.Equal(4, product.Store.FileCount);
+        Assert.Equal(3, product.Store.FileCount);
         Assert.Equal(
             product.FinalCheckpoint.CurrentFileNumber,
             product.FinalCheckpoint.PublishedRevisionFileNumber);

@@ -236,8 +236,9 @@ capacity admission, apply, terminal settlement, logical validation, and all metr
 
 Manifest schema 2 uses one atomic `selectionProfile` per case. Metrics identity
 `raw-wpfr/5` and report schema 5 emit typed position plus the seven canonical integers
-defined above. Corpus revision 16 keeps
-sixteen adjustable traces and the two active Adaptive profiles, for 32 admitted cases.
+defined above. Corpus revision 17 keeps seventeen adjustable traces and the two active
+Adaptive profiles, for 34 admitted cases. Their existing component IDs now carry version
+2 because the corrected motive/budget behavior changes the selection contract.
 The retired no-migration and paced-one-debt profiles are not benchmark references:
 `DeltaReference` and `BaseReference` provide the strategy-independent write
 comparators. Their last complete implementation and 64-case report are archived at
@@ -260,13 +261,19 @@ updating 60 distinct objects per Save. Both active profiles share:
 
 | Profile | Wworkload | Pworkload | F | R | R/L |
 |---|---:|---:|---:|---:|---:|
-| Adaptive `(3,5%)` | 118716 | 2176 | 44040 | 2896812 | 10.5799 |
-| Adaptive `(4,4%)` | 117364 | 2148 | 55044 | 3219260 | 11.7575 |
+| Adaptive `(3,5%)` | 116424 | 2128 | 58460 | 3501092 | 12.7869 |
+| Adaptive `(4,4%)` | 114756 | 2104 | 91380 | 3754140 | 13.7110 |
 
-Adaptive `(4,4%)` writes 1352 fewer bytes during natural Saves and keeps the natural
-workload peak 28 bytes lower. Adaptive `(3,5%)` lowers F by 11004 bytes and R by 322448
+Adaptive `(4,4%)` writes 1668 fewer bytes during natural Saves and keeps the natural
+workload peak 24 bytes lower. Adaptive `(3,5%)` lowers F by 32920 bytes and R by 253048
 bytes. This is a write/peak versus closed-horizon file-tail/read Pareto trade, not a
 winner, tuned default, or steady-state claim.
+
+The seventeenth workload, `oversized-cold-nochange-tiny-clock`, is a white-box adversarial
+trace: a 10,000-byte unmotivated NoChange remains beside a one-byte active clock. The
+pre-fix policy produced `Pworkload=10052` by forcing that migration. The corrected
+regression requires `Pworkload < 10000` for both profiles rather than freezing an
+incidental exact result.
 
 Exact executable authority is
 [`BenchmarkV1RunnerTests.cs`](Tests/BenchmarkV1RunnerTests.cs),
@@ -277,8 +284,10 @@ manifest cases, or score-table rows.
 
 ## Next strategy work
 
-- design one minimal independent candidate that improves the observed write-versus-F/R
-  trade without future workload visibility or a feasibility oracle;
+- isolate stable low-amplification A-debt stalling and Ready-to-Rotate versus
+  Should-Rotate hysteresis before selecting one minimal independent candidate;
+- preserve the corrected strict motive and soft budget behavior; do not restore an
+  unconditional progress floor or a NoChange-first category rule;
 - add or change a workload only when white-box candidate review exposes one concrete
   blind spot;
 - keep raw typed outcomes and Pareto comparisons; do not introduce a scalar score,

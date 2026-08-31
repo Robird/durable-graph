@@ -17,8 +17,10 @@ internal static class ReadAmplificationBaseBudgetPolicy {
             projection.PostLiveGraphBasePayloadBytes,
             parameters.BaseBudgetFraction);
         StrategyTargetV1 target = SelectTarget(projection, parameters);
-        (StrategyStayDecisionV1 stayB, uint? progressOverrideObjectId) =
-            SelectStayB(projection, parameters, budgetBytes);
+        StrategyStayDecisionV1 stayB = SelectStayB(
+            projection,
+            parameters,
+            budgetBytes);
         StrategyRotateDecisionV1 rotateC = SelectRotateC(
             projection,
             parameters,
@@ -27,8 +29,7 @@ internal static class ReadAmplificationBaseBudgetPolicy {
             projection,
             parameters,
             new StrategySelectionV1(target, stayB, rotateC),
-            budgetBytes,
-            progressOverrideObjectId);
+            budgetBytes);
     }
 
     private static long GetPreferredBasePayloadBudgetBytes(
@@ -52,8 +53,7 @@ internal static class ReadAmplificationBaseBudgetPolicy {
             : StrategyTargetV1.StayB;
     }
 
-    private static (StrategyStayDecisionV1 Decision, uint? ProgressOverrideObjectId)
-        SelectStayB(
+    private static StrategyStayDecisionV1 SelectStayB(
             ReadAmplificationBaseBudgetPolicyProjection projection,
             ReadAmplificationBaseBudgetPolicyParameters parameters,
             long budgetBytes) {
@@ -68,34 +68,7 @@ internal static class ReadAmplificationBaseBudgetPolicy {
             .ToHashSet();
         HashSet<uint> migrationObjectIds = [];
 
-        long remainingBudgetBytes = budgetBytes;
-        uint? progressOverrideObjectId = null;
-        bool hasADebt = projection.PostLiveObjects.Any(static fact =>
-            fact.IsADependent &&
-            fact.Kind != ReadAmplificationBaseBudgetPolicyObjectKind.Insert);
-        bool dominantUpdateRetiresADebt = updates.Any(fact =>
-            fact.IsADependent && baseUpdateObjectIds.Contains(fact.ObjectId));
-        if (hasADebt && !dominantUpdateRetiresADebt) {
-            ReadAmplificationBaseBudgetPolicyObjectFact? progress = projection
-                .PostLiveObjects
-                .Where(static fact =>
-                    fact.IsADependent &&
-                    fact.Kind == ReadAmplificationBaseBudgetPolicyObjectKind.NoChange)
-                .OrderBy(static fact => fact, AmplificationComparer.Instance)
-                .FirstOrDefault();
-            progress ??= updates
-                .Where(static fact => fact.IsADependent)
-                .OrderBy(static fact => fact, AmplificationComparer.Instance)
-                .First();
-
-            progressOverrideObjectId = progress.ObjectId;
-            SelectBase(progress, baseUpdateObjectIds, migrationObjectIds);
-            remainingBudgetBytes = ConsumeSoftBudget(
-                remainingBudgetBytes,
-                progress.PostSaveBasePayloadBytes);
-        }
-
-        IEnumerable<ReadAmplificationBaseBudgetPolicyObjectFact> discretionary =
+        ReadAmplificationBaseBudgetPolicyObjectFact[] motivated =
             projection.PostLiveObjects
                 .Where(static fact =>
                     fact.Kind == ReadAmplificationBaseBudgetPolicyObjectKind.Update ||
@@ -108,24 +81,23 @@ internal static class ReadAmplificationBaseBudgetPolicy {
                     IsAboveAmplificationLimit(
                         fact,
                         parameters.ReadAmplificationLimit))
-                .OrderBy(static fact => fact, AmplificationComparer.Instance);
-        foreach (ReadAmplificationBaseBudgetPolicyObjectFact fact in discretionary) {
-            if (fact.PostSaveBasePayloadBytes > remainingBudgetBytes) {
-                continue;
-            }
-
+                .OrderBy(static fact => fact, AmplificationComparer.Instance)
+                .ToArray();
+        foreach (ReadAmplificationBaseBudgetPolicyObjectFact fact in
+            SelectBudgetedPrefix(
+                motivated,
+                budgetBytes,
+                allowIndivisibleFirstObject: true)) {
             SelectBase(fact, baseUpdateObjectIds, migrationObjectIds);
-            remainingBudgetBytes -= fact.PostSaveBasePayloadBytes;
         }
 
-        StrategyStayDecisionV1 decision = new(
+        return new StrategyStayDecisionV1(
             updates.Select(fact => new StrategyUpdateWriteDecisionV1(
                 fact.ObjectId,
                 baseUpdateObjectIds.Contains(fact.ObjectId)
                     ? StrategyUpdateWriteModeV1.Base
                     : StrategyUpdateWriteModeV1.Delta)),
             migrationObjectIds);
-        return (decision, progressOverrideObjectId);
     }
 
     private static StrategyRotateDecisionV1 SelectRotateC(
@@ -142,25 +114,31 @@ internal static class ReadAmplificationBaseBudgetPolicy {
             .Where(IsDominantBaseUpdate)
             .Select(static fact => fact.ObjectId)
             .ToHashSet();
+        HashSet<uint> noChangeBaseObjectIds = [];
         long remainingBudgetBytes = ConsumeSoftBudget(
             budgetBytes,
             projection.ADependentEvacuationBasePayloadBytes);
 
-        IEnumerable<ReadAmplificationBaseBudgetPolicyObjectFact> discretionary =
-            bContainedUpdates
+        ReadAmplificationBaseBudgetPolicyObjectFact[] motivated = projection
+            .PostLiveObjects
                 .Where(fact =>
+                    !fact.IsADependent &&
+                    (fact.Kind == ReadAmplificationBaseBudgetPolicyObjectKind.Update ||
+                        fact.Kind ==
+                            ReadAmplificationBaseBudgetPolicyObjectKind.NoChange) &&
                     !baseUpdateObjectIds.Contains(fact.ObjectId) &&
                     IsAboveAmplificationLimit(
                         fact,
                         parameters.ReadAmplificationLimit))
-                .OrderBy(static fact => fact, AmplificationComparer.Instance);
-        foreach (ReadAmplificationBaseBudgetPolicyObjectFact fact in discretionary) {
-            if (fact.PostSaveBasePayloadBytes > remainingBudgetBytes) {
-                continue;
-            }
-
-            baseUpdateObjectIds.Add(fact.ObjectId);
-            remainingBudgetBytes -= fact.PostSaveBasePayloadBytes;
+                .OrderBy(static fact => fact, AmplificationComparer.Instance)
+                .ToArray();
+        foreach (ReadAmplificationBaseBudgetPolicyObjectFact fact in
+            SelectBudgetedPrefix(
+                motivated,
+                remainingBudgetBytes,
+                allowIndivisibleFirstObject:
+                    projection.ADependentEvacuationBasePayloadBytes == 0)) {
+            SelectBase(fact, baseUpdateObjectIds, noChangeBaseObjectIds);
         }
 
         return new StrategyRotateDecisionV1(
@@ -169,7 +147,31 @@ internal static class ReadAmplificationBaseBudgetPolicy {
                 baseUpdateObjectIds.Contains(fact.ObjectId)
                     ? StrategyUpdateWriteModeV1.Base
                     : StrategyUpdateWriteModeV1.Delta)),
-            []);
+            noChangeBaseObjectIds);
+    }
+
+    private static IEnumerable<ReadAmplificationBaseBudgetPolicyObjectFact>
+        SelectBudgetedPrefix(
+            IReadOnlyList<ReadAmplificationBaseBudgetPolicyObjectFact> candidates,
+            long budgetBytes,
+            bool allowIndivisibleFirstObject) {
+        long selectedBytes = 0;
+        for (int index = 0; index < candidates.Count; index++) {
+            ReadAmplificationBaseBudgetPolicyObjectFact candidate =
+                candidates[index];
+            long nextSelectedBytes = checked(
+                selectedBytes + candidate.PostSaveBasePayloadBytes);
+            if (nextSelectedBytes > budgetBytes) {
+                if (index == 0 && allowIndivisibleFirstObject) {
+                    yield return candidate;
+                }
+
+                yield break;
+            }
+
+            yield return candidate;
+            selectedBytes = nextSelectedBytes;
+        }
     }
 
     private static bool IsDominantBaseUpdate(

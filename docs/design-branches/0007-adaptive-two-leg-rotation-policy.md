@@ -11,6 +11,11 @@
 > 下一步比较等写入 payload 下的 ObjectId-first 与 frame-release-aware 单对象迁移选择。bounded explorer
 > 只在出现具体保守拒绝或疑似 false-negative 后介入。
 
+> Authority boundary：本文保存 2026-08-28 至 2026-08-30 的候选分支与历史探针证据，不是当前
+> benchmark baseline 的算法规格。文中 `progress floor`、NoChange-first 与“当前 executable baseline”
+> 等表述应按其原实验日期阅读；2026-09-01 修复后的 `ReadAmplificationBaseBudgetPolicy` 已取消无条件
+> progress floor，当前事实以源码、测试、`TwoLegRotationProbe/PROJECT-STATE.md` 与策略说明为准。
+
 ## 问题
 
 在 current Revision 的 reconstruction closure 至多引用两个相邻文件的硬约束下，能否用同一组

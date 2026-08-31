@@ -57,7 +57,7 @@ internal static class BenchmarkV1ProtocolIdentities {
 
 internal static class BenchmarkV1Corpus {
     public const string ManifestId = "benchmark-v1";
-    public const int ManifestRevision = 16;
+    public const int ManifestRevision = 17;
     public const string ActiveHundredMixedAdaptiveR3B5PercentCaseId =
         "active-hundred-mixed-read-amplification-r3-b5pct";
     public const string ActiveHundredMixedAdaptiveR4B4PercentCaseId =
@@ -122,6 +122,10 @@ internal static class BenchmarkV1Corpus {
         "previous-debt-granularity-three-small-read-amplification-r3-b5pct";
     public const string PreviousDebtGranularityThreeSmallAdaptiveR4B4PercentCaseId =
         "previous-debt-granularity-three-small-read-amplification-r4-b4pct";
+    public const string OversizedColdNoChangeTinyClockAdaptiveR3B5PercentCaseId =
+        "oversized-cold-nochange-tiny-clock-read-amplification-r3-b5pct";
+    public const string OversizedColdNoChangeTinyClockAdaptiveR4B4PercentCaseId =
+        "oversized-cold-nochange-tiny-clock-read-amplification-r4-b4pct";
 
     public static BenchmarkV1BatchDefinition Create(
         IEnumerable<StrategyBindingV1> strategies) {
@@ -406,6 +410,15 @@ internal static class BenchmarkV1Corpus {
                     1),
                 previousDebtGranularityThreeSmallTrace,
                 frozenStrategies);
+        WorkloadTrace oversizedColdNoChangeTinyClockTrace =
+            CreateOversizedColdNoChangeTinyClockTrace();
+        BenchmarkV1CaseDefinition[] oversizedColdNoChangeTinyClockCases =
+            CreateStrategyCases(
+                new BenchmarkComponentIdentityV1(
+                    "oversized-cold-nochange-tiny-clock",
+                    1),
+                oversizedColdNoChangeTinyClockTrace,
+                frozenStrategies);
         return new BenchmarkV1BatchDefinition(
             ManifestId,
             ManifestRevision,
@@ -432,7 +445,25 @@ internal static class BenchmarkV1Corpus {
                 .. lifecycleTransientSerialCases,
                 .. previousDebtGranularitySingleLargeCases,
                 .. previousDebtGranularityThreeSmallCases,
+                .. oversizedColdNoChangeTinyClockCases,
             ]);
+    }
+
+    private static WorkloadTrace CreateOversizedColdNoChangeTinyClockTrace() {
+        List<SaveStep> steps = [
+            new SaveStep([new CreateObject(10, 10_000)]),
+            new SaveStep([new CreateObject(20, 1)]),
+        ];
+        for (int index = 0; index < 14; index++) {
+            steps.Add(new SaveStep([new UpdateObject(20, 1, 1)]));
+        }
+
+        return new WorkloadTrace(
+            scenarioName: "oversized-cold-nochange-tiny-clock",
+            generatorId: "handwritten",
+            generatorVersion: 1,
+            seed: 0,
+            steps);
     }
 
     private static BenchmarkV1CaseDefinition[] CreateStrategyCases(

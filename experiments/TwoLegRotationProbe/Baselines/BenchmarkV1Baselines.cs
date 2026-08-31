@@ -15,7 +15,7 @@ public static class BenchmarkV1Baselines {
     } = new(
         new BenchmarkComponentIdentityV1(
             "read-amplification-base-budget-r3-b5pct",
-            1),
+            2),
         "read-amplification-r3-b5pct",
         static () => RunAdaptiveR3B5Percent);
 
@@ -24,7 +24,7 @@ public static class BenchmarkV1Baselines {
     } = new(
         new BenchmarkComponentIdentityV1(
             "read-amplification-base-budget-r4-b4pct",
-            1),
+            2),
         "read-amplification-r4-b4pct",
         static () => RunAdaptiveR4B4Percent);
 

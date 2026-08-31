@@ -2,7 +2,7 @@
 
 > 状态：Research Reference
 >
-> 最近核对：2026-08-31
+> 最近核对：2026-09-01
 
 本文整理与 `TwoLegRotationProbe` 最相关的前人成果，供设计策略、构造 benchmark workload 和解释实验结果时查阅。
 它不是 DurableGraph 的设计 authority，也不意味着必须照搬某个系统。当前实现事实仍以源码、测试和实际运行结果为准。
@@ -215,7 +215,7 @@ SQLite WAL 默认在 WAL 达到一定页数时自动 checkpoint。官方文档�
 
 ## 9. 对当前研究路线的结论
 
-当前 `ReadAmplificationBaseBudgetPolicy` 已经组合了有充分前例的最小机制：read-amplification threshold、normalized debt trigger、per-Commit Base budget 与 progress floor。它适合作为 baseline，而不是预设赢家。
+当前 `ReadAmplificationBaseBudgetPolicy` 已经组合了有充分前例的最小机制：read-amplification threshold、normalized debt trigger 与 per-Commit Base budget。Update 和目标动作支持的 NoChange 只有超过读放大阈值才形成 Base 动机；动机按放大率排序后取预算前缀，Stay 或 `E==0` 的 Rotate 才会在预算筛选结果为空时整体放行首个不可拆分动机。旧实现的无条件 NoChange progress floor 会绕过预算，已由 `oversized-cold-nochange-tiny-clock` 反例暴露并移除；它是历史 bug，不是当前 baseline 机制。
 
 最值得成为后续 challenger 或 contract-evolution probe 的方向依次是：
 
@@ -224,5 +224,9 @@ SQLite WAL 默认在 WAL 达到一定页数时自动 checkpoint。官方文档�
 3. **offline small-N oracle**：测量简单 greedy 距离同一 horizon 下可实现 Pareto frontier 的差距；
 4. **LFS-inspired physical benefit/cost**：当 Frame grouping 对 canonical outcome 产生命名反例后，演化策略输入并评价对象组能释放的 Previous Frame bytes 与额外写入；
 5. **read-triggered state**：只有真实 restart/read schedule 证明当前 synthetic cumulative R 与预测式 amplification 不足时，才引入跨 Commit read statistics。
+
+当前仍有两个不同层次的开放问题：没有读放大动机时，稳定 A debt 可能长期不推进；`E/G` 只回答
+“现在轮转有多贵”，尚未区分 Ready-to-Rotate 与 Should-Rotate。基于上一轮 Update 的热度修正和按
+`Base - Delta` 边际成本选择，均保留为后续独立候选，不混入本次基线 bug 修复。
 
 不建议在这一阶段直接引入 reinforcement learning、通用策略插件发现、自动参数搜索、标量排行榜或可持久化 candidate archive。先让统一 workload、公共策略契约、隔离运行和原始评价结果构成一个可重复的“测量台”；策略演进仍可由多个独立实现并行进行。

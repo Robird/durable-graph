@@ -116,7 +116,8 @@ PublishedRevision 为 shared prior-snapshot anchor。accepted new head 的 curre
 
 ## 当前具备的实验积木
 
-- 固定种子、可冻结重放的 Field/List 独立对象 workload；当前 corpus 有十六条可调 trace；
+- 固定种子、可冻结重放的 Field/List 独立对象 workload；当前 corpus 有十七条可调 trace，包括针对
+  oversized unmotivated NoChange 的白盒对抗样本；
 - runtime OVD、absolute StateMap projection、symbolic reconstruction 与 provisional RBF v0.40
   one-Revision/one-Frame estimator；
 - 从 PublishedRevision authority 派生的 immutable
@@ -128,7 +129,8 @@ PublishedRevision 为 shared prior-snapshot anchor。accepted new head 的 curre
   accounting 继续在 evaluator 内部验证 closure 与守恒；
 - `Arena <- Baselines <- Tests` 单向程序集边界；candidate 只作在线选择，Arena 持有
   normalize、定尺、admission、apply、settlement、状态验真和 metrics；
-- 两个 active Adaptive bindings：read-amplification/Base-budget `(3,5%)` 与 `(4,4%)`；
+- 两个 active Adaptive bindings：read-amplification/Base-budget `(3,5%)` 与 `(4,4%)`，同名 profile
+  component identity 已随本次行为修正升至 version 2；
 - typed capacity/no-fallback/zero-mutation witnesses 与核心 evaluator/report determinism tests；
 - no-migration 与 paced-one-debt 的完整 profile、64-case corpus 和专属相位诊断已退出主线，
   由 Git tag `research/no-migration-paced-baselines-20260901` 保存。test-local 的“不迁移/迁一个”
@@ -136,36 +138,48 @@ PublishedRevision 为 shared prior-snapshot anchor。accepted new head 的 curre
 
 ## 当前研究焦点
 
-Metrics identity `raw-wpfr/5`、report schema 5、Corpus revision 16 在十六条 trace 上运行两个
-active Adaptive profiles，共 32 admitted cases。
+Metrics identity `raw-wpfr/5`、report schema 5、Corpus revision 17 在十七条 trace 上运行两个
+active Adaptive v2 profiles，共 34 admitted cases。
 `DeltaReference` 与 `BaseReference` 是 strategy-independent 写入参照，替代退役 profile 的
 “基线策略”职责。
 
 `active-hundred-mixed` 当前提供最有用的长周期反馈：两组 profile 共享
 `Delta/Base references=67206/165606` 与 `L=273804`；Adaptive `(3,5%)` 相比 `(4,4%)`
-多 `1352B Wworkload`、workload-P 高 `28B`，但少 `11004B F` 与 `322448B R`。这证明当前是
+多 `1668B Wworkload`、workload-P 高 `24B`，但少 `32920B F` 与 `253048B R`。这证明当前是
 自然写入/峰值与 closed-horizon 文件高水位/累计冷读之间的交换，也暴露 Adaptive 可能在持续活跃
 对象上进行不必要 Base 写；它不是 winner、默认参数或 steady-state 结论。
 
+Adaptive v2 已移除 unconditional progress 与 NoChange-first：Update 以严格 `(H+D)/B`、目标支持的
+NoChange 以严格 `H/B` 产生 Base 动机；统一按放大率/ObjectId 排序并选择预算内最长前缀。Stay 只允许
+首个有动机的不可分对象超出 `Q`；Rotate 的强制 `E` 先消费 `Q`，且仅 `E==0` 时允许可选首对象超额。
+`Q` 是 payload pacing proxy，不是 exact physical P cap。对抗 workload 证明旧实现曾产生 `P=10052`
+的 10,000-byte 无动机迁移；当前回归只固定 `P<10000`，避免锁定偶然度量值。
+
 ## 下一编码切片
 
-由 active-hundred 白盒结果设计一个最小独立 candidate：保留多对象/按比例迁债的轮转进展，
-同时减少对持续活跃对象的无效 Base 重写。不得增加未来视野或 feasibility oracle；先复跑现有
-32-case suite 并报告 typed outcomes、references 与 raw metrics，不合分、不排榜。
+先对白盒 workload 复审 Adaptive v2 的两个剩余结构性问题，再只选择一个最小独立改动：稳定 A debt
+在没有严格 Base 动机时可能停滞，以及 `E/G` 只表示 Ready-to-Rotate、不能回答 Should-Rotate。
+不得恢复 unconditional progress、增加未来视野或 feasibility oracle；复跑 34-case suite 并报告
+typed outcomes、references 与 raw metrics，不合分、不排榜。
 
 ## 近期 roadmap
 
-1. **实现策略回应**：由上述白盒证据驱动一个最小独立 candidate，不改变 Arena contract 或让策略读取
+1. **隔离下一弱点**：用最小白盒 trace 区分稳定债务停滞与 Rotate hysteresis，确认哪一个先成为可量化短板；
+2. **实现策略回应**：只对已证实短板构造一个最小独立 candidate，不改变 Arena contract 或让策略读取
    未来/feasibility；随后报告 typed outcomes 与 raw metrics，不合分、不排榜；
-2. **按弱点而非目录扩容**：只有 candidate 复审指出新的具体 blind spot，才增加或调整最小 validation；
+3. **按弱点而非目录扩容**：只有 candidate 复审指出新的具体 blind spot，才增加或调整最小 validation；
    不再按 generic axis 或 seed 数机械扩 corpus；
-3. **候选成形后再封包**：闭合 determinism/order/artifact 与 qualification gates，冻结 `ROUND-1` packet/tag，
+4. **候选成形后再封包**：闭合 determinism/order/artifact 与 qualification gates，冻结 `ROUND-1` packet/tag，
    再启动并行 candidate round。
 
 ## 未闭合事项
 
 - 哪些互相正交的因果 workload 轴足以支撑“没有明显短板”仍未知；统一 suite 只提供可重复 synthetic evidence，
   不能声称代表生产；
+- 无 unconditional progress 后，低放大率的稳定 A debt 可在 Stay 中长期不动；应由 hysteresis、债务年龄或
+  其他最小机制解决，还是接受为读写交换，尚未裁决；
+- 当前 `E/G` Rotate trigger 只证明迁移代价低于比例阈值，没有 leg age/write/file pressure，因此混淆
+  Ready-to-Rotate 与 Should-Rotate；简单 hysteresis 的事实输入与收益仍待白盒验证；
 - 当前 payload-only canonical toolkit 是否足以产生结构多样的首轮 candidate，需由首轮结果验证；Frame-aware
   facts 仅在 payload-identical 布局造成 canonical outcome 反转或 Frame-aware oracle 进入新 Pareto 点时进入 V2；
 - 当前 profile-matrix manifest 可由 organizer 冻结候选后统一重跑；若出现分批 strategy report 缓存/比较

@@ -173,12 +173,16 @@ strategy-neutral suite identity 与 per-strategy run identity。
 ## 当前证据
 
 - Arena、Baselines、Tests 三程序集保持单向依赖；两个 active executor 位于独立 Baselines assembly；
-- corpus revision 16 由十六条可调 trace 与两个 Adaptive profiles 组成，共 32 admitted cases；
+- corpus revision 17 由十七条可调 trace 与两个 Adaptive profiles 组成，共 34 admitted cases；新增
+  `oversized-cold-nochange-tiny-clock` 对抗 trace，以 10000B stable A-dependent NoChange 和 1B 活跃
+  clock 隔离软 Base 预算逃逸：旧实现的 `Pworkload=10052B`，修复后两个 profile 均 `<10000B`；
+- 两个 profile 保持原 identity ID 与 case suffix，但行为变化使 component version 均升为 v2；历史 v1
+  manifest/result 只能作为旧算法证据，不能与 revision 17 当前结果混同；
 - runner/report 锁定 fresh-per-case executor、typed termination、Arena-owned settlement/metrics、
   workload-only P、累计 R/L 与 Delta/Base references；
 - `active-hundred-mixed` 的两个 profiles 共享
-  `Delta/Base references=67206/165606`；`(4,4%)` 少写 1352B Wworkload 且 Pworkload 低 28B，
-  `(3,5%)` 的 F/R 分别低 11004B/322448B；
+  `Delta/Base references=67206/165606` 与 `L=273804`；修复后 `(3,5%)` 的 `W/P/F/R` 为
+  `116424/2128/58460/3501092`，`(4,4%)` 为 `114756/2104/91380/3754140`；
 - no-migration 与 paced-one-debt profile 已不再承担 write baseline：完整旧实现和 64-case 结果保存在
   Git tag `research/no-migration-paced-baselines-20260901`，主线使用 strategy-independent references；
 - workload 不再逐条 hash/vector 锁死；只有 candidate 白盒复审暴露具体 blind spot 时才添加或调整最小 trace；
@@ -187,9 +191,11 @@ strategy-neutral suite identity 与 per-strategy run identity。
 
 ## 下一阶段
 
-1. 针对 active-hundred 的持续活跃对象 Base 重写开销设计一个最小独立 candidate，在 revision 16 上复跑；
-2. candidate 稳定后再闭合 determinism/order/artifact 与 qualification gates，冻结 `ROUND-1` packet/tag；
-3. 只有 candidate 确实需要直接物理 Store 输出时才实现 untrusted artifact validator。
+1. 单独研究没有读放大动机时 stable A debt 的停滞；不要恢复会绕过 Base 预算的无条件 progress floor；
+2. 区分 Ready-to-Rotate 与 Should-Rotate，评估最小 hysteresis 是否能避免过早或振荡轮转；
+3. 基于上一轮 Update 的热度修正与按 `Base - Delta` 边际成本选择保留为独立候选，不混入 baseline
+   bug fix；candidate 稳定后再闭合 determinism/order/artifact 与 qualification gates；
+4. 只有 candidate 确实需要直接物理 Store 输出时才实现 untrusted artifact validator。
 
 ## 明确暂缓
 

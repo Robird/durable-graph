@@ -410,13 +410,17 @@ tests. This is a compact comparable projection, not a full diagnostic dump, pars
 persisted product format, score, or winner.
 
 Manifest schema 2 represents one atomic `selectionProfile` identity per case rather
-than a target/decision cross-product. Corpus revision 16 runs the two active Adaptive
-profiles over sixteen traces (32 admitted cases). The retired no-migration and
+than a target/decision cross-product. Corpus revision 17 runs the two active Adaptive
+v2 profiles over seventeen traces (34 admitted cases). The profile IDs are unchanged,
+while their component versions are 2 because the corrected selection behavior changes
+the manifest contract. The retired no-migration and
 paced-one-debt profiles are archived at Git tag
 `research/no-migration-paced-baselines-20260901`; strategy-independent
 `DeltaReference` and `BaseReference` now provide the write comparators. The
 `active-hundred-mixed` workload merges a 100-object migration backlog with 64 rounds of
-sustained 60% update activity. It remains adjustable rather than hash-locked.
+sustained 60% update activity. `oversized-cold-nochange-tiny-clock` is the white-box
+adversarial trace for an unmotivated 10,000-byte NoChange escaping a soft payload
+budget. Both remain adjustable rather than hash-locked.
 Runner/profile closure lives in
 [`BenchmarkV1RunnerTests.cs`](Tests/BenchmarkV1RunnerTests.cs),
 [`BenchmarkV1JsonTests.cs`](Tests/BenchmarkV1JsonTests.cs), and the
@@ -471,10 +475,11 @@ available from Git tag `research/no-migration-paced-baselines-20260901`.
 |---|---|---|
 | Baseline policy matrix | Base, Delta, and a local ratio trade modeled writes against a named final reconstruction snapshot; there is no universal winner. | This predates cumulative R and is not the canonical strategy comparator. [`PolicyMatrixTests.cs`](Tests/PolicyMatrixTests.cs) |
 | Terminal-C sizing | A high-ticket External binding can overflow when same-state Base+Self fits, so per-object token savings cannot replace whole-candidate sizing. | Provisional grammar only. [`ProvisionalRevisionV0GrammarTests.cs`](Tests/ProvisionalRevisionV0GrammarTests.cs) |
-| Adaptive read-amplification/Base-budget v0 | Two payload-proxy parameters select Base/Delta, reserve old-A progress per Stay, and trigger Rotate below a strict debt share. | Payload heuristic only, not encoded-byte authority, tuned defaults, or a winner. [`READ-AMPLIFICATION-BASE-BUDGET-POLICY-V0.md`](READ-AMPLIFICATION-BASE-BUDGET-POLICY-V0.md), [`ReadAmplificationBaseBudgetPolicyCapacityTests.cs`](Tests/ReadAmplificationBaseBudgetPolicyCapacityTests.cs) |
-| Active hundred mixed | Both active profiles share Delta/Base references `67206/165606`. Adaptive `(4,4%)` lowers workload W/P by `1352/28B`; Adaptive `(3,5%)` lowers closed-horizon F and cumulative R by `11004/322448B`. | Adjustable synthetic workload and write/peak versus file-tail/read Pareto trade, not a golden benchmark or steady-state winner. [`BenchmarkV1Corpus.cs`](Benchmarking/BenchmarkV1Corpus.cs), [`EVALUATOR-V1.md`](EVALUATOR-V1.md) |
+| Adaptive read-amplification/Base-budget v0 | Strict Update/target-supported NoChange motives share one amplification-sorted budget prefix; there is no unconditional progress or NoChange priority. Rotate evacuation consumes the soft payload envelope first. | `Q` is a synthetic payload pacing proxy, not an exact physical P cap, encoded-byte authority, tuned default, or winner. [`READ-AMPLIFICATION-BASE-BUDGET-POLICY-V0.md`](READ-AMPLIFICATION-BASE-BUDGET-POLICY-V0.md), [`ReadAmplificationBaseBudgetPolicyCapacityTests.cs`](Tests/ReadAmplificationBaseBudgetPolicyCapacityTests.cs) |
+| Active hundred mixed | Both active profiles share Delta/Base references `67206/165606`. Adaptive `(4,4%)` lowers workload W/P by `1668/24B`; Adaptive `(3,5%)` lowers closed-horizon F and cumulative R by `32920/253048B`. | Adjustable synthetic workload and write/peak versus file-tail/read Pareto trade, not a golden benchmark or steady-state winner. [`BenchmarkV1Corpus.cs`](Benchmarking/BenchmarkV1Corpus.cs), [`EVALUATOR-V1.md`](EVALUATOR-V1.md) |
+| Oversized cold NoChange | The old unconditional migration produced `Pworkload=10052`; the v2 regression requires `Pworkload < 10000`, so the 10,000-byte unmotivated Base cannot escape the envelope. | White-box adversarial witness; it intentionally does not lock the corrected incidental metric. [`BenchmarkV1Corpus.cs`](Benchmarking/BenchmarkV1Corpus.cs), [`BenchmarkV1RunnerTests.cs`](Tests/BenchmarkV1RunnerTests.cs) |
 | Capacity coupling | Selected hard rejection preserves typed failure, no fallback, no mutation, and no metrics even when another path is feasible. | No complete repair/search or file-size policy. [`ReadAmplificationBaseBudgetPolicyCapacityTests.cs`](Tests/ReadAmplificationBaseBudgetPolicyCapacityTests.cs), [`GroupedForegroundBurstCapacityCouplingTests.cs`](Tests/GroupedForegroundBurstCapacityCouplingTests.cs) |
-| Evaluator and benchmark consumer | Terminal settlement is mandatory and internally accounted; canonical W/P are workload-only; F remains a closed-horizon guardrail; R/L samples every successful workload Save. Revision 16 runs 32 admitted cases across sixteen traces and two active profiles. | Internal certified-product track, not an untrusted-artifact judge, score, or frontier. [`EVALUATOR-V1.md`](EVALUATOR-V1.md), [`BenchmarkV1RunnerTests.cs`](Tests/BenchmarkV1RunnerTests.cs), [`BenchmarkV1JsonTests.cs`](Tests/BenchmarkV1JsonTests.cs) |
+| Evaluator and benchmark consumer | Terminal settlement is mandatory and internally accounted; canonical W/P are workload-only; F remains a closed-horizon guardrail; R/L samples every successful workload Save. Revision 17 runs 34 admitted cases across seventeen traces and two active v2 profiles. | Internal certified-product track, not an untrusted-artifact judge, score, or frontier. [`EVALUATOR-V1.md`](EVALUATOR-V1.md), [`BenchmarkV1RunnerTests.cs`](Tests/BenchmarkV1RunnerTests.cs), [`BenchmarkV1JsonTests.cs`](Tests/BenchmarkV1JsonTests.cs) |
 | Continuous rotation | A caller script crosses `A/B -> B/C -> C/D` while preserving exact state, reconstruction closure, and Stay certificates. | Not a stateful runner or durable publication path. [`ContinuousMultiRotationTests.cs`](Tests/ContinuousMultiRotationTests.cs) |
 
 ### Accepted source-partition provenance

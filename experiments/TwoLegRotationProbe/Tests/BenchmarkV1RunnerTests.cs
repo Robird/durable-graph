@@ -13,12 +13,12 @@ namespace Atelia.TwoLegRotationProbe.Tests;
 
 public sealed class BenchmarkV1RunnerTests {
     [Fact]
-    public void Corpus_defines_sixteen_workloads_with_two_active_profiles_each() {
+    public void Corpus_defines_seventeen_workloads_with_two_active_profiles_each() {
         BenchmarkV1BatchDefinition definition = BenchmarkV1Corpus.Create(
             BenchmarkV1Baselines.All);
 
         Assert.Equal(2, definition.Manifest.Schema.Version);
-        Assert.Equal(16, definition.Manifest.ManifestRevision);
+        Assert.Equal(17, definition.Manifest.ManifestRevision);
         Assert.Equal(BenchmarkV1ProtocolIdentities.Evaluator, definition.Manifest.Evaluator);
         Assert.Equal(
             BenchmarkV1ProtocolIdentities.TerminalSettlement,
@@ -33,8 +33,8 @@ public sealed class BenchmarkV1RunnerTests {
         Assert.Equal(
             BenchmarkV1ProtocolIdentities.RevisionGrammar,
             definition.Manifest.RevisionGrammar);
-        Assert.Equal(32, definition.Cases.Count);
-        Assert.Equal(16, definition.Cases
+        Assert.Equal(34, definition.Cases.Count);
+        Assert.Equal(17, definition.Cases
             .Select(static benchmarkCase =>
                 benchmarkCase.ManifestCase.TraceDefinition.Id)
             .Distinct(StringComparer.Ordinal)
@@ -49,6 +49,11 @@ public sealed class BenchmarkV1RunnerTests {
                     benchmarkCase.ManifestCase.SelectionProfile)
                 .Distinct()
                 .OrderBy(static identity => identity.Id, StringComparer.Ordinal));
+        Assert.All(
+            definition.Cases,
+            static benchmarkCase => Assert.Equal(
+                2,
+                benchmarkCase.ManifestCase.SelectionProfile.Version));
 
         foreach (IGrouping<string, BenchmarkV1CaseDefinition> group in
             definition.Cases.GroupBy(
@@ -69,7 +74,7 @@ public sealed class BenchmarkV1RunnerTests {
         BenchmarkV1BatchRun run = BenchmarkV1Runner.Run(
             BenchmarkV1Corpus.Create(BenchmarkV1Baselines.All));
 
-        Assert.Equal(32, run.Report.Cases.Count);
+        Assert.Equal(34, run.Report.Cases.Count);
         foreach (IGrouping<string, BenchmarkCaseReportV1> group in
             run.Report.Cases.GroupBy(
                 static item => item.ResolvedTraceSha256,
@@ -98,17 +103,42 @@ public sealed class BenchmarkV1RunnerTests {
         AssertActiveHundred(
             run.Report,
             BenchmarkV1Corpus.ActiveHundredMixedAdaptiveR3B5PercentCaseId,
-            workloadWriteBytes: 118716,
-            peakWorkloadWriteBytes: 2176,
-            maxCurrentFileTailBytes: 44040,
-            totalColdReadBytes: 2896812);
+            workloadWriteBytes: 116424,
+            peakWorkloadWriteBytes: 2128,
+            maxCurrentFileTailBytes: 58460,
+            totalColdReadBytes: 3501092);
         AssertActiveHundred(
             run.Report,
             BenchmarkV1Corpus.ActiveHundredMixedAdaptiveR4B4PercentCaseId,
-            workloadWriteBytes: 117364,
-            peakWorkloadWriteBytes: 2148,
-            maxCurrentFileTailBytes: 55044,
-            totalColdReadBytes: 3219260);
+            workloadWriteBytes: 114756,
+            peakWorkloadWriteBytes: 2104,
+            maxCurrentFileTailBytes: 91380,
+            totalColdReadBytes: 3754140);
+    }
+
+    [Fact]
+    public void Oversized_cold_nochange_does_not_escape_the_workload_Base_budget() {
+        BenchmarkV1BatchRun run = BenchmarkV1Runner.Run(
+            BenchmarkV1Corpus.Create(BenchmarkV1Baselines.All));
+
+        foreach (string caseId in new[] {
+            BenchmarkV1Corpus
+                .OversizedColdNoChangeTinyClockAdaptiveR3B5PercentCaseId,
+            BenchmarkV1Corpus
+                .OversizedColdNoChangeTinyClockAdaptiveR4B4PercentCaseId,
+        }) {
+            AdmittedOutcomeReportV1 admitted =
+                Assert.IsType<AdmittedOutcomeReportV1>(
+                    FindCase(run.Report, caseId).Outcome);
+
+            // The only foreground payload after bootstrap is a 1-byte clock.
+            // A workload peak at or above the cold object's 10,000-byte Base
+            // proves that an unmotivated NoChange migration escaped the budget.
+            Assert.InRange(
+                admitted.Metrics.PeakWorkloadCommitWriteBytes,
+                0,
+                9_999);
+        }
     }
 
     [Fact]
@@ -200,7 +230,8 @@ public sealed class BenchmarkV1RunnerTests {
             new BenchmarkComponentIdentityV1(
                 BenchmarkV1Baselines
                     .ReadAmplificationBaseBudgetR3B5Percent.Identity.Id,
-                2));
+                BenchmarkV1Baselines
+                    .ReadAmplificationBaseBudgetR3B5Percent.Identity.Version + 1));
 
         Assert.Null(unknown.Strategy);
         Assert.Null(wrongVersion.Strategy);

@@ -763,6 +763,13 @@
 
 ## 6. 船长日志
 
+### 2026-09-01：修复 Adaptive NoChange progress 越过 Base 预算
+
+- **Problem**：旧 `ReadAmplificationBaseBudgetPolicy` 无条件从 A-dependent NoChange 迁移一个对象；`oversized-cold-nochange-tiny-clock` 用 10000B stable cold object 与反复更新的 1B clock 将其放大，旧实现得到 `Pworkload=10052B`，证明 NoChange 可绕过 `baseBudgetFraction`。
+- **Implemented**：修复后 Update 与目标动作支持的 NoChange 只有超过 `readAmplificationLimit` 才形成 Base 动机；动机按放大率降序、ObjectId tie-break 排列并取 `baseBudgetFraction` 预算前缀。动机非空但首项自身超过预算时，允许这个不可拆分首项整体通过；不再存在无动机 NoChange progress floor。两个原 identity ID 的 component version 均由 v1 升至 v2；revision 17 收录该对抗 trace，共十七 workloads、两个 profiles、34 admitted cases，两 profile 的对抗 case 均保持 `Pworkload < 10000B`。
+- **Observed**：`active-hundred-mixed` 的 shared `Delta/Base references=67206/165606`、`L=273804` 不变；修复后 `(3,5%)` 的 `W/P/F/R=116424/2128/58460/3501092`，`(4,4%)` 为 `114756/2104/91380/3754140`。下方 revision 16 数字仍是旧实现的历史证据，不可与当前 baseline 混用。
+- **Open / Deferred**：没有读放大动机时，stable A debt 可能长期不推进；`E/G` 仍只刻画 Ready-to-Rotate 成本，尚无 Should-Rotate hysteresis。上一轮是否 Update 的热度修正与按 `Base - Delta` 边际成本选择均推迟为独立候选，不混入本次 bug fix。
+
 ### 2026-09-01：canonical 写入评价只保留 Wworkload
 
 - **Decided**：report schema 5 / metrics `raw-wpfr/5` / corpus revision 16 从 canonical metrics 删除 closed-horizon total 与 `Wterminal`，只保留 `Wworkload` 作为策略 write comparator；report 共七个整数：Wworkload、两项 references、Pworkload、F、R、L。
