@@ -19,7 +19,8 @@
 
 ## 目标
 
-本探针研究一种没有明显短板的渐进双腿文件轮转策略。
+本探针研究没有明显短板的渐进双腿文件轮转策略，并将逐步收敛为统一 workload、统一 evaluator、
+多策略独立实现的确定性实验赛场。Arena 负责规范输入、物理执行与测量；策略只负责在线选择。
 
 每个 `SaveStep` 是一组彼此独立对象的 `Create` / `Update` / `Remove`；本项目不建模对象之间的引用、
 reachability 或 GC。策略应利用每次自然 Save：
@@ -213,9 +214,9 @@ synthetic evidence，仍不代表一般 pressure-aware rotation trigger 已解�
 ## 当前研究焦点
 
 当前两个 canonical workloads 都把 Adaptive `(3,5%)` 与 `(4,4%)` 压成相同结果；test-local threshold-band
-已经证明两者在自然 read-amplification 边界上可以分叉。当前焦点不是扩展 optimizer/evaluator 平台，而是让
-canonical benchmark 具备最小参数辨别能力，并把 profile 等价类、typed inadmissibility 与四维 Pareto 关系
-变成同一 owning test 内的可执行证据。
+已经证明两者在自然 read-amplification 边界上可以分叉。先闭合这个已经在途的最小参数辨别能力；随后把现有
+benchmark/evaluator 提炼为静态链接的多策略 Arena，使 Baselines 与独立 candidate projects 消费同一窄
+policy contract 和 strategy-neutral workload suite。该转型不引入 optimizer、插件发现、排行榜或标量分数。
 
 ## 下一编码切片
 
@@ -227,18 +228,34 @@ runner 自然演化。四个 atomic profiles 必须消费同一 trace/horizon；
 `W/P/F/R` 合并 admitted ties，并断言 unique vectors 的 componentwise Pareto 关系。不新增 production
 reducer、frontier/archive 类型、report 字段、scalar score 或通用策略接口。
 
+这一步闭合后，下一切片是在当前程序集内做 policy-contract vertical proof：以只含当前
+`G/E/H/D/B` payload facts 的冻结 `PolicyStepViewV1` 驱动现有四个 profiles，并要求已有 typed outcomes、
+`W/P/F/R` 与 canonical hashes 完全不变。逐对象 view 必须保留 Remove 的 source Previous-debt/H/Base facts，
+使 pre-Save parent debt 与只统计 post-live 的 `E` 保持可区分。先证明 seam，再拆程序集。
+
 ## 近期 roadmap
 
 1. **闭合自然参数辨别与局部比较**：增加一个自然参数辨别 workload，并在同一 owning test 中冻结 typed
    outcomes、exact ties 与 Pareto 关系；
-2. **进入人工单 challenger 反例循环**：每轮只针对一个命名反例修改一个策略因素，重跑全部 corpus 并做
-   ablation。每个新增参数、分支或 policy-visible fact 都必须由该反例证明必要；若既未进入任何 workload 的
-   Pareto 集也未改善 admissibility，或删除后结果不变，则不保留。
+2. **证明窄 Policy V1 seam**：在单程序集内让现有四个 profiles 改走同一无状态、payload-only
+   `PolicyStepViewV1 -> PolicySelectionV1`，旧报告与 hashes 不漂移；
+3. **拆出 Arena / Tests / Baselines**：当前项目变为 class library，测试和全部已知 Baselines 各归一处；
+   candidate 只引用 Arena 的窄 public policy surface，organizer 显式注册，不做插件发现；
+4. **把 corpus 改成 workload-only suite 并增加因果多样性**：按 locality、size ratio/skew、lifetime/churn、
+   debt pressure、rotation band、burst/capacity 与 horizon phase 增加最小 workload family，不以 seed 数冒充多样性；
+5. **启动首轮并行 candidates**：organizer 冻结 contract/suite/协议 packet，各 agent 只写独立 candidate
+   project；主线统一集成复跑并报告 typed outcomes 与 raw `W/P/F/R`，不排榜。第二轮起对受已有结果影响的
+   candidate 做 post-freeze 新 workload validation。
 
 ## 未闭合事项
 
-- corpus 何时足以支撑“没有明显短板”的研究结论仍未知；以后只在某个 candidate 暴露命名短板时，加入一个
-  能复现该短板的最小 workload，不预建 workload 平台；
+- 哪些互相正交的因果 workload 轴足以支撑“没有明显短板”仍未知；统一 suite 只提供可重复 synthetic evidence，
+  不能声称代表生产；
+- payload-only Policy V1 是否足以产生结构多样的首轮 candidate，需由 seam proof 和首轮结果验证；Frame-aware
+  facts 仅在 payload-identical 布局造成 canonical outcome 反转、Frame-aware oracle 进入新 Pareto 点，或
+  intermediate read schedule 正式成为评价目标时进入 V2；
+- 当前 profile-matrix manifest 可由 organizer 冻结候选后统一重跑；若出现分批 strategy report 缓存/比较
+  consumer，再拆 strategy-neutral suite hash 与 per-strategy report identity；
 - 产品若最终必须发布唯一默认 profile，仍需要真实 workload/SLO 给出 Peak、file tail 与 read guardrails；
   在此之前只报告 per-workload Pareto 与 `no winner`，不使用裸加权和或严格 W-first 字典序。
 
@@ -247,7 +264,7 @@ reducer、frontier/archive 类型、report 字段、scalar score 或通用策略
 - object references、reachability、GC、serialization 与 durable graph product integration；
 - byte writer/parser、正式 wire format、Extent/multi-frame Revision；
 - durable publication、crash/reopen、concurrency、store identity 与文件 GC；
-- 完备 feasibility solver、一般图搜索、策略插件框架；
+- 完备 feasibility solver、一般图搜索、动态策略插件/MEF/assembly scanning；
 - 更多 historical lineage 功能或查询优化；
 - benchmark manifest/report parser、artifact file I/O、CLI publication 与 benchmark/product API promotion；
 - intermediate cold-read guardrail 与 diagnostics artifact；仅在出现命名 post-Commit restart/read schedule 或
@@ -256,8 +273,10 @@ reducer、frontier/archive 类型、report 字段、scalar score 或通用策略
   关系反转时重启；
 - 新 policy-visible pressure facts 与 bounded repair；保持 current facts-only、selected rejection 不 fallback，
   直到冻结 workload 证明存在系统性错误选择或已知可行但被排除的 candidate；
-- automated search 与 frontier archive；仅在用户明确授权、已有冻结且具参数辨别力的代表性 corpus，且存在
-  executable reduction/stop rule 时重启。产品默认 profile 仍额外要求真实 workload/SLO；
+- weighted score、leaderboard、跨 workload 总分、自动参数搜索、自动进化循环与 frontier archive；并行独立
+  candidate round 已获方向授权，但自动循环仍需冻结的代表性 suite、executable stop rule 与新授权；
+- 独立 Contracts package、NuGet/ABI compatibility、hostile-code sandbox、隐藏测试平台；仅在第二
+  engine/runner、独立发布或真实对抗性执行需求出现时重启；
 - 在没有测量依据时预设 read/write/pause 权重。
 
 ## 证据入口
@@ -265,7 +284,9 @@ reducer、frontier/archive 类型、report 字段、scalar score 或通用策略
 - 已实现模型与运行方式：[`README.md`](README.md)
 - evaluator v1 admissibility/settlement/指标合约：[`EVALUATOR-V1.md`](EVALUATOR-V1.md)
 - 当前候选策略契约：[`READ-AMPLIFICATION-BASE-BUDGET-POLICY-V0.md`](READ-AMPLIFICATION-BASE-BUDGET-POLICY-V0.md)
+- 前人成果与算法参考：[`PRIOR-ART.md`](PRIOR-ART.md)
 - 活跃设计分叉：[`../../docs/design-branches/0007-adaptive-two-leg-rotation-policy.md`](../../docs/design-branches/0007-adaptive-two-leg-rotation-policy.md)
+- 多策略 Arena 边界：[`../../docs/design-branches/0012-two-leg-strategy-benchmark-arena.md`](../../docs/design-branches/0012-two-leg-strategy-benchmark-arena.md)
 - Plan/容量分层：[`../../docs/design-branches/0011-two-phase-save-planning-and-capacity.md`](../../docs/design-branches/0011-two-phase-save-planning-and-capacity.md)
 - StateStore 基础约束：[`../../docs/state-store-base-design.md`](../../docs/state-store-base-design.md)
 - 地址 authority：[`../../docs/state-store-addressing-design.md`](../../docs/state-store-addressing-design.md)

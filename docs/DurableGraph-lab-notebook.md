@@ -763,6 +763,13 @@
 
 ## 6. 船长日志
 
+### 2026-08-31：选择静态多策略 Benchmark Arena 作为下一阶段方向
+
+- **Researched**：Redis incremental rehash、Sprite LFS cost-benefit cleaning、RocksDB/LSM compaction debt、Git delta depth、Kafka cleaner ratio/lag/throttle、SQLite WAL checkpoint 与 ski-rental/knapsack 分别覆盖渐进搬迁、搬迁选择、压力控制、重建链和未知未来决策；整理为 `experiments/TwoLegRotationProbe/PRIOR-ART.md`。
+- **Decided**：先闭合在途的 natural parameter-discriminating workload，再以旧 golden 不漂移为 gate 做 payload-only、无状态 Policy V1 seam；随后拆 Arena/Tests/Baselines、形成 workload-only suite，并让多个独立 candidate projects 静态链接参与统一复跑。Arena 继续独占 exact planning/admission/apply/settlement/metrics。
+- **Deferred / Boundary**：不建立插件发现、排行榜、标量 score、自动进化或独立 Contracts package；Frame-aware facts、stateful lifecycle 与 strategy-neutral persistent suite hash 都等待命名 consumer。第一轮只报告 typed outcomes 与 raw `W/P/F/R`，第二轮起对受既有结果影响的改进做 post-freeze 新 workload validation。
+- **Recorded**：最小依赖图、策略信息边界、corpus 因果轴和并行 Agent 隔离规则记录为 DB-012；公开 synthetic suite 不替代真实 workload/SLO 或唯一产品默认值。
+
 ### 2026-08-31：将 Adaptive 原子 profiles 接入 benchmark-v1
 
 - **Decided**：manifest schema 2 以单一 `selectionProfile` 取代 target/decision 双栏；corpus revision 3 注册 no-migration、paced、Adaptive `(3,5%)`、Adaptive `(4,4%)` 四个 exact profiles。Adaptive identity 固定映射 decimal 参数，只读取当前 normalized facts；不解析 ID、不接受任意参数、不引入 plugin/fallback。

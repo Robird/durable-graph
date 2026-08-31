@@ -14,6 +14,8 @@ Documentation responsibilities are deliberately split:
   [`../../docs/DurableGraph-lab-notebook.md`](../../docs/DurableGraph-lab-notebook.md);
 - competing or selected designs live in
   [`../../docs/design-branches/`](../../docs/design-branches/);
+- related storage-system and algorithm references live in
+  [`PRIOR-ART.md`](PRIOR-ART.md);
 - current work and next slices live only in `PROJECT-STATE.md`.
 
 New experiments should replace or merge a selected-evidence entry below rather
