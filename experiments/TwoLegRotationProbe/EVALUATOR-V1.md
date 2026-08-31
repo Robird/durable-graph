@@ -195,10 +195,13 @@ dump of `FinalColdHeadReadObservation` or candidate diagnostics. Rejected leaves
 no metrics/cursor/settlement properties. V1 is writer-only: external parsing, file I/O,
 and CLI publication remain outside this slice.
 
-Corpus revision 9 runs all four profiles over twelve traces. The low/high-ID traces form one
+The round-1 workload suite is frozen at corpus revision 10: all four profiles over fifteen
+traces. The low/high-ID traces form one
 matched locality family, the low-ID-small/large traces form one matched size-skew family,
 overlap/serial form one matched transient-lifecycle family, and single-large/three-small
-form one matched Previous-debt granularity family. Within every trace group,
+form one matched Previous-debt granularity family. The `3+1`/`2+2` traces add a matched
+insert-burst partition, while the short/long debt-zero traces are a nested-prefix horizon
+diagnostic rather than a cross-horizon Pareto pair. Within every trace group,
 the source fixture, exact expanded
 trace, evaluator protocols, and accounting
 horizon are identical; apart from the case ID, the only experimental input that changes
@@ -206,10 +209,22 @@ is the atomic selection profile. The canonical raw outcomes are:
 
 | Trace | Selection profile | W | P | F | R | Final scope |
 |---|---|---:|---:|---:|---:|---|
+| `debt-zero-before-rotate` | no migration | 808 | 676 | 676 | 788 | 2/3 |
+| `debt-zero-before-rotate` | paced one debt | 832 | 356 | 804 | 812 | 2/3 |
+| `debt-zero-before-rotate` | Adaptive `(3,5%)` | 832 | 356 | 804 | 812 | 2/3 |
+| `debt-zero-before-rotate` | Adaptive `(4,4%)` | 832 | 356 | 804 | 812 | 2/3 |
 | `debt-zero-then-rotate` | no migration | 856 | 680 | 680 | 832 | 2/3 |
 | `debt-zero-then-rotate` | paced one debt | 1536 | 696 | 804 | 756 | 3/4 |
 | `debt-zero-then-rotate` | Adaptive `(3,5%)` | 1536 | 696 | 804 | 756 | 3/4 |
 | `debt-zero-then-rotate` | Adaptive `(4,4%)` | 1536 | 696 | 804 | 756 | 3/4 |
+| `insert-burst-three-one` | no migration | 1432 | 960 | 1400 | 1360 | 2/3 |
+| `insert-burst-three-one` | paced one debt | 2380 | 984 | 1072 | 1332 | 3/4 |
+| `insert-burst-three-one` | Adaptive `(3,5%)` | 2368 | 972 | 972 | 1332 | 4/5 |
+| `insert-burst-three-one` | Adaptive `(4,4%)` | 2368 | 972 | 972 | 1332 | 4/5 |
+| `insert-burst-two-two` | no migration | 1432 | 652 | 1400 | 1360 | 2/3 |
+| `insert-burst-two-two` | paced one debt | 2072 | 680 | 764 | 1332 | 3/4 |
+| `insert-burst-two-two` | Adaptive `(3,5%)` | 2060 | 680 | 680 | 1332 | 4/5 |
+| `insert-burst-two-two` | Adaptive `(4,4%)` | 2060 | 680 | 680 | 1332 | 4/5 |
 | `mixed-small` seed 12345 | no migration | 368 | 164 | 344 | 352 | 2/3 |
 | `mixed-small` seed 12345 | paced one debt | 368 | 164 | 344 | 352 | 2/3 |
 | `mixed-small` seed 12345 | Adaptive `(3,5%)` | 440 | 164 | 184 | 280 | 3/4 |
@@ -255,7 +270,30 @@ is the atomic selection profile. The canonical raw outcomes are:
 | `previous-debt-granularity-three-small` | Adaptive `(3,5%)` | 1596 | 372 | 892 | 728 | 3/4 |
 | `previous-debt-granularity-three-small` | Adaptive `(4,4%)` | 1596 | 372 | 892 | 728 | 3/4 |
 
-All 48 cases are admitted. On `debt-zero-then-rotate`, both Adaptive profiles equal
+All 60 cases are admitted. The insert-burst pair shares step 0, the first workload Save,
+three evaluated Commit slots, its four 300-byte Inserts, and final logical versions. Only
+the last two Save boundaries partition those Inserts as `3+1` or `2+2`; each profile keeps
+the same selection cadence and final scope across the pair, and every workload Frame is
+smaller than 2 KiB. No-migration keeps W/F/R equal while `3+1` raises P by 308 bytes.
+For paced, `3+1` raises W/P/F by `308/304/308`; for both Adaptive profiles it raises them
+by `308/292/292`; R remains equal. The caller controls outer Commit grouping and the
+strategy cannot split it. These differences include provisional layout and later
+Rotate/settlement placement propagation; they are not capacity evidence, batching or
+latency advice, or a steady-state result.
+
+`debt-zero-before-rotate` is the exact three-workload-Save online prefix of
+`debt-zero-then-rotate`; public context exposes neither total horizon nor future steps,
+and every profile has identical views/selections on the shared prefix. The short paced
+and Adaptive cases direct-settle before their first natural Rotate; no-migration is the
+`Stay/Stay/Stay` control. Adding the fourth Save changes no-migration by
+`M/W/P/F/R = +1/+48/+4/+4/+44` without changing final scope; paced and
+both Adaptive profiles change by `+1/+704/+340/+0/-56` and finish one file generation
+later. The traces have different horizons and final states, so these deltas diagnose
+the combined cutoff-phase and terminal-placement change, including the real extra Save;
+they are not a causal cost decomposition and do not define cross-horizon Pareto dominance,
+normalization, or ranking.
+
+On `debt-zero-then-rotate`, both Adaptive profiles equal
 paced exactly; on `mixed-small`, no-migration equals paced while both Adaptive profiles
 equal each other. The threshold-band input ends that universal masking: paced equals
 Adaptive `(4,4%)`, while Adaptive `(3,5%)` writes 4 more bytes for 260 fewer final
@@ -304,7 +342,7 @@ of the current Adaptive one-object progress floor to debt granularity and indivi
 a general size preference.
 
 Manifest schema version 2 replaces the old target/decision pair with one
-`selectionProfile`; corpus revision 9 records the 48-case expansion. Report schema
+`selectionProfile`; corpus revision 10 records the 60-case round-1 workload freeze. Report schema
 and W/P/F/R leaves are unchanged and remain bound through the manifest SHA-256. There
 is no compatibility layer, mandatory strategy interface, arbitrary parameter input,
 or score. The report also rejects an outcome whose declared workload horizon differs from
@@ -324,6 +362,10 @@ for the matched size-skew family,
 for the matched transient-lifecycle family,
 [`BenchmarkV1DebtGranularityWorkloadTests.cs`](Tests/BenchmarkV1DebtGranularityWorkloadTests.cs)
 for the matched Previous-debt granularity family,
+[`BenchmarkV1InsertBurstPartitionWorkloadTests.cs`](Tests/BenchmarkV1InsertBurstPartitionWorkloadTests.cs)
+for the matched insert-burst family,
+[`BenchmarkV1HorizonPhaseWorkloadTests.cs`](Tests/BenchmarkV1HorizonPhaseWorkloadTests.cs)
+for the nested-prefix horizon diagnostic,
 [`BenchmarkAdaptiveSelectionProfileTests.cs`](Tests/BenchmarkAdaptiveSelectionProfileTests.cs)
 for divergent exact parameter binding,
 [`StrategyArenaContractTests.cs`](Tests/StrategyArenaContractTests.cs) for the
@@ -549,6 +591,10 @@ authority.
 The selector uses payload proxies only. A separate B-contained hot-chain witness proves
 strictly above-limit Base selection through exact planning/apply, while a policy-selected
 oversized Rotate proves typed capacity rejection, no fallback, and zero Store mutation.
+Round 1 therefore has no near-limit performance workload. Candidate qualification will
+instead retain an avoidable selected-capacity gate: foreground and alternate/reference
+paths are feasible, the candidate's selected action rejects, Store state remains unchanged,
+and no metrics are invented.
 None of these test-local diagnostics changes the v1 report schema. Executable authority
 lives in [`ReadAmplificationBaseBudgetPolicyIntegrationTests.cs`](Tests/ReadAmplificationBaseBudgetPolicyIntegrationTests.cs),
 [`ReadAmplificationBaseBudgetPolicyThresholdBandTests.cs`](Tests/ReadAmplificationBaseBudgetPolicyThresholdBandTests.cs),
@@ -559,10 +605,10 @@ and [`ReadAmplificationBaseBudgetPolicyCapacityTests.cs`](Tests/ReadAmplificatio
 
 ## Still open before strategy selection
 
-- add the smallest burst/capacity and then horizon-phase families needed before freezing
-  the first competition packet;
+- keep the round-1 workload suite frozen at corpus revision 10;
 - close fresh-fork repeat, case-order permutation, canonical artifact/hash determinism,
-  and the remaining qualification gates before candidate submissions;
+  avoidable selected-capacity, and the remaining candidate qualification gates;
+- freeze and tag the `ROUND-1` packet before candidate submissions;
 - keep checkpoint cold reads outside the canonical frontier; reconsider an intermediate
   read guardrail only when a named restart/read schedule or cold-start SLO exists;
 - retain Pareto/raw outcomes until workload/SLO evidence justifies guardrails or a

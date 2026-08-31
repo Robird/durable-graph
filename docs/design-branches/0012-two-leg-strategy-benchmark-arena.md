@@ -160,8 +160,9 @@ strategy-neutral suite identity 与 per-strategy run identity。
 - lifetime、Remove 与 churn；
 - A-debt share / migration pressure；
 - rotation threshold band；
-- grouped burst/capacity；
+- grouped burst；
 - horizon/epoch phase；
+- 独立于 performance corpus 的 typed capacity qualification；
 - 仅在 canonical outcome 反转时升级的 Frame provenance；
 - 仅在正式成为目标后加入的 restart/read schedule。
 
@@ -172,7 +173,7 @@ strategy-neutral suite identity 与 per-strategy run identity。
 
 - Arena、Baselines、Tests 三程序集 build 通过，dependency 单向；
 - 四个 strategy executor 的实际 assembly 是 `Atelia.TwoLegRotationProbe.Baselines`；
-- corpus revision 9 以十二条 trace 运行 48 个 admitted cases；原有 typed outcomes、W/P/F/R 与 trace SHA
+- round-1 workload suite 冻结于 corpus revision 10：十五条 trace、60 个 admitted cases；原有 typed outcomes、W/P/F/R 与 trace SHA
   不漂移，扩容后的 manifest/report 使用新 canonical hashes；
 - canonical `read-amplification-threshold-band` 形成三个互不支配 unique vectors，并区分两组 Adaptive
   参数；它是 hot-chain reset 与 co-resident expiry/Frame-unpin 的综合见证，不是纯 `E/G` rotation band；
@@ -194,16 +195,27 @@ strategy-neutral suite identity 与 per-strategy run identity。
   paced 只有 4B P layout fallout，两组 Adaptive 在相同 final scope 下形成 W/P/F 与 R 的交换；这只证明
   Adaptive one-object progress floor 对 granularity/indivisibility 敏感，不是 arrival/service-rate pressure、steady state、
   starvation 或一般 size preference；
+- matched insert-burst family 共享 bootstrap、首个 Save、operation multiset、horizon、final versions 与
+  per-profile cadence/scope，只把四项 300B Insert 分成 `3+1` 或 `2+2`；所有 workload Frames 小于 2 KiB。
+  no-migration 只改变 P，paced/Adaptive 还通过 provisional layout 与后续 Rotate/settlement placement 传播到
+  W/F。caller 决定 outer Commit 分组，策略不能拆分；这不是 capacity、batching 或 steady-state 证据；
+- nested-prefix horizon diagnostic 让 short trace 精确复用 long 的前三个 online Saves；公共 prefix 的
+  view/selection 相同且 public context 不暴露 horizon。paced/Adaptive 的 short cutoff 位于首次 natural
+  Rotate 之前，long 多一个 Save；no-migration 是同 scope control。不同 horizon/final state 的 delta
+  同时包含额外 Save 与 terminal placement，不做因果成本拆分、cross-horizon Pareto、归一化或排名；
+- round-1 不加入 near-limit performance trace；现有 typed tests 已冻结 selected rejection、no fallback、
+  zero mutation/no metrics。candidate qualification 只保留 avoidable selected-capacity gate；
 - Remove+Insert 反例锁定 parent debt 与 `E` 不混淆；
 - Arena-certified product 暴露 Store、workload receipts、final checkpoint 与 termination，不暴露 metrics。
 
 ## 下一阶段
 
-1. 先按 burst/capacity 与 horizon phase 补齐最小 workload families；
-2. 闭合 fresh-fork repeat、case-order permutation、canonical artifact/hash determinism 与资格 gate；
-3. 冻结 competition packet：contract、suite revision、evaluator/settlement/layout identities、prior art、目录权限；
-4. 再启动多个独立 candidate projects，由 organizer 集成复跑，不排榜；
-5. 只有 candidate 真实需要直接物理 Store 输出时才实现 untrusted artifact validator。
+1. 闭合 fresh-fork repeat、case-order permutation、canonical artifact/hash determinism 与 candidate
+   qualification gates，包括 avoidable selected-capacity；
+2. 冻结 competition packet：contract、suite revision 10、evaluator/settlement/layout identities、prior art、
+   目录权限，并创建 `ROUND-1` tag；
+3. 再启动多个独立 candidate projects，由 organizer 集成复跑，不排榜；
+4. 只有 candidate 真实需要直接物理 Store 输出时才实现 untrusted artifact validator。
 
 ## 明确暂缓
 

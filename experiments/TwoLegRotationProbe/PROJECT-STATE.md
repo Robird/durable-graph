@@ -195,15 +195,15 @@ PublishedRevision 为 shared prior-snapshot anchor。accepted new head 的 curre
   batch runner 只在 session Store 上 normalize/evaluate/apply，typed rejection 不 fallback；canonical UTF-8
   manifest/report 使用固定 tokens/order、16位 hex seed、manifest+trace SHA-256，只有 admitted 输出 W/P/F/R、
   final cursor 与 settlement 摘要；manifest schema 2 以单一 `selectionProfile` 取代 target/decision 双栏，
-  corpus revision 9 在十二条 trace 上各运行 no-migration、paced、Adaptive `(3,5%)`、Adaptive `(4,4%)`，
-  共 48 cases；identity-only
+  corpus revision 10 在十五条 trace 上各运行 no-migration、paced、Adaptive `(3,5%)`、Adaptive `(4,4%)`，
+  共 60 cases；identity-only
   manifest case 不可执行并 fail-close；
 - 多策略 Arena vertical proof：项目已拆为 `Arena <- Baselines <- Tests` 单向依赖；四个现有策略的完整运行
   delegate 与 Adaptive 实现位于独立 Baselines 程序集。public `StrategyStepViewV1` 保留 `G/E/H/D/B`、
   Insert/Update/Remove/NoChange 与 parent debt，`StrategyRunContextV1` 只逐步开放当前 Save，并由 Arena
   构造 final Store、workload Commit receipts、final checkpoint 与 typed termination。策略不声明 W/P/F/R；
-  原有 cases 的 typed outcomes、exact vectors 与 trace hashes 不漂移；扩为 48 cases 后 manifest/report
-  使用 revision 9 的新 canonical hashes；
+  原有 cases 的 typed outcomes、exact vectors 与 trace hashes 不漂移；扩为 60 cases 后 manifest/report
+  使用 revision 10 的新 canonical hashes；
 - canonical parameter evidence：前两条 trace 遮蔽 Adaptive 参数；threshold-band 形成三个互不支配向量并
   隔离 read limit，debt-share dilution 则让共享 `G=1000,E=40` source 的 Adaptive pair 产生严格 5%/4%
   target 分叉。它们只覆盖有限 horizon，不选择 winner、默认参数或稳态结论；
@@ -227,11 +227,24 @@ PublishedRevision 为 shared prior-snapshot anchor。accepted new head 的 curre
 - canonical Previous-debt granularity pair：ordinary step0 共置 `10/20/30=100B,40=300B`，两条 trace
   只交换 three-small 与 single-large 的首次 full rewrite 次序，并共享 1B sentinel、catch-up 与最终
   three-small reconvergence；operation multiset、最终 versions 和 horizon 相同。两组 Adaptive 在共同 pivot 上均为
-  `G/E=601/300`，但 debt 分别为一个不可再分的 300B 对象与三个 100B 对象。48 cases 全部 admitted，
+  `G/E=601/300`，但 debt 分别为一个不可再分的 300B 对象与三个 100B 对象。该 pair 八个 cases 全部 admitted，
   本 pair 均为四个 workload Commits 加 direct settlement；no-migration exact tie，paced 仅有 4B P
   layout fallout，两组 Adaptive 在相同最终 scope 下形成 W/P/F 与 R 的交换。这只证明当前 Adaptive one-object
   progress floor 对 debt granularity/indivisibility 敏感，不外推 arrival/service-rate pressure、steady state、
   starvation 或一般 size preference；
+- canonical insert-burst pair：两条 trace 共享 bootstrap 与首个 full-rewrite Save，并把相同四项 300B
+  Insert 分成 `3+1` 或 `2+2`；operation multiset、horizon、final versions 以及每个 profile 的 cadence/scope
+  相同，所有 workload Frames 均小于 2 KiB。no-migration 只改变 P；paced/Adaptive 还通过当前 provisional
+  layout 与后续 Rotate/settlement placement 把分组差异传播到 W/F，R 不变。outer Commit 分组由 caller
+  决定，策略不能拆分；这不是 capacity witness，也不外推 batching、latency 或 steady-state 建议；
+- canonical nested-prefix horizon diagnostic：`debt-zero-before-rotate` 精确复用既有 long trace 的前三个
+  workload Saves；公共 prefix 的 view/selection 完全相同，public context 不暴露 horizon。paced/两组
+  Adaptive 的 short cutoff 位于首次 natural Rotate 之前，long 则多一个 Save 并多跨一代；
+  no-migration 是保持同一最终 scope 的 control。两条 trace 的 horizon 与最终状态不同，delta 同时包含
+  真实额外 Save 和 terminal placement 变化；不做因果成本拆分、cross-horizon Pareto、归一化排名或 steady-state 推断；
+- burst/capacity 分层裁决：round-1 corpus 不加入 near-limit performance trace。现有 typed tests 已冻结
+  selected hard rejection、no fallback、zero mutation/no metrics；后续 candidate qualification 只需加入
+  avoidable selected-capacity gate，即 foreground、alternate/reference 路径可行而 candidate 选择被拒绝；
 - named fixed-two-scope-advances diagnostic：窄 `ExecuteCase` seam 复用 canonical benchmark-v1 执行路径，
   test-local continuation 只为 control 真实追加一个 zero-workload terminal settlement。两侧最终同为 scope 3/4；
   control `commits/W/P/F/R=6/944/680/680/752`、paced `5/1536/696/804/756`。control final Previous debt
@@ -245,24 +258,23 @@ synthetic evidence，仍不代表一般 pressure-aware rotation trigger 已解�
 
 ## 当前研究焦点
 
-内部赛道 vertical proof、两类 parameter discriminator 与 locality/size/lifecycle/debt-granularity matched
-families 已闭合。revision 9 以十二条 trace 运行 48 cases；当前焦点继续转向首轮 competition packet 所需的 strategy-neutral
-因果多样性，仍不引入 optimizer、插件发现、排行榜或标量分数。
+round-1 workload suite 已在 revision 10 冻结：十五条 trace、60 cases，覆盖 parameter、locality、size、
+lifecycle、debt granularity、insert burst 与 nested-prefix horizon。当前焦点不再增加 workload，而是闭合
+mechanical qualification 与 competition packet；仍不引入 optimizer、插件发现、排行榜或标量分数。
 
 ## 下一编码切片
 
-先增加最小 burst/capacity family，再补 horizon phase；
-每个 family 仍先以 ordinary matched trace 检验现有 Arena，若 canonical outcome 无辨别力就保留真实负结果。
+闭合 fresh-fork repeat、case-order permutation、canonical artifact/hash determinism 与 candidate
+qualification，随后冻结 `ROUND-1` packet/tag。
 
 ## 近期 roadmap
 
-1. **增加其余因果多样性**：依次按 burst/capacity 与 horizon phase 增加最小 workload family，
-   不以 seed 数冒充多样性；
-2. **闭合首轮机械资格闸门**：加入 fresh-fork repeat、case-order permutation 与 canonical artifact/hash
-   determinism 检查，并固定 typed admission、logical prefix/final-state 与 selected-rejection zero-mutation gates；
-3. **冻结 competition packet**：记录 Arena contract、suite revision、evaluator/settlement/layout identities、
-   candidate 目录权限与 prior-art 输入；
-4. **启动首轮并行 candidates**：organizer 冻结 contract/suite/协议 packet，各 agent 只写独立 candidate
+1. **闭合首轮机械资格闸门**：加入 fresh-fork repeat、case-order permutation 与 canonical artifact/hash
+   determinism，并固定 typed admission、logical prefix/final-state、selected-rejection zero-mutation 与
+   avoidable selected-capacity gates；
+2. **冻结 competition packet**：记录 Arena contract、suite revision 10、evaluator/settlement/layout identities、
+   candidate 目录权限与 prior-art 输入，并创建 `ROUND-1` tag；
+3. **启动首轮并行 candidates**：organizer 冻结 contract/suite/协议 packet，各 agent 只写独立 candidate
    project；主线统一集成复跑并报告 typed outcomes 与 raw `W/P/F/R`，不排榜。第二轮起对受已有结果影响的
    candidate 做 post-freeze 新 workload validation。
 

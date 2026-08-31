@@ -57,7 +57,31 @@ internal static class BenchmarkV1ProtocolIdentities {
 
 internal static class BenchmarkV1Corpus {
     public const string ManifestId = "benchmark-v1";
-    public const int ManifestRevision = 9;
+    public const int ManifestRevision = 10;
+    public const string DebtZeroBeforeRotateNoMigrationCaseId =
+        "debt-zero-before-rotate-no-migration";
+    public const string DebtZeroBeforeRotatePacedCaseId =
+        "debt-zero-before-rotate-paced";
+    public const string DebtZeroBeforeRotateAdaptiveR3B5PercentCaseId =
+        "debt-zero-before-rotate-read-amplification-r3-b5pct";
+    public const string DebtZeroBeforeRotateAdaptiveR4B4PercentCaseId =
+        "debt-zero-before-rotate-read-amplification-r4-b4pct";
+    public const string InsertBurstThreeOneNoMigrationCaseId =
+        "insert-burst-three-one-no-migration";
+    public const string InsertBurstThreeOnePacedCaseId =
+        "insert-burst-three-one-paced";
+    public const string InsertBurstThreeOneAdaptiveR3B5PercentCaseId =
+        "insert-burst-three-one-read-amplification-r3-b5pct";
+    public const string InsertBurstThreeOneAdaptiveR4B4PercentCaseId =
+        "insert-burst-three-one-read-amplification-r4-b4pct";
+    public const string InsertBurstTwoTwoNoMigrationCaseId =
+        "insert-burst-two-two-no-migration";
+    public const string InsertBurstTwoTwoPacedCaseId =
+        "insert-burst-two-two-paced";
+    public const string InsertBurstTwoTwoAdaptiveR3B5PercentCaseId =
+        "insert-burst-two-two-read-amplification-r3-b5pct";
+    public const string InsertBurstTwoTwoAdaptiveR4B4PercentCaseId =
+        "insert-burst-two-two-read-amplification-r4-b4pct";
     public const string DebtZeroThenRotateNoMigrationCaseId =
         "debt-zero-then-rotate-no-migration";
     public const string DebtZeroThenRotatePacedCaseId =
@@ -179,13 +203,64 @@ internal static class BenchmarkV1Corpus {
                 nameof(strategies));
         }
 
-        WorkloadTrace debtZeroThenRotateTrace = CreateDebtZeroThenRotateTrace();
+        (WorkloadTrace debtZeroBeforeRotateTrace,
+            WorkloadTrace debtZeroThenRotateTrace) =
+            CreateDebtZeroRotateHorizonPair();
         GeneratedScenario generated = ScenarioGenerator.Generate(
             CreateMixedSmallDefinition());
+        BenchmarkV1CaseDefinition[] debtZeroBeforeRotateCases =
+            CreateStrategyCases(
+                new BenchmarkComponentIdentityV1(
+                    "debt-zero-before-rotate",
+                    1),
+                debtZeroBeforeRotateTrace,
+                frozenStrategies);
         BenchmarkV1CaseDefinition[] debtZeroThenRotateCases = CreateStrategyCases(
             new BenchmarkComponentIdentityV1("debt-zero-then-rotate", 1),
             debtZeroThenRotateTrace,
             frozenStrategies);
+        SaveStep insertBurstStep0 = new([new CreateObject(10, 10)]);
+        SaveStep insertBurstStep1 = new([new UpdateObject(10, 10, 10)]);
+        CreateObject insert100 = new(100, 300);
+        CreateObject insert101 = new(101, 300);
+        CreateObject insert102 = new(102, 300);
+        CreateObject insert103 = new(103, 300);
+        WorkloadTrace insertBurstThreeOneTrace = new(
+            scenarioName: "insert-burst-three-one",
+            generatorId: "handwritten",
+            generatorVersion: 1,
+            seed: 0,
+            [
+                insertBurstStep0,
+                insertBurstStep1,
+                new SaveStep([insert100, insert101, insert102]),
+                new SaveStep([insert103]),
+            ]);
+        WorkloadTrace insertBurstTwoTwoTrace = new(
+            scenarioName: "insert-burst-two-two",
+            generatorId: "handwritten",
+            generatorVersion: 1,
+            seed: 0,
+            [
+                insertBurstStep0,
+                insertBurstStep1,
+                new SaveStep([insert100, insert101]),
+                new SaveStep([insert102, insert103]),
+            ]);
+        BenchmarkV1CaseDefinition[] insertBurstThreeOneCases =
+            CreateStrategyCases(
+                new BenchmarkComponentIdentityV1(
+                    "insert-burst-three-one",
+                    1),
+                insertBurstThreeOneTrace,
+                frozenStrategies);
+        BenchmarkV1CaseDefinition[] insertBurstTwoTwoCases =
+            CreateStrategyCases(
+                new BenchmarkComponentIdentityV1(
+                    "insert-burst-two-two",
+                    1),
+                insertBurstTwoTwoTrace,
+                frozenStrategies);
         BenchmarkV1CaseDefinition[] mixedSmallCases = CreateStrategyCases(
             new BenchmarkComponentIdentityV1("mixed-small", 1),
             generated.Trace,
@@ -390,7 +465,10 @@ internal static class BenchmarkV1Corpus {
             BenchmarkV1ProtocolIdentities.FrameLayout,
             BenchmarkV1ProtocolIdentities.RevisionGrammar,
             [
+                .. debtZeroBeforeRotateCases,
                 .. debtZeroThenRotateCases,
+                .. insertBurstThreeOneCases,
+                .. insertBurstTwoTwoCases,
                 .. mixedSmallCases,
                 .. thresholdBandCases,
                 .. debtShareDilutionCases,
@@ -416,22 +494,31 @@ internal static class BenchmarkV1Corpus {
                 strategy))
             .ToArray();
 
-    private static WorkloadTrace CreateDebtZeroThenRotateTrace() => new(
-        scenarioName: "debt-zero-then-rotate",
-        generatorId: "handwritten",
-        generatorVersion: 1,
-        seed: 0,
-        [
-            new SaveStep([
-                new CreateObject(10, 100),
-                new CreateObject(20, 200),
-                new CreateObject(30, 300),
-            ]),
-            new SaveStep([new CreateObject(1001, 1)]),
-            new SaveStep([new CreateObject(1002, 1)]),
-            new SaveStep([new CreateObject(1003, 1)]),
-            new SaveStep([new CreateObject(1004, 1)]),
+    private static (WorkloadTrace BeforeRotate, WorkloadTrace ThroughRotate)
+        CreateDebtZeroRotateHorizonPair() {
+        SaveStep step0 = new([
+            new CreateObject(10, 100),
+            new CreateObject(20, 200),
+            new CreateObject(30, 300),
         ]);
+        SaveStep step1 = new([new CreateObject(1001, 1)]);
+        SaveStep step2 = new([new CreateObject(1002, 1)]);
+        SaveStep step3 = new([new CreateObject(1003, 1)]);
+        SaveStep step4 = new([new CreateObject(1004, 1)]);
+        return (
+            new WorkloadTrace(
+                scenarioName: "debt-zero-before-rotate",
+                generatorId: "handwritten",
+                generatorVersion: 1,
+                seed: 0,
+                [step0, step1, step2, step3]),
+            new WorkloadTrace(
+                scenarioName: "debt-zero-then-rotate",
+                generatorId: "handwritten",
+                generatorVersion: 1,
+                seed: 0,
+                [step0, step1, step2, step3, step4]));
+    }
 
     private static WorkloadTrace CreateThresholdBandTrace() => new(
         scenarioName: "read-amplification-threshold-band",
