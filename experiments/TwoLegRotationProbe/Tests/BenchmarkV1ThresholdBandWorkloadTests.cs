@@ -12,7 +12,6 @@ public sealed class BenchmarkV1ThresholdBandWorkloadTests {
         BenchmarkV1CaseDefinition[] cases = FindCases(corpus);
 
         Assert.Equal(4, cases.Length);
-        Assert.Equal(4, corpus.Manifest.ManifestRevision);
         Assert.All(cases, benchmarkCase => {
             Assert.Equal(9, benchmarkCase.Trace.Steps.Count);
             Assert.Equal(8, benchmarkCase.ManifestCase.EvaluatedWorkloadStepCount);

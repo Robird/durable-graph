@@ -763,6 +763,12 @@
 
 ## 6. 船长日志
 
+### 2026-08-31：将 debt-share target boundary 收编为第四个 canonical workload
+
+- **Implemented**：corpus revision 5 新增 `previous-debt-share-dilution-boundary`；普通 step0 创建 40B/960B 对象，随后 measured full-rewrite Updates `100/1/100`，形成四 workloads x 四 Baselines 的 16-case matrix。
+- **Observed**：16 cases 全部 admitted。Adaptive `(3,5%)` 走 `Stay/Rotate/Stay` 并得到 `2148/1004/1096/1124`；`(4,4%)` 走 `Stay/Stay/Rotate` 并得到 `2192/1012/1132/1088`。两者各执行三个 workload Commits 与一次 direct settlement，最终 scope 同为 `3/4`。
+- **Boundary / Next**：`Base==Delta` 使 Adaptive 的读阈值与表示选择惰性，且只有 Adaptive pair 共享预边界物理 source；controls 不是额外的 4%/5% treatment。本结果不选择 winner/default/steady state。下一步尝试把 known-future hot/cold 证据化简成不暴露 future oracle 的 matched locality/ObjectId-permutation workload。
+
 ### 2026-08-31：将 hot-chain threshold-band 收编为第三个 canonical workload
 
 - **Implemented**：benchmark corpus revision 4 以普通 step0 Creates 表达原 test-local source，新增 `read-amplification-threshold-band` 并对四个 Baseline 形成 12-case matrix；原 8 case vectors/trace hashes 保持，expanded manifest/report 使用新 canonical hashes。

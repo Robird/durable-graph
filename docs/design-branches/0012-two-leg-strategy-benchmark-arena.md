@@ -172,17 +172,20 @@ strategy-neutral suite identity 与 per-strategy run identity。
 
 - Arena、Baselines、Tests 三程序集 build 通过，dependency 单向；
 - 四个 strategy executor 的实际 assembly 是 `Atelia.TwoLegRotationProbe.Baselines`；
-- corpus revision 4 以三组 workload 运行 12 个 admitted cases；原 8 cases 的 typed outcomes、W/P/F/R
-  与 trace SHA 不漂移，扩容后的 manifest/report 使用新 canonical hashes；
+- corpus revision 5 以四组 workload 运行 16 个 admitted cases；原有 typed outcomes、W/P/F/R 与 trace SHA
+  不漂移，扩容后的 manifest/report 使用新 canonical hashes；
 - canonical `read-amplification-threshold-band` 形成三个互不支配 unique vectors，并区分两组 Adaptive
   参数；它是 hot-chain reset 与 co-resident expiry/Frame-unpin 的综合见证，不是纯 `E/G` rotation band；
+- canonical `previous-debt-share-dilution-boundary` 用普通 measured prelude 让两个 Adaptive 共享
+  `G=1000,E=40` 的边界 source，并形成 `Stay/Rotate/Stay` 与 `Stay/Stay/Rotate` 的严格 5%/4% target 分叉；
 - Remove+Insert 反例锁定 parent debt 与 `E` 不混淆；
 - Arena-certified product 暴露 Store、workload receipts、final checkpoint 与 termination，不暴露 metrics。
 
 ## 下一阶段
 
-1. 把 test-local `E/G` target-band 化简为独立 canonical Rotate-or-Stay workload；
-2. 按其余因果轴补齐最小 workload families；
+1. 尝试把 known-future hot/cold 证据化简为不暴露 future oracle 的普通 matched
+   locality/ObjectId-permutation workload，并保留无法复现旧分叉的负结果；
+2. 按 size skew、lifecycle/churn、pressure/capacity 与 horizon phase 补齐最小 workload families；
 3. 冻结 competition packet：contract、suite revision、evaluator/settlement/layout identities、prior art、目录权限；
 4. 再启动多个独立 candidate projects，由 organizer 集成复跑，不排榜；
 5. 只有 candidate 真实需要直接物理 Store 输出时才实现 untrusted artifact validator。

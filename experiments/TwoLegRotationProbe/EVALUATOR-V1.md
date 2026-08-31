@@ -195,7 +195,7 @@ dump of `FinalColdHeadReadObservation` or candidate diagnostics. Rejected leaves
 no metrics/cursor/settlement properties. V1 is writer-only: external parsing, file I/O,
 and CLI publication remain outside this slice.
 
-Corpus revision 4 runs all four profiles over three matched inputs. Within each workload
+Corpus revision 5 runs all four profiles over four matched inputs. Within each workload
 group the source fixture, exact expanded trace, evaluator protocols, and accounting
 horizon are identical; apart from the case ID, the only experimental input that changes
 is the atomic selection profile. The canonical raw outcomes are:
@@ -214,17 +214,22 @@ is the atomic selection profile. The canonical raw outcomes are:
 | `read-amplification-threshold-band` | paced one debt | 1512 | 1056 | 1056 | 1472 | 2/3 |
 | `read-amplification-threshold-band` | Adaptive `(3,5%)` | 1516 | 1056 | 1056 | 1212 | 2/3 |
 | `read-amplification-threshold-band` | Adaptive `(4,4%)` | 1512 | 1056 | 1056 | 1472 | 2/3 |
+| `previous-debt-share-dilution-boundary` | no migration | 3160 | 1056 | 2148 | 1048 | 2/3 |
+| `previous-debt-share-dilution-boundary` | paced one debt | 4188 | 1056 | 2156 | 1048 | 3/4 |
+| `previous-debt-share-dilution-boundary` | Adaptive `(3,5%)` | 2148 | 1004 | 1096 | 1124 | 3/4 |
+| `previous-debt-share-dilution-boundary` | Adaptive `(4,4%)` | 2192 | 1012 | 1132 | 1088 | 3/4 |
 
-All twelve cases are admitted. On `debt-zero-then-rotate`, both Adaptive profiles equal
+All sixteen cases are admitted. On `debt-zero-then-rotate`, both Adaptive profiles equal
 paced exactly; on `mixed-small`, no-migration equals paced while both Adaptive profiles
 equal each other. The threshold-band input ends that universal masking: paced equals
 Adaptive `(4,4%)`, while Adaptive `(3,5%)` writes 4 more bytes for 260 fewer final
 cold-read bytes at equal P/F. No-migration writes and reads less than either group but
 has P/F 16 bytes higher. Its three unique vectors are therefore pairwise incomparable.
-This is matched Pareto evidence, not a default profile.
+The debt-share workload separately makes the Adaptive pair cross the strict 4%/5% target
+boundary. These are matched bounded results, not a default profile or steady-state winner.
 
 Manifest schema version 2 replaces the old target/decision pair with one
-`selectionProfile`; corpus revision 4 records the twelve-case expansion. Report schema
+`selectionProfile`; corpus revision 5 records the sixteen-case expansion. Report schema
 and W/P/F/R leaves are unchanged and remain bound through the manifest SHA-256. There
 is no compatibility layer, mandatory strategy interface, arbitrary parameter input,
 or score. The report also rejects an outcome whose declared workload horizon differs from
@@ -234,6 +239,8 @@ Executable authority is split between
 the original eight outcomes, and canonical hashes,
 [`BenchmarkV1ThresholdBandWorkloadTests.cs`](Tests/BenchmarkV1ThresholdBandWorkloadTests.cs)
 for the third workload's exact ties and local Pareto relations,
+[`BenchmarkV1DebtShareDilutionWorkloadTests.cs`](Tests/BenchmarkV1DebtShareDilutionWorkloadTests.cs)
+for the fourth workload's ordinary-trace target boundary,
 [`BenchmarkAdaptiveSelectionProfileTests.cs`](Tests/BenchmarkAdaptiveSelectionProfileTests.cs)
 for divergent exact parameter binding,
 [`StrategyArenaContractTests.cs`](Tests/StrategyArenaContractTests.cs) for the
@@ -422,23 +429,25 @@ co-residents and releases their Frame pins; the official result is therefore int
 hot-chain plus lifecycle/layout evidence, not a pure per-object microbenchmark. Detailed
 `H/B`, budget, migration, and Frame-count diagnostics remain test-local.
 
-A lower-bound target-band fixture starts the measured horizon with 40 bytes of A debt
-and 960 bytes already local to B. Two `Base == Delta` Updates make weak dominance
-independent of the read limit, soft budget, and progress floor. At `G=1000,E=40`, 5%
-strictly selects Rotate while 4% equality selects Stay; the next likewise
-Base-equal-to-Delta Update naturally crosses the targets, so both runs finish the
-workload after one scope advance and then execute one direct terminal settlement:
+A lower-bound target-band fixture is now the fourth canonical workload. Ordinary step 0
+creates object 1 at 40 bytes and object 100 at 960 bytes; measured full-rewrite Updates
+then visit `100/1/100` with `Base == Delta`. For the Adaptive pair, the first Update
+produces the same physical pre-boundary source with `G=1000,E=40`; weak dominance makes
+the read limit and representation choice inert. Five percent strictly selects Rotate
+while four-percent equality selects Stay, and the last Update crosses the targets again:
 
-| Parameters | Workload targets | W | P | F | R | Final Previous debt |
+| Selection profile | Workload targets | W | P | F | R | Final scope |
 |---|---|---:|---:|---:|---:|---|
-| Adaptive `(3,5%)` | Rotate, Stay | 1144 | 1004 | 1096 | 1124 | 1, 100 |
-| Adaptive `(4,4%)` | Stay, Rotate | 1188 | 1012 | 1128 | 1088 | 100 |
+| no migration | Stay, Stay, Stay | 3160 | 1056 | 2148 | 1048 | 2/3 |
+| paced one debt | Stay, Stay, Rotate | 4188 | 1056 | 2156 | 1048 | 3/4 |
+| Adaptive `(3,5%)` | Stay, Rotate, Stay | 2148 | 1004 | 1096 | 1124 | 3/4 |
+| Adaptive `(4,4%)` | Stay, Stay, Rotate | 2192 | 1012 | 1132 | 1088 | 3/4 |
 
-Both sides have three outer Commits and final scope `3/4`. The vector is therefore a
-same-horizon consequence of target timing and terminal liability, not a static
-candidate-cost comparison, steady-state result, or parameter winner. Both final
-per-object payload ratios are exactly `H/B=1`; the different R values therefore expose
-retained full-Frame layout/provenance rather than object payload-chain amplification.
+All cases are admitted with three workload Commits plus direct terminal settlement and
+no settlement migrations. Only the Adaptive pair shares the intended physical source at
+the boundary; the controls remain corpus baselines, not additional 4%/5% crossover
+treatments. The result is target timing/terminal-liability evidence, not a static
+candidate-cost comparison, steady-state result, default, or winner.
 
 The first test-local parameter matrix is intentionally a causal index rather than a
 new executable aggregate or score:
@@ -447,7 +456,7 @@ new executable aggregate or score:
 |---|---|---|---|
 | Matched negative control | masked parameter change | identical trajectory/vector | progress and indivisible Bases can hide both parameters |
 | Read-threshold band | strict read limit | less W for more final R; P/F equal | local W/R trade only |
-| Base-fraction lower bound | strict rotation share | target crossover and a different raw trade | finite aligned horizon only |
+| Base-fraction lower bound | strict rotation share | ordinary-trace target crossover and a different raw trade | only the Adaptive pair shares the intended boundary source; finite horizon |
 | Selected capacity rejection | exact hard gate | typed rejection, no fallback or mutation | no numeric penalty or averaging |
 
 Exact vectors, target/debt trajectories, and rejection details remain asserted only by
@@ -461,14 +470,17 @@ None of these test-local diagnostics changes the v1 report schema. Executable au
 lives in [`ReadAmplificationBaseBudgetPolicyIntegrationTests.cs`](Tests/ReadAmplificationBaseBudgetPolicyIntegrationTests.cs),
 [`ReadAmplificationBaseBudgetPolicyThresholdBandTests.cs`](Tests/ReadAmplificationBaseBudgetPolicyThresholdBandTests.cs),
 [`ReadAmplificationBaseBudgetPolicyTargetBandTests.cs`](Tests/ReadAmplificationBaseBudgetPolicyTargetBandTests.cs),
+[`BenchmarkV1DebtShareDilutionWorkloadTests.cs`](Tests/BenchmarkV1DebtShareDilutionWorkloadTests.cs),
 [`RealizedReconstructionPayloadAmplificationDiagnosticTests.cs`](Tests/RealizedReconstructionPayloadAmplificationDiagnosticTests.cs),
 and [`ReadAmplificationBaseBudgetPolicyCapacityTests.cs`](Tests/ReadAmplificationBaseBudgetPolicyCapacityTests.cs).
 
 ## Still open before strategy selection
 
-- add the smallest strategy-neutral causal workload families needed beyond the integrated
-  threshold-band discriminator, beginning with an independent `E/G` Rotate-or-Stay band
-  rather than treating the current all-Stay workload as rotation evidence;
+- test whether the known-future hot/cold witness can become an ordinary matched
+  locality/ObjectId-permutation workload without exposing a future oracle; preserve a
+  negative result if the natural trace does not reproduce the hand-shaped divergence;
+- then add the smallest size-skew, lifecycle/churn, pressure/capacity, and horizon-phase
+  families needed before freezing the first competition packet;
 - keep checkpoint cold reads outside the canonical frontier; reconsider an intermediate
   read guardrail only when a named restart/read schedule or cold-start SLO exists;
 - retain Pareto/raw outcomes until workload/SLO evidence justifies guardrails or a

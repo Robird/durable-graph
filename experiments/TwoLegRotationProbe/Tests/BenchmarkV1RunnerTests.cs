@@ -13,12 +13,12 @@ namespace Atelia.TwoLegRotationProbe.Tests;
 
 public sealed class BenchmarkV1RunnerTests {
     [Fact]
-    public void Frozen_corpus_defines_three_workloads_with_four_selection_profiles_each() {
+    public void Frozen_corpus_defines_four_workloads_with_four_selection_profiles_each() {
         BenchmarkV1BatchDefinition definition = BenchmarkV1Corpus.Create(
             BenchmarkV1Baselines.All);
 
         Assert.Equal(2, definition.Manifest.Schema.Version);
-        Assert.Equal(4, definition.Manifest.ManifestRevision);
+        Assert.Equal(5, definition.Manifest.ManifestRevision);
         Assert.Equal(BenchmarkV1ProtocolIdentities.Evaluator, definition.Manifest.Evaluator);
         Assert.Equal(
             BenchmarkV1ProtocolIdentities.TerminalSettlement,
@@ -33,7 +33,7 @@ public sealed class BenchmarkV1RunnerTests {
         Assert.Equal(
             BenchmarkV1ProtocolIdentities.RevisionGrammar,
             definition.Manifest.RevisionGrammar);
-        Assert.Equal(12, definition.Cases.Count);
+        Assert.Equal(16, definition.Cases.Count);
         Assert.Equal(
             [
                 BenchmarkV1Corpus.DebtZeroThenRotateNoMigrationCaseId,
@@ -44,6 +44,10 @@ public sealed class BenchmarkV1RunnerTests {
                 BenchmarkV1Corpus.MixedSmallPacedCaseId,
                 BenchmarkV1Corpus.MixedSmallAdaptiveR3B5PercentCaseId,
                 BenchmarkV1Corpus.MixedSmallAdaptiveR4B4PercentCaseId,
+                BenchmarkV1Corpus.DebtShareDilutionNoMigrationCaseId,
+                BenchmarkV1Corpus.DebtShareDilutionPacedCaseId,
+                BenchmarkV1Corpus.DebtShareDilutionAdaptiveR3B5PercentCaseId,
+                BenchmarkV1Corpus.DebtShareDilutionAdaptiveR4B4PercentCaseId,
                 BenchmarkV1Corpus.ThresholdBandNoMigrationCaseId,
                 BenchmarkV1Corpus.ThresholdBandPacedCaseId,
                 BenchmarkV1Corpus.ThresholdBandAdaptiveR3B5PercentCaseId,
@@ -87,6 +91,18 @@ public sealed class BenchmarkV1RunnerTests {
         BenchmarkV1CaseDefinition thresholdAdaptive44 = FindCaseDefinition(
             definition,
             BenchmarkV1Corpus.ThresholdBandAdaptiveR4B4PercentCaseId);
+        BenchmarkV1CaseDefinition debtShareNoMigration = FindCaseDefinition(
+            definition,
+            BenchmarkV1Corpus.DebtShareDilutionNoMigrationCaseId);
+        BenchmarkV1CaseDefinition debtSharePaced = FindCaseDefinition(
+            definition,
+            BenchmarkV1Corpus.DebtShareDilutionPacedCaseId);
+        BenchmarkV1CaseDefinition debtShareAdaptive35 = FindCaseDefinition(
+            definition,
+            BenchmarkV1Corpus.DebtShareDilutionAdaptiveR3B5PercentCaseId);
+        BenchmarkV1CaseDefinition debtShareAdaptive44 = FindCaseDefinition(
+            definition,
+            BenchmarkV1Corpus.DebtShareDilutionAdaptiveR4B4PercentCaseId);
         AssertMatchedWorkload(
             debtNoMigration,
             debtPaced,
@@ -102,6 +118,11 @@ public sealed class BenchmarkV1RunnerTests {
             thresholdPaced,
             thresholdAdaptive35,
             thresholdAdaptive44);
+        AssertMatchedWorkload(
+            debtShareNoMigration,
+            debtSharePaced,
+            debtShareAdaptive35,
+            debtShareAdaptive44);
         BenchmarkComponentIdentityV1[] expectedProfiles = [
             BenchmarkV1Baselines.DebtZeroThenRotateDeltaNoMigration.Identity,
             BenchmarkV1Baselines
@@ -116,9 +137,10 @@ public sealed class BenchmarkV1RunnerTests {
                     benchmarkCase.ManifestCase.SelectionProfile)
                 .Distinct()
                 .OrderBy(static profile => profile.Id));
-        Assert.Equal(3, new[] {
+        Assert.Equal(4, new[] {
             debtNoMigration.ManifestCase.ResolvedTraceSha256,
             mixedNoMigration.ManifestCase.ResolvedTraceSha256,
+            debtShareNoMigration.ManifestCase.ResolvedTraceSha256,
             thresholdNoMigration.ManifestCase.ResolvedTraceSha256,
         }.Distinct(StringComparer.Ordinal).Count());
     }
@@ -229,7 +251,7 @@ public sealed class BenchmarkV1RunnerTests {
         BenchmarkV1BatchRun first = BenchmarkV1Runner.Run(
             BenchmarkV1Corpus.Create(BenchmarkV1Baselines.All));
         BenchmarkV1BatchRun second = BenchmarkV1Runner.Run(
-            BenchmarkV1Corpus.Create(BenchmarkV1Baselines.All));
+            BenchmarkV1Corpus.Create(BenchmarkV1Baselines.All.Reverse()));
 
         Assert.Equal(
             BenchmarkV1Json.WriteManifest(first.Definition.Manifest),
@@ -238,10 +260,10 @@ public sealed class BenchmarkV1RunnerTests {
             BenchmarkV1Json.WriteReport(first.Report),
             BenchmarkV1Json.WriteReport(second.Report));
         Assert.Equal(
-            "4a25f689f7fca42870a071d011974a8c5e35d869c34f77a0efd9c4d846c07ea6",
+            "6ecd67c123f4122b9d7c42a42ff2f8418df89beb861b6c021da4ba289476fba3",
             first.Report.ManifestSha256);
         Assert.Equal(
-            "f37e7f6d27b7094a76a085657a9a56116d01dd92e64fb9a4c3660ba802f87ca0",
+            "7fa93e82a5973dda96aa3b439d651b0a0de67e98e9699d1d625db8f1ffebec45",
             BenchmarkV1Json.ComputeSha256(
                 BenchmarkV1Json.WriteReport(first.Report)));
         Assert.Equal(
@@ -315,6 +337,30 @@ public sealed class BenchmarkV1RunnerTests {
             FindCase(
                 first.Report,
                 BenchmarkV1Corpus.ThresholdBandAdaptiveR4B4PercentCaseId)
+                .ResolvedTraceSha256);
+        Assert.Equal(
+            "b18b43f55f9233b14ef0d3c1787643e565350c98b7f33b9c9b0463e901c5b1e0",
+            FindCase(
+                first.Report,
+                BenchmarkV1Corpus.DebtShareDilutionNoMigrationCaseId)
+                .ResolvedTraceSha256);
+        Assert.Equal(
+            "b18b43f55f9233b14ef0d3c1787643e565350c98b7f33b9c9b0463e901c5b1e0",
+            FindCase(
+                first.Report,
+                BenchmarkV1Corpus.DebtShareDilutionPacedCaseId)
+                .ResolvedTraceSha256);
+        Assert.Equal(
+            "b18b43f55f9233b14ef0d3c1787643e565350c98b7f33b9c9b0463e901c5b1e0",
+            FindCase(
+                first.Report,
+                BenchmarkV1Corpus.DebtShareDilutionAdaptiveR3B5PercentCaseId)
+                .ResolvedTraceSha256);
+        Assert.Equal(
+            "b18b43f55f9233b14ef0d3c1787643e565350c98b7f33b9c9b0463e901c5b1e0",
+            FindCase(
+                first.Report,
+                BenchmarkV1Corpus.DebtShareDilutionAdaptiveR4B4PercentCaseId)
                 .ResolvedTraceSha256);
     }
 

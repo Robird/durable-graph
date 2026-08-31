@@ -57,7 +57,7 @@ internal static class BenchmarkV1ProtocolIdentities {
 
 internal static class BenchmarkV1Corpus {
     public const string ManifestId = "benchmark-v1";
-    public const int ManifestRevision = 4;
+    public const int ManifestRevision = 5;
     public const string DebtZeroThenRotateNoMigrationCaseId =
         "debt-zero-then-rotate-no-migration";
     public const string DebtZeroThenRotatePacedCaseId =
@@ -82,6 +82,14 @@ internal static class BenchmarkV1Corpus {
         "read-amplification-threshold-band-read-amplification-r3-b5pct";
     public const string ThresholdBandAdaptiveR4B4PercentCaseId =
         "read-amplification-threshold-band-read-amplification-r4-b4pct";
+    public const string DebtShareDilutionNoMigrationCaseId =
+        "previous-debt-share-dilution-boundary-no-migration";
+    public const string DebtShareDilutionPacedCaseId =
+        "previous-debt-share-dilution-boundary-paced";
+    public const string DebtShareDilutionAdaptiveR3B5PercentCaseId =
+        "previous-debt-share-dilution-boundary-read-amplification-r3-b5pct";
+    public const string DebtShareDilutionAdaptiveR4B4PercentCaseId =
+        "previous-debt-share-dilution-boundary-read-amplification-r4-b4pct";
 
     public static BenchmarkV1BatchDefinition Create(
         IEnumerable<StrategyBindingV1> strategies) {
@@ -125,6 +133,13 @@ internal static class BenchmarkV1Corpus {
                 1),
             thresholdBandTrace,
             frozenStrategies);
+        WorkloadTrace debtShareDilutionTrace = CreateDebtShareDilutionTrace();
+        BenchmarkV1CaseDefinition[] debtShareDilutionCases = CreateStrategyCases(
+            new BenchmarkComponentIdentityV1(
+                "previous-debt-share-dilution-boundary",
+                1),
+            debtShareDilutionTrace,
+            frozenStrategies);
         return new BenchmarkV1BatchDefinition(
             ManifestId,
             ManifestRevision,
@@ -138,6 +153,7 @@ internal static class BenchmarkV1Corpus {
                 .. debtZeroThenRotateCases,
                 .. mixedSmallCases,
                 .. thresholdBandCases,
+                .. debtShareDilutionCases,
             ]);
     }
 
@@ -202,6 +218,21 @@ internal static class BenchmarkV1Corpus {
                 new RemoveObject(7),
                 new RemoveObject(1001),
             ]),
+        ]);
+
+    private static WorkloadTrace CreateDebtShareDilutionTrace() => new(
+        scenarioName: "previous-debt-share-dilution-boundary",
+        generatorId: "handwritten",
+        generatorVersion: 1,
+        seed: 0,
+        [
+            new SaveStep([
+                new CreateObject(1, 40),
+                new CreateObject(100, 960),
+            ]),
+            new SaveStep([new UpdateObject(100, 960, 960)]),
+            new SaveStep([new UpdateObject(1, 40, 40)]),
+            new SaveStep([new UpdateObject(100, 960, 960)]),
         ]);
 
     private static ScenarioDefinition CreateMixedSmallDefinition() => new(

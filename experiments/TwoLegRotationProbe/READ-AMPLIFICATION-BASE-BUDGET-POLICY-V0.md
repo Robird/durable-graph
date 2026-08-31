@@ -182,20 +182,20 @@ versus `40/10`, over 2 versus 7 reconstruction Frames. Thus this synthetic fixtu
 evacuation keeps P/F equal. It is a local W/R trade, not a Peak result, tuned default,
 general paced-policy winner, or reason to alter the canonical evaluator schema.
 
-A separate Base-fraction lower-bound crossover starts measurement with `G=1000,E=40`.
-`Base == Delta` makes both Updates dominant Bases, so read limit, discretionary budget,
-and progress remain inert. Strict target selection gives `(3,5%)=[Rotate,Stay]` and
-`(4,4%)=[Stay,Rotate]`; both then complete one direct settlement and end after three
-Commits at scope `3/4`. Their W/P/F/R vectors are `1144/1004/1096/1124` and
-`1188/1012/1128/1088`, with final Previous debt `{1,100}` and `{100}`. This proves the
-4% equality/5% strict target boundary through exact apply on an aligned finite horizon.
-Both final per-object payload ratios are `H/B=1`; their different R is retained
-full-Frame layout/provenance, not object payload-chain amplification. The witness does
-not select a default, model steady state, or turn payload `E/G` into physical sizing
-authority.
+A Base-fraction lower-bound crossover is now an ordinary canonical trace: step 0 creates
+`(1,40)` and `(100,960)`, followed by measured full-rewrite Updates `100/1/100` with
+`Base == Delta`. For the Adaptive pair, the prelude creates the same physical boundary
+view `G=1000,E=40`; weak dominance makes the read limit and representation choice inert.
+Strict target selection gives `(3,5%)=[Stay,Rotate,Stay]` and
+`(4,4%)=[Stay,Stay,Rotate]`, with W/P/F/R `2148/1004/1096/1124` and
+`2192/1012/1132/1088`. Both finish at scope `3/4` after three workload Commits and one
+direct settlement. Only the Adaptive pair shares the intended pre-boundary physical
+source; no-migration and paced remain useful corpus controls but are not additional
+4%/5% crossover treatments. This finite witness selects no default or steady-state
+winner and does not turn payload `E/G` into physical sizing authority.
 
-Manifest-schema v2 / corpus revision 4 runs `(3,5%)` and `(4,4%)` as atomic selection
-profiles beside no-migration and paced controls on three frozen workloads. The profiles
+Manifest-schema v2 / corpus revision 5 runs `(3,5%)` and `(4,4%)` as atomic selection
+profiles beside no-migration and paced controls on four frozen workloads. The profiles
 are exact organizer bindings; one discriminating checkpoint verifies that they bind the
 intended decimal parameters rather than merely producing the same result. The first two
 benchmark workloads mask the parameter difference. On `debt-zero-then-rotate`, Adaptive
@@ -206,4 +206,7 @@ equals paced at
 `1516/1056/1056/1212`, while `(4,4%)` produces `1512/1056/1056/1472` and ties paced.
 Together with no-migration `1460/1072/1072/1064`, these are three incomparable unique
 vectors. This remains integrated hot-chain reset plus co-resident expiry/Frame-unpin
-evidence—not a pure `E/G` rotation witness, tuned default, or general winner.
+evidence—not a pure `E/G` rotation witness. The fourth workload supplies that separate
+ordinary-trace target boundary under the limits above; neither result selects a tuned
+default or general winner. Executable authority for the canonical boundary is
+[`BenchmarkV1DebtShareDilutionWorkloadTests.cs`](Tests/BenchmarkV1DebtShareDilutionWorkloadTests.cs).
