@@ -1,3 +1,4 @@
+using Atelia.TwoLegRotationProbe.Arena;
 using Atelia.TwoLegRotationProbe.Encoding;
 using Atelia.TwoLegRotationProbe.Model;
 using Atelia.TwoLegRotationProbe.Planning;
@@ -67,10 +68,11 @@ public sealed class ReadAmplificationBaseBudgetPolicyProjectionTests {
                 new CreateObject(InsertZeroId, BasePayloadBytes: 0),
             ]));
 
+        StrategyStepViewV1 view = StrategyStepViewV1.Create(facts);
         ReadAmplificationBaseBudgetPolicyProjection projection =
-            ReadAmplificationBaseBudgetPolicyProjection.Create(facts);
+            ReadAmplificationBaseBudgetPolicyProjection.Create(view);
 
-        Assert.Same(facts, projection.Facts);
+        Assert.Same(view, projection.View);
         Assert.Equal(17, projection.PostLiveGraphBasePayloadBytes);
         Assert.Equal(3, projection.ADependentEvacuationBasePayloadBytes);
         Assert.Equal(
@@ -157,7 +159,7 @@ public sealed class ReadAmplificationBaseBudgetPolicyProjectionTests {
             allFacts: [noChange]);
 
         InvalidDataException exception = Assert.Throws<InvalidDataException>(() =>
-            ReadAmplificationBaseBudgetPolicyProjection.Create(facts));
+            StrategyStepViewV1.Create(facts));
 
         Assert.Contains("outside source files 1/2", exception.Message,
             StringComparison.Ordinal);

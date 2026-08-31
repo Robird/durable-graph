@@ -1,4 +1,4 @@
-using Atelia.TwoLegRotationProbe.Planning;
+using Atelia.TwoLegRotationProbe.Arena;
 
 namespace Atelia.TwoLegRotationProbe.Policies;
 
@@ -16,21 +16,19 @@ internal static class ReadAmplificationBaseBudgetPolicy {
         long budgetBytes = GetPreferredBasePayloadBudgetBytes(
             projection.PostLiveGraphBasePayloadBytes,
             parameters.BaseBudgetFraction);
-        CandidateTarget target = SelectTarget(projection, parameters);
-        (StayBSaveDecision stayB, uint? progressOverrideObjectId) =
+        StrategyTargetV1 target = SelectTarget(projection, parameters);
+        (StrategyStayDecisionV1 stayB, uint? progressOverrideObjectId) =
             SelectStayB(projection, parameters, budgetBytes);
-        RotateCSaveDecision rotateC = SelectRotateC(
+        StrategyRotateDecisionV1 rotateC = SelectRotateC(
             projection,
             parameters,
             budgetBytes);
         return new ReadAmplificationBaseBudgetPolicySelection(
             projection,
             parameters,
-            target,
+            new StrategySelectionV1(target, stayB, rotateC),
             budgetBytes,
-            progressOverrideObjectId,
-            stayB,
-            rotateC);
+            progressOverrideObjectId);
     }
 
     private static long GetPreferredBasePayloadBudgetBytes(
@@ -40,21 +38,21 @@ internal static class ReadAmplificationBaseBudgetPolicy {
         return checked((long)decimal.Floor(unrounded));
     }
 
-    private static CandidateTarget SelectTarget(
+    private static StrategyTargetV1 SelectTarget(
         ReadAmplificationBaseBudgetPolicyProjection projection,
         ReadAmplificationBaseBudgetPolicyParameters parameters) {
         long graphBytes = projection.PostLiveGraphBasePayloadBytes;
         if (graphBytes == 0) {
-            return CandidateTarget.RotateC;
+            return StrategyTargetV1.RotateC;
         }
 
         decimal triggerBytes = (decimal)graphBytes * parameters.BaseBudgetFraction;
         return (decimal)projection.ADependentEvacuationBasePayloadBytes < triggerBytes
-            ? CandidateTarget.RotateC
-            : CandidateTarget.StayB;
+            ? StrategyTargetV1.RotateC
+            : StrategyTargetV1.StayB;
     }
 
-    private static (StayBSaveDecision Decision, uint? ProgressOverrideObjectId)
+    private static (StrategyStayDecisionV1 Decision, uint? ProgressOverrideObjectId)
         SelectStayB(
             ReadAmplificationBaseBudgetPolicyProjection projection,
             ReadAmplificationBaseBudgetPolicyParameters parameters,
@@ -120,17 +118,17 @@ internal static class ReadAmplificationBaseBudgetPolicy {
             remainingBudgetBytes -= fact.PostSaveBasePayloadBytes;
         }
 
-        StayBSaveDecision decision = new(
-            updates.Select(fact => new UpdateWriteDecision(
+        StrategyStayDecisionV1 decision = new(
+            updates.Select(fact => new StrategyUpdateWriteDecisionV1(
                 fact.ObjectId,
                 baseUpdateObjectIds.Contains(fact.ObjectId)
-                    ? UpdateWriteMode.Base
-                    : UpdateWriteMode.Delta)),
+                    ? StrategyUpdateWriteModeV1.Base
+                    : StrategyUpdateWriteModeV1.Delta)),
             migrationObjectIds);
         return (decision, progressOverrideObjectId);
     }
 
-    private static RotateCSaveDecision SelectRotateC(
+    private static StrategyRotateDecisionV1 SelectRotateC(
         ReadAmplificationBaseBudgetPolicyProjection projection,
         ReadAmplificationBaseBudgetPolicyParameters parameters,
         long budgetBytes) {
@@ -165,12 +163,12 @@ internal static class ReadAmplificationBaseBudgetPolicy {
             remainingBudgetBytes -= fact.PostSaveBasePayloadBytes;
         }
 
-        return new RotateCSaveDecision(
-            bContainedUpdates.Select(fact => new UpdateWriteDecision(
+        return new StrategyRotateDecisionV1(
+            bContainedUpdates.Select(fact => new StrategyUpdateWriteDecisionV1(
                 fact.ObjectId,
                 baseUpdateObjectIds.Contains(fact.ObjectId)
-                    ? UpdateWriteMode.Base
-                    : UpdateWriteMode.Delta)),
+                    ? StrategyUpdateWriteModeV1.Base
+                    : StrategyUpdateWriteModeV1.Delta)),
             []);
     }
 

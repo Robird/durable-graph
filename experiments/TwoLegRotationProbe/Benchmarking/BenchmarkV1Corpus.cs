@@ -1,3 +1,4 @@
+using Atelia.TwoLegRotationProbe.Arena;
 using Atelia.TwoLegRotationProbe.Workloads;
 using Atelia.TwoLegRotationProbe.Workloads.Generation;
 
@@ -74,24 +75,41 @@ internal static class BenchmarkV1Corpus {
     public const string MixedSmallAdaptiveR4B4PercentCaseId =
         "mixed-small-read-amplification-r4-b4pct";
 
-    public static BenchmarkV1BatchDefinition Create() {
+    public static BenchmarkV1BatchDefinition Create(
+        IEnumerable<StrategyBindingV1> strategies) {
+        ArgumentNullException.ThrowIfNull(strategies);
+        StrategyBindingV1[] frozenStrategies = strategies
+            .Select(static strategy => strategy ?? throw new ArgumentException(
+                "A benchmark strategy matrix cannot contain null.",
+                nameof(strategies)))
+            .OrderBy(static strategy => strategy.CaseIdSuffix, StringComparer.Ordinal)
+            .ToArray();
+        if (frozenStrategies.Length == 0) {
+            throw new ArgumentException(
+                "A benchmark strategy matrix cannot be empty.",
+                nameof(strategies));
+        }
+
+        if (frozenStrategies.Select(static strategy => strategy.CaseIdSuffix)
+            .Distinct(StringComparer.Ordinal).Count() != frozenStrategies.Length ||
+            frozenStrategies.Select(static strategy => strategy.Identity)
+                .Distinct().Count() != frozenStrategies.Length) {
+            throw new ArgumentException(
+                "Benchmark strategy identities and case suffixes must be unique.",
+                nameof(strategies));
+        }
+
         WorkloadTrace debtZeroThenRotateTrace = CreateDebtZeroThenRotateTrace();
         GeneratedScenario generated = ScenarioGenerator.Generate(
             CreateMixedSmallDefinition());
-        BenchmarkV1CaseDefinition[] debtZeroThenRotateCases = CreateProfileCases(
-            DebtZeroThenRotateNoMigrationCaseId,
-            DebtZeroThenRotatePacedCaseId,
-            DebtZeroThenRotateAdaptiveR3B5PercentCaseId,
-            DebtZeroThenRotateAdaptiveR4B4PercentCaseId,
+        BenchmarkV1CaseDefinition[] debtZeroThenRotateCases = CreateStrategyCases(
             new BenchmarkComponentIdentityV1("debt-zero-then-rotate", 1),
-            debtZeroThenRotateTrace);
-        BenchmarkV1CaseDefinition[] mixedSmallCases = CreateProfileCases(
-            MixedSmallNoMigrationCaseId,
-            MixedSmallPacedCaseId,
-            MixedSmallAdaptiveR3B5PercentCaseId,
-            MixedSmallAdaptiveR4B4PercentCaseId,
+            debtZeroThenRotateTrace,
+            frozenStrategies);
+        BenchmarkV1CaseDefinition[] mixedSmallCases = CreateStrategyCases(
             new BenchmarkComponentIdentityV1("mixed-small", 1),
-            generated.Trace);
+            generated.Trace,
+            frozenStrategies);
         return new BenchmarkV1BatchDefinition(
             ManifestId,
             ManifestRevision,
@@ -107,38 +125,16 @@ internal static class BenchmarkV1Corpus {
             ]);
     }
 
-    private static BenchmarkV1CaseDefinition[] CreateProfileCases(
-        string noMigrationCaseId,
-        string pacedCaseId,
-        string adaptiveR3B5PercentCaseId,
-        string adaptiveR4B4PercentCaseId,
+    private static BenchmarkV1CaseDefinition[] CreateStrategyCases(
         BenchmarkComponentIdentityV1 traceDefinition,
-        WorkloadTrace trace) => [
-            new BenchmarkV1CaseDefinition(
-                noMigrationCaseId,
+        WorkloadTrace trace,
+        IEnumerable<StrategyBindingV1> strategies) => strategies
+            .Select(strategy => new BenchmarkV1CaseDefinition(
+                $"{traceDefinition.Id}-{strategy.CaseIdSuffix}",
                 traceDefinition,
                 trace,
-                BenchmarkV1SelectionProfiles
-                    .DebtZeroThenRotateDeltaNoMigration.Identity),
-            new BenchmarkV1CaseDefinition(
-                pacedCaseId,
-                traceDefinition,
-                trace,
-                BenchmarkV1SelectionProfiles
-                    .DebtZeroThenRotateDeltaPacedOneDebtByObjectId.Identity),
-            new BenchmarkV1CaseDefinition(
-                adaptiveR3B5PercentCaseId,
-                traceDefinition,
-                trace,
-                BenchmarkV1SelectionProfiles
-                    .ReadAmplificationBaseBudgetR3B5Percent.Identity),
-            new BenchmarkV1CaseDefinition(
-                adaptiveR4B4PercentCaseId,
-                traceDefinition,
-                trace,
-                BenchmarkV1SelectionProfiles
-                    .ReadAmplificationBaseBudgetR4B4Percent.Identity),
-        ];
+                strategy))
+            .ToArray();
 
     private static WorkloadTrace CreateDebtZeroThenRotateTrace() => new(
         scenarioName: "debt-zero-then-rotate",

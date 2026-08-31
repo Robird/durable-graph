@@ -1,6 +1,6 @@
 # Two-leg rotation probe
 
-This isolated .NET 10/xUnit project is the in-memory workbench for exploring
+This isolated .NET 10/xUnit subproject is the in-memory workbench for exploring
 two-leg StateStore file rotation and Base-or-Deltify policies.
 
 The compact current goal, near-term roadmap, and unresolved work live in
@@ -24,8 +24,19 @@ than append another chronological chapter.
 Run the probe from the repository root:
 
 ```powershell
-dotnet test experiments/TwoLegRotationProbe/TwoLegRotationProbe.csproj
+dotnet test experiments/TwoLegRotationProbe/TwoLegRotationProbe.slnx
 ```
+
+The local solution contains three projects with one-way dependencies:
+
+```text
+TwoLegRotationProbe.Tests -> TwoLegRotationProbe.Baselines -> TwoLegRotationProbe
+                         \------------------------------->
+```
+
+The root project is the Arena class library. `Baselines/` owns the four existing
+benchmark strategies; `Tests/` is the organizer and white-box verification project.
+The Arena has no reference back to Baselines.
 
 Within one file epoch:
 
@@ -356,11 +367,22 @@ triggers remain caller-owned experimental controls.
 ## Benchmark-v1 consumer
 
 The experiment-only benchmark runner composes frozen workload traces, one named
-step-0 A/B bootstrap, the closed atomic selection-profile registry, and
-`EvaluatorV1Session`. Step 0 creates one shared full-OVD A Frame and a metadata-only B
-anchor outside W/P; the evaluator consumes the remaining steps and actually charges
-terminal settlement. Selectors see only current normalized source facts and cannot
-inspect future steps, candidate feasibility, or observations.
+step-0 A/B bootstrap, organizer-supplied strategy bindings, and `EvaluatorV1Session`.
+Step 0 creates one shared full-OVD A Frame and a metadata-only B anchor outside W/P;
+the evaluator consumes the remaining steps and actually charges terminal settlement.
+The current canonical execution toolkit exposes only the current payload view, not
+future steps, exact feasibility, metrics, addresses, or observations.
+
+Candidate code is not required to implement a strategy interface or inherit a base
+class. The organizer adapts an assembly entry to a fresh-per-case whole-run
+`StrategyBindingV1` executor.
+During that run, `StrategyRunContextV1` accepts complete Stay/Rotate selections and
+returns an Arena-certified `StrategyRunProductV1`: final in-memory `RbfFileStore`,
+workload Commit receipts, final checkpoint, typed termination, and terminal-settlement
+Revision count. The product contains no candidate-declared metrics; exact planning,
+admission, apply, settlement, final-state validation, and W/P/F/R remain Arena-owned.
+The constructors are intentionally closed in this first internal-track proof; accepting
+an arbitrary hand-built Store/ledger requires a separate exhaustive artifact validator.
 
 Each canonical manifest binds component IDs/versions, bootstrap/evaluated step counts,
 seed, and the exact expanded-trace SHA-256. The canonical report references the
@@ -368,8 +390,8 @@ manifest SHA-256 and projects the four typed outcomes; only admitted cases conta
 W/P/F/R, final cursor, and settlement summary. This is a compact comparable projection,
 not a full diagnostic dump, parser, persisted product format, score, or winner.
 
-Manifest schema 2 represents one atomic `selectionProfile` per case rather than a
-target/decision cross-product. Corpus revision 3 runs no-migration, paced, Adaptive
+Manifest schema 2 represents one atomic `selectionProfile` identity per case rather
+than a target/decision cross-product. Corpus revision 3 runs no-migration, paced, Adaptive
 `(3,5%)`, and Adaptive `(4,4%)` over each of two frozen workloads. Both Adaptive
 profiles are equal on this corpus; each workload still retains two incomparable unique
 raw vectors. That is matched Pareto evidence and parameter masking, not a tuned default
@@ -432,7 +454,7 @@ vectors and all edge cases remain authoritative in the linked tests.
 | Migration membership and future opportunity | Equal-cost membership can change immediate Previous-Frame closure; payload skew exposes write-vs-released-byte pressure; a known-future equal-size trace shows that migrating the object about to be updated with a forced Base can leave old-A debt that remains unchanged in that trace. | Handwritten topology/size/oracle witnesses only—not physical reclamation, actual or total IO, online temperature inference, a weighted winner, or a default policy; rotation can reverse the apparent advantage by creating new-scope Previous debt. [`RotationPolicyComparisonTests.cs`](Tests/RotationPolicyComparisonTests.cs) |
 | Capacity coupling | Two one-object B migration batches can make a large C evacuation fit; conversely, one optional same-state B migration can push an otherwise feasible grouped-foreground Stay beyond the one-Frame envelope. | Handcrafted provisional-grammar witnesses only; they prove neither complete repair/search nor file-size or rotation-trigger policy. [`PreparatoryBaseMigrationTests.cs`](Tests/PreparatoryBaseMigrationTests.cs), [`CompletionCertificateTests.cs`](Tests/CompletionCertificateTests.cs), [`GroupedForegroundBurstCapacityCouplingTests.cs`](Tests/GroupedForegroundBurstCapacityCouplingTests.cs) |
 | Evaluator v1 admissibility | An isolated run fork exposes metrics only after all workload steps and one actually replayed canonical terminal settlement; direct Rotate has no empty Stay, multi-step preparation is one charged Commit, and hard rejections remain typed/non-scoring. | Closes the terminal source epoch `A/B -> B/C`, not all future Previous debt; no scalar score or product evaluator. [`EVALUATOR-V1.md`](EVALUATOR-V1.md), [`EvaluatorV1SessionTests.cs`](Tests/EvaluatorV1SessionTests.cs) |
-| Benchmark-v1 matched consumer | Four atomic profiles share each frozen fixture/trace/horizon. On both workloads the profiles collapse into two exact-vector equivalence classes, with neither unique vector dominating the other; legacy case results and trace hashes remain stable across the manifest-schema migration. | This is two bounded workloads, not a general frontier; single-A-Frame bootstrap, writer-only JSON, no scalar score/parser/CLI. [`EVALUATOR-V1.md`](EVALUATOR-V1.md), [`BenchmarkV1RunnerTests.cs`](Tests/BenchmarkV1RunnerTests.cs), [`FixedTwoScopeAdvanceHorizonTests.cs`](Tests/FixedTwoScopeAdvanceHorizonTests.cs), [`BenchmarkV1JsonTests.cs`](Tests/BenchmarkV1JsonTests.cs) |
+| Benchmark-v1 matched consumer | Four strategies from the independent Baselines assembly share each frozen fixture/trace/horizon through the Arena whole-run contract. The previous 8 typed outcomes, W/P/F/R vectors, manifest hash, report hash, and trace hashes remain byte-exact. | This is an internal-track certified-product proof over two bounded workloads, not a general untrusted-artifact judge or frontier; single-A-Frame bootstrap, writer-only JSON, no scalar score/parser/CLI. [`EVALUATOR-V1.md`](EVALUATOR-V1.md), [`StrategyArenaContractTests.cs`](Tests/StrategyArenaContractTests.cs), [`BenchmarkV1RunnerTests.cs`](Tests/BenchmarkV1RunnerTests.cs), [`BenchmarkV1JsonTests.cs`](Tests/BenchmarkV1JsonTests.cs) |
 | Continuous rotation | A caller script crosses `A/B -> B/C -> C/D` while preserving exact state, reconstruction closure, and Stay certificates. | It is not a stateful runner or durable publication path. [`ContinuousMultiRotationTests.cs`](Tests/ContinuousMultiRotationTests.cs) |
 
 ### Accepted source-partition provenance

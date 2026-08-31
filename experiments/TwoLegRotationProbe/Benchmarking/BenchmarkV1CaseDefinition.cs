@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using Atelia.TwoLegRotationProbe.Arena;
 using Atelia.TwoLegRotationProbe.Workloads;
 
 namespace Atelia.TwoLegRotationProbe.Benchmarking;
@@ -12,7 +13,29 @@ internal sealed class BenchmarkV1CaseDefinition {
         string caseId,
         BenchmarkComponentIdentityV1 traceDefinition,
         WorkloadTrace trace,
-        BenchmarkComponentIdentityV1 selectionProfile) {
+        BenchmarkComponentIdentityV1 selectionProfile)
+        : this(caseId, traceDefinition, trace, selectionProfile, strategy: null) {
+    }
+
+    public BenchmarkV1CaseDefinition(
+        string caseId,
+        BenchmarkComponentIdentityV1 traceDefinition,
+        WorkloadTrace trace,
+        StrategyBindingV1 strategy)
+        : this(
+            caseId,
+            traceDefinition,
+            trace,
+            (strategy ?? throw new ArgumentNullException(nameof(strategy))).Identity,
+            strategy) {
+    }
+
+    private BenchmarkV1CaseDefinition(
+        string caseId,
+        BenchmarkComponentIdentityV1 traceDefinition,
+        WorkloadTrace trace,
+        BenchmarkComponentIdentityV1 selectionProfile,
+        StrategyBindingV1? strategy) {
         ArgumentNullException.ThrowIfNull(traceDefinition);
         ArgumentNullException.ThrowIfNull(trace);
         ArgumentNullException.ThrowIfNull(selectionProfile);
@@ -24,9 +47,8 @@ internal sealed class BenchmarkV1CaseDefinition {
                 nameof(traceDefinition));
         }
 
-        BenchmarkV1SelectionProfileSelector.Validate(selectionProfile);
-
         Trace = trace;
+        Strategy = strategy;
         ManifestCase = new BenchmarkCaseManifestV1(
             caseId,
             BenchmarkV1Identities.SourceFixture,
@@ -45,6 +67,8 @@ internal sealed class BenchmarkV1CaseDefinition {
     public BenchmarkCaseManifestV1 ManifestCase { get; }
 
     public WorkloadTrace Trace { get; }
+
+    public StrategyBindingV1? Strategy { get; }
 }
 
 internal sealed class BenchmarkV1BatchDefinition {

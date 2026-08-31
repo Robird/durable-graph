@@ -188,14 +188,20 @@ PublishedRevision 为 shared prior-snapshot anchor。accepted new head 的 curre
   无条件执行一次 `DirectRotateElseAscendingSingleDebt-v1` terminal settlement。直转优先，否则 ObjectId 升序
   单对象迁债；全部 preparation+Rotate 真实 apply 在同一个 synthetic Commit 中并计入 W/P/F，成功还验证
   terminal source A 已退出 final B/C current reconstruction；
-- benchmark-v1 consumer：closed registry 把 trace step0 Create-only population 共置为一个 full-OVD A Frame，
+- benchmark-v1 consumer：workload-only corpus 接收 organizer 提供的 strategy bindings；trace step0 Create-only
+  population 共置为一个 full-OVD A Frame，
   再写 metadata-only B anchor，evaluator 只消费 steps[1..]；manifest 固定 fixture/trace/generator/seed、expanded
   trace SHA-256、atomic selection profile 与 evaluator/settlement/accounting/layout/grammar/read-schedule identity；
   batch runner 只在 session Store 上 normalize/evaluate/apply，typed rejection 不 fallback；canonical UTF-8
   manifest/report 使用固定 tokens/order、16位 hex seed、manifest+trace SHA-256，只有 admitted 输出 W/P/F/R、
   final cursor 与 settlement 摘要；manifest schema 2 以单一 `selectionProfile` 取代 target/decision 双栏，
   corpus revision 3 在 handwritten 与 seed12345 mixed 两组 workload 上各运行 no-migration、paced、Adaptive
-  `(3,5%)`、Adaptive `(4,4%)`，unknown/wrong-version profile fail-close；
+  `(3,5%)`、Adaptive `(4,4%)`；identity-only manifest case 不可执行并 fail-close；
+- 多策略 Arena vertical proof：项目已拆为 `Arena <- Baselines <- Tests` 单向依赖；四个现有策略的完整运行
+  delegate 与 Adaptive 实现位于独立 Baselines 程序集。public `StrategyStepViewV1` 保留 `G/E/H/D/B`、
+  Insert/Update/Remove/NoChange 与 parent debt，`StrategyRunContextV1` 只逐步开放当前 Save，并由 Arena
+  构造 final Store、workload Commit receipts、final checkpoint 与 typed termination。策略不声明 W/P/F/R；
+  原 8 cases 的 typed outcomes、exact vectors、manifest/report/trace hashes 全部不漂移；
 - 首组跨 workload profile evidence：handwritten 上 no-migration 为 `856/680/680/832`，其余三 profile 同为
   `1536/696/804/756`；mixed 上 no-migration/paced 同为 `368/164/344/352`，两 Adaptive 同为
   `440/164/184/280`。每个 workload 都有两个互不支配的 unique vectors，而两组 Adaptive 参数均被现有
@@ -213,37 +219,28 @@ synthetic evidence，仍不代表一般 pressure-aware rotation trigger 已解�
 
 ## 当前研究焦点
 
-当前两个 canonical workloads 都把 Adaptive `(3,5%)` 与 `(4,4%)` 压成相同结果；test-local threshold-band
-已经证明两者在自然 read-amplification 边界上可以分叉。先闭合这个已经在途的最小参数辨别能力；随后把现有
-benchmark/evaluator 提炼为静态链接的多策略 Arena，使 Baselines 与独立 candidate projects 消费同一窄
-policy contract 和 strategy-neutral workload suite。该转型不引入 optimizer、插件发现、排行榜或标量分数。
+内部赛道准备的第一个 vertical proof 已闭合：Arena、Baselines、Tests 分离，workload matrix 由 organizer
+组合，现有四策略从独立程序集返回 Arena-certified in-memory product 并得到旧结果。当前焦点转为形成首轮
+冻结 competition packet 所需的 strategy-neutral workload 多样性；仍不引入 optimizer、插件发现、排行榜
+或标量分数。
 
 ## 下一编码切片
 
-把现有 threshold-band fixture 的 initial seeds 编码成 trace step0，并让其后普通 `SaveStep`s 通过 canonical
-runner 自然演化。四个 atomic profiles 必须消费同一 trace/horizon；若 canonical bootstrap/evaluator 未复现
-参数分叉，保留实际 typed discrepancy 或负结果，不复制手工 source setup 或强凑旧 golden。
-
-同一切片只在 owning test 内增加最小归约：先把 non-admitted outcomes 按原类型分栏，再按 exact
-`W/P/F/R` 合并 admitted ties，并断言 unique vectors 的 componentwise Pareto 关系。不新增 production
-reducer、frontier/archive 类型、report 字段、scalar score 或通用策略接口。
-
-这一步闭合后，下一切片是在当前程序集内做 policy-contract vertical proof：以只含当前
-`G/E/H/D/B` payload facts 的冻结 `PolicyStepViewV1` 驱动现有四个 profiles，并要求已有 typed outcomes、
-`W/P/F/R` 与 canonical hashes 完全不变。逐对象 view 必须保留 Remove 的 source Previous-debt/H/Base facts，
-使 pre-Save parent debt 与只统计 post-live 的 `E` 保持可区分。先证明 seam，再拆程序集。
+先把现有 threshold-band fixture 的 initial seeds 编码成 trace step0，并让其后普通 `SaveStep`s 通过 canonical
+Arena runner 自然演化，形成第一个会区分 Adaptive `(3,5%)` / `(4,4%)` 的 official workload。若 canonical
+bootstrap 未复现旧手工分叉，保留真实负结果，不复制 source setup 或强凑 golden。随后按 locality、size
+ratio/skew、lifetime/churn、debt pressure、rotation band、burst/capacity 与 horizon phase 补齐最小命名
+workload families，再冻结首轮 packet。
 
 ## 近期 roadmap
 
-1. **闭合自然参数辨别与局部比较**：增加一个自然参数辨别 workload，并在同一 owning test 中冻结 typed
+1. **闭合自然参数辨别与局部比较**：增加一个自然参数辨别 workload，并在 owning test 中冻结 typed
    outcomes、exact ties 与 Pareto 关系；
-2. **证明窄 Policy V1 seam**：在单程序集内让现有四个 profiles 改走同一无状态、payload-only
-   `PolicyStepViewV1 -> PolicySelectionV1`，旧报告与 hashes 不漂移；
-3. **拆出 Arena / Tests / Baselines**：当前项目变为 class library，测试和全部已知 Baselines 各归一处；
-   candidate 只引用 Arena 的窄 public policy surface，organizer 显式注册，不做插件发现；
-4. **把 corpus 改成 workload-only suite 并增加因果多样性**：按 locality、size ratio/skew、lifetime/churn、
+2. **增加因果多样性**：按 locality、size ratio/skew、lifetime/churn、
    debt pressure、rotation band、burst/capacity 与 horizon phase 增加最小 workload family，不以 seed 数冒充多样性；
-5. **启动首轮并行 candidates**：organizer 冻结 contract/suite/协议 packet，各 agent 只写独立 candidate
+3. **冻结 competition packet**：记录 Arena contract、suite revision、evaluator/settlement/layout identities、
+   candidate 目录权限与 prior-art 输入；
+4. **启动首轮并行 candidates**：organizer 冻结 contract/suite/协议 packet，各 agent 只写独立 candidate
    project；主线统一集成复跑并报告 typed outcomes 与 raw `W/P/F/R`，不排榜。第二轮起对受已有结果影响的
    candidate 做 post-freeze 新 workload validation。
 
@@ -251,11 +248,16 @@ reducer、frontier/archive 类型、report 字段、scalar score 或通用策略
 
 - 哪些互相正交的因果 workload 轴足以支撑“没有明显短板”仍未知；统一 suite 只提供可重复 synthetic evidence，
   不能声称代表生产；
-- payload-only Policy V1 是否足以产生结构多样的首轮 candidate，需由 seam proof 和首轮结果验证；Frame-aware
+- 当前 payload-only canonical toolkit 是否足以产生结构多样的首轮 candidate，需由首轮结果验证；Frame-aware
   facts 仅在 payload-identical 布局造成 canonical outcome 反转、Frame-aware oracle 进入新 Pareto 点，或
   intermediate read schedule 正式成为评价目标时进入 V2；
 - 当前 profile-matrix manifest 可由 organizer 冻结候选后统一重跑；若出现分批 strategy report 缓存/比较
   consumer，再拆 strategy-neutral suite hash 与 per-strategy report identity；
+- 当前 `StrategyRunProductV1` 由 Arena context 认证，不接受候选任意手工构造的 Store/ledger；若首轮策略确实
+  需要绕过 canonical planner/apply toolkit，须先实现 exhaustive Frame enumeration、逐 Commit prefix-state
+  validation、layout/ticket/OVD closure 检查与 offline W/P/F/R recomputation；
+- `StrategyBindingV1` 每 case 调用 executor factory，防止意外复用 captured instance；static mutable state
+  仍不是机械隔离的故障模型，首轮 packet 需加入 fresh-fork repeat 与 case-order permutation gate；
 - 产品若最终必须发布唯一默认 profile，仍需要真实 workload/SLO 给出 Peak、file tail 与 read guardrails；
   在此之前只报告 per-workload Pareto 与 `no winner`，不使用裸加权和或严格 W-first 字典序。
 

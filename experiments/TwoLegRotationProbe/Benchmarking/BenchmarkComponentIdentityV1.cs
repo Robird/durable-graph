@@ -1,6 +1,6 @@
 namespace Atelia.TwoLegRotationProbe.Benchmarking;
 
-internal sealed record BenchmarkComponentIdentityV1 {
+public sealed record BenchmarkComponentIdentityV1 {
     public BenchmarkComponentIdentityV1(string id, int version) {
         BenchmarkV1Text.ValidateId(id, nameof(id));
         if (version <= 0) {

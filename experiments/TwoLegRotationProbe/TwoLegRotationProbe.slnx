@@ -1,3 +1,5 @@
 <Solution>
   <Project Path="TwoLegRotationProbe.csproj" />
+  <Project Path="Baselines/TwoLegRotationProbe.Baselines.csproj" />
+  <Project Path="Tests/TwoLegRotationProbe.Tests.csproj" />
 </Solution>

@@ -1,3 +1,4 @@
+using Atelia.TwoLegRotationProbe.Arena;
 using Atelia.TwoLegRotationProbe.Model;
 using Atelia.TwoLegRotationProbe.Planning;
 using Atelia.TwoLegRotationProbe.Policies;
@@ -32,7 +33,7 @@ public sealed class ReadAmplificationBaseBudgetPolicySelectionTests {
             projection.ADependentEvacuationBasePayloadBytes);
         Assert.Equal(50, selection.PreferredBasePayloadBudgetBytes);
         Assert.Equal(
-            expectedRotate ? CandidateTarget.RotateC : CandidateTarget.StayB,
+            expectedRotate ? StrategyTargetV1.RotateC : StrategyTargetV1.StayB,
             selection.Target);
     }
 
@@ -50,7 +51,7 @@ public sealed class ReadAmplificationBaseBudgetPolicySelectionTests {
         Assert.Equal(101, projection.PostLiveGraphBasePayloadBytes);
         Assert.Equal(5, projection.ADependentEvacuationBasePayloadBytes);
         Assert.Equal(5, selection.PreferredBasePayloadBudgetBytes);
-        Assert.Equal(CandidateTarget.RotateC, selection.Target);
+        Assert.Equal(StrategyTargetV1.RotateC, selection.Target);
     }
 
     [Fact]
@@ -62,7 +63,7 @@ public sealed class ReadAmplificationBaseBudgetPolicySelectionTests {
             readLimit: 3m,
             budgetFraction: 0.05m);
 
-        Assert.Equal(CandidateTarget.RotateC, selection.Target);
+        Assert.Equal(StrategyTargetV1.RotateC, selection.Target);
         Assert.Equal(0, selection.PreferredBasePayloadBudgetBytes);
         Assert.Empty(selection.StayB.UpdateDecisions);
         Assert.Empty(selection.RotateC.BContainedUpdateDecisions);
@@ -81,13 +82,13 @@ public sealed class ReadAmplificationBaseBudgetPolicySelectionTests {
             budgetFraction: 1m);
 
         AssertModes(selection.StayB.UpdateDecisions,
-            (1, UpdateWriteMode.Delta),
-            (2, UpdateWriteMode.Delta),
-            (3, UpdateWriteMode.Base));
+            (1, StrategyUpdateWriteModeV1.Delta),
+            (2, StrategyUpdateWriteModeV1.Delta),
+            (3, StrategyUpdateWriteModeV1.Base));
         AssertModes(selection.RotateC.BContainedUpdateDecisions,
-            (1, UpdateWriteMode.Delta),
-            (2, UpdateWriteMode.Delta),
-            (3, UpdateWriteMode.Base));
+            (1, StrategyUpdateWriteModeV1.Delta),
+            (2, StrategyUpdateWriteModeV1.Delta),
+            (3, StrategyUpdateWriteModeV1.Base));
     }
 
     [Fact]
@@ -101,9 +102,10 @@ public sealed class ReadAmplificationBaseBudgetPolicySelectionTests {
             budgetFraction: 0.01m);
 
         Assert.Equal(0, selection.PreferredBasePayloadBudgetBytes);
-        AssertMode(selection.StayB.UpdateDecisions, 1, UpdateWriteMode.Base);
+        AssertMode(selection.StayB.UpdateDecisions, 1,
+            StrategyUpdateWriteModeV1.Base);
         AssertMode(selection.RotateC.BContainedUpdateDecisions, 1,
-            UpdateWriteMode.Base);
+            StrategyUpdateWriteModeV1.Base);
     }
 
     [Fact]
@@ -117,9 +119,10 @@ public sealed class ReadAmplificationBaseBudgetPolicySelectionTests {
             readLimit: decimal.MaxValue,
             budgetFraction: 1m);
 
-        AssertMode(selection.StayB.UpdateDecisions, 1, UpdateWriteMode.Delta);
+        AssertMode(selection.StayB.UpdateDecisions, 1,
+            StrategyUpdateWriteModeV1.Delta);
         AssertMode(selection.RotateC.BContainedUpdateDecisions, 1,
-            UpdateWriteMode.Delta);
+            StrategyUpdateWriteModeV1.Delta);
     }
 
     [Fact]
@@ -134,12 +137,14 @@ public sealed class ReadAmplificationBaseBudgetPolicySelectionTests {
             budgetFraction: 0.5m);
 
         Assert.Equal(6, selection.PreferredBasePayloadBudgetBytes);
-        AssertMode(selection.StayB.UpdateDecisions, 10, UpdateWriteMode.Base);
-        AssertMode(selection.StayB.UpdateDecisions, 20, UpdateWriteMode.Delta);
+        AssertMode(selection.StayB.UpdateDecisions, 10,
+            StrategyUpdateWriteModeV1.Base);
+        AssertMode(selection.StayB.UpdateDecisions, 20,
+            StrategyUpdateWriteModeV1.Delta);
         AssertMode(selection.RotateC.BContainedUpdateDecisions, 10,
-            UpdateWriteMode.Base);
+            StrategyUpdateWriteModeV1.Base);
         AssertMode(selection.RotateC.BContainedUpdateDecisions, 20,
-            UpdateWriteMode.Delta);
+            StrategyUpdateWriteModeV1.Delta);
     }
 
     [Fact]
@@ -167,11 +172,12 @@ public sealed class ReadAmplificationBaseBudgetPolicySelectionTests {
             readLimit: 2m,
             budgetFraction: 0.5m);
 
-        Assert.Equal(CandidateTarget.StayB, selection.Target);
+        Assert.Equal(StrategyTargetV1.StayB, selection.Target);
         Assert.Equal(5, selection.PreferredBasePayloadBudgetBytes);
         Assert.Equal((uint)20, selection.StayProgressOverrideObjectId);
         Assert.Equal([20U], selection.StayB.UnchangedMigrationObjectIds);
-        AssertMode(selection.StayB.UpdateDecisions, 10, UpdateWriteMode.Delta);
+        AssertMode(selection.StayB.UpdateDecisions, 10,
+            StrategyUpdateWriteModeV1.Delta);
     }
 
     [Fact]
@@ -188,8 +194,10 @@ public sealed class ReadAmplificationBaseBudgetPolicySelectionTests {
 
         Assert.Equal(5, selection.PreferredBasePayloadBudgetBytes);
         Assert.Equal((uint)20, selection.StayProgressOverrideObjectId);
-        AssertMode(selection.StayB.UpdateDecisions, 20, UpdateWriteMode.Base);
-        AssertMode(selection.StayB.UpdateDecisions, 10, UpdateWriteMode.Delta);
+        AssertMode(selection.StayB.UpdateDecisions, 20,
+            StrategyUpdateWriteModeV1.Base);
+        AssertMode(selection.StayB.UpdateDecisions, 10,
+            StrategyUpdateWriteModeV1.Delta);
         Assert.Empty(selection.StayB.UnchangedMigrationObjectIds);
     }
 
@@ -206,13 +214,13 @@ public sealed class ReadAmplificationBaseBudgetPolicySelectionTests {
             readLimit: 2m,
             budgetFraction: 0.25m);
 
-        Assert.Equal(CandidateTarget.StayB, selection.Target);
+        Assert.Equal(StrategyTargetV1.StayB, selection.Target);
         Assert.Equal(5, selection.PreferredBasePayloadBudgetBytes);
         Assert.Null(selection.StayProgressOverrideObjectId);
         AssertModes(selection.StayB.UpdateDecisions,
-            (10, UpdateWriteMode.Delta),
-            (20, UpdateWriteMode.Base),
-            (30, UpdateWriteMode.Base));
+            (10, StrategyUpdateWriteModeV1.Delta),
+            (20, StrategyUpdateWriteModeV1.Base),
+            (30, StrategyUpdateWriteModeV1.Base));
     }
 
     [Fact]
@@ -252,11 +260,11 @@ public sealed class ReadAmplificationBaseBudgetPolicySelectionTests {
         Assert.Equal(25, projection.PostLiveGraphBasePayloadBytes);
         Assert.Equal(8, projection.ADependentEvacuationBasePayloadBytes);
         Assert.Equal(10, selection.PreferredBasePayloadBudgetBytes);
-        Assert.Equal(CandidateTarget.RotateC, selection.Target);
+        Assert.Equal(StrategyTargetV1.RotateC, selection.Target);
         AssertModes(selection.RotateC.BContainedUpdateDecisions,
-            (5, UpdateWriteMode.Base),
-            (6, UpdateWriteMode.Delta),
-            (7, UpdateWriteMode.Base));
+            (5, StrategyUpdateWriteModeV1.Base),
+            (6, StrategyUpdateWriteModeV1.Delta),
+            (7, StrategyUpdateWriteModeV1.Base));
         Assert.DoesNotContain(selection.RotateC.BContainedUpdateDecisions,
             static decision => decision.ObjectId == 3);
         Assert.Empty(selection.RotateC.BContainedNoChangeBaseObjectIds);
@@ -339,7 +347,8 @@ public sealed class ReadAmplificationBaseBudgetPolicySelectionTests {
             published,
             parent,
             facts);
-        return ReadAmplificationBaseBudgetPolicyProjection.Create(normalized);
+        return ReadAmplificationBaseBudgetPolicyProjection.Create(
+            StrategyStepViewV1.Create(normalized));
     }
 
     private static SourceObjectFact CreateSource(
@@ -363,15 +372,16 @@ public sealed class ReadAmplificationBaseBudgetPolicySelectionTests {
     }
 
     private static void AssertMode(
-        IReadOnlyList<UpdateWriteDecision> decisions,
+        IReadOnlyList<StrategyUpdateWriteDecisionV1> decisions,
         uint objectId,
-        UpdateWriteMode expected) => Assert.Equal(
+        StrategyUpdateWriteModeV1 expected) => Assert.Equal(
         expected,
         Assert.Single(decisions, decision => decision.ObjectId == objectId).Mode);
 
     private static void AssertModes(
-        IReadOnlyList<UpdateWriteDecision> decisions,
-        params (uint ObjectId, UpdateWriteMode Mode)[] expected) => Assert.Equal(
+        IReadOnlyList<StrategyUpdateWriteDecisionV1> decisions,
+        params (uint ObjectId, StrategyUpdateWriteModeV1 Mode)[] expected) =>
+        Assert.Equal(
         expected,
         decisions.Select(static decision =>
             (decision.ObjectId, decision.Mode)).ToArray());

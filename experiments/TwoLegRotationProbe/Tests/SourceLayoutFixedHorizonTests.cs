@@ -1,3 +1,5 @@
+using Atelia.TwoLegRotationProbe.Arena;
+using Atelia.TwoLegRotationProbe.Baselines;
 using Atelia.TwoLegRotationProbe.Benchmarking;
 using Atelia.TwoLegRotationProbe.Evaluation;
 using Atelia.TwoLegRotationProbe.Model;
@@ -41,21 +43,21 @@ public sealed partial class RotationPolicyComparisonTests {
         FixedHorizonCellResult sharedNoMigration = RunFixedHorizonCell(
             shared,
             trace,
-            BenchmarkV1SelectionProfiles.DebtZeroThenRotateDeltaNoMigration.Identity);
+            BenchmarkV1Baselines.DebtZeroThenRotateDeltaNoMigration);
         FixedHorizonCellResult sharedPaced = RunFixedHorizonCell(
             shared,
             trace,
-            BenchmarkV1SelectionProfiles
-                .DebtZeroThenRotateDeltaPacedOneDebtByObjectId.Identity);
+            BenchmarkV1Baselines
+                .DebtZeroThenRotateDeltaPacedOneDebtByObjectId);
         FixedHorizonCellResult splitNoMigration = RunFixedHorizonCell(
             split,
             trace,
-            BenchmarkV1SelectionProfiles.DebtZeroThenRotateDeltaNoMigration.Identity);
+            BenchmarkV1Baselines.DebtZeroThenRotateDeltaNoMigration);
         FixedHorizonCellResult splitPaced = RunFixedHorizonCell(
             split,
             trace,
-            BenchmarkV1SelectionProfiles
-                .DebtZeroThenRotateDeltaPacedOneDebtByObjectId.Identity);
+            BenchmarkV1Baselines
+                .DebtZeroThenRotateDeltaPacedOneDebtByObjectId);
 
         FixedHorizonRawVector noMigrationSegment1 = new(5, 1476, 1288, 1288, 1320);
         FixedHorizonRawVector noMigrationSegment2 = new(1, 80, 80, 1288, 1352);
@@ -111,7 +113,7 @@ public sealed partial class RotationPolicyComparisonTests {
     private static FixedHorizonCellResult RunFixedHorizonCell(
         AnchoredInteractionFixture fixture,
         WorkloadTrace trace,
-        BenchmarkComponentIdentityV1 selectionProfile) {
+        StrategyBindingV1 strategy) {
         PolicySource source = fixture.Source;
         long sourceTailBytes = FixedHorizonTotalTailBytes(source.Store);
         EvaluatorV1Session first = new(
@@ -126,21 +128,20 @@ public sealed partial class RotationPolicyComparisonTests {
                 first.Cursor.FileScope.CurrentFileNumber,
                 first.Cursor.PublishedRevisionAddress,
                 trace.Steps[stepIndex]);
-            BenchmarkV1StepSelection selection =
-                BenchmarkV1SelectionProfileSelector.Select(
-                selectionProfile,
-                facts);
-            Assert.Equal(CandidateTarget.StayB, selection.Target);
+            StrategySelectionV1 selection = BenchmarkV1Baselines.Select(
+                strategy.Identity,
+                StrategyStepViewV1.Create(facts));
+            Assert.Equal(StrategyTargetV1.StayB, selection.Target);
 
             ExplicitCandidatePairEvaluation pair =
                 ExplicitCandidatePairEvaluator.Evaluate(
                     first.Store,
                     facts,
-                    selection.StayB,
-                    selection.RotateC);
+                    ProjectStay(selection.Stay),
+                    ProjectRotate(selection.Rotate));
             RotationPolicyStepAttempt attempt = first.ApplySelectedWorkloadCommit(
                 pair,
-                selection.Target);
+                CandidateTarget.StayB);
             _ = Assert.IsType<AppliedStayBPolicyStep>(attempt);
             previousFramesAfterWorkloadSteps.Add(InspectFixedHorizonPreviousFrames(
                 first.Store,
@@ -322,6 +323,26 @@ public sealed partial class RotationPolicyComparisonTests {
     private static long FixedHorizonTotalTailBytes(RbfFileStore store) => Enumerable
         .Range(1, store.FileCount)
         .Sum(index => store.GetFile((uint)index).TailOffsetBytes);
+
+    private static StayBSaveDecision ProjectStay(
+        StrategyStayDecisionV1 decision) => new(
+        decision.UpdateDecisions.Select(static update => new UpdateWriteDecision(
+            update.ObjectId,
+            ProjectMode(update.Mode))),
+        decision.UnchangedMigrationObjectIds);
+
+    private static RotateCSaveDecision ProjectRotate(
+        StrategyRotateDecisionV1 decision) => new(
+        decision.BContainedUpdateDecisions.Select(static update =>
+            new UpdateWriteDecision(update.ObjectId, ProjectMode(update.Mode))),
+        decision.BContainedNoChangeBaseObjectIds);
+
+    private static UpdateWriteMode ProjectMode(StrategyUpdateWriteModeV1 mode) =>
+        mode switch {
+            StrategyUpdateWriteModeV1.Base => UpdateWriteMode.Base,
+            StrategyUpdateWriteModeV1.Delta => UpdateWriteMode.Delta,
+            _ => throw new ArgumentOutOfRangeException(nameof(mode)),
+        };
 
     private sealed record FixedHorizonSourceDiagnostic(
         IReadOnlyList<FixedHorizonDebtObject> DebtObjects,

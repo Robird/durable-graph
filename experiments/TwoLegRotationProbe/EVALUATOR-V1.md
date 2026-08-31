@@ -1,6 +1,6 @@
 # TwoLeg evaluator v1 admissibility and accounting contract
 
-> Status: typed outcome, closed-horizon session, registry-backed matched batch, and
+> Status: typed outcome, closed-horizon session, cross-assembly matched batch, and
 > canonical machine-readable manifest/report implemented.
 
 This document fixes the first executable protocol and raw measurement schedule for
@@ -156,7 +156,7 @@ queries beyond current reconstruction.
 ## Benchmark-v1 batch consumer
 
 `BenchmarkV1Runner` is the first real consumer of the evaluator seam. Every case is
-resolved from one closed registry and carries versioned identities for source fixture,
+resolved from an organizer-supplied `StrategyBindingV1` and carries versioned identities for source fixture,
 trace definition, generator, one atomic selection profile, evaluator, settlement,
 accounting, provisional frame layout/grammar, and read schedule. Its manifest also
 contains the SHA-256 of the exact expanded trace, so generator or handwritten payload
@@ -170,13 +170,22 @@ single-A-Frame topology is an explicit experimental treatment, not a general sou
 layout claim; exceeding its one-Frame envelope fails the batch instead of becoming an
 evaluator capacity outcome.
 
-The closed policy registry exposes four atomic selection profiles: debt-zero rotation
-with either no migration or smallest-eligible-debt pacing, plus Adaptive `(3,5%)` and
-`(4,4%)`. Each exact identity selects Target, Stay-B decisions, and Rotate-C decisions
-in one call. Adaptive IDs map to fixed decimal parameters in the registry; IDs are not
-parsed and arbitrary parameter input is not accepted. Selectors receive only current
-`NormalizedSaveFacts`; they cannot inspect step index, future trace, candidate
-feasibility, or observations, and never fall back after rejection.
+The four current strategies live in the independent Baselines assembly: debt-zero
+rotation with either no migration or smallest-eligible-debt pacing, plus Adaptive
+`(3,5%)` and `(4,4%)`. The organizer explicitly supplies their identity/binding matrix;
+Arena does not own a concrete strategy registry. The current implementations consume
+only `StrategyStepViewV1` payload facts and return complete Stay/Rotate actions through
+one whole-run context. That adapter does not require future candidates to expose a
+selector interface or use the same internal code shape. The context hides step index,
+future trace, candidate feasibility, metrics, addresses, and observations, and never
+falls back after rejection.
+
+`StrategyRunProductV1` is Arena-certified and contains the final in-memory Store,
+workload Commit receipts, final checkpoint, typed termination, and terminal-settlement
+Revision count. It has no candidate-declared metrics. A naked final Store would be
+insufficient because P needs outer-Commit boundaries, F needs Current-scope checkpoints,
+and R needs the final PublishedRevision. General validation of an arbitrary hand-built
+Store/ledger is not implemented by v1.
 
 `BenchmarkV1Json` writes compact canonical UTF-8 manifest/report documents with one
 trailing LF, fixed property/token order, ordinal case ordering, 16-digit hexadecimal
@@ -212,14 +221,16 @@ trades lower W/P/F for higher R. This is matched Pareto evidence, not a default 
 Manifest schema version 2 replaces the old target/decision pair with one
 `selectionProfile`; corpus revision 3 records the eight-case expansion. Report schema
 and W/P/F/R leaves are unchanged and remain bound through the manifest SHA-256. There
-is no compatibility layer, generic policy interface, arbitrary parameter input, or
-score. The report also rejects an outcome whose declared workload horizon differs from
+is no compatibility layer, mandatory strategy interface, arbitrary parameter input,
+or score. The report also rejects an outcome whose declared workload horizon differs from
 its manifest, or whose admitted/capacity phase cannot be emitted by evaluator v1.
 Executable authority is split between
 [`BenchmarkV1RunnerTests.cs`](Tests/BenchmarkV1RunnerTests.cs) for the eight cases and
 canonical hashes,
 [`BenchmarkAdaptiveSelectionProfileTests.cs`](Tests/BenchmarkAdaptiveSelectionProfileTests.cs)
-for divergent exact parameter binding, and
+for divergent exact parameter binding,
+[`StrategyArenaContractTests.cs`](Tests/StrategyArenaContractTests.cs) for the
+cross-assembly/product and parent-debt-vs-E seam, and
 [`BenchmarkV1JsonTests.cs`](Tests/BenchmarkV1JsonTests.cs) for the schema-2 JSON leaf.
 
 ### Named fixed-two-scope-advances diagnostic

@@ -1,3 +1,4 @@
+using Atelia.TwoLegRotationProbe.Arena;
 using Atelia.TwoLegRotationProbe.Evaluation;
 using Atelia.TwoLegRotationProbe.Model;
 using Atelia.TwoLegRotationProbe.Planning;
@@ -8,12 +9,12 @@ using Atelia.TwoLegRotationProbe.Workloads;
 namespace Atelia.TwoLegRotationProbe.Tests;
 
 public sealed partial class RotationPolicyComparisonTests {
-    private static readonly CandidateTarget[] AdaptiveMatchedTargets = [
-        CandidateTarget.StayB,
-        CandidateTarget.StayB,
-        CandidateTarget.StayB,
-        CandidateTarget.StayB,
-        CandidateTarget.RotateC,
+    private static readonly StrategyTargetV1[] AdaptiveMatchedTargets = [
+        StrategyTargetV1.StayB,
+        StrategyTargetV1.StayB,
+        StrategyTargetV1.StayB,
+        StrategyTargetV1.StayB,
+        StrategyTargetV1.RotateC,
     ];
 
     [Fact]
@@ -75,8 +76,9 @@ public sealed partial class RotationPolicyComparisonTests {
         Assert.Equal(100, facts.ParentLive[coldObjectId]
             .HeadReconstructionObjectPayloadBytes);
 
+        StrategyStepViewV1 view = StrategyStepViewV1.Create(facts);
         ReadAmplificationBaseBudgetPolicyProjection projection =
-            ReadAmplificationBaseBudgetPolicyProjection.Create(facts);
+            ReadAmplificationBaseBudgetPolicyProjection.Create(view);
         Assert.Equal(200, projection.PostLiveGraphBasePayloadBytes);
         Assert.Equal(100, projection.ADependentEvacuationBasePayloadBytes);
         ReadAmplificationBaseBudgetPolicyObjectFact hot = projection
@@ -97,23 +99,29 @@ public sealed partial class RotationPolicyComparisonTests {
             ReadAmplificationBaseBudgetPolicy.Select(
                 projection,
                 new ReadAmplificationBaseBudgetPolicyParameters(3m, 0.5m));
-        Assert.Equal(CandidateTarget.StayB, selection.Target);
+        Assert.Equal(StrategyTargetV1.StayB, selection.Target);
         Assert.Equal(100, selection.PreferredBasePayloadBudgetBytes);
         Assert.Null(selection.StayProgressOverrideObjectId);
         Assert.Empty(selection.StayB.UnchangedMigrationObjectIds);
         Assert.Equal(
             [
-                new UpdateWriteDecision(hotObjectId, UpdateWriteMode.Base),
-                new UpdateWriteDecision(coldObjectId, UpdateWriteMode.Base),
+                new StrategyUpdateWriteDecisionV1(
+                    hotObjectId,
+                    StrategyUpdateWriteModeV1.Base),
+                new StrategyUpdateWriteDecisionV1(
+                    coldObjectId,
+                    StrategyUpdateWriteModeV1.Base),
             ],
             selection.StayB.UpdateDecisions);
 
+        SaveDecisionPair projectedSelection = ProjectStrategySelection(
+            selection.Selection);
         ExplicitCandidatePairEvaluation pair =
             ExplicitCandidatePairEvaluator.Evaluate(
                 source.Store,
                 facts,
-                selection.StayB,
-                selection.RotateC);
+                projectedSelection.StayB,
+                projectedSelection.RotateC);
         FeasibleCandidate<StayBRevisionPlan> exact =
             Assert.IsType<FeasibleCandidate<StayBRevisionPlan>>(pair.StayBAttempt);
         Assert.Equal(
@@ -128,7 +136,7 @@ public sealed partial class RotationPolicyComparisonTests {
                 source.Store,
                 cursor,
                 pair,
-                selection.Target));
+                StrategyRunContextV1.ProjectTarget(selection.Target)));
         Assert.Same(exact, applied.Selected);
         cursor = applied.ResultCursor;
         ApplyExpectedState(expectedState, decisiveStep);
@@ -258,10 +266,18 @@ public sealed partial class RotationPolicyComparisonTests {
             adaptive44.MigrationObjectIdsByStep);
         Assert.Equal(
             [
-                new UpdateWriteDecision(10, UpdateWriteMode.Delta),
-                new UpdateWriteDecision(10, UpdateWriteMode.Delta),
-                new UpdateWriteDecision(10, UpdateWriteMode.Delta),
-                new UpdateWriteDecision(10, UpdateWriteMode.Base),
+                new StrategyUpdateWriteDecisionV1(
+                    10,
+                    StrategyUpdateWriteModeV1.Delta),
+                new StrategyUpdateWriteDecisionV1(
+                    10,
+                    StrategyUpdateWriteModeV1.Delta),
+                new StrategyUpdateWriteDecisionV1(
+                    10,
+                    StrategyUpdateWriteModeV1.Delta),
+                new StrategyUpdateWriteDecisionV1(
+                    10,
+                    StrategyUpdateWriteModeV1.Base),
             ],
             adaptive35.UpdateDecisionsByStep.Take(4).Select(Assert.Single));
         Assert.Empty(adaptive35.UpdateDecisionsByStep[4]);
@@ -343,11 +359,11 @@ public sealed partial class RotationPolicyComparisonTests {
             source.Store,
             CreateCursor(source),
             totalWorkloadStepCount: steps.Count);
-        List<CandidateTarget> targets = [];
+        List<StrategyTargetV1> targets = [];
         List<uint[]> sourceDebtByStep = [];
         List<uint?> progressOverrideObjectIds = [];
         List<uint[]> migrationObjectIdsByStep = [];
-        List<UpdateWriteDecision[]> updateDecisionsByStep = [];
+        List<StrategyUpdateWriteDecisionV1[]> updateDecisionsByStep = [];
         List<RealizedReconstructionPayloadAmplificationDiagnostic>
             realizedHeadToBasePayloadAmplificationCheckpoints = [
                 CaptureRealizedHeadToBasePayloadAmplification(session),
@@ -362,7 +378,7 @@ public sealed partial class RotationPolicyComparisonTests {
                 step);
             sourceDebtByStep.Add(GetSourcePreviousDebtObjectIds(facts));
 
-            CandidateTarget target = AdaptiveMatchedTargets[index];
+            StrategyTargetV1 target = AdaptiveMatchedTargets[index];
             StayBSaveDecision stayB;
             RotateCSaveDecision rotateC;
             uint? progressOverrideObjectId = null;
@@ -378,17 +394,20 @@ public sealed partial class RotationPolicyComparisonTests {
                     rotateC = paced.RotateC;
                     break;
                 case AdaptiveMatchedTreatment.Adaptive:
+                    StrategyStepViewV1 view = StrategyStepViewV1.Create(facts);
                     ReadAmplificationBaseBudgetPolicyProjection projection =
-                        ReadAmplificationBaseBudgetPolicyProjection.Create(facts);
+                        ReadAmplificationBaseBudgetPolicyProjection.Create(view);
                     ReadAmplificationBaseBudgetPolicySelection selection =
                         ReadAmplificationBaseBudgetPolicy.Select(
                             projection,
                             parameters);
-                    Assert.Same(facts, projection.Facts);
+                    Assert.Same(view, projection.View);
                     Assert.Same(projection, selection.Projection);
                     target = selection.Target;
-                    stayB = selection.StayB;
-                    rotateC = selection.RotateC;
+                    SaveDecisionPair projectedSelection =
+                        ProjectStrategySelection(selection.Selection);
+                    stayB = projectedSelection.StayB;
+                    rotateC = projectedSelection.RotateC;
                     progressOverrideObjectId =
                         selection.StayProgressOverrideObjectId;
                     break;
@@ -406,10 +425,10 @@ public sealed partial class RotationPolicyComparisonTests {
                     rotateC);
             RotationPolicyStepAttempt attempt = session.ApplySelectedWorkloadCommit(
                 pair,
-                target);
+                StrategyRunContextV1.ProjectTarget(target));
             switch (attempt) {
                 case AppliedStayBPolicyStep appliedStay:
-                    Assert.Equal(CandidateTarget.StayB, target);
+                    Assert.Equal(StrategyTargetV1.StayB, target);
                     Assert.Same(pair, appliedStay.Evaluation);
                     Assert.Same(appliedStay.Selected,
                         appliedStay.CompletionCertificate.InitialStayB);
@@ -418,16 +437,18 @@ public sealed partial class RotationPolicyComparisonTests {
                             .UnchangedMigrationObjectIds,
                     ]);
                     updateDecisionsByStep.Add([
-                        .. appliedStay.Selected.Plan.Decision.UpdateDecisions,
+                        .. appliedStay.Selected.Plan.Decision.UpdateDecisions
+                            .Select(ProjectPlanningUpdateDecision),
                     ]);
                     break;
                 case AppliedRotateCPolicyStep appliedRotate:
-                    Assert.Equal(CandidateTarget.RotateC, target);
+                    Assert.Equal(StrategyTargetV1.RotateC, target);
                     Assert.Same(pair, appliedRotate.Evaluation);
                     migrationObjectIdsByStep.Add([]);
                     updateDecisionsByStep.Add([
                         .. appliedRotate.Selected.Plan.Decision
-                            .BContainedUpdateDecisions,
+                            .BContainedUpdateDecisions
+                            .Select(ProjectPlanningUpdateDecision),
                     ]);
                     break;
                 default:
@@ -534,13 +555,27 @@ public sealed partial class RotationPolicyComparisonTests {
         Adaptive,
     }
 
+    private static SaveDecisionPair ProjectStrategySelection(
+        StrategySelectionV1 selection) => new(
+        StrategyRunContextV1.ProjectStay(selection.Stay),
+        StrategyRunContextV1.ProjectRotate(selection.Rotate));
+
+    private static StrategyUpdateWriteDecisionV1 ProjectPlanningUpdateDecision(
+        UpdateWriteDecision decision) => new(
+        decision.ObjectId,
+        decision.Mode switch {
+            UpdateWriteMode.Base => StrategyUpdateWriteModeV1.Base,
+            UpdateWriteMode.Delta => StrategyUpdateWriteModeV1.Delta,
+            _ => throw new ArgumentOutOfRangeException(nameof(decision)),
+        });
+
     private sealed record AdaptiveMatchedRun(
         FixedHorizonRawVector Raw,
-        IReadOnlyList<CandidateTarget> Targets,
+        IReadOnlyList<StrategyTargetV1> Targets,
         IReadOnlyList<uint[]> SourceDebtByStep,
         IReadOnlyList<uint?> ProgressOverrideObjectIds,
         IReadOnlyList<uint[]> MigrationObjectIdsByStep,
-        IReadOnlyList<UpdateWriteDecision[]> UpdateDecisionsByStep,
+        IReadOnlyList<StrategyUpdateWriteDecisionV1[]> UpdateDecisionsByStep,
         IReadOnlyList<RealizedReconstructionPayloadAmplificationDiagnostic>
             RealizedHeadToBasePayloadAmplificationCheckpoints,
         uint[] FinalDebtObjectIds,

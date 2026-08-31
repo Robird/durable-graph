@@ -1,3 +1,4 @@
+using Atelia.TwoLegRotationProbe.Arena;
 using Atelia.TwoLegRotationProbe.Encoding;
 using Atelia.TwoLegRotationProbe.Planning;
 using Atelia.TwoLegRotationProbe.Policies;
@@ -29,8 +30,9 @@ public sealed partial class GroupedForegroundBurstCapacityCouplingTests {
                     UpdateBasePayloadBytes,
                     DeltaPayloadBytes),
             ]));
+        StrategyStepViewV1 view = StrategyStepViewV1.Create(facts);
         ReadAmplificationBaseBudgetPolicyProjection projection =
-            ReadAmplificationBaseBudgetPolicyProjection.Create(facts);
+            ReadAmplificationBaseBudgetPolicyProjection.Create(view);
         ReadAmplificationBaseBudgetPolicySelection selection =
             ReadAmplificationBaseBudgetPolicy.Select(
                 projection,
@@ -38,8 +40,8 @@ public sealed partial class GroupedForegroundBurstCapacityCouplingTests {
                     readAmplificationLimit: 1m,
                     baseBudgetFraction: 1m));
 
-        Assert.Same(facts, projection.Facts);
-        Assert.Equal(CandidateTarget.RotateC, selection.Target);
+        Assert.Same(view, projection.View);
+        Assert.Equal(StrategyTargetV1.RotateC, selection.Target);
         Assert.Equal(
             [FirstUpdateObjectId, SecondUpdateObjectId, ThirdUpdateObjectId],
             selection.RotateC.BContainedUpdateDecisions.Select(
@@ -47,7 +49,7 @@ public sealed partial class GroupedForegroundBurstCapacityCouplingTests {
         Assert.All(
             selection.RotateC.BContainedUpdateDecisions,
             static decision => Assert.Equal(
-                UpdateWriteMode.Base,
+                StrategyUpdateWriteModeV1.Base,
                 decision.Mode));
         Assert.Empty(selection.RotateC.BContainedNoChangeBaseObjectIds);
         Assert.Contains(
@@ -58,8 +60,8 @@ public sealed partial class GroupedForegroundBurstCapacityCouplingTests {
             ExplicitCandidatePairEvaluator.Evaluate(
                 source.Store,
                 facts,
-                selection.StayB,
-                selection.RotateC);
+                StrategyRunContextV1.ProjectStay(selection.StayB),
+                StrategyRunContextV1.ProjectRotate(selection.RotateC));
         CapacityRejectedCandidate<RotateCRevisionPlan> rejectedRotate =
             Assert.IsType<CapacityRejectedCandidate<RotateCRevisionPlan>>(
                 evaluation.RotateCAttempt);
@@ -77,10 +79,12 @@ public sealed partial class GroupedForegroundBurstCapacityCouplingTests {
                     source.Store,
                     source.Cursor,
                     evaluation,
-                    selection.Target));
+                    StrategyRunContextV1.ProjectTarget(selection.Target)));
 
         Assert.Same(evaluation, outcome.Evaluation);
-        Assert.Equal(selection.Target, outcome.SelectedTarget);
+        Assert.Equal(
+            StrategyRunContextV1.ProjectTarget(selection.Target),
+            outcome.SelectedTarget);
         Assert.Equal(rejectedRotate.Rejection, outcome.Rejection);
         AssertStoreSnapshot(beforeEvaluation, CaptureStore(source.Store));
     }

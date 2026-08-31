@@ -1,3 +1,4 @@
+using Atelia.TwoLegRotationProbe.Arena;
 using Atelia.TwoLegRotationProbe.Evaluation;
 using Atelia.TwoLegRotationProbe.Model;
 using Atelia.TwoLegRotationProbe.Planning;
@@ -15,10 +16,10 @@ public sealed partial class RotationPolicyComparisonTests {
             new ReadAmplificationBaseBudgetPolicyParameters(4m, 0.04m));
 
         Assert.Equal(
-            [CandidateTarget.RotateC, CandidateTarget.StayB],
+            [StrategyTargetV1.RotateC, StrategyTargetV1.StayB],
             adaptive35.Steps.Select(static step => step.Target));
         Assert.Equal(
-            [CandidateTarget.StayB, CandidateTarget.RotateC],
+            [StrategyTargetV1.StayB, StrategyTargetV1.RotateC],
             adaptive44.Steps.Select(static step => step.Target));
 
         Assert.Equal(1000, adaptive35.Steps[0].GraphBasePayloadBytes);
@@ -87,7 +88,8 @@ public sealed partial class RotationPolicyComparisonTests {
             fixture.Cursor.PublishedRevisionAddress,
             firstStep);
         ReadAmplificationBaseBudgetPolicyProjection projection =
-            ReadAmplificationBaseBudgetPolicyProjection.Create(facts);
+            ReadAmplificationBaseBudgetPolicyProjection.Create(
+                StrategyStepViewV1.Create(facts));
 
         ReadAmplificationBaseBudgetPolicySelection read3Fraction4 = Select(
             projection,
@@ -114,9 +116,9 @@ public sealed partial class RotationPolicyComparisonTests {
         Assert.Equal(80, update.ReadAmplificationNumeratorBytes);
         Assert.Equal(40, update.PostSaveBasePayloadBytes);
         Assert.Equal(40, update.DeltaPayloadBytes);
-        Assert.Equal(CandidateTarget.StayB, read3Fraction4.Target);
+        Assert.Equal(StrategyTargetV1.StayB, read3Fraction4.Target);
         Assert.Equal(read3Fraction4.Target, read4Fraction4.Target);
-        Assert.Equal(CandidateTarget.RotateC, read3Fraction5.Target);
+        Assert.Equal(StrategyTargetV1.RotateC, read3Fraction5.Target);
         Assert.Equal(read3Fraction5.Target, read4Fraction5.Target);
 
         foreach (ReadAmplificationBaseBudgetPolicySelection selection in new[] {
@@ -128,7 +130,9 @@ public sealed partial class RotationPolicyComparisonTests {
             Assert.Null(selection.StayProgressOverrideObjectId);
             Assert.Empty(selection.StayB.UnchangedMigrationObjectIds);
             Assert.Equal(
-                new UpdateWriteDecision(1, UpdateWriteMode.Base),
+                new StrategyUpdateWriteDecisionV1(
+                    1,
+                    StrategyUpdateWriteModeV1.Base),
                 Assert.Single(selection.StayB.UpdateDecisions));
             Assert.Empty(selection.RotateC.BContainedUpdateDecisions);
             Assert.Empty(selection.RotateC.BContainedNoChangeBaseObjectIds);
@@ -156,15 +160,16 @@ public sealed partial class RotationPolicyComparisonTests {
                 session.Cursor.PublishedRevisionAddress,
                 step);
             ReadAmplificationBaseBudgetPolicyProjection projection =
-                ReadAmplificationBaseBudgetPolicyProjection.Create(facts);
+                ReadAmplificationBaseBudgetPolicyProjection.Create(
+                    StrategyStepViewV1.Create(facts));
             ReadAmplificationBaseBudgetPolicySelection selection =
                 ReadAmplificationBaseBudgetPolicy.Select(projection, parameters);
             ExplicitCandidatePairEvaluation pair =
                 ExplicitCandidatePairEvaluator.Evaluate(
                     session.Store,
                     facts,
-                    selection.StayB,
-                    selection.RotateC);
+                    StrategyRunContextV1.ProjectStay(selection.StayB),
+                    StrategyRunContextV1.ProjectRotate(selection.RotateC));
             FeasibleCandidate<StayBRevisionPlan> stay =
                 Assert.IsType<FeasibleCandidate<StayBRevisionPlan>>(
                     pair.StayBAttempt);
@@ -184,10 +189,10 @@ public sealed partial class RotationPolicyComparisonTests {
 
             RotationPolicyStepAttempt attempt = session.ApplySelectedWorkloadCommit(
                 pair,
-                selection.Target);
-            CandidateTarget appliedTarget = attempt switch {
-                AppliedStayBPolicyStep => CandidateTarget.StayB,
-                AppliedRotateCPolicyStep => CandidateTarget.RotateC,
+                StrategyRunContextV1.ProjectTarget(selection.Target));
+            StrategyTargetV1 appliedTarget = attempt switch {
+                AppliedStayBPolicyStep => StrategyTargetV1.StayB,
+                AppliedRotateCPolicyStep => StrategyTargetV1.RotateC,
                 _ => throw new InvalidOperationException(
                     $"Target-band policy action was not applied: {attempt.GetType().Name}."),
             };
@@ -295,7 +300,7 @@ public sealed partial class RotationPolicyComparisonTests {
         long GraphBasePayloadBytes,
         long ADependentBasePayloadBytes,
         long PreferredBaseBudgetBytes,
-        CandidateTarget Target,
+        StrategyTargetV1 Target,
         uint? ProgressOverrideObjectId,
         IReadOnlyList<uint> StayMigrationObjectIds,
         IReadOnlyList<uint> RotateOptionalBaseObjectIds,

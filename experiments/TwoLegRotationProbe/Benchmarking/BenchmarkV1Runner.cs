@@ -1,7 +1,7 @@
+using Atelia.TwoLegRotationProbe.Arena;
 using Atelia.TwoLegRotationProbe.Evaluation;
 using Atelia.TwoLegRotationProbe.Model;
 using Atelia.TwoLegRotationProbe.Planning;
-using Atelia.TwoLegRotationProbe.Policies;
 using Atelia.TwoLegRotationProbe.Simulation;
 using Atelia.TwoLegRotationProbe.Workloads;
 
@@ -36,53 +36,23 @@ internal static class BenchmarkV1Runner {
         BenchmarkCaseManifestV1 manifestCase = definition.ManifestCase;
         BenchmarkV1BootstrappedSource source =
             BenchmarkV1SourceBootstrap.Create(trace);
-        EvaluatorV1Session session = new(
+        StrategyBindingV1 strategy = definition.Strategy ??
+            throw new InvalidDataException(
+                $"Benchmark case '{manifestCase.CaseId}' has no resolved strategy binding.");
+        StrategyRunContextV1 context = new(
             source.Store,
             source.Cursor,
+            trace,
+            manifestCase.BootstrapStepCount,
             manifestCase.EvaluatedWorkloadStepCount);
-
-        for (int traceStepIndex = manifestCase.BootstrapStepCount;
-            traceStepIndex < trace.Steps.Count;
-            traceStepIndex++) {
-            NormalizedSaveFacts facts = SaveStepNormalizer.Normalize(
-                session.Store,
-                session.Cursor.FileScope.CurrentFileNumber,
-                session.Cursor.PublishedRevisionAddress,
-                trace.Steps[traceStepIndex]);
-            BenchmarkV1StepSelection selection =
-                BenchmarkV1SelectionProfileSelector.Select(
-                    manifestCase.SelectionProfile,
-                    facts);
-            ExplicitCandidatePairEvaluation pair =
-                ExplicitCandidatePairEvaluator.Evaluate(
-                    session.Store,
-                    facts,
-                    selection.StayB,
-                    selection.RotateC);
-            RotationPolicyStepAttempt attempt =
-                session.ApplySelectedWorkloadCommit(
-                    pair,
-                    selection.Target);
-
-            if (attempt is AppliedStayBPolicyStep or AppliedRotateCPolicyStep) {
-                continue;
-            }
-
-            if (attempt is SelectedPolicyCandidateCapacityRejected or
-                StayBPolicyCompletionRejectedUnproven) {
-                break;
-            }
-
-            throw new InvalidDataException(
-                "The evaluator returned an unsupported workload attempt kind.");
-        }
-
-        EvaluatorRunOutcome outcome = session.Complete();
+        StrategyRunProductV1 product = strategy.Execute(context);
+        context.ValidateReturnedProduct(product);
+        EvaluatorRunOutcome outcome = product.Outcome;
         if (outcome is AdmittedEvaluatorRun admitted) {
-            ValidateFinalState(session.Store, admitted, trace);
+            ValidateFinalState(product.Store, admitted, trace);
         }
 
-        return new BenchmarkV1CaseExecution(session.Store, outcome);
+        return new BenchmarkV1CaseExecution(product, outcome);
     }
 
     private static void ValidateDefinitionClosure(
@@ -119,5 +89,7 @@ internal static class BenchmarkV1Runner {
 }
 
 internal sealed record BenchmarkV1CaseExecution(
-    RbfFileStore Store,
-    EvaluatorRunOutcome Outcome);
+    StrategyRunProductV1 Product,
+    EvaluatorRunOutcome Outcome) {
+    public RbfFileStore Store => Product.Store;
+}

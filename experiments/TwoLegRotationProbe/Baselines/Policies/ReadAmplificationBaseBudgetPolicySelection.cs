@@ -1,46 +1,40 @@
-using Atelia.TwoLegRotationProbe.Planning;
+using Atelia.TwoLegRotationProbe.Arena;
 
 namespace Atelia.TwoLegRotationProbe.Policies;
 
 /// <summary>
 /// Pure policy output over one exact projection and parameter instance.
-/// Candidate construction, admission, and apply remain outside this value.
+/// Candidate construction, admission, and apply remain in Arena.
 /// </summary>
 internal sealed class ReadAmplificationBaseBudgetPolicySelection {
     internal ReadAmplificationBaseBudgetPolicySelection(
         ReadAmplificationBaseBudgetPolicyProjection projection,
         ReadAmplificationBaseBudgetPolicyParameters parameters,
-        CandidateTarget target,
+        StrategySelectionV1 selection,
         long preferredBasePayloadBudgetBytes,
-        uint? stayProgressOverrideObjectId,
-        StayBSaveDecision stayB,
-        RotateCSaveDecision rotateC) {
+        uint? stayProgressOverrideObjectId) {
         Projection = projection ?? throw new ArgumentNullException(nameof(projection));
         Parameters = parameters ?? throw new ArgumentNullException(nameof(parameters));
-        if (!Enum.IsDefined(target)) {
-            throw new ArgumentOutOfRangeException(nameof(target));
-        }
-
+        Selection = selection ?? throw new ArgumentNullException(nameof(selection));
         ArgumentOutOfRangeException.ThrowIfNegative(
             preferredBasePayloadBudgetBytes);
-        Target = target;
         PreferredBasePayloadBudgetBytes = preferredBasePayloadBudgetBytes;
         StayProgressOverrideObjectId = stayProgressOverrideObjectId;
-        StayB = stayB ?? throw new ArgumentNullException(nameof(stayB));
-        RotateC = rotateC ?? throw new ArgumentNullException(nameof(rotateC));
     }
 
     public ReadAmplificationBaseBudgetPolicyProjection Projection { get; }
 
     public ReadAmplificationBaseBudgetPolicyParameters Parameters { get; }
 
-    public CandidateTarget Target { get; }
+    public StrategySelectionV1 Selection { get; }
+
+    public StrategyTargetV1 Target => Selection.Target;
 
     public long PreferredBasePayloadBudgetBytes { get; }
 
     public uint? StayProgressOverrideObjectId { get; }
 
-    public StayBSaveDecision StayB { get; }
+    public StrategyStayDecisionV1 StayB => Selection.Stay;
 
-    public RotateCSaveDecision RotateC { get; }
+    public StrategyRotateDecisionV1 RotateC => Selection.Rotate;
 }

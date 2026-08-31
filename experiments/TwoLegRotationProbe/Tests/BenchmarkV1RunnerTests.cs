@@ -1,3 +1,5 @@
+using Atelia.TwoLegRotationProbe.Arena;
+using Atelia.TwoLegRotationProbe.Baselines;
 using Atelia.TwoLegRotationProbe.Benchmarking;
 using Atelia.TwoLegRotationProbe.Encoding;
 using Atelia.TwoLegRotationProbe.Evaluation;
@@ -12,7 +14,8 @@ namespace Atelia.TwoLegRotationProbe.Tests;
 public sealed class BenchmarkV1RunnerTests {
     [Fact]
     public void Frozen_corpus_defines_two_workloads_with_four_selection_profiles_each() {
-        BenchmarkV1BatchDefinition definition = BenchmarkV1Corpus.Create();
+        BenchmarkV1BatchDefinition definition = BenchmarkV1Corpus.Create(
+            BenchmarkV1Baselines.All);
 
         Assert.Equal(2, definition.Manifest.Schema.Version);
         Assert.Equal(3, definition.Manifest.ManifestRevision);
@@ -79,11 +82,11 @@ public sealed class BenchmarkV1RunnerTests {
             mixedAdaptive35,
             mixedAdaptive44);
         BenchmarkComponentIdentityV1[] expectedProfiles = [
-            BenchmarkV1SelectionProfiles.DebtZeroThenRotateDeltaNoMigration.Identity,
-            BenchmarkV1SelectionProfiles
+            BenchmarkV1Baselines.DebtZeroThenRotateDeltaNoMigration.Identity,
+            BenchmarkV1Baselines
                 .DebtZeroThenRotateDeltaPacedOneDebtByObjectId.Identity,
-            BenchmarkV1SelectionProfiles.ReadAmplificationBaseBudgetR3B5Percent.Identity,
-            BenchmarkV1SelectionProfiles.ReadAmplificationBaseBudgetR4B4Percent.Identity,
+            BenchmarkV1Baselines.ReadAmplificationBaseBudgetR3B5Percent.Identity,
+            BenchmarkV1Baselines.ReadAmplificationBaseBudgetR4B4Percent.Identity,
         ];
         Assert.Equal(
             expectedProfiles.OrderBy(static profile => profile.Id),
@@ -99,7 +102,8 @@ public sealed class BenchmarkV1RunnerTests {
 
     [Fact]
     public void Frozen_corpus_runs_all_profiles_to_exact_admitted_raw_outcomes() {
-        BenchmarkV1BatchDefinition definition = BenchmarkV1Corpus.Create();
+        BenchmarkV1BatchDefinition definition = BenchmarkV1Corpus.Create(
+            BenchmarkV1Baselines.All);
 
         BenchmarkV1BatchRun run = BenchmarkV1Runner.Run(definition);
 
@@ -200,9 +204,9 @@ public sealed class BenchmarkV1RunnerTests {
     [Fact]
     public void Rebuilt_corpus_manifest_and_report_are_byte_identical() {
         BenchmarkV1BatchRun first = BenchmarkV1Runner.Run(
-            BenchmarkV1Corpus.Create());
+            BenchmarkV1Corpus.Create(BenchmarkV1Baselines.All));
         BenchmarkV1BatchRun second = BenchmarkV1Runner.Run(
-            BenchmarkV1Corpus.Create());
+            BenchmarkV1Corpus.Create(BenchmarkV1Baselines.All));
 
         Assert.Equal(
             BenchmarkV1Json.WriteManifest(first.Definition.Manifest),
@@ -269,7 +273,8 @@ public sealed class BenchmarkV1RunnerTests {
 
     [Fact]
     public void Bootstrap_places_step_zero_Bases_in_A_and_excludes_them_from_W_and_P() {
-        BenchmarkV1CaseDefinition definition = BenchmarkV1Corpus.Create().Cases
+        BenchmarkV1CaseDefinition definition = BenchmarkV1Corpus.Create(
+            BenchmarkV1Baselines.All).Cases
             .Single(benchmarkCase => benchmarkCase.ManifestCase.CaseId ==
                 BenchmarkV1Corpus.DebtZeroThenRotatePacedCaseId);
         BenchmarkV1BootstrappedSource source = BenchmarkV1SourceBootstrap.Create(
@@ -312,7 +317,8 @@ public sealed class BenchmarkV1RunnerTests {
 
     [Fact]
     public void Pacing_and_control_read_the_same_facts_and_differ_only_by_smallest_debt_migration() {
-        BenchmarkV1CaseDefinition definition = BenchmarkV1Corpus.Create().Cases
+        BenchmarkV1CaseDefinition definition = BenchmarkV1Corpus.Create(
+            BenchmarkV1Baselines.All).Cases
             .Single(benchmarkCase => benchmarkCase.ManifestCase.CaseId ==
                 BenchmarkV1Corpus.DebtZeroThenRotatePacedCaseId);
         BenchmarkV1BootstrappedSource source = BenchmarkV1SourceBootstrap.Create(
@@ -323,33 +329,33 @@ public sealed class BenchmarkV1RunnerTests {
             source.Cursor.PublishedRevisionAddress,
             definition.Trace.Steps[1]);
 
-        BenchmarkV1StepSelection control =
-            BenchmarkV1SelectionProfileSelector.Select(
-            BenchmarkV1SelectionProfiles.DebtZeroThenRotateDeltaNoMigration.Identity,
-            facts);
-        BenchmarkV1StepSelection paced =
-            BenchmarkV1SelectionProfileSelector.Select(
-                BenchmarkV1SelectionProfiles
+        StrategyStepViewV1 view = StrategyStepViewV1.Create(facts);
+        StrategySelectionV1 control = BenchmarkV1Baselines.Select(
+            BenchmarkV1Baselines.DebtZeroThenRotateDeltaNoMigration.Identity,
+            view);
+        StrategySelectionV1 paced = BenchmarkV1Baselines.Select(
+            BenchmarkV1Baselines
                 .DebtZeroThenRotateDeltaPacedOneDebtByObjectId.Identity,
-            facts);
+            view);
 
-        Assert.Equal(CandidateTarget.StayB, control.Target);
+        Assert.Equal(StrategyTargetV1.StayB, control.Target);
         Assert.Equal(control.Target, paced.Target);
         Assert.Equal(
-            control.StayB.UpdateDecisions,
-            paced.StayB.UpdateDecisions);
+            control.Stay.UpdateDecisions,
+            paced.Stay.UpdateDecisions);
         Assert.Equal(
-            control.RotateC.BContainedUpdateDecisions,
-            paced.RotateC.BContainedUpdateDecisions);
-        Assert.Empty(control.StayB.UnchangedMigrationObjectIds);
-        Assert.Equal([10U], paced.StayB.UnchangedMigrationObjectIds);
-        Assert.Empty(control.RotateC.BContainedNoChangeBaseObjectIds);
-        Assert.Empty(paced.RotateC.BContainedNoChangeBaseObjectIds);
+            control.Rotate.BContainedUpdateDecisions,
+            paced.Rotate.BContainedUpdateDecisions);
+        Assert.Empty(control.Stay.UnchangedMigrationObjectIds);
+        Assert.Equal([10U], paced.Stay.UnchangedMigrationObjectIds);
+        Assert.Empty(control.Rotate.BContainedNoChangeBaseObjectIds);
+        Assert.Empty(paced.Rotate.BContainedNoChangeBaseObjectIds);
     }
 
     [Fact]
     public void Adaptive_registry_profiles_equal_their_direct_pure_policy_selections() {
-        BenchmarkV1CaseDefinition definition = BenchmarkV1Corpus.Create().Cases
+        BenchmarkV1CaseDefinition definition = BenchmarkV1Corpus.Create(
+            BenchmarkV1Baselines.All).Cases
             .Single(benchmarkCase => benchmarkCase.ManifestCase.CaseId ==
                 BenchmarkV1Corpus.DebtZeroThenRotateAdaptiveR3B5PercentCaseId);
         BenchmarkV1BootstrappedSource source = BenchmarkV1SourceBootstrap.Create(
@@ -361,35 +367,43 @@ public sealed class BenchmarkV1RunnerTests {
             definition.Trace.Steps[1]);
 
         AssertAdaptiveProfileEqualsDirectPolicy(
-            BenchmarkV1SelectionProfiles.ReadAmplificationBaseBudgetR3B5Percent.Identity,
+            BenchmarkV1Baselines.ReadAmplificationBaseBudgetR3B5Percent.Identity,
             new ReadAmplificationBaseBudgetPolicyParameters(3m, 0.05m),
             facts);
         AssertAdaptiveProfileEqualsDirectPolicy(
-            BenchmarkV1SelectionProfiles.ReadAmplificationBaseBudgetR4B4Percent.Identity,
+            BenchmarkV1Baselines.ReadAmplificationBaseBudgetR4B4Percent.Identity,
             new ReadAmplificationBaseBudgetPolicyParameters(4m, 0.04m),
             facts);
     }
 
     [Fact]
-    public void Case_definition_rejects_unknown_or_wrong_version_selection_profiles() {
-        WorkloadTrace trace = BenchmarkV1Corpus.Create().Cases[0].Trace;
+    public void Identity_only_case_is_manifest_only_and_runner_fails_closed() {
+        WorkloadTrace trace = BenchmarkV1Corpus.Create(
+            BenchmarkV1Baselines.All).Cases[0].Trace;
         BenchmarkComponentIdentityV1 traceDefinition = new(
             trace.ScenarioName,
             1);
 
-        Assert.Throws<ArgumentException>(() => new BenchmarkV1CaseDefinition(
+        BenchmarkV1CaseDefinition unknown = new(
             "unknown-selection-profile",
             traceDefinition,
             trace,
-            new BenchmarkComponentIdentityV1("unknown-selection-profile", 1)));
-        Assert.Throws<ArgumentException>(() => new BenchmarkV1CaseDefinition(
+            new BenchmarkComponentIdentityV1("unknown-selection-profile", 1));
+        BenchmarkV1CaseDefinition wrongVersion = new(
             "wrong-version-selection-profile",
             traceDefinition,
             trace,
             new BenchmarkComponentIdentityV1(
-                BenchmarkV1SelectionProfiles
+                BenchmarkV1Baselines
                     .ReadAmplificationBaseBudgetR3B5Percent.Identity.Id,
-                2)));
+                2));
+
+        Assert.Null(unknown.Strategy);
+        Assert.Null(wrongVersion.Strategy);
+        Assert.Throws<InvalidDataException>(() =>
+            BenchmarkV1Runner.ExecuteCase(unknown));
+        Assert.Throws<InvalidDataException>(() =>
+            BenchmarkV1Runner.ExecuteCase(wrongVersion));
     }
 
     [Fact]
@@ -425,7 +439,7 @@ public sealed class BenchmarkV1RunnerTests {
             "selected-capacity-case",
             new BenchmarkComponentIdentityV1("selected-capacity", 1),
             trace,
-            BenchmarkV1SelectionProfiles.DebtZeroThenRotateDeltaNoMigration.Identity);
+            BenchmarkV1Baselines.DebtZeroThenRotateDeltaNoMigration);
 
         BenchmarkV1BatchRun run = BenchmarkV1Runner.Run(Batch(benchmarkCase));
 
@@ -453,7 +467,7 @@ public sealed class BenchmarkV1RunnerTests {
             "bootstrap-only-case",
             new BenchmarkComponentIdentityV1("bootstrap-only", 1),
             trace,
-            BenchmarkV1SelectionProfiles.DebtZeroThenRotateDeltaNoMigration.Identity);
+            BenchmarkV1Baselines.DebtZeroThenRotateDeltaNoMigration);
         BenchmarkV1BatchRun run = BenchmarkV1Runner.Run(Batch(benchmarkCase));
 
         Assert.Equal(0, benchmarkCase.ManifestCase.EvaluatedWorkloadStepCount);
@@ -466,7 +480,8 @@ public sealed class BenchmarkV1RunnerTests {
 
     [Fact]
     public void Batch_rejects_protocol_identity_that_does_not_match_the_runner() {
-        BenchmarkV1CaseDefinition benchmarkCase = BenchmarkV1Corpus.Create().Cases[0];
+        BenchmarkV1CaseDefinition benchmarkCase = BenchmarkV1Corpus.Create(
+            BenchmarkV1Baselines.All).Cases[0];
 
         Assert.Throws<ArgumentException>(() => new BenchmarkV1BatchDefinition(
             BenchmarkV1Corpus.ManifestId,
@@ -538,24 +553,24 @@ public sealed class BenchmarkV1RunnerTests {
         BenchmarkComponentIdentityV1 profile,
         ReadAmplificationBaseBudgetPolicyParameters parameters,
         NormalizedSaveFacts facts) {
-        BenchmarkV1StepSelection registry =
-            BenchmarkV1SelectionProfileSelector.Select(profile, facts);
+        StrategyStepViewV1 view = StrategyStepViewV1.Create(facts);
+        StrategySelectionV1 registry = BenchmarkV1Baselines.Select(profile, view);
         ReadAmplificationBaseBudgetPolicySelection direct =
             ReadAmplificationBaseBudgetPolicy.Select(
-                ReadAmplificationBaseBudgetPolicyProjection.Create(facts),
+                ReadAmplificationBaseBudgetPolicyProjection.Create(view),
                 parameters);
 
         Assert.Equal(direct.Target, registry.Target);
-        Assert.Equal(direct.StayB.UpdateDecisions, registry.StayB.UpdateDecisions);
+        Assert.Equal(direct.StayB.UpdateDecisions, registry.Stay.UpdateDecisions);
         Assert.Equal(
             direct.StayB.UnchangedMigrationObjectIds,
-            registry.StayB.UnchangedMigrationObjectIds);
+            registry.Stay.UnchangedMigrationObjectIds);
         Assert.Equal(
             direct.RotateC.BContainedUpdateDecisions,
-            registry.RotateC.BContainedUpdateDecisions);
+            registry.Rotate.BContainedUpdateDecisions);
         Assert.Equal(
             direct.RotateC.BContainedNoChangeBaseObjectIds,
-            registry.RotateC.BContainedNoChangeBaseObjectIds);
+            registry.Rotate.BContainedNoChangeBaseObjectIds);
     }
 
     private static AdmittedOutcomeReportV1 AssertAdmitted(

@@ -8,9 +8,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Remove="Baselines/**/*.cs" />
-    <Compile Remove="Candidates/**/*.cs" />
-    <Compile Remove="Tests/**/*.cs" />
+    <ProjectReference Include="..\TwoLegRotationProbe.csproj" />
   </ItemGroup>
 
 </Project>

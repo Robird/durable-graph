@@ -1,3 +1,4 @@
+using Atelia.TwoLegRotationProbe.Baselines;
 using Atelia.TwoLegRotationProbe.Benchmarking;
 using Atelia.TwoLegRotationProbe.Evaluation;
 using Atelia.TwoLegRotationProbe.Model;
@@ -14,7 +15,8 @@ public sealed class FixedTwoScopeAdvanceHorizonTests {
     }
 
     private static void RunAndAssertWitness() {
-        BenchmarkV1BatchDefinition corpus = BenchmarkV1Corpus.Create();
+        BenchmarkV1BatchDefinition corpus = BenchmarkV1Corpus.Create(
+            BenchmarkV1Baselines.All);
         BenchmarkV1CaseDefinition controlDefinition = FindCase(
             corpus,
             BenchmarkV1Corpus.DebtZeroThenRotateNoMigrationCaseId);

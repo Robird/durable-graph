@@ -763,6 +763,13 @@
 
 ## 6. 船长日志
 
+### 2026-08-31：闭合多策略 Arena 的内部赛道 vertical proof
+
+- **Implemented**：`TwoLegRotationProbe` 已拆为 Arena class library、独立 Baselines 与 Tests 三个项目；Arena 无 Baselines 反向引用。四个原有策略的 whole-run delegate 与 Adaptive 实现均位于 `Atelia.TwoLegRotationProbe.Baselines`。
+- **Decided**：不把 candidate 固定成 selector interface；organizer 只绑定 identity 与 whole-run delegate。当前 canonical toolkit 以逐步 `StrategyStepViewV1` 输入和完整 Stay/Rotate action 驱动 Arena-owned planning/apply，产出带 final Store、workload Commit receipts、final checkpoint 与 typed termination 的 Arena-certified product；product 不允许策略声明 metrics。
+- **Observed**：裸 final Store 无法唯一恢复 outer-Commit Peak，且缺 final PublishedRevision 与 Current-scope 时间线，故 Store-only 不足以独立计算 P/F/R。任意 hand-built Store/ledger 的离线验真等待真实 candidate consumer，不在本轮开放。
+- **Verified**：原 8 cases 的 typed outcomes、W/P/F/R、manifest/report/trace hashes 全部不漂移；Remove-A-debt + Insert 反例仍得到 `parentDebt=true,G=200,E=0`，DebtZero 与 Adaptive 分别选择 Stay/Rotate。下一步先扩充 strategy-neutral workload 因果多样性，再冻结首轮 competition packet。
+
 ### 2026-08-31：选择静态多策略 Benchmark Arena 作为下一阶段方向
 
 - **Researched**：Redis incremental rehash、Sprite LFS cost-benefit cleaning、RocksDB/LSM compaction debt、Git delta depth、Kafka cleaner ratio/lag/throttle、SQLite WAL checkpoint 与 ski-rental/knapsack 分别覆盖渐进搬迁、搬迁选择、压力控制、重建链和未知未来决策；整理为 `experiments/TwoLegRotationProbe/PRIOR-ART.md`。

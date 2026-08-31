@@ -1,18 +1,18 @@
 namespace Atelia.TwoLegRotationProbe.Model;
 
-internal sealed class RbfFileStore {
+public sealed class RbfFileStore {
     private readonly List<RbfFile> _files = [];
 
     public int FileCount => _files.Count;
 
-    public RbfFile CreateFile() {
+    internal RbfFile CreateFile() {
         uint fileNumber = checked((uint)_files.Count + 1);
         RbfFile file = new(fileNumber);
         _files.Add(file);
         return file;
     }
 
-    public (RbfFile File, FrameTicket Ticket) CreateFileWithFirstFrame(
+    internal (RbfFile File, FrameTicket Ticket) CreateFileWithFirstFrame(
         Frame frame,
         RbfFrameLayoutEstimate expectedLayout) {
         ArgumentNullException.ThrowIfNull(frame);
@@ -39,7 +39,7 @@ internal sealed class RbfFileStore {
         return (candidate, ticket);
     }
 
-    public RbfFile GetFile(uint fileNumber) {
+    internal RbfFile GetFile(uint fileNumber) {
         if (fileNumber == 0 || fileNumber > _files.Count) {
             throw new KeyNotFoundException($"RBF file {fileNumber} does not exist.");
         }
@@ -47,10 +47,10 @@ internal sealed class RbfFileStore {
         return _files[checked((int)fileNumber - 1)];
     }
 
-    public Frame ReadFrame(AbsoluteFrameAddress address) =>
+    internal Frame ReadFrame(AbsoluteFrameAddress address) =>
         GetFile(address.FileNumber).Read(address.FrameTicket);
 
-    public RbfFrameLayoutEstimate ReadLayout(AbsoluteFrameAddress address) =>
+    internal RbfFrameLayoutEstimate ReadLayout(AbsoluteFrameAddress address) =>
         GetFile(address.FileNumber).ReadLayout(address.FrameTicket);
 
     /// <summary>
@@ -58,7 +58,7 @@ internal sealed class RbfFileStore {
     /// instances, tickets, stored layouts, tails, and file numbering are preserved while
     /// later appends affect only the fork. This is not a durable or crash-safe snapshot.
     /// </summary>
-    public RbfFileStore ForkForProbe() {
+    internal RbfFileStore ForkForProbe() {
         RbfFileStore fork = new();
         foreach (RbfFile file in _files) {
             fork._files.Add(file.ForkForProbe());

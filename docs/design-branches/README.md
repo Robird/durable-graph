@@ -33,4 +33,4 @@
 | [DB-009](0009-base-lineage-parent-locator.md) | Base lineage direct parent 与 Revision locator | Chosen | 真实 lineage consumer 出现且 OVD/TailMeta lookup 成为稳定瓶颈 |
 | [DB-010](0010-base-lineage-anchor-scope.md) | Base lineage anchor 的作用域 | Chosen | mixed-provenance Revision、import/rescue/stale Save 或 DurableId reuse/epoch |
 | [DB-011](0011-two-phase-save-planning-and-capacity.md) | Save 策略规划与容量可行性分层 | Open | 普通 workload 中稳定出现 capacity false-negative、次优可行候选或 continuation 证书差异 |
-| [DB-012](0012-two-leg-strategy-benchmark-arena.md) | TwoLeg 多策略 Benchmark Arena 的最小边界 | Open | 首个跨程序集 Baseline vertical proof、首轮并行候选或分批 result artifact consumer |
+| [DB-012](0012-two-leg-strategy-benchmark-arena.md) | TwoLeg 多策略 Benchmark Arena 的最小边界 | Partially implemented | 首轮 workload packet、任意 hand-built artifact consumer 或第二 engine/runner |

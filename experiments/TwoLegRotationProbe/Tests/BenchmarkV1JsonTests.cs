@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using Atelia.TwoLegRotationProbe.Baselines;
 using Atelia.TwoLegRotationProbe.Benchmarking;
 using Atelia.TwoLegRotationProbe.Encoding;
 using Atelia.TwoLegRotationProbe.Evaluation;
@@ -120,12 +121,12 @@ public sealed class BenchmarkV1JsonTests {
             "same-case",
             Component("hash-test"),
             Trace(seed: 42, updatedBaseBytes: 25),
-            BenchmarkV1SelectionProfiles.DebtZeroThenRotateDeltaNoMigration.Identity);
+            BenchmarkV1Baselines.DebtZeroThenRotateDeltaNoMigration.Identity);
         BenchmarkV1CaseDefinition secondCase = new(
             "same-case",
             Component("hash-test"),
             Trace(seed: 42, updatedBaseBytes: 26),
-            BenchmarkV1SelectionProfiles.DebtZeroThenRotateDeltaNoMigration.Identity);
+            BenchmarkV1Baselines.DebtZeroThenRotateDeltaNoMigration.Identity);
         BenchmarkManifestV1 firstManifest = Batch(firstCase).Manifest;
         BenchmarkManifestV1 secondManifest = Batch(secondCase).Manifest;
 

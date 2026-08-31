@@ -1,3 +1,4 @@
+using Atelia.TwoLegRotationProbe.Arena;
 using Atelia.TwoLegRotationProbe.Evaluation;
 using Atelia.TwoLegRotationProbe.Model;
 using Atelia.TwoLegRotationProbe.Planning;
@@ -51,8 +52,8 @@ public sealed partial class RotationPolicyComparisonTests {
             steps,
             new ReadAmplificationBaseBudgetPolicyParameters(4m, 0.04m));
 
-        CandidateTarget[] allStay = Enumerable
-            .Repeat(CandidateTarget.StayB, steps.Length)
+        StrategyTargetV1[] allStay = Enumerable
+            .Repeat(StrategyTargetV1.StayB, steps.Length)
             .ToArray();
         Assert.Equal(allStay, adaptive35.Targets);
         Assert.Equal(allStay, adaptive44.Targets);
@@ -71,16 +72,16 @@ public sealed partial class RotationPolicyComparisonTests {
 
         Assert.Equal(
             [
-                UpdateWriteMode.Delta,
-                UpdateWriteMode.Delta,
-                UpdateWriteMode.Delta,
-                UpdateWriteMode.Delta,
-                UpdateWriteMode.Base,
-                UpdateWriteMode.Delta,
+                StrategyUpdateWriteModeV1.Delta,
+                StrategyUpdateWriteModeV1.Delta,
+                StrategyUpdateWriteModeV1.Delta,
+                StrategyUpdateWriteModeV1.Delta,
+                StrategyUpdateWriteModeV1.Base,
+                StrategyUpdateWriteModeV1.Delta,
             ],
             adaptive35.HotUpdateModes);
         Assert.Equal(
-            Enumerable.Repeat(UpdateWriteMode.Delta, 6),
+            Enumerable.Repeat(StrategyUpdateWriteModeV1.Delta, 6),
             adaptive44.HotUpdateModes);
         Assert.Equal([15L, 20L, 25L, 30L, 35L, 15L],
             adaptive35.HotProspectiveReadPayloadBytes);
@@ -144,10 +145,10 @@ public sealed partial class RotationPolicyComparisonTests {
             totalWorkloadStepCount: steps.Count);
         Dictionary<uint, LogicalObjectState> expectedState = new(
             source.InitialExpectedState);
-        List<CandidateTarget> targets = [];
+        List<StrategyTargetV1> targets = [];
         List<uint?> progressOverrideObjectIds = [];
         List<uint[]> migrationObjectIdsByStep = [];
-        List<UpdateWriteMode> hotUpdateModes = [];
+        List<StrategyUpdateWriteModeV1> hotUpdateModes = [];
         List<long> hotProspectiveReadPayloadBytes = [];
         List<long> updateBudgetBytesAfterProgress = [];
 
@@ -158,7 +159,8 @@ public sealed partial class RotationPolicyComparisonTests {
                 session.Cursor.PublishedRevisionAddress,
                 step);
             ReadAmplificationBaseBudgetPolicyProjection projection =
-                ReadAmplificationBaseBudgetPolicyProjection.Create(facts);
+                ReadAmplificationBaseBudgetPolicyProjection.Create(
+                    StrategyStepViewV1.Create(facts));
             ReadAmplificationBaseBudgetPolicySelection selection =
                 ReadAmplificationBaseBudgetPolicy.Select(projection, parameters);
 
@@ -193,10 +195,12 @@ public sealed partial class RotationPolicyComparisonTests {
                 ExplicitCandidatePairEvaluator.Evaluate(
                     session.Store,
                     facts,
-                    selection.StayB,
-                    selection.RotateC);
+                    StrategyRunContextV1.ProjectStay(selection.StayB),
+                    StrategyRunContextV1.ProjectRotate(selection.RotateC));
             AppliedStayBPolicyStep applied = Assert.IsType<AppliedStayBPolicyStep>(
-                session.ApplySelectedWorkloadCommit(pair, selection.Target));
+                session.ApplySelectedWorkloadCommit(
+                    pair,
+                    StrategyRunContextV1.ProjectTarget(selection.Target)));
             Assert.Same(pair, applied.Evaluation);
             migrationObjectIdsByStep.Add([
                 .. applied.Selected.Plan.Decision.UnchangedMigrationObjectIds,
@@ -255,10 +259,10 @@ public sealed partial class RotationPolicyComparisonTests {
 
     private sealed record ThresholdBandRun(
         FixedHorizonRawVector Raw,
-        IReadOnlyList<CandidateTarget> Targets,
+        IReadOnlyList<StrategyTargetV1> Targets,
         IReadOnlyList<uint?> ProgressOverrideObjectIds,
         IReadOnlyList<uint[]> MigrationObjectIdsByStep,
-        IReadOnlyList<UpdateWriteMode> HotUpdateModes,
+        IReadOnlyList<StrategyUpdateWriteModeV1> HotUpdateModes,
         IReadOnlyList<long> HotProspectiveReadPayloadBytes,
         IReadOnlyList<long> UpdateBudgetBytesAfterProgress,
         RealizedReconstructionPayloadAmplificationSample FinalHotAmplification,
