@@ -13,12 +13,12 @@ namespace Atelia.TwoLegRotationProbe.Tests;
 
 public sealed class BenchmarkV1RunnerTests {
     [Fact]
-    public void Frozen_corpus_defines_two_workloads_with_four_selection_profiles_each() {
+    public void Frozen_corpus_defines_three_workloads_with_four_selection_profiles_each() {
         BenchmarkV1BatchDefinition definition = BenchmarkV1Corpus.Create(
             BenchmarkV1Baselines.All);
 
         Assert.Equal(2, definition.Manifest.Schema.Version);
-        Assert.Equal(3, definition.Manifest.ManifestRevision);
+        Assert.Equal(4, definition.Manifest.ManifestRevision);
         Assert.Equal(BenchmarkV1ProtocolIdentities.Evaluator, definition.Manifest.Evaluator);
         Assert.Equal(
             BenchmarkV1ProtocolIdentities.TerminalSettlement,
@@ -33,7 +33,7 @@ public sealed class BenchmarkV1RunnerTests {
         Assert.Equal(
             BenchmarkV1ProtocolIdentities.RevisionGrammar,
             definition.Manifest.RevisionGrammar);
-        Assert.Equal(8, definition.Cases.Count);
+        Assert.Equal(12, definition.Cases.Count);
         Assert.Equal(
             [
                 BenchmarkV1Corpus.DebtZeroThenRotateNoMigrationCaseId,
@@ -44,6 +44,10 @@ public sealed class BenchmarkV1RunnerTests {
                 BenchmarkV1Corpus.MixedSmallPacedCaseId,
                 BenchmarkV1Corpus.MixedSmallAdaptiveR3B5PercentCaseId,
                 BenchmarkV1Corpus.MixedSmallAdaptiveR4B4PercentCaseId,
+                BenchmarkV1Corpus.ThresholdBandNoMigrationCaseId,
+                BenchmarkV1Corpus.ThresholdBandPacedCaseId,
+                BenchmarkV1Corpus.ThresholdBandAdaptiveR3B5PercentCaseId,
+                BenchmarkV1Corpus.ThresholdBandAdaptiveR4B4PercentCaseId,
             ],
             definition.Cases.Select(static benchmarkCase =>
                 benchmarkCase.ManifestCase.CaseId));
@@ -71,6 +75,18 @@ public sealed class BenchmarkV1RunnerTests {
         BenchmarkV1CaseDefinition mixedAdaptive44 = FindCaseDefinition(
             definition,
             BenchmarkV1Corpus.MixedSmallAdaptiveR4B4PercentCaseId);
+        BenchmarkV1CaseDefinition thresholdNoMigration = FindCaseDefinition(
+            definition,
+            BenchmarkV1Corpus.ThresholdBandNoMigrationCaseId);
+        BenchmarkV1CaseDefinition thresholdPaced = FindCaseDefinition(
+            definition,
+            BenchmarkV1Corpus.ThresholdBandPacedCaseId);
+        BenchmarkV1CaseDefinition thresholdAdaptive35 = FindCaseDefinition(
+            definition,
+            BenchmarkV1Corpus.ThresholdBandAdaptiveR3B5PercentCaseId);
+        BenchmarkV1CaseDefinition thresholdAdaptive44 = FindCaseDefinition(
+            definition,
+            BenchmarkV1Corpus.ThresholdBandAdaptiveR4B4PercentCaseId);
         AssertMatchedWorkload(
             debtNoMigration,
             debtPaced,
@@ -81,6 +97,11 @@ public sealed class BenchmarkV1RunnerTests {
             mixedPaced,
             mixedAdaptive35,
             mixedAdaptive44);
+        AssertMatchedWorkload(
+            thresholdNoMigration,
+            thresholdPaced,
+            thresholdAdaptive35,
+            thresholdAdaptive44);
         BenchmarkComponentIdentityV1[] expectedProfiles = [
             BenchmarkV1Baselines.DebtZeroThenRotateDeltaNoMigration.Identity,
             BenchmarkV1Baselines
@@ -95,9 +116,11 @@ public sealed class BenchmarkV1RunnerTests {
                     benchmarkCase.ManifestCase.SelectionProfile)
                 .Distinct()
                 .OrderBy(static profile => profile.Id));
-        Assert.NotEqual(
+        Assert.Equal(3, new[] {
             debtNoMigration.ManifestCase.ResolvedTraceSha256,
-            mixedNoMigration.ManifestCase.ResolvedTraceSha256);
+            mixedNoMigration.ManifestCase.ResolvedTraceSha256,
+            thresholdNoMigration.ManifestCase.ResolvedTraceSha256,
+        }.Distinct(StringComparer.Ordinal).Count());
     }
 
     [Fact]
@@ -215,10 +238,10 @@ public sealed class BenchmarkV1RunnerTests {
             BenchmarkV1Json.WriteReport(first.Report),
             BenchmarkV1Json.WriteReport(second.Report));
         Assert.Equal(
-            "d5a436d29c6416930430d7a22ae082e857b741bc7f7f41410c03732964b998a6",
+            "4a25f689f7fca42870a071d011974a8c5e35d869c34f77a0efd9c4d846c07ea6",
             first.Report.ManifestSha256);
         Assert.Equal(
-            "7b45ca1b4a1dc8473a5d9933fd1ca9ee15db3eda0732f044dbd01c0c59bb7f31",
+            "f37e7f6d27b7094a76a085657a9a56116d01dd92e64fb9a4c3660ba802f87ca0",
             BenchmarkV1Json.ComputeSha256(
                 BenchmarkV1Json.WriteReport(first.Report)));
         Assert.Equal(
@@ -268,6 +291,30 @@ public sealed class BenchmarkV1RunnerTests {
             FindCase(
                 first.Report,
                 BenchmarkV1Corpus.MixedSmallAdaptiveR4B4PercentCaseId)
+                .ResolvedTraceSha256);
+        Assert.Equal(
+            "0d94e562a41af07ab793fd59f5d56d6730933d49e5f1f1ac3309cdeb28b2591d",
+            FindCase(
+                first.Report,
+                BenchmarkV1Corpus.ThresholdBandNoMigrationCaseId)
+                .ResolvedTraceSha256);
+        Assert.Equal(
+            "0d94e562a41af07ab793fd59f5d56d6730933d49e5f1f1ac3309cdeb28b2591d",
+            FindCase(
+                first.Report,
+                BenchmarkV1Corpus.ThresholdBandPacedCaseId)
+                .ResolvedTraceSha256);
+        Assert.Equal(
+            "0d94e562a41af07ab793fd59f5d56d6730933d49e5f1f1ac3309cdeb28b2591d",
+            FindCase(
+                first.Report,
+                BenchmarkV1Corpus.ThresholdBandAdaptiveR3B5PercentCaseId)
+                .ResolvedTraceSha256);
+        Assert.Equal(
+            "0d94e562a41af07ab793fd59f5d56d6730933d49e5f1f1ac3309cdeb28b2591d",
+            FindCase(
+                first.Report,
+                BenchmarkV1Corpus.ThresholdBandAdaptiveR4B4PercentCaseId)
                 .ResolvedTraceSha256);
     }
 

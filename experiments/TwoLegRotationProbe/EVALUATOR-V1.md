@@ -195,7 +195,7 @@ dump of `FinalColdHeadReadObservation` or candidate diagnostics. Rejected leaves
 no metrics/cursor/settlement properties. V1 is writer-only: external parsing, file I/O,
 and CLI publication remain outside this slice.
 
-Corpus revision 3 runs all four profiles over two matched inputs. Within each workload
+Corpus revision 4 runs all four profiles over three matched inputs. Within each workload
 group the source fixture, exact expanded trace, evaluator protocols, and accounting
 horizon are identical; apart from the case ID, the only experimental input that changes
 is the atomic selection profile. The canonical raw outcomes are:
@@ -210,23 +210,30 @@ is the atomic selection profile. The canonical raw outcomes are:
 | `mixed-small` seed 12345 | paced one debt | 368 | 164 | 344 | 352 | 2/3 |
 | `mixed-small` seed 12345 | Adaptive `(3,5%)` | 440 | 164 | 184 | 280 | 3/4 |
 | `mixed-small` seed 12345 | Adaptive `(4,4%)` | 440 | 164 | 184 | 280 | 3/4 |
+| `read-amplification-threshold-band` | no migration | 1460 | 1072 | 1072 | 1064 | 2/3 |
+| `read-amplification-threshold-band` | paced one debt | 1512 | 1056 | 1056 | 1472 | 2/3 |
+| `read-amplification-threshold-band` | Adaptive `(3,5%)` | 1516 | 1056 | 1056 | 1212 | 2/3 |
+| `read-amplification-threshold-band` | Adaptive `(4,4%)` | 1512 | 1056 | 1056 | 1472 | 2/3 |
 
-All eight cases are admitted. On `debt-zero-then-rotate`, both Adaptive profiles equal
+All twelve cases are admitted. On `debt-zero-then-rotate`, both Adaptive profiles equal
 paced exactly; on `mixed-small`, no-migration equals paced while both Adaptive profiles
-equal each other. Thus the frozen corpus masks the parameter difference. The two unique
-vectors on each workload are nevertheless incomparable: Adaptive pays 72 more W on
-`mixed-small` for equal P, 160 lower F, and 72 lower R, while the handwritten control
-trades lower W/P/F for higher R. This is matched Pareto evidence, not a default profile.
+equal each other. The threshold-band input ends that universal masking: paced equals
+Adaptive `(4,4%)`, while Adaptive `(3,5%)` writes 4 more bytes for 260 fewer final
+cold-read bytes at equal P/F. No-migration writes and reads less than either group but
+has P/F 16 bytes higher. Its three unique vectors are therefore pairwise incomparable.
+This is matched Pareto evidence, not a default profile.
 
 Manifest schema version 2 replaces the old target/decision pair with one
-`selectionProfile`; corpus revision 3 records the eight-case expansion. Report schema
+`selectionProfile`; corpus revision 4 records the twelve-case expansion. Report schema
 and W/P/F/R leaves are unchanged and remain bound through the manifest SHA-256. There
 is no compatibility layer, mandatory strategy interface, arbitrary parameter input,
 or score. The report also rejects an outcome whose declared workload horizon differs from
 its manifest, or whose admitted/capacity phase cannot be emitted by evaluator v1.
 Executable authority is split between
-[`BenchmarkV1RunnerTests.cs`](Tests/BenchmarkV1RunnerTests.cs) for the eight cases and
-canonical hashes,
+[`BenchmarkV1RunnerTests.cs`](Tests/BenchmarkV1RunnerTests.cs) for case inventory,
+the original eight outcomes, and canonical hashes,
+[`BenchmarkV1ThresholdBandWorkloadTests.cs`](Tests/BenchmarkV1ThresholdBandWorkloadTests.cs)
+for the third workload's exact ties and local Pareto relations,
 [`BenchmarkAdaptiveSelectionProfileTests.cs`](Tests/BenchmarkAdaptiveSelectionProfileTests.cs)
 for divergent exact parameter binding,
 [`StrategyArenaContractTests.cs`](Tests/StrategyArenaContractTests.cs) for the
@@ -396,7 +403,8 @@ represented explicitly. It is distinct from the
 prospective policy operand `(H+D)/B`, and it is neither physical Frame IO nor a fifth
 canonical metric.
 
-A separate threshold-band fixture makes the hot object B-contained, leaves one-byte
+A threshold-band fixture, now also encoded as the third canonical benchmark workload,
+makes the hot object B-contained, leaves one-byte
 NoChange objects to satisfy progress, and gives both parameter sets enough discretionary
 budget for its 10-byte Base. Both sides therefore Stay eight times and migrate `1..8`;
 only prospective amplification `3.5` distinguishes the strict limits:
@@ -408,7 +416,11 @@ only prospective amplification `3.5` distinguishes the strict limits:
 
 Here `(4,4%)` writes 4 fewer physical bytes and reads 260 more bytes at final cold load;
 P/F remain equal because the shared 1000-byte terminal evacuation dominates them. This
-is a bounded W/R discriminator, not a Peak result, tuned default, or general winner.
+is a bounded hot-chain-reset discriminator, not a pure `E/G` rotation band, Peak result,
+tuned default, or general winner. The final Remove also expires small maintenance
+co-residents and releases their Frame pins; the official result is therefore integrated
+hot-chain plus lifecycle/layout evidence, not a pure per-object microbenchmark. Detailed
+`H/B`, budget, migration, and Frame-count diagnostics remain test-local.
 
 A lower-bound target-band fixture starts the measured horizon with 40 bytes of A debt
 and 960 bytes already local to B. Two `Base == Delta` Updates make weak dominance
@@ -454,9 +466,9 @@ and [`ReadAmplificationBaseBudgetPolicyCapacityTests.cs`](Tests/ReadAmplificatio
 
 ## Still open before strategy selection
 
-- close one natural parameter-discriminating workload and its private owning-test
-  exact-tie/Pareto assertions in the same bounded slice; do not add a production
-  reducer, report field, or score;
+- add the smallest strategy-neutral causal workload families needed beyond the integrated
+  threshold-band discriminator, beginning with an independent `E/G` Rotate-or-Stay band
+  rather than treating the current all-Stay workload as rotation evidence;
 - keep checkpoint cold reads outside the canonical frontier; reconsider an intermediate
   read guardrail only when a named restart/read schedule or cold-start SLO exists;
 - retain Pareto/raw outcomes until workload/SLO evidence justifies guardrails or a

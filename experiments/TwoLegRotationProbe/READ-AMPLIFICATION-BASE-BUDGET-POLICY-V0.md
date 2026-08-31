@@ -194,13 +194,16 @@ full-Frame layout/provenance, not object payload-chain amplification. The witnes
 not select a default, model steady state, or turn payload `E/G` into physical sizing
 authority.
 
-Manifest-schema v2 / corpus revision 3 now runs `(3,5%)` and `(4,4%)` as atomic
-selection profiles beside no-migration and paced controls on two frozen workloads. The
-profiles are exact closed-registry identities; one discriminating checkpoint verifies
-that they bind the intended decimal parameters rather than merely producing the same
-result on the corpus. Both benchmark workloads nevertheless mask the parameter
-difference. On `debt-zero-then-rotate`, Adaptive equals paced at
+Manifest-schema v2 / corpus revision 4 runs `(3,5%)` and `(4,4%)` as atomic selection
+profiles beside no-migration and paced controls on three frozen workloads. The profiles
+are exact organizer bindings; one discriminating checkpoint verifies that they bind the
+intended decimal parameters rather than merely producing the same result. The first two
+benchmark workloads mask the parameter difference. On `debt-zero-then-rotate`, Adaptive
+equals paced at
 `W/P/F/R=1536/696/804/756`; on `mixed-small`, both Adaptive profiles produce
-`440/164/184/280` versus the controls' `368/164/344/352`. Each workload therefore has
-two incomparable unique vectors, but neither distinguishes the Adaptive tuples or
-selects a default.
+`440/164/184/280` versus the controls' `368/164/344/352`. The canonical
+`read-amplification-threshold-band` workload separates them: `(3,5%)` produces
+`1516/1056/1056/1212`, while `(4,4%)` produces `1512/1056/1056/1472` and ties paced.
+Together with no-migration `1460/1072/1072/1064`, these are three incomparable unique
+vectors. This remains integrated hot-chain reset plus co-resident expiry/Frame-unpin
+evidence—not a pure `E/G` rotation witness, tuned default, or general winner.

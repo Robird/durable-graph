@@ -57,7 +57,7 @@ internal static class BenchmarkV1ProtocolIdentities {
 
 internal static class BenchmarkV1Corpus {
     public const string ManifestId = "benchmark-v1";
-    public const int ManifestRevision = 3;
+    public const int ManifestRevision = 4;
     public const string DebtZeroThenRotateNoMigrationCaseId =
         "debt-zero-then-rotate-no-migration";
     public const string DebtZeroThenRotatePacedCaseId =
@@ -74,6 +74,14 @@ internal static class BenchmarkV1Corpus {
         "mixed-small-read-amplification-r3-b5pct";
     public const string MixedSmallAdaptiveR4B4PercentCaseId =
         "mixed-small-read-amplification-r4-b4pct";
+    public const string ThresholdBandNoMigrationCaseId =
+        "read-amplification-threshold-band-no-migration";
+    public const string ThresholdBandPacedCaseId =
+        "read-amplification-threshold-band-paced";
+    public const string ThresholdBandAdaptiveR3B5PercentCaseId =
+        "read-amplification-threshold-band-read-amplification-r3-b5pct";
+    public const string ThresholdBandAdaptiveR4B4PercentCaseId =
+        "read-amplification-threshold-band-read-amplification-r4-b4pct";
 
     public static BenchmarkV1BatchDefinition Create(
         IEnumerable<StrategyBindingV1> strategies) {
@@ -110,6 +118,13 @@ internal static class BenchmarkV1Corpus {
             new BenchmarkComponentIdentityV1("mixed-small", 1),
             generated.Trace,
             frozenStrategies);
+        WorkloadTrace thresholdBandTrace = CreateThresholdBandTrace();
+        BenchmarkV1CaseDefinition[] thresholdBandCases = CreateStrategyCases(
+            new BenchmarkComponentIdentityV1(
+                "read-amplification-threshold-band",
+                1),
+            thresholdBandTrace,
+            frozenStrategies);
         return new BenchmarkV1BatchDefinition(
             ManifestId,
             ManifestRevision,
@@ -122,6 +137,7 @@ internal static class BenchmarkV1Corpus {
             [
                 .. debtZeroThenRotateCases,
                 .. mixedSmallCases,
+                .. thresholdBandCases,
             ]);
     }
 
@@ -151,6 +167,41 @@ internal static class BenchmarkV1Corpus {
             new SaveStep([new CreateObject(1002, 1)]),
             new SaveStep([new CreateObject(1003, 1)]),
             new SaveStep([new CreateObject(1004, 1)]),
+        ]);
+
+    private static WorkloadTrace CreateThresholdBandTrace() => new(
+        scenarioName: "read-amplification-threshold-band",
+        generatorId: "handwritten",
+        generatorVersion: 1,
+        seed: 0,
+        [
+            new SaveStep([
+                new CreateObject(1, 10),
+                new CreateObject(2, 1),
+                new CreateObject(3, 1),
+                new CreateObject(4, 1),
+                new CreateObject(5, 1),
+                new CreateObject(6, 1),
+                new CreateObject(7, 1),
+                new CreateObject(8, 1),
+                new CreateObject(100, 1000),
+            ]),
+            new SaveStep([new CreateObject(1001, 1)]),
+            new SaveStep([new UpdateObject(1, 10, 5)]),
+            new SaveStep([new UpdateObject(1, 10, 5)]),
+            new SaveStep([new UpdateObject(1, 10, 5)]),
+            new SaveStep([new UpdateObject(1, 10, 5)]),
+            new SaveStep([new UpdateObject(1, 10, 5)]),
+            new SaveStep([new UpdateObject(1, 10, 5)]),
+            new SaveStep([
+                new RemoveObject(2),
+                new RemoveObject(3),
+                new RemoveObject(4),
+                new RemoveObject(5),
+                new RemoveObject(6),
+                new RemoveObject(7),
+                new RemoveObject(1001),
+            ]),
         ]);
 
     private static ScenarioDefinition CreateMixedSmallDefinition() => new(

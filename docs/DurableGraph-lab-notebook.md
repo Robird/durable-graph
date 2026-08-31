@@ -763,6 +763,12 @@
 
 ## 6. 船长日志
 
+### 2026-08-31：将 hot-chain threshold-band 收编为第三个 canonical workload
+
+- **Implemented**：benchmark corpus revision 4 以普通 step0 Creates 表达原 test-local source，新增 `read-amplification-threshold-band` 并对四个 Baseline 形成 12-case matrix；原 8 case vectors/trace hashes 保持，expanded manifest/report 使用新 canonical hashes。
+- **Observed**：新 workload 全部 admitted；no-migration、paced/Adaptive `(4,4%)`、Adaptive `(3,5%)` 形成三个互不支配 unique vectors。两 Adaptive 以 `4B W` 交换 `260B R`，P/F 相等；paced 与 `(4,4%)` 精确相等。
+- **Boundary / Next**：末尾 Remove 会解除 maintenance co-residents 对旧 Frames 的 pin，因此这是 hot-chain reset 与 lifecycle/layout 的综合证据；两个 Adaptive 全程 Stay，不能冒充纯 `E/G` Rotate-or-Stay threshold。下一步把已有 test-local target-band 化简成独立 canonical workload。
+
 ### 2026-08-31：闭合多策略 Arena 的内部赛道 vertical proof
 
 - **Implemented**：`TwoLegRotationProbe` 已拆为 Arena class library、独立 Baselines 与 Tests 三个项目；Arena 无 Baselines 反向引用。四个原有策略的 whole-run delegate 与 Adaptive 实现均位于 `Atelia.TwoLegRotationProbe.Baselines`。
