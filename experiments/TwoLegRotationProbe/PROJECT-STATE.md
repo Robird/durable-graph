@@ -100,6 +100,14 @@ PublishedRevision 为 shared prior-snapshot anchor。accepted new head 的 curre
 - selected Stay-B 只有在存在具体、有限、可重放的 `CanPrepareAndRotate` continuation certificate 时才接受；
   Rotate-C 可直接 apply。evaluator 在 workload 后另行执行 canonical terminal settlement。当前不要求完备
   solver；找不到有限路径只能称 `RejectedUnproven`，不能称一般无解；
+- 当前策略 profile 不持有跨 Commit 可变状态，只读取当前 `NormalizedSaveFacts` 的派生 projection；不得读取
+  step index、未来 workload、candidate feasibility 或 observation 后再选择 target/decisions；只有命名反例
+  证明这组输入不足时，才考虑增加一个最小事实；
+- profile 比较只在同 manifest（因而 protocol/layout/read identities 相同）、同 workload、同 evaluator
+  horizon 的 admitted outcomes 之间进行：exact `W/P/F/R` ties 归为等价类，四项均不差且至少一项更好
+  才构成支配；typed inadmissibility 保持在排序之外；
+- canonical report 保持 typed outcome 与 admitted `W/P/F/R`/scope/settlement 摘要；checkpoint cold-read、
+  Frame provenance 等 diagnostics 留在 owning tests，直到出现命名 read schedule consumer；
 - 文件被物理删除后的历史不可导航不属于格式需要抵抗的故障模型。
 
 ## 当前具备的实验积木
@@ -204,59 +212,35 @@ synthetic evidence，仍不代表一般 pressure-aware rotation trigger 已解�
 
 ## 当前研究焦点
 
-首轮 adaptive 小型 matrix 已闭合四条互补证据：matched negative control 证明参数可被 progress/对象
-不可分性遮蔽；read-threshold band 隔离局部 W/R trade；Base-fraction lower-bound crossover 隔离严格
-轮转门槛，并在对齐 horizon 上观察 target timing/terminal liability；selected capacity rejection 保持 typed、
-不 fallback、不计分。exact vectors、`H/B` 与逐步 debt 见 `EVALUATOR-V1.md` 和 owning tests；这些 bounded
-synthetic evidence 不选择默认参数。
-
-continuation-state discriminator 已闭合：相同 coarse semantic/policy inputs 可以产生相同的第三段闭合
-`W/P/F/R`，同时保留不同的 workload-checkpoint cold-read 轨迹。v1 的 final-head-only R 与“每次 Commit
-都可能发生冷启动”的 guardrail 是两个不同问题，不能用 final R 自动替代后者；当前仍不把中间读轨迹
-提升成第五 score。
-
-Adaptive named profiles 已进入相同 benchmark horizon：单一 profile identity 原子选择 target 与两侧
-decisions，manifest schema 2 不再表达伪 target/decision 笛卡尔积；旧四 case 的 raw/scopes 与两条 trace hash
-保持不变。当前两个 frozen workloads 都把 `(3,5%)` 与 `(4,4%)` 压成同一结果，因此它们能证明跨 profile
-trade 和参数遮蔽，却不能支撑调参或默认值选择。
+当前两个 canonical workloads 都把 Adaptive `(3,5%)` 与 `(4,4%)` 压成相同结果；test-local threshold-band
+已经证明两者在自然 read-amplification 边界上可以分叉。当前焦点不是扩展 optimizer/evaluator 平台，而是让
+canonical benchmark 具备最小参数辨别能力，并把 profile 等价类、typed inadmissibility 与四维 Pareto 关系
+变成同一 owning test 内的可执行证据。
 
 ## 下一编码切片
 
-把已经能区分 `(3,5%)`/`(4,4%)` 的 threshold-band trace 以第三个 frozen workload 接入 corpus，验证现有
-step0 bootstrap/evaluator horizon 能复现其参数分叉；仍对四个 atomic profiles 使用同一输入。只增加一条已
-有因果证据的 workload，不引入任意 scenario 搜索、scalar score 或新 report 字段；若 canonical bootstrap
-改变既有因果条件，则保留 typed discrepancy，而不是强行匹配 test-local golden。
+把现有 threshold-band fixture 的 initial seeds 编码成 trace step0，并让其后普通 `SaveStep`s 通过 canonical
+runner 自然演化。四个 atomic profiles 必须消费同一 trace/horizon；若 canonical bootstrap/evaluator 未复现
+参数分叉，保留实际 typed discrepancy 或负结果，不复制手工 source setup 或强凑旧 golden。
+
+同一切片只在 owning test 内增加最小归约：先把 non-admitted outcomes 按原类型分栏，再按 exact
+`W/P/F/R` 合并 admitted ties，并断言 unique vectors 的 componentwise Pareto 关系。不新增 production
+reducer、frontier/archive 类型、report 字段、scalar score 或通用策略接口。
 
 ## 近期 roadmap
 
-1. **增加参数辨别 workload**：把 threshold-band causal trace 接入同一 atomic-profile benchmark；
-2. **形成 Pareto reduction**：只在同 manifest/workload/horizon 的 admitted outcomes 间比较 raw vectors，
-   exact ties 归为等价类，inadmissibility 保持独立，不提前合分；
-3. **再启动自动优化**：只允许修改窄 policy seam，保留 Pareto candidates/counterexamples，允许 `no winner`。
+1. **闭合自然参数辨别与局部比较**：增加一个自然参数辨别 workload，并在同一 owning test 中冻结 typed
+   outcomes、exact ties 与 Pareto 关系；
+2. **进入人工单 challenger 反例循环**：每轮只针对一个命名反例修改一个策略因素，重跑全部 corpus 并做
+   ablation。每个新增参数、分支或 policy-visible fact 都必须由该反例证明必要；若既未进入任何 workload 的
+   Pareto 集也未改善 admissibility，或删除后结果不变，则不保留。
 
 ## 未闭合事项
 
-- 小型 matrix 已分别锁定参数被遮蔽、read-threshold、Base-fraction target 与 typed inadmissibility；现有
-  canonical corpus 的两个 workloads 仍无法区分 Adaptive 参数，需要至少一个参数辨别 workload 才适合进入
-  profile-level Pareto reduction，且仍不能据此选择产品默认值；
-- common third epoch 已证明 retained Frame provenance 会改变 workload-checkpoint cold reads，却可在旧 Frame
-  全部覆盖后得到相同 closed W/P/F/R；是否把 intermediate cold-read pressure 设为 guardrail，仍需 workload
-  restart/read schedule，而不能从 final-only R 推导；
-- 无 workload SLO 时采用 Pareto frontier，还是先给 peak/file/read guardrail 再主优化 total write；当前不接受
-  裸加权和或会用 1B 总写收益购买任意峰值的严格字典序；
-- batch consumer 已形成 experiment-only runner/report seam，但仍不自动证明产品 API 边界；
-- v1 report 只保存 comparable W/P/F/R 与 admissibility/final-scope/settlement 摘要，不复制完整 cold-read Frame
-  diagnostics；需要时应另建 diagnostics artifact，不能悄悄扩张 comparable schema；
-- v1 writer 尚无外部 parser、文件落盘或 CLI publication；manifest/report 是一对以 SHA-256 关联的 canonical
-  byte artifacts，而非 durable product format；
-- `trace-step0-single-a-full-base-then-b-anchor/1` 把 initial payload 共置一个 A Frame，会掩盖局部 Frame release；
-  test-local split witness 已证明 measurement boundary，但尚无证据把第二 fixture identity 提升进 canonical corpus；
-- 旧 rotation-comparison reduction 中的 counterfactual terminal 仍只投影 final-C append/result 与 preparatory
-  Stay count，不聚合互斥未来，也不声称已观测 preparatory writes 或 terminal-source pressure；evaluator v1
-  的 terminal settlement 是另一条已真实执行并计费的路径；
-- evaluator/benchmark 冻结后，哪些历史可见 pressure facts 足以驱动 rotation/migration，以及何时才有证据
-  为具体 rejection 加入 bounded repair/explorer；
-- 多个不可支配策略出现后，何时需要用户用真实 workload/SLO 选择产品默认值。
+- corpus 何时足以支撑“没有明显短板”的研究结论仍未知；以后只在某个 candidate 暴露命名短板时，加入一个
+  能复现该短板的最小 workload，不预建 workload 平台；
+- 产品若最终必须发布唯一默认 profile，仍需要真实 workload/SLO 给出 Peak、file tail 与 read guardrails；
+  在此之前只报告 per-workload Pareto 与 `no winner`，不使用裸加权和或严格 W-first 字典序。
 
 ## 明确暂缓
 
@@ -265,6 +249,15 @@ step0 bootstrap/evaluator horizon 能复现其参数分叉；仍对四个 atomic
 - durable publication、crash/reopen、concurrency、store identity 与文件 GC；
 - 完备 feasibility solver、一般图搜索、策略插件框架；
 - 更多 historical lineage 功能或查询优化；
+- benchmark manifest/report parser、artifact file I/O、CLI publication 与 benchmark/product API promotion；
+- intermediate cold-read guardrail 与 diagnostics artifact；仅在出现命名 post-Commit restart/read schedule 或
+  真实冷启动 SLO 时重启；
+- secondary source-layout corpus；仅在真实布局分布可用，或 Shared/Split 导致 profile admissibility/Pareto
+  关系反转时重启；
+- 新 policy-visible pressure facts 与 bounded repair；保持 current facts-only、selected rejection 不 fallback，
+  直到冻结 workload 证明存在系统性错误选择或已知可行但被排除的 candidate；
+- automated search 与 frontier archive；仅在用户明确授权、已有冻结且具参数辨别力的代表性 corpus，且存在
+  executable reduction/stop rule 时重启。产品默认 profile 仍额外要求真实 workload/SLO；
 - 在没有测量依据时预设 read/write/pause 权重。
 
 ## 证据入口

@@ -443,12 +443,10 @@ and [`ReadAmplificationBaseBudgetPolicyCapacityTests.cs`](Tests/ReadAmplificatio
 
 ## Still open before strategy selection
 
-- decide whether the optimization protocol needs an intermediate cold-read guardrail or
-  intentionally keeps v1's final-head-only R; the common third epoch proves these are
-  observably different questions;
-- add the existing threshold-band causal trace as a third frozen workload because the
-  current two-workload corpus masks `(3,5%)` versus `(4,4%)`;
-- only then define a minimal Pareto comparison over same-workload admitted profile
-  results, preserving exact ties and keeping typed inadmissibility outside ranking;
+- close one natural parameter-discriminating workload and its private owning-test
+  exact-tie/Pareto assertions in the same bounded slice; do not add a production
+  reducer, report field, or score;
+- keep checkpoint cold reads outside the canonical frontier; reconsider an intermediate
+  read guardrail only when a named restart/read schedule or cold-start SLO exists;
 - retain Pareto/raw outcomes until workload/SLO evidence justifies guardrails or a
   ranking rule.
