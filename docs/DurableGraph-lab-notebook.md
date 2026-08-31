@@ -763,11 +763,17 @@
 
 ## 6. 船长日志
 
-### 2026-08-31：冻结 round-1 workload suite
+### 2026-08-31：将两个过短反例合并为 active-hundred mixed workload
+
+- **Implemented**：corpus revision 11 用 `active-hundred-mixed` 取代 `many-small-nochange-backlog-100` 与 `continuously-updated-previous-debt`，形成十六 traces / 64 admitted cases。新 trace 由既有 fixed-seed generator 生成：100 个持久对象按 Field/List 1:1 权重初始化，后续 64 轮每轮确定性随机 Update 60 个不同对象，无 Create/Remove。
+- **Observed**：no-migration/paced 在 64 个 workload Saves 中都没有 Rotate；Adaptive `(3,5%)` 在 25/47 轮转，`(4,4%)` 在 31/61 轮转。raw `W/P/F/R` 分别为 no-migration `116844/5208/111680/5200`、paced `117120/2128/115092/116856`、Adaptive 3/5 `119760/2176/44040/34368`、Adaptive 4/4 `121700/4336/55044/12060`；四者各有一个 direct terminal-settlement Revision。
+- **Decided / Next**：这是面向反馈迭代的策略探针，不新增 dedicated unit test，不锁定 trace/manifest/report hash，也不宣称 steady state 或 winner。下一步先回应其 pacing/active-debt 行为；只有具体候选白盒弱点需要时才继续调整 workload。
+
+### 2026-08-31：revision 10 的 provisional round-1 freeze
 
 - **Implemented**：corpus revision 10 以十五条 trace 形成 60-case admitted matrix；新增 matched `insert-burst-three-one/two-two` 与 nested-prefix `debt-zero-before-rotate` horizon diagnostic，原有 trace vectors/hashes 不漂移。
 - **Observed**：burst pair 固定 operation multiset、horizon、final versions 与 per-profile cadence/scope，所有 workload Frames 小于 2 KiB；分组会改变 P，并可经 provisional layout 与 Rotate/settlement placement 传播到 W/F。horizon short/long 的 online prefix 完全相同；paced/Adaptive 的 cutoff 跨过首次 natural Rotate，no-migration 是同 scope control。delta 同时包含额外 Save 与 terminal placement，不做因果成本拆分或跨 horizon 排名。
-- **Decided / Next**：round 1 不加入 near-limit performance trace；typed capacity 只作为 avoidable selected-rejection qualification gate。workload suite 至此冻结，下一步闭合 determinism/order/artifact 与 candidate qualification gates，再发布 `ROUND-1` packet/tag。
+- **Superseded**：round 1 仍不加入 near-limit performance trace，typed capacity 只作为 qualification gate；但“suite 至此冻结”随后被用户显式重开，并收敛为上方 revision 11 的可调 active-hundred workload。
 
 ### 2026-08-31：将 Previous-debt granularity 收编为 canonical matched family
 

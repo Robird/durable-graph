@@ -13,12 +13,12 @@ namespace Atelia.TwoLegRotationProbe.Tests;
 
 public sealed class BenchmarkV1RunnerTests {
     [Fact]
-    public void Frozen_corpus_defines_fifteen_workloads_with_four_selection_profiles_each() {
+    public void Corpus_defines_sixteen_workloads_with_four_selection_profiles_each() {
         BenchmarkV1BatchDefinition definition = BenchmarkV1Corpus.Create(
             BenchmarkV1Baselines.All);
 
         Assert.Equal(2, definition.Manifest.Schema.Version);
-        Assert.Equal(10, definition.Manifest.ManifestRevision);
+        Assert.Equal(11, definition.Manifest.ManifestRevision);
         Assert.Equal(BenchmarkV1ProtocolIdentities.Evaluator, definition.Manifest.Evaluator);
         Assert.Equal(
             BenchmarkV1ProtocolIdentities.TerminalSettlement,
@@ -33,9 +33,13 @@ public sealed class BenchmarkV1RunnerTests {
         Assert.Equal(
             BenchmarkV1ProtocolIdentities.RevisionGrammar,
             definition.Manifest.RevisionGrammar);
-        Assert.Equal(60, definition.Cases.Count);
+        Assert.Equal(64, definition.Cases.Count);
         Assert.Equal(
             [
+                BenchmarkV1Corpus.ActiveHundredMixedNoMigrationCaseId,
+                BenchmarkV1Corpus.ActiveHundredMixedPacedCaseId,
+                BenchmarkV1Corpus.ActiveHundredMixedAdaptiveR3B5PercentCaseId,
+                BenchmarkV1Corpus.ActiveHundredMixedAdaptiveR4B4PercentCaseId,
                 BenchmarkV1Corpus.DebtZeroBeforeRotateNoMigrationCaseId,
                 BenchmarkV1Corpus.DebtZeroBeforeRotatePacedCaseId,
                 BenchmarkV1Corpus.DebtZeroBeforeRotateAdaptiveR3B5PercentCaseId,
@@ -151,6 +155,18 @@ public sealed class BenchmarkV1RunnerTests {
         BenchmarkV1CaseDefinition burstTwoTwoAdaptive44 = FindCaseDefinition(
             definition,
             BenchmarkV1Corpus.InsertBurstTwoTwoAdaptiveR4B4PercentCaseId);
+        BenchmarkV1CaseDefinition activeHundredNoMigration = FindCaseDefinition(
+            definition,
+            BenchmarkV1Corpus.ActiveHundredMixedNoMigrationCaseId);
+        BenchmarkV1CaseDefinition activeHundredPaced = FindCaseDefinition(
+            definition,
+            BenchmarkV1Corpus.ActiveHundredMixedPacedCaseId);
+        BenchmarkV1CaseDefinition activeHundredAdaptive35 = FindCaseDefinition(
+            definition,
+            BenchmarkV1Corpus.ActiveHundredMixedAdaptiveR3B5PercentCaseId);
+        BenchmarkV1CaseDefinition activeHundredAdaptive44 = FindCaseDefinition(
+            definition,
+            BenchmarkV1Corpus.ActiveHundredMixedAdaptiveR4B4PercentCaseId);
         BenchmarkV1CaseDefinition mixedNoMigration = FindCaseDefinition(
             definition,
             BenchmarkV1Corpus.MixedSmallNoMigrationCaseId);
@@ -316,6 +332,11 @@ public sealed class BenchmarkV1RunnerTests {
             burstTwoTwoAdaptive35,
             burstTwoTwoAdaptive44);
         AssertMatchedWorkload(
+            activeHundredNoMigration,
+            activeHundredPaced,
+            activeHundredAdaptive35,
+            activeHundredAdaptive44);
+        AssertMatchedWorkload(
             mixedNoMigration,
             mixedPaced,
             mixedAdaptive35,
@@ -384,7 +405,8 @@ public sealed class BenchmarkV1RunnerTests {
                     benchmarkCase.ManifestCase.SelectionProfile)
                 .Distinct()
                 .OrderBy(static profile => profile.Id));
-        Assert.Equal(15, new[] {
+        Assert.Equal(16, new[] {
+            activeHundredNoMigration.ManifestCase.ResolvedTraceSha256,
             debtBeforeNoMigration.ManifestCase.ResolvedTraceSha256,
             debtNoMigration.ManifestCase.ResolvedTraceSha256,
             burstThreeOneNoMigration.ManifestCase.ResolvedTraceSha256,
@@ -516,13 +538,6 @@ public sealed class BenchmarkV1RunnerTests {
         Assert.Equal(
             BenchmarkV1Json.WriteReport(first.Report),
             BenchmarkV1Json.WriteReport(second.Report));
-        Assert.Equal(
-            "4d780b510f8b0c33523499705e0237508f066acadaec2369a7487109c4d75e95",
-            first.Report.ManifestSha256);
-        Assert.Equal(
-            "9f9541fc8c57eaa6d2c3089e48013ead29240556a7e6cc020899ffa7bbc9f766",
-            BenchmarkV1Json.ComputeSha256(
-                BenchmarkV1Json.WriteReport(first.Report)));
         Assert.Equal(
             "cd064c19d4cd94f0a25536481fa0c901ca77e7187b0ff9350b95a2b804d286e2",
             FindCase(

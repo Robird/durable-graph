@@ -195,8 +195,9 @@ dump of `FinalColdHeadReadObservation` or candidate diagnostics. Rejected leaves
 no metrics/cursor/settlement properties. V1 is writer-only: external parsing, file I/O,
 and CLI publication remain outside this slice.
 
-The round-1 workload suite is frozen at corpus revision 10: all four profiles over fifteen
-traces. The low/high-ID traces form one
+Corpus revision 11 currently runs all four profiles over sixteen traces. Its newest
+workload is intentionally still an adjustable probe rather than a frozen benchmark
+artifact. The low/high-ID traces form one
 matched locality family, the low-ID-small/large traces form one matched size-skew family,
 overlap/serial form one matched transient-lifecycle family, and single-large/three-small
 form one matched Previous-debt granularity family. The `3+1`/`2+2` traces add a matched
@@ -205,7 +206,7 @@ diagnostic rather than a cross-horizon Pareto pair. Within every trace group,
 the source fixture, exact expanded
 trace, evaluator protocols, and accounting
 horizon are identical; apart from the case ID, the only experimental input that changes
-is the atomic selection profile. The canonical raw outcomes are:
+is the atomic selection profile. The current raw outcomes are:
 
 | Trace | Selection profile | W | P | F | R | Final scope |
 |---|---|---:|---:|---:|---:|---|
@@ -225,6 +226,10 @@ is the atomic selection profile. The canonical raw outcomes are:
 | `insert-burst-two-two` | paced one debt | 2072 | 680 | 764 | 1332 | 3/4 |
 | `insert-burst-two-two` | Adaptive `(3,5%)` | 2060 | 680 | 680 | 1332 | 4/5 |
 | `insert-burst-two-two` | Adaptive `(4,4%)` | 2060 | 680 | 680 | 1332 | 4/5 |
+| `active-hundred-mixed` | no migration | 116844 | 5208 | 111680 | 5200 | 2/3 |
+| `active-hundred-mixed` | paced one debt | 117120 | 2128 | 115092 | 116856 | 2/3 |
+| `active-hundred-mixed` | Adaptive `(3,5%)` | 119760 | 2176 | 44040 | 34368 | 4/5 |
+| `active-hundred-mixed` | Adaptive `(4,4%)` | 121700 | 4336 | 55044 | 12060 | 4/5 |
 | `mixed-small` seed 12345 | no migration | 368 | 164 | 344 | 352 | 2/3 |
 | `mixed-small` seed 12345 | paced one debt | 368 | 164 | 344 | 352 | 2/3 |
 | `mixed-small` seed 12345 | Adaptive `(3,5%)` | 440 | 164 | 184 | 280 | 3/4 |
@@ -270,7 +275,21 @@ is the atomic selection profile. The canonical raw outcomes are:
 | `previous-debt-granularity-three-small` | Adaptive `(3,5%)` | 1596 | 372 | 892 | 728 | 3/4 |
 | `previous-debt-granularity-three-small` | Adaptive `(4,4%)` | 1596 | 372 | 892 | 728 | 3/4 |
 
-All 60 cases are admitted. The insert-burst pair shares step 0, the first workload Save,
+All 64 cases are admitted. `active-hundred-mixed` uses the existing fixed-seed generator:
+100 persistent objects are selected with equal Field/List weights, then exactly 60 distinct
+live objects are updated in each of 64 workload Saves. Each object therefore has a 60%
+marginal per-round update chance while every round still leaves a changing 40-object
+NoChange pool. No object is created or removed after bootstrap. This one workload combines
+a large migration backlog with sustained Update traffic and crosses the nominal 20-Save
+lower bound implied by a 5% Base budget more than once.
+
+The direct exploratory run found no workload Rotate for no-migration or paced. Adaptive
+`(3,5%)` rotated at workload Saves 25 and 47; Adaptive `(4,4%)` rotated at 31 and 61.
+All four runs then used one direct terminal-settlement Revision. The vectors above are a
+current observation for tuning, not golden tests or hash-locked evidence: the workload
+parameters deliberately remain open to feedback-driven adjustment.
+
+The insert-burst pair shares step 0, the first workload Save,
 three evaluated Commit slots, its four 300-byte Inserts, and final logical versions. Only
 the last two Save boundaries partition those Inserts as `3+1` or `2+2`; each profile keeps
 the same selection cadence and final scope across the pair, and every workload Frame is
@@ -342,7 +361,7 @@ of the current Adaptive one-object progress floor to debt granularity and indivi
 a general size preference.
 
 Manifest schema version 2 replaces the old target/decision pair with one
-`selectionProfile`; corpus revision 10 records the 60-case round-1 workload freeze. Report schema
+`selectionProfile`; corpus revision 11 currently contains 64 cases. Report schema
 and W/P/F/R leaves are unchanged and remain bound through the manifest SHA-256. There
 is no compatibility layer, mandatory strategy interface, arbitrary parameter input,
 or score. The report also rejects an outcome whose declared workload horizon differs from
@@ -366,6 +385,8 @@ for the matched Previous-debt granularity family,
 for the matched insert-burst family,
 [`BenchmarkV1HorizonPhaseWorkloadTests.cs`](Tests/BenchmarkV1HorizonPhaseWorkloadTests.cs)
 for the nested-prefix horizon diagnostic,
+[`BenchmarkV1Corpus.cs`](Benchmarking/BenchmarkV1Corpus.cs) for the adjustable
+active-hundred mixed workload,
 [`BenchmarkAdaptiveSelectionProfileTests.cs`](Tests/BenchmarkAdaptiveSelectionProfileTests.cs)
 for divergent exact parameter binding,
 [`StrategyArenaContractTests.cs`](Tests/StrategyArenaContractTests.cs) for the
@@ -603,12 +624,16 @@ lives in [`ReadAmplificationBaseBudgetPolicyIntegrationTests.cs`](Tests/ReadAmpl
 [`RealizedReconstructionPayloadAmplificationDiagnosticTests.cs`](Tests/RealizedReconstructionPayloadAmplificationDiagnosticTests.cs),
 and [`ReadAmplificationBaseBudgetPolicyCapacityTests.cs`](Tests/ReadAmplificationBaseBudgetPolicyCapacityTests.cs).
 
-## Still open before strategy selection
+## Next strategy work
 
-- keep the round-1 workload suite frozen at corpus revision 10;
-- close fresh-fork repeat, case-order permutation, canonical artifact/hash determinism,
-  avoidable selected-capacity, and the remaining candidate qualification gates;
-- freeze and tag the `ROUND-1` packet before candidate submissions;
+- tune the active-hundred mixed workload only when a concrete strategy observation justifies it;
+- respond to its combined backlog and active-Update pressure with a minimal independent
+  candidate, then rerun the suite;
+- add any future validation workload only after white-box review identifies a
+  concrete candidate weakness and a minimal causal trace; do not resume generic axis or
+  seed expansion;
+- close determinism/order/artifact and qualification gates only when the candidate shape
+  is ready for the `ROUND-1` packet/tag;
 - keep checkpoint cold reads outside the canonical frontier; reconsider an intermediate
   read guardrail only when a named restart/read schedule or cold-start SLO exists;
 - retain Pareto/raw outcomes until workload/SLO evidence justifies guardrails or a

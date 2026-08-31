@@ -391,12 +391,11 @@ W/P/F/R, final cursor, and settlement summary. This is a compact comparable proj
 not a full diagnostic dump, parser, persisted product format, score, or winner.
 
 Manifest schema 2 represents one atomic `selectionProfile` identity per case rather
-than a target/decision cross-product. The round-1 workload suite is frozen at corpus
-revision 10: four strategies over fifteen traces (60 admitted cases). Its bounded
-matched families include locality, size, lifecycle, debt granularity, and insert-burst
-partitioning; a nested-prefix pair separately exposes terminal horizon phase. These are
-causal probes, not a tuned default or ranking.
-Exact vectors, profile closure, and canonical hashes live in
+than a target/decision cross-product. Corpus revision 11 currently runs four strategies
+over sixteen traces (64 admitted cases). Its newest `active-hundred-mixed` workload merges
+a 100-object migration backlog with 64 rounds of sustained 60% update activity. It is an
+adjustable causal probe, not a frozen default, rank, or hash-locked benchmark artifact.
+Stable-fixture vectors and profile closure live in
 [`BenchmarkV1RunnerTests.cs`](Tests/BenchmarkV1RunnerTests.cs) and
 [`BenchmarkV1ThresholdBandWorkloadTests.cs`](Tests/BenchmarkV1ThresholdBandWorkloadTests.cs),
 with the rotation boundary in
@@ -412,7 +411,9 @@ with Previous-debt granularity in
 insert burst in
 [`BenchmarkV1InsertBurstPartitionWorkloadTests.cs`](Tests/BenchmarkV1InsertBurstPartitionWorkloadTests.cs),
 and horizon phase in
-[`BenchmarkV1HorizonPhaseWorkloadTests.cs`](Tests/BenchmarkV1HorizonPhaseWorkloadTests.cs).
+[`BenchmarkV1HorizonPhaseWorkloadTests.cs`](Tests/BenchmarkV1HorizonPhaseWorkloadTests.cs),
+with the adjustable active-hundred workload in
+[`BenchmarkV1Corpus.cs`](Benchmarking/BenchmarkV1Corpus.cs).
 
 ## Scoped rotation observation reductions
 
@@ -473,9 +474,10 @@ vectors and all edge cases remain authoritative in the linked tests.
 | Previous-debt granularity | In a matched pair, both Adaptive profiles reach `G/E=601/300` while representing old-A debt as one 300B object or three 100B objects. Exchanging the first full-rewrite order, then reconverging logical versions, exposes the current Adaptive one-object progress floor's sensitivity to indivisible debt units. | Bounded granularity evidence only—not arrival/service-rate pressure, steady state, starvation, or a general size preference. [`BenchmarkV1DebtGranularityWorkloadTests.cs`](Tests/BenchmarkV1DebtGranularityWorkloadTests.cs) |
 | Insert-burst partition | Matched `3+1`/`2+2` traces share bootstrap, first Save, operation multiset, horizon, final versions, and per-profile cadence/scope. All workload Frames remain below 2 KiB; grouping changes P directly and can propagate through provisional layout and later Rotate/settlement placement. | The caller owns outer Commit grouping and a strategy cannot split it. This is not a capacity witness or batching, latency, or steady-state advice. [`BenchmarkV1InsertBurstPartitionWorkloadTests.cs`](Tests/BenchmarkV1InsertBurstPartitionWorkloadTests.cs) |
 | Nested-prefix horizon phase | The short debt-zero trace is the exact three-Save online prefix of the existing long trace; views/selections match and the public context exposes no horizon. For paced/Adaptive, the cutoff falls before versus after their first natural Rotate; no-migration is the same-scope control. | Deltas combine the real extra Save/final-state change with terminal placement. Different horizons are not a matched Pareto comparison; no causal cost decomposition, cross-horizon ranking, normalization, or steady-state claim. [`BenchmarkV1HorizonPhaseWorkloadTests.cs`](Tests/BenchmarkV1HorizonPhaseWorkloadTests.cs) |
+| Active hundred mixed | The fixed-seed generator bootstraps 100 persistent objects with equal Field/List weights, then updates exactly 60 distinct objects per round for 64 rounds. This combines a large migration backlog, a changing NoChange pool, and sustained Delta opportunities. | The parameters intentionally remain mutable. The first direct run observed no workload Rotate for no-migration/paced, versus two Rotates for each Adaptive profile; this is tuning evidence, not a golden test, winner, or steady-state proof. [`BenchmarkV1Corpus.cs`](Benchmarking/BenchmarkV1Corpus.cs), [`EVALUATOR-V1.md`](EVALUATOR-V1.md) |
 | Capacity coupling | Existing typed witnesses cover avoidable selected rejection: foreground and alternate/reference paths remain feasible, while the chosen candidate rejects without fallback, mutation, or metrics. | Kept outside the round-1 performance corpus; near-limit layout facts are not policy input, and these tests prove neither complete repair/search nor file-size policy. [`ReadAmplificationBaseBudgetPolicyCapacityTests.cs`](Tests/ReadAmplificationBaseBudgetPolicyCapacityTests.cs), [`GroupedForegroundBurstCapacityCouplingTests.cs`](Tests/GroupedForegroundBurstCapacityCouplingTests.cs) |
 | Evaluator v1 admissibility | An isolated run fork exposes metrics only after all workload steps and one actually replayed canonical terminal settlement; direct Rotate has no empty Stay, multi-step preparation is one charged Commit, and hard rejections remain typed/non-scoring. | Closes the terminal source epoch `A/B -> B/C`, not all future Previous debt; no scalar score or product evaluator. [`EVALUATOR-V1.md`](EVALUATOR-V1.md), [`EvaluatorV1SessionTests.cs`](Tests/EvaluatorV1SessionTests.cs) |
-| Benchmark-v1 matched consumer | Four strategies from the independent Baselines assembly share each frozen fixture/trace/horizon through the Arena whole-run contract. The round-1 suite is frozen at revision 10 with 60 admitted cases over fifteen traces; earlier vectors and trace hashes remain exact while the expanded manifest/report receive new canonical hashes. | Internal-track certified-product evidence only—not an untrusted-artifact judge or full frontier; single-A-Frame bootstrap, writer-only JSON, no scalar score/parser/CLI. [`EVALUATOR-V1.md`](EVALUATOR-V1.md), [`StrategyArenaContractTests.cs`](Tests/StrategyArenaContractTests.cs), [`BenchmarkV1RunnerTests.cs`](Tests/BenchmarkV1RunnerTests.cs), [`BenchmarkV1JsonTests.cs`](Tests/BenchmarkV1JsonTests.cs) |
+| Benchmark-v1 matched consumer | Four strategies from the independent Baselines assembly share each fixture/trace/horizon through the Arena whole-run contract. Revision 11 currently has 64 admitted cases over sixteen traces; the active-hundred workload is deliberately not locked by a dedicated unit test or literal hash. | Future validation traces still require a named white-box candidate weakness rather than another generic axis. This remains internal-track certified-product evidence, not an untrusted-artifact judge or full frontier. [`EVALUATOR-V1.md`](EVALUATOR-V1.md), [`BenchmarkV1RunnerTests.cs`](Tests/BenchmarkV1RunnerTests.cs), [`BenchmarkV1JsonTests.cs`](Tests/BenchmarkV1JsonTests.cs) |
 | Continuous rotation | A caller script crosses `A/B -> B/C -> C/D` while preserving exact state, reconstruction closure, and Stay certificates. | It is not a stateful runner or durable publication path. [`ContinuousMultiRotationTests.cs`](Tests/ContinuousMultiRotationTests.cs) |
 
 ### Accepted source-partition provenance

@@ -57,7 +57,15 @@ internal static class BenchmarkV1ProtocolIdentities {
 
 internal static class BenchmarkV1Corpus {
     public const string ManifestId = "benchmark-v1";
-    public const int ManifestRevision = 10;
+    public const int ManifestRevision = 11;
+    public const string ActiveHundredMixedNoMigrationCaseId =
+        "active-hundred-mixed-no-migration";
+    public const string ActiveHundredMixedPacedCaseId =
+        "active-hundred-mixed-paced";
+    public const string ActiveHundredMixedAdaptiveR3B5PercentCaseId =
+        "active-hundred-mixed-read-amplification-r3-b5pct";
+    public const string ActiveHundredMixedAdaptiveR4B4PercentCaseId =
+        "active-hundred-mixed-read-amplification-r4-b4pct";
     public const string DebtZeroBeforeRotateNoMigrationCaseId =
         "debt-zero-before-rotate-no-migration";
     public const string DebtZeroBeforeRotatePacedCaseId =
@@ -208,6 +216,8 @@ internal static class BenchmarkV1Corpus {
             CreateDebtZeroRotateHorizonPair();
         GeneratedScenario generated = ScenarioGenerator.Generate(
             CreateMixedSmallDefinition());
+        GeneratedScenario activeHundred = ScenarioGenerator.Generate(
+            CreateActiveHundredMixedDefinition());
         BenchmarkV1CaseDefinition[] debtZeroBeforeRotateCases =
             CreateStrategyCases(
                 new BenchmarkComponentIdentityV1(
@@ -260,6 +270,11 @@ internal static class BenchmarkV1Corpus {
                     "insert-burst-two-two",
                     1),
                 insertBurstTwoTwoTrace,
+                frozenStrategies);
+        BenchmarkV1CaseDefinition[] activeHundredMixedCases =
+            CreateStrategyCases(
+                new BenchmarkComponentIdentityV1("active-hundred-mixed", 1),
+                activeHundred.Trace,
                 frozenStrategies);
         BenchmarkV1CaseDefinition[] mixedSmallCases = CreateStrategyCases(
             new BenchmarkComponentIdentityV1("mixed-small", 1),
@@ -469,6 +484,7 @@ internal static class BenchmarkV1Corpus {
                 .. debtZeroThenRotateCases,
                 .. insertBurstThreeOneCases,
                 .. insertBurstTwoTwoCases,
+                .. activeHundredMixedCases,
                 .. mixedSmallCases,
                 .. thresholdBandCases,
                 .. debtShareDilutionCases,
@@ -578,6 +594,38 @@ internal static class BenchmarkV1Corpus {
         createPerLaterStep: 1,
         maxUpdatePerLaterStep: 2,
         maxRemovePerLaterStep: 1,
+        fieldObjectWeight: 1,
+        listObjectWeight: 1,
+        fieldBehavior: new FieldBehaviorParameters(
+            componentCount: 4,
+            initialComponentBytesMinInclusive: 4,
+            initialComponentBytesMaxExclusive: 20,
+            replacementComponentBytesMinInclusive: 1,
+            replacementComponentBytesMaxExclusive: 32,
+            maxReplacedComponentsPerUpdate: 2,
+            deltaOperationOverheadBytes: 2,
+            deltaComponentOverheadBytes: 1),
+        listBehavior: new ListBehaviorParameters(
+            initialItemCount: 2,
+            initialItemBytesMinInclusive: 10,
+            initialItemBytesMaxExclusive: 11,
+            insertedItemBytesMinInclusive: 5,
+            insertedItemBytesMaxExclusive: 6,
+            replacementItemBytesMinInclusive: 7,
+            replacementItemBytesMaxExclusive: 8,
+            deltaOperationOverheadBytes: 2,
+            insertWeight: 1,
+            removeWeight: 1,
+            replaceWeight: 1));
+
+    private static ScenarioDefinition CreateActiveHundredMixedDefinition() => new(
+        name: "active-hundred-mixed",
+        seed: 0xA11C_E100,
+        stepCount: 65,
+        initialPopulation: 100,
+        createPerLaterStep: 0,
+        maxUpdatePerLaterStep: 60,
+        maxRemovePerLaterStep: 0,
         fieldObjectWeight: 1,
         listObjectWeight: 1,
         fieldBehavior: new FieldBehaviorParameters(

@@ -173,8 +173,8 @@ strategy-neutral suite identity 与 per-strategy run identity。
 
 - Arena、Baselines、Tests 三程序集 build 通过，dependency 单向；
 - 四个 strategy executor 的实际 assembly 是 `Atelia.TwoLegRotationProbe.Baselines`；
-- round-1 workload suite 冻结于 corpus revision 10：十五条 trace、60 个 admitted cases；原有 typed outcomes、W/P/F/R 与 trace SHA
-  不漂移，扩容后的 manifest/report 使用新 canonical hashes；
+- corpus revision 11 当前包含十六条 trace、64 个 admitted cases；最新 `active-hundred-mixed` 是可调的
+  长程策略探针，不设置 dedicated unit test 或 literal hash，避免把反馈迭代误当成格式冻结；
 - canonical `read-amplification-threshold-band` 形成三个互不支配 unique vectors，并区分两组 Adaptive
   参数；它是 hot-chain reset 与 co-resident expiry/Frame-unpin 的综合见证，不是纯 `E/G` rotation band；
 - canonical `previous-debt-share-dilution-boundary` 用普通 measured prelude 让两个 Adaptive 共享
@@ -205,16 +205,19 @@ strategy-neutral suite identity 与 per-strategy run identity。
   同时包含额外 Save 与 terminal placement，不做因果成本拆分、cross-horizon Pareto、归一化或排名；
 - round-1 不加入 near-limit performance trace；现有 typed tests 已冻结 selected rejection、no fallback、
   zero mutation/no metrics。candidate qualification 只保留 avoidable selected-capacity gate；
+- active-hundred mixed 用现有 fixed-seed Field/List generator 建立 100 个持久对象，连续 64 轮每轮更新
+  60 个不同对象；它把 backlog、持续 Delta 动机和变化的 NoChange pool 放在同一运行中。初跑观察到
+  no-migration/paced 无 workload Rotate；Adaptive `(3,5%)` 在 25/47 轮转，`(4,4%)` 在 31/61 轮转。
+  这只是当前参数下的策略反馈，不是 golden、winner 或 steady-state 证据；
 - Remove+Insert 反例锁定 parent debt 与 `E` 不混淆；
 - Arena-certified product 暴露 Store、workload receipts、final checkpoint 与 termination，不暴露 metrics。
 
 ## 下一阶段
 
-1. 闭合 fresh-fork repeat、case-order permutation、canonical artifact/hash determinism 与 candidate
-   qualification gates，包括 avoidable selected-capacity；
-2. 冻结 competition packet：contract、suite revision 10、evaluator/settlement/layout identities、prior art、
-   目录权限，并创建 `ROUND-1` tag；
-3. 再启动多个独立 candidate projects，由 organizer 集成复跑，不排榜；
+1. 先针对 active-hundred mixed 暴露的 pacing/active-debt 行为实现一个最小独立 candidate，并在当前
+   revision 11 上复跑；
+2. 未来 workload 只允许由 candidate 白盒复审指出的具体 blind spot 驱动，不再机械补 generic axes/seeds；
+3. 候选形状稳定后再闭合 determinism/order/artifact 与 qualification gates，冻结 `ROUND-1` packet/tag；
 4. 只有 candidate 真实需要直接物理 Store 输出时才实现 untrusted artifact validator。
 
 ## 明确暂缓
