@@ -241,7 +241,7 @@ public sealed class BenchmarkV1HorizonPhaseWorkloadTests {
                 admitted.Metrics.TotalPhysicalWriteBytes,
                 admitted.Metrics.PeakCommitWriteBytes,
                 admitted.Metrics.MaxCurrentFileTailBytes,
-                admitted.Metrics.FinalColdHeadReadBytes));
+                admitted.Metrics.TerminalColdHeadReadBytes));
     }
 
     private static long[] CommitWrites(WorkloadTrace trace, HorizonRun run) {

@@ -141,10 +141,7 @@ public sealed class BenchmarkV1JsonTests {
     [Fact]
     public void Four_outcome_leaves_have_disjoint_machine_readable_shapes() {
         BenchmarkManifestV1 manifest = Manifest([
-            Case(
-                "admitted",
-                traceStepCount: 1,
-                evaluatedWorkloadStepCount: 0),
+            Case("admitted"),
             Case("capacity"),
             Case("incomplete"),
             Case(
@@ -158,6 +155,10 @@ public sealed class BenchmarkV1JsonTests {
             EvaluatorRunPhase.TerminalSettlement,
             completedWorkloadStepCount: 0,
             totalWorkloadStepCount: 0);
+        EvaluatorPositionReportV1 admittedTerminal = new(
+            EvaluatorRunPhase.TerminalSettlement,
+            completedWorkloadStepCount: 1,
+            totalWorkloadStepCount: 1);
         EvaluatorPositionReportV1 workload = new(
             EvaluatorRunPhase.Workload,
             completedWorkloadStepCount: 0,
@@ -192,13 +193,16 @@ public sealed class BenchmarkV1JsonTests {
                 "admitted",
                 traceHash,
                 new AdmittedOutcomeReportV1(
-                    terminal,
+                    admittedTerminal,
                     new EvaluatorMetricsReportV1(
-                        realizedCommitCount: 1,
+                        realizedCommitCount: 2,
                         totalPhysicalWriteBytes: 100,
                         peakCommitWriteBytes: 100,
                         maxCurrentFileTailBytes: 200,
-                        finalColdHeadReadBytes: 24),
+                        workloadColdReadSampleCount: 1,
+                        totalWorkloadColdReadBytes: 48,
+                        totalWorkloadLogicalBasePayloadBytes: 10,
+                        terminalColdHeadReadBytes: 24),
                     new FinalCursorReportV1(
                         previousFileNumber: 1,
                         currentFileNumber: 2,
@@ -212,12 +216,12 @@ public sealed class BenchmarkV1JsonTests {
 
         byte[] bytes = BenchmarkV1Json.WriteReport(report);
         string json = System.Text.Encoding.UTF8.GetString(bytes);
-        Assert.Equal(
-            "9468261733b643eb696fc743ba931a73f0e26f2f22cee03da40fd5f7d3cea611",
-            BenchmarkV1Json.ComputeSha256(bytes));
         using JsonDocument document = JsonDocument.Parse(bytes);
         JsonElement cases = document.RootElement.GetProperty("cases");
 
+        Assert.Equal(
+            2,
+            document.RootElement.GetProperty("schema").GetProperty("version").GetInt32());
         Assert.Equal(BenchmarkV1Json.ComputeManifestSha256(manifest),
             document.RootElement.GetProperty("manifestSha256").GetString());
         Assert.Equal(
@@ -228,7 +232,25 @@ public sealed class BenchmarkV1JsonTests {
 
         JsonElement admitted = GetOutcome(cases, "admitted");
         Assert.Equal("admitted", admitted.GetProperty("kind").GetString());
-        Assert.True(admitted.TryGetProperty("metrics", out _));
+        JsonElement metrics = admitted.GetProperty("metrics");
+        Assert.Equal(
+            [
+                "realizedCommitCount",
+                "totalPhysicalWriteBytes",
+                "peakCommitWriteBytes",
+                "maxCurrentFileTailBytes",
+                "workloadColdReadSampleCount",
+                "totalWorkloadColdReadBytes",
+                "totalWorkloadLogicalBasePayloadBytes",
+                "terminalColdHeadReadBytes",
+            ],
+            metrics.EnumerateObject().Select(static property => property.Name));
+        Assert.Equal(1, metrics.GetProperty("workloadColdReadSampleCount").GetInt32());
+        Assert.Equal(48, metrics.GetProperty("totalWorkloadColdReadBytes").GetInt64());
+        Assert.Equal(
+            10,
+            metrics.GetProperty("totalWorkloadLogicalBasePayloadBytes").GetInt64());
+        Assert.Equal(24, metrics.GetProperty("terminalColdHeadReadBytes").GetInt64());
         Assert.True(admitted.TryGetProperty("finalCursor", out _));
         Assert.True(admitted.TryGetProperty("settlement", out _));
 
@@ -391,7 +413,10 @@ public sealed class BenchmarkV1JsonTests {
             totalPhysicalWriteBytes: 100,
             peakCommitWriteBytes: 100,
             maxCurrentFileTailBytes: 200,
-            finalColdHeadReadBytes: 24),
+            workloadColdReadSampleCount: 0,
+            totalWorkloadColdReadBytes: 0,
+            totalWorkloadLogicalBasePayloadBytes: 0,
+            terminalColdHeadReadBytes: 24),
         new FinalCursorReportV1(
             previousFileNumber: 1,
             currentFileNumber: 2,
@@ -408,8 +433,8 @@ public sealed class BenchmarkV1JsonTests {
         manifestRevision: 1,
         Component("two-leg-evaluator"),
         Component("direct-rotate-else-ascending-single-debt"),
-        Component("final-head-cold-load"),
-        Component("raw-wpfr"),
+        Component("after-every-workload-save-cold-load"),
+        new BenchmarkComponentIdentityV1("raw-wpfr", 2),
         Component("rbf-v0.40-envelope"),
         Component("provisional-revision-v0"),
         cases);

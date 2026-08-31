@@ -206,8 +206,17 @@ internal static class BenchmarkV1Json {
             "maxCurrentFileTailBytes",
             metrics.MaxCurrentFileTailBytes);
         writer.WriteNumber(
-            "finalColdHeadReadBytes",
-            metrics.FinalColdHeadReadBytes);
+            "workloadColdReadSampleCount",
+            metrics.WorkloadColdReadSampleCount);
+        writer.WriteNumber(
+            "totalWorkloadColdReadBytes",
+            metrics.TotalWorkloadColdReadBytes);
+        writer.WriteNumber(
+            "totalWorkloadLogicalBasePayloadBytes",
+            metrics.TotalWorkloadLogicalBasePayloadBytes);
+        writer.WriteNumber(
+            "terminalColdHeadReadBytes",
+            metrics.TerminalColdHeadReadBytes);
         writer.WriteEndObject();
     }
 

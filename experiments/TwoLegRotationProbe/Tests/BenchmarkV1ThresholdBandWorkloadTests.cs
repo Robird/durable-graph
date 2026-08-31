@@ -74,8 +74,11 @@ public sealed class BenchmarkV1ThresholdBandWorkloadTests {
             adaptive44.Metrics.TotalPhysicalWriteBytes <
                 adaptive35.Metrics.TotalPhysicalWriteBytes);
         Assert.True(
-            adaptive44.Metrics.FinalColdHeadReadBytes >
-                adaptive35.Metrics.FinalColdHeadReadBytes);
+            adaptive44.Metrics.TotalWorkloadColdReadBytes <
+                adaptive35.Metrics.TotalWorkloadColdReadBytes);
+        Assert.True(
+            adaptive44.Metrics.TerminalColdHeadReadBytes >
+                adaptive35.Metrics.TerminalColdHeadReadBytes);
         Assert.Equal(
             adaptive35.Metrics.PeakCommitWriteBytes,
             adaptive44.Metrics.PeakCommitWriteBytes);
@@ -85,9 +88,8 @@ public sealed class BenchmarkV1ThresholdBandWorkloadTests {
 
         Assert.Equal(paced.Metrics, adaptive44.Metrics);
 
-        // The three unique vectors are pairwise incomparable in this workload:
-        // no-migration buys lower W/R with higher P/F, while the two Adaptive
-        // limits exchange four write bytes for 260 final cold-read bytes.
+        // No-migration buys lower W/R with higher P/F. Adaptive (4,4%) strictly
+        // dominates (3,5%) on canonical W/P/F/R here; the latter only lowers T.
         Assert.True(
             noMigration.Metrics.TotalPhysicalWriteBytes <
                 paced.Metrics.TotalPhysicalWriteBytes);
@@ -98,8 +100,8 @@ public sealed class BenchmarkV1ThresholdBandWorkloadTests {
             noMigration.Metrics.MaxCurrentFileTailBytes >
                 paced.Metrics.MaxCurrentFileTailBytes);
         Assert.True(
-            noMigration.Metrics.FinalColdHeadReadBytes <
-                paced.Metrics.FinalColdHeadReadBytes);
+            noMigration.Metrics.TotalWorkloadColdReadBytes <
+                paced.Metrics.TotalWorkloadColdReadBytes);
         Assert.True(
             noMigration.Metrics.TotalPhysicalWriteBytes <
                 adaptive35.Metrics.TotalPhysicalWriteBytes);
@@ -110,8 +112,8 @@ public sealed class BenchmarkV1ThresholdBandWorkloadTests {
             noMigration.Metrics.MaxCurrentFileTailBytes >
                 adaptive35.Metrics.MaxCurrentFileTailBytes);
         Assert.True(
-            noMigration.Metrics.FinalColdHeadReadBytes <
-                adaptive35.Metrics.FinalColdHeadReadBytes);
+            noMigration.Metrics.TotalWorkloadColdReadBytes <
+                adaptive35.Metrics.TotalWorkloadColdReadBytes);
     }
 
     private static BenchmarkV1CaseDefinition[] FindCases(
@@ -150,7 +152,7 @@ public sealed class BenchmarkV1ThresholdBandWorkloadTests {
             admitted.Metrics.MaxCurrentFileTailBytes);
         Assert.Equal(
             finalColdHeadReadBytes,
-            admitted.Metrics.FinalColdHeadReadBytes);
+            admitted.Metrics.TerminalColdHeadReadBytes);
         Assert.Equal(2U, admitted.FinalCursor.PreviousFileNumber);
         Assert.Equal(3U, admitted.FinalCursor.CurrentFileNumber);
         Assert.Equal(3U, admitted.FinalCursor.PublishedRevision.FileNumber);

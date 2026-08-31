@@ -278,7 +278,7 @@ public sealed partial class RotationPolicyComparisonTests {
             admitted.Metrics.TotalPhysicalWriteBytes,
             admitted.Metrics.PeakCommitWriteBytes,
             admitted.Metrics.MaxCurrentFileTailBytes,
-            admitted.Metrics.FinalColdHeadReadBytes);
+            admitted.Metrics.TerminalColdHeadReadBytes);
 
     private static FixedHorizonRawVector ConcatenateFixedHorizonSegments(
         params AdmittedEvaluatorRun[] segments) => new(
@@ -286,7 +286,7 @@ public sealed partial class RotationPolicyComparisonTests {
             segments.Sum(static segment => segment.Metrics.TotalPhysicalWriteBytes),
             segments.Max(static segment => segment.Metrics.PeakCommitWriteBytes),
             segments.Max(static segment => segment.Metrics.MaxCurrentFileTailBytes),
-            segments[^1].Metrics.FinalColdHeadReadBytes);
+            segments[^1].Metrics.TerminalColdHeadReadBytes);
 
     private static void AssertFixedHorizonScope(
         ProbeRevisionCursor cursor,

@@ -39,7 +39,13 @@ public sealed class EvaluatorRawMetricTests {
                 stayPair,
                 CandidateTarget.StayB));
         metrics.ObserveAcceptedRevision(source.Store, appliedStay.ResultCursor);
-        metrics.EndCommit(source.Store, appliedStay.ResultCursor);
+        metrics.EndWorkloadCommit(
+            source.Store,
+            appliedStay.ResultCursor,
+            postLiveGraphBasePayloadBytes: 140);
+        long expectedStayColdReadBytes = FinalColdHeadReadMeasurer.Measure(
+            source.Store,
+            appliedStay.ResultCursor.PublishedRevisionAddress).UniqueFrameBytes;
 
         NormalizedSaveFacts rotateFacts = SaveStepNormalizer.Normalize(
             source.Store,
@@ -69,7 +75,13 @@ public sealed class EvaluatorRawMetricTests {
                 rotatePair,
                 CandidateTarget.RotateC));
         metrics.ObserveAcceptedRevision(source.Store, appliedRotate.ResultCursor);
-        metrics.EndCommit(source.Store, appliedRotate.ResultCursor);
+        metrics.EndWorkloadCommit(
+            source.Store,
+            appliedRotate.ResultCursor,
+            postLiveGraphBasePayloadBytes: 140);
+        long expectedRotateColdReadBytes = FinalColdHeadReadMeasurer.Measure(
+            source.Store,
+            appliedRotate.ResultCursor.PublishedRevisionAddress).UniqueFrameBytes;
 
         EvaluatorRawMetrics observed = metrics.Complete(
             source.Store,
@@ -92,28 +104,35 @@ public sealed class EvaluatorRawMetricTests {
             Math.Max(stayWriteBytes, rotateWriteBytes),
             observed.PeakCommitWriteBytes);
         Assert.Equal(expectedMaxCurrentTail, observed.MaxCurrentFileTailBytes);
+        Assert.Equal(2, observed.WorkloadColdReadSampleCount);
+        Assert.Equal(
+            expectedStayColdReadBytes + expectedRotateColdReadBytes,
+            observed.TotalWorkloadColdReadBytes);
+        Assert.Equal(280, observed.TotalWorkloadLogicalBasePayloadBytes);
+        Assert.Equal([0, 1], observed.WorkloadColdReadSamples.Select(
+            static sample => sample.WorkloadSaveOrdinal));
 
         AbsoluteFrameAddress stayAddress = stayCandidate.Plan.Revision.Address;
         AbsoluteFrameAddress rotateAddress = rotateCandidate.Plan.Revision.Address;
         Assert.Equal(
             [rotateAddress],
-            observed.FinalColdHeadRead.DictionaryFrameAddresses);
+            observed.TerminalColdHeadRead.DictionaryFrameAddresses);
         Assert.Equal(
             CanonicalAddresses([stayAddress, rotateAddress]),
-            observed.FinalColdHeadRead.ObjectReconstructionFrameAddresses);
+            observed.TerminalColdHeadRead.ObjectReconstructionFrameAddresses);
         Assert.Equal(
             CanonicalAddresses([stayAddress, rotateAddress]),
-            observed.FinalColdHeadRead.UniqueFrameAddresses);
+            observed.TerminalColdHeadRead.UniqueFrameAddresses);
         long expectedColdReadBytes = checked(
             (long)source.Store.ReadLayout(stayAddress).FrameLengthBytes +
             source.Store.ReadLayout(rotateAddress).FrameLengthBytes);
-        Assert.Equal(expectedColdReadBytes, observed.FinalColdHeadReadBytes);
+        Assert.Equal(expectedColdReadBytes, observed.TerminalColdHeadReadBytes);
         Assert.Equal(
             source.Store.ReadLayout(rotateAddress).FrameLengthBytes,
-            observed.FinalColdHeadRead.DictionaryFrameBytes);
+            observed.TerminalColdHeadRead.DictionaryFrameBytes);
         Assert.Equal(
             expectedColdReadBytes,
-            observed.FinalColdHeadRead.ObjectReconstructionFrameBytes);
+            observed.TerminalColdHeadRead.ObjectReconstructionFrameBytes);
     }
 
     [Fact]
@@ -143,7 +162,10 @@ public sealed class EvaluatorRawMetricTests {
             afterFirst,
             secondMigration);
         metrics.ObserveAcceptedRevision(source.Store, afterSecond);
-        metrics.EndCommit(source.Store, afterSecond);
+        metrics.EndWorkloadCommit(
+            source.Store,
+            afterSecond,
+            postLiveGraphBasePayloadBytes: 30);
 
         EvaluatorRawMetrics observed = metrics.Complete(source.Store, afterSecond);
         long expectedWriteBytes = checked(
@@ -155,6 +177,13 @@ public sealed class EvaluatorRawMetricTests {
         Assert.Equal(
             afterSecond.CurrentFileTailOffsetBytes,
             observed.MaxCurrentFileTailBytes);
+        Assert.Equal(1, observed.WorkloadColdReadSampleCount);
+        Assert.Equal(
+            FinalColdHeadReadMeasurer.Measure(
+                source.Store,
+                afterSecond.PublishedRevisionAddress).UniqueFrameBytes,
+            observed.TotalWorkloadColdReadBytes);
+        Assert.Equal(30, observed.TotalWorkloadLogicalBasePayloadBytes);
     }
 
     [Fact]
@@ -172,7 +201,49 @@ public sealed class EvaluatorRawMetricTests {
         Assert.Equal(
             source.InitialCurrentTailOffsetBytes,
             observed.MaxCurrentFileTailBytes);
-        Assert.True(observed.FinalColdHeadReadBytes > 0);
+        Assert.Equal(0, observed.WorkloadColdReadSampleCount);
+        Assert.Equal(0, observed.TotalWorkloadColdReadBytes);
+        Assert.Equal(0, observed.TotalWorkloadLogicalBasePayloadBytes);
+        Assert.True(observed.TerminalColdHeadReadBytes > 0);
+    }
+
+    [Fact]
+    public void Removing_the_last_live_object_records_positive_cold_bytes_over_zero_live_bytes() {
+        SourceFixture source = CreateSource((FirstObjectId, 10));
+        EvaluatorRawMetricAccumulator metrics = new(source.Store, source.Cursor);
+        NormalizedSaveFacts facts = SaveStepNormalizer.Normalize(
+            source.Store,
+            source.Current.FileNumber,
+            source.Cursor.PublishedRevisionAddress,
+            new SaveStep([new RemoveObject(FirstObjectId)]));
+        ExplicitCandidatePairEvaluation pair = ExplicitCandidatePairEvaluator.Evaluate(
+            source.Store,
+            facts,
+            new StayBSaveDecision([], []),
+            new RotateCSaveDecision([], []));
+
+        metrics.BeginCommit(source.Store, source.Cursor);
+        AppliedStayBPolicyStep applied = Assert.IsType<AppliedStayBPolicyStep>(
+            ExplicitRotationPolicyStepHarness.TryApplySelected(
+                source.Store,
+                source.Cursor,
+                pair,
+                CandidateTarget.StayB));
+        metrics.ObserveAcceptedRevision(source.Store, applied.ResultCursor);
+        metrics.EndWorkloadCommit(
+            source.Store,
+            applied.ResultCursor,
+            postLiveGraphBasePayloadBytes: 0);
+
+        EvaluatorRawMetrics observed = metrics.Complete(
+            source.Store,
+            applied.ResultCursor);
+
+        Assert.Equal(1, observed.WorkloadColdReadSampleCount);
+        Assert.True(observed.TotalWorkloadColdReadBytes > 0);
+        Assert.Equal(0, observed.TotalWorkloadLogicalBasePayloadBytes);
+        Assert.Empty(observed.WorkloadColdReadSamples[0]
+            .ColdRead.ObjectReconstructionFrameAddresses);
     }
 
     [Fact]

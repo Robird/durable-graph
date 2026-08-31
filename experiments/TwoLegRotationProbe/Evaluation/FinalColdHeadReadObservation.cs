@@ -17,10 +17,12 @@ internal sealed class FinalColdHeadReadObservation {
     internal FinalColdHeadReadObservation(
         IEnumerable<AbsoluteFrameAddress> dictionaryFrameAddresses,
         IEnumerable<AbsoluteFrameAddress> objectReconstructionFrameAddresses,
+        long postLiveBasePayloadBytes,
         Func<AbsoluteFrameAddress, long> getFrameBytes) {
         ArgumentNullException.ThrowIfNull(dictionaryFrameAddresses);
         ArgumentNullException.ThrowIfNull(objectReconstructionFrameAddresses);
         ArgumentNullException.ThrowIfNull(getFrameBytes);
+        ArgumentOutOfRangeException.ThrowIfNegative(postLiveBasePayloadBytes);
 
         AbsoluteFrameAddress[] dictionaryFrames = Canonicalize(
             dictionaryFrameAddresses);
@@ -35,6 +37,7 @@ internal sealed class FinalColdHeadReadObservation {
         DictionaryFrameBytes = SumFrameBytes(dictionaryFrames, getFrameBytes);
         ObjectReconstructionFrameBytes = SumFrameBytes(objectFrames, getFrameBytes);
         UniqueFrameBytes = SumFrameBytes(uniqueFrames, getFrameBytes);
+        PostLiveBasePayloadBytes = postLiveBasePayloadBytes;
     }
 
     public IReadOnlyList<AbsoluteFrameAddress> DictionaryFrameAddresses =>
@@ -51,6 +54,8 @@ internal sealed class FinalColdHeadReadObservation {
     public long ObjectReconstructionFrameBytes { get; }
 
     public long UniqueFrameBytes { get; }
+
+    public long PostLiveBasePayloadBytes { get; }
 
     private static AbsoluteFrameAddress[] Canonicalize(
         IEnumerable<AbsoluteFrameAddress> addresses) => addresses

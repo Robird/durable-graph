@@ -763,6 +763,13 @@
 
 ## 6. 船长日志
 
+### 2026-08-31：将 R 从随机终相位改为 workload-cycle cumulative cold load
+
+- **Problem**：revision 11 的 R 只在强制 terminal settlement 后测一次最终 head；它衡量人工收尾布局的随机相位，不能表达策略在一系列自然 Save 中持续承担的冷读压力。active-hundred 上 `(4,4%)` 的较小终点读量因此给出了误导性印象。
+- **Implemented**：revision 12 的 `after-every-workload-save-cold-load/1` 在每个成功 workload outer Save 后以空缓存测一次 authoritative OVD+current-reconstruction full-Frame union；同一 Commit 内多个 Revision 只采样一次，bootstrap/rejection/terminal settlement 不采样。canonical R 为物理读字节累计，L 为对应 post-live Base payload 累计；报告精确整数 `(R,L)`，T 单列 terminal cold-head 诊断，report schema 升至 2、metrics 升至 `raw-wpfr/2`。
+- **Observed**：active-hundred 的共享 `N=64,L=273804` 下，no-migration、paced、Adaptive `(3,5%)`、Adaptive `(4,4%)` 的 `R/avg/amplification` 分别为 `3915000/61171.88/14.2985`、`4020812/62825.19/14.6850`、`2896812/45262.69/10.5799`、`3219260/50300.94/11.7575`。`(3,5%)` 在 W/P/F/R 四项严格支配 `(4,4%)`；后者较小的 T 只是终相位差。
+- **Boundary / Next**：R 仍是“每次 Save 后必冷启一次”的命名读取日程，不声称真实 IO 频率；per-Save vector 保留内部，不输出浮点 ratio。下一步回到策略候选设计，用 revision 12 复跑。
+
 ### 2026-08-31：将两个过短反例合并为 active-hundred mixed workload
 
 - **Implemented**：corpus revision 11 用 `active-hundred-mixed` 取代 `many-small-nochange-backlog-100` 与 `continuously-updated-previous-debt`，形成十六 traces / 64 admitted cases。新 trace 由既有 fixed-seed generator 生成：100 个持久对象按 Field/List 1:1 权重初始化，后续 64 轮每轮确定性随机 Update 60 个不同对象，无 Create/Remove。

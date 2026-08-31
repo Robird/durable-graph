@@ -153,7 +153,7 @@ returns typed `PayloadAndTailMetaLength` rejection without fallback or Store mut
 The first matched-cadence workload uses four 100-byte old-A objects, four repeated
 50-byte Updates of object 10, then one Insert. Both `(3,5%)` and `(4,4%)` naturally
 select `Stay, Stay, Stay, Stay, Rotate`; the controls are held to that same target
-cadence. Control/paced/adaptive produce W/P/F/R `924/476/476/524`,
+cadence. Control/paced/adaptive produce endpoint W/P/F/T `924/476/476/524`,
 `1248/372/748/524`, and `1296/472/796/524`; the two adaptive parameter sets are exactly
 equal. Their 20B/16B budgets cannot fit a 100B optional Base, while the fourth Save's
 progress floor forces the last A-dependent hot object to Base. This negative control
@@ -161,11 +161,9 @@ shows that changing parameters need not change the realized policy.
 
 Across the initial head and four Update result heads, Adaptive resets object 10's
 realized reconstruction payload sequence from the controls' `100,150,200,250,300` to
-`100,150,200,250,100`. Nevertheless paced strictly dominates
-adaptive in W/P/F with equal final-only R in this fixture. Subsequent rotation and
-terminal settlement hide the intermediate chain reset from R; this is both a policy
-counterexample and evidence that a strategy optimizing intermediate amplification needs
-a separately named diagnostic before parameter search. The implemented test-local
+`100,150,200,250,100`. Nevertheless paced has lower W/P/F with equal T in this fixture.
+The endpoint does not contain the workload-cycle read schedule; cumulative R is now the
+canonical read metric. The implemented test-local
 diagnostic records raw realized `H/B` at accepted head checkpoints, explicitly
 distinguishes `0/0` from positive-over-zero infinity, and remains outside the canonical
 evaluator.
@@ -175,20 +173,19 @@ parameter set's different remaining budget non-binding: both Stay eight times an
 `1..8`, and both can afford the hot object's 10-byte optional Base after each one-byte
 progress action. At prospective ratio
 `3.5`, only `(3,5%)` writes Base; `(4,4%)` retains Delta, and its following exact `4.0`
-equality also remains Delta. The resulting `(3,5%)` / `(4,4%)` W/P/F/R vectors are
-`1516/1056/1056/1212` and `1512/1056/1056/1472`; final hot realized `H/B` is `15/10`
-versus `40/10`, over 2 versus 7 reconstruction Frames. Thus this synthetic fixture buys
-4 fewer written bytes with 260 more final cold-read bytes, while the common terminal
-evacuation keeps P/F equal. It is a local W/R trade, not a Peak result, tuned default,
-general paced-policy winner, or reason to alter the canonical evaluator schema.
+equality also remains Delta. The resulting `(3,5%)` / `(4,4%)` W/P/F/R/T vectors are
+`1516/1056/1056/11040/1212` and `1512/1056/1056/11028/1472`; final hot realized `H/B`
+is `15/10` versus `40/10`, over 2 versus 7 reconstruction Frames. Thus `(4,4%)` writes
+4 fewer bytes and cumulatively reads 12 fewer while T is 260 higher; `(3,5%)` is dominated
+under canonical W/P/F/R in this trace. It is not a Peak result, tuned default, or general winner.
 
 A Base-fraction lower-bound crossover is now an ordinary canonical trace: step 0 creates
 `(1,40)` and `(100,960)`, followed by measured full-rewrite Updates `100/1/100` with
 `Base == Delta`. For the Adaptive pair, the prelude creates the same physical boundary
 view `G=1000,E=40`; weak dominance makes the read limit and representation choice inert.
 Strict target selection gives `(3,5%)=[Stay,Rotate,Stay]` and
-`(4,4%)=[Stay,Stay,Rotate]`, with W/P/F/R `2148/1004/1096/1124` and
-`2192/1012/1132/1088`. Both finish at scope `3/4` after three workload Commits and one
+`(4,4%)=[Stay,Stay,Rotate]`, with W/P/F/R/T `2148/1004/1096/4248/1124` and
+`2192/1012/1132/5324/1088`. Both finish at scope `3/4` after three workload Commits and one
 direct settlement. Only the Adaptive pair shares the intended pre-boundary physical
 source; no-migration and paced remain useful corpus controls but are not additional
 4%/5% crossover treatments. This finite witness selects no default or steady-state

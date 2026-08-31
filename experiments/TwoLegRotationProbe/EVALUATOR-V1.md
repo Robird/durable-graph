@@ -110,23 +110,40 @@ run. It is not total Store bytes, total historical-file bytes, epoch growth, or
 `MaxDurableGraphRelativeFrameStartOffsetBytes - tail` slack. Those may remain useful
 diagnostics but are not aliases for F.
 
-### R — `FinalColdHeadReadBytes`
+### R — `TotalWorkloadColdReadBytes`
 
-The first read schedule is named `FinalHeadColdLoad`: start with an empty Frame cache
-and load the final PublishedRevision once.
+The read schedule is named `AfterEveryWorkloadSaveColdLoad`: after every successful
+caller workload Save, start with an empty Frame cache and load that accepted
+PublishedRevision once. If there are `N` workload Saves, sample `t` is:
 
 ```text
-RequiredFrames = Unique(
+RequiredFrames(t) = Unique(
     OVD materialization Revision Frames
   ∪ every live object's current-reconstruction Frames)
 
-R = Sum(RequiredFrames.FrameLengthBytes)
+C(t) = Sum(RequiredFrames(t).FrameLengthBytes)
+G(t) = Sum(every post-Save live object's BasePayloadBytes)
+
+R = Sum(C(t), t = 1..N)
+L = Sum(G(t), t = 1..N)
 ```
 
-An empty live graph can therefore have nonzero R because its OVD chain must still be
-materialized. A Frame used by both the OVD and an object chain is counted once in R.
-The diagnostic observation retains OVD-only and object-reconstruction sets/bytes
-separately, but their individual byte sums may overlap and must not be added.
+The report keeps the exact integer pair `(R, L)` rather than serializing a rounded ratio.
+`R / N` is the average cold-load bytes per workload Save; `R / L` is aggregate physical
+read amplification over the workload schedule. The latter is a ratio of sums, not an
+unweighted mean of per-Save ratios. When `L == 0`, amplification is undefined even though
+R may be positive because the OVD chain still has to be materialized.
+
+A Frame used by both the OVD and an object chain is counted once within one sample. The
+cache resets between Saves, so a Frame required by several samples is charged once in
+each. Bootstrap, rejected/unrealized attempts, settlement preparation Revisions, and the
+synthetic terminal settlement Commit do not produce workload read samples. W/P/F still
+include the terminal settlement write/pressure; this asymmetry is deliberate and explicit.
+
+`TerminalColdHeadReadBytes` separately measures one empty-cache load after terminal
+settlement. It diagnoses the evaluator's artificial closed-horizon placement and is not R.
+The full observation retains OVD-only and object-reconstruction sets/bytes separately,
+but their individual byte sums may overlap and must not be added.
 
 `FrameLengthBytes` follows the current full-Frame read model; it does not model cache
 hits, TailMeta-only routing IO, OS block rounding, compression, or historical lineage
@@ -136,13 +153,15 @@ queries beyond current reconstruction.
 
 - `Evaluation/EvaluatorRawMetricAccumulator.cs` records append-only Store snapshots
   inside explicit Commit boundaries and derives W/P/F.
-- `Evaluation/FinalColdHeadReadMeasurer.cs` derives R from authoritative OVD
-  materialization and object reconstruction.
+- `Evaluation/FinalColdHeadReadMeasurer.cs` derives each exact cold load from authoritative
+  OVD materialization and object reconstruction; the accumulator samples it once per
+  successful workload outer Commit and once separately after terminal settlement.
 - `Tests/EvaluatorRawMetricTests.cs` fixes:
   - Stay then Rotate accounting, including the fresh-C 4-byte header;
   - multiple realized Revisions grouped into one Commit peak;
+  - one cold-load sample per outer workload Commit and checked cumulative `(R, L)`;
   - OVD/object Frame de-duplication;
-  - nonzero cold-head read cost for an empty live graph.
+  - positive cold-head bytes over a zero-live-payload denominator.
 - `Planning/CanonicalTerminalSettlementPlanner.cs` extracts the deterministic
   continuation that is shared by ordinary Stay admission and terminal settlement.
 - `Evaluation/EvaluatorV1Session.cs` owns the isolated run fork, maps workload hard
@@ -184,18 +203,18 @@ falls back after rejection.
 workload Commit receipts, final checkpoint, typed termination, and terminal-settlement
 Revision count. It has no candidate-declared metrics. A naked final Store would be
 insufficient because P needs outer-Commit boundaries, F needs Current-scope checkpoints,
-and R needs the final PublishedRevision. General validation of an arbitrary hand-built
+and R needs every workload Commit head plus its post-live logical Base bytes. General validation of an arbitrary hand-built
 Store/ledger is not implemented by v1.
 
 `BenchmarkV1Json` writes compact canonical UTF-8 manifest/report documents with one
 trailing LF, fixed property/token order, ordinal case ordering, 16-digit hexadecimal
 seeds, manifest SHA-256, and resolved trace SHA-256. The report is deliberately the
-comparable W/P/F/R plus admissibility/final-scope/settlement projection—not a lossless
+comparable W/P/F/R/L/T plus admissibility/final-scope/settlement projection—not a lossless
 dump of `FinalColdHeadReadObservation` or candidate diagnostics. Rejected leaves have
 no metrics/cursor/settlement properties. V1 is writer-only: external parsing, file I/O,
 and CLI publication remain outside this slice.
 
-Corpus revision 11 currently runs all four profiles over sixteen traces. Its newest
+Corpus revision 12 runs all four profiles over sixteen traces. Its newest
 workload is intentionally still an adjustable probe rather than a frozen benchmark
 artifact. The low/high-ID traces form one
 matched locality family, the low-ID-small/large traces form one matched size-skew family,
@@ -206,74 +225,76 @@ diagnostic rather than a cross-horizon Pareto pair. Within every trace group,
 the source fixture, exact expanded
 trace, evaluator protocols, and accounting
 horizon are identical; apart from the case ID, the only experimental input that changes
-is the atomic selection profile. The current raw outcomes are:
+is the atomic selection profile. The current raw outcomes are below; T is the terminal
+diagnostic, while N/L are omitted from the table because they are strategy-invariant
+within each shared trace and remain available in the report:
 
-| Trace | Selection profile | W | P | F | R | Final scope |
-|---|---|---:|---:|---:|---:|---|
-| `debt-zero-before-rotate` | no migration | 808 | 676 | 676 | 788 | 2/3 |
-| `debt-zero-before-rotate` | paced one debt | 832 | 356 | 804 | 812 | 2/3 |
-| `debt-zero-before-rotate` | Adaptive `(3,5%)` | 832 | 356 | 804 | 812 | 2/3 |
-| `debt-zero-before-rotate` | Adaptive `(4,4%)` | 832 | 356 | 804 | 812 | 2/3 |
-| `debt-zero-then-rotate` | no migration | 856 | 680 | 680 | 832 | 2/3 |
-| `debt-zero-then-rotate` | paced one debt | 1536 | 696 | 804 | 756 | 3/4 |
-| `debt-zero-then-rotate` | Adaptive `(3,5%)` | 1536 | 696 | 804 | 756 | 3/4 |
-| `debt-zero-then-rotate` | Adaptive `(4,4%)` | 1536 | 696 | 804 | 756 | 3/4 |
-| `insert-burst-three-one` | no migration | 1432 | 960 | 1400 | 1360 | 2/3 |
-| `insert-burst-three-one` | paced one debt | 2380 | 984 | 1072 | 1332 | 3/4 |
-| `insert-burst-three-one` | Adaptive `(3,5%)` | 2368 | 972 | 972 | 1332 | 4/5 |
-| `insert-burst-three-one` | Adaptive `(4,4%)` | 2368 | 972 | 972 | 1332 | 4/5 |
-| `insert-burst-two-two` | no migration | 1432 | 652 | 1400 | 1360 | 2/3 |
-| `insert-burst-two-two` | paced one debt | 2072 | 680 | 764 | 1332 | 3/4 |
-| `insert-burst-two-two` | Adaptive `(3,5%)` | 2060 | 680 | 680 | 1332 | 4/5 |
-| `insert-burst-two-two` | Adaptive `(4,4%)` | 2060 | 680 | 680 | 1332 | 4/5 |
-| `active-hundred-mixed` | no migration | 116844 | 5208 | 111680 | 5200 | 2/3 |
-| `active-hundred-mixed` | paced one debt | 117120 | 2128 | 115092 | 116856 | 2/3 |
-| `active-hundred-mixed` | Adaptive `(3,5%)` | 119760 | 2176 | 44040 | 34368 | 4/5 |
-| `active-hundred-mixed` | Adaptive `(4,4%)` | 121700 | 4336 | 55044 | 12060 | 4/5 |
-| `mixed-small` seed 12345 | no migration | 368 | 164 | 344 | 352 | 2/3 |
-| `mixed-small` seed 12345 | paced one debt | 368 | 164 | 344 | 352 | 2/3 |
-| `mixed-small` seed 12345 | Adaptive `(3,5%)` | 440 | 164 | 184 | 280 | 3/4 |
-| `mixed-small` seed 12345 | Adaptive `(4,4%)` | 440 | 164 | 184 | 280 | 3/4 |
-| `read-amplification-threshold-band` | no migration | 1460 | 1072 | 1072 | 1064 | 2/3 |
-| `read-amplification-threshold-band` | paced one debt | 1512 | 1056 | 1056 | 1472 | 2/3 |
-| `read-amplification-threshold-band` | Adaptive `(3,5%)` | 1516 | 1056 | 1056 | 1212 | 2/3 |
-| `read-amplification-threshold-band` | Adaptive `(4,4%)` | 1512 | 1056 | 1056 | 1472 | 2/3 |
-| `previous-debt-share-dilution-boundary` | no migration | 3160 | 1056 | 2148 | 1048 | 2/3 |
-| `previous-debt-share-dilution-boundary` | paced one debt | 4188 | 1056 | 2156 | 1048 | 3/4 |
-| `previous-debt-share-dilution-boundary` | Adaptive `(3,5%)` | 2148 | 1004 | 1096 | 1124 | 3/4 |
-| `previous-debt-share-dilution-boundary` | Adaptive `(4,4%)` | 2192 | 1012 | 1132 | 1088 | 3/4 |
-| `locality-next-update-low-id` | no migration | 448 | 256 | 256 | 248 | 2/3 |
-| `locality-next-update-low-id` | paced one debt | 456 | 256 | 448 | 440 | 2/3 |
-| `locality-next-update-low-id` | Adaptive `(3,5%)` | 452 | 252 | 444 | 288 | 2/3 |
-| `locality-next-update-low-id` | Adaptive `(4,4%)` | 452 | 252 | 444 | 288 | 2/3 |
-| `locality-next-update-high-id` | no migration | 448 | 256 | 256 | 248 | 2/3 |
-| `locality-next-update-high-id` | paced one debt | 452 | 152 | 340 | 292 | 2/3 |
-| `locality-next-update-high-id` | Adaptive `(3,5%)` | 348 | 152 | 340 | 332 | 2/3 |
-| `locality-next-update-high-id` | Adaptive `(4,4%)` | 348 | 152 | 340 | 332 | 2/3 |
-| `size-skew-low-id-small` | no migration | 220 | 176 | 176 | 208 | 2/3 |
-| `size-skew-low-id-small` | paced one debt | 224 | 152 | 152 | 212 | 2/3 |
-| `size-skew-low-id-small` | Adaptive `(3,5%)` | 224 | 152 | 152 | 212 | 2/3 |
-| `size-skew-low-id-small` | Adaptive `(4,4%)` | 224 | 152 | 152 | 212 | 2/3 |
-| `size-skew-low-id-large` | no migration | 220 | 176 | 176 | 208 | 2/3 |
-| `size-skew-low-id-large` | paced one debt | 228 | 152 | 192 | 216 | 2/3 |
-| `size-skew-low-id-large` | Adaptive `(3,5%)` | 228 | 152 | 192 | 216 | 2/3 |
-| `size-skew-low-id-large` | Adaptive `(4,4%)` | 228 | 152 | 192 | 216 | 2/3 |
-| `lifecycle-transient-overlap` | no migration | 1220 | 444 | 1008 | 244 | 2/3 |
-| `lifecycle-transient-overlap` | paced one debt | 1452 | 552 | 1144 | 284 | 3/4 |
-| `lifecycle-transient-overlap` | Adaptive `(3,5%)` | 1452 | 552 | 1144 | 284 | 3/4 |
-| `lifecycle-transient-overlap` | Adaptive `(4,4%)` | 1452 | 552 | 1144 | 284 | 3/4 |
-| `lifecycle-transient-serial` | no migration | 1220 | 444 | 1008 | 244 | 2/3 |
-| `lifecycle-transient-serial` | paced one debt | 1448 | 552 | 736 | 284 | 3/4 |
-| `lifecycle-transient-serial` | Adaptive `(3,5%)` | 1448 | 552 | 736 | 284 | 3/4 |
-| `lifecycle-transient-serial` | Adaptive `(4,4%)` | 1448 | 552 | 736 | 284 | 3/4 |
-| `previous-debt-granularity-single-large` | no migration | 1800 | 672 | 1168 | 708 | 2/3 |
-| `previous-debt-granularity-single-large` | paced one debt | 1812 | 672 | 1688 | 1788 | 2/3 |
-| `previous-debt-granularity-single-large` | Adaptive `(3,5%)` | 1504 | 368 | 752 | 772 | 3/4 |
-| `previous-debt-granularity-single-large` | Adaptive `(4,4%)` | 1504 | 368 | 752 | 772 | 3/4 |
-| `previous-debt-granularity-three-small` | no migration | 1800 | 672 | 1168 | 708 | 2/3 |
-| `previous-debt-granularity-three-small` | paced one debt | 1812 | 676 | 1688 | 1788 | 2/3 |
-| `previous-debt-granularity-three-small` | Adaptive `(3,5%)` | 1596 | 372 | 892 | 728 | 3/4 |
-| `previous-debt-granularity-three-small` | Adaptive `(4,4%)` | 1596 | 372 | 892 | 728 | 3/4 |
+| Trace | Selection profile | W | P | F | R | T | Final scope |
+|---|---|---:|---:|---:|---:|---:|---|
+| `debt-zero-before-rotate` | no migration | 808 | 676 | 676 | 2292 | 788 | 2/3 |
+| `debt-zero-before-rotate` | paced one debt | 832 | 356 | 804 | 3352 | 812 | 2/3 |
+| `debt-zero-before-rotate` | Adaptive `(3,5%)` | 832 | 356 | 804 | 3352 | 812 | 2/3 |
+| `debt-zero-before-rotate` | Adaptive `(4,4%)` | 832 | 356 | 804 | 3352 | 812 | 2/3 |
+| `debt-zero-then-rotate` | no migration | 856 | 680 | 680 | 3136 | 832 | 2/3 |
+| `debt-zero-then-rotate` | paced one debt | 1536 | 696 | 804 | 4172 | 756 | 3/4 |
+| `debt-zero-then-rotate` | Adaptive `(3,5%)` | 1536 | 696 | 804 | 4172 | 756 | 3/4 |
+| `debt-zero-then-rotate` | Adaptive `(4,4%)` | 1536 | 696 | 804 | 4172 | 756 | 3/4 |
+| `insert-burst-three-one` | no migration | 1432 | 960 | 1400 | 2648 | 1360 | 2/3 |
+| `insert-burst-three-one` | paced one debt | 2380 | 984 | 1072 | 2564 | 1332 | 3/4 |
+| `insert-burst-three-one` | Adaptive `(3,5%)` | 2368 | 972 | 972 | 2464 | 1332 | 4/5 |
+| `insert-burst-three-one` | Adaptive `(4,4%)` | 2368 | 972 | 972 | 2464 | 1332 | 4/5 |
+| `insert-burst-two-two` | no migration | 1432 | 652 | 1400 | 2340 | 1360 | 2/3 |
+| `insert-burst-two-two` | paced one debt | 2072 | 680 | 764 | 2252 | 1332 | 3/4 |
+| `insert-burst-two-two` | Adaptive `(3,5%)` | 2060 | 680 | 680 | 2152 | 1332 | 4/5 |
+| `insert-burst-two-two` | Adaptive `(4,4%)` | 2060 | 680 | 680 | 2152 | 1332 | 4/5 |
+| `active-hundred-mixed` | no migration | 116844 | 5208 | 111680 | 3915000 | 5200 | 2/3 |
+| `active-hundred-mixed` | paced one debt | 117120 | 2128 | 115092 | 4020812 | 116856 | 2/3 |
+| `active-hundred-mixed` | Adaptive `(3,5%)` | 119760 | 2176 | 44040 | 2896812 | 34368 | 4/5 |
+| `active-hundred-mixed` | Adaptive `(4,4%)` | 121700 | 4336 | 55044 | 3219260 | 12060 | 4/5 |
+| `mixed-small` seed 12345 | no migration | 368 | 164 | 344 | 792 | 352 | 2/3 |
+| `mixed-small` seed 12345 | paced one debt | 368 | 164 | 344 | 792 | 352 | 2/3 |
+| `mixed-small` seed 12345 | Adaptive `(3,5%)` | 440 | 164 | 184 | 616 | 280 | 3/4 |
+| `mixed-small` seed 12345 | Adaptive `(4,4%)` | 440 | 164 | 184 | 616 | 280 | 3/4 |
+| `read-amplification-threshold-band` | no migration | 1460 | 1072 | 1072 | 10704 | 1064 | 2/3 |
+| `read-amplification-threshold-band` | paced one debt | 1512 | 1056 | 1056 | 11028 | 1472 | 2/3 |
+| `read-amplification-threshold-band` | Adaptive `(3,5%)` | 1516 | 1056 | 1056 | 11040 | 1212 | 2/3 |
+| `read-amplification-threshold-band` | Adaptive `(4,4%)` | 1512 | 1056 | 1056 | 11028 | 1472 | 2/3 |
+| `previous-debt-share-dilution-boundary` | no migration | 3160 | 1056 | 2148 | 7424 | 1048 | 2/3 |
+| `previous-debt-share-dilution-boundary` | paced one debt | 4188 | 1056 | 2156 | 8432 | 1048 | 3/4 |
+| `previous-debt-share-dilution-boundary` | Adaptive `(3,5%)` | 2148 | 1004 | 1096 | 4248 | 1124 | 3/4 |
+| `previous-debt-share-dilution-boundary` | Adaptive `(4,4%)` | 2192 | 1012 | 1132 | 5324 | 1088 | 3/4 |
+| `locality-next-update-low-id` | no migration | 448 | 256 | 256 | 776 | 248 | 2/3 |
+| `locality-next-update-low-id` | paced one debt | 456 | 256 | 448 | 1100 | 440 | 2/3 |
+| `locality-next-update-low-id` | Adaptive `(3,5%)` | 452 | 252 | 444 | 1096 | 288 | 2/3 |
+| `locality-next-update-low-id` | Adaptive `(4,4%)` | 452 | 252 | 444 | 1096 | 288 | 2/3 |
+| `locality-next-update-high-id` | no migration | 448 | 256 | 256 | 776 | 248 | 2/3 |
+| `locality-next-update-high-id` | paced one debt | 452 | 152 | 340 | 992 | 292 | 2/3 |
+| `locality-next-update-high-id` | Adaptive `(3,5%)` | 348 | 152 | 340 | 992 | 332 | 2/3 |
+| `locality-next-update-high-id` | Adaptive `(4,4%)` | 348 | 152 | 340 | 992 | 332 | 2/3 |
+| `size-skew-low-id-small` | no migration | 220 | 176 | 176 | 236 | 208 | 2/3 |
+| `size-skew-low-id-small` | paced one debt | 224 | 152 | 152 | 264 | 212 | 2/3 |
+| `size-skew-low-id-small` | Adaptive `(3,5%)` | 224 | 152 | 152 | 264 | 212 | 2/3 |
+| `size-skew-low-id-small` | Adaptive `(4,4%)` | 224 | 152 | 152 | 264 | 212 | 2/3 |
+| `size-skew-low-id-large` | no migration | 220 | 176 | 176 | 236 | 208 | 2/3 |
+| `size-skew-low-id-large` | paced one debt | 228 | 152 | 192 | 344 | 216 | 2/3 |
+| `size-skew-low-id-large` | Adaptive `(3,5%)` | 228 | 152 | 192 | 344 | 216 | 2/3 |
+| `size-skew-low-id-large` | Adaptive `(4,4%)` | 228 | 152 | 192 | 344 | 216 | 2/3 |
+| `lifecycle-transient-overlap` | no migration | 1220 | 444 | 1008 | 4292 | 244 | 2/3 |
+| `lifecycle-transient-overlap` | paced one debt | 1452 | 552 | 1144 | 4068 | 284 | 3/4 |
+| `lifecycle-transient-overlap` | Adaptive `(3,5%)` | 1452 | 552 | 1144 | 4068 | 284 | 3/4 |
+| `lifecycle-transient-overlap` | Adaptive `(4,4%)` | 1452 | 552 | 1144 | 4068 | 284 | 3/4 |
+| `lifecycle-transient-serial` | no migration | 1220 | 444 | 1008 | 3888 | 244 | 2/3 |
+| `lifecycle-transient-serial` | paced one debt | 1448 | 552 | 736 | 3652 | 284 | 3/4 |
+| `lifecycle-transient-serial` | Adaptive `(3,5%)` | 1448 | 552 | 736 | 3652 | 284 | 3/4 |
+| `lifecycle-transient-serial` | Adaptive `(4,4%)` | 1448 | 552 | 736 | 3652 | 284 | 3/4 |
+| `previous-debt-granularity-single-large` | no migration | 1800 | 672 | 1168 | 5392 | 708 | 2/3 |
+| `previous-debt-granularity-single-large` | paced one debt | 1812 | 672 | 1688 | 7152 | 1788 | 2/3 |
+| `previous-debt-granularity-single-large` | Adaptive `(3,5%)` | 1504 | 368 | 752 | 4568 | 772 | 3/4 |
+| `previous-debt-granularity-single-large` | Adaptive `(4,4%)` | 1504 | 368 | 752 | 4568 | 772 | 3/4 |
+| `previous-debt-granularity-three-small` | no migration | 1800 | 672 | 1168 | 5360 | 708 | 2/3 |
+| `previous-debt-granularity-three-small` | paced one debt | 1812 | 676 | 1688 | 6712 | 1788 | 2/3 |
+| `previous-debt-granularity-three-small` | Adaptive `(3,5%)` | 1596 | 372 | 892 | 4596 | 728 | 3/4 |
+| `previous-debt-granularity-three-small` | Adaptive `(4,4%)` | 1596 | 372 | 892 | 4596 | 728 | 3/4 |
 
 All 64 cases are admitted. `active-hundred-mixed` uses the existing fixed-seed generator:
 100 persistent objects are selected with equal Field/List weights, then exactly 60 distinct
@@ -285,17 +306,21 @@ lower bound implied by a 5% Base budget more than once.
 
 The direct exploratory run found no workload Rotate for no-migration or paced. Adaptive
 `(3,5%)` rotated at workload Saves 25 and 47; Adaptive `(4,4%)` rotated at 31 and 61.
-All four runs then used one direct terminal-settlement Revision. The vectors above are a
-current observation for tuning, not golden tests or hash-locked evidence: the workload
-parameters deliberately remain open to feedback-driven adjustment.
+All four runs then used one direct terminal-settlement Revision. Their shared
+`N=64,L=273804` makes average cold bytes/read amplification respectively:
+no-migration `61171.88/14.2985`, paced `62825.19/14.6850`, Adaptive `(3,5%)`
+`45262.69/10.5799`, and Adaptive `(4,4%)` `50300.94/11.7575`. Under canonical W/P/F/R,
+Adaptive `(3,5%)` strictly dominates `(4,4%)`; the latter's much smaller T was a terminal
+phase artifact, not better cycle-wide reading. The vectors remain tuning observations,
+not golden/hash-locked evidence.
 
 The insert-burst pair shares step 0, the first workload Save,
 three evaluated Commit slots, its four 300-byte Inserts, and final logical versions. Only
 the last two Save boundaries partition those Inserts as `3+1` or `2+2`; each profile keeps
 the same selection cadence and final scope across the pair, and every workload Frame is
-smaller than 2 KiB. No-migration keeps W/F/R equal while `3+1` raises P by 308 bytes.
-For paced, `3+1` raises W/P/F by `308/304/308`; for both Adaptive profiles it raises them
-by `308/292/292`; R remains equal. The caller controls outer Commit grouping and the
+smaller than 2 KiB. Relative to `2+2`, `3+1` raises no-migration W/P/F/R by
+`0/308/0/308`, paced by `308/304/308/312`, and both Adaptive profiles by
+`308/292/292/312`. The caller controls outer Commit grouping and the
 strategy cannot split it. These differences include provisional layout and later
 Rotate/settlement placement propagation; they are not capacity evidence, batching or
 latency advice, or a steady-state result.
@@ -305,8 +330,8 @@ latency advice, or a steady-state result.
 and every profile has identical views/selections on the shared prefix. The short paced
 and Adaptive cases direct-settle before their first natural Rotate; no-migration is the
 `Stay/Stay/Stay` control. Adding the fourth Save changes no-migration by
-`M/W/P/F/R = +1/+48/+4/+4/+44` without changing final scope; paced and
-both Adaptive profiles change by `+1/+704/+340/+0/-56` and finish one file generation
+`M/W/P/F/R = +1/+48/+4/+4/+844` without changing final scope; paced and
+both Adaptive profiles change by `+1/+704/+340/+0/+820` and finish one file generation
 later. The traces have different horizons and final states, so these deltas diagnose
 the combined cutoff-phase and terminal-placement change, including the real extra Save;
 they are not a causal cost decomposition and do not define cross-horizon Pareto dominance,
@@ -315,14 +340,14 @@ normalization, or ranking.
 On `debt-zero-then-rotate`, both Adaptive profiles equal
 paced exactly; on `mixed-small`, no-migration equals paced while both Adaptive profiles
 equal each other. The threshold-band input ends that universal masking: paced equals
-Adaptive `(4,4%)`, while Adaptive `(3,5%)` writes 4 more bytes for 260 fewer final
-cold-read bytes at equal P/F. No-migration writes and reads less than either group but
-has P/F 16 bytes higher. Its three unique vectors are therefore pairwise incomparable.
+Adaptive `(4,4%)`; Adaptive `(3,5%)` writes 4 more bytes and reads 12 more workload bytes
+at equal P/F, so it is canonically dominated despite a 260-byte lower T. No-migration
+writes and reads less than either group but has P/F 16 bytes higher.
 The debt-share workload separately makes the Adaptive pair cross the strict 4%/5% target
 boundary. In the locality family every profile selects `Stay/Stay`, executes two workload
 Commits plus direct settlement, and ends at scope `2/3`. No-migration ties across the
 permutation; paced changes; both Adaptive parameters tie within each trace, while their
-high-ID result lowers W/P/F and raises R relative to low-ID. The candidates' first
+high-ID result lowers W/P/F/R relative to low-ID. The candidates' first
 `StrategyStepViewV1` and selection are identical, so no future oracle is exposed. This
 proves sensitivity to ObjectId assignment plus next-update locality—not long-term
 hot/cold classification, temperature inference, the old singleton-Frame oracle setup,
@@ -341,9 +366,9 @@ IDs, payloads, horizon, and final state are identical; only the order of `Create
 set falling from two to one. Every case has five realized Commits and direct settlement. No-migration
 uses `Stay/Stay/Stay/Stay` and ends at scope `2/3`; paced and both Adaptive profiles use
 `Stay/Stay/Rotate/Stay` and end at `3/4`. No-migration is invariant. For the other three
-profiles, serial lowers F by 408 bytes at equal P/R; its 4-byte W reduction is current
-layout fallout. On overlap no-migration dominates the other profiles; on serial its higher
-F makes the relation incomparable despite lower W/P/R. This proves that the current
+profiles, serial lowers W/F/R by `4/408/416` at equal P. On overlap and serial,
+no-migration trades lower W/P against higher R and, for serial, higher F; the old
+final-only endpoint had hidden this cycle-wide read tradeoff. This proves that the current
 policies and local Pareto relation are sensitive to finite-horizon equal-size transient
 overlap, not churn-rate or lifetime prediction, GC, steady state, a winner, or advice to
 serialize application work. The Previous-debt granularity pair starts from ordinary
@@ -353,22 +378,23 @@ objects and the other first rewrites the single large object; both then create t
 reconvergence. Their operation multiset, final logical versions, and horizon are identical.
 At the shared post-sentinel pivot, both Adaptive profiles have `G/E=601/300`, but their
 debt is respectively `{40:300}` or `{10:100,20:100,30:100}`. Every case executes four workload Commits plus
-direct settlement (`M=5`). No-migration is an exact pairwise tie; paced differs only by
-4B of P due to current layout. Both Adaptive profiles have the same final scope on the
-two traces, while single-large lowers W/P/F and raises R. This demonstrates sensitivity
+direct settlement (`M=5`). The new cycle-wide R distinguishes the pair even where W/P/F
+or T tie: three-small lowers no-migration R by 32 and paced R by 440, while single-large
+lowers Adaptive W/P/F/R by `92/4/140/28`. This demonstrates sensitivity
 of the current Adaptive one-object progress floor to debt granularity and indivisibility at fixed
 `G/E`; it is not arrival/service-rate pressure, steady-state or starvation evidence, nor
 a general size preference.
 
 Manifest schema version 2 replaces the old target/decision pair with one
-`selectionProfile`; corpus revision 11 currently contains 64 cases. Report schema
-and W/P/F/R leaves are unchanged and remain bound through the manifest SHA-256. There
+`selectionProfile`; corpus revision 12 contains the same 64 cases under read schedule
+`after-every-workload-save-cold-load/1`, metrics `raw-wpfr/2`, and report schema 2.
+The report emits exact workload sample count, R, L, and terminal T integers. There
 is no compatibility layer, mandatory strategy interface, arbitrary parameter input,
 or score. The report also rejects an outcome whose declared workload horizon differs from
 its manifest, or whose admitted/capacity phase cannot be emitted by evaluator v1.
 Executable authority is split between
 [`BenchmarkV1RunnerTests.cs`](Tests/BenchmarkV1RunnerTests.cs) for case inventory,
-the original eight outcomes, and canonical hashes,
+stable-fixture outcomes, and deterministic rebuild,
 [`BenchmarkV1ThresholdBandWorkloadTests.cs`](Tests/BenchmarkV1ThresholdBandWorkloadTests.cs)
 for the third workload's exact ties and local Pareto relations,
 [`BenchmarkV1DebtShareDilutionWorkloadTests.cs`](Tests/BenchmarkV1DebtShareDilutionWorkloadTests.cs)
@@ -398,16 +424,16 @@ cross-assembly/product and parent-debt-vs-E seam, and
 One test-local diagnostic continues the handwritten control from its admitted 2/3
 head through one additional zero-workload `EvaluatorV1Session`, while the paced case
 already ends at 3/4. Each session remains an independently accounted closed segment;
-the diagnostic concatenates them with Commit count/W as sums, P/F as maxima, and R
-from the final cold head only. It does not change the canonical v1 report schema.
+the diagnostic concatenates them with Commit count/W as sums, P/F as maxima, and T
+from the last segment's terminal head. It predates the canonical workload read schedule.
 
-| Treatment | Commits | W | P | F | R | Final scope | Final Previous debt |
+| Treatment | Commits | W | P | F | T | Final scope | Final Previous debt |
 |---|---:|---:|---:|---:|---:|---|---|
 | no migration | 6 | 944 | 680 | 680 | 752 | 3/4 | 10, 20, 30 |
 | paced one debt | 5 | 1536 | 696 | 804 | 756 | 3/4 | 1004 |
 
 The control's extra segment is one direct settlement Commit with
-`W/P/F/R=88/88/680/752`; full Store tail growth independently equals the concatenated
+`W/P/F/T=88/88/680/752`; full Store tail growth independently equals the concatenated
 W. Equal scope removes the different-final-file-generation confounder, but not Commit
 placement, debt membership, Frame layout, terminal liability, or the single-A-Frame
 fixture bias. The vector is therefore a named discriminator, not a general winner.
@@ -427,7 +453,7 @@ Each cell runs the same four workload Stays, one terminal settlement, and one ex
 zero-workload terminal settlement. All therefore have six outer Commits, exactly two
 scope advances, and final scope `3/4`:
 
-| Source layout | Decision treatment | W | P | F | R | Final Previous debt |
+| Source layout | Decision treatment | W | P | F | T | Final Previous debt |
 |---|---|---:|---:|---:|---:|---|
 | Shared | no migration | 1556 | 1288 | 1288 | 1352 | 1, 2, 3, 10, 20, 30 |
 | Shared | paced one debt | 2284 | 788 | 956 | 1352 | 20, 30 |
@@ -441,11 +467,11 @@ Split/no migration, and `1308,1308,656,656` for Split/paced. The paced Split tre
 releases the cold payload Frame on the third workload step; object-debt membership
 alone does not express that closure.
 
-Cross-layout W/P/F/R equality is therefore a useful negative result, not evidence that
-source layout is generally irrelevant. Bootstrap writes are outside W, R reads only
-the final head, and two scope advances remove the original A from final current
-reconstruction. The intermediate Frame observations are diagnostics, not actual or
-cumulative IO and not a fifth score. Exact provenance and vector assertions live in
+Cross-layout W/P/F/T equality was only an endpoint negative result, not evidence that
+source layout is generally irrelevant. Bootstrap writes are outside W, T reads only
+the terminal head, and two scope advances remove the original A from terminal current
+reconstruction. The intermediate Frame observations motivated cumulative workload R.
+Exact provenance and endpoint-vector assertions live in
 [`SourceLayoutFixedHorizonTests.cs`](Tests/SourceLayoutFixedHorizonTests.cs).
 
 ### Named fixed-cadence two-epoch terminal-liability witness
@@ -462,7 +488,7 @@ The no-migration and paced-one-debt treatments therefore both execute eight oute
 Commits and exactly two scope advances, ending at scope `3/4` with the same live state
 and Previous debt `{10,20,30}`:
 
-| Treatment | Segment | Commits | W | P | F | R |
+| Treatment | Segment | Commits | W | P | F | T |
 |---|---|---:|---:|---:|---:|---:|
 | no migration | epoch 1 | 4 | 796 | 664 | 664 | 656 |
 | no migration | epoch 2 | 4 | 188 | 52 | 800 | 700 |
@@ -477,10 +503,10 @@ second epoch's three natural paced Saves then migrate exactly `10`, `20`, and `3
 again. Thus the first epoch's terminal liability incurs repeated work in later natural
 Saves rather than merely being carried through another zero-workload settlement.
 
-Within this fixed cadence, pacing trades `+640 W` for `-316 P`, while horizon `F` and
-final-only `R` are respectively 12 and 92 bytes higher. This is a raw Pareto
+Within this fixed cadence, pacing trades `+640 W` for `-316 P`, while horizon F and
+final-only T are respectively 12 and 92 bytes higher. This endpoint
 observation, not a winner: the cadence is an experimental control rather than
-`DebtZeroThenRotate` or a product rotation trigger, R remains final-head-only, and
+`DebtZeroThenRotate` or a product rotation trigger, T is not canonical R, and
 equal final debt membership does not imply equal retained physical layout/provenance
 state or a regenerative steady-state cycle. The exact debt/migration trajectory and
 vectors live in
@@ -498,13 +524,13 @@ inputs agree.
 Both endpoints then receive the same third epoch: the same three isomorphic nonempty
 Saves, fixed Stay-B targets, and the same paced-one-debt selector. Both migrate
 `10`, `20`, and `30`; their exact workload-Commit writes are `152,260,348` bytes and
-their direct terminal settlements each write 52 bytes. The closed third-epoch vector
-is identical on both sides:
+their direct terminal settlements each write 52 bytes. The closed third-epoch W/P/F/T
+endpoint is identical, but cumulative workload R is not:
 
-| Source history | Commits | W | P | F | R |
-|---|---:|---:|---:|---:|---:|
-| no-migration shaped | 4 | 812 | 348 | 812 | 792 |
-| paced shaped | 4 | 812 | 348 | 812 | 792 |
+| Source history | Commits | W | P | F | R | T |
+|---|---:|---:|---:|---:|---:|---:|
+| no-migration shaped | 4 | 812 | 348 | 812 | 2744 | 792 |
+| paced shaped | 4 | 812 | 348 | 812 | 2376 | 792 |
 
 Physical history remains visible before the third epoch closes. After the three
 workload Saves, exact cold-head bytes are `848,1104,792` versus `792,792,792`, and
@@ -512,15 +538,14 @@ required Previous-file object Frames are `1,1,0` versus `2,1,0`. The shared Fram
 the first side remains required until its last resident debt object moves; the second
 side releases singleton Frames one by one. Once all three objects have been rewritten,
 the two physical states converge for this continuation and the direct settlement keeps
-their final-only R equal.
+their T equal.
 
-Across all three epochs the accumulated vectors are `12/1796/664/812/792` and
-`12/2436/348/812/792`. Those cumulative W/P differences were incurred while shaping
+Across all three epochs the old endpoint vectors were `12/1796/664/812/792` and
+`12/2436/348/812/792` in `Commits/W/P/F/T`. Those W/P differences were incurred while shaping
 the two source histories; they are not a cost difference in the common third epoch.
 The observation therefore says only that the coarse endpoint summary is sufficient
-for this fixed continuation's closed W/P/F/R, while retained Frame layout/provenance
-still determines intermediate checkpoint cold-read pressure. It does not prove general
-state sufficiency, pure packing causality, actual cumulative IO, or a fifth metric.
+for this fixed continuation's W/P/F/T endpoint, while canonical R now preserves the
+intermediate difference. It does not prove general state sufficiency or pure packing causality.
 
 ### Named adaptive payload-policy matched-cadence diagnostic
 
@@ -531,7 +556,7 @@ no-migration and paced controls are externally held to that same workload target
 All sides then execute one direct terminal settlement, so each has six outer Commits,
 two scope advances, final scope `3/4`, and the same logical state:
 
-| Decision treatment | W | P | F | R | Final Previous debt |
+| Decision treatment | W | P | F | T | Final Previous debt |
 |---|---:|---:|---:|---:|---|
 | Delta, no migration | 924 | 476 | 476 | 524 | 10,20,30,40,1001 |
 | Delta, paced one debt | 1248 | 372 | 748 | 524 | 10,1001 |
@@ -544,11 +569,9 @@ payload is `100,150,200,250,100`, versus `100,150,200,250,300` for both controls
 are exactly equal because the
 20B/16B soft budgets cannot fit a 100B optional Base and the fourth Save's progress
 floor—not either strict read threshold—forces the remaining A-dependent hot object to
-Base. This is a parameter-insensitive negative control. Paced nevertheless strictly
-dominates both adaptive rows in W/P/F with equal final-only R in this fixture. The two
-subsequent rotations make R blind to the intermediate reset; that is a
-measurement/horizon boundary, not evidence that read amplification has no value and not
-a general policy ranking.
+Base. This is a parameter-insensitive negative control. Paced has lower W/P/F with equal
+T in this fixture. The new workload schedule must be measured before making a read claim;
+T remains only a terminal diagnostic.
 
 The test-local realized diagnostic records raw per-object `H/B` at initial, accepted
 workload, and admitted final-settlement heads, with `0/0` and positive-over-zero
@@ -562,13 +585,14 @@ NoChange objects to satisfy progress, and gives both parameter sets enough discr
 budget for its 10-byte Base. Both sides therefore Stay eight times and migrate `1..8`;
 only prospective amplification `3.5` distinguishes the strict limits:
 
-| Parameters | W | P | F | R | Final hot H/B | Hot reconstruction Frames |
-|---|---:|---:|---:|---:|---:|---:|
-| Adaptive `(3,5%)` | 1516 | 1056 | 1056 | 1212 | 15/10 | 2 |
-| Adaptive `(4,4%)` | 1512 | 1056 | 1056 | 1472 | 40/10 | 7 |
+| Parameters | W | P | F | R | T | Final hot H/B | Hot reconstruction Frames |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| Adaptive `(3,5%)` | 1516 | 1056 | 1056 | 11040 | 1212 | 15/10 | 2 |
+| Adaptive `(4,4%)` | 1512 | 1056 | 1056 | 11028 | 1472 | 40/10 | 7 |
 
-Here `(4,4%)` writes 4 fewer physical bytes and reads 260 more bytes at final cold load;
-P/F remain equal because the shared 1000-byte terminal evacuation dominates them. This
+Here `(4,4%)` writes 4 fewer physical bytes and reads 12 fewer bytes over the workload,
+while T is 260 bytes higher. P/F remain equal because the shared 1000-byte terminal
+evacuation dominates them. Under canonical W/P/F/R, `(3,5%)` is dominated here. This
 is a bounded hot-chain-reset discriminator, not a pure `E/G` rotation band, Peak result,
 tuned default, or general winner. The final Remove also expires small maintenance
 co-residents and releases their Frame pins; the official result is therefore integrated
@@ -582,12 +606,12 @@ produces the same physical pre-boundary source with `G=1000,E=40`; weak dominanc
 the read limit and representation choice inert. Five percent strictly selects Rotate
 while four-percent equality selects Stay, and the last Update crosses the targets again:
 
-| Selection profile | Workload targets | W | P | F | R | Final scope |
-|---|---|---:|---:|---:|---:|---|
-| no migration | Stay, Stay, Stay | 3160 | 1056 | 2148 | 1048 | 2/3 |
-| paced one debt | Stay, Stay, Rotate | 4188 | 1056 | 2156 | 1048 | 3/4 |
-| Adaptive `(3,5%)` | Stay, Rotate, Stay | 2148 | 1004 | 1096 | 1124 | 3/4 |
-| Adaptive `(4,4%)` | Stay, Stay, Rotate | 2192 | 1012 | 1132 | 1088 | 3/4 |
+| Selection profile | Workload targets | W | P | F | R | T | Final scope |
+|---|---|---:|---:|---:|---:|---:|---|
+| no migration | Stay, Stay, Stay | 3160 | 1056 | 2148 | 7424 | 1048 | 2/3 |
+| paced one debt | Stay, Stay, Rotate | 4188 | 1056 | 2156 | 8432 | 1048 | 3/4 |
+| Adaptive `(3,5%)` | Stay, Rotate, Stay | 2148 | 1004 | 1096 | 4248 | 1124 | 3/4 |
+| Adaptive `(4,4%)` | Stay, Stay, Rotate | 2192 | 1012 | 1132 | 5324 | 1088 | 3/4 |
 
 All cases are admitted with three workload Commits plus direct terminal settlement and
 no settlement migrations. Only the Adaptive pair shares the intended physical source at
@@ -601,7 +625,7 @@ new executable aggregate or score:
 | Witness | Isolated axis | Observed result | Boundary |
 |---|---|---|---|
 | Matched negative control | masked parameter change | identical trajectory/vector | progress and indivisible Bases can hide both parameters |
-| Read-threshold band | strict read limit | less W for more final R; P/F equal | local W/R trade only |
+| Read-threshold band | strict read limit | earlier Base lowers T but raises W/R; P/F equal | endpoint T is not cycle-wide R |
 | Base-fraction lower bound | strict rotation share | ordinary-trace target crossover and a different raw trade | only the Adaptive pair shares the intended boundary source; finite horizon |
 | Selected capacity rejection | exact hard gate | typed rejection, no fallback or mutation | no numeric penalty or averaging |
 
@@ -634,7 +658,6 @@ and [`ReadAmplificationBaseBudgetPolicyCapacityTests.cs`](Tests/ReadAmplificatio
   seed expansion;
 - close determinism/order/artifact and qualification gates only when the candidate shape
   is ready for the `ROUND-1` packet/tag;
-- keep checkpoint cold reads outside the canonical frontier; reconsider an intermediate
-  read guardrail only when a named restart/read schedule or cold-start SLO exists;
+- keep per-Save sample vectors internal while reporting exact cumulative R/L and terminal T;
 - retain Pareto/raw outcomes until workload/SLO evidence justifies guardrails or a
   ranking rule.

@@ -12,10 +12,10 @@ internal static class BenchmarkV1ProtocolIdentities {
         new("direct-rotate-else-ascending-single-debt", 1);
 
     public static readonly BenchmarkComponentIdentityV1 ReadSchedule =
-        new("final-head-cold-load", 1);
+        new("after-every-workload-save-cold-load", 1);
 
     public static readonly BenchmarkComponentIdentityV1 Metrics =
-        new("raw-wpfr", 1);
+        new("raw-wpfr", 2);
 
     public static readonly BenchmarkComponentIdentityV1 FrameLayout =
         new("rbf-v0.40-envelope", 1);
@@ -57,7 +57,7 @@ internal static class BenchmarkV1ProtocolIdentities {
 
 internal static class BenchmarkV1Corpus {
     public const string ManifestId = "benchmark-v1";
-    public const int ManifestRevision = 11;
+    public const int ManifestRevision = 12;
     public const string ActiveHundredMixedNoMigrationCaseId =
         "active-hundred-mixed-no-migration";
     public const string ActiveHundredMixedPacedCaseId =

@@ -125,7 +125,8 @@ Git pack 会在有限 window 内寻找 delta base，同时用 `--depth` 限制�
 - soft preference：预计下一次 Delta 的冷读放大超过阈值时倾向 Base；
 - hard guardrail：若产品 SLO 最终要求最大 chain depth、reconstruction Frame count 或 cold bytes，则超限必须 Base，不能再交给综合 score 权衡。
 
-当前没有真实 cold-start/read schedule，因此只有 soft preference 是合理的最小实现。不要仅凭这一类比提前增加硬阈值。
+当前 evaluator 已采用 synthetic `cold-load after each workload Save` 日程来累计读压力，但仍没有真实产品
+cold-start 频率或 SLO；因此只有 soft preference 是合理的最小实现，不据此提前增加硬阈值。
 
 参考：
 
@@ -199,9 +200,9 @@ SQLite WAL 默认在 WAL 达到一定页数时自动 checkpoint。官方文档�
 | Rotation boundary | `E/G` 邻域和 strict/equality 行为 | threshold bands、near-empty evacuation |
 | Foreground burst | 维护工作是否把可行 Commit 推过 Frame envelope | small regular、grouped burst |
 | Horizon phase | terminal liability 是否只是被推迟 | aligned closed horizon、不同起始 epoch phase |
-| Restart schedule | final-only R 是否代表实际读取需求 | no restart、periodic restart、cold-load after each Commit |
+| Restart schedule | terminal-only T 是否代表周期读取需求 | 当前采用 cold-load after each workload Save；未来可比较 no/periodic restart |
 
-最后一项只有在评价目标真的包含该 read schedule 时才进入 canonical metric；否则它应继续作为命名 diagnostic，避免策略针对不存在的读取模式过拟合。
+当前 canonical R 已明确采用最后一项的 synthetic schedule；它是统一比较协议，不是对生产 restart 频率的事实声明。
 
 ### Workload 设计纪律
 
@@ -222,6 +223,6 @@ SQLite WAL 默认在 WAL 达到一定页数时自动 checkpoint。官方文档�
 2. **debt-pressure guardrail**：当冻结 workload 证明比例触发会 starvation 时，引入 soft/hard pressure，而非新权重；
 3. **offline small-N oracle**：测量简单 greedy 距离同一 horizon 下可实现 Pareto frontier 的差距；
 4. **LFS-inspired physical benefit/cost**：当 Frame grouping 对 canonical outcome 产生命名反例后，演化策略输入并评价对象组能释放的 Previous Frame bytes 与额外写入；
-5. **read-triggered state**：只有真实 restart/read schedule 证明预测式 amplification 不足时，才引入跨 Commit read statistics。
+5. **read-triggered state**：只有真实 restart/read schedule 证明当前 synthetic cumulative R 与预测式 amplification 不足时，才引入跨 Commit read statistics。
 
 不建议在这一阶段直接引入 reinforcement learning、通用策略插件发现、自动参数搜索、标量排行榜或可持久化 candidate archive。先让统一 workload、公共策略契约、隔离运行和原始评价结果构成一个可重复的“测量台”；策略演进仍可由多个独立实现并行进行。

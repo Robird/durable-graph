@@ -115,15 +115,23 @@ public sealed class BenchmarkV1LifecycleOverlapWorkloadTests {
             BenchmarkV1Baselines.DebtZeroThenRotateDeltaNoMigration);
         AssertRun(
             noMigrationOverlap,
-            new RawVector(5, 1220, 444, 1008, 244),
+            new RawVector(5, 1220, 444, 1008, 4292, 244),
             previousFileNumber: 2,
             currentFileNumber: 3);
         AssertRun(
             noMigrationSerial,
-            new RawVector(5, 1220, 444, 1008, 244),
+            new RawVector(5, 1220, 444, 1008, 3888, 244),
             previousFileNumber: 2,
             currentFileNumber: 3);
-        Assert.Equal(noMigrationOverlap.Vector, noMigrationSerial.Vector);
+        Assert.Equal(
+            noMigrationOverlap.Vector.TotalWorkloadColdReadBytes,
+            noMigrationSerial.Vector.TotalWorkloadColdReadBytes + 404);
+        Assert.Equal(
+            noMigrationOverlap.Vector with {
+                TotalWorkloadColdReadBytes =
+                    noMigrationSerial.Vector.TotalWorkloadColdReadBytes,
+            },
+            noMigrationSerial.Vector);
         Assert.Equal(
             noMigrationOverlap.PhysicalState,
             noMigrationSerial.PhysicalState);
@@ -135,12 +143,12 @@ public sealed class BenchmarkV1LifecycleOverlapWorkloadTests {
             LifecycleRun serial = Run(Serial, strategy);
             AssertRun(
                 overlap,
-                new RawVector(5, 1452, 552, 1144, 284),
+                new RawVector(5, 1452, 552, 1144, 4068, 284),
                 previousFileNumber: 3,
                 currentFileNumber: 4);
             AssertRun(
                 serial,
-                new RawVector(5, 1448, 552, 736, 284),
+                new RawVector(5, 1448, 552, 736, 3652, 284),
                 previousFileNumber: 3,
                 currentFileNumber: 4);
             Assert.Equal(
@@ -153,8 +161,11 @@ public sealed class BenchmarkV1LifecycleOverlapWorkloadTests {
                 overlap.Vector.MaxCurrentFileTailBytes,
                 serial.Vector.MaxCurrentFileTailBytes + 408);
             Assert.Equal(
-                overlap.Vector.FinalColdHeadReadBytes,
-                serial.Vector.FinalColdHeadReadBytes);
+                overlap.Vector.TotalWorkloadColdReadBytes,
+                serial.Vector.TotalWorkloadColdReadBytes + 416);
+            Assert.Equal(
+                overlap.Vector.TerminalColdHeadReadBytes,
+                serial.Vector.TerminalColdHeadReadBytes);
             Assert.Equal(overlap.PhysicalState, serial.PhysicalState);
             Assert.Equal(noMigrationOverlap.PhysicalState, overlap.PhysicalState);
             pacedOverlap.Add(overlap);
@@ -166,17 +177,24 @@ public sealed class BenchmarkV1LifecycleOverlapWorkloadTests {
         Assert.All(pacedSerial.Skip(1), run =>
             Assert.Equal(pacedSerial[0].Vector, run.Vector));
 
-        // The 4-byte W difference is a current-layout consequence. The causal
-        // lifecycle signal in this matched pair is the 408-byte F separation.
-        AssertDominates(noMigrationOverlap.Vector, pacedOverlap[0].Vector);
+        // No-migration writes less and has lower P/F in overlap, but cumulative R
+        // is higher. The old terminal-only endpoint had hidden this trade.
+        Assert.True(noMigrationOverlap.Vector.TotalPhysicalWriteBytes <
+            pacedOverlap[0].Vector.TotalPhysicalWriteBytes);
+        Assert.True(noMigrationOverlap.Vector.PeakCommitWriteBytes <
+            pacedOverlap[0].Vector.PeakCommitWriteBytes);
+        Assert.True(noMigrationOverlap.Vector.MaxCurrentFileTailBytes <
+            pacedOverlap[0].Vector.MaxCurrentFileTailBytes);
+        Assert.True(noMigrationOverlap.Vector.TotalWorkloadColdReadBytes >
+            pacedOverlap[0].Vector.TotalWorkloadColdReadBytes);
         Assert.True(noMigrationSerial.Vector.TotalPhysicalWriteBytes <
             pacedSerial[0].Vector.TotalPhysicalWriteBytes);
         Assert.True(noMigrationSerial.Vector.PeakCommitWriteBytes <
             pacedSerial[0].Vector.PeakCommitWriteBytes);
         Assert.True(noMigrationSerial.Vector.MaxCurrentFileTailBytes >
             pacedSerial[0].Vector.MaxCurrentFileTailBytes);
-        Assert.True(noMigrationSerial.Vector.FinalColdHeadReadBytes <
-            pacedSerial[0].Vector.FinalColdHeadReadBytes);
+        Assert.True(noMigrationSerial.Vector.TotalWorkloadColdReadBytes >
+            pacedSerial[0].Vector.TotalWorkloadColdReadBytes);
     }
 
     private static SelectionTrace CaptureSelections(
@@ -238,7 +256,8 @@ public sealed class BenchmarkV1LifecycleOverlapWorkloadTests {
                 admitted.Metrics.TotalPhysicalWriteBytes,
                 admitted.Metrics.PeakCommitWriteBytes,
                 admitted.Metrics.MaxCurrentFileTailBytes,
-                admitted.Metrics.FinalColdHeadReadBytes));
+                admitted.Metrics.TotalWorkloadColdReadBytes,
+                admitted.Metrics.TerminalColdHeadReadBytes));
     }
 
     private static void AssertRun(
@@ -260,14 +279,6 @@ public sealed class BenchmarkV1LifecycleOverlapWorkloadTests {
         Assert.Empty(run.Admitted.Settlement.MigratedObjectIds);
         Assert.Equal(0, run.Admitted.Settlement.MaintenanceRevisionCount);
         Assert.Equal(1, run.Admitted.Settlement.RealizedRevisionCount);
-    }
-
-    private static void AssertDominates(RawVector better, RawVector worse) {
-        Assert.True(better.TotalPhysicalWriteBytes <= worse.TotalPhysicalWriteBytes);
-        Assert.True(better.PeakCommitWriteBytes <= worse.PeakCommitWriteBytes);
-        Assert.True(better.MaxCurrentFileTailBytes <= worse.MaxCurrentFileTailBytes);
-        Assert.True(better.FinalColdHeadReadBytes <= worse.FinalColdHeadReadBytes);
-        Assert.NotEqual(better, worse);
     }
 
     private static string[] OperationMultiset(WorkloadTrace trace) => trace.Steps
@@ -347,5 +358,6 @@ public sealed class BenchmarkV1LifecycleOverlapWorkloadTests {
         long TotalPhysicalWriteBytes,
         long PeakCommitWriteBytes,
         long MaxCurrentFileTailBytes,
-        long FinalColdHeadReadBytes);
+        long TotalWorkloadColdReadBytes,
+        long TerminalColdHeadReadBytes);
 }

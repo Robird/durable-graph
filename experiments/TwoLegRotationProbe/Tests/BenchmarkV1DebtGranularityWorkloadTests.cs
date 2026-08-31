@@ -144,24 +144,32 @@ public sealed class BenchmarkV1DebtGranularityWorkloadTests {
     public void Granularity_pair_remains_distinguishable_after_common_reconvergence() {
         DebtGranularityRun noMigrationSingle = AssertRun(
             BenchmarkV1Corpus.PreviousDebtGranularitySingleLargeNoMigrationCaseId,
-            new RawVector(5, 1800, 672, 1168, 708),
+            new RawVector(5, 1800, 672, 1168, 5392, 708),
             previousFileNumber: 2,
             currentFileNumber: 3);
         DebtGranularityRun noMigrationThree = AssertRun(
             BenchmarkV1Corpus.PreviousDebtGranularityThreeSmallNoMigrationCaseId,
-            new RawVector(5, 1800, 672, 1168, 708),
+            new RawVector(5, 1800, 672, 1168, 5360, 708),
             previousFileNumber: 2,
             currentFileNumber: 3);
-        Assert.Equal(noMigrationSingle.Vector, noMigrationThree.Vector);
+        Assert.Equal(
+            noMigrationSingle.Vector.TotalWorkloadColdReadBytes,
+            noMigrationThree.Vector.TotalWorkloadColdReadBytes + 32);
+        Assert.Equal(
+            noMigrationSingle.Vector with {
+                TotalWorkloadColdReadBytes =
+                    noMigrationThree.Vector.TotalWorkloadColdReadBytes,
+            },
+            noMigrationThree.Vector);
 
         DebtGranularityRun pacedSingle = AssertRun(
             BenchmarkV1Corpus.PreviousDebtGranularitySingleLargePacedCaseId,
-            new RawVector(5, 1812, 672, 1688, 1788),
+            new RawVector(5, 1812, 672, 1688, 7152, 1788),
             previousFileNumber: 2,
             currentFileNumber: 3);
         DebtGranularityRun pacedThree = AssertRun(
             BenchmarkV1Corpus.PreviousDebtGranularityThreeSmallPacedCaseId,
-            new RawVector(5, 1812, 676, 1688, 1788),
+            new RawVector(5, 1812, 676, 1688, 6712, 1788),
             previousFileNumber: 2,
             currentFileNumber: 3);
         Assert.Equal(
@@ -170,19 +178,21 @@ public sealed class BenchmarkV1DebtGranularityWorkloadTests {
         Assert.Equal(
             pacedSingle.Vector with {
                 PeakCommitWriteBytes = pacedThree.Vector.PeakCommitWriteBytes,
+                TotalWorkloadColdReadBytes =
+                    pacedThree.Vector.TotalWorkloadColdReadBytes,
             },
             pacedThree.Vector);
 
         DebtGranularityRun adaptive35Single = AssertRun(
             BenchmarkV1Corpus
                 .PreviousDebtGranularitySingleLargeAdaptiveR3B5PercentCaseId,
-            new RawVector(5, 1504, 368, 752, 772),
+            new RawVector(5, 1504, 368, 752, 4568, 772),
             previousFileNumber: 3,
             currentFileNumber: 4);
         DebtGranularityRun adaptive35Three = AssertRun(
             BenchmarkV1Corpus
                 .PreviousDebtGranularityThreeSmallAdaptiveR3B5PercentCaseId,
-            new RawVector(5, 1596, 372, 892, 728),
+            new RawVector(5, 1596, 372, 892, 4596, 728),
             previousFileNumber: 3,
             currentFileNumber: 4);
         DebtGranularityRun adaptive44Single = AssertRun(
@@ -215,17 +225,19 @@ public sealed class BenchmarkV1DebtGranularityWorkloadTests {
             adaptive44Three,
         ]);
 
-        // The paced 4-byte P delta is current-layout fallout, not a policy benefit.
-        // Adaptive granularity remains a W/P/F versus R trade after both traces
-        // reconverge to the same logical versions and pre-settlement scope.
+        // The paced 4-byte P delta is current-layout fallout. Under cumulative R,
+        // single-large now strictly improves every canonical W/P/F/R dimension;
+        // its higher terminal T is only an endpoint diagnostic.
         Assert.True(adaptive35Single.Vector.TotalPhysicalWriteBytes <
             adaptive35Three.Vector.TotalPhysicalWriteBytes);
         Assert.True(adaptive35Single.Vector.PeakCommitWriteBytes <
             adaptive35Three.Vector.PeakCommitWriteBytes);
         Assert.True(adaptive35Single.Vector.MaxCurrentFileTailBytes <
             adaptive35Three.Vector.MaxCurrentFileTailBytes);
-        Assert.True(adaptive35Single.Vector.FinalColdHeadReadBytes >
-            adaptive35Three.Vector.FinalColdHeadReadBytes);
+        Assert.True(adaptive35Single.Vector.TotalWorkloadColdReadBytes <
+            adaptive35Three.Vector.TotalWorkloadColdReadBytes);
+        Assert.True(adaptive35Single.Vector.TerminalColdHeadReadBytes >
+            adaptive35Three.Vector.TerminalColdHeadReadBytes);
     }
 
     private static StrategyTargetV1[] StayFour => [
@@ -307,7 +319,8 @@ public sealed class BenchmarkV1DebtGranularityWorkloadTests {
             admitted.Metrics.TotalPhysicalWriteBytes,
             admitted.Metrics.PeakCommitWriteBytes,
             admitted.Metrics.MaxCurrentFileTailBytes,
-            admitted.Metrics.FinalColdHeadReadBytes);
+            admitted.Metrics.TotalWorkloadColdReadBytes,
+            admitted.Metrics.TerminalColdHeadReadBytes);
         Assert.Equal(expected, actual);
         Assert.Equal(EvaluatorRunPhase.TerminalSettlement, admitted.Position.Phase);
         Assert.Equal(4, admitted.Position.CompletedWorkloadStepCount);
@@ -428,5 +441,6 @@ public sealed class BenchmarkV1DebtGranularityWorkloadTests {
         long TotalPhysicalWriteBytes,
         long PeakCommitWriteBytes,
         long MaxCurrentFileTailBytes,
-        long FinalColdHeadReadBytes);
+        long TotalWorkloadColdReadBytes,
+        long TerminalColdHeadReadBytes);
 }

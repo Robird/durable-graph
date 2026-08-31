@@ -18,7 +18,7 @@ public sealed class BenchmarkV1RunnerTests {
             BenchmarkV1Baselines.All);
 
         Assert.Equal(2, definition.Manifest.Schema.Version);
-        Assert.Equal(11, definition.Manifest.ManifestRevision);
+        Assert.Equal(12, definition.Manifest.ManifestRevision);
         Assert.Equal(BenchmarkV1ProtocolIdentities.Evaluator, definition.Manifest.Evaluator);
         Assert.Equal(
             BenchmarkV1ProtocolIdentities.TerminalSettlement,
@@ -1220,6 +1220,13 @@ public sealed class BenchmarkV1RunnerTests {
         BenchmarkCaseReportV1 benchmarkCase = FindCase(report, caseId);
         AdmittedOutcomeReportV1 admitted = Assert.IsType<AdmittedOutcomeReportV1>(
             benchmarkCase.Outcome);
+        Assert.Equal(
+            admitted.Position.TotalWorkloadStepCount,
+            admitted.Metrics.WorkloadColdReadSampleCount);
+        if (admitted.Position.TotalWorkloadStepCount > 0) {
+            Assert.True(admitted.Metrics.TotalWorkloadColdReadBytes > 0);
+        }
+
         Assert.Equal(realizedCommitCount, admitted.Metrics.RealizedCommitCount);
         Assert.Equal(
             totalPhysicalWriteBytes,
@@ -1230,7 +1237,7 @@ public sealed class BenchmarkV1RunnerTests {
             admitted.Metrics.MaxCurrentFileTailBytes);
         Assert.Equal(
             finalColdHeadReadBytes,
-            admitted.Metrics.FinalColdHeadReadBytes);
+            admitted.Metrics.TerminalColdHeadReadBytes);
         Assert.Equal(previousFileNumber, admitted.FinalCursor.PreviousFileNumber);
         Assert.Equal(currentFileNumber, admitted.FinalCursor.CurrentFileNumber);
         Assert.Empty(admitted.Settlement.MigratedObjectIds);

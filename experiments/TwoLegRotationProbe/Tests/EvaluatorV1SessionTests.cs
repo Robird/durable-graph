@@ -30,6 +30,9 @@ public sealed class EvaluatorV1SessionTests {
                 pair.StayBAttempt);
         Assert.IsType<AppliedStayBPolicyStep>(
             session.ApplySelectedWorkloadCommit(pair, CandidateTarget.StayB));
+        long workloadColdReadBytes = FinalColdHeadReadMeasurer.Measure(
+            session.Store,
+            session.Cursor.PublishedRevisionAddress).UniqueFrameBytes;
 
         AdmittedEvaluatorRun admitted = Assert.IsType<AdmittedEvaluatorRun>(
             session.Complete());
@@ -40,6 +43,11 @@ public sealed class EvaluatorV1SessionTests {
         Assert.Equal(1, admitted.Position.TotalWorkloadStepCount);
         Assert.Empty(admitted.Settlement.MigratedObjectIds);
         Assert.Equal(2, admitted.Metrics.RealizedCommitCount);
+        Assert.Equal(1, admitted.Metrics.WorkloadColdReadSampleCount);
+        Assert.Equal(
+            workloadColdReadBytes,
+            admitted.Metrics.TotalWorkloadColdReadBytes);
+        Assert.Equal(11, admitted.Metrics.TotalWorkloadLogicalBasePayloadBytes);
         long workloadWrite = stay.Observation.Layout.AppendLengthBytes;
         long physicalWrite = TotalTailBytes(session.Store) -
             TotalTailBytes(source.Store);
@@ -73,6 +81,10 @@ public sealed class EvaluatorV1SessionTests {
             [101U, 202U],
             admitted.Settlement.MigratedObjectIds);
         Assert.Equal(1, admitted.Metrics.RealizedCommitCount);
+        Assert.Equal(0, admitted.Metrics.WorkloadColdReadSampleCount);
+        Assert.Equal(0, admitted.Metrics.TotalWorkloadColdReadBytes);
+        Assert.Equal(0, admitted.Metrics.TotalWorkloadLogicalBasePayloadBytes);
+        Assert.True(admitted.Metrics.TerminalColdHeadReadBytes > 0);
         long expectedWrite = TotalTailBytes(session.Store) -
             TotalTailBytes(source.Store);
         Assert.Equal(expectedWrite, admitted.Metrics.TotalPhysicalWriteBytes);
@@ -265,17 +277,17 @@ public sealed class EvaluatorV1SessionTests {
 
         Assert.Empty(admitted.Settlement.MigratedObjectIds);
         Assert.Empty(
-            admitted.Metrics.FinalColdHeadRead
+            admitted.Metrics.TerminalColdHeadRead
                 .ObjectReconstructionFrameAddresses);
         AbsoluteFrameAddress finalAddress =
             admitted.FinalCursor.PublishedRevisionAddress;
         Assert.Equal(
             [finalAddress],
-            admitted.Metrics.FinalColdHeadRead.DictionaryFrameAddresses);
+            admitted.Metrics.TerminalColdHeadRead.DictionaryFrameAddresses);
         Assert.Equal(
             [finalAddress],
-            admitted.Metrics.FinalColdHeadRead.UniqueFrameAddresses);
-        Assert.True(admitted.Metrics.FinalColdHeadReadBytes > 0);
+            admitted.Metrics.TerminalColdHeadRead.UniqueFrameAddresses);
+        Assert.True(admitted.Metrics.TerminalColdHeadReadBytes > 0);
     }
 
     [Fact]
@@ -377,10 +389,10 @@ public sealed class EvaluatorV1SessionTests {
         AdmittedEvaluatorRun admitted,
         uint oldPreviousFileNumber) {
         Assert.DoesNotContain(
-            admitted.Metrics.FinalColdHeadRead.UniqueFrameAddresses,
+            admitted.Metrics.TerminalColdHeadRead.UniqueFrameAddresses,
             address => address.FileNumber == oldPreviousFileNumber);
         Assert.All(
-            admitted.Metrics.FinalColdHeadRead.UniqueFrameAddresses,
+            admitted.Metrics.TerminalColdHeadRead.UniqueFrameAddresses,
             address => Assert.Contains(
                 address.FileNumber,
                 new[] {

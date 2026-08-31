@@ -170,7 +170,7 @@ public sealed class BenchmarkV1SizeSkewWorkloadTests {
                 admitted.Metrics.TotalPhysicalWriteBytes,
                 admitted.Metrics.PeakCommitWriteBytes,
                 admitted.Metrics.MaxCurrentFileTailBytes,
-                admitted.Metrics.FinalColdHeadReadBytes));
+                admitted.Metrics.TerminalColdHeadReadBytes));
     }
 
     private static void AssertRun(

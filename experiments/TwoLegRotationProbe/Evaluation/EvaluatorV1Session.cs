@@ -64,10 +64,10 @@ internal sealed class EvaluatorV1Session {
 
         switch (attempt) {
             case AppliedStayBPolicyStep appliedStay:
-                AcceptWorkloadCommit(appliedStay.ResultCursor);
+                AcceptWorkloadCommit(appliedStay.ResultCursor, evaluation.Facts);
                 break;
             case AppliedRotateCPolicyStep appliedRotate:
-                AcceptWorkloadCommit(appliedRotate.ResultCursor);
+                AcceptWorkloadCommit(appliedRotate.ResultCursor, evaluation.Facts);
                 break;
             case SelectedPolicyCandidateCapacityRejected capacity:
                 _metrics.CancelUnrealizedCommit(Store, _cursor);
@@ -166,6 +166,11 @@ internal sealed class EvaluatorV1Session {
 
         ValidateClosedTerminalEpoch(terminalSource, expectedState);
         EvaluatorRawMetrics metrics = _metrics.Complete(Store, _cursor);
+        if (metrics.WorkloadColdReadSampleCount != _completedWorkloadStepCount) {
+            throw new InvalidDataException(
+                "Every accepted workload Save must contribute exactly one cold-read sample.");
+        }
+
         AdmittedEvaluatorRun admitted = new(
             TerminalPosition(),
             _cursor,
@@ -175,9 +180,20 @@ internal sealed class EvaluatorV1Session {
         return admitted;
     }
 
-    private void AcceptWorkloadCommit(ProbeRevisionCursor resultCursor) {
+    private void AcceptWorkloadCommit(
+        ProbeRevisionCursor resultCursor,
+        NormalizedSaveFacts facts) {
         _metrics.ObserveAcceptedRevision(Store, resultCursor);
-        _metrics.EndCommit(Store, resultCursor);
+        long postLiveGraphBasePayloadBytes = 0;
+        foreach (LogicalObjectState state in facts.PostLiveStates.Values) {
+            postLiveGraphBasePayloadBytes = checked(
+                postLiveGraphBasePayloadBytes + state.BasePayloadBytes);
+        }
+
+        _metrics.EndWorkloadCommit(
+            Store,
+            resultCursor,
+            postLiveGraphBasePayloadBytes);
         _cursor = resultCursor;
         _completedWorkloadStepCount = checked(
             _completedWorkloadStepCount + 1);

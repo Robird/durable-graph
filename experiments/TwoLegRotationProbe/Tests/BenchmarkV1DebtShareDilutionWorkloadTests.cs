@@ -213,7 +213,7 @@ public sealed class BenchmarkV1DebtShareDilutionWorkloadTests {
             admitted.Metrics.MaxCurrentFileTailBytes);
         Assert.Equal(
             finalColdHeadReadBytes,
-            admitted.Metrics.FinalColdHeadReadBytes);
+            admitted.Metrics.TerminalColdHeadReadBytes);
         Assert.Equal(previousFileNumber, admitted.FinalCursor.PreviousFileNumber);
         Assert.Equal(currentFileNumber, admitted.FinalCursor.CurrentFileNumber);
         Assert.Equal(

@@ -329,7 +329,7 @@ public sealed class BenchmarkV1LocalityObjectIdPermutationWorkloadTests {
             admitted.Metrics.MaxCurrentFileTailBytes);
         Assert.Equal(
             finalColdHeadReadBytes,
-            admitted.Metrics.FinalColdHeadReadBytes);
+            admitted.Metrics.TerminalColdHeadReadBytes);
         Assert.Equal(2U, admitted.FinalCursor.PreviousFileNumber);
         Assert.Equal(3U, admitted.FinalCursor.CurrentFileNumber);
         Assert.Empty(admitted.Settlement.MigratedObjectIds);

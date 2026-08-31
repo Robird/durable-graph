@@ -58,8 +58,8 @@ public sealed class FixedTwoScopeAdvanceHorizonTests {
             controlSegment2);
         Assert.Equal(new RawVector(6, 944, 680, 680, 752), controlCombined);
         Assert.NotEqual(
-            controlSegment1.Metrics.FinalColdHeadReadBytes +
-                controlSegment2.Metrics.FinalColdHeadReadBytes,
+            controlSegment1.Metrics.TerminalColdHeadReadBytes +
+                controlSegment2.Metrics.TerminalColdHeadReadBytes,
             controlCombined.FinalColdHeadReadBytes);
         AssertPhysicalGrowthEqualsWrites(
             controlDefinition.Trace,
@@ -120,7 +120,7 @@ public sealed class FixedTwoScopeAdvanceHorizonTests {
                 static segment => segment.Metrics.PeakCommitWriteBytes),
             MaxCurrentFileTailBytes: segments.Max(
                 static segment => segment.Metrics.MaxCurrentFileTailBytes),
-            FinalColdHeadReadBytes: segments[^1].Metrics.FinalColdHeadReadBytes);
+            FinalColdHeadReadBytes: segments[^1].Metrics.TerminalColdHeadReadBytes);
     }
 
     private static void AssertRaw(

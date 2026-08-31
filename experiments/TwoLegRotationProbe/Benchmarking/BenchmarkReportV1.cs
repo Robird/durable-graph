@@ -77,12 +77,21 @@ internal sealed class BenchmarkReportV1 {
                 parameterName);
         }
 
-        if (reportCase.Outcome is AdmittedOutcomeReportV1 &&
-            position.Phase != EvaluatorRunPhase.TerminalSettlement) {
-            throw new ArgumentException(
-                $"Admitted benchmark case '{reportCase.CaseId}' must be at " +
-                "terminal settlement.",
-                parameterName);
+        if (reportCase.Outcome is AdmittedOutcomeReportV1 admitted) {
+            if (position.Phase != EvaluatorRunPhase.TerminalSettlement) {
+                throw new ArgumentException(
+                    $"Admitted benchmark case '{reportCase.CaseId}' must be at " +
+                    "terminal settlement.",
+                    parameterName);
+            }
+
+            if (admitted.Metrics.WorkloadColdReadSampleCount !=
+                position.TotalWorkloadStepCount) {
+                throw new ArgumentException(
+                    $"Admitted benchmark case '{reportCase.CaseId}' must have one " +
+                    "cold-read sample per workload Save.",
+                    parameterName);
+            }
         }
 
         if (reportCase.Outcome is CapacityRejectedOutcomeReportV1 &&
@@ -252,7 +261,10 @@ internal sealed record EvaluatorMetricsReportV1 {
         long totalPhysicalWriteBytes,
         long peakCommitWriteBytes,
         long maxCurrentFileTailBytes,
-        long finalColdHeadReadBytes) {
+        int workloadColdReadSampleCount,
+        long totalWorkloadColdReadBytes,
+        long totalWorkloadLogicalBasePayloadBytes,
+        long terminalColdHeadReadBytes) {
         ArgumentOutOfRangeException.ThrowIfNegative(realizedCommitCount);
         ArgumentOutOfRangeException.ThrowIfNegative(totalPhysicalWriteBytes);
         ArgumentOutOfRangeException.ThrowIfNegative(peakCommitWriteBytes);
@@ -260,7 +272,24 @@ internal sealed record EvaluatorMetricsReportV1 {
             throw new ArgumentOutOfRangeException(nameof(maxCurrentFileTailBytes));
         }
 
-        ArgumentOutOfRangeException.ThrowIfNegative(finalColdHeadReadBytes);
+        ArgumentOutOfRangeException.ThrowIfNegative(terminalColdHeadReadBytes);
+        ArgumentOutOfRangeException.ThrowIfNegative(workloadColdReadSampleCount);
+        ArgumentOutOfRangeException.ThrowIfNegative(totalWorkloadColdReadBytes);
+        ArgumentOutOfRangeException.ThrowIfNegative(
+            totalWorkloadLogicalBasePayloadBytes);
+        if (workloadColdReadSampleCount > realizedCommitCount) {
+            throw new ArgumentException(
+                "Workload cold-read samples cannot exceed realized Commits.",
+                nameof(workloadColdReadSampleCount));
+        }
+
+        if ((workloadColdReadSampleCount == 0) !=
+            (totalWorkloadColdReadBytes == 0)) {
+            throw new ArgumentException(
+                "Workload cold-read bytes must be nonzero exactly when samples exist.",
+                nameof(totalWorkloadColdReadBytes));
+        }
+
         if (peakCommitWriteBytes > totalPhysicalWriteBytes) {
             throw new ArgumentException(
                 "Peak Commit writes cannot exceed total writes.",
@@ -277,7 +306,10 @@ internal sealed record EvaluatorMetricsReportV1 {
         TotalPhysicalWriteBytes = totalPhysicalWriteBytes;
         PeakCommitWriteBytes = peakCommitWriteBytes;
         MaxCurrentFileTailBytes = maxCurrentFileTailBytes;
-        FinalColdHeadReadBytes = finalColdHeadReadBytes;
+        WorkloadColdReadSampleCount = workloadColdReadSampleCount;
+        TotalWorkloadColdReadBytes = totalWorkloadColdReadBytes;
+        TotalWorkloadLogicalBasePayloadBytes = totalWorkloadLogicalBasePayloadBytes;
+        TerminalColdHeadReadBytes = terminalColdHeadReadBytes;
     }
 
     public int RealizedCommitCount { get; }
@@ -288,7 +320,13 @@ internal sealed record EvaluatorMetricsReportV1 {
 
     public long MaxCurrentFileTailBytes { get; }
 
-    public long FinalColdHeadReadBytes { get; }
+    public int WorkloadColdReadSampleCount { get; }
+
+    public long TotalWorkloadColdReadBytes { get; }
+
+    public long TotalWorkloadLogicalBasePayloadBytes { get; }
+
+    public long TerminalColdHeadReadBytes { get; }
 
     public static EvaluatorMetricsReportV1 Project(EvaluatorRawMetrics metrics) {
         ArgumentNullException.ThrowIfNull(metrics);
@@ -297,7 +335,10 @@ internal sealed record EvaluatorMetricsReportV1 {
             metrics.TotalPhysicalWriteBytes,
             metrics.PeakCommitWriteBytes,
             metrics.MaxCurrentFileTailBytes,
-            metrics.FinalColdHeadReadBytes);
+            metrics.WorkloadColdReadSampleCount,
+            metrics.TotalWorkloadColdReadBytes,
+            metrics.TotalWorkloadLogicalBasePayloadBytes,
+            metrics.TerminalColdHeadReadBytes);
     }
 }
 

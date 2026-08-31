@@ -17,6 +17,7 @@ internal sealed class EvaluatorRawMetricAccumulator {
     private long _totalPhysicalWriteBytes;
     private long _peakCommitWriteBytes;
     private long _maxCurrentFileTailBytes;
+    private readonly List<WorkloadColdReadSample> _workloadColdReadSamples = [];
 
     public EvaluatorRawMetricAccumulator(
         RbfFileStore store,
@@ -86,6 +87,38 @@ internal sealed class EvaluatorRawMetricAccumulator {
     }
 
     public void EndCommit(
+        RbfFileStore store,
+        ProbeRevisionCursor resultCursor) {
+        EndCommitCore(store, resultCursor);
+    }
+
+    /// <summary>
+    /// Closes one successful outer workload Save and records one empty-cache load of
+    /// its accepted PublishedRevision. Bootstrap and evaluator terminal settlement use
+    /// <see cref="EndCommit"/> instead and therefore do not enter this read schedule.
+    /// </summary>
+    public void EndWorkloadCommit(
+        RbfFileStore store,
+        ProbeRevisionCursor resultCursor,
+        long postLiveGraphBasePayloadBytes) {
+        ArgumentOutOfRangeException.ThrowIfNegative(postLiveGraphBasePayloadBytes);
+        EndCommitCore(store, resultCursor);
+
+        FinalColdHeadReadObservation coldRead = FinalColdHeadReadMeasurer.Measure(
+            store,
+            resultCursor.PublishedRevisionAddress);
+        if (coldRead.PostLiveBasePayloadBytes != postLiveGraphBasePayloadBytes) {
+            throw new InvalidDataException(
+                "The accepted workload head does not match its normalized post-live Base bytes.");
+        }
+
+        _workloadColdReadSamples.Add(new WorkloadColdReadSample(
+            workloadSaveOrdinal: _workloadColdReadSamples.Count,
+            coldRead,
+            coldRead.PostLiveBasePayloadBytes));
+    }
+
+    private void EndCommitCore(
         RbfFileStore store,
         ProbeRevisionCursor resultCursor) {
         ArgumentNullException.ThrowIfNull(store);
@@ -162,6 +195,7 @@ internal sealed class EvaluatorRawMetricAccumulator {
             _totalPhysicalWriteBytes,
             _peakCommitWriteBytes,
             _maxCurrentFileTailBytes,
+            _workloadColdReadSamples,
             coldRead);
     }
 

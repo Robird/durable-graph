@@ -14,6 +14,7 @@ internal static class FinalColdHeadReadMeasurer {
                 store,
                 publishedRevisionAddress);
         List<AbsoluteFrameAddress> objectReconstructionFrames = [];
+        long postLiveBasePayloadBytes = 0;
         foreach ((uint objectId, AbsoluteFrameAddress headAddress) in
             materialization.Bindings.OrderBy(static pair => pair.Key)) {
             ObjectReconstructionInspection reconstruction =
@@ -21,6 +22,8 @@ internal static class FinalColdHeadReadMeasurer {
                     store,
                     objectId,
                     headAddress);
+            postLiveBasePayloadBytes = checked(
+                postLiveBasePayloadBytes + reconstruction.State.BasePayloadBytes);
             objectReconstructionFrames.AddRange(
                 reconstruction.ReconstructionFrameAddresses);
         }
@@ -28,6 +31,7 @@ internal static class FinalColdHeadReadMeasurer {
         return new FinalColdHeadReadObservation(
             materialization.DictionaryRevisionAddresses,
             objectReconstructionFrames,
+            postLiveBasePayloadBytes,
             address => store.ReadLayout(address).FrameLengthBytes);
     }
 }

@@ -289,7 +289,7 @@ public sealed class BenchmarkV1InsertBurstPartitionWorkloadTests {
                 admitted.Metrics.TotalPhysicalWriteBytes,
                 admitted.Metrics.PeakCommitWriteBytes,
                 admitted.Metrics.MaxCurrentFileTailBytes,
-                admitted.Metrics.FinalColdHeadReadBytes));
+                admitted.Metrics.TerminalColdHeadReadBytes));
     }
 
     private static void AssertAllWorkloadFramesSmall(StrategyRunProductV1 product) {
