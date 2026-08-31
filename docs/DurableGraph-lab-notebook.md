@@ -763,6 +763,12 @@
 
 ## 6. 船长日志
 
+### 2026-08-31：闭合 Base-fraction target-band 与首轮因果 matrix
+
+- **Observed**：测量前固定 `A-debt=40B`、`B-local=960B`，两次 `Base == Delta` Update 使 read limit、soft budget 与 progress 惰性；`(3,5%)` 以 `[Rotate,Stay]`、`(4,4%)` 以 `[Stay,Rotate]` 各完成一次 workload 轮转，再各 direct settlement 到 scope `3/4`。
+- **Observed**：两侧 `W/P/F/R` 为 `1144/1004/1096/1124` 与 `1188/1012/1128/1088`，final Previous debt 为 `{1,100}` 与 `{100}`；final per-object `H/B` 同为 1，所以 R 差异来自 retained full-Frame layout/provenance。这是严格 4% equality / 5% Rotate 边界及 target timing/terminal liability 的 Pareto 证据，不是默认参数或稳态 winner。
+- **Decided**：首轮小型 matrix 以 negative control、read-threshold、Base-fraction target 与 typed inadmissibility 四条因果索引闭合；不新增重复 goldens 的聚合 test/type，不把 rejection 数值化，也不增加第五 score。下一切片回到第三 epoch continuation-state 充分性。
+
 ### 2026-08-31：加入 realized H/B diagnostic 与首个参数辨别器
 
 - **Observed**：test-local diagnostic 从 accepted head 的 OVD/reconstruction authority 冻结全部 live object 的原始 `H/B`，显式区分 finite、`0/0` 与 positive-over-zero infinity；不带候选 Delta、不汇总共享 Frame，也不扩张 canonical evaluator/report。

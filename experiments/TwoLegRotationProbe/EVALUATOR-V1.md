@@ -350,12 +350,45 @@ Here `(4,4%)` writes 4 fewer physical bytes and reads 260 more bytes at final co
 P/F remain equal because the shared 1000-byte terminal evacuation dominates them. This
 is a bounded W/R discriminator, not a Peak result, tuned default, or general winner.
 
+A lower-bound target-band fixture starts the measured horizon with 40 bytes of A debt
+and 960 bytes already local to B. Two `Base == Delta` Updates make weak dominance
+independent of the read limit, soft budget, and progress floor. At `G=1000,E=40`, 5%
+strictly selects Rotate while 4% equality selects Stay; the next likewise
+Base-equal-to-Delta Update naturally crosses the targets, so both runs finish the
+workload after one scope advance and then execute one direct terminal settlement:
+
+| Parameters | Workload targets | W | P | F | R | Final Previous debt |
+|---|---|---:|---:|---:|---:|---|
+| Adaptive `(3,5%)` | Rotate, Stay | 1144 | 1004 | 1096 | 1124 | 1, 100 |
+| Adaptive `(4,4%)` | Stay, Rotate | 1188 | 1012 | 1128 | 1088 | 100 |
+
+Both sides have three outer Commits and final scope `3/4`. The vector is therefore a
+same-horizon consequence of target timing and terminal liability, not a static
+candidate-cost comparison, steady-state result, or parameter winner. Both final
+per-object payload ratios are exactly `H/B=1`; the different R values therefore expose
+retained full-Frame layout/provenance rather than object payload-chain amplification.
+
+The first test-local parameter matrix is intentionally a causal index rather than a
+new executable aggregate or score:
+
+| Witness | Isolated axis | Observed result | Boundary |
+|---|---|---|---|
+| Matched negative control | masked parameter change | identical trajectory/vector | progress and indivisible Bases can hide both parameters |
+| Read-threshold band | strict read limit | less W for more final R; P/F equal | local W/R trade only |
+| Base-fraction lower bound | strict rotation share | target crossover and a different raw trade | finite aligned horizon only |
+| Selected capacity rejection | exact hard gate | typed rejection, no fallback or mutation | no numeric penalty or averaging |
+
+Exact vectors, target/debt trajectories, and rejection details remain asserted only by
+their owning tests; the table does not create a fifth metric or duplicate a sizing
+authority.
+
 The selector uses payload proxies only. A separate B-contained hot-chain witness proves
 strictly above-limit Base selection through exact planning/apply, while a policy-selected
 oversized Rotate proves typed capacity rejection, no fallback, and zero Store mutation.
 None of these test-local diagnostics changes the v1 report schema. Executable authority
 lives in [`ReadAmplificationBaseBudgetPolicyIntegrationTests.cs`](Tests/ReadAmplificationBaseBudgetPolicyIntegrationTests.cs),
 [`ReadAmplificationBaseBudgetPolicyThresholdBandTests.cs`](Tests/ReadAmplificationBaseBudgetPolicyThresholdBandTests.cs),
+[`ReadAmplificationBaseBudgetPolicyTargetBandTests.cs`](Tests/ReadAmplificationBaseBudgetPolicyTargetBandTests.cs),
 [`RealizedReconstructionPayloadAmplificationDiagnosticTests.cs`](Tests/RealizedReconstructionPayloadAmplificationDiagnosticTests.cs),
 and [`ReadAmplificationBaseBudgetPolicyCapacityTests.cs`](Tests/ReadAmplificationBaseBudgetPolicyCapacityTests.cs).
 
@@ -364,7 +397,5 @@ and [`ReadAmplificationBaseBudgetPolicyCapacityTests.cs`](Tests/ReadAmplificatio
 - continue both aligned logical/scope/debt endpoints through one identical third epoch
   before deciding whether debt membership and payload bytes are sufficient continuation
   state or retained physical layout/provenance state remains decision-relevant;
-- add a Base-fraction target-band discriminator and then reduce the small test-local
-  parameter/workload matrix without silently adding a fifth canonical score;
 - retain Pareto/raw outcomes until workload/SLO evidence justifies guardrails or a
   ranking rule.

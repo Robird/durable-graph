@@ -202,38 +202,33 @@ synthetic evidence，仍不代表一般 pressure-aware rotation trigger 已解�
 
 ## 当前研究焦点
 
-test-local realized diagnostic 现在从 accepted head 的 OVD/reconstruction authority 冻结每个 live
-object 的原始 `H/B`；`0/0` 约定 effective ratio 1，正数除 0 显式为 infinity。它不带候选 Delta、不按
-per-object Frame 相加，也不进入 canonical `W/P/F/R` 或 report。
+首轮 adaptive 小型 matrix 已闭合四条互补证据：matched negative control 证明参数可被 progress/对象
+不可分性遮蔽；read-threshold band 隔离局部 W/R trade；Base-fraction lower-bound crossover 隔离严格
+轮转门槛，并在对齐 horizon 上观察 target timing/terminal liability；selected capacity rejection 保持 typed、
+不 fallback、不计分。exact vectors、`H/B` 与逐步 debt 见 `EVALUATOR-V1.md` 和 owning tests；这些 bounded
+synthetic evidence 不选择默认参数。
 
-首个 matched cadence 中，`(3,5%)` 与新增的 `(4,4%)` 完全同轨，均为
-`W/P/F/R=1296/472/796/524`。预算 20B/16B 都装不下一个 100B optional Base，第四步又由 progress floor
-强制 hot Base；因此本 fixture 不能辨别参数，且两者仍被 paced 的 `1248/372/748/524` 局部严格支配。
-
-独立 threshold-band witness 排除了 target、progress 与 budget 混淆：两组都 Stay 八次并按 `1..8` 迁债，
-但 prospective ratio `3.5` 只让 `(3,5%)` 写一次 hot Base。其 `(3,5%)` / `(4,4%)` 向量为
-`1516/1056/1056/1212` 与 `1512/1056/1056/1472`，final hot `H/B` 为 `15/10` 与 `40/10`，形成少写 4B、
-多读 260B 的局部 W/R trade；共同的 1000B terminal evacuation 主导相同 P/F，所以这不是 Peak witness。
+当前焦点回到 continuation-state 充分性。Base-fraction crossover 的两侧 final per-object `H/B` 均为 1，
+但 R 仍不同；结合此前 fixed-cadence 的相同 logical/scope/debt endpoint 尚未对齐 physical history，下一步
+应送入同一第三 epoch，直接观察 retained Frame layout/provenance 是否改变 continuation exact costs。
 
 ## 下一编码切片
 
-继续扩展小型、单因素参数矩阵：下一个 discriminator 只让 `E/G` 落在 `[4%,5%)`，观察 Base fraction 对
-Stay/Rotate 的影响；随后把当前读阈值、轮转阈值、negative control 与 typed inadmissibility 归成 test-local
-matrix reduction。仍不进入 benchmark registry/report，不合成第五 score。
+闭合 continuation-state 充分性：把 fixed-cadence 两个已对齐 logical/scope/debt endpoint 继续送入同一第三
+epoch，判断 retained physical layout/provenance 是否改变后续 exact cost。小型参数 matrix 已用文档因果索引
+闭合，不再新增会复制 golden 或把 rejection 数值化的聚合 test/type。
 
 ## 近期 roadmap
 
-1. **完成小型参数/workload matrix**：读阈值 discriminator 已完成；再隔离 Base fraction 的 target 分叉，
-   汇总 raw W/P/F/R、realized H/B、debt 与 inadmissibility，允许候选被局部支配；
-2. **闭合 continuation-state 充分性**：保留 fixed-cadence 对齐终点的第三 epoch discriminator，裁决 retained
+1. **闭合 continuation-state 充分性**：保留 fixed-cadence 对齐终点的第三 epoch discriminator，裁决 retained
    physical layout/provenance state 是否影响 continuation；
-3. **形成 Pareto evidence**：在相同 horizon 下保留 raw vectors、inadmissibility 与反例，不提前合分；
-4. **再启动自动优化**：只允许修改窄 policy seam，保留 Pareto candidates/counterexamples，允许 `no winner`。
+2. **形成 Pareto evidence**：在相同 horizon 下保留 raw vectors、inadmissibility 与反例，不提前合分；
+3. **再启动自动优化**：只允许修改窄 policy seam，保留 Pareto candidates/counterexamples，允许 `no winner`。
 
 ## 未闭合事项
 
-- 首个 adaptive witness 证明 `(3,5%)` 与 `(4,4%)` 可被 soft progress/object indivisibility 完全遮蔽；尚需
-  Base-fraction target-band 与更多 workload shape，才能判断参数敏感区而非把重复轨迹当成调参证据；
+- 小型 matrix 已分别锁定参数被遮蔽、read-threshold、Base-fraction target 与 typed inadmissibility；它仍只有
+  bounded synthetic shapes，不能据此选择默认参数或假定真实 workload 上存在同一 Pareto 前沿；
 - fixed-cadence witness 已用相同 Commit/scope/debt 终点量化 terminal liability，但没有对齐 retained
   physical layout/provenance state；仍需第三 epoch continuation 判断这种物理历史是否会改变下一段 exact
   costs，不能仅凭 debt IDs 宣称闭环；

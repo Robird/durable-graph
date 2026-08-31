@@ -180,3 +180,15 @@ versus `40/10`, over 2 versus 7 reconstruction Frames. Thus this synthetic fixtu
 4 fewer written bytes with 260 more final cold-read bytes, while the common terminal
 evacuation keeps P/F equal. It is a local W/R trade, not a Peak result, tuned default,
 general paced-policy winner, or reason to alter the canonical evaluator schema.
+
+A separate Base-fraction lower-bound crossover starts measurement with `G=1000,E=40`.
+`Base == Delta` makes both Updates dominant Bases, so read limit, discretionary budget,
+and progress remain inert. Strict target selection gives `(3,5%)=[Rotate,Stay]` and
+`(4,4%)=[Stay,Rotate]`; both then complete one direct settlement and end after three
+Commits at scope `3/4`. Their W/P/F/R vectors are `1144/1004/1096/1124` and
+`1188/1012/1128/1088`, with final Previous debt `{1,100}` and `{100}`. This proves the
+4% equality/5% strict target boundary through exact apply on an aligned finite horizon.
+Both final per-object payload ratios are `H/B=1`; their different R is retained
+full-Frame layout/provenance, not object payload-chain amplification. The witness does
+not select a default, model steady state, or turn payload `E/G` into physical sizing
+authority.
