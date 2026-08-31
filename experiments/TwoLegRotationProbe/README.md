@@ -391,11 +391,10 @@ W/P/F/R, final cursor, and settlement summary. This is a compact comparable proj
 not a full diagnostic dump, parser, persisted product format, score, or winner.
 
 Manifest schema 2 represents one atomic `selectionProfile` identity per case rather
-than a target/decision cross-product. Corpus revision 8 runs four strategies over ten
-frozen traces (40 cases). In addition to the locality and size-skew pairs, the transient
-lifecycle pair keeps the operation multiset, IDs, payloads, horizon, and final state fixed:
-overlap creates both 400B objects before removing them, while serial removes each before
-creating the next. These are bounded matched treatments, not a tuned default or ranking.
+than a target/decision cross-product. Corpus revision 9 runs four strategies over twelve
+frozen traces (48 cases). The locality, size-skew, transient-lifecycle, and Previous-debt
+granularity pairs each freeze their own operation multiset, final state, and horizon while
+changing one bounded treatment. These are causal probes, not a tuned default or ranking.
 Exact vectors, profile closure, and canonical hashes live in
 [`BenchmarkV1RunnerTests.cs`](Tests/BenchmarkV1RunnerTests.cs) and
 [`BenchmarkV1ThresholdBandWorkloadTests.cs`](Tests/BenchmarkV1ThresholdBandWorkloadTests.cs),
@@ -406,7 +405,9 @@ and locality pair in
 with size skew in
 [`BenchmarkV1SizeSkewWorkloadTests.cs`](Tests/BenchmarkV1SizeSkewWorkloadTests.cs),
 and transient lifecycle in
-[`BenchmarkV1LifecycleOverlapWorkloadTests.cs`](Tests/BenchmarkV1LifecycleOverlapWorkloadTests.cs).
+[`BenchmarkV1LifecycleOverlapWorkloadTests.cs`](Tests/BenchmarkV1LifecycleOverlapWorkloadTests.cs),
+with Previous-debt granularity in
+[`BenchmarkV1DebtGranularityWorkloadTests.cs`](Tests/BenchmarkV1DebtGranularityWorkloadTests.cs).
 
 ## Scoped rotation observation reductions
 
@@ -464,9 +465,10 @@ vectors and all edge cases remain authoritative in the linked tests.
 | Migration membership and future opportunity | A matched low/high-ID canonical pair gives every strategy the same first `StrategyStepViewV1` and selection, then Updates one of the two equal-size objects. No-migration is invariant, while ObjectId-first paced/Adaptive outcomes change with the assignment. | Candidates receive no future oracle. This proves sensitivity to ObjectId assignment plus next-update locality, not long-term hot/cold classification, temperature inference, the old singleton-Frame oracle setup, a winner, or a default. [`BenchmarkV1LocalityObjectIdPermutationWorkloadTests.cs`](Tests/BenchmarkV1LocalityObjectIdPermutationWorkloadTests.cs), [`RotationPolicyComparisonTests.cs`](Tests/RotationPolicyComparisonTests.cs) |
 | Size-to-ID assignment | A matched ordinary pair swaps 20B/100B payloads between the low/high ObjectIds. ObjectId-first pacing writes the low ID now and the other object during direct settlement, exposing immediate-vs-terminal placement sensitivity. | Both step-0 Bases share one A Frame, so neither workload migration releases it; this does not reproduce the old singleton-Frame release oracle or select a size preference. [`BenchmarkV1SizeSkewWorkloadTests.cs`](Tests/BenchmarkV1SizeSkewWorkloadTests.cs), [`RotationPolicyComparisonTests.cs`](Tests/RotationPolicyComparisonTests.cs) |
 | Transient lifecycle overlap | Matched overlap/serial traces apply the same two 400B Creates and Removes but reach peak transient live sets of two and one. Current paced/Adaptive policies keep the same cadence within the pair, while serial materially lowers maximum Current-file tail and changes the local Pareto relation. | This is sensitivity to finite-horizon transient overlap, not churn-rate or lifetime prediction, GC, steady state, a winner, or advice to serialize application work. [`BenchmarkV1LifecycleOverlapWorkloadTests.cs`](Tests/BenchmarkV1LifecycleOverlapWorkloadTests.cs) |
+| Previous-debt granularity | In a matched pair, both Adaptive profiles reach `G/E=601/300` while representing old-A debt as one 300B object or three 100B objects. Exchanging the first full-rewrite order, then reconverging logical versions, exposes the current Adaptive one-object progress floor's sensitivity to indivisible debt units. | Bounded granularity evidence only—not arrival/service-rate pressure, steady state, starvation, or a general size preference. [`BenchmarkV1DebtGranularityWorkloadTests.cs`](Tests/BenchmarkV1DebtGranularityWorkloadTests.cs) |
 | Capacity coupling | Two one-object B migration batches can make a large C evacuation fit; conversely, one optional same-state B migration can push an otherwise feasible grouped-foreground Stay beyond the one-Frame envelope. | Handcrafted provisional-grammar witnesses only; they prove neither complete repair/search nor file-size or rotation-trigger policy. [`PreparatoryBaseMigrationTests.cs`](Tests/PreparatoryBaseMigrationTests.cs), [`CompletionCertificateTests.cs`](Tests/CompletionCertificateTests.cs), [`GroupedForegroundBurstCapacityCouplingTests.cs`](Tests/GroupedForegroundBurstCapacityCouplingTests.cs) |
 | Evaluator v1 admissibility | An isolated run fork exposes metrics only after all workload steps and one actually replayed canonical terminal settlement; direct Rotate has no empty Stay, multi-step preparation is one charged Commit, and hard rejections remain typed/non-scoring. | Closes the terminal source epoch `A/B -> B/C`, not all future Previous debt; no scalar score or product evaluator. [`EVALUATOR-V1.md`](EVALUATOR-V1.md), [`EvaluatorV1SessionTests.cs`](Tests/EvaluatorV1SessionTests.cs) |
-| Benchmark-v1 matched consumer | Four strategies from the independent Baselines assembly share each frozen fixture/trace/horizon through the Arena whole-run contract. Revision 8 has 40 admitted cases over ten traces; earlier W/P/F/R vectors and trace hashes remain exact while the expanded manifest/report receive new canonical hashes. | This is an internal-track certified-product proof over bounded synthetic traces, not a general untrusted-artifact judge or full frontier; single-A-Frame bootstrap, writer-only JSON, no scalar score/parser/CLI. [`EVALUATOR-V1.md`](EVALUATOR-V1.md), [`StrategyArenaContractTests.cs`](Tests/StrategyArenaContractTests.cs), [`BenchmarkV1RunnerTests.cs`](Tests/BenchmarkV1RunnerTests.cs), [`BenchmarkV1LifecycleOverlapWorkloadTests.cs`](Tests/BenchmarkV1LifecycleOverlapWorkloadTests.cs), [`BenchmarkV1JsonTests.cs`](Tests/BenchmarkV1JsonTests.cs) |
+| Benchmark-v1 matched consumer | Four strategies from the independent Baselines assembly share each frozen fixture/trace/horizon through the Arena whole-run contract. Revision 9 has 48 admitted cases over twelve traces; earlier W/P/F/R vectors and trace hashes remain exact while the expanded manifest/report receive new canonical hashes. | This is an internal-track certified-product proof over bounded synthetic traces, not a general untrusted-artifact judge or full frontier; single-A-Frame bootstrap, writer-only JSON, no scalar score/parser/CLI. [`EVALUATOR-V1.md`](EVALUATOR-V1.md), [`StrategyArenaContractTests.cs`](Tests/StrategyArenaContractTests.cs), [`BenchmarkV1RunnerTests.cs`](Tests/BenchmarkV1RunnerTests.cs), [`BenchmarkV1DebtGranularityWorkloadTests.cs`](Tests/BenchmarkV1DebtGranularityWorkloadTests.cs), [`BenchmarkV1JsonTests.cs`](Tests/BenchmarkV1JsonTests.cs) |
 | Continuous rotation | A caller script crosses `A/B -> B/C -> C/D` while preserving exact state, reconstruction closure, and Stay certificates. | It is not a stateful runner or durable publication path. [`ContinuousMultiRotationTests.cs`](Tests/ContinuousMultiRotationTests.cs) |
 
 ### Accepted source-partition provenance

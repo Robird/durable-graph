@@ -57,7 +57,7 @@ internal static class BenchmarkV1ProtocolIdentities {
 
 internal static class BenchmarkV1Corpus {
     public const string ManifestId = "benchmark-v1";
-    public const int ManifestRevision = 8;
+    public const int ManifestRevision = 9;
     public const string DebtZeroThenRotateNoMigrationCaseId =
         "debt-zero-then-rotate-no-migration";
     public const string DebtZeroThenRotatePacedCaseId =
@@ -138,6 +138,22 @@ internal static class BenchmarkV1Corpus {
         "lifecycle-transient-serial-read-amplification-r3-b5pct";
     public const string LifecycleTransientSerialAdaptiveR4B4PercentCaseId =
         "lifecycle-transient-serial-read-amplification-r4-b4pct";
+    public const string PreviousDebtGranularitySingleLargeNoMigrationCaseId =
+        "previous-debt-granularity-single-large-no-migration";
+    public const string PreviousDebtGranularitySingleLargePacedCaseId =
+        "previous-debt-granularity-single-large-paced";
+    public const string PreviousDebtGranularitySingleLargeAdaptiveR3B5PercentCaseId =
+        "previous-debt-granularity-single-large-read-amplification-r3-b5pct";
+    public const string PreviousDebtGranularitySingleLargeAdaptiveR4B4PercentCaseId =
+        "previous-debt-granularity-single-large-read-amplification-r4-b4pct";
+    public const string PreviousDebtGranularityThreeSmallNoMigrationCaseId =
+        "previous-debt-granularity-three-small-no-migration";
+    public const string PreviousDebtGranularityThreeSmallPacedCaseId =
+        "previous-debt-granularity-three-small-paced";
+    public const string PreviousDebtGranularityThreeSmallAdaptiveR3B5PercentCaseId =
+        "previous-debt-granularity-three-small-read-amplification-r3-b5pct";
+    public const string PreviousDebtGranularityThreeSmallAdaptiveR4B4PercentCaseId =
+        "previous-debt-granularity-three-small-read-amplification-r4-b4pct";
 
     public static BenchmarkV1BatchDefinition Create(
         IEnumerable<StrategyBindingV1> strategies) {
@@ -306,6 +322,64 @@ internal static class BenchmarkV1Corpus {
                     1),
                 lifecycleTransientSerialTrace,
                 frozenStrategies);
+        SaveStep debtGranularityStep0 = new([
+            new CreateObject(10, 100),
+            new CreateObject(20, 100),
+            new CreateObject(30, 100),
+            new CreateObject(40, 300),
+        ]);
+        SaveStep debtGranularityCreate1001 = new([new CreateObject(1001, 1)]);
+        SaveStep debtGranularityRewriteThreeSmall = new([
+            new UpdateObject(10, 100, 100),
+            new UpdateObject(20, 100, 100),
+            new UpdateObject(30, 100, 100),
+        ]);
+        SaveStep debtGranularityRewriteSingleLarge = new([
+            new UpdateObject(40, 300, 300),
+        ]);
+        SaveStep debtGranularityReconvergeThreeSmall = new([
+            new UpdateObject(10, 100, 100),
+            new UpdateObject(20, 100, 100),
+            new UpdateObject(30, 100, 100),
+        ]);
+        WorkloadTrace previousDebtGranularitySingleLargeTrace = new(
+            scenarioName: "previous-debt-granularity-single-large",
+            generatorId: "handwritten",
+            generatorVersion: 1,
+            seed: 0,
+            [
+                debtGranularityStep0,
+                debtGranularityRewriteThreeSmall,
+                debtGranularityCreate1001,
+                debtGranularityRewriteSingleLarge,
+                debtGranularityReconvergeThreeSmall,
+            ]);
+        WorkloadTrace previousDebtGranularityThreeSmallTrace = new(
+            scenarioName: "previous-debt-granularity-three-small",
+            generatorId: "handwritten",
+            generatorVersion: 1,
+            seed: 0,
+            [
+                debtGranularityStep0,
+                debtGranularityRewriteSingleLarge,
+                debtGranularityCreate1001,
+                debtGranularityRewriteThreeSmall,
+                debtGranularityReconvergeThreeSmall,
+            ]);
+        BenchmarkV1CaseDefinition[] previousDebtGranularitySingleLargeCases =
+            CreateStrategyCases(
+                new BenchmarkComponentIdentityV1(
+                    "previous-debt-granularity-single-large",
+                    1),
+                previousDebtGranularitySingleLargeTrace,
+                frozenStrategies);
+        BenchmarkV1CaseDefinition[] previousDebtGranularityThreeSmallCases =
+            CreateStrategyCases(
+                new BenchmarkComponentIdentityV1(
+                    "previous-debt-granularity-three-small",
+                    1),
+                previousDebtGranularityThreeSmallTrace,
+                frozenStrategies);
         return new BenchmarkV1BatchDefinition(
             ManifestId,
             ManifestRevision,
@@ -326,6 +400,8 @@ internal static class BenchmarkV1Corpus {
                 .. sizeSkewLowIdLargeCases,
                 .. lifecycleTransientOverlapCases,
                 .. lifecycleTransientSerialCases,
+                .. previousDebtGranularitySingleLargeCases,
+                .. previousDebtGranularityThreeSmallCases,
             ]);
     }
 

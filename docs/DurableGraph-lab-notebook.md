@@ -763,11 +763,17 @@
 
 ## 6. 船长日志
 
+### 2026-08-31：将 Previous-debt granularity 收编为 canonical matched family
+
+- **Implemented**：corpus revision 9 新增 `previous-debt-granularity-single-large/three-small`；两条 ordinary trace 固定 operation multiset、最终 versions 与 horizon，两组 Adaptive 在共同 `G/E=601/300` pivot 上分别保留一个 300B 或三个 100B old-A debt，随后以相同操作 reconverge。
+- **Observed**：48 cases 全部 admitted，本 pair 均为四个 workload Commits 加 direct settlement。no-migration exact tie，paced 仅有 4B P layout fallout；两组 Adaptive 在相同 final scope 下形成 W/P/F 与 R 的交换。
+- **Boundary / Next**：结果只证明当前 Adaptive one-object progress floor 对 debt granularity/indivisibility 敏感，不是 arrival/service-rate pressure、steady state、starvation 或一般 size preference。下一步增加 burst/capacity，再补 horizon phase 与首轮资格 gate。
+
 ### 2026-08-31：将 transient overlap/serial 收编为 canonical lifecycle family
 
 - **Implemented**：corpus revision 8 新增 `lifecycle-transient-overlap/serial`；两条 ordinary trace 共享 step0 的两个 100B 对象，并以相同 IDs/payloads/horizon 对两个 400B transient 对象执行相同 Create/Remove multiset，最终状态完全相同。
 - **Observed**：40 cases 全部 admitted，均为四个 workload Commits 加 direct settlement。no-migration 在 pair 内均为 `Stay/Stay/Stay/Stay` 并终止于 scope `2/3`；paced 与两组 Adaptive 均为 `Stay/Stay/Rotate/Stay` 并终止于 `3/4`。overlap/serial 的 peak transient live-set 分别为 2/1，后三组策略的主差异是 serial 将 F 降低 408B。
-- **Boundary / Next**：4B W 差是当前 provisional layout fallout；本 family 只证明当前策略对有限 horizon 内等尺寸 transient overlap 敏感，不是 churn rate/lifetime prediction、GC、steady state、winner/default，也不建议应用串行化。下一步隔离 debt pressure，再研究 burst/capacity 与 horizon phase。
+- **Boundary / Next**：4B W 差是当前 provisional layout fallout；本 family 只证明当前策略对有限 horizon 内等尺寸 transient overlap 敏感，不是 churn rate/lifetime prediction、GC、steady state、winner/default，也不建议应用串行化。其后的 debt-granularity 切片已由上条记录闭合。
 
 ### 2026-08-31：将 ordinary size-skew 置换收编为 canonical matched family
 

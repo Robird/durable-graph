@@ -172,7 +172,7 @@ strategy-neutral suite identity 与 per-strategy run identity。
 
 - Arena、Baselines、Tests 三程序集 build 通过，dependency 单向；
 - 四个 strategy executor 的实际 assembly 是 `Atelia.TwoLegRotationProbe.Baselines`；
-- corpus revision 8 以十条 trace 运行 40 个 admitted cases；原有 typed outcomes、W/P/F/R 与 trace SHA
+- corpus revision 9 以十二条 trace 运行 48 个 admitted cases；原有 typed outcomes、W/P/F/R 与 trace SHA
   不漂移，扩容后的 manifest/report 使用新 canonical hashes；
 - canonical `read-amplification-threshold-band` 形成三个互不支配 unique vectors，并区分两组 Adaptive
   参数；它是 hot-chain reset 与 co-resident expiry/Frame-unpin 的综合见证，不是纯 `E/G` rotation band；
@@ -189,15 +189,21 @@ strategy-neutral suite identity 与 per-strategy run identity。
   从 2 改为 1。no-migration 对置换不变；
   ObjectId-first paced/Adaptive 保持 pair 内 cadence，serial 的主观察是 F 降低 408B。这不外推
   churn rate、lifetime prediction、GC、steady state 或业务串行化；
+- matched Previous-debt granularity family 固定 operation multiset、final versions 与 horizon；两组 Adaptive
+  在 pivot 上均为 `G/E=601/300`，但把 300B old-A debt 表示为一个 300B 对象或三个 100B 对象。no-migration exact tie，
+  paced 只有 4B P layout fallout，两组 Adaptive 在相同 final scope 下形成 W/P/F 与 R 的交换；这只证明
+  Adaptive one-object progress floor 对 granularity/indivisibility 敏感，不是 arrival/service-rate pressure、steady state、
+  starvation 或一般 size preference；
 - Remove+Insert 反例锁定 parent debt 与 `E` 不混淆；
 - Arena-certified product 暴露 Store、workload receipts、final checkpoint 与 termination，不暴露 metrics。
 
 ## 下一阶段
 
-1. 先补 debt pressure，再按 burst/capacity 与 horizon phase 补齐最小 workload families；
-2. 冻结 competition packet：contract、suite revision、evaluator/settlement/layout identities、prior art、目录权限；
-3. 再启动多个独立 candidate projects，由 organizer 集成复跑，不排榜；
-4. 只有 candidate 真实需要直接物理 Store 输出时才实现 untrusted artifact validator。
+1. 先按 burst/capacity 与 horizon phase 补齐最小 workload families；
+2. 闭合 fresh-fork repeat、case-order permutation、canonical artifact/hash determinism 与资格 gate；
+3. 冻结 competition packet：contract、suite revision、evaluator/settlement/layout identities、prior art、目录权限；
+4. 再启动多个独立 candidate projects，由 organizer 集成复跑，不排榜；
+5. 只有 candidate 真实需要直接物理 Store 输出时才实现 untrusted artifact validator。
 
 ## 明确暂缓
 

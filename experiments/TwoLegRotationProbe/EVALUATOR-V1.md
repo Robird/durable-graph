@@ -195,9 +195,10 @@ dump of `FinalColdHeadReadObservation` or candidate diagnostics. Rejected leaves
 no metrics/cursor/settlement properties. V1 is writer-only: external parsing, file I/O,
 and CLI publication remain outside this slice.
 
-Corpus revision 8 runs all four profiles over ten traces. The low/high-ID traces form one
+Corpus revision 9 runs all four profiles over twelve traces. The low/high-ID traces form one
 matched locality family, the low-ID-small/large traces form one matched size-skew family,
-and overlap/serial form one matched transient-lifecycle family. Within every trace group,
+overlap/serial form one matched transient-lifecycle family, and single-large/three-small
+form one matched Previous-debt granularity family. Within every trace group,
 the source fixture, exact expanded
 trace, evaluator protocols, and accounting
 horizon are identical; apart from the case ID, the only experimental input that changes
@@ -245,8 +246,16 @@ is the atomic selection profile. The canonical raw outcomes are:
 | `lifecycle-transient-serial` | paced one debt | 1448 | 552 | 736 | 284 | 3/4 |
 | `lifecycle-transient-serial` | Adaptive `(3,5%)` | 1448 | 552 | 736 | 284 | 3/4 |
 | `lifecycle-transient-serial` | Adaptive `(4,4%)` | 1448 | 552 | 736 | 284 | 3/4 |
+| `previous-debt-granularity-single-large` | no migration | 1800 | 672 | 1168 | 708 | 2/3 |
+| `previous-debt-granularity-single-large` | paced one debt | 1812 | 672 | 1688 | 1788 | 2/3 |
+| `previous-debt-granularity-single-large` | Adaptive `(3,5%)` | 1504 | 368 | 752 | 772 | 3/4 |
+| `previous-debt-granularity-single-large` | Adaptive `(4,4%)` | 1504 | 368 | 752 | 772 | 3/4 |
+| `previous-debt-granularity-three-small` | no migration | 1800 | 672 | 1168 | 708 | 2/3 |
+| `previous-debt-granularity-three-small` | paced one debt | 1812 | 676 | 1688 | 1788 | 2/3 |
+| `previous-debt-granularity-three-small` | Adaptive `(3,5%)` | 1596 | 372 | 892 | 728 | 3/4 |
+| `previous-debt-granularity-three-small` | Adaptive `(4,4%)` | 1596 | 372 | 892 | 728 | 3/4 |
 
-All 40 cases are admitted. On `debt-zero-then-rotate`, both Adaptive profiles equal
+All 48 cases are admitted. On `debt-zero-then-rotate`, both Adaptive profiles equal
 paced exactly; on `mixed-small`, no-migration equals paced while both Adaptive profiles
 equal each other. The threshold-band input ends that universal masking: paced equals
 Adaptive `(4,4%)`, while Adaptive `(3,5%)` writes 4 more bytes for 260 fewer final
@@ -280,10 +289,22 @@ layout fallout. On overlap no-migration dominates the other profiles; on serial 
 F makes the relation incomparable despite lower W/P/R. This proves that the current
 policies and local Pareto relation are sensitive to finite-horizon equal-size transient
 overlap, not churn-rate or lifetime prediction, GC, steady state, a winner, or advice to
-serialize application work.
+serialize application work. The Previous-debt granularity pair starts from ordinary
+step-0 Creates `10/20/30=100B,40=300B`. One trace first full-rewrites the three small
+objects and the other first rewrites the single large object; both then create the same
+1B sentinel, perform the complementary catch-up, and finish with the same three-small
+reconvergence. Their operation multiset, final logical versions, and horizon are identical.
+At the shared post-sentinel pivot, both Adaptive profiles have `G/E=601/300`, but their
+debt is respectively `{40:300}` or `{10:100,20:100,30:100}`. Every case executes four workload Commits plus
+direct settlement (`M=5`). No-migration is an exact pairwise tie; paced differs only by
+4B of P due to current layout. Both Adaptive profiles have the same final scope on the
+two traces, while single-large lowers W/P/F and raises R. This demonstrates sensitivity
+of the current Adaptive one-object progress floor to debt granularity and indivisibility at fixed
+`G/E`; it is not arrival/service-rate pressure, steady-state or starvation evidence, nor
+a general size preference.
 
 Manifest schema version 2 replaces the old target/decision pair with one
-`selectionProfile`; corpus revision 8 records the 40-case expansion. Report schema
+`selectionProfile`; corpus revision 9 records the 48-case expansion. Report schema
 and W/P/F/R leaves are unchanged and remain bound through the manifest SHA-256. There
 is no compatibility layer, mandatory strategy interface, arbitrary parameter input,
 or score. The report also rejects an outcome whose declared workload horizon differs from
@@ -301,6 +322,8 @@ for the matched locality/ObjectId family,
 for the matched size-skew family,
 [`BenchmarkV1LifecycleOverlapWorkloadTests.cs`](Tests/BenchmarkV1LifecycleOverlapWorkloadTests.cs)
 for the matched transient-lifecycle family,
+[`BenchmarkV1DebtGranularityWorkloadTests.cs`](Tests/BenchmarkV1DebtGranularityWorkloadTests.cs)
+for the matched Previous-debt granularity family,
 [`BenchmarkAdaptiveSelectionProfileTests.cs`](Tests/BenchmarkAdaptiveSelectionProfileTests.cs)
 for divergent exact parameter binding,
 [`StrategyArenaContractTests.cs`](Tests/StrategyArenaContractTests.cs) for the
@@ -536,8 +559,10 @@ and [`ReadAmplificationBaseBudgetPolicyCapacityTests.cs`](Tests/ReadAmplificatio
 
 ## Still open before strategy selection
 
-- add the smallest debt-pressure family, then burst/capacity and horizon-phase families
-  needed before freezing the first competition packet;
+- add the smallest burst/capacity and then horizon-phase families needed before freezing
+  the first competition packet;
+- close fresh-fork repeat, case-order permutation, canonical artifact/hash determinism,
+  and the remaining qualification gates before candidate submissions;
 - keep checkpoint cold reads outside the canonical frontier; reconsider an intermediate
   read guardrail only when a named restart/read schedule or cold-start SLO exists;
 - retain Pareto/raw outcomes until workload/SLO evidence justifies guardrails or a
