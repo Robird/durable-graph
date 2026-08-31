@@ -236,8 +236,8 @@ capacity admission, apply, terminal settlement, logical validation, and all metr
 
 Manifest schema 2 uses one atomic `selectionProfile` per case. Metrics identity
 `raw-wpfr/5` and report schema 5 emit typed position plus the seven canonical integers
-defined above. Corpus revision 17 keeps seventeen adjustable traces and the two active
-Adaptive profiles, for 34 admitted cases. Their existing component IDs now carry version
+defined above. Corpus revision 18 keeps eighteen adjustable traces and the two active
+Adaptive profiles, for 36 admitted cases. Their existing component IDs now carry version
 2 because the corrected motive/budget behavior changes the selection contract.
 The retired no-migration and paced-one-debt profiles are not benchmark references:
 `DeltaReference` and `BaseReference` provide the strategy-independent write
@@ -275,6 +275,20 @@ pre-fix policy produced `Pworkload=10052` by forcing that migration. The correct
 regression requires `Pworkload < 10000` for both profiles rather than freezing an
 incidental exact result.
 
+The eighteenth workload, `active-hundred-mixed-cold-debt`, is an aligned-channel
+derivative of the active-hundred trace. It adds 20 bootstrap-only cold objects totaling
+1120 Base payload bytes. Both profiles select Stay for all 64 workload Saves and all 20
+objects still resolve to A at the last workload checkpoint:
+
+| Profile | Wworkload | Pworkload | F | R | L | R/L |
+|---|---:|---:|---:|---:|---:|---:|
+| Adaptive `(3,5%)` | 117404 | 2076 | 117448 | 4166576 | 345484 | 12.0601 |
+| Adaptive `(4,4%)` | 115692 | 2056 | 115736 | 4108844 | 345484 | 11.8930 |
+
+This is executable evidence for long-lived low-amplification A-debt stalling Rotate in
+the current candidate. It is not an infinite-horizon proof or evidence for a particular
+repair. The original active-hundred trace remains present as the causal comparison.
+
 Exact executable authority is
 [`BenchmarkV1RunnerTests.cs`](Tests/BenchmarkV1RunnerTests.cs),
 [`BenchmarkV1JsonTests.cs`](Tests/BenchmarkV1JsonTests.cs), and the
@@ -284,8 +298,8 @@ manifest cases, or score-table rows.
 
 ## Next strategy work
 
-- isolate stable low-amplification A-debt stalling and Ready-to-Rotate versus
-  Should-Rotate hysteresis before selecting one minimal independent candidate;
+- design one minimal response to the now-observed stable low-amplification A-debt stall;
+  keep general Ready-to-Rotate versus Should-Rotate hysteresis as a separate candidate;
 - preserve the corrected strict motive and soft budget behavior; do not restore an
   unconditional progress floor or a NoChange-first category rule;
 - add or change a workload only when white-box candidate review exposes one concrete

@@ -174,8 +174,8 @@ choice inert. Strict target selection gives
 `(3,5%)=[Stay,Rotate,Stay]` and `(4,4%)=[Stay,Stay,Rotate]`, proving the 5%/4%
 boundary. This does not turn payload `E/G` into exact physical sizing authority.
 
-Benchmark corpus revision 17 registers seventeen workloads and only these two Adaptive
-bindings, producing 34 cases. Their existing component IDs now use version 2 because
+Benchmark corpus revision 18 registers eighteen workloads and only these two Adaptive
+bindings, producing 36 cases. Their existing component IDs now use version 2 because
 this motive/budget correction changes selection behavior. The adversarial
 `oversized-cold-nochange-tiny-clock` workload preserves a 10,000-byte unmotivated cold
 NoChange beside a one-byte active clock. Before the fix its workload peak was `10052`;
@@ -186,3 +186,8 @@ Git tag `research/no-migration-paced-baselines-20260901`; `DeltaReference` and
 `BaseReference` now provide strategy-independent write comparators. Current corpus
 counts and raw metrics belong to [`EVALUATOR-V1.md`](EVALUATOR-V1.md). Exact policy
 authority remains in the `ReadAmplificationBaseBudgetPolicy*` tests.
+
+The aligned-channel `active-hundred-mixed-cold-debt` workload separately exposes the
+remaining liveness blind spot: 20 low-amplification cold A-debt objects survive all 64
+natural Saves and both profiles select only Stay. This is evidence for a future bounded
+progress repair, not part of the v0 selector contract.

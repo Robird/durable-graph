@@ -57,11 +57,17 @@ internal static class BenchmarkV1ProtocolIdentities {
 
 internal static class BenchmarkV1Corpus {
     public const string ManifestId = "benchmark-v1";
-    public const int ManifestRevision = 17;
+    public const int ManifestRevision = 18;
     public const string ActiveHundredMixedAdaptiveR3B5PercentCaseId =
         "active-hundred-mixed-read-amplification-r3-b5pct";
     public const string ActiveHundredMixedAdaptiveR4B4PercentCaseId =
         "active-hundred-mixed-read-amplification-r4-b4pct";
+    public const string ActiveHundredMixedColdDebtAdaptiveR3B5PercentCaseId =
+        "active-hundred-mixed-cold-debt-read-amplification-r3-b5pct";
+    public const string ActiveHundredMixedColdDebtAdaptiveR4B4PercentCaseId =
+        "active-hundred-mixed-cold-debt-read-amplification-r4-b4pct";
+    internal const uint ActiveHundredColdDebtObjectIdStart = 10_001;
+    internal const int ActiveHundredColdDebtObjectCount = 20;
     public const string DebtZeroBeforeRotateAdaptiveR3B5PercentCaseId =
         "debt-zero-before-rotate-read-amplification-r3-b5pct";
     public const string DebtZeroBeforeRotateAdaptiveR4B4PercentCaseId =
@@ -158,6 +164,8 @@ internal static class BenchmarkV1Corpus {
             CreateMixedSmallDefinition());
         GeneratedScenario activeHundred = ScenarioGenerator.Generate(
             CreateActiveHundredMixedDefinition());
+        WorkloadTrace activeHundredColdDebtTrace =
+            CreateActiveHundredMixedColdDebtTrace(activeHundred.Trace);
         BenchmarkV1CaseDefinition[] debtZeroBeforeRotateCases =
             CreateStrategyCases(
                 new BenchmarkComponentIdentityV1(
@@ -215,6 +223,13 @@ internal static class BenchmarkV1Corpus {
             CreateStrategyCases(
                 new BenchmarkComponentIdentityV1("active-hundred-mixed", 1),
                 activeHundred.Trace,
+                frozenStrategies);
+        BenchmarkV1CaseDefinition[] activeHundredMixedColdDebtCases =
+            CreateStrategyCases(
+                new BenchmarkComponentIdentityV1(
+                    "active-hundred-mixed-cold-debt",
+                    1),
+                activeHundredColdDebtTrace,
                 frozenStrategies);
         BenchmarkV1CaseDefinition[] mixedSmallCases = CreateStrategyCases(
             new BenchmarkComponentIdentityV1("mixed-small", 1),
@@ -434,6 +449,7 @@ internal static class BenchmarkV1Corpus {
                 .. insertBurstThreeOneCases,
                 .. insertBurstTwoTwoCases,
                 .. activeHundredMixedCases,
+                .. activeHundredMixedColdDebtCases,
                 .. mixedSmallCases,
                 .. thresholdBandCases,
                 .. debtShareDilutionCases,
@@ -446,6 +462,27 @@ internal static class BenchmarkV1Corpus {
                 .. previousDebtGranularitySingleLargeCases,
                 .. previousDebtGranularityThreeSmallCases,
                 .. oversizedColdNoChangeTinyClockCases,
+            ]);
+    }
+
+    private static WorkloadTrace CreateActiveHundredMixedColdDebtTrace(
+        WorkloadTrace activeTrace) {
+        List<IEnumerable<WorkloadChange>> coldSteps = new(activeTrace.Steps.Count) {
+            Enumerable.Range(0, ActiveHundredColdDebtObjectCount)
+                .Select(index => (WorkloadChange)new CreateObject(
+                    checked(ActiveHundredColdDebtObjectIdStart + (uint)index),
+                    BasePayloadBytes: 32 + ((index % 4) * 16))),
+        };
+        for (int index = 1; index < activeTrace.Steps.Count; index++) {
+            coldSteps.Add([]);
+        }
+
+        return WorkloadTraceComposer.Compose(
+            scenarioName: "active-hundred-mixed-cold-debt",
+            seed: activeTrace.Seed,
+            [
+                WorkloadChannel.FromTrace("active-hundred-mixed", activeTrace),
+                new WorkloadChannel("long-lived-cold-debt", coldSteps),
             ]);
     }
 

@@ -105,6 +105,11 @@ changes. Random streams are forked by `(seed, step, object, lane)`, so an extra
 draw in one lane cannot advance another. The algorithm, generator version, and
 scenario definition form the reproducibility boundary.
 
+`WorkloadTraceComposer` can align independent channels on the same Save timeline.
+A channel may be silent on a Save, while ObjectIds remain channel-owned and disjoint;
+the merged result is immediately replay-validated and becomes an ordinary frozen
+`WorkloadTrace`. Channel identity does not enter evaluator or policy semantics.
+
 “Frozen” means every treatment replays the same in-memory trace instance. It is
 not a serialized trace format. `WorkloadSimulator` compiles that trace into a
 fresh single-file run and validates every accepted logical prefix:
@@ -410,8 +415,8 @@ tests. This is a compact comparable projection, not a full diagnostic dump, pars
 persisted product format, score, or winner.
 
 Manifest schema 2 represents one atomic `selectionProfile` identity per case rather
-than a target/decision cross-product. Corpus revision 17 runs the two active Adaptive
-v2 profiles over seventeen traces (34 admitted cases). The profile IDs are unchanged,
+than a target/decision cross-product. Corpus revision 18 runs the two active Adaptive
+v2 profiles over eighteen traces (36 admitted cases). The profile IDs are unchanged,
 while their component versions are 2 because the corrected selection behavior changes
 the manifest contract. The retired no-migration and
 paced-one-debt profiles are archived at Git tag
@@ -420,7 +425,9 @@ paced-one-debt profiles are archived at Git tag
 `active-hundred-mixed` workload merges a 100-object migration backlog with 64 rounds of
 sustained 60% update activity. `oversized-cold-nochange-tiny-clock` is the white-box
 adversarial trace for an unmotivated 10,000-byte NoChange escaping a soft payload
-budget. Both remain adjustable rather than hash-locked.
+budget. `active-hundred-mixed-cold-debt` composes the active channel with 20 stable
+bootstrap-only cold objects; both profiles Stay for all 64 workload Saves and leave
+those objects dependent on A. These traces remain adjustable rather than hash-locked.
 Runner/profile closure lives in
 [`BenchmarkV1RunnerTests.cs`](Tests/BenchmarkV1RunnerTests.cs),
 [`BenchmarkV1JsonTests.cs`](Tests/BenchmarkV1JsonTests.cs), and the
@@ -479,7 +486,7 @@ available from Git tag `research/no-migration-paced-baselines-20260901`.
 | Active hundred mixed | Both active profiles share Delta/Base references `67206/165606`. Adaptive `(4,4%)` lowers workload W/P by `1668/24B`; Adaptive `(3,5%)` lowers closed-horizon F and cumulative R by `32920/253048B`. | Adjustable synthetic workload and write/peak versus file-tail/read Pareto trade, not a golden benchmark or steady-state winner. [`BenchmarkV1Corpus.cs`](Benchmarking/BenchmarkV1Corpus.cs), [`EVALUATOR-V1.md`](EVALUATOR-V1.md) |
 | Oversized cold NoChange | The old unconditional migration produced `Pworkload=10052`; the v2 regression requires `Pworkload < 10000`, so the 10,000-byte unmotivated Base cannot escape the envelope. | White-box adversarial witness; it intentionally does not lock the corrected incidental metric. [`BenchmarkV1Corpus.cs`](Benchmarking/BenchmarkV1Corpus.cs), [`BenchmarkV1RunnerTests.cs`](Tests/BenchmarkV1RunnerTests.cs) |
 | Capacity coupling | Selected hard rejection preserves typed failure, no fallback, no mutation, and no metrics even when another path is feasible. | No complete repair/search or file-size policy. [`ReadAmplificationBaseBudgetPolicyCapacityTests.cs`](Tests/ReadAmplificationBaseBudgetPolicyCapacityTests.cs), [`GroupedForegroundBurstCapacityCouplingTests.cs`](Tests/GroupedForegroundBurstCapacityCouplingTests.cs) |
-| Evaluator and benchmark consumer | Terminal settlement is mandatory and internally accounted; canonical W/P are workload-only; F remains a closed-horizon guardrail; R/L samples every successful workload Save. Revision 17 runs 34 admitted cases across seventeen traces and two active v2 profiles. | Internal certified-product track, not an untrusted-artifact judge, score, or frontier. [`EVALUATOR-V1.md`](EVALUATOR-V1.md), [`BenchmarkV1RunnerTests.cs`](Tests/BenchmarkV1RunnerTests.cs), [`BenchmarkV1JsonTests.cs`](Tests/BenchmarkV1JsonTests.cs) |
+| Evaluator and benchmark consumer | Terminal settlement is mandatory and internally accounted; canonical W/P are workload-only; F remains a closed-horizon guardrail; R/L samples every successful workload Save. Revision 18 runs 36 admitted cases across eighteen traces and two active v2 profiles. | Internal certified-product track, not an untrusted-artifact judge, score, or frontier. [`EVALUATOR-V1.md`](EVALUATOR-V1.md), [`BenchmarkV1RunnerTests.cs`](Tests/BenchmarkV1RunnerTests.cs), [`BenchmarkV1JsonTests.cs`](Tests/BenchmarkV1JsonTests.cs) |
 | Continuous rotation | A caller script crosses `A/B -> B/C -> C/D` while preserving exact state, reconstruction closure, and Stay certificates. | Not a stateful runner or durable publication path. [`ContinuousMultiRotationTests.cs`](Tests/ContinuousMultiRotationTests.cs) |
 
 ### Accepted source-partition provenance

@@ -13,12 +13,12 @@ namespace Atelia.TwoLegRotationProbe.Tests;
 
 public sealed class BenchmarkV1RunnerTests {
     [Fact]
-    public void Corpus_defines_seventeen_workloads_with_two_active_profiles_each() {
+    public void Corpus_defines_eighteen_workloads_with_two_active_profiles_each() {
         BenchmarkV1BatchDefinition definition = BenchmarkV1Corpus.Create(
             BenchmarkV1Baselines.All);
 
         Assert.Equal(2, definition.Manifest.Schema.Version);
-        Assert.Equal(17, definition.Manifest.ManifestRevision);
+        Assert.Equal(18, definition.Manifest.ManifestRevision);
         Assert.Equal(BenchmarkV1ProtocolIdentities.Evaluator, definition.Manifest.Evaluator);
         Assert.Equal(
             BenchmarkV1ProtocolIdentities.TerminalSettlement,
@@ -33,8 +33,8 @@ public sealed class BenchmarkV1RunnerTests {
         Assert.Equal(
             BenchmarkV1ProtocolIdentities.RevisionGrammar,
             definition.Manifest.RevisionGrammar);
-        Assert.Equal(34, definition.Cases.Count);
-        Assert.Equal(17, definition.Cases
+        Assert.Equal(36, definition.Cases.Count);
+        Assert.Equal(18, definition.Cases
             .Select(static benchmarkCase =>
                 benchmarkCase.ManifestCase.TraceDefinition.Id)
             .Distinct(StringComparer.Ordinal)
@@ -74,7 +74,7 @@ public sealed class BenchmarkV1RunnerTests {
         BenchmarkV1BatchRun run = BenchmarkV1Runner.Run(
             BenchmarkV1Corpus.Create(BenchmarkV1Baselines.All));
 
-        Assert.Equal(34, run.Report.Cases.Count);
+        Assert.Equal(36, run.Report.Cases.Count);
         foreach (IGrouping<string, BenchmarkCaseReportV1> group in
             run.Report.Cases.GroupBy(
                 static item => item.ResolvedTraceSha256,
@@ -114,6 +114,51 @@ public sealed class BenchmarkV1RunnerTests {
             peakWorkloadWriteBytes: 2104,
             maxCurrentFileTailBytes: 91380,
             totalColdReadBytes: 3754140);
+    }
+
+    [Fact]
+    public void Active_hundred_with_cold_debt_stays_for_the_whole_workload_horizon() {
+        BenchmarkV1BatchDefinition corpus = BenchmarkV1Corpus.Create(
+            BenchmarkV1Baselines.All);
+
+        foreach (string caseId in new[] {
+            BenchmarkV1Corpus.ActiveHundredMixedColdDebtAdaptiveR3B5PercentCaseId,
+            BenchmarkV1Corpus.ActiveHundredMixedColdDebtAdaptiveR4B4PercentCaseId,
+        }) {
+            BenchmarkV1CaseExecution execution = BenchmarkV1Runner.ExecuteCase(
+                FindCaseDefinition(corpus, caseId));
+            StrategyRunProductV1 product = execution.Product;
+            _ = Assert.IsType<AdmittedEvaluatorRun>(execution.Outcome);
+            Assert.Equal(64, product.WorkloadCommits.Count);
+            Assert.All(
+                product.WorkloadCommits,
+                static receipt => Assert.Equal(
+                    StrategyTargetV1.StayB,
+                    receipt.SelectedTarget));
+
+            StrategyRevisionCheckpointV1 lastWorkload =
+                product.WorkloadCommits[^1].Result;
+            AbsoluteFrameAddress lastWorkloadRevision = new(
+                lastWorkload.PublishedRevisionFileNumber,
+                new FrameTicket(
+                    lastWorkload.PublishedRevisionOffsetBytes,
+                    lastWorkload.PublishedRevisionLengthBytes));
+            for (int index = 0;
+                index < BenchmarkV1Corpus.ActiveHundredColdDebtObjectCount;
+                index++) {
+                uint objectId = checked(
+                    BenchmarkV1Corpus.ActiveHundredColdDebtObjectIdStart +
+                    (uint)index);
+                ObjectVersionDictionaryLookupInspection lookup =
+                    ObjectVersionDictionaryReader.LookupLive(
+                        product.Store,
+                        lastWorkloadRevision,
+                        objectId);
+                Assert.Equal(
+                    lastWorkload.PreviousFileNumber,
+                    lookup.ResolvedObjectVersionAddress?.FileNumber);
+            }
+        }
     }
 
     [Fact]

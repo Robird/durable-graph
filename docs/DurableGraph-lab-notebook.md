@@ -763,6 +763,13 @@
 
 ## 6. 船长日志
 
+### 2026-09-01：复合 workload 证实 Adaptive 的 stable A-debt 停滞
+
+- **Question**：修复无动机 progress floor 后，现实感更强的持续活跃对象群中，低放大率冷 A-debt 是否会长期阻塞 Rotate。
+- **Implemented**：加入只负责对齐 Save timeline、隔离 ObjectId ownership 并合并 change lanes 的 `WorkloadTraceComposer`；corpus revision 18 保留原 `active-hundred-mixed`，另叠加 20 个 bootstrap-only、合计 1120B 的冷对象 channel，形成十八 workloads × 两 profiles = 36 cases。
+- **Observed**：两 profile 在复合 trace 的 64 个 workload Saves 中全部选择 Stay，末端 20 个冷对象仍从 A 重建；`(3,5%)` 的 `W/P/F/R/L=117404/2076/117448/4166576/345484`，`(4,4%)` 为 `115692/2056/115736/4108844/345484`。
+- **Concluded / Next**：stable low-amplification A-debt stall 已从假说变成有限 horizon 可执行反例。下一步只设计一个受软预算约束的最小 progress 补丁；不同时混入一般 Rotate hysteresis，也不恢复绕过预算的无条件迁移。
+
 ### 2026-09-01：修复 Adaptive NoChange progress 越过 Base 预算
 
 - **Problem**：旧 `ReadAmplificationBaseBudgetPolicy` 无条件从 A-dependent NoChange 迁移一个对象；`oversized-cold-nochange-tiny-clock` 用 10000B stable cold object 与反复更新的 1B clock 将其放大，旧实现得到 `Pworkload=10052B`，证明 NoChange 可绕过 `baseBudgetFraction`。

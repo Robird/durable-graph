@@ -116,8 +116,8 @@ PublishedRevision 为 shared prior-snapshot anchor。accepted new head 的 curre
 
 ## 当前具备的实验积木
 
-- 固定种子、可冻结重放的 Field/List 独立对象 workload；当前 corpus 有十七条可调 trace，包括针对
-  oversized unmotivated NoChange 的白盒对抗样本；
+- 固定种子、可冻结重放的 Field/List 独立对象 workload，以及只在 trace 构造阶段工作的 aligned-channel
+  复合器；当前 corpus 有十八条可调 trace，包括软预算逃逸与长期冷 A-debt 停滞两类白盒对抗样本；
 - runtime OVD、absolute StateMap projection、symbolic reconstruction 与 provisional RBF v0.40
   one-Revision/one-Frame estimator；
 - 从 PublishedRevision authority 派生的 immutable
@@ -138,8 +138,8 @@ PublishedRevision 为 shared prior-snapshot anchor。accepted new head 的 curre
 
 ## 当前研究焦点
 
-Metrics identity `raw-wpfr/5`、report schema 5、Corpus revision 17 在十七条 trace 上运行两个
-active Adaptive v2 profiles，共 34 admitted cases。
+Metrics identity `raw-wpfr/5`、report schema 5、Corpus revision 18 在十八条 trace 上运行两个
+active Adaptive v2 profiles，共 36 admitted cases。
 `DeltaReference` 与 `BaseReference` 是 strategy-independent 写入参照，替代退役 profile 的
 “基线策略”职责。
 
@@ -155,17 +155,24 @@ NoChange 以严格 `H/B` 产生 Base 动机；统一按放大率/ObjectId 排序
 `Q` 是 payload pacing proxy，不是 exact physical P cap。对抗 workload 证明旧实现曾产生 `P=10052`
 的 10,000-byte 无动机迁移；当前回归只固定 `P<10000`，避免锁定偶然度量值。
 
+`active-hundred-mixed-cold-debt` 保留原 100-object/64-Save 活跃 channel，并叠加 20 个仅在 bootstrap
+出现、合计 1120B 的冷 channel 对象。两个 Adaptive profile 的 64 个自然 Save 全部选择 Stay，workload
+末这 20 个对象仍从 A 重建；`(3,5%)` 的 `W/P/F/R/L` 为
+`117404/2076/117448/4166576/345484`，`(4,4%)` 为
+`115692/2056/115736/4108844/345484`。这已把“稳定低放大 A debt 长期阻塞 Rotate”从假说提升为有限
+horizon 可执行反例；它不证明生产频率、无限期停滞或补丁优劣。
+
 ## 下一编码切片
 
-先对白盒 workload 复审 Adaptive v2 的两个剩余结构性问题，再只选择一个最小独立改动：稳定 A debt
-在没有严格 Base 动机时可能停滞，以及 `E/G` 只表示 Ready-to-Rotate、不能回答 Should-Rotate。
-不得恢复 unconditional progress、增加未来视野或 feasibility oracle；复跑 34-case suite 并报告
+先针对已证实的稳定冷 A-debt 停滞设计一个最小独立补丁；暂不同时引入一般 Rotate hysteresis。
+不得恢复会绕过 `Q` 的 unconditional progress、增加未来视野或 feasibility oracle；复跑 36-case suite 并报告
 typed outcomes、references 与 raw metrics，不合分、不排榜。
 
 ## 近期 roadmap
 
-1. **隔离下一弱点**：用最小白盒 trace 区分稳定债务停滞与 Rotate hysteresis，确认哪一个先成为可量化短板；
-2. **实现策略回应**：只对已证实短板构造一个最小独立 candidate，不改变 Arena contract 或让策略读取
+1. **设计冷债进度补丁**：在保持单次 Base 软预算与严格读放大动机的前提下，为 stable A debt 提供有界、
+   可累计的 Rotate 进度；先比较最小状态事实或无状态替代，不把 Should-Rotate hysteresis 一并混入；
+2. **实现策略回应**：只对该已证实短板构造一个最小独立 candidate，不改变 Arena contract 或让策略读取
    未来/feasibility；随后报告 typed outcomes 与 raw metrics，不合分、不排榜；
 3. **按弱点而非目录扩容**：只有 candidate 复审指出新的具体 blind spot，才增加或调整最小 validation；
    不再按 generic axis 或 seed 数机械扩 corpus；
@@ -176,8 +183,8 @@ typed outcomes、references 与 raw metrics，不合分、不排榜。
 
 - 哪些互相正交的因果 workload 轴足以支撑“没有明显短板”仍未知；统一 suite 只提供可重复 synthetic evidence，
   不能声称代表生产；
-- 无 unconditional progress 后，低放大率的稳定 A debt 可在 Stay 中长期不动；应由 hysteresis、债务年龄或
-  其他最小机制解决，还是接受为读写交换，尚未裁决；
+- 无 unconditional progress 后，低放大率稳定 A debt 在复合对抗 trace 的 64 个自然 Save 中全部未动并阻塞
+  Rotate；应使用累计 budget、债务年龄、受预算约束的 progress 或其他最小机制，尚未裁决；
 - 当前 `E/G` Rotate trigger 只证明迁移代价低于比例阈值，没有 leg age/write/file pressure，因此混淆
   Ready-to-Rotate 与 Should-Rotate；简单 hysteresis 的事实输入与收益仍待白盒验证；
 - 当前 payload-only canonical toolkit 是否足以产生结构多样的首轮 candidate，需由首轮结果验证；Frame-aware

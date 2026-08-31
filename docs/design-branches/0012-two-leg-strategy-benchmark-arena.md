@@ -173,11 +173,13 @@ strategy-neutral suite identity 与 per-strategy run identity。
 ## 当前证据
 
 - Arena、Baselines、Tests 三程序集保持单向依赖；两个 active executor 位于独立 Baselines assembly；
-- corpus revision 17 由十七条可调 trace 与两个 Adaptive profiles 组成，共 34 admitted cases；新增
+- corpus revision 18 由十八条可调 trace 与两个 Adaptive profiles 组成，共 36 admitted cases；
+  `active-hundred-mixed-cold-debt` 用 aligned channels 将原 100-object 活跃轨与 20 个 bootstrap-only
+  冷对象叠加；两 profile 的 64 个 workload Saves 全为 Stay，末端冷对象仍从 A 重建；另有
   `oversized-cold-nochange-tiny-clock` 对抗 trace，以 10000B stable A-dependent NoChange 和 1B 活跃
   clock 隔离软 Base 预算逃逸：旧实现的 `Pworkload=10052B`，修复后两个 profile 均 `<10000B`；
 - 两个 profile 保持原 identity ID 与 case suffix，但行为变化使 component version 均升为 v2；历史 v1
-  manifest/result 只能作为旧算法证据，不能与 revision 17 当前结果混同；
+  manifest/result 只能作为旧算法证据，不能与 revision 18 当前结果混同；
 - runner/report 锁定 fresh-per-case executor、typed termination、Arena-owned settlement/metrics、
   workload-only P、累计 R/L 与 Delta/Base references；
 - `active-hundred-mixed` 的两个 profiles 共享
@@ -191,7 +193,8 @@ strategy-neutral suite identity 与 per-strategy run identity。
 
 ## 下一阶段
 
-1. 单独研究没有读放大动机时 stable A debt 的停滞；不要恢复会绕过 Base 预算的无条件 progress floor；
+1. 为已由复合 workload 证实的 stable A-debt 停滞设计受预算约束的最小 progress 回应；不要恢复会绕过
+   Base 预算的无条件 progress floor；
 2. 区分 Ready-to-Rotate 与 Should-Rotate，评估最小 hysteresis 是否能避免过早或振荡轮转；
 3. 基于上一轮 Update 的热度修正与按 `Base - Delta` 边际成本选择保留为独立候选，不混入 baseline
    bug fix；candidate 稳定后再闭合 determinism/order/artifact 与 qualification gates；
