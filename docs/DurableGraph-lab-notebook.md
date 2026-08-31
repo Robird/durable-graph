@@ -763,11 +763,17 @@
 
 ## 6. 船长日志
 
+### 2026-08-31：闭合 common third-epoch continuation discriminator
+
+- **Observed**：fixed-cadence 两侧第二 epoch 终点同为 scope `3/4`、Previous debt `{10,20,30}`、per-object `H/B=1`、Current tail 52B；control 的三个 cold Base 共置一个 file-3 Frame，paced 分散在三个 Frames，source cold-head read 分别为 700/792B。
+- **Observed**：两端共同采用 paced-one-debt 跑同构第三 epoch，迁移顺序同为 `10,20,30`；三个 workload Commit 写入均为 `152,260,348B`，direct settlement 均为 52B，第三段 `W/P/F/R` 同为 `812/348/812/792`。三个 workload checkpoint 的 cold-head bytes 仍为 `848,1104,792` 与 `792,792,792`，旧 Bases 全部覆盖后差异消失。
+- **Concluded / Next**：coarse endpoint summary 只在此 trace 上对 closed W/P/F/R observationally sufficient，不能推广成一般充分性；v1 final-only R 不等于 intermediate cold-read guardrail，checkpoint 也不是实际或累计 IO。下一步以 coupled named profiles 把 adaptive `(3,5%)`/`(4,4%)` 接入相同 benchmark workloads，再形成不合分的 Pareto evidence。
+
 ### 2026-08-31：闭合 Base-fraction target-band 与首轮因果 matrix
 
 - **Observed**：测量前固定 `A-debt=40B`、`B-local=960B`，两次 `Base == Delta` Update 使 read limit、soft budget 与 progress 惰性；`(3,5%)` 以 `[Rotate,Stay]`、`(4,4%)` 以 `[Stay,Rotate]` 各完成一次 workload 轮转，再各 direct settlement 到 scope `3/4`。
 - **Observed**：两侧 `W/P/F/R` 为 `1144/1004/1096/1124` 与 `1188/1012/1128/1088`，final Previous debt 为 `{1,100}` 与 `{100}`；final per-object `H/B` 同为 1，所以 R 差异来自 retained full-Frame layout/provenance。这是严格 4% equality / 5% Rotate 边界及 target timing/terminal liability 的 Pareto 证据，不是默认参数或稳态 winner。
-- **Decided**：首轮小型 matrix 以 negative control、read-threshold、Base-fraction target 与 typed inadmissibility 四条因果索引闭合；不新增重复 goldens 的聚合 test/type，不把 rejection 数值化，也不增加第五 score。下一切片回到第三 epoch continuation-state 充分性。
+- **Decided**：首轮小型 matrix 以 negative control、read-threshold、Base-fraction target 与 typed inadmissibility 四条因果索引闭合；不新增重复 goldens 的聚合 test/type，不把 rejection 数值化，也不增加第五 score。其后的 third-epoch continuation-state 问题已由上方条目闭合。
 
 ### 2026-08-31：加入 realized H/B diagnostic 与首个参数辨别器
 
@@ -788,7 +794,7 @@
 - **Observed**：共同的三对象 A Frame 上，no-migration 与 paced-one-debt 都按 `3 workload Stay + 1 direct settlement` 运行两个 epoch；两侧同为 8 Commits、两次 scope advance，最终 scope `3/4`、live state 与 Previous debt `{10,20,30}` 对齐。
 - **Observed**：no-migration combined `W/P/F/R=984/664/800/700`，paced 为 `1624/348/812/792`。paced 以 `+640 W` 换得 `-316 P`，同时 horizon F/final-only R 高 12/92 bytes，形成当前 fixture 下的 raw Pareto trade，不选择 winner。
 - **Observed**：paced 首个 settlement 后形成的新 Previous debt `{10,20,30}`，在第二 epoch 的三个自然 Save 中又按 `10,20,30` 被实际迁移；terminal liability 因而进入了后续 workload，而不是只被另一个 zero-workload settlement 掩盖。
-- **Boundary / Next**：固定 Stay cadence 是实验控制，不是 `DebtZeroThenRotate` 或产品 trigger；相同 final debt membership 也不等于相同 retained physical layout/provenance state、steady state 或 regenerative cycle。下一步只追加一个同构第三 epoch，检验 aligned logical/scope/debt 终点的 retained physical state 是否仍改变 continuation cost。
+- **Boundary / Next**：固定 Stay cadence 是实验控制，不是 `DebtZeroThenRotate` 或产品 trigger；相同 final debt membership 也不等于相同 retained physical layout/provenance state、steady state 或 regenerative cycle。上方 common third-epoch discriminator 已继续裁决这种物理历史对 closed vector 与中间 cold-read pressure 的不同影响。
 
 ### 2026-08-30：闭合 source-layout/provenance fixed-horizon 2x2
 

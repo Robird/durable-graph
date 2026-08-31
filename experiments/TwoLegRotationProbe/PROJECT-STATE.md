@@ -150,10 +150,11 @@ PublishedRevision 为 shared prior-snapshot anchor。accepted new head 的 curre
   Revisions；相同 object-debt 轨迹可有不同 required unique Previous Frames。fixed-horizon 2x2 进一步
   证明同 treatment 的 Shared/Split 最终 W/P/F/R 可以相同，同时仍保留不同的 intermediate live-object
   Previous payload-Frame closure；该负结果限定了 final-only R/accounting 的观察边界，不证明 layout 无关；
-- fixed-cadence two-epoch terminal-liability witness：共同的三对象 A Frame 上，每 epoch 固定三个非空
-  foreground Stay 与一次 direct settlement；no-migration/paced 都以 8 Commits、两次换腿到 3/4，并以相同
-  live state/debt IDs 收尾。paced 第一轮写入 B 的三个 same-state Base 在下一轮成为 Previous debt，又被三个
-  自然 Save 逐一迁移，证明削峰工作会跨腿重新出现；该 cadence 是实验控制，不是自动 trigger；
+- fixed-cadence continuation witness：前两 epoch 让 no-migration/paced 都以 8 Commits、两次换腿到 3/4，
+  并以相同 live state/debt IDs/`H/B`/Current tail、不同 shared/split Frame provenance 收尾；两侧再共同采用
+  paced selector 跑第三 epoch，闭合 `W/P/F/R` 同为 `812/348/812/792`，但 workload checkpoint cold-head
+  bytes 为 `848,1104,792` 与 `792,792,792`。因此物理历史在被覆盖前影响中间读取压力，却未改变该固定
+  continuation 的闭合向量；该 cadence 是实验控制，不是自动 trigger；
 - read-amplification + Base-budget policy v0：只读 payload projection 冻结 `G/E` 与 per-object `H/D/B`，
   pure selector 实现 strict ratio/rotation thresholds、weak dominance、soft budget 与 NoChange-first progress；
   exact threshold/apply、policy-selected capacity rejection、realized accepted-head `H/B` diagnostic 与两组
@@ -208,30 +209,37 @@ synthetic evidence，仍不代表一般 pressure-aware rotation trigger 已解�
 不 fallback、不计分。exact vectors、`H/B` 与逐步 debt 见 `EVALUATOR-V1.md` 和 owning tests；这些 bounded
 synthetic evidence 不选择默认参数。
 
-当前焦点回到 continuation-state 充分性。Base-fraction crossover 的两侧 final per-object `H/B` 均为 1，
-但 R 仍不同；结合此前 fixed-cadence 的相同 logical/scope/debt endpoint 尚未对齐 physical history，下一步
-应送入同一第三 epoch，直接观察 retained Frame layout/provenance 是否改变 continuation exact costs。
+continuation-state discriminator 已闭合：相同 coarse semantic/policy inputs 可以产生相同的第三段闭合
+`W/P/F/R`，同时保留不同的 workload-checkpoint cold-read 轨迹。v1 的 final-head-only R 与“每次 Commit
+都可能发生冷启动”的 guardrail 是两个不同问题，不能用 final R 自动替代后者；当前仍不把中间读轨迹
+提升成第五 score。
+
+下一焦点是让 adaptive profiles 进入相同 benchmark horizon，形成跨 workload 的 comparable raw evidence。
+由于 adaptive 的 target 与 Base/Delta/migration decisions 来自同一次 coupled selection，接入时应保持一个
+named profile 的原子身份，不能让 manifest 暗示 target/decision 可以任意交叉组合。
 
 ## 下一编码切片
 
-闭合 continuation-state 充分性：把 fixed-cadence 两个已对齐 logical/scope/debt endpoint 继续送入同一第三
-epoch，判断 retained physical layout/provenance 是否改变后续 exact cost。小型参数 matrix 已用文档因果索引
-闭合，不再新增会复制 golden 或把 rejection 数值化的聚合 test/type。
+把 adaptive `(3,5%)` 与 `(4,4%)` 作为两个 coupled named profiles 接入 closed benchmark-v1 runner，先复用
+现有两个 frozen workloads 形成 matched、typed outcomes。保持 hard rejection 非数值化，不扩张 W/P/F/R
+report schema；若现有 target/decision 双 identity 无法无歧义表达 coupled profile，先以最小版本化 binding
+修正 manifest contract，而不是开放任意策略插件或参数 cross-product。
 
 ## 近期 roadmap
 
-1. **闭合 continuation-state 充分性**：保留 fixed-cadence 对齐终点的第三 epoch discriminator，裁决 retained
-   physical layout/provenance state 是否影响 continuation；
-2. **形成 Pareto evidence**：在相同 horizon 下保留 raw vectors、inadmissibility 与反例，不提前合分；
+1. **接入 adaptive named profiles**：保持 coupled target/decision 身份，在两个 frozen workloads 上复用同一
+   evaluator/horizon；
+2. **形成 Pareto evidence**：只在同 manifest/workload/horizon 的 admitted outcomes 间比较 raw vectors，
+   inadmissibility 保持独立，不提前合分；
 3. **再启动自动优化**：只允许修改窄 policy seam，保留 Pareto candidates/counterexamples，允许 `no winner`。
 
 ## 未闭合事项
 
 - 小型 matrix 已分别锁定参数被遮蔽、read-threshold、Base-fraction target 与 typed inadmissibility；它仍只有
   bounded synthetic shapes，不能据此选择默认参数或假定真实 workload 上存在同一 Pareto 前沿；
-- fixed-cadence witness 已用相同 Commit/scope/debt 终点量化 terminal liability，但没有对齐 retained
-  physical layout/provenance state；仍需第三 epoch continuation 判断这种物理历史是否会改变下一段 exact
-  costs，不能仅凭 debt IDs 宣称闭环；
+- common third epoch 已证明 retained Frame provenance 会改变 workload-checkpoint cold reads，却可在旧 Frame
+  全部覆盖后得到相同 closed W/P/F/R；是否把 intermediate cold-read pressure 设为 guardrail，仍需 workload
+  restart/read schedule，而不能从 final-only R 推导；
 - 无 workload SLO 时采用 Pareto frontier，还是先给 peak/file/read guardrail 再主优化 total write；当前不接受
   裸加权和或会用 1B 总写收益购买任意峰值的严格字典序；
 - batch consumer 已形成 experiment-only runner/report seam，但仍不自动证明产品 API 边界；

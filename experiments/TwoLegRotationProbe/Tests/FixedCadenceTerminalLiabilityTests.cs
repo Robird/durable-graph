@@ -100,6 +100,174 @@ public sealed partial class RotationPolicyComparisonTests {
             paced.CombinedRaw);
     }
 
+    [Fact]
+    public void Fixed_cadence_common_third_epoch_exposes_retained_frame_layout() {
+        PolicySource source = CreateSource();
+        SaveStep[] firstEpoch = CreateFixedCadenceSteps(1001, 1002);
+        SaveStep[] secondEpoch = CreateFixedCadenceSteps(1101, 1102);
+        SaveStep[] commonThirdEpoch = CreateFixedCadenceSteps(1201, 1202);
+
+        TerminalLiabilityRun control = RunFixedCadenceTreatment(
+            source,
+            firstEpoch,
+            secondEpoch,
+            SelectDeltaNoMigrationDecisions);
+        TerminalLiabilityRun paced = RunFixedCadenceTreatment(
+            source,
+            firstEpoch,
+            secondEpoch,
+            SelectDeltaPacedOneDebtDecisions);
+
+        AssertExactState(control.FinalState, paced.FinalState);
+        AssertFixedHorizonScope(control.SecondEpoch.FinalCursor, 3, 4);
+        AssertFixedHorizonScope(paced.SecondEpoch.FinalCursor, 3, 4);
+        Assert.Equal([10U, 20U, 30U], control.FinalDebtObjectIds);
+        Assert.Equal(control.FinalDebtObjectIds, paced.FinalDebtObjectIds);
+        AssertAlignedFixedCadenceContinuationInputs(control.SecondEpoch);
+        AssertAlignedFixedCadenceContinuationInputs(paced.SecondEpoch);
+
+        FixedCadenceEndpointLayout controlLayout = ObserveFixedCadenceEndpointLayout(
+            control.SecondEpoch);
+        FixedCadenceEndpointLayout pacedLayout = ObserveFixedCadenceEndpointLayout(
+            paced.SecondEpoch);
+        Assert.Equal(
+            control.SecondEpoch.FinalCursor.CurrentFileTailOffsetBytes,
+            paced.SecondEpoch.FinalCursor.CurrentFileTailOffsetBytes);
+        Assert.Equal(
+            control.SecondEpoch.FinalCursor.PublishedRevisionAddress,
+            paced.SecondEpoch.FinalCursor.PublishedRevisionAddress);
+        Assert.Equal(52, control.SecondEpoch.FinalCursor.CurrentFileTailOffsetBytes);
+        Assert.Equal([10U, 20U, 30U], Assert.Single(
+            controlLayout.ObjectFrameGroups));
+        Assert.Equal(3, pacedLayout.ObjectFrameGroups.Count);
+        Assert.All(
+            pacedLayout.ObjectFrameGroups,
+            static objectIds => Assert.Single(objectIds));
+        Assert.NotEqual(
+            controlLayout.ColdHeadRead.ObjectReconstructionFrameBytes,
+            pacedLayout.ColdHeadRead.ObjectReconstructionFrameBytes);
+        Assert.Equal(700, controlLayout.ColdHeadRead.UniqueFrameBytes);
+        Assert.Equal(792, pacedLayout.ColdHeadRead.UniqueFrameBytes);
+        Assert.Equal(44, controlLayout.ColdHeadRead.DictionaryFrameBytes);
+        Assert.Equal(
+            controlLayout.ColdHeadRead.DictionaryFrameBytes,
+            pacedLayout.ColdHeadRead.DictionaryFrameBytes);
+        Assert.Equal(656, controlLayout.ColdHeadRead.ObjectReconstructionFrameBytes);
+        Assert.Equal(748, pacedLayout.ColdHeadRead.ObjectReconstructionFrameBytes);
+
+        TerminalLiabilityEpoch controlThird = RunFixedCadenceEpoch(
+            control.SecondEpoch.Store,
+            control.SecondEpoch.FinalCursor,
+            commonThirdEpoch,
+            SelectDeltaPacedOneDebtDecisions,
+            new Dictionary<uint, LogicalObjectState>(control.FinalState),
+            expectedPreviousFileNumber: 4,
+            expectedCurrentFileNumber: 5);
+        TerminalLiabilityEpoch pacedThird = RunFixedCadenceEpoch(
+            paced.SecondEpoch.Store,
+            paced.SecondEpoch.FinalCursor,
+            commonThirdEpoch,
+            SelectDeltaPacedOneDebtDecisions,
+            new Dictionary<uint, LogicalObjectState>(paced.FinalState),
+            expectedPreviousFileNumber: 4,
+            expectedCurrentFileNumber: 5);
+
+        uint[][] expectedSourceDebt = [
+            [10U, 20U, 30U],
+            [20U, 30U],
+            [30U],
+        ];
+        uint[][] expectedMigrations = [[10U], [20U], [30U]];
+        Assert.Equal(expectedSourceDebt, controlThird.SourceDebtByStep);
+        Assert.Equal(expectedSourceDebt, pacedThird.SourceDebtByStep);
+        Assert.Equal(expectedMigrations, controlThird.MigrationObjectIdsByStep);
+        Assert.Equal(expectedMigrations, pacedThird.MigrationObjectIdsByStep);
+        Assert.Equal([10U, 20U, 30U], controlThird.DebtAfterSettlement);
+        Assert.Equal(
+            controlThird.DebtAfterSettlement,
+            pacedThird.DebtAfterSettlement);
+
+        Assert.Equal(
+            controlThird.WorkloadCommitWriteBytes,
+            pacedThird.WorkloadCommitWriteBytes);
+        Assert.Equal(
+            controlThird.SettlementCommitWriteBytes,
+            pacedThird.SettlementCommitWriteBytes);
+        Assert.Equal(controlThird.Raw, pacedThird.Raw);
+        Assert.Equal(
+            new FixedHorizonRawVector(4, 812, 348, 812, 792),
+            controlThird.Raw);
+        Assert.Equal(
+            [152L, 260L, 348L],
+            controlThird.WorkloadCommitWriteBytes);
+        Assert.Equal(52, controlThird.SettlementCommitWriteBytes);
+        Assert.Equal(
+            [1, 1, 0],
+            controlThird.WorkloadCandidateObservations.Select(static observation =>
+                observation.PostLiveReconstruction.PreviousFileUniqueFrameCount));
+        Assert.Equal(
+            [2, 1, 0],
+            pacedThird.WorkloadCandidateObservations.Select(static observation =>
+                observation.PostLiveReconstruction.PreviousFileUniqueFrameCount));
+        Assert.Equal(
+            [848L, 1104L, 792L],
+            controlThird.ColdHeadReadsAfterWorkloadSteps.Select(static read =>
+                read.UniqueFrameBytes));
+        Assert.Equal(
+            [792L, 792L, 792L],
+            pacedThird.ColdHeadReadsAfterWorkloadSteps.Select(static read =>
+                read.UniqueFrameBytes));
+        Assert.Equal(
+            [804L, 1060L, 748L],
+            controlThird.ColdHeadReadsAfterWorkloadSteps.Select(static read =>
+                read.ObjectReconstructionFrameBytes));
+        Assert.Equal(
+            [748L, 748L, 748L],
+            pacedThird.ColdHeadReadsAfterWorkloadSteps.Select(static read =>
+                read.ObjectReconstructionFrameBytes));
+        Assert.Equal(
+            controlThird.ColdHeadReadsAfterWorkloadSteps[^1].UniqueFrameBytes,
+            pacedThird.ColdHeadReadsAfterWorkloadSteps[^1].UniqueFrameBytes);
+        Assert.Equal(
+            controlThird.Raw.FinalColdHeadReadBytes,
+            pacedThird.Raw.FinalColdHeadReadBytes);
+
+        FixedHorizonRawVector controlCombined = ConcatenateFixedHorizonSegments(
+            control.FirstEpoch.Admitted,
+            control.SecondEpoch.Admitted,
+            controlThird.Admitted);
+        FixedHorizonRawVector pacedCombined = ConcatenateFixedHorizonSegments(
+            paced.FirstEpoch.Admitted,
+            paced.SecondEpoch.Admitted,
+            pacedThird.Admitted);
+        Assert.Equal(
+            new FixedHorizonRawVector(12, 1796, 664, 812, 792),
+            controlCombined);
+        Assert.Equal(
+            new FixedHorizonRawVector(12, 2436, 348, 812, 792),
+            pacedCombined);
+        long sourceTailBytes = FixedHorizonTotalTailBytes(source.Store);
+        Assert.Equal(
+            controlCombined.TotalPhysicalWriteBytes,
+            checked(FixedHorizonTotalTailBytes(controlThird.Store) -
+                sourceTailBytes));
+        Assert.Equal(
+            pacedCombined.TotalPhysicalWriteBytes,
+            checked(FixedHorizonTotalTailBytes(pacedThird.Store) -
+                sourceTailBytes));
+    }
+
+    private static SaveStep[] CreateFixedCadenceSteps(
+        uint firstObjectId,
+        uint secondObjectId) => [
+        new SaveStep([new CreateObject(firstObjectId, 1)]),
+        new SaveStep([
+            new RemoveObject(firstObjectId),
+            new CreateObject(secondObjectId, 1),
+        ]),
+        new SaveStep([new RemoveObject(secondObjectId)]),
+    ];
+
     private static TerminalLiabilityRun RunFixedCadenceTreatment(
         PolicySource source,
         IReadOnlyList<SaveStep> firstEpochSteps,
@@ -168,6 +336,10 @@ public sealed partial class RotationPolicyComparisonTests {
             totalWorkloadStepCount: steps.Count);
         List<uint[]> sourceDebtByStep = [];
         List<uint[]> migrationObjectIdsByStep = [];
+        List<long> workloadCommitWriteBytes = [];
+        List<FinalColdHeadReadObservation> coldHeadReadsAfterWorkloadSteps = [];
+        List<CandidateRawObservation> workloadCandidateObservations = [];
+        long segmentSourceTailBytes = FixedHorizonTotalTailBytes(sourceStore);
 
         foreach (SaveStep step in steps) {
             NormalizedSaveFacts facts = SaveStepNormalizer.Normalize(
@@ -184,6 +356,7 @@ public sealed partial class RotationPolicyComparisonTests {
                     decisions.StayB,
                     decisions.RotateC);
 
+            long commitSourceTailBytes = FixedHorizonTotalTailBytes(session.Store);
             RotationPolicyStepAttempt attempt = session.ApplySelectedWorkloadCommit(
                 pair,
                 CandidateTarget.StayB);
@@ -196,14 +369,23 @@ public sealed partial class RotationPolicyComparisonTests {
             migrationObjectIdsByStep.Add([
                 .. applied.Selected.Plan.Decision.UnchangedMigrationObjectIds,
             ]);
+            workloadCommitWriteBytes.Add(checked(
+                FixedHorizonTotalTailBytes(session.Store) - commitSourceTailBytes));
+            coldHeadReadsAfterWorkloadSteps.Add(FinalColdHeadReadMeasurer.Measure(
+                session.Store,
+                session.Cursor.PublishedRevisionAddress));
+            workloadCandidateObservations.Add(applied.Selected.Observation);
 
             ApplyExpectedState(expectedState, step);
             AssertExactState(expectedState, facts.PostLiveStates);
             AssertRuntimeStateAndClosure(session.Store, session.Cursor, expectedState);
         }
 
+        long settlementSourceTailBytes = FixedHorizonTotalTailBytes(session.Store);
         AdmittedEvaluatorRun admitted = Assert.IsType<AdmittedEvaluatorRun>(
             session.Complete());
+        long settlementCommitWriteBytes = checked(
+            FixedHorizonTotalTailBytes(session.Store) - settlementSourceTailBytes);
         AssertFixedHorizonScope(
             admitted.FinalCursor,
             expectedPreviousFileNumber,
@@ -213,6 +395,13 @@ public sealed partial class RotationPolicyComparisonTests {
             session.Store,
             admitted.FinalCursor,
             expectedState);
+        Assert.Equal(
+            steps.Count + 1,
+            admitted.Metrics.RealizedCommitCount);
+        Assert.Equal(
+            admitted.Metrics.TotalPhysicalWriteBytes,
+            checked(FixedHorizonTotalTailBytes(session.Store) -
+                segmentSourceTailBytes));
 
         return new TerminalLiabilityEpoch(
             session.Store,
@@ -223,7 +412,51 @@ public sealed partial class RotationPolicyComparisonTests {
             migrationObjectIdsByStep,
             GetFixedHorizonPreviousDebtObjectIds(
                 session.Store,
-                admitted.FinalCursor));
+                admitted.FinalCursor),
+            workloadCommitWriteBytes.ToArray(),
+            settlementCommitWriteBytes,
+            coldHeadReadsAfterWorkloadSteps.ToArray(),
+            workloadCandidateObservations.ToArray());
+    }
+
+    private static void AssertAlignedFixedCadenceContinuationInputs(
+        TerminalLiabilityEpoch endpoint) {
+        NormalizedSaveFacts facts = SaveStepNormalizer.NormalizeMaintenanceOnly(
+            endpoint.Store,
+            endpoint.FinalCursor.FileScope.CurrentFileNumber,
+            endpoint.FinalCursor.PublishedRevisionAddress);
+        Assert.Equal([10U, 20U, 30U], facts.NoChanges.Select(static fact =>
+            fact.ObjectId).ToArray());
+        Assert.All(facts.NoChanges, fact => {
+            Assert.Equal(fact.Source.HeadAddress, fact.Source.BaseAddress);
+            Assert.Equal(
+                fact.Source.State.BasePayloadBytes,
+                fact.Source.HeadReconstructionObjectPayloadBytes);
+            Assert.Equal(
+                endpoint.FinalCursor.FileScope.PreviousFileNumber,
+                fact.Source.BaseAddress.FileNumber);
+        });
+    }
+
+    private static FixedCadenceEndpointLayout ObserveFixedCadenceEndpointLayout(
+        TerminalLiabilityEpoch endpoint) {
+        NormalizedSaveFacts facts = SaveStepNormalizer.NormalizeMaintenanceOnly(
+            endpoint.Store,
+            endpoint.FinalCursor.FileScope.CurrentFileNumber,
+            endpoint.FinalCursor.PublishedRevisionAddress);
+        uint[][] groups = facts.NoChanges
+            .GroupBy(static fact => fact.Source.BaseAddress)
+            .Select(static group => group
+                .Select(static fact => fact.ObjectId)
+                .Order()
+                .ToArray())
+            .OrderBy(static group => group[0])
+            .ToArray();
+        return new FixedCadenceEndpointLayout(
+            groups,
+            FinalColdHeadReadMeasurer.Measure(
+                endpoint.Store,
+                endpoint.FinalCursor.PublishedRevisionAddress));
     }
 
     private sealed record TerminalLiabilityRun(
@@ -240,6 +473,15 @@ public sealed partial class RotationPolicyComparisonTests {
         FixedHorizonRawVector Raw,
         IReadOnlyList<uint[]> SourceDebtByStep,
         IReadOnlyList<uint[]> MigrationObjectIdsByStep,
-        uint[] DebtAfterSettlement);
+        uint[] DebtAfterSettlement,
+        IReadOnlyList<long> WorkloadCommitWriteBytes,
+        long SettlementCommitWriteBytes,
+        IReadOnlyList<FinalColdHeadReadObservation>
+            ColdHeadReadsAfterWorkloadSteps,
+        IReadOnlyList<CandidateRawObservation> WorkloadCandidateObservations);
+
+    private sealed record FixedCadenceEndpointLayout(
+        IReadOnlyList<uint[]> ObjectFrameGroups,
+        FinalColdHeadReadObservation ColdHeadRead);
 
 }

@@ -302,6 +302,42 @@ state or a regenerative steady-state cycle. The exact debt/migration trajectory 
 vectors live in
 [`FixedCadenceTerminalLiabilityTests.cs`](Tests/FixedCadenceTerminalLiabilityTests.cs).
 
+### Common third-epoch continuation discriminator
+
+The two fixed-cadence endpoints above agree on live logical state, scope `3/4`,
+Previous debt `{10,20,30}`, each object's `H/B=1`, and a 52-byte Current-file tail.
+They deliberately retain different physical provenance: no-migration's three cold
+Bases share one file-3 Frame, while paced's Bases occupy three Frames. Their source
+cold-head reads are therefore 700 and 792 bytes even though the coarse continuation
+inputs agree.
+
+Both endpoints then receive the same third epoch: the same three isomorphic nonempty
+Saves, fixed Stay-B targets, and the same paced-one-debt selector. Both migrate
+`10`, `20`, and `30`; their exact workload-Commit writes are `152,260,348` bytes and
+their direct terminal settlements each write 52 bytes. The closed third-epoch vector
+is identical on both sides:
+
+| Source history | Commits | W | P | F | R |
+|---|---:|---:|---:|---:|---:|
+| no-migration shaped | 4 | 812 | 348 | 812 | 792 |
+| paced shaped | 4 | 812 | 348 | 812 | 792 |
+
+Physical history remains visible before the third epoch closes. After the three
+workload Saves, exact cold-head bytes are `848,1104,792` versus `792,792,792`, and
+required Previous-file object Frames are `1,1,0` versus `2,1,0`. The shared Frame on
+the first side remains required until its last resident debt object moves; the second
+side releases singleton Frames one by one. Once all three objects have been rewritten,
+the two physical states converge for this continuation and the direct settlement keeps
+their final-only R equal.
+
+Across all three epochs the accumulated vectors are `12/1796/664/812/792` and
+`12/2436/348/812/792`. Those cumulative W/P differences were incurred while shaping
+the two source histories; they are not a cost difference in the common third epoch.
+The observation therefore says only that the coarse endpoint summary is sufficient
+for this fixed continuation's closed W/P/F/R, while retained Frame layout/provenance
+still determines intermediate checkpoint cold-read pressure. It does not prove general
+state sufficiency, pure packing causality, actual cumulative IO, or a fifth metric.
+
 ### Named adaptive payload-policy matched-cadence diagnostic
 
 The first `ReadAmplificationLimit=3`, `BaseBudgetFraction=5%` policy witness starts with
@@ -394,8 +430,10 @@ and [`ReadAmplificationBaseBudgetPolicyCapacityTests.cs`](Tests/ReadAmplificatio
 
 ## Still open before strategy selection
 
-- continue both aligned logical/scope/debt endpoints through one identical third epoch
-  before deciding whether debt membership and payload bytes are sufficient continuation
-  state or retained physical layout/provenance state remains decision-relevant;
+- decide whether the optimization protocol needs an intermediate cold-read guardrail or
+  intentionally keeps v1's final-head-only R; the common third epoch proves these are
+  observably different questions;
+- bind the coupled adaptive target/decision profiles into the closed benchmark runner
+  without presenting their two halves as an arbitrary cross-product;
 - retain Pareto/raw outcomes until workload/SLO evidence justifies guardrails or a
   ranking rule.
