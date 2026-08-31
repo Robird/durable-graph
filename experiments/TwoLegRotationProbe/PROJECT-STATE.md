@@ -2,7 +2,7 @@
 
 > 状态：Active Research Context
 >
-> 最近校准：2026-08-31
+> 最近校准：2026-09-01
 >
 > 读者：继续研究本子项目的 Coding Agent 与维护者
 
@@ -115,180 +115,40 @@ PublishedRevision 为 shared prior-snapshot anchor。accepted new head 的 curre
 
 ## 当前具备的实验积木
 
-- 固定种子、可冻结重放的 Field/List 独立对象 workload；
-- single-file `AlwaysBase`、`AlwaysDeltaWhenLegal`、local read-amplification=3 基线；
-- runtime OVD、absolute StateMap projection、symbolic reconstruction 与 raw read/write observations；
-- provisional RBF v0.40 whole-frame estimator；无 bytes writer/parser；
-- 从 PublishedRevision OVD authority 派生的 immutable canonical
-  `Insert / Update / Remove / NoChange` facts；
-- 独立 `NormalizeMaintenanceOnly` 入口复用同一 source inspection，并在不放宽 `SaveStep` 非空约束的
-  前提下产生全 NoChange facts；
-- caller-explicit Stay-B candidate：同一 B Revision 合并 domain changes、Update Base/Delta、OVD Remove 与
-  selected unchanged A-debt same-state Base；
-- caller-explicit Rotate-C candidate：同一 fresh-C Revision 合并 domain changes、mandatory A-dependent
-  Bases、B-contained Update Base/Delta 与 NoChange External/optional Base，并写 full OVD Base；
-- caller-explicit paired evaluation：两侧从同一 facts 独立尝试，成功保留 exact plan/candidate/estimate
-  identity，合法但撞到已知 Frame/address hard gate 时返回 typed bounded rejection；
-- 无权重 raw candidate observations：从既有 estimate 的 domain records 与冻结 reconstruction paths
-  派生 foreground/maintenance record bytes、PostLive full-frame reads 和相对结果 FileScope 的 Previous debt；
-  candidate 不重估，source stored layout 则用同一唯一 estimator 验证 provisional provenance；
-- caller-owned volatile probe cursor 与强类型 Stay-B / Rotate-C apply seam：变异前重验 source、tail、facts、
-  candidate state/layout/anchor，失败不追加；不写 Store head，不声称并发、crash 或 durable publication；
-- 保守 `CanPrepareAndRotate` certificate：在 exact scratch fork 上先试零迁移 Rotate-C，再按 ObjectId 升序
-  每次迁一个 A-debt object；成功冻结完整 exact candidate chain，容量受阻只返回 `RejectedUnproven`；
-- caller-scripted 连续 Save witness：只组合现有 normalized facts、pair、certificate 与 apply seam，已跑通
-  `A/B -> B/C -> C/D`，并观察到 Previous debt `{10} -> {20} -> {} -> {20}` 的换腿锯齿；
-- probe-only 无状态单步 policy harness：caller 显式选 target 后，统一处理 selected capacity、Stay completion
-  admission 与 exact apply；typed rejection 不 fallback，cursor 仍由 caller 显式传入/接回；
-- 固定 `[Stay, Stay, Rotate]` 的 cold-migration 因果对照：no-migration 与 paced-one-debt 共享同一 trace、
-  target 和 foreground，只改变 Stay 的迁债集合；paced 降低单次/Rotate append 峰值，但换腿后留下更多
-  Previous debt 与 frame bytes；
-- test-local `DebtZeroThenRotate` 进展基线：target 只读本次 Save 之前的 source A-debt；四步 all-cold
-  trace 中 no-migration 完成有限前缀但保留 deferred debt，paced-one-debt 前三步清债并只在第四次 Save
-  真正轮转；completion certificate 明确保持为反事实可行性证据，不算策略进展；
-- test-local rotation observation reductions：每个 realized step 冻结各自 scope 下的 source/result debt、
-  live-object reconstruction Previous Frames、Current tail/next-start slack 与写入分项；连续 SourceScope
-  归成 observed epoch，Rotate 属于并关闭旧 epoch；certificate terminal-C 单独标记为 counterfactual，
-  不进入 realized totals/peaks；一个两 epoch witness 已验证 `A/B -> B/C -> C/D` 的跨步连续性；
-- test-local decision selector：只从 canonical facts 投影完整 Stay-B/Rotate-C decisions，与 target selector
-  正交；changed A-debt 固定对照已验证 Base@B 能把旧 A evacuation 分摊到自然 Update，但换腿后会成为
-  新 B/C scope 的 Previous debt；
-- role-disjoint 2x2 interaction witness：changed `{10,20,30}` 与 migration-only `{1,2,3}` 共居一个 A Frame，
-  四个命名 treatment 证明两种机制在该 trace 上逐步退休 old-A debt 的集合互斥且可加；只有组合格在第三次
-  Stay 后释放共享 Frame，换腿后各自在 B 写过的对象按新 scope 形成 Previous debt；
-- current-reconstruction source-layout evidence：两侧使用同构的 metadata-only full-OVD A anchor，shared
-  将六个 payload Base 共置一个 Frame，split 以唯一 accepted chain 把 cold/changed 分置两个 payload
-  Revisions；相同 object-debt 轨迹可有不同 required unique Previous Frames。fixed-horizon 2x2 进一步
-  证明同 treatment 的 Shared/Split 终点 W/P/F/T 可以相同，同时仍保留不同的 intermediate live-object
-  Previous payload-Frame closure；新的累计 R 正是为了保存这种周期内差异；
-- fixed-cadence continuation witness：前两 epoch 让 no-migration/paced 都以 8 Commits、两次换腿到 3/4，
-  并以相同 live state/debt IDs/`H/B`/Current tail、不同 shared/split Frame provenance 收尾；两侧再共同采用
-  paced selector 跑第三 epoch，终点 `W/P/F/T` 同为 `812/348/812/792`，但 workload cold-load 序列为
-  `848,1104,792` 与 `792,792,792`，故累计 R 为 `2744` 与 `2376`。物理历史在被覆盖前的影响现已进入
-  canonical 读取指标；该 cadence 是实验控制，不是自动 trigger；
-- read-amplification + Base-budget policy v0：只读 payload projection 冻结 `G/E` 与 per-object `H/D/B`，
-  pure selector 实现 strict ratio/rotation thresholds、weak dominance、soft budget 与 NoChange-first progress；
-  exact threshold/apply、policy-selected capacity rejection、realized accepted-head `H/B` diagnostic 与两组
-  parameter witness 已闭合，未改 planner、harness 或 canonical report schema；
-- migration membership 因果组：equal-byte source topology 证明同成本 membership 会改变即时 Previous-Frame
-  closure；payload skew 暴露本步少写与退出更多 old-A full-Frame bytes 的局部冲突；known-future、等尺寸
-  hot/cold oracle 则证明把迁移预算投给下一步会 Update 且被对照强制写 Base 的对象，会错过本 trace 内
-  保持不变的 cold debt。三者都保留
-  terminal-C/换腿后压力反转，不选择 winner，也不冒充在线温度推断；
-- caller-selected B same-state Base migration plan/append witness；
-- relay-free immediate A/B -> B/C plan/append、shared anchor、B/C closure witness；
-- 多批 B migration 使原本放不下的 C evacuation 可编码的容量 witness；
-- grouped-foreground Frame-envelope coupling witness：同一 canonical facts、固定 Stay-B target 下，三项
-  foreground Update 全写 Base 时 exact candidate 只剩不超过 32B envelope slack；再加入一个 10B
-  optional same-state migration 后命中 typed `PayloadAndTailMetaLength` rejection。失败不 fallback、不改变
-  Store/cursor；foreground-only 分支经 completion/apply 后只向 B 追加其 exact Frame；
-- experiment-only raw metric accounting：显式 outer-Commit 边界按全文件 tail 增量计算 W，并把 W 精确
-  拆成成功 workload Saves 与 canonical terminal-settlement Commit；每个 realized Revision checkpoint 跟踪 F，
-  workload-only P 只取自然 Save 峰值，terminal burst 由单独的 `Wterminal` 表达；每个成功 workload Save
-  后以 empty-cache full-Frame 去重并集累计 R/L，terminal head 另记内部 T。workload
-  Delta-reference=`Insert Base + Update Delta`，Base-reference=`Insert Base + Update result Base`；Remove、NoChange、
-  bootstrap、terminal 与 rejected 不进入 references。只输出原始整数，不输出浮点；
-- evaluator v1 closed-horizon session：每次 run 在独立 Store fork 上消费 caller-selected workload Commits，
-  用互斥 typed outcome 分开 success、selected capacity、`RejectedUnproven` 与 incomplete；完整 workload 后
-  无条件执行一次 `DirectRotateElseAscendingSingleDebt-v1` terminal settlement。直转优先，否则 ObjectId 升序
-  单对象迁债；全部 preparation+Rotate 真实 apply 在同一个 synthetic Commit 中并计入 Wterminal/F，且进入
-  内部可派生的 closed-P，但不进入 canonical workload-P；成功还验证
-  terminal source A 已退出 final B/C current reconstruction；
-- benchmark-v1 consumer：workload-only corpus 接收 organizer 提供的 strategy bindings；trace step0 Create-only
-  population 共置为一个 full-OVD A Frame，
-  再写 metadata-only B anchor，evaluator 只消费 steps[1..]；manifest 固定 fixture/trace/generator/seed、expanded
-  trace SHA-256、atomic selection profile 与 evaluator/settlement/accounting/layout/grammar/read-schedule identity；
-  batch runner 只在 session Store 上 normalize/evaluate/apply，typed rejection 不 fallback；canonical UTF-8
-  manifest/report 使用固定 tokens/order、16位 hex seed、manifest+trace SHA-256，只有 admitted 输出精简后的
-  九个 raw metrics；manifest schema 2 以单一 `selectionProfile` 取代 target/decision 双栏，report schema 4 /
-  `raw-wpfr/4` 采用 workload-only P 并移除终点/冗余投影，corpus revision 14
-  当前在十六条 trace 上各运行 no-migration、paced、Adaptive `(3,5%)`、Adaptive `(4,4%)`，
-  共 64 cases；identity-only
-  manifest case 不可执行并 fail-close；
-- 多策略 Arena vertical proof：项目已拆为 `Arena <- Baselines <- Tests` 单向依赖；四个现有策略的完整运行
-  delegate 与 Adaptive 实现位于独立 Baselines 程序集。public `StrategyStepViewV1` 保留 `G/E/H/D/B`、
-  Insert/Update/Remove/NoChange 与 parent debt，`StrategyRunContextV1` 只逐步开放当前 Save，并由 Arena
-  构造 final Store、workload Commit receipts、final checkpoint 与 typed termination。策略不声明任何 metrics；
-  原有稳定 fixtures 继续保留 typed outcomes 与 exact vectors；新 active-hundred workload 暂不设 dedicated
-  unit test 或 literal hash，以便反馈式调参；
-- canonical parameter evidence：前两条 trace 遮蔽 Adaptive 参数；threshold-band 隔离 read limit，但新累计
-  R 显示 `(3,5%)` 在该 trace 被 `(4,4%)` 支配，旧 T 差异曾掩盖这一点；debt-share dilution 仍让共享
-  `G=1000,E=40` source 的 Adaptive pair 产生严格 5%/4% target 分叉；
-- canonical locality/ObjectId pair：两条 trace 的首个 `StrategyStepViewV1` 与 selection 完全相同，候选看不到
-  next Update。no-migration 对 low/high 置换不变，paced 与 Adaptive 会改变；这只证明当前
-  ObjectId-first assignment 对 next-update locality 敏感，不是长期 hot/cold、温度推断、旧
-  singleton-Frame oracle 复制或 winner；
-- canonical size-skew pair：两条 ordinary trace 仅交换 20B/100B payload 与低 ObjectId 的绑定；
-  no-migration 对置换不变，ObjectId-first paced/两组 Adaptive 在各 trace 内同结果，但 low-id-large
-  以更高 W/F/R 且相同 P 显示尺寸到 ID 绑定对 immediate-vs-terminal placement 的敏感性。
-  ordinary bootstrap 把两个 Base 共置一个 A Frame，因此 workload checkpoint 两种迁移都不释放该 Frame；
-  这不是旧 singleton-Frame release oracle 的复制；
-- canonical transient-lifecycle pair：两条 trace 使用相同 Create/Remove multiset、ObjectId、payload、horizon
-  与最终状态，只交换 `Create101` 与 `Remove100` 的次序；这改变 transient 的生命周期重叠与驻留跨度，
-  并使 peak live-set 从 overlap 的 2 变为 serial 的 1。
-  八个 cases 均 admitted，以四个 workload Commits 加 direct settlement 得到 `M=5`。
-  no-migration 在 pair 内都走 `Stay/Stay/Stay/Stay` 并终止于 scope `2/3`；ObjectId-first paced/两组
-  Adaptive 都走 `Stay/Stay/Rotate/Stay` 并终止于 `3/4`。serial 的主观察是这三组策略的 F 降低
-  408B；4B W 差是当前 layout fallout。这不外推 churn rate、lifetime prediction、GC、steady state
-  或建议业务串行化；
-- canonical Previous-debt granularity pair：ordinary step0 共置 `10/20/30=100B,40=300B`，两条 trace
-  只交换 three-small 与 single-large 的首次 full rewrite 次序，并共享 1B sentinel、catch-up 与最终
-  three-small reconvergence；operation multiset、最终 versions 和 horizon 相同。两组 Adaptive 在共同 pivot 上均为
-  `G/E=601/300`，但 debt 分别为一个不可再分的 300B 对象与三个 100B 对象。该 pair 八个 cases 全部 admitted，
-  本 pair 均为四个 workload Commits 加 direct settlement；endpoint T 曾让 no-migration 看似 exact tie、paced
-  只差 4B P，但累计 R 进一步区分二者；两组 Adaptive 中 single-large 在 W/P/F/R 全部更低。这只证明当前 Adaptive one-object
-  progress floor 对 debt granularity/indivisibility 敏感，不外推 arrival/service-rate pressure、steady state、
-  starvation 或一般 size preference；
-- canonical insert-burst pair：两条 trace 共享 bootstrap 与首个 full-rewrite Save，并把相同四项 300B
-  Insert 分成 `3+1` 或 `2+2`；operation multiset、horizon、final versions 以及每个 profile 的 cadence/scope
-  相同，所有 workload Frames 均小于 2 KiB。no-migration 只改变 P；paced/Adaptive 还通过当前 provisional
-  layout 与后续 Rotate/settlement placement 把分组差异传播到 W/F，R 不变。outer Commit 分组由 caller
-  决定，策略不能拆分；这不是 capacity witness，也不外推 batching、latency 或 steady-state 建议；
-- canonical nested-prefix horizon diagnostic：`debt-zero-before-rotate` 精确复用既有 long trace 的前三个
-  workload Saves；公共 prefix 的 view/selection 完全相同，public context 不暴露 horizon。paced/两组
-  Adaptive 的 short cutoff 位于首次 natural Rotate 之前，long 则多一个 Save 并多跨一代；
-  no-migration 是保持同一最终 scope 的 control。两条 trace 的 horizon 与最终状态不同，delta 同时包含
-  真实额外 Save 和 terminal placement 变化；不做因果成本拆分、cross-horizon Pareto、归一化排名或 steady-state 推断；
-- burst/capacity 分层裁决：round-1 corpus 不加入 near-limit performance trace。现有 typed tests 已冻结
-  selected hard rejection、no fallback、zero mutation/no metrics；后续 candidate qualification 只需加入
-  avoidable selected-capacity gate，即 foreground、alternate/reference 路径可行而 candidate 选择被拒绝；
-- adjustable active-hundred mixed workload：fixed-seed generator 以 Field/List 1:1 权重创建 100 个持久对象，
-  后续 64 个 workload Saves 每轮从全部 live objects 中确定性随机选择 60 个 Update；没有后续 Create/Remove。
-  这同时保留大规模 A-debt backlog、持续 Delta 动机和每轮变化的 40-object NoChange pool。首轮观察中
-  no-migration/paced 无 workload Rotate；Adaptive `(3,5%)` 在 Saves 25/47 Rotate，`(4,4%)` 在 31/61 Rotate；
-  新累计 R/L 显示 `(3,5%)` 的平均冷读/放大率为 `45262.69/10.5799`，优于 `(4,4%)` 的
-  `50300.94/11.7575`。四策略的 Delta/Base references 同为 `67206/165606`；no-migration、paced、
-  Adaptive `(3,5%)`、Adaptive `(4,4%)` 的 `Wworkload/Wterminal` 分别为 `111636/5208`、
-  `115048/2072`、`118716/1044`、`117364/4336`。`(3,5%)` 相比 `(4,4%)` 在 workload 多写 1352B，
-  但少留下 3292B terminal liability，净少写 1940B，并同时降低 F/R。T 与旧 closed-horizon P 已从
-  canonical comparison 降级；这仍不归因完整 `I/UB/UD/NB` 或策略原因，也不视为 golden/steady-state 证据；
-- named fixed-two-scope-advances diagnostic：窄 `ExecuteCase` seam 复用 canonical benchmark-v1 执行路径，
-  test-local continuation 只为 control 真实追加一个 zero-workload terminal settlement。两侧最终同为 scope 3/4；
-  control `commits/W/P/F/T=6/944/680/680/752`、paced `5/1536/696/804/756`。control final Previous debt
-  `{10,20,30}`，paced 为 `{1004}`，所以 equal scope 排除了结束文件代际差异，却没有中性化布局历史或尾债；
-- terminal sizing 反例：high-ticket External 不支配 zero-payload Base+Self。
-
-Stay-B 与 Rotate-C 已接入同一 per-Save facts、paired evaluation、显式 apply、保守 completion proof 与
-连续多轮转调用节奏。当前连续 witness 仍是 test-local caller script，不是自动策略或通用 Runner。
-当前还具备外部固定日程、故意保守的 `DebtZeroThenRotate` 与自动 payload-share v0 trigger；后者只有有界
-synthetic evidence，仍不代表一般 pressure-aware rotation trigger 已解决。
+- 固定种子、可冻结重放的 Field/List 独立对象 workload；当前 corpus 有十六条可调 trace；
+- runtime OVD、absolute StateMap projection、symbolic reconstruction 与 provisional RBF v0.40
+  one-Revision/one-Frame estimator；
+- 从 PublishedRevision authority 派生的 immutable
+  `Insert / Update / Remove / NoChange` facts，以及 payload-only `G/E/H/D/B` strategy view；
+- caller-explicit Stay-B / Rotate-C planning、paired evaluation、exact hard-capacity filter、
+  completion certificate 与无 fallback apply；
+- evaluator v1：fresh Store、typed outcomes、一次真实 terminal settlement，以及
+  `W/Wworkload/Wterminal`、workload-only P、F、累计 R/L、Delta/Base references；
+- `Arena <- Baselines <- Tests` 单向程序集边界；candidate 只作在线选择，Arena 持有
+  normalize、定尺、admission、apply、settlement、状态验真和 metrics；
+- 两个 active Adaptive bindings：read-amplification/Base-budget `(3,5%)` 与 `(4,4%)`；
+- typed capacity/no-fallback/zero-mutation witnesses 与核心 evaluator/report determinism tests；
+- no-migration 与 paced-one-debt 的完整 profile、64-case corpus 和专属相位诊断已退出主线，
+  由 Git tag `research/no-migration-paced-baselines-20260901` 保存。test-local 的“不迁移/迁一个”
+  动作可以继续作为机制对照，但不再是 profile、manifest case 或正式结果行。
 
 ## 当前研究焦点
 
-revision 14 当前是十六条 trace、64 admitted cases，并采用 workload-cycle cumulative cold-load R、
-workload/terminal write split、payload references 与 workload-only P。最新
-`active-hundred-mixed` 把原先两个过短、过纯的
-adversarial trace 合并成一个可调的长程混合 workload；它用 100 个持久对象、64 轮和每轮 60% Update，直接
-观察 backlog pacing 与 active-Update debt 在同一运行中的交互。四策略复审已确认当前核心交换是：
-no-migration 的 W/workload-P 最低，但相比 Adaptive 接受很高的 F/R；paced-one-debt 在本负载上既未促成
-自然轮转，又被 no-migration 在 W/workload-P/F/R 四项严格支配；Adaptive `(3,5%)` 相比 `(4,4%)`
-降低 W/F/R `1940/11004/322448B`，但 workload-P 高 28B，因此是窄峰值交换而非严格 winner。
-不继续补 generic axes。
+Corpus revision 15 在十六条 trace 上运行两个 active Adaptive profiles，共 32 admitted cases。
+`DeltaReference` 与 `BaseReference` 是 strategy-independent 写入参照，替代退役 profile 的
+“基线策略”职责。
+
+`active-hundred-mixed` 当前提供最有用的长周期反馈：两组 profile 共享
+`Delta/Base references=67206/165606` 与 `L=273804`；Adaptive `(3,5%)` 相比 `(4,4%)`
+少 `1940B W`、`11004B F`、`322448B R`，但 workload-P 高 `28B`。这证明当前存在窄峰值
+交换，也暴露 Adaptive 可能在持续活跃对象上进行不必要 Base 写；它不是 winner、默认参数或
+steady-state 结论。
 
 ## 下一编码切片
 
-由 active-hundred 白盒结果设计一个最小独立 candidate：保留多对象/按比例迁债带来的轮转进展，同时避免
-paced-one-debt 的过慢清债与 Adaptive 在活跃对象上不必要的 Base 写。不得增加未来视野或 feasibility oracle。
+由 active-hundred 白盒结果设计一个最小独立 candidate：保留多对象/按比例迁债的轮转进展，
+同时减少对持续活跃对象的无效 Base 重写。不得增加未来视野或 feasibility oracle；先复跑现有
+32-case suite 并报告 typed outcomes、references 与 raw metrics，不合分、不排榜。
 
 ## 近期 roadmap
 

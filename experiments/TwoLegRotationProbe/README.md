@@ -359,10 +359,9 @@ rejection, or Stay-B completion `RejectedUnproven`.
 
 The harness never chooses a target, falls back to the other candidate, executes
 the certificate's maintenance/final continuation, caches a StateMap, or owns a
-publication cursor. Test-local treatments may select no migration or select the
-smallest eligible A-debt `NoChange` ObjectId; that ordering is deterministic
-assignment, not evidence of object temperature. Target schedules and source-debt
-triggers remain caller-owned experimental controls.
+publication cursor. Test-local treatments may still select no migration or one
+A-debt object to isolate a mechanism; they are not registered benchmark profiles.
+Target schedules and source-debt triggers remain caller-owned experimental controls.
 
 ## Benchmark-v1 consumer
 
@@ -406,29 +405,17 @@ tests. This is a compact comparable projection, not a full diagnostic dump, pars
 persisted product format, score, or winner.
 
 Manifest schema 2 represents one atomic `selectionProfile` identity per case rather
-than a target/decision cross-product. Corpus revision 14 runs four strategies
-over sixteen traces (64 admitted cases). Its newest `active-hundred-mixed` workload merges
-a 100-object migration backlog with 64 rounds of sustained 60% update activity. It is an
-adjustable causal probe, not a frozen default, rank, or hash-locked benchmark artifact.
-Stable-fixture vectors and profile closure live in
-[`BenchmarkV1RunnerTests.cs`](Tests/BenchmarkV1RunnerTests.cs) and
-[`BenchmarkV1ThresholdBandWorkloadTests.cs`](Tests/BenchmarkV1ThresholdBandWorkloadTests.cs),
-with the rotation boundary in
-[`BenchmarkV1DebtShareDilutionWorkloadTests.cs`](Tests/BenchmarkV1DebtShareDilutionWorkloadTests.cs)
-and locality pair in
-[`BenchmarkV1LocalityObjectIdPermutationWorkloadTests.cs`](Tests/BenchmarkV1LocalityObjectIdPermutationWorkloadTests.cs),
-with size skew in
-[`BenchmarkV1SizeSkewWorkloadTests.cs`](Tests/BenchmarkV1SizeSkewWorkloadTests.cs),
-and transient lifecycle in
-[`BenchmarkV1LifecycleOverlapWorkloadTests.cs`](Tests/BenchmarkV1LifecycleOverlapWorkloadTests.cs),
-with Previous-debt granularity in
-[`BenchmarkV1DebtGranularityWorkloadTests.cs`](Tests/BenchmarkV1DebtGranularityWorkloadTests.cs),
-insert burst in
-[`BenchmarkV1InsertBurstPartitionWorkloadTests.cs`](Tests/BenchmarkV1InsertBurstPartitionWorkloadTests.cs),
-and horizon phase in
-[`BenchmarkV1HorizonPhaseWorkloadTests.cs`](Tests/BenchmarkV1HorizonPhaseWorkloadTests.cs),
-with the adjustable active-hundred workload in
-[`BenchmarkV1Corpus.cs`](Benchmarking/BenchmarkV1Corpus.cs).
+than a target/decision cross-product. Corpus revision 15 runs the two active Adaptive
+profiles over sixteen traces (32 admitted cases). The retired no-migration and
+paced-one-debt profiles are archived at Git tag
+`research/no-migration-paced-baselines-20260901`; strategy-independent
+`DeltaReference` and `BaseReference` now provide the write comparators. The
+`active-hundred-mixed` workload merges a 100-object migration backlog with 64 rounds of
+sustained 60% update activity. It remains adjustable rather than hash-locked.
+Runner/profile closure lives in
+[`BenchmarkV1RunnerTests.cs`](Tests/BenchmarkV1RunnerTests.cs),
+[`BenchmarkV1JsonTests.cs`](Tests/BenchmarkV1JsonTests.cs), and the
+`ReadAmplificationBaseBudgetPolicy*` tests.
 
 ## Scoped rotation observation reductions
 
@@ -471,29 +458,19 @@ capacity or completion rejection outcomes.
 
 ## Selected executable evidence
 
-The README keeps only results that still shape the current strategy work. Exact
-vectors and all edge cases remain authoritative in the linked tests.
+This README keeps only evidence that still shapes current implementation or strategy work.
+The retired no-migration/paced profile matrix and its dedicated phase diagnostics are
+available from Git tag `research/no-migration-paced-baselines-20260901`.
 
 | Probe | Established result | Claim boundary and executable authority |
 |---|---|---|
-| Baseline policy matrix | Base, Delta, and the local ratio trade modeled writes against a named final reconstruction snapshot; there is no universal winner. | No cumulative read total. [`PolicyMatrixTests.cs`](Tests/PolicyMatrixTests.cs) |
+| Baseline policy matrix | Base, Delta, and a local ratio trade modeled writes against a named final reconstruction snapshot; there is no universal winner. | This predates cumulative R and is not the canonical strategy comparator. [`PolicyMatrixTests.cs`](Tests/PolicyMatrixTests.cs) |
 | Terminal-C sizing | A high-ticket External binding can overflow when same-state Base+Self fits, so per-object token savings cannot replace whole-candidate sizing. | Provisional grammar only. [`ProvisionalRevisionV0GrammarTests.cs`](Tests/ProvisionalRevisionV0GrammarTests.cs) |
-| Controlled migration pacing | Moving one A-debt object on each fixed-target Stay can smooth Rotate writes, but those B records become next-epoch Previous debt. A common paced third epoch has equal W/P/F/T endpoints but workload R `2744` versus `2376`, preserving the source-history difference that final-only reading hid. | The cadence is an experimental control, not a product trigger or steady-state proof; ObjectId is deterministic assignment rather than coldness. [`RotationPolicyComparisonTests.cs`](Tests/RotationPolicyComparisonTests.cs), [`FixedCadenceTerminalLiabilityTests.cs`](Tests/FixedCadenceTerminalLiabilityTests.cs), [`EVALUATOR-V1.md`](EVALUATOR-V1.md) |
-| Adaptive read-amplification/Base-budget v0 | Two payload-proxy parameters select Base/Delta, reserve one old-A progress action per Stay, and trigger Rotate below a strict debt share. The canonical threshold and debt-share traces isolate those two parameters. | Payload heuristic and bounded synthetic evidence only—not encoded/physical byte authority, a fifth score, tuned defaults, steady state, or a general winner. The locality pair leaves `(3,5%)` and `(4,4%)` tied within each trace, so it is not another parameter discriminator. [`READ-AMPLIFICATION-BASE-BUDGET-POLICY-V0.md`](READ-AMPLIFICATION-BASE-BUDGET-POLICY-V0.md), [`BenchmarkV1ThresholdBandWorkloadTests.cs`](Tests/BenchmarkV1ThresholdBandWorkloadTests.cs), [`BenchmarkV1DebtShareDilutionWorkloadTests.cs`](Tests/BenchmarkV1DebtShareDilutionWorkloadTests.cs), [`ReadAmplificationBaseBudgetPolicyCapacityTests.cs`](Tests/ReadAmplificationBaseBudgetPolicyCapacityTests.cs) |
-| Changed A-debt Base vs Delta | Base@B can distribute evacuation work across natural Updates, while Delta defers it to C; after the scope shift those B Bases become new Previous debt. | A shared A Frame masks partial object-debt retirement. [`RotationPolicyComparisonTests.cs`](Tests/RotationPolicyComparisonTests.cs) |
-| Role-disjoint 2x2 | Changed-write and cold-migration retire disjoint ObjectId sets additively in the fixture; only their combination releases the shared A Frame. | Fixture-level set additivity is not general independence, synergy, or total-IO improvement. [`RotationPolicyComparisonTests.cs`](Tests/RotationPolicyComparisonTests.cs) |
-| Source payload-head topology | The same object-debt trajectory can require one shared A Frame or different role-local A Frames. A fixed-two-advance 2x2 retains this difference while Shared/Split terminal W/P/F/T can be equal. | Object debt is not sufficient for transient exact Frame pressure; cumulative workload R now observes cycle history, while T remains endpoint-only. This is not pure packing, actual IO, or general layout irrelevance. [`RotationPolicyComparisonTests.cs`](Tests/RotationPolicyComparisonTests.cs), [`SourceLayoutFixedHorizonTests.cs`](Tests/SourceLayoutFixedHorizonTests.cs) |
-| Migration membership and future opportunity | A matched low/high-ID canonical pair gives every strategy the same first `StrategyStepViewV1` and selection, then Updates one of the two equal-size objects. No-migration is invariant, while ObjectId-first paced/Adaptive outcomes change with the assignment. | Candidates receive no future oracle. This proves sensitivity to ObjectId assignment plus next-update locality, not long-term hot/cold classification, temperature inference, the old singleton-Frame oracle setup, a winner, or a default. [`BenchmarkV1LocalityObjectIdPermutationWorkloadTests.cs`](Tests/BenchmarkV1LocalityObjectIdPermutationWorkloadTests.cs), [`RotationPolicyComparisonTests.cs`](Tests/RotationPolicyComparisonTests.cs) |
-| Size-to-ID assignment | A matched ordinary pair swaps 20B/100B payloads between the low/high ObjectIds. ObjectId-first pacing writes the low ID now and the other object during direct settlement, exposing immediate-vs-terminal placement sensitivity. | Both step-0 Bases share one A Frame, so neither workload migration releases it; this does not reproduce the old singleton-Frame release oracle or select a size preference. [`BenchmarkV1SizeSkewWorkloadTests.cs`](Tests/BenchmarkV1SizeSkewWorkloadTests.cs), [`RotationPolicyComparisonTests.cs`](Tests/RotationPolicyComparisonTests.cs) |
-| Transient lifecycle overlap | Matched overlap/serial traces apply the same two 400B Creates and Removes but reach peak transient live sets of two and one. Current paced/Adaptive policies keep the same cadence within the pair, while serial materially lowers maximum Current-file tail and changes the local Pareto relation. | This is sensitivity to finite-horizon transient overlap, not churn-rate or lifetime prediction, GC, steady state, a winner, or advice to serialize application work. [`BenchmarkV1LifecycleOverlapWorkloadTests.cs`](Tests/BenchmarkV1LifecycleOverlapWorkloadTests.cs) |
-| Previous-debt granularity | In a matched pair, both Adaptive profiles reach `G/E=601/300` while representing old-A debt as one 300B object or three 100B objects. Exchanging the first full-rewrite order, then reconverging logical versions, exposes the current Adaptive one-object progress floor's sensitivity to indivisible debt units. | Bounded granularity evidence only—not arrival/service-rate pressure, steady state, starvation, or a general size preference. [`BenchmarkV1DebtGranularityWorkloadTests.cs`](Tests/BenchmarkV1DebtGranularityWorkloadTests.cs) |
-| Insert-burst partition | Matched `3+1`/`2+2` traces share bootstrap, first Save, operation multiset, horizon, final versions, and per-profile cadence/scope. All workload Frames remain below 2 KiB; grouping changes P directly and can propagate through provisional layout and later Rotate/settlement placement. | The caller owns outer Commit grouping and a strategy cannot split it. This is not a capacity witness or batching, latency, or steady-state advice. [`BenchmarkV1InsertBurstPartitionWorkloadTests.cs`](Tests/BenchmarkV1InsertBurstPartitionWorkloadTests.cs) |
-| Nested-prefix horizon phase | The short debt-zero trace is the exact three-Save online prefix of the existing long trace; views/selections match and the public context exposes no horizon. For paced/Adaptive, the cutoff falls before versus after their first natural Rotate; no-migration is the same-scope control. | Deltas combine the real extra Save/final-state change with terminal placement. Different horizons are not a matched Pareto comparison; no causal cost decomposition, cross-horizon ranking, normalization, or steady-state claim. [`BenchmarkV1HorizonPhaseWorkloadTests.cs`](Tests/BenchmarkV1HorizonPhaseWorkloadTests.cs) |
-| Active hundred mixed | The fixed-seed generator bootstraps 100 persistent objects with equal Field/List weights, then updates exactly 60 distinct objects per round for 64 rounds. This combines a large migration backlog, a changing NoChange pool, and sustained Delta opportunities. | All four strategies share Delta/Base references `67206/165606`. No-migration minimizes W/workload-P but accepts much larger F/R than Adaptive; paced-one-debt does not rotate and is dominated by no-migration; Adaptive `(3,5%)` lowers W/F/R relative to `(4,4%)` at a 28B workload-peak cost. The workload remains adjustable rather than golden. [`BenchmarkV1Corpus.cs`](Benchmarking/BenchmarkV1Corpus.cs), [`EVALUATOR-V1.md`](EVALUATOR-V1.md) |
-| Capacity coupling | Existing typed witnesses cover avoidable selected rejection: foreground and alternate/reference paths remain feasible, while the chosen candidate rejects without fallback, mutation, or metrics. | Kept outside the round-1 performance corpus; near-limit layout facts are not policy input, and these tests prove neither complete repair/search nor file-size policy. [`ReadAmplificationBaseBudgetPolicyCapacityTests.cs`](Tests/ReadAmplificationBaseBudgetPolicyCapacityTests.cs), [`GroupedForegroundBurstCapacityCouplingTests.cs`](Tests/GroupedForegroundBurstCapacityCouplingTests.cs) |
-| Evaluator v1 admissibility | An isolated run fork exposes metrics only after all workload steps and one actually replayed canonical terminal settlement; direct Rotate has no empty Stay, multi-step preparation is one charged Commit, and hard rejections remain typed/non-scoring. | Closes the terminal source epoch `A/B -> B/C`, not all future Previous debt; no scalar score or product evaluator. [`EVALUATOR-V1.md`](EVALUATOR-V1.md), [`EvaluatorV1SessionTests.cs`](Tests/EvaluatorV1SessionTests.cs) |
-| Benchmark-v1 matched consumer | Four strategies from the independent Baselines assembly share each fixture/trace/horizon through the Arena whole-run contract. Revision 14 has 64 admitted cases over sixteen traces under `raw-wpfr/4` and report schema 4; endpoint-only and redundant fields are no longer in the comparable report. | Future validation traces still require a named white-box candidate weakness rather than another generic axis. This remains internal-track certified-product evidence, not an untrusted-artifact judge or full frontier. [`EVALUATOR-V1.md`](EVALUATOR-V1.md), [`BenchmarkV1RunnerTests.cs`](Tests/BenchmarkV1RunnerTests.cs), [`BenchmarkV1JsonTests.cs`](Tests/BenchmarkV1JsonTests.cs) |
-| Continuous rotation | A caller script crosses `A/B -> B/C -> C/D` while preserving exact state, reconstruction closure, and Stay certificates. | It is not a stateful runner or durable publication path. [`ContinuousMultiRotationTests.cs`](Tests/ContinuousMultiRotationTests.cs) |
+| Adaptive read-amplification/Base-budget v0 | Two payload-proxy parameters select Base/Delta, reserve old-A progress per Stay, and trigger Rotate below a strict debt share. | Payload heuristic only, not encoded-byte authority, tuned defaults, or a winner. [`READ-AMPLIFICATION-BASE-BUDGET-POLICY-V0.md`](READ-AMPLIFICATION-BASE-BUDGET-POLICY-V0.md), [`ReadAmplificationBaseBudgetPolicyCapacityTests.cs`](Tests/ReadAmplificationBaseBudgetPolicyCapacityTests.cs) |
+| Active hundred mixed | Both active profiles share Delta/Base references `67206/165606`. Adaptive `(3,5%)` lowers closed W/F/R relative to `(4,4%)`, while `(4,4%)` lowers workload P by 28B. | Adjustable synthetic workload and narrow Pareto trade, not a golden benchmark or steady-state winner. [`BenchmarkV1Corpus.cs`](Benchmarking/BenchmarkV1Corpus.cs), [`EVALUATOR-V1.md`](EVALUATOR-V1.md) |
+| Capacity coupling | Selected hard rejection preserves typed failure, no fallback, no mutation, and no metrics even when another path is feasible. | No complete repair/search or file-size policy. [`ReadAmplificationBaseBudgetPolicyCapacityTests.cs`](Tests/ReadAmplificationBaseBudgetPolicyCapacityTests.cs), [`GroupedForegroundBurstCapacityCouplingTests.cs`](Tests/GroupedForegroundBurstCapacityCouplingTests.cs) |
+| Evaluator and benchmark consumer | Terminal settlement is charged; W is phase-conserved; P is workload-only; R/L samples every successful workload Save; report metrics are Arena-owned. Revision 15 runs 32 admitted cases across sixteen traces and two active profiles. | Internal certified-product track, not an untrusted-artifact judge, score, or frontier. [`EVALUATOR-V1.md`](EVALUATOR-V1.md), [`BenchmarkV1RunnerTests.cs`](Tests/BenchmarkV1RunnerTests.cs), [`BenchmarkV1JsonTests.cs`](Tests/BenchmarkV1JsonTests.cs) |
+| Continuous rotation | A caller script crosses `A/B -> B/C -> C/D` while preserving exact state, reconstruction closure, and Stay certificates. | Not a stateful runner or durable publication path. [`ContinuousMultiRotationTests.cs`](Tests/ContinuousMultiRotationTests.cs) |
 
 ### Accepted source-partition provenance
 

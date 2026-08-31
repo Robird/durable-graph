@@ -57,131 +57,67 @@ internal static class BenchmarkV1ProtocolIdentities {
 
 internal static class BenchmarkV1Corpus {
     public const string ManifestId = "benchmark-v1";
-    public const int ManifestRevision = 14;
-    public const string ActiveHundredMixedNoMigrationCaseId =
-        "active-hundred-mixed-no-migration";
-    public const string ActiveHundredMixedPacedCaseId =
-        "active-hundred-mixed-paced";
+    public const int ManifestRevision = 15;
     public const string ActiveHundredMixedAdaptiveR3B5PercentCaseId =
         "active-hundred-mixed-read-amplification-r3-b5pct";
     public const string ActiveHundredMixedAdaptiveR4B4PercentCaseId =
         "active-hundred-mixed-read-amplification-r4-b4pct";
-    public const string DebtZeroBeforeRotateNoMigrationCaseId =
-        "debt-zero-before-rotate-no-migration";
-    public const string DebtZeroBeforeRotatePacedCaseId =
-        "debt-zero-before-rotate-paced";
     public const string DebtZeroBeforeRotateAdaptiveR3B5PercentCaseId =
         "debt-zero-before-rotate-read-amplification-r3-b5pct";
     public const string DebtZeroBeforeRotateAdaptiveR4B4PercentCaseId =
         "debt-zero-before-rotate-read-amplification-r4-b4pct";
-    public const string InsertBurstThreeOneNoMigrationCaseId =
-        "insert-burst-three-one-no-migration";
-    public const string InsertBurstThreeOnePacedCaseId =
-        "insert-burst-three-one-paced";
     public const string InsertBurstThreeOneAdaptiveR3B5PercentCaseId =
         "insert-burst-three-one-read-amplification-r3-b5pct";
     public const string InsertBurstThreeOneAdaptiveR4B4PercentCaseId =
         "insert-burst-three-one-read-amplification-r4-b4pct";
-    public const string InsertBurstTwoTwoNoMigrationCaseId =
-        "insert-burst-two-two-no-migration";
-    public const string InsertBurstTwoTwoPacedCaseId =
-        "insert-burst-two-two-paced";
     public const string InsertBurstTwoTwoAdaptiveR3B5PercentCaseId =
         "insert-burst-two-two-read-amplification-r3-b5pct";
     public const string InsertBurstTwoTwoAdaptiveR4B4PercentCaseId =
         "insert-burst-two-two-read-amplification-r4-b4pct";
-    public const string DebtZeroThenRotateNoMigrationCaseId =
-        "debt-zero-then-rotate-no-migration";
-    public const string DebtZeroThenRotatePacedCaseId =
-        "debt-zero-then-rotate-paced";
     public const string DebtZeroThenRotateAdaptiveR3B5PercentCaseId =
         "debt-zero-then-rotate-read-amplification-r3-b5pct";
     public const string DebtZeroThenRotateAdaptiveR4B4PercentCaseId =
         "debt-zero-then-rotate-read-amplification-r4-b4pct";
-    public const string MixedSmallNoMigrationCaseId =
-        "mixed-small-no-migration";
-    public const string MixedSmallPacedCaseId =
-        "mixed-small-paced";
     public const string MixedSmallAdaptiveR3B5PercentCaseId =
         "mixed-small-read-amplification-r3-b5pct";
     public const string MixedSmallAdaptiveR4B4PercentCaseId =
         "mixed-small-read-amplification-r4-b4pct";
-    public const string ThresholdBandNoMigrationCaseId =
-        "read-amplification-threshold-band-no-migration";
-    public const string ThresholdBandPacedCaseId =
-        "read-amplification-threshold-band-paced";
     public const string ThresholdBandAdaptiveR3B5PercentCaseId =
         "read-amplification-threshold-band-read-amplification-r3-b5pct";
     public const string ThresholdBandAdaptiveR4B4PercentCaseId =
         "read-amplification-threshold-band-read-amplification-r4-b4pct";
-    public const string DebtShareDilutionNoMigrationCaseId =
-        "previous-debt-share-dilution-boundary-no-migration";
-    public const string DebtShareDilutionPacedCaseId =
-        "previous-debt-share-dilution-boundary-paced";
     public const string DebtShareDilutionAdaptiveR3B5PercentCaseId =
         "previous-debt-share-dilution-boundary-read-amplification-r3-b5pct";
     public const string DebtShareDilutionAdaptiveR4B4PercentCaseId =
         "previous-debt-share-dilution-boundary-read-amplification-r4-b4pct";
-    public const string LocalityLowIdNoMigrationCaseId =
-        "locality-next-update-low-id-no-migration";
-    public const string LocalityLowIdPacedCaseId =
-        "locality-next-update-low-id-paced";
     public const string LocalityLowIdAdaptiveR3B5PercentCaseId =
         "locality-next-update-low-id-read-amplification-r3-b5pct";
     public const string LocalityLowIdAdaptiveR4B4PercentCaseId =
         "locality-next-update-low-id-read-amplification-r4-b4pct";
-    public const string LocalityHighIdNoMigrationCaseId =
-        "locality-next-update-high-id-no-migration";
-    public const string LocalityHighIdPacedCaseId =
-        "locality-next-update-high-id-paced";
     public const string LocalityHighIdAdaptiveR3B5PercentCaseId =
         "locality-next-update-high-id-read-amplification-r3-b5pct";
     public const string LocalityHighIdAdaptiveR4B4PercentCaseId =
         "locality-next-update-high-id-read-amplification-r4-b4pct";
-    public const string SizeSkewLowIdSmallNoMigrationCaseId =
-        "size-skew-low-id-small-no-migration";
-    public const string SizeSkewLowIdSmallPacedCaseId =
-        "size-skew-low-id-small-paced";
     public const string SizeSkewLowIdSmallAdaptiveR3B5PercentCaseId =
         "size-skew-low-id-small-read-amplification-r3-b5pct";
     public const string SizeSkewLowIdSmallAdaptiveR4B4PercentCaseId =
         "size-skew-low-id-small-read-amplification-r4-b4pct";
-    public const string SizeSkewLowIdLargeNoMigrationCaseId =
-        "size-skew-low-id-large-no-migration";
-    public const string SizeSkewLowIdLargePacedCaseId =
-        "size-skew-low-id-large-paced";
     public const string SizeSkewLowIdLargeAdaptiveR3B5PercentCaseId =
         "size-skew-low-id-large-read-amplification-r3-b5pct";
     public const string SizeSkewLowIdLargeAdaptiveR4B4PercentCaseId =
         "size-skew-low-id-large-read-amplification-r4-b4pct";
-    public const string LifecycleTransientOverlapNoMigrationCaseId =
-        "lifecycle-transient-overlap-no-migration";
-    public const string LifecycleTransientOverlapPacedCaseId =
-        "lifecycle-transient-overlap-paced";
     public const string LifecycleTransientOverlapAdaptiveR3B5PercentCaseId =
         "lifecycle-transient-overlap-read-amplification-r3-b5pct";
     public const string LifecycleTransientOverlapAdaptiveR4B4PercentCaseId =
         "lifecycle-transient-overlap-read-amplification-r4-b4pct";
-    public const string LifecycleTransientSerialNoMigrationCaseId =
-        "lifecycle-transient-serial-no-migration";
-    public const string LifecycleTransientSerialPacedCaseId =
-        "lifecycle-transient-serial-paced";
     public const string LifecycleTransientSerialAdaptiveR3B5PercentCaseId =
         "lifecycle-transient-serial-read-amplification-r3-b5pct";
     public const string LifecycleTransientSerialAdaptiveR4B4PercentCaseId =
         "lifecycle-transient-serial-read-amplification-r4-b4pct";
-    public const string PreviousDebtGranularitySingleLargeNoMigrationCaseId =
-        "previous-debt-granularity-single-large-no-migration";
-    public const string PreviousDebtGranularitySingleLargePacedCaseId =
-        "previous-debt-granularity-single-large-paced";
     public const string PreviousDebtGranularitySingleLargeAdaptiveR3B5PercentCaseId =
         "previous-debt-granularity-single-large-read-amplification-r3-b5pct";
     public const string PreviousDebtGranularitySingleLargeAdaptiveR4B4PercentCaseId =
         "previous-debt-granularity-single-large-read-amplification-r4-b4pct";
-    public const string PreviousDebtGranularityThreeSmallNoMigrationCaseId =
-        "previous-debt-granularity-three-small-no-migration";
-    public const string PreviousDebtGranularityThreeSmallPacedCaseId =
-        "previous-debt-granularity-three-small-paced";
     public const string PreviousDebtGranularityThreeSmallAdaptiveR3B5PercentCaseId =
         "previous-debt-granularity-three-small-read-amplification-r3-b5pct";
     public const string PreviousDebtGranularityThreeSmallAdaptiveR4B4PercentCaseId =

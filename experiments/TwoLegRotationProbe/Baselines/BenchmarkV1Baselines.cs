@@ -6,27 +6,10 @@ using Atelia.TwoLegRotationProbe.Policies;
 namespace Atelia.TwoLegRotationProbe.Baselines;
 
 /// <summary>
-/// Organizer-ready bindings for the four historical benchmark-v1 strategies.
+/// Organizer-ready bindings for the active benchmark-v1 strategies.
 /// Their implementations live entirely in the Baselines assembly.
 /// </summary>
 public static class BenchmarkV1Baselines {
-    public static StrategyBindingV1 DebtZeroThenRotateDeltaNoMigration { get; } =
-        new(
-            new BenchmarkComponentIdentityV1(
-                "debt-zero-then-rotate-delta-no-migration",
-                1),
-            "no-migration",
-            static () => RunDebtZeroNoMigration);
-
-    public static StrategyBindingV1 DebtZeroThenRotateDeltaPacedOneDebtByObjectId {
-        get;
-    } = new(
-        new BenchmarkComponentIdentityV1(
-            "debt-zero-then-rotate-delta-paced-one-debt-by-object-id",
-            1),
-        "paced",
-        static () => RunDebtZeroPaced);
-
     public static StrategyBindingV1 ReadAmplificationBaseBudgetR3B5Percent {
         get;
     } = new(
@@ -47,8 +30,6 @@ public static class BenchmarkV1Baselines {
 
     private static readonly ReadOnlyCollection<StrategyBindingV1> FrozenAll =
         Array.AsReadOnly(new[] {
-            DebtZeroThenRotateDeltaNoMigration,
-            DebtZeroThenRotateDeltaPacedOneDebtByObjectId,
             ReadAmplificationBaseBudgetR3B5Percent,
             ReadAmplificationBaseBudgetR4B4Percent,
         });
@@ -60,14 +41,6 @@ public static class BenchmarkV1Baselines {
         StrategyStepViewV1 view) {
         ArgumentNullException.ThrowIfNull(identity);
         ArgumentNullException.ThrowIfNull(view);
-        if (identity == DebtZeroThenRotateDeltaNoMigration.Identity) {
-            return SelectDebtZeroThenRotate(view, paced: false);
-        }
-
-        if (identity == DebtZeroThenRotateDeltaPacedOneDebtByObjectId.Identity) {
-            return SelectDebtZeroThenRotate(view, paced: true);
-        }
-
         if (identity == ReadAmplificationBaseBudgetR3B5Percent.Identity) {
             return SelectAdaptive(
                 view,
@@ -84,16 +57,6 @@ public static class BenchmarkV1Baselines {
             $"Baselines does not recognize strategy '{identity.Id}/{identity.Version}'.",
             nameof(identity));
     }
-
-    private static StrategyRunProductV1 RunDebtZeroNoMigration(
-        StrategyRunContextV1 context) => Run(
-            context,
-            static view => SelectDebtZeroThenRotate(view, paced: false));
-
-    private static StrategyRunProductV1 RunDebtZeroPaced(
-        StrategyRunContextV1 context) => Run(
-            context,
-            static view => SelectDebtZeroThenRotate(view, paced: true));
 
     private static StrategyRunProductV1 RunAdaptiveR3B5Percent(
         StrategyRunContextV1 context) => Run(
@@ -133,37 +96,4 @@ public static class BenchmarkV1Baselines {
             ReadAmplificationBaseBudgetPolicyProjection.Create(view),
             parameters).Selection;
 
-    private static StrategySelectionV1 SelectDebtZeroThenRotate(
-        StrategyStepViewV1 view,
-        bool paced) {
-        StrategyTargetV1 target = view.HasParentPreviousDebt
-            ? StrategyTargetV1.StayB
-            : StrategyTargetV1.RotateC;
-        uint[] migrations = paced
-            ? view.Objects
-                .Where(static fact =>
-                    fact.Kind == StrategyObjectKindV1.NoChange &&
-                    fact.SourceIsPreviousDependent is true)
-                .Select(static fact => fact.ObjectId)
-                .Take(1)
-                .ToArray()
-            : [];
-        StrategyStayDecisionV1 stay = new(
-            view.Objects
-                .Where(static fact => fact.Kind == StrategyObjectKindV1.Update)
-                .Select(static fact => new StrategyUpdateWriteDecisionV1(
-                    fact.ObjectId,
-                    StrategyUpdateWriteModeV1.Delta)),
-            migrations);
-        StrategyRotateDecisionV1 rotate = new(
-            view.Objects
-                .Where(static fact =>
-                    fact.Kind == StrategyObjectKindV1.Update &&
-                    fact.SourceIsPreviousDependent is false)
-                .Select(static fact => new StrategyUpdateWriteDecisionV1(
-                    fact.ObjectId,
-                    StrategyUpdateWriteModeV1.Delta)),
-            []);
-        return new StrategySelectionV1(target, stay, rotate);
-    }
 }

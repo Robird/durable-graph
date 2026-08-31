@@ -569,6 +569,57 @@ public sealed partial class RotationPolicyComparisonTests {
             _ => throw new ArgumentOutOfRangeException(nameof(decision)),
         });
 
+    private static FixedHorizonRawVector ProjectFixedHorizonRaw(
+        AdmittedEvaluatorRun admitted) => new(
+            admitted.Metrics.RealizedCommitCount,
+            admitted.Metrics.TotalPhysicalWriteBytes,
+            admitted.Metrics.PeakCommitWriteBytes,
+            admitted.Metrics.MaxCurrentFileTailBytes,
+            admitted.Metrics.TerminalColdHeadReadBytes);
+
+    private static void AssertFixedHorizonScope(
+        ProbeRevisionCursor cursor,
+        uint previousFileNumber,
+        uint currentFileNumber) {
+        Assert.Equal(previousFileNumber, cursor.FileScope.PreviousFileNumber);
+        Assert.Equal(currentFileNumber, cursor.FileScope.CurrentFileNumber);
+        Assert.Equal(currentFileNumber, cursor.PublishedRevisionAddress.FileNumber);
+    }
+
+    private static void AssertDirectFixedHorizonSettlement(
+        TerminalSettlementObservation settlement) {
+        Assert.Empty(settlement.MigratedObjectIds);
+        Assert.Equal(0, settlement.MaintenanceRevisionCount);
+        Assert.Equal(1, settlement.RealizedRevisionCount);
+    }
+
+    private static uint[] GetFixedHorizonPreviousDebtObjectIds(
+        RbfFileStore store,
+        ProbeRevisionCursor cursor) {
+        uint previousFileNumber = cursor.FileScope.PreviousFileNumber
+            ?? throw new InvalidDataException("The witness requires a two-file scope.");
+        return SaveStepNormalizer.NormalizeMaintenanceOnly(
+                store,
+                cursor.FileScope.CurrentFileNumber,
+                cursor.PublishedRevisionAddress)
+            .NoChanges
+            .Where(fact => fact.Source.BaseAddress.FileNumber == previousFileNumber)
+            .Select(static fact => fact.ObjectId)
+            .Order()
+            .ToArray();
+    }
+
+    private static long FixedHorizonTotalTailBytes(RbfFileStore store) => Enumerable
+        .Range(1, store.FileCount)
+        .Sum(index => store.GetFile((uint)index).TailOffsetBytes);
+
+    private readonly record struct FixedHorizonRawVector(
+        int RealizedCommitCount,
+        long TotalPhysicalWriteBytes,
+        long PeakCommitWriteBytes,
+        long MaxCurrentFileTailBytes,
+        long FinalColdHeadReadBytes);
+
     private sealed record AdaptiveMatchedRun(
         FixedHorizonRawVector Raw,
         IReadOnlyList<StrategyTargetV1> Targets,

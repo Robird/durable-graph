@@ -29,8 +29,6 @@ TwoLegRotationProbe.csproj                    Arena class library
 └─ workload corpus + canonical report
 
 Baselines/TwoLegRotationProbe.Baselines.csproj -> Arena
-├─ no-migration
-├─ paced-one-debt
 └─ Adaptive (3,5%) / (4,4%)
 
 Tests/TwoLegRotationProbe.Tests.csproj -> Arena + Baselines
@@ -59,7 +57,7 @@ StrategyBindingV1(identity, caseIdSuffix, fresh-per-case executor factory)
 
 这是集成适配器，不是候选程序集必须公开的接口。factory 为每个 case 建立新的 whole-run executor
 边界，避免复用捕获实例状态；它不是对 static mutable state 的恶意代码沙箱，正式开赛前仍需 repeat/order
-determinism gate。四个现有 Baselines 恰好以逐步纯选择实现，但这只是
+determinism gate。两个现有 Baselines 恰好以逐步纯选择实现，但这只是
 convenience implementation；后续 candidate 可以在一次 run 内持有私有状态或组合多个内部算法。
 
 为保持 online 公平性，`StrategyRunContextV1` 逐步开放当前 Save，仍不暴露 future trace、step index、
@@ -85,8 +83,7 @@ workload identity、candidate feasibility、raw metrics、absolute addresses 或
 | NoChange | Previous-dependent、source Base、`H` | 同状态 `B` |
 
 `Remove(A-debt object 10) + Insert(object 20)` 是必保留反例：`HasParentPreviousDebt=true`，但 `E=0`。
-DebtZero control 因 parent debt 选择 Stay，Adaptive 因 post-live evacuation 为零选择 Rotate。不能用 `E`
-代替 pre-Save parent debt。
+test-local parent-debt treatment 与 Adaptive 可产生不同 target，因此不能用 `E` 代替 pre-Save parent debt。
 
 `StrategySelectionV1` 完整描述当前 canonical toolkit 所需 action：
 
@@ -173,54 +170,23 @@ strategy-neutral suite identity 与 per-strategy run identity。
 
 ## 当前证据
 
-- Arena、Baselines、Tests 三程序集 build 通过，dependency 单向；
-- 四个 strategy executor 的实际 assembly 是 `Atelia.TwoLegRotationProbe.Baselines`；
-- corpus revision 14 包含十六条 trace、64 个 admitted cases；最新 `active-hundred-mixed` 是可调的
-  长程策略探针，不设置 dedicated unit test 或 literal hash，避免把反馈迭代误当成格式冻结；
-- canonical `read-amplification-threshold-band` 区分两组 Adaptive 参数，但累计 R 显示 `(3,5%)` 在该 trace
-  被 `(4,4%)` 支配；旧 terminal T 曾把这一关系显示成写入换读取。它仍不是纯 `E/G` rotation band；
-- canonical `previous-debt-share-dilution-boundary` 用普通 measured prelude 让两个 Adaptive 共享
-  `G=1000,E=40` 的边界 source，并形成 `Stay/Rotate/Stay` 与 `Stay/Stay/Rotate` 的严格 5%/4% target 分叉；
-- matched low/high-ID locality family 保持首个 strategy view/selection 与 no-migration 结果不变，却改变
-  ObjectId-first paced/Adaptive 的结果；候选没有 future oracle，这只是 assignment sensitivity，不是温度推断；
-- matched size-skew family 仅交换 20B/100B payload 的 ObjectId 绑定；no-migration 不变，
-  ObjectId-first paced/Adaptive 的 low-id-large 结果提高 W/F/R 而 P 相同。ordinary bootstrap
-  使两个 Base 共居 A Frame，因此这是 immediate-vs-terminal placement 证据，不是旧
-  singleton-Frame release oracle；
-- matched transient-lifecycle family 固定 Create/Remove multiset、ObjectId、payload、horizon 与最终状态，
-  只交换 `Create101` 与 `Remove100` 的次序，由此改变 transient 的重叠/驻留跨度并把 peak live-set
-  从 2 改为 1。no-migration 对置换不变；
-  ObjectId-first paced/Adaptive 保持 pair 内 cadence，serial 的主观察是 F 降低 408B。这不外推
-  churn rate、lifetime prediction、GC、steady state 或业务串行化；
-- matched Previous-debt granularity family 固定 operation multiset、final versions 与 horizon；两组 Adaptive
-  在 pivot 上均为 `G/E=601/300`，但把 300B old-A debt 表示为一个 300B 对象或三个 100B 对象。累计 R
-  揭示 endpoint T 未见的周期差异；两组 Adaptive 的 single-large 在相同 final scope 下同时降低 W/P/F/R；这只证明
-  Adaptive one-object progress floor 对 granularity/indivisibility 敏感，不是 arrival/service-rate pressure、steady state、
-  starvation 或一般 size preference；
-- matched insert-burst family 共享 bootstrap、首个 Save、operation multiset、horizon、final versions 与
-  per-profile cadence/scope，只把四项 300B Insert 分成 `3+1` 或 `2+2`；所有 workload Frames 小于 2 KiB。
-  no-migration 只改变 P，paced/Adaptive 还通过 provisional layout 与后续 Rotate/settlement placement 传播到
-  W/F。caller 决定 outer Commit 分组，策略不能拆分；这不是 capacity、batching 或 steady-state 证据；
-- nested-prefix horizon diagnostic 让 short trace 精确复用 long 的前三个 online Saves；公共 prefix 的
-  view/selection 相同且 public context 不暴露 horizon。paced/Adaptive 的 short cutoff 位于首次 natural
-  Rotate 之前，long 多一个 Save；no-migration 是同 scope control。不同 horizon/final state 的 delta
-  同时包含额外 Save 与 terminal placement，不做因果成本拆分、cross-horizon Pareto、归一化或排名；
-- round-1 不加入 near-limit performance trace；现有 typed tests 已冻结 selected rejection、no fallback、
-  zero mutation/no metrics。candidate qualification 只保留 avoidable selected-capacity gate；
-- active-hundred mixed 用现有 fixed-seed Field/List generator 建立 100 个持久对象，连续 64 轮每轮更新
-  60 个不同对象；它把 backlog、持续 Delta 动机和变化的 NoChange pool 放在同一运行中。初跑观察到
-  no-migration/paced 无 workload Rotate；Adaptive `(3,5%)` 在 25/47 轮转，`(4,4%)` 在 31/61 轮转。
-  这只是当前参数下的策略反馈，不是 golden、winner 或 steady-state 证据；
-- Remove+Insert 反例锁定 parent debt 与 `E` 不混淆；
-- Arena-certified product 暴露 Store、workload receipts、final checkpoint 与 termination，不暴露 metrics。
+- Arena、Baselines、Tests 三程序集保持单向依赖；两个 active executor 位于独立 Baselines assembly；
+- corpus revision 15 由十六条可调 trace 与两个 Adaptive profiles 组成，共 32 admitted cases；
+- runner/report 锁定 fresh-per-case executor、typed termination、Arena-owned settlement/metrics、
+  workload-only P、累计 R/L 与 Delta/Base references；
+- `active-hundred-mixed` 的两个 profiles 共享
+  `Delta/Base references=67206/165606`；`(3,5%)` 以高 28B 的 workload-P 换取更低 W/F/R；
+- no-migration 与 paced-one-debt profile 已不再承担 write baseline：完整旧实现和 64-case 结果保存在
+  Git tag `research/no-migration-paced-baselines-20260901`，主线使用 strategy-independent references；
+- workload 不再逐条 hash/vector 锁死；只有 candidate 白盒复审暴露具体 blind spot 时才添加或调整最小 trace；
+- typed capacity tests 继续证明 selected rejection、no fallback、zero mutation/no metrics；
+- Arena-certified product 暴露 Store、workload receipts、final checkpoint 与 termination，不暴露 candidate metrics。
 
 ## 下一阶段
 
-1. 先针对 active-hundred mixed 暴露的 pacing/active-debt 行为实现一个最小独立 candidate，并在当前
-   revision 14 上复跑；
-2. 未来 workload 只允许由 candidate 白盒复审指出的具体 blind spot 驱动，不再机械补 generic axes/seeds；
-3. 候选形状稳定后再闭合 determinism/order/artifact 与 qualification gates，冻结 `ROUND-1` packet/tag；
-4. 只有 candidate 真实需要直接物理 Store 输出时才实现 untrusted artifact validator。
+1. 针对 active-hundred 的持续活跃对象 Base 重写开销设计一个最小独立 candidate，在 revision 15 上复跑；
+2. candidate 稳定后再闭合 determinism/order/artifact 与 qualification gates，冻结 `ROUND-1` packet/tag；
+3. 只有 candidate 确实需要直接物理 Store 输出时才实现 untrusted artifact validator。
 
 ## 明确暂缓
 

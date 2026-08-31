@@ -121,12 +121,12 @@ public sealed class BenchmarkV1JsonTests {
             "same-case",
             Component("hash-test"),
             Trace(seed: 42, updatedBaseBytes: 25),
-            BenchmarkV1Baselines.DebtZeroThenRotateDeltaNoMigration.Identity);
+            BenchmarkV1Baselines.ReadAmplificationBaseBudgetR3B5Percent.Identity);
         BenchmarkV1CaseDefinition secondCase = new(
             "same-case",
             Component("hash-test"),
             Trace(seed: 42, updatedBaseBytes: 26),
-            BenchmarkV1Baselines.DebtZeroThenRotateDeltaNoMigration.Identity);
+            BenchmarkV1Baselines.ReadAmplificationBaseBudgetR3B5Percent.Identity);
         BenchmarkManifestV1 firstManifest = Batch(firstCase).Manifest;
         BenchmarkManifestV1 secondManifest = Batch(secondCase).Manifest;
 

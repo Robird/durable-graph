@@ -62,23 +62,19 @@ public sealed class StrategyArenaContractTests {
         Assert.Null(inserted.SourceIsPreviousDependent);
         Assert.Equal(200, inserted.ResultBasePayloadBytes);
 
-        StrategySelectionV1 debtSelection = BenchmarkV1Baselines.Select(
-            BenchmarkV1Baselines.DebtZeroThenRotateDeltaNoMigration.Identity,
-            view);
         StrategySelectionV1 adaptiveSelection = BenchmarkV1Baselines.Select(
             BenchmarkV1Baselines.ReadAmplificationBaseBudgetR3B5Percent.Identity,
             view);
 
-        Assert.Equal(StrategyTargetV1.StayB, debtSelection.Target);
         Assert.Equal(StrategyTargetV1.RotateC, adaptiveSelection.Target);
     }
 
     [Fact]
     public void Arena_certified_product_exposes_store_and_workload_commit_receipts() {
         BenchmarkV1CaseDefinition benchmarkCase = BenchmarkV1Corpus.Create(
-            [BenchmarkV1Baselines.DebtZeroThenRotateDeltaNoMigration]).Cases
+            [BenchmarkV1Baselines.ReadAmplificationBaseBudgetR3B5Percent]).Cases
             .Single(definition => definition.ManifestCase.CaseId ==
-                BenchmarkV1Corpus.DebtZeroThenRotateNoMigrationCaseId);
+                BenchmarkV1Corpus.DebtZeroThenRotateAdaptiveR3B5PercentCaseId);
 
         BenchmarkV1CaseExecution execution = BenchmarkV1Runner.ExecuteCase(
             benchmarkCase);
@@ -91,11 +87,17 @@ public sealed class StrategyArenaContractTests {
             [0, 1, 2, 3],
             product.WorkloadCommits.Select(static receipt =>
                 receipt.WorkloadStepOrdinal));
-        Assert.All(product.WorkloadCommits, receipt => Assert.Equal(
-            StrategyTargetV1.StayB,
-            receipt.SelectedTarget));
+        Assert.Equal(
+            [
+                StrategyTargetV1.StayB,
+                StrategyTargetV1.StayB,
+                StrategyTargetV1.StayB,
+                StrategyTargetV1.RotateC,
+            ],
+            product.WorkloadCommits.Select(static receipt =>
+                receipt.SelectedTarget));
         Assert.Equal(1, product.TerminalSettlementRevisionCount);
-        Assert.Equal(3, product.Store.FileCount);
+        Assert.Equal(4, product.Store.FileCount);
         Assert.Equal(
             product.FinalCheckpoint.CurrentFileNumber,
             product.FinalCheckpoint.PublishedRevisionFileNumber);

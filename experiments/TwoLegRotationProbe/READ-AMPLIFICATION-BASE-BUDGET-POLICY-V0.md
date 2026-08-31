@@ -144,61 +144,25 @@ fit does not imply exact candidate feasibility.
 
 Projection and pure-selection tests lock the payload formula, strict target/read
 boundaries, weak dominance, deterministic ordering, zero-size behavior, soft-budget
-rounding/overshoot, NoChange-first progress and target-specific decision shapes. A
-separate exact witness constructs a B-contained hot chain with payload history 251 and
-proves `(251 + 50) / 100 = 3.01` selects Base through the ordinary planner/apply seam,
-independently of the progress override. A policy-selected oversized Rotate-C also
-returns typed `PayloadAndTailMetaLength` rejection without fallback or Store mutation.
+rounding/overshoot, NoChange-first progress, and target-specific decision shapes. An
+exact B-contained hot-chain witness proves `(251 + 50) / 100 = 3.01` selects Base
+through ordinary planning/apply independently of the progress floor. A selected
+oversized Rotate-C returns typed `PayloadAndTailMetaLength` rejection without fallback
+or Store mutation.
 
-The first matched-cadence workload uses four 100-byte old-A objects, four repeated
-50-byte Updates of object 10, then one Insert. Both `(3,5%)` and `(4,4%)` naturally
-select `Stay, Stay, Stay, Stay, Rotate`; the controls are held to that same target
-cadence. Control/paced/adaptive produce endpoint W/P/F/T `924/476/476/524`,
-`1248/372/748/524`, and `1296/472/796/524`; the two adaptive parameter sets are exactly
-equal. Their 20B/16B budgets cannot fit a 100B optional Base, while the fourth Save's
-progress floor forces the last A-dependent hot object to Base. This negative control
-shows that changing parameters need not change the realized policy.
+The threshold-band witness keeps target/progress aligned and gives both profiles enough
+optional budget. At prospective ratio `3.5`, only `(3,5%)` writes Base; `(4,4%)`
+retains Delta, and equality at `4.0` remains Delta. Its bounded result demonstrates the
+strict read threshold, not a tuned default or general winner.
 
-Across the initial head and four Update result heads, Adaptive resets object 10's
-realized reconstruction payload sequence from the controls' `100,150,200,250,300` to
-`100,150,200,250,100`. Nevertheless paced has lower W/P/F with equal T in this fixture.
-The endpoint does not contain the workload-cycle read schedule; cumulative R is now the
-canonical read metric. The implemented test-local
-diagnostic records raw realized `H/B` at accepted head checkpoints, explicitly
-distinguishes `0/0` from positive-over-zero infinity, and remains outside the canonical
-evaluator.
+The Base-fraction boundary reaches a shared `G=1000,E=40` view with representation
+choice inert. Strict target selection gives
+`(3,5%)=[Stay,Rotate,Stay]` and `(4,4%)=[Stay,Stay,Rotate]`, proving the 5%/4%
+boundary. This does not turn payload `E/G` into exact physical sizing authority.
 
-A second threshold-band workload keeps target and progress identical while making each
-parameter set's different remaining budget non-binding: both Stay eight times and migrate
-`1..8`, and both can afford the hot object's 10-byte optional Base after each one-byte
-progress action. At prospective ratio
-`3.5`, only `(3,5%)` writes Base; `(4,4%)` retains Delta, and its following exact `4.0`
-equality also remains Delta. The resulting `(3,5%)` / `(4,4%)` W/P/F/R/T vectors are
-`1516/1056/1056/11040/1212` and `1512/1056/1056/11028/1472`; final hot realized `H/B`
-is `15/10` versus `40/10`, over 2 versus 7 reconstruction Frames. Thus `(4,4%)` writes
-4 fewer bytes and cumulatively reads 12 fewer while T is 260 higher; `(3,5%)` is dominated
-under canonical W/P/F/R in this trace. It is not a Peak result, tuned default, or general winner.
-
-A Base-fraction lower-bound crossover is now an ordinary canonical trace: step 0 creates
-`(1,40)` and `(100,960)`, followed by measured full-rewrite Updates `100/1/100` with
-`Base == Delta`. For the Adaptive pair, the prelude creates the same physical boundary
-view `G=1000,E=40`; weak dominance makes the read limit and representation choice inert.
-Strict target selection gives `(3,5%)=[Stay,Rotate,Stay]` and
-`(4,4%)=[Stay,Stay,Rotate]`, with W/P/F/R/T `2148/1004/1096/4248/1124` and
-`2192/1012/1132/5324/1088`. Both finish at scope `3/4` after three workload Commits and one
-direct settlement. Only the Adaptive pair shares the intended pre-boundary physical
-source; no-migration and paced remain useful corpus controls but are not additional
-4%/5% crossover treatments. This finite witness selects no default or steady-state
-winner and does not turn payload `E/G` into physical sizing authority.
-
-Manifest schema v2 runs `(3,5%)` and `(4,4%)` as exact organizer bindings beside the
-no-migration and paced controls. The threshold and debt-share traces above isolate the
-read and target parameters; the matched locality/ObjectId pair leaves both Adaptive
-parameters tied within each trace and is therefore not another parameter discriminator.
-Current corpus revision/counts and exact W/P/F/R vectors belong to
-[`EVALUATOR-V1.md`](EVALUATOR-V1.md), while executable authority for the target boundary
-and locality family lives in
-[`BenchmarkV1DebtShareDilutionWorkloadTests.cs`](Tests/BenchmarkV1DebtShareDilutionWorkloadTests.cs)
-and
-[`BenchmarkV1LocalityObjectIdPermutationWorkloadTests.cs`](Tests/BenchmarkV1LocalityObjectIdPermutationWorkloadTests.cs).
-None of these bounded synthetic results selects a tuned default or general winner.
+Benchmark corpus revision 15 registers only these two Adaptive bindings. The older
+no-migration and paced-one-debt profiles, controls, and 64-case report are archived at
+Git tag `research/no-migration-paced-baselines-20260901`; `DeltaReference` and
+`BaseReference` now provide strategy-independent write comparators. Current corpus
+counts and raw metrics belong to [`EVALUATOR-V1.md`](EVALUATOR-V1.md). Exact policy
+authority remains in the `ReadAmplificationBaseBudgetPolicy*` tests.

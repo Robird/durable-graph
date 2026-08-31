@@ -763,6 +763,12 @@
 
 ## 6. 船长日志
 
+### 2026-09-01：退役 no-migration 与 paced-one-debt profile
+
+- **Decided**：`DeltaReference` 与 `BaseReference` 已承担 strategy-independent 写入参照，不再用两个行为很弱的 profile 充当写入 baseline。
+- **Observed**：annotated tag `research/no-migration-paced-baselines-20260901` 保存移除前的完整实现、64-case corpus 与专属诊断；主线 revision 15 只注册两个 Adaptive profiles，十六条 trace 共 32 cases。
+- **Decided**：删除 profile bindings、manifest case IDs、正式跑分行与 profile 专属相位/golden tests；保留必要的 test-local 极端动作作为底层机制对照，不把它们重新包装成策略。
+
 ### 2026-08-31：将 canonical P 分相并移除终点相位噪声
 
 - **Problem**：schema 3 的 P 取 workload 与一个人工 terminal-settlement Commit 的共同峰值；当 terminal 主导时会遮住自然 Save 峰值。T、final cursor、settlement 明细及两个可由 manifest/protocol 推导的 counts 也把终点相位与内部认证信息带进了可比较报告。
