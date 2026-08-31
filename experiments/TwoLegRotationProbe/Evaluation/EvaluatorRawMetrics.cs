@@ -14,7 +14,7 @@ internal sealed class EvaluatorRawMetrics {
         long terminalSettlementPhysicalWriteBytes,
         long totalWorkloadDeltaReferencePayloadBytes,
         long totalWorkloadBaseReferencePayloadBytes,
-        long peakCommitWriteBytes,
+        long peakWorkloadCommitWriteBytes,
         long maxCurrentFileTailBytes,
         IEnumerable<WorkloadColdReadSample> workloadColdReadSamples,
         FinalColdHeadReadObservation terminalColdHeadRead) {
@@ -26,19 +26,22 @@ internal sealed class EvaluatorRawMetrics {
             totalWorkloadDeltaReferencePayloadBytes);
         ArgumentOutOfRangeException.ThrowIfNegative(
             totalWorkloadBaseReferencePayloadBytes);
-        ArgumentOutOfRangeException.ThrowIfNegative(peakCommitWriteBytes);
+        ArgumentOutOfRangeException.ThrowIfNegative(peakWorkloadCommitWriteBytes);
         long totalPhysicalWriteBytes = checked(
             workloadPhysicalWriteBytes + terminalSettlementPhysicalWriteBytes);
-        if (peakCommitWriteBytes > totalPhysicalWriteBytes) {
+        long peakCommitWriteBytes = Math.Max(
+            peakWorkloadCommitWriteBytes,
+            terminalSettlementPhysicalWriteBytes);
+        if (peakWorkloadCommitWriteBytes > workloadPhysicalWriteBytes) {
             throw new ArgumentException(
-                "Peak Commit write bytes cannot exceed total physical write bytes.",
-                nameof(peakCommitWriteBytes));
+                "Peak workload Commit write bytes cannot exceed workload physical write bytes.",
+                nameof(peakWorkloadCommitWriteBytes));
         }
 
         if (realizedCommitCount == 0 && peakCommitWriteBytes != 0) {
             throw new ArgumentException(
                 "A run without realized Commits cannot have a nonzero write peak.",
-                nameof(peakCommitWriteBytes));
+                nameof(realizedCommitCount));
         }
 
         if (maxCurrentFileTailBytes < RbfV040Layout.InitialTailOffsetBytes) {
@@ -56,6 +59,7 @@ internal sealed class EvaluatorRawMetrics {
             totalWorkloadDeltaReferencePayloadBytes;
         TotalWorkloadBaseReferencePayloadBytes =
             totalWorkloadBaseReferencePayloadBytes;
+        PeakWorkloadCommitWriteBytes = peakWorkloadCommitWriteBytes;
         PeakCommitWriteBytes = peakCommitWriteBytes;
         MaxCurrentFileTailBytes = maxCurrentFileTailBytes;
         ArgumentNullException.ThrowIfNull(workloadColdReadSamples);
@@ -68,11 +72,18 @@ internal sealed class EvaluatorRawMetrics {
 
         if (samples.Length == 0 &&
             (workloadPhysicalWriteBytes != 0 ||
+                peakWorkloadCommitWriteBytes != 0 ||
                 totalWorkloadDeltaReferencePayloadBytes != 0 ||
                 totalWorkloadBaseReferencePayloadBytes != 0)) {
             throw new ArgumentException(
                 "Metrics without workload samples cannot contain workload write accounting.",
                 nameof(workloadColdReadSamples));
+        }
+
+        if (samples.Length > 0 && peakWorkloadCommitWriteBytes == 0) {
+            throw new ArgumentException(
+                "Metrics with workload samples must have a positive workload write peak.",
+                nameof(peakWorkloadCommitWriteBytes));
         }
 
         for (int index = 0; index < samples.Length; index++) {
@@ -138,6 +149,17 @@ internal sealed class EvaluatorRawMetrics {
     /// </summary>
     public long TotalWorkloadBaseReferencePayloadBytes { get; }
 
+    /// <summary>
+    /// Largest physical append burst among successful outer workload Commits.
+    /// Bootstrap, terminal settlement, and rejected Saves are excluded.
+    /// </summary>
+    public long PeakWorkloadCommitWriteBytes { get; }
+
+    /// <summary>
+    /// Largest physical append burst in the closed horizon. Terminal settlement is
+    /// one synthetic outer Commit, so this is exactly the maximum of the workload
+    /// peak and <see cref="TerminalSettlementPhysicalWriteBytes"/>.
+    /// </summary>
     public long PeakCommitWriteBytes { get; }
 
     public long MaxCurrentFileTailBytes { get; }

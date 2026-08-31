@@ -107,6 +107,9 @@ public sealed class EvaluatorRawMetricTests {
         Assert.Equal(80, observed.TotalWorkloadBaseReferencePayloadBytes);
         Assert.Equal(
             Math.Max(stayWriteBytes, rotateWriteBytes),
+            observed.PeakWorkloadCommitWriteBytes);
+        Assert.Equal(
+            observed.PeakWorkloadCommitWriteBytes,
             observed.PeakCommitWriteBytes);
         Assert.Equal(expectedMaxCurrentTail, observed.MaxCurrentFileTailBytes);
         Assert.Equal(2, observed.WorkloadColdReadSampleCount);
@@ -183,6 +186,7 @@ public sealed class EvaluatorRawMetricTests {
         Assert.Equal(0, observed.TotalWorkloadDeltaReferencePayloadBytes);
         Assert.Equal(0, observed.TotalWorkloadBaseReferencePayloadBytes);
         Assert.Equal(expectedWriteBytes, observed.PeakCommitWriteBytes);
+        Assert.Equal(expectedWriteBytes, observed.PeakWorkloadCommitWriteBytes);
         Assert.Equal(
             afterSecond.CurrentFileTailOffsetBytes,
             observed.MaxCurrentFileTailBytes);
@@ -211,6 +215,7 @@ public sealed class EvaluatorRawMetricTests {
         Assert.Equal(0, observed.TotalWorkloadDeltaReferencePayloadBytes);
         Assert.Equal(0, observed.TotalWorkloadBaseReferencePayloadBytes);
         Assert.Equal(0, observed.PeakCommitWriteBytes);
+        Assert.Equal(0, observed.PeakWorkloadCommitWriteBytes);
         Assert.Equal(
             source.InitialCurrentTailOffsetBytes,
             observed.MaxCurrentFileTailBytes);
@@ -233,7 +238,7 @@ public sealed class EvaluatorRawMetricTests {
             terminalSettlementPhysicalWriteBytes: 1,
             totalWorkloadDeltaReferencePayloadBytes: 0,
             totalWorkloadBaseReferencePayloadBytes: 0,
-            peakCommitWriteBytes: 1,
+            peakWorkloadCommitWriteBytes: 1,
             maxCurrentFileTailBytes: source.Cursor.CurrentFileTailOffsetBytes,
             workloadColdReadSamples: [],
             terminalColdHeadRead: coldRead));
@@ -244,12 +249,56 @@ public sealed class EvaluatorRawMetricTests {
             terminalSettlementPhysicalWriteBytes: 0,
             totalWorkloadDeltaReferencePayloadBytes: 0,
             totalWorkloadBaseReferencePayloadBytes: 0,
-            peakCommitWriteBytes: 1,
+            peakWorkloadCommitWriteBytes: 1,
             maxCurrentFileTailBytes: source.Cursor.CurrentFileTailOffsetBytes,
             workloadColdReadSamples: [
                 new WorkloadColdReadSample(0, coldRead, long.MaxValue),
                 new WorkloadColdReadSample(1, coldRead, 1),
             ],
+            terminalColdHeadRead: coldRead));
+    }
+
+    [Fact]
+    public void Raw_metric_rejects_impossible_peak_accounting() {
+        SourceFixture source = CreateSource((FirstObjectId, 10));
+        FinalColdHeadReadObservation coldRead = FinalColdHeadReadMeasurer.Measure(
+            source.Store,
+            source.Cursor.PublishedRevisionAddress);
+        WorkloadColdReadSample[] samples = [
+            new WorkloadColdReadSample(0, coldRead, 10),
+        ];
+
+        Assert.Throws<ArgumentException>(() => new EvaluatorRawMetrics(
+            realizedCommitCount: 1,
+            workloadPhysicalWriteBytes: 10,
+            terminalSettlementPhysicalWriteBytes: 0,
+            totalWorkloadDeltaReferencePayloadBytes: 0,
+            totalWorkloadBaseReferencePayloadBytes: 0,
+            peakWorkloadCommitWriteBytes: 11,
+            maxCurrentFileTailBytes: source.Cursor.CurrentFileTailOffsetBytes,
+            workloadColdReadSamples: samples,
+            terminalColdHeadRead: coldRead));
+
+        Assert.Throws<ArgumentException>(() => new EvaluatorRawMetrics(
+            realizedCommitCount: 1,
+            workloadPhysicalWriteBytes: 10,
+            terminalSettlementPhysicalWriteBytes: 0,
+            totalWorkloadDeltaReferencePayloadBytes: 0,
+            totalWorkloadBaseReferencePayloadBytes: 0,
+            peakWorkloadCommitWriteBytes: 0,
+            maxCurrentFileTailBytes: source.Cursor.CurrentFileTailOffsetBytes,
+            workloadColdReadSamples: samples,
+            terminalColdHeadRead: coldRead));
+
+        Assert.Throws<ArgumentException>(() => new EvaluatorRawMetrics(
+            realizedCommitCount: 0,
+            workloadPhysicalWriteBytes: 0,
+            terminalSettlementPhysicalWriteBytes: 10,
+            totalWorkloadDeltaReferencePayloadBytes: 0,
+            totalWorkloadBaseReferencePayloadBytes: 0,
+            peakWorkloadCommitWriteBytes: 0,
+            maxCurrentFileTailBytes: source.Cursor.CurrentFileTailOffsetBytes,
+            workloadColdReadSamples: [],
             terminalColdHeadRead: coldRead));
     }
 

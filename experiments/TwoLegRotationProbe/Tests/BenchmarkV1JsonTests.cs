@@ -195,27 +195,15 @@ public sealed class BenchmarkV1JsonTests {
                 new AdmittedOutcomeReportV1(
                     admittedTerminal,
                     new EvaluatorMetricsReportV1(
-                        realizedCommitCount: 2,
                         totalPhysicalWriteBytes: 100,
                         workloadPhysicalWriteBytes: 60,
                         terminalSettlementPhysicalWriteBytes: 40,
                         totalWorkloadDeltaReferencePayloadBytes: 7,
                         totalWorkloadBaseReferencePayloadBytes: 10,
-                        peakCommitWriteBytes: 100,
+                        peakWorkloadCommitWriteBytes: 60,
                         maxCurrentFileTailBytes: 200,
-                        workloadColdReadSampleCount: 1,
                         totalWorkloadColdReadBytes: 48,
-                        totalWorkloadLogicalBasePayloadBytes: 10,
-                        terminalColdHeadReadBytes: 24),
-                    new FinalCursorReportV1(
-                        previousFileNumber: 1,
-                        currentFileNumber: 2,
-                        new FrameAddressReportV1(
-                            fileNumber: 2,
-                            offsetBytes: 4,
-                            lengthBytes: 24),
-                        currentFileTailBytes: 32),
-                    new TerminalSettlementReportV1([10, 20]))),
+                        totalWorkloadLogicalBasePayloadBytes: 10))),
         ]);
 
         byte[] bytes = BenchmarkV1Json.WriteReport(report);
@@ -224,7 +212,7 @@ public sealed class BenchmarkV1JsonTests {
         JsonElement cases = document.RootElement.GetProperty("cases");
 
         Assert.Equal(
-            3,
+            4,
             document.RootElement.GetProperty("schema").GetProperty("version").GetInt32());
         Assert.Equal(BenchmarkV1Json.ComputeManifestSha256(manifest),
             document.RootElement.GetProperty("manifestSha256").GetString());
@@ -239,21 +227,17 @@ public sealed class BenchmarkV1JsonTests {
         JsonElement metrics = admitted.GetProperty("metrics");
         Assert.Equal(
             [
-                "realizedCommitCount",
                 "totalPhysicalWriteBytes",
                 "workloadPhysicalWriteBytes",
                 "terminalSettlementPhysicalWriteBytes",
                 "totalWorkloadDeltaReferencePayloadBytes",
                 "totalWorkloadBaseReferencePayloadBytes",
-                "peakCommitWriteBytes",
+                "peakWorkloadCommitWriteBytes",
                 "maxCurrentFileTailBytes",
-                "workloadColdReadSampleCount",
                 "totalWorkloadColdReadBytes",
                 "totalWorkloadLogicalBasePayloadBytes",
-                "terminalColdHeadReadBytes",
             ],
             metrics.EnumerateObject().Select(static property => property.Name));
-        Assert.Equal(1, metrics.GetProperty("workloadColdReadSampleCount").GetInt32());
         Assert.Equal(60, metrics.GetProperty("workloadPhysicalWriteBytes").GetInt64());
         Assert.Equal(
             40,
@@ -268,9 +252,18 @@ public sealed class BenchmarkV1JsonTests {
         Assert.Equal(
             10,
             metrics.GetProperty("totalWorkloadLogicalBasePayloadBytes").GetInt64());
-        Assert.Equal(24, metrics.GetProperty("terminalColdHeadReadBytes").GetInt64());
-        Assert.True(admitted.TryGetProperty("finalCursor", out _));
-        Assert.True(admitted.TryGetProperty("settlement", out _));
+        Assert.Equal(60, metrics.GetProperty("peakWorkloadCommitWriteBytes").GetInt64());
+        Assert.False(admitted.TryGetProperty("finalCursor", out _));
+        Assert.False(admitted.TryGetProperty("settlement", out _));
+        Assert.DoesNotContain("\"realizedCommitCount\"", json, StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "\"workloadColdReadSampleCount\"",
+            json,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "\"terminalColdHeadReadBytes\"",
+            json,
+            StringComparison.Ordinal);
 
         JsonElement capacityOutcome = GetOutcome(cases, "capacity");
         Assert.Equal("capacity-rejected", capacityOutcome.GetProperty("kind").GetString());
@@ -296,32 +289,59 @@ public sealed class BenchmarkV1JsonTests {
     [Fact]
     public void Metrics_report_requires_exact_write_phase_conservation() {
         Assert.Throws<ArgumentException>(() => new EvaluatorMetricsReportV1(
-            realizedCommitCount: 2,
             totalPhysicalWriteBytes: 100,
             workloadPhysicalWriteBytes: 60,
             terminalSettlementPhysicalWriteBytes: 39,
             totalWorkloadDeltaReferencePayloadBytes: 7,
             totalWorkloadBaseReferencePayloadBytes: 10,
-            peakCommitWriteBytes: 60,
+            peakWorkloadCommitWriteBytes: 60,
             maxCurrentFileTailBytes: 200,
-            workloadColdReadSampleCount: 1,
             totalWorkloadColdReadBytes: 48,
-            totalWorkloadLogicalBasePayloadBytes: 10,
-            terminalColdHeadReadBytes: 24));
+            totalWorkloadLogicalBasePayloadBytes: 10));
+
+        Assert.Throws<ArgumentException>(() => new EvaluatorMetricsReportV1(
+            totalPhysicalWriteBytes: 100,
+            workloadPhysicalWriteBytes: 60,
+            terminalSettlementPhysicalWriteBytes: 40,
+            totalWorkloadDeltaReferencePayloadBytes: 7,
+            totalWorkloadBaseReferencePayloadBytes: 10,
+            peakWorkloadCommitWriteBytes: 0,
+            maxCurrentFileTailBytes: 200,
+            totalWorkloadColdReadBytes: 48,
+            totalWorkloadLogicalBasePayloadBytes: 10));
+
+        Assert.Throws<ArgumentException>(() => new EvaluatorMetricsReportV1(
+            totalPhysicalWriteBytes: 100,
+            workloadPhysicalWriteBytes: 0,
+            terminalSettlementPhysicalWriteBytes: 100,
+            totalWorkloadDeltaReferencePayloadBytes: 0,
+            totalWorkloadBaseReferencePayloadBytes: 0,
+            peakWorkloadCommitWriteBytes: 0,
+            maxCurrentFileTailBytes: 200,
+            totalWorkloadColdReadBytes: 48,
+            totalWorkloadLogicalBasePayloadBytes: 0));
 
         Assert.Throws<OverflowException>(() => new EvaluatorMetricsReportV1(
-            realizedCommitCount: 2,
             totalPhysicalWriteBytes: long.MaxValue,
             workloadPhysicalWriteBytes: long.MaxValue,
             terminalSettlementPhysicalWriteBytes: 1,
             totalWorkloadDeltaReferencePayloadBytes: 0,
             totalWorkloadBaseReferencePayloadBytes: 0,
-            peakCommitWriteBytes: 1,
+            peakWorkloadCommitWriteBytes: 1,
             maxCurrentFileTailBytes: 200,
-            workloadColdReadSampleCount: 0,
             totalWorkloadColdReadBytes: 0,
-            totalWorkloadLogicalBasePayloadBytes: 0,
-            terminalColdHeadReadBytes: 24));
+            totalWorkloadLogicalBasePayloadBytes: 0));
+
+        Assert.Throws<ArgumentException>(() => new EvaluatorMetricsReportV1(
+            totalPhysicalWriteBytes: 100,
+            workloadPhysicalWriteBytes: 60,
+            terminalSettlementPhysicalWriteBytes: 40,
+            totalWorkloadDeltaReferencePayloadBytes: 7,
+            totalWorkloadBaseReferencePayloadBytes: 10,
+            peakWorkloadCommitWriteBytes: 61,
+            maxCurrentFileTailBytes: 200,
+            totalWorkloadColdReadBytes: 48,
+            totalWorkloadLogicalBasePayloadBytes: 10));
     }
 
     [Fact]
@@ -458,27 +478,15 @@ public sealed class BenchmarkV1JsonTests {
         EvaluatorPositionReportV1 position) => new(
         position,
         new EvaluatorMetricsReportV1(
-            realizedCommitCount: 1,
             totalPhysicalWriteBytes: 100,
             workloadPhysicalWriteBytes: 0,
             terminalSettlementPhysicalWriteBytes: 100,
             totalWorkloadDeltaReferencePayloadBytes: 0,
             totalWorkloadBaseReferencePayloadBytes: 0,
-            peakCommitWriteBytes: 100,
+            peakWorkloadCommitWriteBytes: 0,
             maxCurrentFileTailBytes: 200,
-            workloadColdReadSampleCount: 0,
             totalWorkloadColdReadBytes: 0,
-            totalWorkloadLogicalBasePayloadBytes: 0,
-            terminalColdHeadReadBytes: 24),
-        new FinalCursorReportV1(
-            previousFileNumber: 1,
-            currentFileNumber: 2,
-            new FrameAddressReportV1(
-                fileNumber: 2,
-                offsetBytes: 4,
-                lengthBytes: 24),
-            currentFileTailBytes: 32),
-        new TerminalSettlementReportV1([]));
+            totalWorkloadLogicalBasePayloadBytes: 0));
 
     private static BenchmarkManifestV1 Manifest(
         IEnumerable<BenchmarkCaseManifestV1> cases) => new(
@@ -487,7 +495,7 @@ public sealed class BenchmarkV1JsonTests {
         Component("two-leg-evaluator"),
         Component("direct-rotate-else-ascending-single-debt"),
         Component("after-every-workload-save-cold-load"),
-        new BenchmarkComponentIdentityV1("raw-wpfr", 3),
+        new BenchmarkComponentIdentityV1("raw-wpfr", 4),
         Component("rbf-v0.40-envelope"),
         Component("provisional-revision-v0"),
         cases);

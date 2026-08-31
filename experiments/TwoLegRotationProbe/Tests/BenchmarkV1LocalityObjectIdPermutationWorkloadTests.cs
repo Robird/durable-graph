@@ -104,60 +104,52 @@ public sealed class BenchmarkV1LocalityObjectIdPermutationWorkloadTests {
             report,
             BenchmarkV1Corpus.LocalityLowIdNoMigrationCaseId,
             totalPhysicalWriteBytes: 448,
-            peakCommitWriteBytes: 256,
-            maxCurrentFileTailBytes: 256,
-            finalColdHeadReadBytes: 248);
+            peakWorkloadCommitWriteBytes: 148,
+            maxCurrentFileTailBytes: 256);
         AdmittedOutcomeReportV1 noMigrationHigh = AssertAdmitted(
             report,
             BenchmarkV1Corpus.LocalityHighIdNoMigrationCaseId,
             totalPhysicalWriteBytes: 448,
-            peakCommitWriteBytes: 256,
-            maxCurrentFileTailBytes: 256,
-            finalColdHeadReadBytes: 248);
+            peakWorkloadCommitWriteBytes: 148,
+            maxCurrentFileTailBytes: 256);
         Assert.Equal(noMigrationLow.Metrics, noMigrationHigh.Metrics);
 
         AssertAdmitted(
             report,
             BenchmarkV1Corpus.LocalityLowIdPacedCaseId,
             totalPhysicalWriteBytes: 456,
-            peakCommitWriteBytes: 256,
-            maxCurrentFileTailBytes: 448,
-            finalColdHeadReadBytes: 440);
+            peakWorkloadCommitWriteBytes: 256,
+            maxCurrentFileTailBytes: 448);
         AssertAdmitted(
             report,
             BenchmarkV1Corpus.LocalityHighIdPacedCaseId,
             totalPhysicalWriteBytes: 452,
-            peakCommitWriteBytes: 152,
-            maxCurrentFileTailBytes: 340,
-            finalColdHeadReadBytes: 292);
+            peakWorkloadCommitWriteBytes: 152,
+            maxCurrentFileTailBytes: 340);
         AdmittedOutcomeReportV1 adaptive35Low = AssertAdmitted(
             report,
             BenchmarkV1Corpus.LocalityLowIdAdaptiveR3B5PercentCaseId,
             totalPhysicalWriteBytes: 452,
-            peakCommitWriteBytes: 252,
-            maxCurrentFileTailBytes: 444,
-            finalColdHeadReadBytes: 288);
+            peakWorkloadCommitWriteBytes: 252,
+            maxCurrentFileTailBytes: 444);
         AdmittedOutcomeReportV1 adaptive35High = AssertAdmitted(
             report,
             BenchmarkV1Corpus.LocalityHighIdAdaptiveR3B5PercentCaseId,
             totalPhysicalWriteBytes: 348,
-            peakCommitWriteBytes: 152,
-            maxCurrentFileTailBytes: 340,
-            finalColdHeadReadBytes: 332);
+            peakWorkloadCommitWriteBytes: 152,
+            maxCurrentFileTailBytes: 340);
         AdmittedOutcomeReportV1 adaptive44Low = AssertAdmitted(
             report,
             BenchmarkV1Corpus.LocalityLowIdAdaptiveR4B4PercentCaseId,
             totalPhysicalWriteBytes: 452,
-            peakCommitWriteBytes: 252,
-            maxCurrentFileTailBytes: 444,
-            finalColdHeadReadBytes: 288);
+            peakWorkloadCommitWriteBytes: 252,
+            maxCurrentFileTailBytes: 444);
         AdmittedOutcomeReportV1 adaptive44High = AssertAdmitted(
             report,
             BenchmarkV1Corpus.LocalityHighIdAdaptiveR4B4PercentCaseId,
             totalPhysicalWriteBytes: 348,
-            peakCommitWriteBytes: 152,
-            maxCurrentFileTailBytes: 340,
-            finalColdHeadReadBytes: 332);
+            peakWorkloadCommitWriteBytes: 152,
+            maxCurrentFileTailBytes: 340);
 
         Assert.Equal(adaptive35Low.Metrics, adaptive44Low.Metrics);
         Assert.Equal(adaptive35High.Metrics, adaptive44High.Metrics);
@@ -309,9 +301,8 @@ public sealed class BenchmarkV1LocalityObjectIdPermutationWorkloadTests {
         BenchmarkReportV1 report,
         string caseId,
         long totalPhysicalWriteBytes,
-        long peakCommitWriteBytes,
-        long maxCurrentFileTailBytes,
-        long finalColdHeadReadBytes) {
+        long peakWorkloadCommitWriteBytes,
+        long maxCurrentFileTailBytes) {
         BenchmarkCaseReportV1 benchmarkCase = report.Cases.Single(
             candidate => candidate.CaseId == caseId);
         AdmittedOutcomeReportV1 admitted = Assert.IsType<AdmittedOutcomeReportV1>(
@@ -319,22 +310,15 @@ public sealed class BenchmarkV1LocalityObjectIdPermutationWorkloadTests {
         Assert.Equal(EvaluatorRunPhase.TerminalSettlement, admitted.Position.Phase);
         Assert.Equal(2, admitted.Position.CompletedWorkloadStepCount);
         Assert.Equal(2, admitted.Position.TotalWorkloadStepCount);
-        Assert.Equal(3, admitted.Metrics.RealizedCommitCount);
         Assert.Equal(
             totalPhysicalWriteBytes,
             admitted.Metrics.TotalPhysicalWriteBytes);
-        Assert.Equal(peakCommitWriteBytes, admitted.Metrics.PeakCommitWriteBytes);
+        Assert.Equal(
+            peakWorkloadCommitWriteBytes,
+            admitted.Metrics.PeakWorkloadCommitWriteBytes);
         Assert.Equal(
             maxCurrentFileTailBytes,
             admitted.Metrics.MaxCurrentFileTailBytes);
-        Assert.Equal(
-            finalColdHeadReadBytes,
-            admitted.Metrics.TerminalColdHeadReadBytes);
-        Assert.Equal(2U, admitted.FinalCursor.PreviousFileNumber);
-        Assert.Equal(3U, admitted.FinalCursor.CurrentFileNumber);
-        Assert.Empty(admitted.Settlement.MigratedObjectIds);
-        Assert.Equal(0, admitted.Settlement.MaintenanceRevisionCount);
-        Assert.Equal(1, admitted.Settlement.RealizedRevisionCount);
         return admitted;
     }
 

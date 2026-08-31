@@ -18,7 +18,7 @@ public sealed class BenchmarkV1RunnerTests {
             BenchmarkV1Baselines.All);
 
         Assert.Equal(2, definition.Manifest.Schema.Version);
-        Assert.Equal(13, definition.Manifest.ManifestRevision);
+        Assert.Equal(14, definition.Manifest.ManifestRevision);
         Assert.Equal(BenchmarkV1ProtocolIdentities.Evaluator, definition.Manifest.Evaluator);
         Assert.Equal(
             BenchmarkV1ProtocolIdentities.TerminalSettlement,
@@ -450,93 +450,48 @@ public sealed class BenchmarkV1RunnerTests {
         AdmittedOutcomeReportV1 debtNoMigration = AssertAdmitted(
             run.Report,
             BenchmarkV1Corpus.DebtZeroThenRotateNoMigrationCaseId,
-            realizedCommitCount: 5,
             totalPhysicalWriteBytes: 856,
-            peakCommitWriteBytes: 680,
-            maxCurrentFileTailBytes: 680,
-            finalColdHeadReadBytes: 832,
-            previousFileNumber: 2,
-            currentFileNumber: 3);
+            maxCurrentFileTailBytes: 680);
         AdmittedOutcomeReportV1 debtPaced = AssertAdmitted(
             run.Report,
             BenchmarkV1Corpus.DebtZeroThenRotatePacedCaseId,
-            realizedCommitCount: 5,
             totalPhysicalWriteBytes: 1536,
-            peakCommitWriteBytes: 696,
-            maxCurrentFileTailBytes: 804,
-            finalColdHeadReadBytes: 756,
-            previousFileNumber: 3,
-            currentFileNumber: 4);
+            maxCurrentFileTailBytes: 804);
         AdmittedOutcomeReportV1 debtAdaptive35 = AssertAdmitted(
             run.Report,
             BenchmarkV1Corpus.DebtZeroThenRotateAdaptiveR3B5PercentCaseId,
-            realizedCommitCount: 5,
             totalPhysicalWriteBytes: 1536,
-            peakCommitWriteBytes: 696,
-            maxCurrentFileTailBytes: 804,
-            finalColdHeadReadBytes: 756,
-            previousFileNumber: 3,
-            currentFileNumber: 4);
+            maxCurrentFileTailBytes: 804);
         AdmittedOutcomeReportV1 debtAdaptive44 = AssertAdmitted(
             run.Report,
             BenchmarkV1Corpus.DebtZeroThenRotateAdaptiveR4B4PercentCaseId,
-            realizedCommitCount: 5,
             totalPhysicalWriteBytes: 1536,
-            peakCommitWriteBytes: 696,
-            maxCurrentFileTailBytes: 804,
-            finalColdHeadReadBytes: 756,
-            previousFileNumber: 3,
-            currentFileNumber: 4);
+            maxCurrentFileTailBytes: 804);
         AdmittedOutcomeReportV1 mixedNoMigration = AssertAdmitted(
             run.Report,
             BenchmarkV1Corpus.MixedSmallNoMigrationCaseId,
-            realizedCommitCount: 3,
             totalPhysicalWriteBytes: 368,
-            peakCommitWriteBytes: 164,
-            maxCurrentFileTailBytes: 344,
-            finalColdHeadReadBytes: 352,
-            previousFileNumber: 2,
-            currentFileNumber: 3);
+            maxCurrentFileTailBytes: 344);
         AdmittedOutcomeReportV1 mixedPaced = AssertAdmitted(
             run.Report,
             BenchmarkV1Corpus.MixedSmallPacedCaseId,
-            realizedCommitCount: 3,
             totalPhysicalWriteBytes: 368,
-            peakCommitWriteBytes: 164,
-            maxCurrentFileTailBytes: 344,
-            finalColdHeadReadBytes: 352,
-            previousFileNumber: 2,
-            currentFileNumber: 3);
+            maxCurrentFileTailBytes: 344);
         AdmittedOutcomeReportV1 mixedAdaptive35 = AssertAdmitted(
             run.Report,
             BenchmarkV1Corpus.MixedSmallAdaptiveR3B5PercentCaseId,
-            realizedCommitCount: 3,
             totalPhysicalWriteBytes: 440,
-            peakCommitWriteBytes: 164,
-            maxCurrentFileTailBytes: 184,
-            finalColdHeadReadBytes: 280,
-            previousFileNumber: 3,
-            currentFileNumber: 4);
+            maxCurrentFileTailBytes: 184);
         AdmittedOutcomeReportV1 mixedAdaptive44 = AssertAdmitted(
             run.Report,
             BenchmarkV1Corpus.MixedSmallAdaptiveR4B4PercentCaseId,
-            realizedCommitCount: 3,
             totalPhysicalWriteBytes: 440,
-            peakCommitWriteBytes: 164,
-            maxCurrentFileTailBytes: 184,
-            finalColdHeadReadBytes: 280,
-            previousFileNumber: 3,
-            currentFileNumber: 4);
+            maxCurrentFileTailBytes: 184);
         Assert.NotEqual(debtNoMigration.Metrics, debtPaced.Metrics);
         Assert.Equal(debtPaced.Metrics, debtAdaptive35.Metrics);
         Assert.Equal(debtAdaptive35.Metrics, debtAdaptive44.Metrics);
         Assert.Equal(mixedNoMigration.Metrics, mixedPaced.Metrics);
-        Assert.Equal(mixedNoMigration.FinalCursor, mixedPaced.FinalCursor);
-        Assert.Equal(
-            mixedNoMigration.Settlement.MigratedObjectIds,
-            mixedPaced.Settlement.MigratedObjectIds);
         Assert.Equal(mixedAdaptive35.Metrics, mixedAdaptive44.Metrics);
-        Assert.Equal(mixedAdaptive35.FinalCursor, mixedAdaptive44.FinalCursor);
     }
 
     [Fact]
@@ -1121,13 +1076,41 @@ public sealed class BenchmarkV1RunnerTests {
         Assert.Equal(0, benchmarkCase.ManifestCase.EvaluatedWorkloadStepCount);
         AdmittedOutcomeReportV1 admitted = Assert.IsType<AdmittedOutcomeReportV1>(
             Assert.Single(run.Report.Cases).Outcome);
-        Assert.Equal(1, admitted.Metrics.RealizedCommitCount);
-        Assert.Equal(2U, admitted.FinalCursor.PreviousFileNumber);
-        Assert.Equal(3U, admitted.FinalCursor.CurrentFileNumber);
+        Assert.Equal(0, admitted.Metrics.PeakWorkloadCommitWriteBytes);
+        Assert.Equal(0, admitted.Metrics.WorkloadPhysicalWriteBytes);
     }
 
     [Fact]
-    public void Batch_rejects_protocol_identity_that_does_not_match_the_runner() {
+    public void Admitted_sample_count_is_checked_before_report_projection() {
+        BenchmarkV1CaseDefinition definition = BenchmarkV1Corpus.Create(
+            BenchmarkV1Baselines.All).Cases
+            .Single(benchmarkCase => benchmarkCase.ManifestCase.CaseId ==
+                BenchmarkV1Corpus.MixedSmallNoMigrationCaseId);
+        AdmittedEvaluatorRun admitted = Assert.IsType<AdmittedEvaluatorRun>(
+            BenchmarkV1Runner.ExecuteCase(definition).Outcome);
+        EvaluatorRawMetrics missingSamples = new(
+            admitted.Metrics.RealizedCommitCount,
+            workloadPhysicalWriteBytes: 0,
+            terminalSettlementPhysicalWriteBytes:
+                admitted.Metrics.TerminalSettlementPhysicalWriteBytes,
+            totalWorkloadDeltaReferencePayloadBytes: 0,
+            totalWorkloadBaseReferencePayloadBytes: 0,
+            peakWorkloadCommitWriteBytes: 0,
+            admitted.Metrics.MaxCurrentFileTailBytes,
+            workloadColdReadSamples: [],
+            admitted.Metrics.TerminalColdHeadRead);
+        AdmittedEvaluatorRun inconsistent = new(
+            admitted.Position,
+            admitted.FinalCursor,
+            missingSamples,
+            admitted.Settlement);
+
+        Assert.Throws<InvalidDataException>(() =>
+            BenchmarkOutcomeReportV1.Project(inconsistent));
+    }
+
+    [Fact]
+    public void Batch_rejects_protocol_identities_that_do_not_match_the_runner() {
         BenchmarkV1CaseDefinition benchmarkCase = BenchmarkV1Corpus.Create(
             BenchmarkV1Baselines.All).Cases[0];
 
@@ -1138,6 +1121,17 @@ public sealed class BenchmarkV1RunnerTests {
             BenchmarkV1ProtocolIdentities.TerminalSettlement,
             BenchmarkV1ProtocolIdentities.ReadSchedule,
             BenchmarkV1ProtocolIdentities.Metrics,
+            BenchmarkV1ProtocolIdentities.FrameLayout,
+            BenchmarkV1ProtocolIdentities.RevisionGrammar,
+            [benchmarkCase]));
+
+        Assert.Throws<ArgumentException>(() => new BenchmarkV1BatchDefinition(
+            BenchmarkV1Corpus.ManifestId,
+            BenchmarkV1Corpus.ManifestRevision,
+            BenchmarkV1ProtocolIdentities.Evaluator,
+            BenchmarkV1ProtocolIdentities.TerminalSettlement,
+            BenchmarkV1ProtocolIdentities.ReadSchedule,
+            new BenchmarkComponentIdentityV1("raw-wpfr", 3),
             BenchmarkV1ProtocolIdentities.FrameLayout,
             BenchmarkV1ProtocolIdentities.RevisionGrammar,
             [benchmarkCase]));
@@ -1224,37 +1218,25 @@ public sealed class BenchmarkV1RunnerTests {
     private static AdmittedOutcomeReportV1 AssertAdmitted(
         BenchmarkReportV1 report,
         string caseId,
-        int realizedCommitCount,
         long totalPhysicalWriteBytes,
-        long peakCommitWriteBytes,
-        long maxCurrentFileTailBytes,
-        long finalColdHeadReadBytes,
-        uint previousFileNumber,
-        uint currentFileNumber) {
+        long maxCurrentFileTailBytes) {
         BenchmarkCaseReportV1 benchmarkCase = FindCase(report, caseId);
         AdmittedOutcomeReportV1 admitted = Assert.IsType<AdmittedOutcomeReportV1>(
             benchmarkCase.Outcome);
-        Assert.Equal(
-            admitted.Position.TotalWorkloadStepCount,
-            admitted.Metrics.WorkloadColdReadSampleCount);
         if (admitted.Position.TotalWorkloadStepCount > 0) {
             Assert.True(admitted.Metrics.TotalWorkloadColdReadBytes > 0);
         }
 
-        Assert.Equal(realizedCommitCount, admitted.Metrics.RealizedCommitCount);
         Assert.Equal(
             totalPhysicalWriteBytes,
             admitted.Metrics.TotalPhysicalWriteBytes);
-        Assert.Equal(peakCommitWriteBytes, admitted.Metrics.PeakCommitWriteBytes);
+        Assert.InRange(
+            admitted.Metrics.PeakWorkloadCommitWriteBytes,
+            0,
+            admitted.Metrics.WorkloadPhysicalWriteBytes);
         Assert.Equal(
             maxCurrentFileTailBytes,
             admitted.Metrics.MaxCurrentFileTailBytes);
-        Assert.Equal(
-            finalColdHeadReadBytes,
-            admitted.Metrics.TerminalColdHeadReadBytes);
-        Assert.Equal(previousFileNumber, admitted.FinalCursor.PreviousFileNumber);
-        Assert.Equal(currentFileNumber, admitted.FinalCursor.CurrentFileNumber);
-        Assert.Empty(admitted.Settlement.MigratedObjectIds);
         return admitted;
     }
 

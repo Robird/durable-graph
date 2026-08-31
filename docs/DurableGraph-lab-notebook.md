@@ -763,6 +763,13 @@
 
 ## 6. 船长日志
 
+### 2026-08-31：将 canonical P 分相并移除终点相位噪声
+
+- **Problem**：schema 3 的 P 取 workload 与一个人工 terminal-settlement Commit 的共同峰值；当 terminal 主导时会遮住自然 Save 峰值。T、final cursor、settlement 明细及两个可由 manifest/protocol 推导的 counts 也把终点相位与内部认证信息带进了可比较报告。
+- **Implemented**：corpus revision 14 / metrics `raw-wpfr/4` / report schema 4 将 canonical P 改为 workload-only `PeakWorkloadCommitWriteBytes`；terminal burst 已由唯一 synthetic Commit 的 `Wterminal` 精确表达，旧 closed peak 可按 `max(Pworkload,Wterminal)` 派生。report 的 metrics 仅保留九个整数：`W/Wworkload/Wterminal`、两项 payload references、Pworkload、F、R、L；typed outcome position 仍统一保留 phase 与 completed/total workload counts。T、final cursor、settlement 与冗余 metric counts 保留在 evaluator 内部用于正确性/专项诊断。F 仍是全过程 Current-file high-water capacity guardrail，不是终点快照。
+- **Observed**：active-hundred 的 no-migration、paced、Adaptive `(3,5%)`、Adaptive `(4,4%)` 的 `Pworkload` 为 `2044/2128/2176/2148`。paced 被 no-migration 在 W/Pworkload/F/R 四项严格支配。Adaptive `(3,5%)` 相比 `(4,4%)` 将 W/F/R 分别降低 `1940/11004/322448B`，但 Pworkload 高 28B；修正后的关系是窄峰值交换，不是 schema-3 所显示的严格支配。
+- **Boundary / Next**：closed-horizon W 与 `Wterminal` 继续保留，避免奖励延期清债；canonical report 的瘦身不删除 evaluator outcome 中的认证信息。下一步由这个白盒交换设计首个独立 candidate，不引入 score、未来视野或新的 policy facts。
+
 ### 2026-08-31：拆分 workload/terminal 写入并加入 payload references
 
 - **Implemented**：corpus revision 13 / metrics `raw-wpfr/3` / report schema 3 在保持既有 W/P/F/R/T 核心结果不变的同时，新增精确整数 `Wworkload`、`Wterminal`、workload Delta-reference 与 Base-reference，并强制 `W = Wworkload + Wterminal`。Delta-reference=`Insert Base + Update Delta`，Base-reference=`Insert Base + Update result Base`；Remove、NoChange、bootstrap、terminal settlement 与 rejected Saves 不进入 references。
@@ -773,7 +780,7 @@
 
 - **Problem**：revision 11 的 R 只在强制 terminal settlement 后测一次最终 head；它衡量人工收尾布局的随机相位，不能表达策略在一系列自然 Save 中持续承担的冷读压力。active-hundred 上 `(4,4%)` 的较小终点读量因此给出了误导性印象。
 - **Implemented**：revision 12 的 `after-every-workload-save-cold-load/1` 在每个成功 workload outer Save 后以空缓存测一次 authoritative OVD+current-reconstruction full-Frame union；同一 Commit 内多个 Revision 只采样一次，bootstrap/rejection/terminal settlement 不采样。canonical R 为物理读字节累计，L 为对应 post-live Base payload 累计；报告精确整数 `(R,L)`，T 单列 terminal cold-head 诊断，report schema 升至 2、metrics 升至 `raw-wpfr/2`。
-- **Observed**：active-hundred 的共享 `N=64,L=273804` 下，no-migration、paced、Adaptive `(3,5%)`、Adaptive `(4,4%)` 的 `R/avg/amplification` 分别为 `3915000/61171.88/14.2985`、`4020812/62825.19/14.6850`、`2896812/45262.69/10.5799`、`3219260/50300.94/11.7575`。`(3,5%)` 在 W/P/F/R 四项严格支配 `(4,4%)`；后者较小的 T 只是终相位差。
+- **Observed**：active-hundred 的共享 `N=64,L=273804` 下，no-migration、paced、Adaptive `(3,5%)`、Adaptive `(4,4%)` 的 `R/avg/amplification` 分别为 `3915000/61171.88/14.2985`、`4020812/62825.19/14.6850`、`2896812/45262.69/10.5799`、`3219260/50300.94/11.7575`。当时 schema-3 的 closed-horizon P 让 `(3,5%)` 看似在 W/P/F/R 四项严格支配 `(4,4%)`；上方 revision 14 复审已把该结论修正为 workload-P 的 28B 反向交换。后者较小的 T 仍只是终相位差。
 - **Boundary / Next**：R 仍是“每次 Save 后必冷启一次”的命名读取日程，不声称真实 IO 频率；per-Save vector 保留内部，不输出浮点 ratio。下一步回到策略候选设计，用 revision 12 复跑。
 
 ### 2026-08-31：将两个过短反例合并为 active-hundred mixed workload

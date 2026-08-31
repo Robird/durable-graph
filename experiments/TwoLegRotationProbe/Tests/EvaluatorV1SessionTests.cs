@@ -52,6 +52,7 @@ public sealed class EvaluatorV1SessionTests {
         long physicalWrite = TotalTailBytes(session.Store) -
             TotalTailBytes(source.Store);
         long settlementWrite = physicalWrite - workloadWrite;
+        Assert.True(settlementWrite > workloadWrite);
         Assert.Equal(
             workloadWrite + settlementWrite,
             admitted.Metrics.TotalPhysicalWriteBytes);
@@ -64,6 +65,9 @@ public sealed class EvaluatorV1SessionTests {
         Assert.Equal(
             Math.Max(workloadWrite, settlementWrite),
             admitted.Metrics.PeakCommitWriteBytes);
+        Assert.Equal(
+            workloadWrite,
+            admitted.Metrics.PeakWorkloadCommitWriteBytes);
         Assert.Equal(3, session.Store.FileCount);
         Assert.Equal(2U, admitted.FinalCursor.FileScope.PreviousFileNumber);
         Assert.Equal(3U, admitted.FinalCursor.FileScope.CurrentFileNumber);
@@ -101,6 +105,7 @@ public sealed class EvaluatorV1SessionTests {
         Assert.Equal(0, admitted.Metrics.TotalWorkloadDeltaReferencePayloadBytes);
         Assert.Equal(0, admitted.Metrics.TotalWorkloadBaseReferencePayloadBytes);
         Assert.Equal(expectedWrite, admitted.Metrics.PeakCommitWriteBytes);
+        Assert.Equal(0, admitted.Metrics.PeakWorkloadCommitWriteBytes);
         long lastPreparationTail = session.Store.GetFile(2).TailOffsetBytes;
         Assert.Equal(
             Math.Max(
@@ -401,6 +406,9 @@ public sealed class EvaluatorV1SessionTests {
         Assert.Equal(
             Math.Max(firstRotateWrite, terminalRotateWrite),
             admitted.Metrics.PeakCommitWriteBytes);
+        Assert.Equal(
+            firstRotateWrite,
+            admitted.Metrics.PeakWorkloadCommitWriteBytes);
         AssertClosedOverFinalScope(admitted, oldPreviousFileNumber: 2);
     }
 

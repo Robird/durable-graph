@@ -14,7 +14,7 @@
 1. organizer 冻结 workload、bootstrap、horizon、settlement 与评价协议；
 2. candidate 自主组织算法、状态和内部类型，不要求继承基类或实现策略接口；
 3. 每个 `{workload, strategy}` 使用独立 Store fork；
-4. Arena 独占 exact planning/admission/apply、terminal settlement、合法性验证与 `W/P/F/R/L/T`；
+4. Arena 独占 exact planning/admission/apply、terminal settlement、合法性验证与 canonical raw metrics；
 5. typed non-admission 不转成罚分，首阶段不建立 scalar score、排行榜或产品默认策略。
 
 这不是动态插件 ABI、恶意代码沙箱或 submission service。
@@ -63,7 +63,7 @@ determinism gate。四个现有 Baselines 恰好以逐步纯选择实现，但�
 convenience implementation；后续 candidate 可以在一次 run 内持有私有状态或组合多个内部算法。
 
 为保持 online 公平性，`StrategyRunContextV1` 逐步开放当前 Save，仍不暴露 future trace、step index、
-workload identity、candidate feasibility、W/P/F/R/L/T、absolute addresses 或 apply 后观察。跨 Commit stateful
+workload identity、candidate feasibility、raw metrics、absolute addresses 或 apply 后观察。跨 Commit stateful
 策略可以存在于 whole-run delegate 的局部实例中，不需要 Arena 预先冻结 lifecycle interface。
 
 ## 冻结的 workload view
@@ -109,7 +109,7 @@ DebtZero control 因 parent debt 选择 Stay，Adaptive 因 post-live evacuation
 - 每个 realized workload Commit 的 ordinal、selected target 与 result checkpoint；
 - final checkpoint；
 - typed termination；
-- terminal-settlement realized Revision count；
+- terminal-settlement realized Revision count（仅内部认证/诊断，不进入 canonical report）；
 - **不包含 candidate 声明的 metrics**。
 
 本轮采用 Arena-certified product：只有 `StrategyRunContextV1` 能构造 product；每次 `Commit` 仍通过唯一
@@ -139,7 +139,8 @@ final state 做 full-trace replay 验证。因此当前产品足以进行内部�
 - same action grammar、exact estimator 与 read schedule；
 - rejected selected choice 不 fallback，失败不变异 Store/cursor；
 - workload 完成后统一 terminal settlement；
-- 只有 admitted outcome 才有 W/P/F/R/L/T；
+- 只有 admitted outcome 才有 canonical raw metrics；效率量为 W、workload-only P、R，F 是容量 guardrail，
+  并保留 W 的 workload/terminal 分相、Delta/Base payload references 与 R 的 L 分母；
 - strategy identity/version 与 deterministic rerun；
 - candidate 无权提交 official metrics。
 
@@ -165,7 +166,7 @@ strategy-neutral suite identity 与 per-strategy run identity。
 - 独立于 performance corpus 的 typed capacity qualification；
 - 仅在 canonical outcome 反转时升级的 Frame provenance；
 - 已选 `after-every-workload-save-cold-load/1`：每个成功 workload outer Save 后独立冷载一次；
-  per-Save vector 内部保留，canonical report 只发布累计 R/L 与 terminal T。
+  per-Save vector 与 terminal T 内部保留，canonical report 只发布累计 R/L。
 
 第一轮使用同一冻结公开 suite。依据第一轮结果改进、或准备宣称扩展前沿的第二轮 candidate，应在实现
 冻结后接受一个新命名 workload/family 的 post-freeze validation。这不是 hidden test 或总分。
@@ -174,7 +175,7 @@ strategy-neutral suite identity 与 per-strategy run identity。
 
 - Arena、Baselines、Tests 三程序集 build 通过，dependency 单向；
 - 四个 strategy executor 的实际 assembly 是 `Atelia.TwoLegRotationProbe.Baselines`；
-- corpus revision 12 包含十六条 trace、64 个 admitted cases；最新 `active-hundred-mixed` 是可调的
+- corpus revision 14 包含十六条 trace、64 个 admitted cases；最新 `active-hundred-mixed` 是可调的
   长程策略探针，不设置 dedicated unit test 或 literal hash，避免把反馈迭代误当成格式冻结；
 - canonical `read-amplification-threshold-band` 区分两组 Adaptive 参数，但累计 R 显示 `(3,5%)` 在该 trace
   被 `(4,4%)` 支配；旧 terminal T 曾把这一关系显示成写入换读取。它仍不是纯 `E/G` rotation band；
@@ -216,7 +217,7 @@ strategy-neutral suite identity 与 per-strategy run identity。
 ## 下一阶段
 
 1. 先针对 active-hundred mixed 暴露的 pacing/active-debt 行为实现一个最小独立 candidate，并在当前
-   revision 12 上复跑；
+   revision 14 上复跑；
 2. 未来 workload 只允许由 candidate 白盒复审指出的具体 blind spot 驱动，不再机械补 generic axes/seeds；
 3. 候选形状稳定后再闭合 determinism/order/artifact 与 qualification gates，冻结 `ROUND-1` packet/tag；
 4. 只有 candidate 真实需要直接物理 Store 输出时才实现 untrusted artifact validator。

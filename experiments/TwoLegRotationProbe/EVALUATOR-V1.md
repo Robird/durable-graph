@@ -55,9 +55,10 @@ the terminal source epoch, even when the last workload Commit already rotated:
 Planning and proof replay happen on scratch forks and do not count as writes. Once a
 certificate exists, every preparatory Stay and the final Rotate are applied to the
 session Store inside one synthetic outer Commit. Each Revision is observed so F sees
-the B preparation peak; the whole burst forms one P sample. A direct Rotate therefore
-has zero empty Stay Revisions, while a multi-step settlement deliberately exposes its
-full terminal burst.
+the B preparation peak; the whole burst forms the single `W_terminal` sample and therefore
+participates only in the internally derived `P_closed`, not canonical `P_workload`. A
+direct Rotate therefore has zero empty Stay Revisions, while a multi-step settlement
+deliberately exposes its full terminal burst.
 
 Successful closure means terminal source `A/B` became result `B/C`, logical state was
 preserved, and the final OVD materialization plus every live current-reconstruction
@@ -122,17 +123,21 @@ derived floating-point ratio. A fuller `I/UB/UD/NB` decomposition and attributio
 overhead to particular strategy reasons remain deferred until the new diagnostics have
 an observed consumer.
 
-### P — `PeakCommitWriteBytes`
+### P — `PeakWorkloadCommitWriteBytes`
 
 ```text
-P = Max(CommitWriteBytes)
+P_workload = Max(CommitWriteBytes for successful workload Saves)
+P_closed = Max(P_workload, W_terminal)
 ```
 
 The boundary is the outer Commit, not an individual Revision Frame. The accumulator
 therefore permits several accepted Revision checkpoints between `BeginCommit` and
-`EndCommit`; all of their file growth contributes to the same peak sample. Evaluator
-v1 attributes every preparatory/final settlement Revision to one synthetic Commit and
-observes all of them inside that boundary.
+`EndCommit`; all of their file growth contributes to the same workload peak sample.
+Evaluator v1 attributes every preparatory/final settlement Revision to one synthetic
+Commit, so its burst is already exactly `W_terminal`. Canonical reports expose
+`P_workload` and `W_terminal` separately instead of letting an arbitrary terminal phase
+hide the natural-Save peak. The old closed-horizon peak remains internally derivable by
+the identity above.
 
 ### F — `MaxCurrentFileTailBytes`
 
@@ -172,11 +177,13 @@ R may be positive because the OVD chain still has to be materialized.
 A Frame used by both the OVD and an object chain is counted once within one sample. The
 cache resets between Saves, so a Frame required by several samples is charged once in
 each. Bootstrap, rejected/unrealized attempts, settlement preparation Revisions, and the
-synthetic terminal settlement Commit do not produce workload read samples. W/P/F still
-include the terminal settlement write/pressure; this asymmetry is deliberate and explicit.
+synthetic terminal settlement Commit do not produce workload read samples. `W_terminal`
+and F still expose terminal write/capacity pressure, while canonical P is workload-only.
+This asymmetry is deliberate and explicit.
 
 `TerminalColdHeadReadBytes` separately measures one empty-cache load after terminal
-settlement. It diagnoses the evaluator's artificial closed-horizon placement and is not R.
+settlement. It diagnoses the evaluator's artificial closed-horizon placement and is not R;
+schema 4 keeps it internal rather than publishing it as a comparable metric.
 The full observation retains OVD-only and object-reconstruction sets/bytes separately,
 but their individual byte sums may overlap and must not be added.
 
@@ -244,14 +251,16 @@ Store/ledger is not implemented by v1.
 
 `BenchmarkV1Json` writes compact canonical UTF-8 manifest/report documents with one
 trailing LF, fixed property/token order, ordinal case ordering, 16-digit hexadecimal
-seeds, manifest SHA-256, and resolved trace SHA-256. The report is deliberately the
-comparable W/P/F/R/L/T, workload/terminal write split, Delta/Base payload references,
-plus admissibility/final-scope/settlement projection—not a lossless
-dump of `FinalColdHeadReadObservation` or candidate diagnostics. Rejected leaves have
-no metrics/cursor/settlement properties. V1 is writer-only: external parsing, file I/O,
-and CLI publication remain outside this slice.
+seeds, manifest SHA-256, and resolved trace SHA-256. Report schema 4 deliberately keeps
+typed outcome position plus the nine metric integers `W`, `W_workload`, `W_terminal`, both
+payload references, `P_workload`, F, R, and L. Final cursor, settlement details, terminal
+cold-head T, and the redundant realized-Commit/workload-sample metric counts remain
+evaluator-owned certification or test diagnostics. Outcome position retains phase and
+completed/total workload counts for every typed leaf. Rejected leaves have no metrics.
+V1 is writer-only:
+external parsing, file I/O, and CLI publication remain outside this slice.
 
-Corpus revision 13 runs all four profiles over sixteen traces. Its newest
+Corpus revision 14 runs all four profiles over sixteen traces. Its newest
 workload is intentionally still an adjustable probe rather than a frozen benchmark
 artifact. The low/high-ID traces form one
 matched locality family, the low-ID-small/large traces form one matched size-skew family,
@@ -262,9 +271,10 @@ diagnostic rather than a cross-horizon Pareto pair. Within every trace group,
 the source fixture, exact expanded
 trace, evaluator protocols, and accounting
 horizon are identical; apart from the case ID, the only experimental input that changes
-is the atomic selection profile. The current core outcomes are below and did not change
-when the accounting projection expanded. T is the terminal diagnostic; N/L and the four
-new exact integers are omitted from this table and remain available in report schema 3:
+is the atomic selection profile. The large table below is retained only as schema-3
+historical evidence: its P is the old closed-horizon peak, while T and final scope are no
+longer canonical report fields. Schema 4 comparisons use `P_workload` and the compact
+metric set above.
 
 | Trace | Selection profile | W | P | F | R | T | Final scope |
 |---|---|---:|---:|---:|---:|---:|---|
@@ -346,10 +356,10 @@ The direct exploratory run found no workload Rotate for no-migration or paced. A
 All four runs then used one direct terminal-settlement Revision. Their shared
 `N=64,L=273804` makes average cold bytes/read amplification respectively:
 no-migration `61171.88/14.2985`, paced `62825.19/14.6850`, Adaptive `(3,5%)`
-`45262.69/10.5799`, and Adaptive `(4,4%)` `50300.94/11.7575`. Under canonical W/P/F/R,
-Adaptive `(3,5%)` strictly dominates `(4,4%)`; the latter's much smaller T was a terminal
-phase artifact, not better cycle-wide reading. The vectors remain tuning observations,
-not golden/hash-locked evidence.
+`45262.69/10.5799`, and Adaptive `(4,4%)` `50300.94/11.7575`. The old schema-3
+closed-horizon P made Adaptive `(3,5%)` appear to strictly dominate `(4,4%)`; schema 4
+separates natural workload peak from terminal liability and reveals a 28-byte workload-peak
+trade instead. The vectors remain tuning observations, not golden/hash-locked evidence.
 
 The first schema-3 diagnostic rerun gives both Adaptive profiles the same
 Delta/Base references, `67206/165606`. Adaptive `(3,5%)` splits W as
@@ -358,6 +368,23 @@ Delta/Base references, `67206/165606`. Adaptive `(3,5%)` splits W as
 the workload but 3292 more during canonical settlement, for 1940 more total bytes. These
 are exact tail-delta accounting facts, not yet an `I/UB/UD/NB` decomposition or an
 attribution of either difference to a particular strategy reason.
+
+The schema-4 four-profile review is:
+
+| Selection profile | W workload | W terminal | W | P workload | F | R | R/L |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| no migration | 111636 | 5208 | 116844 | 2044 | 111680 | 3915000 | 14.2985 |
+| paced one debt | 115048 | 2072 | 117120 | 2128 | 115092 | 4020812 | 14.6850 |
+| Adaptive `(3,5%)` | 118716 | 1044 | 119760 | 2176 | 44040 | 2896812 | 10.5799 |
+| Adaptive `(4,4%)` | 117364 | 4336 | 121700 | 2148 | 55044 | 3219260 | 11.7575 |
+
+All four share `DeltaReference=67206`, `BaseReference=165606`, and `L=273804`.
+No-migration minimizes W and workload P but accepts much larger F/R than either Adaptive
+profile. Paced-one-debt performs no natural Rotate here and is strictly worse than
+no-migration on W, workload P, F, and R; its smaller terminal liability does not recover
+the normal-work overhead. Adaptive `(3,5%)` lowers W/F/R relative to `(4,4%)` by
+`1940/11004/322448` bytes but has a 28-byte larger workload peak, so the corrected
+canonical metrics show a narrow Pareto trade rather than a strict winner.
 
 The insert-burst pair shares step 0, the first workload Save,
 three evaluated Commit slots, its four 300-byte Inserts, and final logical versions. Only
@@ -431,10 +458,9 @@ of the current Adaptive one-object progress floor to debt granularity and indivi
 a general size preference.
 
 Manifest schema version 2 replaces the old target/decision pair with one
-`selectionProfile`; corpus revision 13 contains the same 64 cases under read schedule
-`after-every-workload-save-cold-load/1`, metrics `raw-wpfr/3`, and report schema 3.
-The report emits exact workload sample count, R, L, terminal T, `W_workload`,
-`W_terminal`, Delta-reference, and Base-reference integers. It emits no derived floating
+`selectionProfile`; corpus revision 14 contains the same 64 cases under read schedule
+`after-every-workload-save-cold-load/1`, metrics `raw-wpfr/4`, and report schema 4.
+The report emits the nine canonical integers described above. It emits no derived floating
 point, and W must equal the two write components. There
 is no compatibility layer, mandatory strategy interface, arbitrary parameter input,
 or score. The report also rejects an outcome whose declared workload horizon differs from
@@ -697,8 +723,8 @@ and [`ReadAmplificationBaseBudgetPolicyCapacityTests.cs`](Tests/ReadAmplificatio
 
 ## Next strategy work
 
-- inspect the first `active-hundred-mixed` schema-3 rerun above across all four profiles
-  before choosing a candidate response;
+- use the completed `active-hundred-mixed` four-profile review to define one minimal
+  candidate response to the observed W-versus-F/R trade, without changing Arena facts;
 - tune the active-hundred mixed workload only when a concrete strategy observation justifies it;
 - use that diagnostic comparison to decide which observed overhead deserves a minimal
   independent candidate response, then rerun the suite;
@@ -707,7 +733,7 @@ and [`ReadAmplificationBaseBudgetPolicyCapacityTests.cs`](Tests/ReadAmplificatio
   seed expansion;
 - close determinism/order/artifact and qualification gates only when the candidate shape
   is ready for the `ROUND-1` packet/tag;
-- keep per-Save sample vectors internal while reporting exact cumulative R/L, terminal T,
-  workload/terminal writes, and raw payload references;
+- keep per-Save sample vectors, terminal T, final cursor, and settlement details internal
+  while reporting exact cumulative R/L, workload/terminal writes, and raw payload references;
 - retain Pareto/raw outcomes until workload/SLO evidence justifies guardrails or a
   ranking rule.

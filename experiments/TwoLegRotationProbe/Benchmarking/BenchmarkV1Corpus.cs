@@ -15,7 +15,7 @@ internal static class BenchmarkV1ProtocolIdentities {
         new("after-every-workload-save-cold-load", 1);
 
     public static readonly BenchmarkComponentIdentityV1 Metrics =
-        new("raw-wpfr", 3);
+        new("raw-wpfr", 4);
 
     public static readonly BenchmarkComponentIdentityV1 FrameLayout =
         new("rbf-v0.40-envelope", 1);
@@ -57,7 +57,7 @@ internal static class BenchmarkV1ProtocolIdentities {
 
 internal static class BenchmarkV1Corpus {
     public const string ManifestId = "benchmark-v1";
-    public const int ManifestRevision = 13;
+    public const int ManifestRevision = 14;
     public const string ActiveHundredMixedNoMigrationCaseId =
         "active-hundred-mixed-no-migration";
     public const string ActiveHundredMixedPacedCaseId =

@@ -19,7 +19,7 @@ internal sealed class EvaluatorRawMetricAccumulator {
     private long _terminalSettlementPhysicalWriteBytes;
     private long _totalWorkloadDeltaReferencePayloadBytes;
     private long _totalWorkloadBaseReferencePayloadBytes;
-    private long _peakCommitWriteBytes;
+    private long _peakWorkloadCommitWriteBytes;
     private long _maxCurrentFileTailBytes;
     private readonly List<WorkloadColdReadSample> _workloadColdReadSamples = [];
 
@@ -93,9 +93,13 @@ internal sealed class EvaluatorRawMetricAccumulator {
     public void EndTerminalSettlementCommit(
         RbfFileStore store,
         ProbeRevisionCursor resultCursor) {
+        if (_terminalSettlementPhysicalWriteBytes != 0) {
+            throw new InvalidOperationException(
+                "Evaluator metrics admit exactly one terminal settlement Commit.");
+        }
+
         long commitWriteBytes = EndCommitCore(store, resultCursor);
-        _terminalSettlementPhysicalWriteBytes = checked(
-            _terminalSettlementPhysicalWriteBytes + commitWriteBytes);
+        _terminalSettlementPhysicalWriteBytes = commitWriteBytes;
     }
 
     /// <summary>
@@ -125,6 +129,9 @@ internal sealed class EvaluatorRawMetricAccumulator {
 
         _workloadPhysicalWriteBytes = checked(
             _workloadPhysicalWriteBytes + commitWriteBytes);
+        _peakWorkloadCommitWriteBytes = Math.Max(
+            _peakWorkloadCommitWriteBytes,
+            commitWriteBytes);
         _totalWorkloadDeltaReferencePayloadBytes = checked(
             _totalWorkloadDeltaReferencePayloadBytes + deltaReferencePayloadBytes);
         _totalWorkloadBaseReferencePayloadBytes = checked(
@@ -163,9 +170,6 @@ internal sealed class EvaluatorRawMetricAccumulator {
         }
 
         _realizedCommitCount = checked(_realizedCommitCount + 1);
-        _peakCommitWriteBytes = Math.Max(
-            _peakCommitWriteBytes,
-            commitWriteBytes);
         _lastCompletedStore = _lastObservedStore;
         _lastCompletedCursor = result;
         ClearOpenCommit();
@@ -212,7 +216,7 @@ internal sealed class EvaluatorRawMetricAccumulator {
             _terminalSettlementPhysicalWriteBytes,
             _totalWorkloadDeltaReferencePayloadBytes,
             _totalWorkloadBaseReferencePayloadBytes,
-            _peakCommitWriteBytes,
+            _peakWorkloadCommitWriteBytes,
             _maxCurrentFileTailBytes,
             _workloadColdReadSamples,
             coldRead);

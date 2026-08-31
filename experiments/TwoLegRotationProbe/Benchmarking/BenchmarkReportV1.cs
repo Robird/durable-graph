@@ -77,19 +77,11 @@ internal sealed class BenchmarkReportV1 {
                 parameterName);
         }
 
-        if (reportCase.Outcome is AdmittedOutcomeReportV1 admitted) {
+        if (reportCase.Outcome is AdmittedOutcomeReportV1) {
             if (position.Phase != EvaluatorRunPhase.TerminalSettlement) {
                 throw new ArgumentException(
                     $"Admitted benchmark case '{reportCase.CaseId}' must be at " +
                     "terminal settlement.",
-                    parameterName);
-            }
-
-            if (admitted.Metrics.WorkloadColdReadSampleCount !=
-                position.TotalWorkloadStepCount) {
-                throw new ArgumentException(
-                    $"Admitted benchmark case '{reportCase.CaseId}' must have one " +
-                    "cold-read sample per workload Save.",
                     parameterName);
             }
         }
@@ -156,11 +148,7 @@ internal abstract record BenchmarkOutcomeReportV1 {
     public static BenchmarkOutcomeReportV1 Project(EvaluatorRunOutcome outcome) {
         ArgumentNullException.ThrowIfNull(outcome);
         return outcome switch {
-            AdmittedEvaluatorRun admitted => new AdmittedOutcomeReportV1(
-                EvaluatorPositionReportV1.Project(admitted.Position),
-                EvaluatorMetricsReportV1.Project(admitted.Metrics),
-                FinalCursorReportV1.Project(admitted.FinalCursor),
-                TerminalSettlementReportV1.Project(admitted.Settlement)),
+            AdmittedEvaluatorRun admitted => ProjectAdmitted(admitted),
             EvaluatorRunCapacityRejected capacity =>
                 new CapacityRejectedOutcomeReportV1(
                     EvaluatorPositionReportV1.Project(capacity.Position),
@@ -176,24 +164,30 @@ internal abstract record BenchmarkOutcomeReportV1 {
                 "The evaluator returned an unsupported outcome kind."),
         };
     }
+
+    private static AdmittedOutcomeReportV1 ProjectAdmitted(
+        AdmittedEvaluatorRun admitted) {
+        if (admitted.Metrics.WorkloadColdReadSampleCount !=
+            admitted.Position.TotalWorkloadStepCount) {
+            throw new InvalidDataException(
+                "An admitted evaluator outcome must have one cold-read sample " +
+                "per workload Save before report projection.");
+        }
+
+        return new AdmittedOutcomeReportV1(
+            EvaluatorPositionReportV1.Project(admitted.Position),
+            EvaluatorMetricsReportV1.Project(admitted.Metrics));
+    }
 }
 
 internal sealed record AdmittedOutcomeReportV1 : BenchmarkOutcomeReportV1 {
     public AdmittedOutcomeReportV1(
         EvaluatorPositionReportV1 position,
-        EvaluatorMetricsReportV1 metrics,
-        FinalCursorReportV1 finalCursor,
-        TerminalSettlementReportV1 settlement) : base(position) {
+        EvaluatorMetricsReportV1 metrics) : base(position) {
         Metrics = metrics ?? throw new ArgumentNullException(nameof(metrics));
-        FinalCursor = finalCursor ?? throw new ArgumentNullException(nameof(finalCursor));
-        Settlement = settlement ?? throw new ArgumentNullException(nameof(settlement));
     }
 
     public EvaluatorMetricsReportV1 Metrics { get; }
-
-    public FinalCursorReportV1 FinalCursor { get; }
-
-    public TerminalSettlementReportV1 Settlement { get; }
 }
 
 internal sealed record CapacityRejectedOutcomeReportV1 : BenchmarkOutcomeReportV1 {
@@ -257,19 +251,15 @@ internal sealed record EvaluatorPositionReportV1 {
 
 internal sealed record EvaluatorMetricsReportV1 {
     public EvaluatorMetricsReportV1(
-        int realizedCommitCount,
         long totalPhysicalWriteBytes,
         long workloadPhysicalWriteBytes,
         long terminalSettlementPhysicalWriteBytes,
         long totalWorkloadDeltaReferencePayloadBytes,
         long totalWorkloadBaseReferencePayloadBytes,
-        long peakCommitWriteBytes,
+        long peakWorkloadCommitWriteBytes,
         long maxCurrentFileTailBytes,
-        int workloadColdReadSampleCount,
         long totalWorkloadColdReadBytes,
-        long totalWorkloadLogicalBasePayloadBytes,
-        long terminalColdHeadReadBytes) {
-        ArgumentOutOfRangeException.ThrowIfNegative(realizedCommitCount);
+        long totalWorkloadLogicalBasePayloadBytes) {
         ArgumentOutOfRangeException.ThrowIfNegative(totalPhysicalWriteBytes);
         ArgumentOutOfRangeException.ThrowIfNegative(workloadPhysicalWriteBytes);
         ArgumentOutOfRangeException.ThrowIfNegative(
@@ -285,51 +275,36 @@ internal sealed record EvaluatorMetricsReportV1 {
                 nameof(totalPhysicalWriteBytes));
         }
 
-        ArgumentOutOfRangeException.ThrowIfNegative(peakCommitWriteBytes);
+        ArgumentOutOfRangeException.ThrowIfNegative(peakWorkloadCommitWriteBytes);
         if (maxCurrentFileTailBytes < RbfV040Layout.InitialTailOffsetBytes) {
             throw new ArgumentOutOfRangeException(nameof(maxCurrentFileTailBytes));
         }
 
-        ArgumentOutOfRangeException.ThrowIfNegative(terminalColdHeadReadBytes);
-        ArgumentOutOfRangeException.ThrowIfNegative(workloadColdReadSampleCount);
         ArgumentOutOfRangeException.ThrowIfNegative(totalWorkloadColdReadBytes);
         ArgumentOutOfRangeException.ThrowIfNegative(
             totalWorkloadLogicalBasePayloadBytes);
-        if (workloadColdReadSampleCount > realizedCommitCount) {
+        if (peakWorkloadCommitWriteBytes > workloadPhysicalWriteBytes) {
             throw new ArgumentException(
-                "Workload cold-read samples cannot exceed realized Commits.",
-                nameof(workloadColdReadSampleCount));
+                "Peak workload Commit writes cannot exceed workload writes.",
+                nameof(peakWorkloadCommitWriteBytes));
         }
 
-        if (workloadColdReadSampleCount == 0 &&
-            (workloadPhysicalWriteBytes != 0 ||
-                totalWorkloadDeltaReferencePayloadBytes != 0 ||
-                totalWorkloadBaseReferencePayloadBytes != 0)) {
+        if ((workloadPhysicalWriteBytes == 0) !=
+            (peakWorkloadCommitWriteBytes == 0)) {
             throw new ArgumentException(
-                "A report without workload samples cannot contain workload write accounting.",
-                nameof(workloadColdReadSampleCount));
+                "Workload writes and their peak must either both be zero or both " +
+                "be positive.",
+                nameof(peakWorkloadCommitWriteBytes));
         }
 
-        if ((workloadColdReadSampleCount == 0) !=
+        if ((workloadPhysicalWriteBytes == 0) !=
             (totalWorkloadColdReadBytes == 0)) {
             throw new ArgumentException(
-                "Workload cold-read bytes must be nonzero exactly when samples exist.",
+                "Workload writes and workload cold-read bytes must either both be " +
+                "zero or both be positive.",
                 nameof(totalWorkloadColdReadBytes));
         }
 
-        if (peakCommitWriteBytes > totalPhysicalWriteBytes) {
-            throw new ArgumentException(
-                "Peak Commit writes cannot exceed total writes.",
-                nameof(peakCommitWriteBytes));
-        }
-
-        if (realizedCommitCount == 0 && peakCommitWriteBytes != 0) {
-            throw new ArgumentException(
-                "A run without realized Commits cannot have a nonzero write peak.",
-                nameof(peakCommitWriteBytes));
-        }
-
-        RealizedCommitCount = realizedCommitCount;
         TotalPhysicalWriteBytes = totalPhysicalWriteBytes;
         WorkloadPhysicalWriteBytes = workloadPhysicalWriteBytes;
         TerminalSettlementPhysicalWriteBytes =
@@ -338,15 +313,11 @@ internal sealed record EvaluatorMetricsReportV1 {
             totalWorkloadDeltaReferencePayloadBytes;
         TotalWorkloadBaseReferencePayloadBytes =
             totalWorkloadBaseReferencePayloadBytes;
-        PeakCommitWriteBytes = peakCommitWriteBytes;
+        PeakWorkloadCommitWriteBytes = peakWorkloadCommitWriteBytes;
         MaxCurrentFileTailBytes = maxCurrentFileTailBytes;
-        WorkloadColdReadSampleCount = workloadColdReadSampleCount;
         TotalWorkloadColdReadBytes = totalWorkloadColdReadBytes;
         TotalWorkloadLogicalBasePayloadBytes = totalWorkloadLogicalBasePayloadBytes;
-        TerminalColdHeadReadBytes = terminalColdHeadReadBytes;
     }
-
-    public int RealizedCommitCount { get; }
 
     public long TotalPhysicalWriteBytes { get; }
 
@@ -358,145 +329,26 @@ internal sealed record EvaluatorMetricsReportV1 {
 
     public long TotalWorkloadBaseReferencePayloadBytes { get; }
 
-    public long PeakCommitWriteBytes { get; }
+    public long PeakWorkloadCommitWriteBytes { get; }
 
     public long MaxCurrentFileTailBytes { get; }
-
-    public int WorkloadColdReadSampleCount { get; }
 
     public long TotalWorkloadColdReadBytes { get; }
 
     public long TotalWorkloadLogicalBasePayloadBytes { get; }
 
-    public long TerminalColdHeadReadBytes { get; }
-
     public static EvaluatorMetricsReportV1 Project(EvaluatorRawMetrics metrics) {
         ArgumentNullException.ThrowIfNull(metrics);
         return new EvaluatorMetricsReportV1(
-            metrics.RealizedCommitCount,
             metrics.TotalPhysicalWriteBytes,
             metrics.WorkloadPhysicalWriteBytes,
             metrics.TerminalSettlementPhysicalWriteBytes,
             metrics.TotalWorkloadDeltaReferencePayloadBytes,
             metrics.TotalWorkloadBaseReferencePayloadBytes,
-            metrics.PeakCommitWriteBytes,
+            metrics.PeakWorkloadCommitWriteBytes,
             metrics.MaxCurrentFileTailBytes,
-            metrics.WorkloadColdReadSampleCount,
             metrics.TotalWorkloadColdReadBytes,
-            metrics.TotalWorkloadLogicalBasePayloadBytes,
-            metrics.TerminalColdHeadReadBytes);
-    }
-}
-
-internal sealed record FinalCursorReportV1 {
-    public FinalCursorReportV1(
-        uint previousFileNumber,
-        uint currentFileNumber,
-        FrameAddressReportV1 publishedRevision,
-        long currentFileTailBytes) {
-        ArgumentOutOfRangeException.ThrowIfZero(previousFileNumber);
-        if (currentFileNumber != checked(previousFileNumber + 1)) {
-            throw new ArgumentException(
-                "The final cursor must describe adjacent Previous and Current files.",
-                nameof(currentFileNumber));
-        }
-
-        ArgumentNullException.ThrowIfNull(publishedRevision);
-        if (publishedRevision.FileNumber != currentFileNumber) {
-            throw new ArgumentException(
-                "The final PublishedRevision must be in the Current file.",
-                nameof(publishedRevision));
-        }
-
-        long publishedAppendEnd = checked(
-            publishedRevision.OffsetBytes +
-            publishedRevision.LengthBytes +
-            RbfV040Layout.TrailingFenceBytes);
-        if (currentFileTailBytes < publishedAppendEnd) {
-            throw new ArgumentOutOfRangeException(nameof(currentFileTailBytes));
-        }
-
-        if ((currentFileTailBytes & RbfV040Layout.AlignmentMask) != 0) {
-            throw new ArgumentOutOfRangeException(
-                nameof(currentFileTailBytes),
-                currentFileTailBytes,
-                "The final Current-file tail must be aligned.");
-        }
-
-        PreviousFileNumber = previousFileNumber;
-        CurrentFileNumber = currentFileNumber;
-        PublishedRevision = publishedRevision;
-        CurrentFileTailBytes = currentFileTailBytes;
-    }
-
-    public uint PreviousFileNumber { get; }
-
-    public uint CurrentFileNumber { get; }
-
-    public FrameAddressReportV1 PublishedRevision { get; }
-
-    public long CurrentFileTailBytes { get; }
-
-    public static FinalCursorReportV1 Project(ProbeRevisionCursor cursor) {
-        ArgumentNullException.ThrowIfNull(cursor);
-        uint previous = cursor.FileScope.PreviousFileNumber ??
-            throw new InvalidDataException(
-                "An admitted evaluator cursor must have a Previous file.");
-        return new FinalCursorReportV1(
-            previous,
-            cursor.FileScope.CurrentFileNumber,
-            FrameAddressReportV1.Project(cursor.PublishedRevisionAddress),
-            cursor.CurrentFileTailOffsetBytes);
-    }
-}
-
-internal sealed record FrameAddressReportV1 {
-    public FrameAddressReportV1(uint fileNumber, long offsetBytes, int lengthBytes) {
-        FrameTicket ticket = new(offsetBytes, lengthBytes);
-        _ = new AbsoluteFrameAddress(fileNumber, ticket);
-        FileNumber = fileNumber;
-        OffsetBytes = offsetBytes;
-        LengthBytes = lengthBytes;
-    }
-
-    public uint FileNumber { get; }
-
-    public long OffsetBytes { get; }
-
-    public int LengthBytes { get; }
-
-    public static FrameAddressReportV1 Project(AbsoluteFrameAddress address) => new(
-        address.FileNumber,
-        address.FrameTicket.OffsetBytes,
-        address.FrameTicket.LengthBytes);
-}
-
-internal sealed class TerminalSettlementReportV1 {
-    private readonly ReadOnlyCollection<uint> _migratedObjectIds;
-
-    public TerminalSettlementReportV1(IEnumerable<uint> migratedObjectIds) {
-        ArgumentNullException.ThrowIfNull(migratedObjectIds);
-        uint[] snapshot = migratedObjectIds.ToArray();
-        if (!snapshot.SequenceEqual(
-            snapshot.OrderBy(static objectId => objectId).Distinct())) {
-            throw new ArgumentException(
-                "Settlement migrations must contain unique ascending ObjectIds.",
-                nameof(migratedObjectIds));
-        }
-
-        _migratedObjectIds = Array.AsReadOnly(snapshot);
-    }
-
-    public IReadOnlyList<uint> MigratedObjectIds => _migratedObjectIds;
-
-    public int MaintenanceRevisionCount => _migratedObjectIds.Count;
-
-    public int RealizedRevisionCount => checked(MaintenanceRevisionCount + 1);
-
-    public static TerminalSettlementReportV1 Project(
-        TerminalSettlementObservation settlement) {
-        ArgumentNullException.ThrowIfNull(settlement);
-        return new TerminalSettlementReportV1(settlement.MigratedObjectIds);
+            metrics.TotalWorkloadLogicalBasePayloadBytes);
     }
 }
 

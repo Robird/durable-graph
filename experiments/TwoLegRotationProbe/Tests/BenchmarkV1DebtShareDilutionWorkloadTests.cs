@@ -51,6 +51,7 @@ public sealed class BenchmarkV1DebtShareDilutionWorkloadTests {
                 StrategyTargetV1.StayB,
             ],
             totalPhysicalWriteBytes: 3160,
+            peakWorkloadCommitWriteBytes: 1008,
             peakCommitWriteBytes: 1056,
             maxCurrentFileTailBytes: 2148,
             finalColdHeadReadBytes: 1048,
@@ -68,6 +69,7 @@ public sealed class BenchmarkV1DebtShareDilutionWorkloadTests {
                 StrategyTargetV1.RotateC,
             ],
             totalPhysicalWriteBytes: 4188,
+            peakWorkloadCommitWriteBytes: 1056,
             peakCommitWriteBytes: 1056,
             maxCurrentFileTailBytes: 2156,
             finalColdHeadReadBytes: 1048,
@@ -85,6 +87,7 @@ public sealed class BenchmarkV1DebtShareDilutionWorkloadTests {
                 StrategyTargetV1.StayB,
             ],
             totalPhysicalWriteBytes: 2148,
+            peakWorkloadCommitWriteBytes: 1004,
             peakCommitWriteBytes: 1004,
             maxCurrentFileTailBytes: 1096,
             finalColdHeadReadBytes: 1124,
@@ -102,6 +105,7 @@ public sealed class BenchmarkV1DebtShareDilutionWorkloadTests {
                 StrategyTargetV1.RotateC,
             ],
             totalPhysicalWriteBytes: 2192,
+            peakWorkloadCommitWriteBytes: 1012,
             peakCommitWriteBytes: 1012,
             maxCurrentFileTailBytes: 1132,
             finalColdHeadReadBytes: 1088,
@@ -176,6 +180,7 @@ public sealed class BenchmarkV1DebtShareDilutionWorkloadTests {
         string caseId,
         IReadOnlyList<StrategyTargetV1> expectedTargets,
         long totalPhysicalWriteBytes,
+        long peakWorkloadCommitWriteBytes,
         long peakCommitWriteBytes,
         long maxCurrentFileTailBytes,
         long finalColdHeadReadBytes,
@@ -187,6 +192,8 @@ public sealed class BenchmarkV1DebtShareDilutionWorkloadTests {
             benchmarkCase => benchmarkCase.ManifestCase.CaseId == caseId);
         BenchmarkV1CaseExecution execution = BenchmarkV1Runner.ExecuteCase(definition);
         Assert.Equal(StrategyRunTerminationV1.Admitted, execution.Product.Termination);
+        AdmittedEvaluatorRun endpoint = Assert.IsType<AdmittedEvaluatorRun>(
+            execution.Outcome);
         Assert.Equal(
             [0, 1, 2],
             execution.Product.WorkloadCommits.Select(static receipt =>
@@ -203,29 +210,40 @@ public sealed class BenchmarkV1DebtShareDilutionWorkloadTests {
         Assert.Equal(EvaluatorRunPhase.TerminalSettlement, admitted.Position.Phase);
         Assert.Equal(3, admitted.Position.CompletedWorkloadStepCount);
         Assert.Equal(3, admitted.Position.TotalWorkloadStepCount);
-        Assert.Equal(4, admitted.Metrics.RealizedCommitCount);
         Assert.Equal(
             totalPhysicalWriteBytes,
             admitted.Metrics.TotalPhysicalWriteBytes);
-        Assert.Equal(peakCommitWriteBytes, admitted.Metrics.PeakCommitWriteBytes);
+        Assert.Equal(
+            peakWorkloadCommitWriteBytes,
+            admitted.Metrics.PeakWorkloadCommitWriteBytes);
         Assert.Equal(
             maxCurrentFileTailBytes,
             admitted.Metrics.MaxCurrentFileTailBytes);
+        Assert.Equal(4, endpoint.Metrics.RealizedCommitCount);
+        Assert.Equal(peakCommitWriteBytes, endpoint.Metrics.PeakCommitWriteBytes);
         Assert.Equal(
             finalColdHeadReadBytes,
-            admitted.Metrics.TerminalColdHeadReadBytes);
-        Assert.Equal(previousFileNumber, admitted.FinalCursor.PreviousFileNumber);
-        Assert.Equal(currentFileNumber, admitted.FinalCursor.CurrentFileNumber);
+            endpoint.Metrics.TerminalColdHeadReadBytes);
+        Assert.Equal(
+            previousFileNumber,
+            endpoint.FinalCursor.FileScope.PreviousFileNumber);
         Assert.Equal(
             currentFileNumber,
-            admitted.FinalCursor.PublishedRevision.FileNumber);
-        Assert.Equal(4, admitted.FinalCursor.PublishedRevision.OffsetBytes);
+            endpoint.FinalCursor.FileScope.CurrentFileNumber);
+        Assert.Equal(
+            currentFileNumber,
+            endpoint.FinalCursor.PublishedRevisionAddress.FileNumber);
+        Assert.Equal(
+            4,
+            endpoint.FinalCursor.PublishedRevisionAddress.FrameTicket.OffsetBytes);
         Assert.Equal(
             publishedRevisionLengthBytes,
-            admitted.FinalCursor.PublishedRevision.LengthBytes);
-        Assert.Equal(currentFileTailBytes, admitted.FinalCursor.CurrentFileTailBytes);
-        Assert.Empty(admitted.Settlement.MigratedObjectIds);
-        Assert.Equal(0, admitted.Settlement.MaintenanceRevisionCount);
-        Assert.Equal(1, admitted.Settlement.RealizedRevisionCount);
+            endpoint.FinalCursor.PublishedRevisionAddress.FrameTicket.LengthBytes);
+        Assert.Equal(
+            currentFileTailBytes,
+            endpoint.FinalCursor.CurrentFileTailOffsetBytes);
+        Assert.Empty(endpoint.Settlement.MigratedObjectIds);
+        Assert.Equal(0, endpoint.Settlement.MaintenanceRevisionCount);
+        Assert.Equal(1, endpoint.Settlement.RealizedRevisionCount);
     }
 }

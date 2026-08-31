@@ -133,8 +133,6 @@ internal static class BenchmarkV1Json {
                 writer.WriteString("kind", "admitted");
                 WritePosition(writer, admitted.Position);
                 WriteMetrics(writer, admitted.Metrics);
-                WriteFinalCursor(writer, admitted.FinalCursor);
-                WriteSettlement(writer, admitted.Settlement);
                 break;
             case CapacityRejectedOutcomeReportV1 capacity:
                 writer.WriteString("kind", "capacity-rejected");
@@ -197,7 +195,6 @@ internal static class BenchmarkV1Json {
         Utf8JsonWriter writer,
         EvaluatorMetricsReportV1 metrics) {
         writer.WriteStartObject("metrics");
-        writer.WriteNumber("realizedCommitCount", metrics.RealizedCommitCount);
         writer.WriteNumber(
             "totalPhysicalWriteBytes",
             metrics.TotalPhysicalWriteBytes);
@@ -213,54 +210,18 @@ internal static class BenchmarkV1Json {
         writer.WriteNumber(
             "totalWorkloadBaseReferencePayloadBytes",
             metrics.TotalWorkloadBaseReferencePayloadBytes);
-        writer.WriteNumber("peakCommitWriteBytes", metrics.PeakCommitWriteBytes);
+        writer.WriteNumber(
+            "peakWorkloadCommitWriteBytes",
+            metrics.PeakWorkloadCommitWriteBytes);
         writer.WriteNumber(
             "maxCurrentFileTailBytes",
             metrics.MaxCurrentFileTailBytes);
-        writer.WriteNumber(
-            "workloadColdReadSampleCount",
-            metrics.WorkloadColdReadSampleCount);
         writer.WriteNumber(
             "totalWorkloadColdReadBytes",
             metrics.TotalWorkloadColdReadBytes);
         writer.WriteNumber(
             "totalWorkloadLogicalBasePayloadBytes",
             metrics.TotalWorkloadLogicalBasePayloadBytes);
-        writer.WriteNumber(
-            "terminalColdHeadReadBytes",
-            metrics.TerminalColdHeadReadBytes);
-        writer.WriteEndObject();
-    }
-
-    private static void WriteFinalCursor(
-        Utf8JsonWriter writer,
-        FinalCursorReportV1 cursor) {
-        writer.WriteStartObject("finalCursor");
-        writer.WriteNumber("previousFileNumber", cursor.PreviousFileNumber);
-        writer.WriteNumber("currentFileNumber", cursor.CurrentFileNumber);
-        writer.WriteStartObject("publishedRevision");
-        writer.WriteNumber("fileNumber", cursor.PublishedRevision.FileNumber);
-        writer.WriteNumber("offsetBytes", cursor.PublishedRevision.OffsetBytes);
-        writer.WriteNumber("lengthBytes", cursor.PublishedRevision.LengthBytes);
-        writer.WriteEndObject();
-        writer.WriteNumber("currentFileTailBytes", cursor.CurrentFileTailBytes);
-        writer.WriteEndObject();
-    }
-
-    private static void WriteSettlement(
-        Utf8JsonWriter writer,
-        TerminalSettlementReportV1 settlement) {
-        writer.WriteStartObject("settlement");
-        writer.WriteNumber(
-            "maintenanceRevisionCount",
-            settlement.MaintenanceRevisionCount);
-        writer.WriteNumber("realizedRevisionCount", settlement.RealizedRevisionCount);
-        writer.WriteStartArray("migratedObjectIds");
-        foreach (uint objectId in settlement.MigratedObjectIds) {
-            writer.WriteNumberValue(objectId);
-        }
-
-        writer.WriteEndArray();
         writer.WriteEndObject();
     }
 
