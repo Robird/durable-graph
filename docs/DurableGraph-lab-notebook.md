@@ -763,6 +763,12 @@
 
 ## 6. 船长日志
 
+### 2026-08-31：拆分 workload/terminal 写入并加入 payload references
+
+- **Implemented**：corpus revision 13 / metrics `raw-wpfr/3` / report schema 3 在保持既有 W/P/F/R/T 核心结果不变的同时，新增精确整数 `Wworkload`、`Wterminal`、workload Delta-reference 与 Base-reference，并强制 `W = Wworkload + Wterminal`。Delta-reference=`Insert Base + Update Delta`，Base-reference=`Insert Base + Update result Base`；Remove、NoChange、bootstrap、terminal settlement 与 rejected Saves 不进入 references。
+- **Observed**：active-hundred 的两组 Adaptive references 同为 `67206/165606`；`(3,5%)` 的 W=`118716 workload + 1044 terminal = 119760`，`(4,4%)` 为 `117364 + 4336 = 121700`。后者 workload 少写 1352B、terminal 多写 3292B，净多写 1940B。
+- **Boundary / Next**：references 是 synthetic foreground payload totals，不是实际 all-Delta/all-Base 物理 baseline、上下界或 score；report 不输出浮点。下一步先据四整数复审 active-hundred，再决定 candidate；完整 `I/UB/UD/NB` 与策略原因归因暂缓。
+
 ### 2026-08-31：将 R 从随机终相位改为 workload-cycle cumulative cold load
 
 - **Problem**：revision 11 的 R 只在强制 terminal settlement 后测一次最终 head；它衡量人工收尾布局的随机相位，不能表达策略在一系列自然 Save 中持续承担的冷读压力。active-hundred 上 `(4,4%)` 的较小终点读量因此给出了误导性印象。

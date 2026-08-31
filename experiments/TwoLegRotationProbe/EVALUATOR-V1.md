@@ -79,6 +79,10 @@ CommitWriteBytes =
   - Sum(all file TailOffsetBytes before Commit)
 
 W = Sum(CommitWriteBytes)
+
+W_workload = WorkloadPhysicalWriteBytes
+W_terminal = TerminalSettlementPhysicalWriteBytes
+W = W_workload + W_terminal
 ```
 
 Existing bytes before the evaluation horizon are not charged. A new file did not
@@ -86,6 +90,37 @@ exist in the before snapshot, so its initial 4-byte header fence and every Frame
 appended by that Commit are charged automatically. The value is modeled physical
 append size under the in-memory RBF v0.40 model, not measured filesystem traffic,
 flush latency, or write amplification below that model.
+
+`W_workload` sums successful caller workload Saves. `W_terminal` contains the one
+canonical terminal-settlement outer Commit, including all preparatory and final
+Revisions in that synthetic Commit. Bootstrap and rejected/unrealized attempts enter
+neither part. The report preserves all three exact integers and rejects a projection
+unless the conservation identity above holds.
+
+### Workload payload references
+
+Two more exact workload-only integers provide a stable foreground payload denominator:
+
+```text
+DeltaReference = Sum(Insert.ResultBasePayloadBytes)
+               + Sum(Update.DeltaPayloadBytes)
+
+BaseReference  = Sum(Insert.ResultBasePayloadBytes)
+               + Sum(Update.ResultBasePayloadBytes)
+```
+
+Only Inserts and Updates from successful workload Saves contribute. Remove, NoChange,
+bootstrap, terminal settlement, and rejected/unrealized Saves contribute zero. The
+references depend on normalized workload facts, not on whether the selected candidate
+actually wrote an Update as Base or Delta.
+
+These are synthetic foreground payload references. They omit record headers, tags,
+tickets, OVD/meta bytes, file headers, alignment/layout effects, cold migration, and
+terminal evacuation. Consequently they are neither physical all-Delta/all-Base baseline
+runs, nor lower/upper bounds, nor a score. The report emits the raw integers and no
+derived floating-point ratio. A fuller `I/UB/UD/NB` decomposition and attribution of
+overhead to particular strategy reasons remain deferred until the new diagnostics have
+an observed consumer.
 
 ### P — `PeakCommitWriteBytes`
 
@@ -159,6 +194,7 @@ queries beyond current reconstruction.
 - `Tests/EvaluatorRawMetricTests.cs` fixes:
   - Stay then Rotate accounting, including the fresh-C 4-byte header;
   - multiple realized Revisions grouped into one Commit peak;
+  - exact workload/terminal write conservation and workload-only Delta/Base references;
   - one cold-load sample per outer workload Commit and checked cumulative `(R, L)`;
   - OVD/object Frame de-duplication;
   - positive cold-head bytes over a zero-live-payload denominator.
@@ -209,12 +245,13 @@ Store/ledger is not implemented by v1.
 `BenchmarkV1Json` writes compact canonical UTF-8 manifest/report documents with one
 trailing LF, fixed property/token order, ordinal case ordering, 16-digit hexadecimal
 seeds, manifest SHA-256, and resolved trace SHA-256. The report is deliberately the
-comparable W/P/F/R/L/T plus admissibility/final-scope/settlement projection—not a lossless
+comparable W/P/F/R/L/T, workload/terminal write split, Delta/Base payload references,
+plus admissibility/final-scope/settlement projection—not a lossless
 dump of `FinalColdHeadReadObservation` or candidate diagnostics. Rejected leaves have
 no metrics/cursor/settlement properties. V1 is writer-only: external parsing, file I/O,
 and CLI publication remain outside this slice.
 
-Corpus revision 12 runs all four profiles over sixteen traces. Its newest
+Corpus revision 13 runs all four profiles over sixteen traces. Its newest
 workload is intentionally still an adjustable probe rather than a frozen benchmark
 artifact. The low/high-ID traces form one
 matched locality family, the low-ID-small/large traces form one matched size-skew family,
@@ -225,9 +262,9 @@ diagnostic rather than a cross-horizon Pareto pair. Within every trace group,
 the source fixture, exact expanded
 trace, evaluator protocols, and accounting
 horizon are identical; apart from the case ID, the only experimental input that changes
-is the atomic selection profile. The current raw outcomes are below; T is the terminal
-diagnostic, while N/L are omitted from the table because they are strategy-invariant
-within each shared trace and remain available in the report:
+is the atomic selection profile. The current core outcomes are below and did not change
+when the accounting projection expanded. T is the terminal diagnostic; N/L and the four
+new exact integers are omitted from this table and remain available in report schema 3:
 
 | Trace | Selection profile | W | P | F | R | T | Final scope |
 |---|---|---:|---:|---:|---:|---:|---|
@@ -314,6 +351,14 @@ Adaptive `(3,5%)` strictly dominates `(4,4%)`; the latter's much smaller T was a
 phase artifact, not better cycle-wide reading. The vectors remain tuning observations,
 not golden/hash-locked evidence.
 
+The first schema-3 diagnostic rerun gives both Adaptive profiles the same
+Delta/Base references, `67206/165606`. Adaptive `(3,5%)` splits W as
+`118716 workload + 1044 terminal = 119760`; `(4,4%)` splits it as
+`117364 workload + 4336 terminal = 121700`. Thus `(4,4%)` writes 1352 fewer bytes during
+the workload but 3292 more during canonical settlement, for 1940 more total bytes. These
+are exact tail-delta accounting facts, not yet an `I/UB/UD/NB` decomposition or an
+attribution of either difference to a particular strategy reason.
+
 The insert-burst pair shares step 0, the first workload Save,
 three evaluated Commit slots, its four 300-byte Inserts, and final logical versions. Only
 the last two Save boundaries partition those Inserts as `3+1` or `2+2`; each profile keeps
@@ -386,9 +431,11 @@ of the current Adaptive one-object progress floor to debt granularity and indivi
 a general size preference.
 
 Manifest schema version 2 replaces the old target/decision pair with one
-`selectionProfile`; corpus revision 12 contains the same 64 cases under read schedule
-`after-every-workload-save-cold-load/1`, metrics `raw-wpfr/2`, and report schema 2.
-The report emits exact workload sample count, R, L, and terminal T integers. There
+`selectionProfile`; corpus revision 13 contains the same 64 cases under read schedule
+`after-every-workload-save-cold-load/1`, metrics `raw-wpfr/3`, and report schema 3.
+The report emits exact workload sample count, R, L, terminal T, `W_workload`,
+`W_terminal`, Delta-reference, and Base-reference integers. It emits no derived floating
+point, and W must equal the two write components. There
 is no compatibility layer, mandatory strategy interface, arbitrary parameter input,
 or score. The report also rejects an outcome whose declared workload horizon differs from
 its manifest, or whose admitted/capacity phase cannot be emitted by evaluator v1.
@@ -650,14 +697,17 @@ and [`ReadAmplificationBaseBudgetPolicyCapacityTests.cs`](Tests/ReadAmplificatio
 
 ## Next strategy work
 
+- inspect the first `active-hundred-mixed` schema-3 rerun above across all four profiles
+  before choosing a candidate response;
 - tune the active-hundred mixed workload only when a concrete strategy observation justifies it;
-- respond to its combined backlog and active-Update pressure with a minimal independent
-  candidate, then rerun the suite;
+- use that diagnostic comparison to decide which observed overhead deserves a minimal
+  independent candidate response, then rerun the suite;
 - add any future validation workload only after white-box review identifies a
   concrete candidate weakness and a minimal causal trace; do not resume generic axis or
   seed expansion;
 - close determinism/order/artifact and qualification gates only when the candidate shape
   is ready for the `ROUND-1` packet/tag;
-- keep per-Save sample vectors internal while reporting exact cumulative R/L and terminal T;
+- keep per-Save sample vectors internal while reporting exact cumulative R/L, terminal T,
+  workload/terminal writes, and raw payload references;
 - retain Pareto/raw outcomes until workload/SLO evidence justifies guardrails or a
   ranking rule.

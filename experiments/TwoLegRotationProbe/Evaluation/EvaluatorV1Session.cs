@@ -162,7 +162,7 @@ internal sealed class EvaluatorV1Session {
             _cursor,
             settlement.FinalRotateC);
         _metrics.ObserveAcceptedRevision(Store, _cursor);
-        _metrics.EndCommit(Store, _cursor);
+        _metrics.EndTerminalSettlementCommit(Store, _cursor);
 
         ValidateClosedTerminalEpoch(terminalSource, expectedState);
         EvaluatorRawMetrics metrics = _metrics.Complete(Store, _cursor);
@@ -184,16 +184,10 @@ internal sealed class EvaluatorV1Session {
         ProbeRevisionCursor resultCursor,
         NormalizedSaveFacts facts) {
         _metrics.ObserveAcceptedRevision(Store, resultCursor);
-        long postLiveGraphBasePayloadBytes = 0;
-        foreach (LogicalObjectState state in facts.PostLiveStates.Values) {
-            postLiveGraphBasePayloadBytes = checked(
-                postLiveGraphBasePayloadBytes + state.BasePayloadBytes);
-        }
-
         _metrics.EndWorkloadCommit(
             Store,
             resultCursor,
-            postLiveGraphBasePayloadBytes);
+            facts);
         _cursor = resultCursor;
         _completedWorkloadStepCount = checked(
             _completedWorkloadStepCount + 1);

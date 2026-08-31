@@ -259,6 +259,10 @@ internal sealed record EvaluatorMetricsReportV1 {
     public EvaluatorMetricsReportV1(
         int realizedCommitCount,
         long totalPhysicalWriteBytes,
+        long workloadPhysicalWriteBytes,
+        long terminalSettlementPhysicalWriteBytes,
+        long totalWorkloadDeltaReferencePayloadBytes,
+        long totalWorkloadBaseReferencePayloadBytes,
         long peakCommitWriteBytes,
         long maxCurrentFileTailBytes,
         int workloadColdReadSampleCount,
@@ -267,6 +271,20 @@ internal sealed record EvaluatorMetricsReportV1 {
         long terminalColdHeadReadBytes) {
         ArgumentOutOfRangeException.ThrowIfNegative(realizedCommitCount);
         ArgumentOutOfRangeException.ThrowIfNegative(totalPhysicalWriteBytes);
+        ArgumentOutOfRangeException.ThrowIfNegative(workloadPhysicalWriteBytes);
+        ArgumentOutOfRangeException.ThrowIfNegative(
+            terminalSettlementPhysicalWriteBytes);
+        ArgumentOutOfRangeException.ThrowIfNegative(
+            totalWorkloadDeltaReferencePayloadBytes);
+        ArgumentOutOfRangeException.ThrowIfNegative(
+            totalWorkloadBaseReferencePayloadBytes);
+        if (checked(workloadPhysicalWriteBytes +
+            terminalSettlementPhysicalWriteBytes) != totalPhysicalWriteBytes) {
+            throw new ArgumentException(
+                "Total physical writes must equal workload plus terminal settlement writes.",
+                nameof(totalPhysicalWriteBytes));
+        }
+
         ArgumentOutOfRangeException.ThrowIfNegative(peakCommitWriteBytes);
         if (maxCurrentFileTailBytes < RbfV040Layout.InitialTailOffsetBytes) {
             throw new ArgumentOutOfRangeException(nameof(maxCurrentFileTailBytes));
@@ -280,6 +298,15 @@ internal sealed record EvaluatorMetricsReportV1 {
         if (workloadColdReadSampleCount > realizedCommitCount) {
             throw new ArgumentException(
                 "Workload cold-read samples cannot exceed realized Commits.",
+                nameof(workloadColdReadSampleCount));
+        }
+
+        if (workloadColdReadSampleCount == 0 &&
+            (workloadPhysicalWriteBytes != 0 ||
+                totalWorkloadDeltaReferencePayloadBytes != 0 ||
+                totalWorkloadBaseReferencePayloadBytes != 0)) {
+            throw new ArgumentException(
+                "A report without workload samples cannot contain workload write accounting.",
                 nameof(workloadColdReadSampleCount));
         }
 
@@ -304,6 +331,13 @@ internal sealed record EvaluatorMetricsReportV1 {
 
         RealizedCommitCount = realizedCommitCount;
         TotalPhysicalWriteBytes = totalPhysicalWriteBytes;
+        WorkloadPhysicalWriteBytes = workloadPhysicalWriteBytes;
+        TerminalSettlementPhysicalWriteBytes =
+            terminalSettlementPhysicalWriteBytes;
+        TotalWorkloadDeltaReferencePayloadBytes =
+            totalWorkloadDeltaReferencePayloadBytes;
+        TotalWorkloadBaseReferencePayloadBytes =
+            totalWorkloadBaseReferencePayloadBytes;
         PeakCommitWriteBytes = peakCommitWriteBytes;
         MaxCurrentFileTailBytes = maxCurrentFileTailBytes;
         WorkloadColdReadSampleCount = workloadColdReadSampleCount;
@@ -315,6 +349,14 @@ internal sealed record EvaluatorMetricsReportV1 {
     public int RealizedCommitCount { get; }
 
     public long TotalPhysicalWriteBytes { get; }
+
+    public long WorkloadPhysicalWriteBytes { get; }
+
+    public long TerminalSettlementPhysicalWriteBytes { get; }
+
+    public long TotalWorkloadDeltaReferencePayloadBytes { get; }
+
+    public long TotalWorkloadBaseReferencePayloadBytes { get; }
 
     public long PeakCommitWriteBytes { get; }
 
@@ -333,6 +375,10 @@ internal sealed record EvaluatorMetricsReportV1 {
         return new EvaluatorMetricsReportV1(
             metrics.RealizedCommitCount,
             metrics.TotalPhysicalWriteBytes,
+            metrics.WorkloadPhysicalWriteBytes,
+            metrics.TerminalSettlementPhysicalWriteBytes,
+            metrics.TotalWorkloadDeltaReferencePayloadBytes,
+            metrics.TotalWorkloadBaseReferencePayloadBytes,
             metrics.PeakCommitWriteBytes,
             metrics.MaxCurrentFileTailBytes,
             metrics.WorkloadColdReadSampleCount,

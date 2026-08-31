@@ -1,5 +1,6 @@
 using Atelia.TwoLegRotationProbe.Model;
 using Atelia.TwoLegRotationProbe.Planning;
+using Atelia.TwoLegRotationProbe.Workloads;
 
 namespace Atelia.TwoLegRotationProbe.Evaluation;
 
@@ -14,7 +15,10 @@ internal sealed class EvaluatorRawMetricAccumulator {
     private StoreTailSnapshot? _lastObservedStore;
     private CursorValue? _lastObservedCursor;
     private int _realizedCommitCount;
-    private long _totalPhysicalWriteBytes;
+    private long _workloadPhysicalWriteBytes;
+    private long _terminalSettlementPhysicalWriteBytes;
+    private long _totalWorkloadDeltaReferencePayloadBytes;
+    private long _totalWorkloadBaseReferencePayloadBytes;
     private long _peakCommitWriteBytes;
     private long _maxCurrentFileTailBytes;
     private readonly List<WorkloadColdReadSample> _workloadColdReadSamples = [];
@@ -86,23 +90,30 @@ internal sealed class EvaluatorRawMetricAccumulator {
         _lastObservedCursor = result;
     }
 
-    public void EndCommit(
+    public void EndTerminalSettlementCommit(
         RbfFileStore store,
         ProbeRevisionCursor resultCursor) {
-        EndCommitCore(store, resultCursor);
+        long commitWriteBytes = EndCommitCore(store, resultCursor);
+        _terminalSettlementPhysicalWriteBytes = checked(
+            _terminalSettlementPhysicalWriteBytes + commitWriteBytes);
     }
 
     /// <summary>
     /// Closes one successful outer workload Save and records one empty-cache load of
     /// its accepted PublishedRevision. Bootstrap and evaluator terminal settlement use
-    /// <see cref="EndCommit"/> instead and therefore do not enter this read schedule.
+    /// <see cref="EndTerminalSettlementCommit"/> instead and therefore do not enter
+    /// this read schedule or the workload reference payload totals.
     /// </summary>
     public void EndWorkloadCommit(
         RbfFileStore store,
         ProbeRevisionCursor resultCursor,
-        long postLiveGraphBasePayloadBytes) {
-        ArgumentOutOfRangeException.ThrowIfNegative(postLiveGraphBasePayloadBytes);
-        EndCommitCore(store, resultCursor);
+        NormalizedSaveFacts facts) {
+        ArgumentNullException.ThrowIfNull(facts);
+
+        long postLiveGraphBasePayloadBytes = SumPostLiveBasePayloadBytes(facts);
+        (long deltaReferencePayloadBytes, long baseReferencePayloadBytes) =
+            SumWorkloadReferencePayloadBytes(facts);
+        long commitWriteBytes = EndCommitCore(store, resultCursor);
 
         FinalColdHeadReadObservation coldRead = FinalColdHeadReadMeasurer.Measure(
             store,
@@ -112,13 +123,19 @@ internal sealed class EvaluatorRawMetricAccumulator {
                 "The accepted workload head does not match its normalized post-live Base bytes.");
         }
 
+        _workloadPhysicalWriteBytes = checked(
+            _workloadPhysicalWriteBytes + commitWriteBytes);
+        _totalWorkloadDeltaReferencePayloadBytes = checked(
+            _totalWorkloadDeltaReferencePayloadBytes + deltaReferencePayloadBytes);
+        _totalWorkloadBaseReferencePayloadBytes = checked(
+            _totalWorkloadBaseReferencePayloadBytes + baseReferencePayloadBytes);
         _workloadColdReadSamples.Add(new WorkloadColdReadSample(
             workloadSaveOrdinal: _workloadColdReadSamples.Count,
             coldRead,
             coldRead.PostLiveBasePayloadBytes));
     }
 
-    private void EndCommitCore(
+    private long EndCommitCore(
         RbfFileStore store,
         ProbeRevisionCursor resultCursor) {
         ArgumentNullException.ThrowIfNull(store);
@@ -146,14 +163,13 @@ internal sealed class EvaluatorRawMetricAccumulator {
         }
 
         _realizedCommitCount = checked(_realizedCommitCount + 1);
-        _totalPhysicalWriteBytes = checked(
-            _totalPhysicalWriteBytes + commitWriteBytes);
         _peakCommitWriteBytes = Math.Max(
             _peakCommitWriteBytes,
             commitWriteBytes);
         _lastCompletedStore = _lastObservedStore;
         _lastCompletedCursor = result;
         ClearOpenCommit();
+        return commitWriteBytes;
     }
 
     /// <summary>
@@ -192,11 +208,40 @@ internal sealed class EvaluatorRawMetricAccumulator {
             finalCursor.PublishedRevisionAddress);
         return new EvaluatorRawMetrics(
             _realizedCommitCount,
-            _totalPhysicalWriteBytes,
+            _workloadPhysicalWriteBytes,
+            _terminalSettlementPhysicalWriteBytes,
+            _totalWorkloadDeltaReferencePayloadBytes,
+            _totalWorkloadBaseReferencePayloadBytes,
             _peakCommitWriteBytes,
             _maxCurrentFileTailBytes,
             _workloadColdReadSamples,
             coldRead);
+    }
+
+    private static long SumPostLiveBasePayloadBytes(NormalizedSaveFacts facts) {
+        long result = 0;
+        foreach (LogicalObjectState state in facts.PostLiveStates.Values) {
+            result = checked(result + state.BasePayloadBytes);
+        }
+
+        return result;
+    }
+
+    private static (long Delta, long Base) SumWorkloadReferencePayloadBytes(
+        NormalizedSaveFacts facts) {
+        long delta = 0;
+        long @base = 0;
+        foreach (NormalizedInsertFact insert in facts.Inserts) {
+            delta = checked(delta + insert.ResultState.BasePayloadBytes);
+            @base = checked(@base + insert.ResultState.BasePayloadBytes);
+        }
+
+        foreach (NormalizedUpdateFact update in facts.Updates) {
+            delta = checked(delta + update.DeltaPayloadBytes);
+            @base = checked(@base + update.ResultState.BasePayloadBytes);
+        }
+
+        return (delta, @base);
     }
 
     /// <summary>

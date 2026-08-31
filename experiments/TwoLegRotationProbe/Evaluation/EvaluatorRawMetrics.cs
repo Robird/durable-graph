@@ -10,14 +10,25 @@ namespace Atelia.TwoLegRotationProbe.Evaluation;
 internal sealed class EvaluatorRawMetrics {
     internal EvaluatorRawMetrics(
         int realizedCommitCount,
-        long totalPhysicalWriteBytes,
+        long workloadPhysicalWriteBytes,
+        long terminalSettlementPhysicalWriteBytes,
+        long totalWorkloadDeltaReferencePayloadBytes,
+        long totalWorkloadBaseReferencePayloadBytes,
         long peakCommitWriteBytes,
         long maxCurrentFileTailBytes,
         IEnumerable<WorkloadColdReadSample> workloadColdReadSamples,
         FinalColdHeadReadObservation terminalColdHeadRead) {
         ArgumentOutOfRangeException.ThrowIfNegative(realizedCommitCount);
-        ArgumentOutOfRangeException.ThrowIfNegative(totalPhysicalWriteBytes);
+        ArgumentOutOfRangeException.ThrowIfNegative(workloadPhysicalWriteBytes);
+        ArgumentOutOfRangeException.ThrowIfNegative(
+            terminalSettlementPhysicalWriteBytes);
+        ArgumentOutOfRangeException.ThrowIfNegative(
+            totalWorkloadDeltaReferencePayloadBytes);
+        ArgumentOutOfRangeException.ThrowIfNegative(
+            totalWorkloadBaseReferencePayloadBytes);
         ArgumentOutOfRangeException.ThrowIfNegative(peakCommitWriteBytes);
+        long totalPhysicalWriteBytes = checked(
+            workloadPhysicalWriteBytes + terminalSettlementPhysicalWriteBytes);
         if (peakCommitWriteBytes > totalPhysicalWriteBytes) {
             throw new ArgumentException(
                 "Peak Commit write bytes cannot exceed total physical write bytes.",
@@ -38,11 +49,32 @@ internal sealed class EvaluatorRawMetrics {
         }
 
         RealizedCommitCount = realizedCommitCount;
+        WorkloadPhysicalWriteBytes = workloadPhysicalWriteBytes;
+        TerminalSettlementPhysicalWriteBytes = terminalSettlementPhysicalWriteBytes;
         TotalPhysicalWriteBytes = totalPhysicalWriteBytes;
+        TotalWorkloadDeltaReferencePayloadBytes =
+            totalWorkloadDeltaReferencePayloadBytes;
+        TotalWorkloadBaseReferencePayloadBytes =
+            totalWorkloadBaseReferencePayloadBytes;
         PeakCommitWriteBytes = peakCommitWriteBytes;
         MaxCurrentFileTailBytes = maxCurrentFileTailBytes;
         ArgumentNullException.ThrowIfNull(workloadColdReadSamples);
         WorkloadColdReadSample[] samples = workloadColdReadSamples.ToArray();
+        if (samples.Length > realizedCommitCount) {
+            throw new ArgumentException(
+                "Workload samples cannot exceed realized Commits.",
+                nameof(workloadColdReadSamples));
+        }
+
+        if (samples.Length == 0 &&
+            (workloadPhysicalWriteBytes != 0 ||
+                totalWorkloadDeltaReferencePayloadBytes != 0 ||
+                totalWorkloadBaseReferencePayloadBytes != 0)) {
+            throw new ArgumentException(
+                "Metrics without workload samples cannot contain workload write accounting.",
+                nameof(workloadColdReadSamples));
+        }
+
         for (int index = 0; index < samples.Length; index++) {
             WorkloadColdReadSample sample = samples[index] ??
                 throw new ArgumentException(
@@ -77,7 +109,34 @@ internal sealed class EvaluatorRawMetrics {
 
     public int RealizedCommitCount { get; }
 
+    /// <summary>
+    /// Physical bytes appended by successful outer workload Saves.
+    /// </summary>
+    public long WorkloadPhysicalWriteBytes { get; }
+
+    /// <summary>
+    /// Physical bytes appended by the canonical terminal settlement Commit.
+    /// </summary>
+    public long TerminalSettlementPhysicalWriteBytes { get; }
+
+    /// <summary>
+    /// Sum of workload and terminal-settlement physical write bytes.
+    /// </summary>
     public long TotalPhysicalWriteBytes { get; }
+
+    /// <summary>
+    /// Workload-only payload reference in which Inserts contribute their Base payload
+    /// and Updates contribute their Delta payload. Remove, NoChange, bootstrap, terminal
+    /// settlement, and rejected Saves contribute zero.
+    /// </summary>
+    public long TotalWorkloadDeltaReferencePayloadBytes { get; }
+
+    /// <summary>
+    /// Workload-only payload reference in which Inserts and Updates contribute their
+    /// resulting Base payload. Remove, NoChange, bootstrap, terminal settlement, and
+    /// rejected Saves contribute zero.
+    /// </summary>
+    public long TotalWorkloadBaseReferencePayloadBytes { get; }
 
     public long PeakCommitWriteBytes { get; }
 

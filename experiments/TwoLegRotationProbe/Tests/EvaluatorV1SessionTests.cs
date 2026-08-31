@@ -55,6 +55,12 @@ public sealed class EvaluatorV1SessionTests {
         Assert.Equal(
             workloadWrite + settlementWrite,
             admitted.Metrics.TotalPhysicalWriteBytes);
+        Assert.Equal(workloadWrite, admitted.Metrics.WorkloadPhysicalWriteBytes);
+        Assert.Equal(
+            settlementWrite,
+            admitted.Metrics.TerminalSettlementPhysicalWriteBytes);
+        Assert.Equal(1, admitted.Metrics.TotalWorkloadDeltaReferencePayloadBytes);
+        Assert.Equal(1, admitted.Metrics.TotalWorkloadBaseReferencePayloadBytes);
         Assert.Equal(
             Math.Max(workloadWrite, settlementWrite),
             admitted.Metrics.PeakCommitWriteBytes);
@@ -88,6 +94,12 @@ public sealed class EvaluatorV1SessionTests {
         long expectedWrite = TotalTailBytes(session.Store) -
             TotalTailBytes(source.Store);
         Assert.Equal(expectedWrite, admitted.Metrics.TotalPhysicalWriteBytes);
+        Assert.Equal(0, admitted.Metrics.WorkloadPhysicalWriteBytes);
+        Assert.Equal(
+            expectedWrite,
+            admitted.Metrics.TerminalSettlementPhysicalWriteBytes);
+        Assert.Equal(0, admitted.Metrics.TotalWorkloadDeltaReferencePayloadBytes);
+        Assert.Equal(0, admitted.Metrics.TotalWorkloadBaseReferencePayloadBytes);
         Assert.Equal(expectedWrite, admitted.Metrics.PeakCommitWriteBytes);
         long lastPreparationTail = session.Store.GetFile(2).TailOffsetBytes;
         Assert.Equal(
@@ -96,6 +108,71 @@ public sealed class EvaluatorV1SessionTests {
                 admitted.FinalCursor.CurrentFileTailOffsetBytes),
             admitted.Metrics.MaxCurrentFileTailBytes);
         AssertClosedOverFinalScope(admitted, oldPreviousFileNumber: 1);
+    }
+
+    [Fact]
+    public void Payload_references_are_policy_independent_across_Delta_and_forced_Base() {
+        SourceFixture source = CreateSource((FirstObjectId, 100));
+        List<AdmittedEvaluatorRun> runs = [];
+
+        foreach (CandidateTarget target in new[] {
+            CandidateTarget.StayB,
+            CandidateTarget.RotateC,
+        }) {
+            EvaluatorV1Session session = new(
+                source.Store,
+                source.Cursor,
+                totalWorkloadStepCount: 1);
+            NormalizedSaveFacts facts = SaveStepNormalizer.Normalize(
+                session.Store,
+                session.Cursor.FileScope.CurrentFileNumber,
+                session.Cursor.PublishedRevisionAddress,
+                new SaveStep([
+                    new UpdateObject(
+                        FirstObjectId,
+                        ResultBasePayloadBytes: 100,
+                        DeltaPayloadBytes: 7),
+                    new CreateObject(InsertObjectId, BasePayloadBytes: 13),
+                ]));
+            UpdateWriteDecision delta = new(
+                FirstObjectId,
+                UpdateWriteMode.Delta);
+            ExplicitCandidatePairEvaluation pair =
+                ExplicitCandidatePairEvaluator.Evaluate(
+                    session.Store,
+                    facts,
+                    new StayBSaveDecision([delta], []),
+                    new RotateCSaveDecision([], []));
+
+            RotationPolicyStepAttempt applied =
+                session.ApplySelectedWorkloadCommit(pair, target);
+            if (target == CandidateTarget.StayB) {
+                AppliedStayBPolicyStep stay =
+                    Assert.IsType<AppliedStayBPolicyStep>(applied);
+                Assert.Equal(
+                    ObjectVersionKind.Delta,
+                    stay.Selected.Plan.Revision.Frame.ObjectVersions[
+                        FirstObjectId].Kind);
+            } else {
+                AppliedRotateCPolicyStep rotate =
+                    Assert.IsType<AppliedRotateCPolicyStep>(applied);
+                Assert.Equal(
+                    ObjectVersionKind.Base,
+                    rotate.Selected.Plan.Revision.Frame.ObjectVersions[
+                        FirstObjectId].Kind);
+            }
+
+            runs.Add(Assert.IsType<AdmittedEvaluatorRun>(session.Complete()));
+        }
+
+        Assert.All(runs, admitted => {
+            Assert.Equal(20,
+                admitted.Metrics.TotalWorkloadDeltaReferencePayloadBytes);
+            Assert.Equal(113,
+                admitted.Metrics.TotalWorkloadBaseReferencePayloadBytes);
+            Assert.Equal(113,
+                admitted.Metrics.TotalWorkloadLogicalBasePayloadBytes);
+        });
     }
 
     [Fact]

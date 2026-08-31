@@ -18,7 +18,7 @@ public sealed class BenchmarkV1RunnerTests {
             BenchmarkV1Baselines.All);
 
         Assert.Equal(2, definition.Manifest.Schema.Version);
-        Assert.Equal(12, definition.Manifest.ManifestRevision);
+        Assert.Equal(13, definition.Manifest.ManifestRevision);
         Assert.Equal(BenchmarkV1ProtocolIdentities.Evaluator, definition.Manifest.Evaluator);
         Assert.Equal(
             BenchmarkV1ProtocolIdentities.TerminalSettlement,
@@ -433,6 +433,20 @@ public sealed class BenchmarkV1RunnerTests {
         BenchmarkV1BatchRun run = BenchmarkV1Runner.Run(definition);
 
         Assert.Same(definition, run.Definition);
+        foreach (IGrouping<string, BenchmarkCaseReportV1> traceGroup in
+            run.Report.Cases.GroupBy(
+                static item => item.ResolvedTraceSha256,
+                StringComparer.Ordinal)) {
+            EvaluatorMetricsReportV1[] metrics = traceGroup
+                .Select(static item => Assert.IsType<AdmittedOutcomeReportV1>(
+                    item.Outcome).Metrics)
+                .ToArray();
+            Assert.Single(metrics.Select(static item =>
+                item.TotalWorkloadDeltaReferencePayloadBytes).Distinct());
+            Assert.Single(metrics.Select(static item =>
+                item.TotalWorkloadBaseReferencePayloadBytes).Distinct());
+        }
+
         AdmittedOutcomeReportV1 debtNoMigration = AssertAdmitted(
             run.Report,
             BenchmarkV1Corpus.DebtZeroThenRotateNoMigrationCaseId,

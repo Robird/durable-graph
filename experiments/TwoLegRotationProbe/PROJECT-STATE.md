@@ -108,8 +108,10 @@ PublishedRevision 为 shared prior-snapshot anchor。accepted new head 的 curre
   horizon 的 admitted outcomes 之间进行：exact `W/P/F/R` ties 归为等价类，四项均不差且至少一项更好
   才构成支配；typed inadmissibility 保持在排序之外；
 - canonical report 保持 typed outcome 与 admitted `W/P/F/R/L/T`/scope/settlement 摘要；R 是每个成功
-  workload Save 后 empty-cache cold load 的累计，L 是对应 post-live Base bytes 累计，T 是 terminal 诊断；
-  per-Save samples 与 Frame provenance 留在 evaluator 内部/owning tests；
+  workload Save 后 empty-cache cold load 的累计，L 是对应 post-live Base bytes 累计，T 是 terminal 诊断。
+  另保留 `Wworkload/Wterminal` 与 workload Delta/Base 两个 payload-reference 整数，且
+  `W = Wworkload + Wterminal`；references 不是物理 baseline、界或 score。per-Save samples 与 Frame
+  provenance 留在 evaluator 内部/owning tests；
 - 文件被物理删除后的历史不可导航不属于格式需要抵抗的故障模型。
 
 ## 当前具备的实验积木
@@ -181,10 +183,11 @@ PublishedRevision 为 shared prior-snapshot anchor。accepted new head 的 curre
   foreground Update 全写 Base 时 exact candidate 只剩不超过 32B envelope slack；再加入一个 10B
   optional same-state migration 后命中 typed `PayloadAndTailMetaLength` rejection。失败不 fallback、不改变
   Store/cursor；foreground-only 分支经 completion/apply 后只向 B 追加其 exact Frame；
-- experiment-only raw metric accounting：显式 outer-Commit 边界按全文件 tail 增量计算 W/P，并在每个
-  realized Revision checkpoint 跟踪 F；每个成功 workload Save 后用 empty-cache OVD+object reconstruction
-  full-Frame 去重并集形成一个 cold-load sample，累计为 R/L；terminal head 另记 T。fresh-file 4B header
-  计入写入，typed rejection 不进入指标；
+- experiment-only raw metric accounting：显式 outer-Commit 边界按全文件 tail 增量计算 W/P，并把 W 精确
+  拆成成功 workload Saves 与 canonical terminal-settlement Commit；每个 realized Revision checkpoint 跟踪 F，
+  每个成功 workload Save 后以 empty-cache full-Frame 去重并集累计 R/L，terminal head 另记 T。workload
+  Delta-reference=`Insert Base + Update Delta`，Base-reference=`Insert Base + Update result Base`；Remove、NoChange、
+  bootstrap、terminal 与 rejected 不进入 references。只输出原始整数，不输出浮点；
 - evaluator v1 closed-horizon session：每次 run 在独立 Store fork 上消费 caller-selected workload Commits，
   用互斥 typed outcome 分开 success、selected capacity、`RejectedUnproven` 与 incomplete；完整 workload 后
   无条件执行一次 `DirectRotateElseAscendingSingleDebt-v1` terminal settlement。直转优先，否则 ObjectId 升序
@@ -196,14 +199,15 @@ PublishedRevision 为 shared prior-snapshot anchor。accepted new head 的 curre
   trace SHA-256、atomic selection profile 与 evaluator/settlement/accounting/layout/grammar/read-schedule identity；
   batch runner 只在 session Store 上 normalize/evaluate/apply，typed rejection 不 fallback；canonical UTF-8
   manifest/report 使用固定 tokens/order、16位 hex seed、manifest+trace SHA-256，只有 admitted 输出 W/P/F/R/L/T、
-  final cursor 与 settlement 摘要；manifest schema 2 以单一 `selectionProfile` 取代 target/decision 双栏，
-  corpus revision 12 当前在十六条 trace 上各运行 no-migration、paced、Adaptive `(3,5%)`、Adaptive `(4,4%)`，
+  write/reference diagnostics、final cursor 与 settlement 摘要；manifest schema 2 以单一 `selectionProfile`
+  取代 target/decision 双栏，report schema 3 / `raw-wpfr/3` 固定新增四整数及 W 守恒，corpus revision 13
+  当前在十六条 trace 上各运行 no-migration、paced、Adaptive `(3,5%)`、Adaptive `(4,4%)`，
   共 64 cases；identity-only
   manifest case 不可执行并 fail-close；
 - 多策略 Arena vertical proof：项目已拆为 `Arena <- Baselines <- Tests` 单向依赖；四个现有策略的完整运行
   delegate 与 Adaptive 实现位于独立 Baselines 程序集。public `StrategyStepViewV1` 保留 `G/E/H/D/B`、
   Insert/Update/Remove/NoChange 与 parent debt，`StrategyRunContextV1` 只逐步开放当前 Save，并由 Arena
-  构造 final Store、workload Commit receipts、final checkpoint 与 typed termination。策略不声明 W/P/F/R；
+  构造 final Store、workload Commit receipts、final checkpoint 与 typed termination。策略不声明任何 metrics；
   原有稳定 fixtures 继续保留 typed outcomes 与 exact vectors；新 active-hundred workload 暂不设 dedicated
   unit test 或 literal hash，以便反馈式调参；
 - canonical parameter evidence：前两条 trace 遮蔽 Adaptive 参数；threshold-band 隔离 read limit，但新累计
@@ -252,7 +256,10 @@ PublishedRevision 为 shared prior-snapshot anchor。accepted new head 的 curre
   这同时保留大规模 A-debt backlog、持续 Delta 动机和每轮变化的 40-object NoChange pool。首轮观察中
   no-migration/paced 无 workload Rotate；Adaptive `(3,5%)` 在 Saves 25/47 Rotate，`(4,4%)` 在 31/61 Rotate；
   新累计 R/L 显示 `(3,5%)` 的平均冷读/放大率为 `45262.69/10.5799`，优于 `(4,4%)` 的
-  `50300.94/11.7575`，并在 W/P/F/R 四项严格支配后者；参数仍可反馈调整，不视为 golden/steady-state 证据；
+  `50300.94/11.7575`，并在 W/P/F/R 四项严格支配后者。schema-3 首次诊断中两者 Delta/Base references
+  同为 `67206/165606`；`(3,5%)` 的 W=`118716 workload + 1044 terminal`，`(4,4%)` 为
+  `117364 + 4336`。这只完成 phase split，不归因完整 `I/UB/UD/NB` 或策略原因；参数仍可反馈调整，
+  不视为 golden/steady-state 证据；
 - named fixed-two-scope-advances diagnostic：窄 `ExecuteCase` seam 复用 canonical benchmark-v1 执行路径，
   test-local continuation 只为 control 真实追加一个 zero-workload terminal settlement。两侧最终同为 scope 3/4；
   control `commits/W/P/F/T=6/944/680/680/752`、paced `5/1536/696/804/756`。control final Previous debt
@@ -266,23 +273,25 @@ synthetic evidence，仍不代表一般 pressure-aware rotation trigger 已解�
 
 ## 当前研究焦点
 
-revision 12 当前是十六条 trace、64 admitted cases，并采用 workload-cycle cumulative cold-load R。最新
+revision 13 当前是十六条 trace、64 admitted cases，并采用 workload-cycle cumulative cold-load R 与
+schema-3 write/reference diagnostics。最新
 `active-hundred-mixed` 把原先两个过短、过纯的
 adversarial trace 合并成一个可调的长程混合 workload；它用 100 个持久对象、64 轮和每轮 60% Update，直接
-观察 backlog pacing 与 active-Update debt 在同一运行中的交互。当前焦点转向 strategy response/candidate，
-而不是冻结更多 goldens 或继续补 generic axes。
+观察 backlog pacing 与 active-Update debt 在同一运行中的交互。当前先解释其 workload/terminal split 与
+payload-reference 差距，再决定 candidate 应回应的具体代价；不继续补 generic axes。
 
 ## 下一编码切片
 
-针对 active-hundred mixed 暴露的 pacing/active-debt 行为设计首个独立 candidate，并在当前 suite 上复跑。
+利用 schema-3 四整数复审 active-hundred 的四个 profiles，分清 foreground payload reference、真实 workload
+物理写与 terminal settlement 的差异；在此之前不设计首个 candidate。
 
 ## 近期 roadmap
 
-1. **实现策略回应**：由 active-hundred mixed 的白盒证据驱动一个最小独立 candidate，
-   不改变 Arena contract 或让策略读取未来/feasibility；
-2. **复跑与复审**：在当前 revision 12 上报告 typed outcomes 与 raw `W/P/F/R/L/T`，检查改进是否只是把代价
-   转移到既有 workload；不合分、不排榜；
-3. **按弱点而非目录扩容**：只有复审指出新的具体 candidate blind spot，才增加或调整最小 validation；
+1. **解释新诊断**：在 revision 13 上复审 active-hundred 的 `Wworkload/Wterminal` 与两个 references；只做
+   由整数支持的差额分析，暂缓完整 `I/UB/UD/NB` 和策略原因归因；
+2. **实现策略回应**：由上述白盒证据驱动一个最小独立 candidate，不改变 Arena contract 或让策略读取
+   未来/feasibility；随后报告 typed outcomes 与 raw metrics，不合分、不排榜；
+3. **按弱点而非目录扩容**：只有 candidate 复审指出新的具体 blind spot，才增加或调整最小 validation；
    不再按 generic axis 或 seed 数机械扩 corpus；
 4. **候选成形后再封包**：闭合 determinism/order/artifact 与 qualification gates，冻结 `ROUND-1` packet/tag，
    再启动并行 candidate round。

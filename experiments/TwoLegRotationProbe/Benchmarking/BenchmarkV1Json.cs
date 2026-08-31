@@ -201,6 +201,18 @@ internal static class BenchmarkV1Json {
         writer.WriteNumber(
             "totalPhysicalWriteBytes",
             metrics.TotalPhysicalWriteBytes);
+        writer.WriteNumber(
+            "workloadPhysicalWriteBytes",
+            metrics.WorkloadPhysicalWriteBytes);
+        writer.WriteNumber(
+            "terminalSettlementPhysicalWriteBytes",
+            metrics.TerminalSettlementPhysicalWriteBytes);
+        writer.WriteNumber(
+            "totalWorkloadDeltaReferencePayloadBytes",
+            metrics.TotalWorkloadDeltaReferencePayloadBytes);
+        writer.WriteNumber(
+            "totalWorkloadBaseReferencePayloadBytes",
+            metrics.TotalWorkloadBaseReferencePayloadBytes);
         writer.WriteNumber("peakCommitWriteBytes", metrics.PeakCommitWriteBytes);
         writer.WriteNumber(
             "maxCurrentFileTailBytes",

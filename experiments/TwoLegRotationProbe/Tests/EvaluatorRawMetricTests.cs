@@ -42,7 +42,7 @@ public sealed class EvaluatorRawMetricTests {
         metrics.EndWorkloadCommit(
             source.Store,
             appliedStay.ResultCursor,
-            postLiveGraphBasePayloadBytes: 140);
+            stayFacts);
         long expectedStayColdReadBytes = FinalColdHeadReadMeasurer.Measure(
             source.Store,
             appliedStay.ResultCursor.PublishedRevisionAddress).UniqueFrameBytes;
@@ -78,7 +78,7 @@ public sealed class EvaluatorRawMetricTests {
         metrics.EndWorkloadCommit(
             source.Store,
             appliedRotate.ResultCursor,
-            postLiveGraphBasePayloadBytes: 140);
+            rotateFacts);
         long expectedRotateColdReadBytes = FinalColdHeadReadMeasurer.Measure(
             source.Store,
             appliedRotate.ResultCursor.PublishedRevisionAddress).UniqueFrameBytes;
@@ -100,6 +100,11 @@ public sealed class EvaluatorRawMetricTests {
         Assert.Equal(
             stayWriteBytes + rotateWriteBytes,
             observed.TotalPhysicalWriteBytes);
+        Assert.Equal(observed.TotalPhysicalWriteBytes,
+            observed.WorkloadPhysicalWriteBytes);
+        Assert.Equal(0, observed.TerminalSettlementPhysicalWriteBytes);
+        Assert.Equal(41, observed.TotalWorkloadDeltaReferencePayloadBytes);
+        Assert.Equal(80, observed.TotalWorkloadBaseReferencePayloadBytes);
         Assert.Equal(
             Math.Max(stayWriteBytes, rotateWriteBytes),
             observed.PeakCommitWriteBytes);
@@ -165,7 +170,7 @@ public sealed class EvaluatorRawMetricTests {
         metrics.EndWorkloadCommit(
             source.Store,
             afterSecond,
-            postLiveGraphBasePayloadBytes: 30);
+            secondMigration.Plan.Facts);
 
         EvaluatorRawMetrics observed = metrics.Complete(source.Store, afterSecond);
         long expectedWriteBytes = checked(
@@ -173,6 +178,10 @@ public sealed class EvaluatorRawMetricTests {
             secondMigration.Observation.Layout.AppendLengthBytes);
         Assert.Equal(1, observed.RealizedCommitCount);
         Assert.Equal(expectedWriteBytes, observed.TotalPhysicalWriteBytes);
+        Assert.Equal(expectedWriteBytes, observed.WorkloadPhysicalWriteBytes);
+        Assert.Equal(0, observed.TerminalSettlementPhysicalWriteBytes);
+        Assert.Equal(0, observed.TotalWorkloadDeltaReferencePayloadBytes);
+        Assert.Equal(0, observed.TotalWorkloadBaseReferencePayloadBytes);
         Assert.Equal(expectedWriteBytes, observed.PeakCommitWriteBytes);
         Assert.Equal(
             afterSecond.CurrentFileTailOffsetBytes,
@@ -197,6 +206,10 @@ public sealed class EvaluatorRawMetricTests {
 
         Assert.Equal(0, observed.RealizedCommitCount);
         Assert.Equal(0, observed.TotalPhysicalWriteBytes);
+        Assert.Equal(0, observed.WorkloadPhysicalWriteBytes);
+        Assert.Equal(0, observed.TerminalSettlementPhysicalWriteBytes);
+        Assert.Equal(0, observed.TotalWorkloadDeltaReferencePayloadBytes);
+        Assert.Equal(0, observed.TotalWorkloadBaseReferencePayloadBytes);
         Assert.Equal(0, observed.PeakCommitWriteBytes);
         Assert.Equal(
             source.InitialCurrentTailOffsetBytes,
@@ -205,6 +218,39 @@ public sealed class EvaluatorRawMetricTests {
         Assert.Equal(0, observed.TotalWorkloadColdReadBytes);
         Assert.Equal(0, observed.TotalWorkloadLogicalBasePayloadBytes);
         Assert.True(observed.TerminalColdHeadReadBytes > 0);
+    }
+
+    [Fact]
+    public void Raw_metric_checked_sums_fail_on_overflow() {
+        SourceFixture source = CreateSource((FirstObjectId, 10));
+        FinalColdHeadReadObservation coldRead = FinalColdHeadReadMeasurer.Measure(
+            source.Store,
+            source.Cursor.PublishedRevisionAddress);
+
+        Assert.Throws<OverflowException>(() => new EvaluatorRawMetrics(
+            realizedCommitCount: 2,
+            workloadPhysicalWriteBytes: long.MaxValue,
+            terminalSettlementPhysicalWriteBytes: 1,
+            totalWorkloadDeltaReferencePayloadBytes: 0,
+            totalWorkloadBaseReferencePayloadBytes: 0,
+            peakCommitWriteBytes: 1,
+            maxCurrentFileTailBytes: source.Cursor.CurrentFileTailOffsetBytes,
+            workloadColdReadSamples: [],
+            terminalColdHeadRead: coldRead));
+
+        Assert.Throws<OverflowException>(() => new EvaluatorRawMetrics(
+            realizedCommitCount: 2,
+            workloadPhysicalWriteBytes: 2,
+            terminalSettlementPhysicalWriteBytes: 0,
+            totalWorkloadDeltaReferencePayloadBytes: 0,
+            totalWorkloadBaseReferencePayloadBytes: 0,
+            peakCommitWriteBytes: 1,
+            maxCurrentFileTailBytes: source.Cursor.CurrentFileTailOffsetBytes,
+            workloadColdReadSamples: [
+                new WorkloadColdReadSample(0, coldRead, long.MaxValue),
+                new WorkloadColdReadSample(1, coldRead, 1),
+            ],
+            terminalColdHeadRead: coldRead));
     }
 
     [Fact]
@@ -233,13 +279,15 @@ public sealed class EvaluatorRawMetricTests {
         metrics.EndWorkloadCommit(
             source.Store,
             applied.ResultCursor,
-            postLiveGraphBasePayloadBytes: 0);
+            facts);
 
         EvaluatorRawMetrics observed = metrics.Complete(
             source.Store,
             applied.ResultCursor);
 
         Assert.Equal(1, observed.WorkloadColdReadSampleCount);
+        Assert.Equal(0, observed.TotalWorkloadDeltaReferencePayloadBytes);
+        Assert.Equal(0, observed.TotalWorkloadBaseReferencePayloadBytes);
         Assert.True(observed.TotalWorkloadColdReadBytes > 0);
         Assert.Equal(0, observed.TotalWorkloadLogicalBasePayloadBytes);
         Assert.Empty(observed.WorkloadColdReadSamples[0]
