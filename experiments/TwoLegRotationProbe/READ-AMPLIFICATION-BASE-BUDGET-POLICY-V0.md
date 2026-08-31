@@ -194,19 +194,14 @@ source; no-migration and paced remain useful corpus controls but are not additio
 4%/5% crossover treatments. This finite witness selects no default or steady-state
 winner and does not turn payload `E/G` into physical sizing authority.
 
-Manifest-schema v2 / corpus revision 5 runs `(3,5%)` and `(4,4%)` as atomic selection
-profiles beside no-migration and paced controls on four frozen workloads. The profiles
-are exact organizer bindings; one discriminating checkpoint verifies that they bind the
-intended decimal parameters rather than merely producing the same result. The first two
-benchmark workloads mask the parameter difference. On `debt-zero-then-rotate`, Adaptive
-equals paced at
-`W/P/F/R=1536/696/804/756`; on `mixed-small`, both Adaptive profiles produce
-`440/164/184/280` versus the controls' `368/164/344/352`. The canonical
-`read-amplification-threshold-band` workload separates them: `(3,5%)` produces
-`1516/1056/1056/1212`, while `(4,4%)` produces `1512/1056/1056/1472` and ties paced.
-Together with no-migration `1460/1072/1072/1064`, these are three incomparable unique
-vectors. This remains integrated hot-chain reset plus co-resident expiry/Frame-unpin
-evidence—not a pure `E/G` rotation witness. The fourth workload supplies that separate
-ordinary-trace target boundary under the limits above; neither result selects a tuned
-default or general winner. Executable authority for the canonical boundary is
-[`BenchmarkV1DebtShareDilutionWorkloadTests.cs`](Tests/BenchmarkV1DebtShareDilutionWorkloadTests.cs).
+Manifest schema v2 runs `(3,5%)` and `(4,4%)` as exact organizer bindings beside the
+no-migration and paced controls. The threshold and debt-share traces above isolate the
+read and target parameters; the matched locality/ObjectId pair leaves both Adaptive
+parameters tied within each trace and is therefore not another parameter discriminator.
+Current corpus revision/counts and exact W/P/F/R vectors belong to
+[`EVALUATOR-V1.md`](EVALUATOR-V1.md), while executable authority for the target boundary
+and locality family lives in
+[`BenchmarkV1DebtShareDilutionWorkloadTests.cs`](Tests/BenchmarkV1DebtShareDilutionWorkloadTests.cs)
+and
+[`BenchmarkV1LocalityObjectIdPermutationWorkloadTests.cs`](Tests/BenchmarkV1LocalityObjectIdPermutationWorkloadTests.cs).
+None of these bounded synthetic results selects a tuned default or general winner.

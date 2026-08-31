@@ -13,12 +13,12 @@ namespace Atelia.TwoLegRotationProbe.Tests;
 
 public sealed class BenchmarkV1RunnerTests {
     [Fact]
-    public void Frozen_corpus_defines_four_workloads_with_four_selection_profiles_each() {
+    public void Frozen_corpus_defines_six_workloads_with_four_selection_profiles_each() {
         BenchmarkV1BatchDefinition definition = BenchmarkV1Corpus.Create(
             BenchmarkV1Baselines.All);
 
         Assert.Equal(2, definition.Manifest.Schema.Version);
-        Assert.Equal(5, definition.Manifest.ManifestRevision);
+        Assert.Equal(6, definition.Manifest.ManifestRevision);
         Assert.Equal(BenchmarkV1ProtocolIdentities.Evaluator, definition.Manifest.Evaluator);
         Assert.Equal(
             BenchmarkV1ProtocolIdentities.TerminalSettlement,
@@ -33,13 +33,21 @@ public sealed class BenchmarkV1RunnerTests {
         Assert.Equal(
             BenchmarkV1ProtocolIdentities.RevisionGrammar,
             definition.Manifest.RevisionGrammar);
-        Assert.Equal(16, definition.Cases.Count);
+        Assert.Equal(24, definition.Cases.Count);
         Assert.Equal(
             [
                 BenchmarkV1Corpus.DebtZeroThenRotateNoMigrationCaseId,
                 BenchmarkV1Corpus.DebtZeroThenRotatePacedCaseId,
                 BenchmarkV1Corpus.DebtZeroThenRotateAdaptiveR3B5PercentCaseId,
                 BenchmarkV1Corpus.DebtZeroThenRotateAdaptiveR4B4PercentCaseId,
+                BenchmarkV1Corpus.LocalityHighIdNoMigrationCaseId,
+                BenchmarkV1Corpus.LocalityHighIdPacedCaseId,
+                BenchmarkV1Corpus.LocalityHighIdAdaptiveR3B5PercentCaseId,
+                BenchmarkV1Corpus.LocalityHighIdAdaptiveR4B4PercentCaseId,
+                BenchmarkV1Corpus.LocalityLowIdNoMigrationCaseId,
+                BenchmarkV1Corpus.LocalityLowIdPacedCaseId,
+                BenchmarkV1Corpus.LocalityLowIdAdaptiveR3B5PercentCaseId,
+                BenchmarkV1Corpus.LocalityLowIdAdaptiveR4B4PercentCaseId,
                 BenchmarkV1Corpus.MixedSmallNoMigrationCaseId,
                 BenchmarkV1Corpus.MixedSmallPacedCaseId,
                 BenchmarkV1Corpus.MixedSmallAdaptiveR3B5PercentCaseId,
@@ -103,6 +111,30 @@ public sealed class BenchmarkV1RunnerTests {
         BenchmarkV1CaseDefinition debtShareAdaptive44 = FindCaseDefinition(
             definition,
             BenchmarkV1Corpus.DebtShareDilutionAdaptiveR4B4PercentCaseId);
+        BenchmarkV1CaseDefinition localityHighNoMigration = FindCaseDefinition(
+            definition,
+            BenchmarkV1Corpus.LocalityHighIdNoMigrationCaseId);
+        BenchmarkV1CaseDefinition localityHighPaced = FindCaseDefinition(
+            definition,
+            BenchmarkV1Corpus.LocalityHighIdPacedCaseId);
+        BenchmarkV1CaseDefinition localityHighAdaptive35 = FindCaseDefinition(
+            definition,
+            BenchmarkV1Corpus.LocalityHighIdAdaptiveR3B5PercentCaseId);
+        BenchmarkV1CaseDefinition localityHighAdaptive44 = FindCaseDefinition(
+            definition,
+            BenchmarkV1Corpus.LocalityHighIdAdaptiveR4B4PercentCaseId);
+        BenchmarkV1CaseDefinition localityLowNoMigration = FindCaseDefinition(
+            definition,
+            BenchmarkV1Corpus.LocalityLowIdNoMigrationCaseId);
+        BenchmarkV1CaseDefinition localityLowPaced = FindCaseDefinition(
+            definition,
+            BenchmarkV1Corpus.LocalityLowIdPacedCaseId);
+        BenchmarkV1CaseDefinition localityLowAdaptive35 = FindCaseDefinition(
+            definition,
+            BenchmarkV1Corpus.LocalityLowIdAdaptiveR3B5PercentCaseId);
+        BenchmarkV1CaseDefinition localityLowAdaptive44 = FindCaseDefinition(
+            definition,
+            BenchmarkV1Corpus.LocalityLowIdAdaptiveR4B4PercentCaseId);
         AssertMatchedWorkload(
             debtNoMigration,
             debtPaced,
@@ -123,6 +155,16 @@ public sealed class BenchmarkV1RunnerTests {
             debtSharePaced,
             debtShareAdaptive35,
             debtShareAdaptive44);
+        AssertMatchedWorkload(
+            localityHighNoMigration,
+            localityHighPaced,
+            localityHighAdaptive35,
+            localityHighAdaptive44);
+        AssertMatchedWorkload(
+            localityLowNoMigration,
+            localityLowPaced,
+            localityLowAdaptive35,
+            localityLowAdaptive44);
         BenchmarkComponentIdentityV1[] expectedProfiles = [
             BenchmarkV1Baselines.DebtZeroThenRotateDeltaNoMigration.Identity,
             BenchmarkV1Baselines
@@ -137,8 +179,10 @@ public sealed class BenchmarkV1RunnerTests {
                     benchmarkCase.ManifestCase.SelectionProfile)
                 .Distinct()
                 .OrderBy(static profile => profile.Id));
-        Assert.Equal(4, new[] {
+        Assert.Equal(6, new[] {
             debtNoMigration.ManifestCase.ResolvedTraceSha256,
+            localityHighNoMigration.ManifestCase.ResolvedTraceSha256,
+            localityLowNoMigration.ManifestCase.ResolvedTraceSha256,
             mixedNoMigration.ManifestCase.ResolvedTraceSha256,
             debtShareNoMigration.ManifestCase.ResolvedTraceSha256,
             thresholdNoMigration.ManifestCase.ResolvedTraceSha256,
@@ -260,10 +304,10 @@ public sealed class BenchmarkV1RunnerTests {
             BenchmarkV1Json.WriteReport(first.Report),
             BenchmarkV1Json.WriteReport(second.Report));
         Assert.Equal(
-            "6ecd67c123f4122b9d7c42a42ff2f8418df89beb861b6c021da4ba289476fba3",
+            "735e609c533e51bde3fe1b083ed8f08bb82b81fde0b3f8707adbe81cc6b87409",
             first.Report.ManifestSha256);
         Assert.Equal(
-            "7fa93e82a5973dda96aa3b439d651b0a0de67e98e9699d1d625db8f1ffebec45",
+            "d4aa56bfa12f0ebba6e5c57e8e5fc5caa8ba7e06bc8fe465c30b53ff6199e46f",
             BenchmarkV1Json.ComputeSha256(
                 BenchmarkV1Json.WriteReport(first.Report)));
         Assert.Equal(
@@ -361,6 +405,54 @@ public sealed class BenchmarkV1RunnerTests {
             FindCase(
                 first.Report,
                 BenchmarkV1Corpus.DebtShareDilutionAdaptiveR4B4PercentCaseId)
+                .ResolvedTraceSha256);
+        Assert.Equal(
+            "fdc0630433f49dbf445e2805d4f567c1b175c67d7dfde0dd44cb8e2de0b738fd",
+            FindCase(
+                first.Report,
+                BenchmarkV1Corpus.LocalityHighIdNoMigrationCaseId)
+                .ResolvedTraceSha256);
+        Assert.Equal(
+            "fdc0630433f49dbf445e2805d4f567c1b175c67d7dfde0dd44cb8e2de0b738fd",
+            FindCase(
+                first.Report,
+                BenchmarkV1Corpus.LocalityHighIdPacedCaseId)
+                .ResolvedTraceSha256);
+        Assert.Equal(
+            "fdc0630433f49dbf445e2805d4f567c1b175c67d7dfde0dd44cb8e2de0b738fd",
+            FindCase(
+                first.Report,
+                BenchmarkV1Corpus.LocalityHighIdAdaptiveR3B5PercentCaseId)
+                .ResolvedTraceSha256);
+        Assert.Equal(
+            "fdc0630433f49dbf445e2805d4f567c1b175c67d7dfde0dd44cb8e2de0b738fd",
+            FindCase(
+                first.Report,
+                BenchmarkV1Corpus.LocalityHighIdAdaptiveR4B4PercentCaseId)
+                .ResolvedTraceSha256);
+        Assert.Equal(
+            "4ab42dae6600bc32058838bd4e738fecdd41428f4d049e59135160a5445e4c42",
+            FindCase(
+                first.Report,
+                BenchmarkV1Corpus.LocalityLowIdNoMigrationCaseId)
+                .ResolvedTraceSha256);
+        Assert.Equal(
+            "4ab42dae6600bc32058838bd4e738fecdd41428f4d049e59135160a5445e4c42",
+            FindCase(
+                first.Report,
+                BenchmarkV1Corpus.LocalityLowIdPacedCaseId)
+                .ResolvedTraceSha256);
+        Assert.Equal(
+            "4ab42dae6600bc32058838bd4e738fecdd41428f4d049e59135160a5445e4c42",
+            FindCase(
+                first.Report,
+                BenchmarkV1Corpus.LocalityLowIdAdaptiveR3B5PercentCaseId)
+                .ResolvedTraceSha256);
+        Assert.Equal(
+            "4ab42dae6600bc32058838bd4e738fecdd41428f4d049e59135160a5445e4c42",
+            FindCase(
+                first.Report,
+                BenchmarkV1Corpus.LocalityLowIdAdaptiveR4B4PercentCaseId)
                 .ResolvedTraceSha256);
     }
 

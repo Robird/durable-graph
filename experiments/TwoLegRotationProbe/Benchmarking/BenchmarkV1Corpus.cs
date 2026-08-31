@@ -57,7 +57,7 @@ internal static class BenchmarkV1ProtocolIdentities {
 
 internal static class BenchmarkV1Corpus {
     public const string ManifestId = "benchmark-v1";
-    public const int ManifestRevision = 5;
+    public const int ManifestRevision = 6;
     public const string DebtZeroThenRotateNoMigrationCaseId =
         "debt-zero-then-rotate-no-migration";
     public const string DebtZeroThenRotatePacedCaseId =
@@ -90,6 +90,22 @@ internal static class BenchmarkV1Corpus {
         "previous-debt-share-dilution-boundary-read-amplification-r3-b5pct";
     public const string DebtShareDilutionAdaptiveR4B4PercentCaseId =
         "previous-debt-share-dilution-boundary-read-amplification-r4-b4pct";
+    public const string LocalityLowIdNoMigrationCaseId =
+        "locality-next-update-low-id-no-migration";
+    public const string LocalityLowIdPacedCaseId =
+        "locality-next-update-low-id-paced";
+    public const string LocalityLowIdAdaptiveR3B5PercentCaseId =
+        "locality-next-update-low-id-read-amplification-r3-b5pct";
+    public const string LocalityLowIdAdaptiveR4B4PercentCaseId =
+        "locality-next-update-low-id-read-amplification-r4-b4pct";
+    public const string LocalityHighIdNoMigrationCaseId =
+        "locality-next-update-high-id-no-migration";
+    public const string LocalityHighIdPacedCaseId =
+        "locality-next-update-high-id-paced";
+    public const string LocalityHighIdAdaptiveR3B5PercentCaseId =
+        "locality-next-update-high-id-read-amplification-r3-b5pct";
+    public const string LocalityHighIdAdaptiveR4B4PercentCaseId =
+        "locality-next-update-high-id-read-amplification-r4-b4pct";
 
     public static BenchmarkV1BatchDefinition Create(
         IEnumerable<StrategyBindingV1> strategies) {
@@ -140,6 +156,45 @@ internal static class BenchmarkV1Corpus {
                 1),
             debtShareDilutionTrace,
             frozenStrategies);
+        SaveStep localityStep0 = new([
+            new CreateObject(10, 100),
+            new CreateObject(20, 100),
+        ]);
+        SaveStep localityStep1 = new([new CreateObject(1001, 1)]);
+        WorkloadTrace localityLowIdTrace = new(
+            scenarioName: "locality-next-update-low-id",
+            generatorId: "handwritten",
+            generatorVersion: 1,
+            seed: 0,
+            [
+                localityStep0,
+                localityStep1,
+                new SaveStep([
+                    new UpdateObject(10, 100, 100),
+                    new RemoveObject(1001),
+                ]),
+            ]);
+        WorkloadTrace localityHighIdTrace = new(
+            scenarioName: "locality-next-update-high-id",
+            generatorId: "handwritten",
+            generatorVersion: 1,
+            seed: 0,
+            [
+                localityStep0,
+                localityStep1,
+                new SaveStep([
+                    new UpdateObject(20, 100, 100),
+                    new RemoveObject(1001),
+                ]),
+            ]);
+        BenchmarkV1CaseDefinition[] localityLowIdCases = CreateStrategyCases(
+            new BenchmarkComponentIdentityV1("locality-next-update-low-id", 1),
+            localityLowIdTrace,
+            frozenStrategies);
+        BenchmarkV1CaseDefinition[] localityHighIdCases = CreateStrategyCases(
+            new BenchmarkComponentIdentityV1("locality-next-update-high-id", 1),
+            localityHighIdTrace,
+            frozenStrategies);
         return new BenchmarkV1BatchDefinition(
             ManifestId,
             ManifestRevision,
@@ -154,6 +209,8 @@ internal static class BenchmarkV1Corpus {
                 .. mixedSmallCases,
                 .. thresholdBandCases,
                 .. debtShareDilutionCases,
+                .. localityLowIdCases,
+                .. localityHighIdCases,
             ]);
     }
 

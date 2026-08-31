@@ -763,6 +763,12 @@
 
 ## 6. 船长日志
 
+### 2026-08-31：将 locality/ObjectId permutation 收编为 matched canonical family
+
+- **Implemented**：corpus revision 6 新增 `locality-next-update-low-id/high-id`；两条 trace 共享 bootstrap 与首个 `StrategyStepViewV1`/selection，只在下一次等尺寸 Update 的 ObjectId 上置换，形成六 traces x 四 Baselines 的 24-case matrix。
+- **Observed**：全部选择 `Stay/Stay`，以两个 workload Commits 加 direct settlement 到 scope `2/3`。no-migration low/high 同为 `448/256/256/248`；paced 为 `456/256/448/440`、`452/152/340/292`；两组 Adaptive 参数在各 trace 内相等，low/high 为 `452/252/444/288`、`348/152/340/332`。
+- **Boundary / Next**：候选首步看不到 future Update；结果只证明 ObjectId-first assignment 对 next-update locality 敏感，不是长期 hot/cold、温度推断、旧 singleton-Frame oracle 复制、winner 或默认策略。下一步把 payload-skew 化简为 ordinary matched size-skew family。
+
 ### 2026-08-31：将 debt-share target boundary 收编为第四个 canonical workload
 
 - **Implemented**：corpus revision 5 新增 `previous-debt-share-dilution-boundary`；普通 step0 创建 40B/960B 对象，随后 measured full-rewrite Updates `100/1/100`，形成四 workloads x 四 Baselines 的 16-case matrix。

@@ -195,29 +195,23 @@ PublishedRevision 为 shared prior-snapshot anchor。accepted new head 的 curre
   batch runner 只在 session Store 上 normalize/evaluate/apply，typed rejection 不 fallback；canonical UTF-8
   manifest/report 使用固定 tokens/order、16位 hex seed、manifest+trace SHA-256，只有 admitted 输出 W/P/F/R、
   final cursor 与 settlement 摘要；manifest schema 2 以单一 `selectionProfile` 取代 target/decision 双栏，
-  corpus revision 5 在 handwritten debt、seed12345 mixed、read-amplification-threshold-band 与
-  previous-debt-share-dilution-boundary 四组 workload 上各运行 no-migration、paced、Adaptive `(3,5%)`、
-  Adaptive `(4,4%)`；identity-only
+  corpus revision 6 在四条既有 trace 与 matched `locality-next-update-low-id/high-id` pair 上各运行
+  no-migration、paced、Adaptive `(3,5%)`、Adaptive `(4,4%)`，共 24 cases；identity-only
   manifest case 不可执行并 fail-close；
 - 多策略 Arena vertical proof：项目已拆为 `Arena <- Baselines <- Tests` 单向依赖；四个现有策略的完整运行
   delegate 与 Adaptive 实现位于独立 Baselines 程序集。public `StrategyStepViewV1` 保留 `G/E/H/D/B`、
   Insert/Update/Remove/NoChange 与 parent debt，`StrategyRunContextV1` 只逐步开放当前 Save，并由 Arena
   构造 final Store、workload Commit receipts、final checkpoint 与 typed termination。策略不声明 W/P/F/R；
-  原有 cases 的 typed outcomes、exact vectors 与 trace hashes 不漂移；扩为 16 cases 后 manifest/report
-  使用 revision 5 的新 canonical hashes；
-- 首组跨 workload profile evidence：handwritten 上 no-migration 为 `856/680/680/832`，其余三 profile 同为
-  `1536/696/804/756`；mixed 上 no-migration/paced 同为 `368/164/344/352`，两 Adaptive 同为
-  `440/164/184/280`。每个 workload 都有两个互不支配的 unique vectors，而两组 Adaptive 参数均被现有
-  两组输入遮蔽；独立 ratio=3.5 checkpoint 已锁 profile 到 exact decimal 参数，而不是只看同结果；
-- canonical threshold-band evidence：普通 step0 Creates 复现原 test-local A/B source，四 profile 全部 admitted；
-  no-migration、paced/Adaptive `(4,4%)`、Adaptive `(3,5%)` 形成三个互不支配 unique vectors，后两者以
-  `4B W` 交换 `260B R` 且 P/F 相等。该 workload 是 hot-chain reset 与 co-resident expiry/Frame-unpin 的
-  综合证据，两个 Adaptive 全程 Stay，因此不是独立 `E/G` Rotate-or-Stay threshold witness；
-- canonical debt-share boundary：普通 step0 `Create(1,40)+Create(100,960)` 后依次 full-rewrite Update
-  `100/1/100`；`Base==Delta` 使 Adaptive 的读阈值与表示选择不参与分叉。只有两个 Adaptive 在边界前共享
-  `G=1000,E=40` 的物理 source，随后 `(3,5%)` 走 `Stay/Rotate/Stay`，`(4,4%)` 走
-  `Stay/Stay/Rotate`，分别得到 `2148/1004/1096/1124` 与 `2192/1012/1132/1088`。这是有限
-  horizon 的 target timing/terminal-liability 证据，不选择 winner、默认参数或稳态结论；
+  原有 cases 的 typed outcomes、exact vectors 与 trace hashes 不漂移；扩为 24 cases 后 manifest/report
+  使用 revision 6 的新 canonical hashes；
+- canonical parameter evidence：前两条 trace 遮蔽 Adaptive 参数；threshold-band 形成三个互不支配向量并
+  隔离 read limit，debt-share dilution 则让共享 `G=1000,E=40` source 的 Adaptive pair 产生严格 5%/4%
+  target 分叉。它们只覆盖有限 horizon，不选择 winner、默认参数或稳态结论；
+- canonical locality/ObjectId pair：两条 trace 的首个 `StrategyStepViewV1` 与 selection 完全相同，候选看不到
+  next Update。no-migration low/high 均为 `448/256/256/248`；paced 为
+  `456/256/448/440`、`452/152/340/292`；两组 Adaptive 参数在各 trace 内相等，low/high 为
+  `452/252/444/288`、`348/152/340/332`。这只证明当前 ObjectId-first assignment 对 next-update
+  locality 敏感，不是长期 hot/cold、温度推断、旧 singleton-Frame oracle 复制或 winner；
 - named fixed-two-scope-advances diagnostic：窄 `ExecuteCase` seam 复用 canonical benchmark-v1 执行路径，
   test-local continuation 只为 control 真实追加一个 zero-workload terminal settlement。两侧最终同为 scope 3/4；
   control `commits/W/P/F/R=6/944/680/680/752`、paced `5/1536/696/804/756`。control final Previous debt
@@ -231,22 +225,21 @@ synthetic evidence，仍不代表一般 pressure-aware rotation trigger 已解�
 
 ## 当前研究焦点
 
-内部赛道 vertical proof、read-amplification 与 `E/G` target 两类 canonical parameter discriminator 已闭合。
-revision 5 以四组 workload 运行 16 cases；当前焦点继续转向首轮 competition packet 所需的
-strategy-neutral 因果多样性，仍不引入 optimizer、插件发现、排行榜或标量分数。
+内部赛道 vertical proof、两类 parameter discriminator 与 locality/ObjectId matched family 已闭合。
+revision 6 以六条 trace 运行 24 cases；当前焦点继续转向首轮 competition packet 所需的 strategy-neutral
+因果多样性，仍不引入 optimizer、插件发现、排行榜或标量分数。
 
 ## 下一编码切片
 
-检验现有 known-future hot/cold 证据能否化简成普通 matched locality/ObjectId-permutation workload family。
-候选只能看到当前 canonical facts，不暴露 future oracle；若自然 trace 不能保留旧手工反例，就记录真实负结果，
-不复制隐藏 source setup。随后再补 size skew、lifecycle/churn、debt pressure、burst/capacity 与 horizon phase。
+把现有 payload-skew 证据化简成普通 matched size-skew family；不复制隐藏 source setup 或未来信息，若自然
+trace 不保留旧手工分叉就记录真实负结果。随后再补 lifecycle/churn、debt pressure、burst/capacity 与
+horizon phase。
 
 ## 近期 roadmap
 
-1. **隔离 locality 与 ObjectId assignment**：把 known-future hot/cold 反例化简为普通 matched permutation
-   workload，候选不获得 future oracle，并接纳无法复现旧分叉的负结果；
-2. **增加其余因果多样性**：按 size ratio/skew、lifetime/churn、debt pressure、burst/capacity 与
-   horizon phase 增加最小 workload family，不以 seed 数冒充多样性；
+1. **隔离 size skew**：把 payload-skew 反例化简为 ordinary matched family，接纳无法复现旧分叉的负结果；
+2. **增加其余因果多样性**：按 lifecycle/churn、debt pressure、burst/capacity 与 horizon phase 增加最小
+   workload family，不以 seed 数冒充多样性；
 3. **冻结 competition packet**：记录 Arena contract、suite revision、evaluator/settlement/layout identities、
    candidate 目录权限与 prior-art 输入；
 4. **启动首轮并行 candidates**：organizer 冻结 contract/suite/协议 packet，各 agent 只写独立 candidate

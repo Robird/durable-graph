@@ -195,8 +195,9 @@ dump of `FinalColdHeadReadObservation` or candidate diagnostics. Rejected leaves
 no metrics/cursor/settlement properties. V1 is writer-only: external parsing, file I/O,
 and CLI publication remain outside this slice.
 
-Corpus revision 5 runs all four profiles over four matched inputs. Within each workload
-group the source fixture, exact expanded trace, evaluator protocols, and accounting
+Corpus revision 6 runs all four profiles over six traces. The low/high-ID traces form one
+matched locality family. Within every trace group, the source fixture, exact expanded
+trace, evaluator protocols, and accounting
 horizon are identical; apart from the case ID, the only experimental input that changes
 is the atomic selection profile. The canonical raw outcomes are:
 
@@ -218,18 +219,33 @@ is the atomic selection profile. The canonical raw outcomes are:
 | `previous-debt-share-dilution-boundary` | paced one debt | 4188 | 1056 | 2156 | 1048 | 3/4 |
 | `previous-debt-share-dilution-boundary` | Adaptive `(3,5%)` | 2148 | 1004 | 1096 | 1124 | 3/4 |
 | `previous-debt-share-dilution-boundary` | Adaptive `(4,4%)` | 2192 | 1012 | 1132 | 1088 | 3/4 |
+| `locality-next-update-low-id` | no migration | 448 | 256 | 256 | 248 | 2/3 |
+| `locality-next-update-low-id` | paced one debt | 456 | 256 | 448 | 440 | 2/3 |
+| `locality-next-update-low-id` | Adaptive `(3,5%)` | 452 | 252 | 444 | 288 | 2/3 |
+| `locality-next-update-low-id` | Adaptive `(4,4%)` | 452 | 252 | 444 | 288 | 2/3 |
+| `locality-next-update-high-id` | no migration | 448 | 256 | 256 | 248 | 2/3 |
+| `locality-next-update-high-id` | paced one debt | 452 | 152 | 340 | 292 | 2/3 |
+| `locality-next-update-high-id` | Adaptive `(3,5%)` | 348 | 152 | 340 | 332 | 2/3 |
+| `locality-next-update-high-id` | Adaptive `(4,4%)` | 348 | 152 | 340 | 332 | 2/3 |
 
-All sixteen cases are admitted. On `debt-zero-then-rotate`, both Adaptive profiles equal
+All 24 cases are admitted. On `debt-zero-then-rotate`, both Adaptive profiles equal
 paced exactly; on `mixed-small`, no-migration equals paced while both Adaptive profiles
 equal each other. The threshold-band input ends that universal masking: paced equals
 Adaptive `(4,4%)`, while Adaptive `(3,5%)` writes 4 more bytes for 260 fewer final
 cold-read bytes at equal P/F. No-migration writes and reads less than either group but
 has P/F 16 bytes higher. Its three unique vectors are therefore pairwise incomparable.
 The debt-share workload separately makes the Adaptive pair cross the strict 4%/5% target
-boundary. These are matched bounded results, not a default profile or steady-state winner.
+boundary. In the locality family every profile selects `Stay/Stay`, executes two workload
+Commits plus direct settlement, and ends at scope `2/3`. No-migration ties across the
+permutation; paced changes; both Adaptive parameters tie within each trace, while their
+high-ID result lowers W/P/F and raises R relative to low-ID. The candidates' first
+`StrategyStepViewV1` and selection are identical, so no future oracle is exposed. This
+proves sensitivity to ObjectId assignment plus next-update locality—not long-term
+hot/cold classification, temperature inference, the old singleton-Frame oracle setup,
+a default, or a winner.
 
 Manifest schema version 2 replaces the old target/decision pair with one
-`selectionProfile`; corpus revision 5 records the sixteen-case expansion. Report schema
+`selectionProfile`; corpus revision 6 records the 24-case expansion. Report schema
 and W/P/F/R leaves are unchanged and remain bound through the manifest SHA-256. There
 is no compatibility layer, mandatory strategy interface, arbitrary parameter input,
 or score. The report also rejects an outcome whose declared workload horizon differs from
@@ -241,6 +257,8 @@ the original eight outcomes, and canonical hashes,
 for the third workload's exact ties and local Pareto relations,
 [`BenchmarkV1DebtShareDilutionWorkloadTests.cs`](Tests/BenchmarkV1DebtShareDilutionWorkloadTests.cs)
 for the fourth workload's ordinary-trace target boundary,
+[`BenchmarkV1LocalityObjectIdPermutationWorkloadTests.cs`](Tests/BenchmarkV1LocalityObjectIdPermutationWorkloadTests.cs)
+for the matched locality/ObjectId family,
 [`BenchmarkAdaptiveSelectionProfileTests.cs`](Tests/BenchmarkAdaptiveSelectionProfileTests.cs)
 for divergent exact parameter binding,
 [`StrategyArenaContractTests.cs`](Tests/StrategyArenaContractTests.cs) for the
@@ -476,11 +494,11 @@ and [`ReadAmplificationBaseBudgetPolicyCapacityTests.cs`](Tests/ReadAmplificatio
 
 ## Still open before strategy selection
 
-- test whether the known-future hot/cold witness can become an ordinary matched
-  locality/ObjectId-permutation workload without exposing a future oracle; preserve a
-  negative result if the natural trace does not reproduce the hand-shaped divergence;
-- then add the smallest size-skew, lifecycle/churn, pressure/capacity, and horizon-phase
-  families needed before freezing the first competition packet;
+- turn the existing payload-skew evidence into an ordinary matched size-skew family;
+  preserve a negative result if the natural trace does not reproduce the hand-shaped
+  divergence;
+- then add the smallest lifecycle/churn, pressure/capacity, and horizon-phase families
+  needed before freezing the first competition packet;
 - keep checkpoint cold reads outside the canonical frontier; reconsider an intermediate
   read guardrail only when a named restart/read schedule or cold-start SLO exists;
 - retain Pareto/raw outcomes until workload/SLO evidence justifies guardrails or a
