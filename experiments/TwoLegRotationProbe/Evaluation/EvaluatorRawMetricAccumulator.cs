@@ -90,6 +90,12 @@ internal sealed class EvaluatorRawMetricAccumulator {
         _lastObservedCursor = result;
     }
 
+    /// <summary>
+    /// Records the synthetic closure Commit separately from workload writes. The
+    /// resulting bytes validate closed-horizon accounting and expose cutoff
+    /// liability to internal diagnostics; they are not projected as a canonical
+    /// strategy-comparison metric.
+    /// </summary>
     public void EndTerminalSettlementCommit(
         RbfFileStore store,
         ProbeRevisionCursor resultCursor) {

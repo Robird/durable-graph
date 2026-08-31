@@ -121,17 +121,23 @@ internal sealed class EvaluatorRawMetrics {
     public int RealizedCommitCount { get; }
 
     /// <summary>
-    /// Physical bytes appended by successful outer workload Saves.
+    /// Physical bytes appended by successful outer workload Saves. This is the sole
+    /// write total projected into the canonical strategy-comparison report.
     /// </summary>
     public long WorkloadPhysicalWriteBytes { get; }
 
     /// <summary>
-    /// Physical bytes appended by the canonical terminal settlement Commit.
+    /// Physical bytes appended by the canonical terminal settlement Commit. This is
+    /// a synthetic cutoff-liability and accounting diagnostic, not a strategy write
+    /// comparator and not part of the canonical benchmark report.
     /// </summary>
     public long TerminalSettlementPhysicalWriteBytes { get; }
 
     /// <summary>
-    /// Sum of workload and terminal-settlement physical write bytes.
+    /// Sum of workload and terminal-settlement physical write bytes. This derived
+    /// closed-horizon value preserves Store-tail conservation for internal validation;
+    /// it must not be used to rank strategies and is not projected into the canonical
+    /// benchmark report.
     /// </summary>
     public long TotalPhysicalWriteBytes { get; }
 
@@ -158,7 +164,9 @@ internal sealed class EvaluatorRawMetrics {
     /// <summary>
     /// Largest physical append burst in the closed horizon. Terminal settlement is
     /// one synthetic outer Commit, so this is exactly the maximum of the workload
-    /// peak and <see cref="TerminalSettlementPhysicalWriteBytes"/>.
+    /// peak and <see cref="TerminalSettlementPhysicalWriteBytes"/>. It is retained
+    /// only for internal closure-accounting diagnostics; canonical comparison uses
+    /// <see cref="PeakWorkloadCommitWriteBytes"/>.
     /// </summary>
     public long PeakCommitWriteBytes { get; }
 

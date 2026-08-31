@@ -9,7 +9,7 @@ or a product policy API.
 
 ## Admission boundary
 
-`W/P/F/R` exist only for realized, accepted work. A selected capacity rejection,
+`W_workload/P_workload/F/R` exist only for realized, accepted work. A selected capacity rejection,
 `RejectedUnproven`, or incomplete workload is a typed inadmissible outcome, not a run
 with a numeric penalty. It has no result cursor and contributes no invented write or
 read metrics. Stale/corrupt state, invalid decisions, lifecycle misuse, and unexpected
@@ -55,8 +55,9 @@ the terminal source epoch, even when the last workload Commit already rotated:
 Planning and proof replay happen on scratch forks and do not count as writes. Once a
 certificate exists, every preparatory Stay and the final Rotate are applied to the
 session Store inside one synthetic outer Commit. Each Revision is observed so F sees
-the B preparation peak; the whole burst forms the single `W_terminal` sample and therefore
-participates only in the internally derived `P_closed`, not canonical `P_workload`. A
+the B preparation peak; the whole burst forms the single internal `W_terminal` sample and
+therefore participates only in the internally derived `P_closed`, not canonical
+`P_workload`. A
 direct Rotate therefore has zero empty Stay Revisions, while a multi-step settlement
 deliberately exposes its full terminal burst.
 
@@ -70,33 +71,40 @@ long-run protocols remain outside v1.
 
 ## Raw metrics
 
-### W — `TotalPhysicalWriteBytes`
+### Wworkload — `WorkloadPhysicalWriteBytes`
 
-For each caller-declared outer Commit:
+For each successful caller workload outer Commit:
 
 ```text
 CommitWriteBytes =
     Sum(all file TailOffsetBytes after Commit)
   - Sum(all file TailOffsetBytes before Commit)
 
-W = Sum(CommitWriteBytes)
-
 W_workload = WorkloadPhysicalWriteBytes
-W_terminal = TerminalSettlementPhysicalWriteBytes
-W = W_workload + W_terminal
+           = Sum(CommitWriteBytes for successful workload Saves)
 ```
 
-Existing bytes before the evaluation horizon are not charged. A new file did not
-exist in the before snapshot, so its initial 4-byte header fence and every Frame
-appended by that Commit are charged automatically. The value is modeled physical
-append size under the in-memory RBF v0.40 model, not measured filesystem traffic,
-flush latency, or write amplification below that model.
+This is the canonical write comparator. Existing bytes before the evaluation horizon
+are not charged. A new file did not exist in the before snapshot, so its initial 4-byte
+header fence and every Frame appended by that Commit are charged automatically. The
+value is modeled physical append size under the in-memory RBF v0.40 model, not measured
+filesystem traffic, flush latency, or write amplification below that model.
 
-`W_workload` sums successful caller workload Saves. `W_terminal` contains the one
+The accumulator also retains closed-horizon write accounting internally:
+
+```text
+W_terminal = TerminalSettlementPhysicalWriteBytes
+W_total = TotalPhysicalWriteBytes
+        = W_workload + W_terminal
+```
+
+`W_terminal` contains the one
 canonical terminal-settlement outer Commit, including all preparatory and final
 Revisions in that synthetic Commit. Bootstrap and rejected/unrealized attempts enter
-neither part. The report preserves all three exact integers and rejects a projection
-unless the conservation identity above holds.
+neither part. `W_terminal` and `W_total` verify closure accounting and diagnose terminal
+liability, but they are phase-sensitive liquidation values rather than policy-comparison
+metrics. Canonical reports omit both while the evaluator continues to enforce the
+conservation identity above. Terminal settlement itself remains mandatory for admission.
 
 ### Workload payload references
 
@@ -134,10 +142,9 @@ The boundary is the outer Commit, not an individual Revision Frame. The accumula
 therefore permits several accepted Revision checkpoints between `BeginCommit` and
 `EndCommit`; all of their file growth contributes to the same workload peak sample.
 Evaluator v1 attributes every preparatory/final settlement Revision to one synthetic
-Commit, so its burst is already exactly `W_terminal`. Canonical reports expose
-`P_workload` and `W_terminal` separately instead of letting an arbitrary terminal phase
-hide the natural-Save peak. The old closed-horizon peak remains internally derivable by
-the identity above.
+Commit, so its burst is already exactly `W_terminal`. Canonical reports expose only
+`P_workload`; the terminal burst and old closed-horizon peak remain internally available
+through the identity above instead of hiding the natural-Save peak.
 
 ### F — `MaxCurrentFileTailBytes`
 
@@ -148,7 +155,10 @@ F = Max(Current file TailOffsetBytes at the initial state and every realized che
 This is the maximum absolute tail of the file that was Current at that point in the
 run. It is not total Store bytes, total historical-file bytes, epoch growth, or
 `MaxDurableGraphRelativeFrameStartOffsetBytes - tail` slack. Those may remain useful
-diagnostics but are not aliases for F.
+diagnostics but are not aliases for F. F deliberately includes terminal-settlement
+checkpoints: it is a closed-horizon file-capacity guardrail and can therefore retain
+terminal-phase sensitivity even though canonical write comparison uses only
+`W_workload`.
 
 ### R — `TotalWorkloadColdReadBytes`
 
@@ -178,12 +188,13 @@ A Frame used by both the OVD and an object chain is counted once within one samp
 cache resets between Saves, so a Frame required by several samples is charged once in
 each. Bootstrap, rejected/unrealized attempts, settlement preparation Revisions, and the
 synthetic terminal settlement Commit do not produce workload read samples. `W_terminal`
-and F still expose terminal write/capacity pressure, while canonical P is workload-only.
-This asymmetry is deliberate and explicit.
+remains an internal terminal-liability diagnostic, while canonical F still observes
+closed-horizon capacity pressure and canonical P is workload-only. This asymmetry is
+deliberate and explicit.
 
 `TerminalColdHeadReadBytes` separately measures one empty-cache load after terminal
 settlement. It diagnoses the evaluator's artificial closed-horizon placement and is not R;
-schema 4 keeps it internal rather than publishing it as a comparable metric.
+schema 5 keeps it internal rather than publishing it as a comparable metric.
 The full observation retains OVD-only and object-reconstruction sets/bytes separately,
 but their individual byte sums may overlap and must not be added.
 
@@ -194,7 +205,8 @@ queries beyond current reconstruction.
 ## Implemented seam and evidence
 
 - `Evaluation/EvaluatorRawMetricAccumulator.cs` records append-only Store snapshots
-  inside explicit Commit boundaries and derives W/P/F.
+  inside explicit Commit boundaries and derives canonical `W_workload/P_workload/F`
+  plus internal terminal/total write conservation.
 - `Evaluation/FinalColdHeadReadMeasurer.cs` derives each exact cold load from authoritative
   OVD materialization and object reconstruction; the accumulator samples it once per
   successful workload outer Commit and once separately after terminal settlement.
@@ -222,8 +234,9 @@ an organizer-supplied strategy binding, and one evaluator session. Candidate cod
 only the current `StrategyStepViewV1`; the Arena retains normalization, exact planning,
 capacity admission, apply, terminal settlement, logical validation, and all metrics.
 
-Manifest schema 2 uses one atomic `selectionProfile` per case. Report schema 4 emits
-typed position plus the nine canonical integers defined above. Corpus revision 15 keeps
+Manifest schema 2 uses one atomic `selectionProfile` per case. Metrics identity
+`raw-wpfr/5` and report schema 5 emit typed position plus the seven canonical integers
+defined above. Corpus revision 16 keeps
 sixteen adjustable traces and the two active Adaptive profiles, for 32 admitted cases.
 The retired no-migration and paced-one-debt profiles are not benchmark references:
 `DeltaReference` and `BaseReference` provide the strategy-independent write
@@ -245,15 +258,15 @@ updating 60 distinct objects per Save. Both active profiles share:
 - `L = 273804`;
 - 64 workload cold-load samples.
 
-| Profile | Wworkload | Wterminal | W | Pworkload | F | R | R/L |
-|---|---:|---:|---:|---:|---:|---:|---:|
-| Adaptive `(3,5%)` | 118716 | 1044 | 119760 | 2176 | 44040 | 2896812 | 10.5799 |
-| Adaptive `(4,4%)` | 117364 | 4336 | 121700 | 2148 | 55044 | 3219260 | 11.7575 |
+| Profile | Wworkload | Pworkload | F | R | R/L |
+|---|---:|---:|---:|---:|---:|
+| Adaptive `(3,5%)` | 118716 | 2176 | 44040 | 2896812 | 10.5799 |
+| Adaptive `(4,4%)` | 117364 | 2148 | 55044 | 3219260 | 11.7575 |
 
-Adaptive `(3,5%)` writes 1352 more bytes during natural Saves but leaves 3292 fewer
-terminal-settlement bytes, so its closed-horizon W is 1940 lower. It also lowers F and R,
-while `(4,4%)` keeps the natural workload peak 28 bytes lower. This is a narrow
-Pareto trade, not a winner or tuned default.
+Adaptive `(4,4%)` writes 1352 fewer bytes during natural Saves and keeps the natural
+workload peak 28 bytes lower. Adaptive `(3,5%)` lowers F by 11004 bytes and R by 322448
+bytes. This is a write/peak versus closed-horizon file-tail/read Pareto trade, not a
+winner, tuned default, or steady-state claim.
 
 Exact executable authority is
 [`BenchmarkV1RunnerTests.cs`](Tests/BenchmarkV1RunnerTests.cs),

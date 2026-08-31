@@ -125,7 +125,7 @@ final state 做 full-trace replay 验证。因此当前产品足以进行内部�
 5. 每个 workload Commit 末的 prefix logical replay；
 6. OVD、relative address、Delta lineage 与 final reconstruction closure；
 7. Arena-owned terminal settlement；
-8. 从已验证 tail/checkpoint ledger 离线重算 W/P/F，并对每个 workload head 重算累计 R/L；terminal head 另算 T。
+8. 从已验证 tail/checkpoint ledger 离线重算 Wworkload/Pworkload/F，并对每个 workload head 重算累计 R/L；terminal writes、closed-horizon total 与 terminal head 只作内部诊断。
 
 在这些 gate 实现前，不公开 product constructors，也不把候选声明的 capacity/rejection 当成官方结果。
 
@@ -136,13 +136,15 @@ final state 做 full-trace replay 验证。因此当前产品足以进行内部�
 - same action grammar、exact estimator 与 read schedule；
 - rejected selected choice 不 fallback，失败不变异 Store/cursor；
 - workload 完成后统一 terminal settlement；
-- 只有 admitted outcome 才有 canonical raw metrics；效率量为 W、workload-only P、R，F 是容量 guardrail，
-  并保留 W 的 workload/terminal 分相、Delta/Base payload references 与 R 的 L 分母；
+- 只有 admitted outcome 才有 canonical raw metrics；效率量为 workload-only W/P 与 R，F 是 closed-horizon
+  容量 guardrail，并保留 Delta/Base payload references 与 R 的 L 分母；
 - strategy identity/version 与 deterministic rerun；
 - candidate 无权提交 official metrics。
 
-取消其中任一项都会制造具体不公平：fallback 泄漏 feasibility oracle，缺 settlement 奖励延迟清债，复用
-Store 污染 tail，把 rejection 数值化则混合不同失败语义。
+取消其中任一项都会制造具体不公平：fallback 泄漏 feasibility oracle，缺 settlement 会失去
+closed-horizon admissibility、final reconstruction closure 与 F guardrail 证据，复用 Store 污染 tail，
+把 rejection 数值化则混合不同失败语义。terminal settlement 继续证明可闭合性、
+final reconstruction closure 与 capacity admission，但它的人工收尾写入不参与策略 write comparator。
 
 ## Workload suite 与策略矩阵
 
@@ -171,11 +173,12 @@ strategy-neutral suite identity 与 per-strategy run identity。
 ## 当前证据
 
 - Arena、Baselines、Tests 三程序集保持单向依赖；两个 active executor 位于独立 Baselines assembly；
-- corpus revision 15 由十六条可调 trace 与两个 Adaptive profiles 组成，共 32 admitted cases；
+- corpus revision 16 由十六条可调 trace 与两个 Adaptive profiles 组成，共 32 admitted cases；
 - runner/report 锁定 fresh-per-case executor、typed termination、Arena-owned settlement/metrics、
   workload-only P、累计 R/L 与 Delta/Base references；
 - `active-hundred-mixed` 的两个 profiles 共享
-  `Delta/Base references=67206/165606`；`(3,5%)` 以高 28B 的 workload-P 换取更低 W/F/R；
+  `Delta/Base references=67206/165606`；`(4,4%)` 少写 1352B Wworkload 且 Pworkload 低 28B，
+  `(3,5%)` 的 F/R 分别低 11004B/322448B；
 - no-migration 与 paced-one-debt profile 已不再承担 write baseline：完整旧实现和 64-case 结果保存在
   Git tag `research/no-migration-paced-baselines-20260901`，主线使用 strategy-independent references；
 - workload 不再逐条 hash/vector 锁死；只有 candidate 白盒复审暴露具体 blind spot 时才添加或调整最小 trace；
@@ -184,7 +187,7 @@ strategy-neutral suite identity 与 per-strategy run identity。
 
 ## 下一阶段
 
-1. 针对 active-hundred 的持续活跃对象 Base 重写开销设计一个最小独立 candidate，在 revision 15 上复跑；
+1. 针对 active-hundred 的持续活跃对象 Base 重写开销设计一个最小独立 candidate，在 revision 16 上复跑；
 2. candidate 稳定后再闭合 determinism/order/artifact 与 qualification gates，冻结 `ROUND-1` packet/tag；
 3. 只有 candidate 确实需要直接物理 Store 输出时才实现 untrusted artifact validator。
 

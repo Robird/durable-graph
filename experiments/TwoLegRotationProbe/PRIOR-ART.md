@@ -88,7 +88,7 @@ MigrationCost(S)
 
 LSM 系统把 compaction 视为 write amplification、read amplification 与 space amplification 的权衡。leveled、tiered/universal 以及 Fluid LSM 选择了不同的合并频率与结构，因此不存在脱离 workload 的统一最优配置。
 
-这支持 TwoLeg evaluator 当前的基本做法：在同一 manifest、workload 和 horizon 内保留 raw `W/P/F/R`，先报告 Pareto 与 `no winner`，而不是预设跨 workload 的加权总分。
+这支持 TwoLeg evaluator 当前的基本做法：在同一 manifest、workload 和 horizon 内保留 raw `Wworkload/Pworkload/F/R`，先报告 Pareto 与 `no winner`，而不是预设跨 workload 的加权总分。
 
 几个特别可借鉴的工程机制：
 
@@ -157,7 +157,7 @@ Kafka log cleaner 同时提供：
 
 SQLite WAL 默认在 WAL 达到一定页数时自动 checkpoint。官方文档明确描述了它的性能形状：大多数 Commit 很快，但触发 checkpoint 的 Commit 可能明显更慢；checkpoint 频率同时影响读性能、平均写性能与 WAL 大小。
 
-这正是 TwoLeg 渐进迁移希望改善的现象。SQLite 的价值主要是提供负面对照和 workload 维度：只看平均/总写入会掩盖偶发 checkpoint 峰值，因此 `P = PeakCommitWriteBytes` 不能被 `W` 替代。
+这正是 TwoLeg 渐进迁移希望改善的现象。SQLite 的价值主要是提供负面对照和 workload 维度：只看平均/总写入会掩盖偶发 checkpoint 峰值，因此 `Pworkload = PeakWorkloadCommitWriteBytes` 不能被 `Wworkload` 替代。
 
 参考：
 
@@ -210,7 +210,7 @@ SQLite WAL 默认在 WAL 达到一定页数时自动 checkpoint。官方文档�
 - 所有策略消费完全相同的 bootstrap、trace、horizon 和 terminal settlement；
 - 在线策略只看当前 canonical facts，不看 step index、未来 trace、另一候选的 feasibility 或运行后 observation；
 - typed inadmissibility 不转换成巨大罚分，也不与 admitted outcome 平均；
-- 同 workload 内可比较 raw `W/P/F/R`；跨 workload 汇总前必须先明确归一化与产品权重；
+- 同 workload 内可比较 raw `Wworkload/Pworkload/F/R`；跨 workload 汇总前必须先明确归一化与产品权重；
 - 隐藏/保留 workload 只有在策略作者不能读取其源码或结果时才真正防过拟合；同仓库并行 subagent 竞赛默认不是盲测。
 
 ## 9. 对当前研究路线的结论

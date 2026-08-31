@@ -18,7 +18,7 @@ public sealed class BenchmarkV1RunnerTests {
             BenchmarkV1Baselines.All);
 
         Assert.Equal(2, definition.Manifest.Schema.Version);
-        Assert.Equal(15, definition.Manifest.ManifestRevision);
+        Assert.Equal(16, definition.Manifest.ManifestRevision);
         Assert.Equal(BenchmarkV1ProtocolIdentities.Evaluator, definition.Manifest.Evaluator);
         Assert.Equal(
             BenchmarkV1ProtocolIdentities.TerminalSettlement,
@@ -88,10 +88,6 @@ public sealed class BenchmarkV1RunnerTests {
                     item.TotalWorkloadBaseReferencePayloadBytes)
                 .Distinct());
             Assert.All(metrics, static item => {
-                Assert.Equal(
-                    item.TotalPhysicalWriteBytes,
-                    item.WorkloadPhysicalWriteBytes +
-                        item.TerminalSettlementPhysicalWriteBytes);
                 Assert.InRange(
                     item.PeakWorkloadCommitWriteBytes,
                     0,
@@ -103,7 +99,6 @@ public sealed class BenchmarkV1RunnerTests {
             run.Report,
             BenchmarkV1Corpus.ActiveHundredMixedAdaptiveR3B5PercentCaseId,
             workloadWriteBytes: 118716,
-            terminalWriteBytes: 1044,
             peakWorkloadWriteBytes: 2176,
             maxCurrentFileTailBytes: 44040,
             totalColdReadBytes: 2896812);
@@ -111,7 +106,6 @@ public sealed class BenchmarkV1RunnerTests {
             run.Report,
             BenchmarkV1Corpus.ActiveHundredMixedAdaptiveR4B4PercentCaseId,
             workloadWriteBytes: 117364,
-            terminalWriteBytes: 4336,
             peakWorkloadWriteBytes: 2148,
             maxCurrentFileTailBytes: 55044,
             totalColdReadBytes: 3219260);
@@ -282,14 +276,33 @@ public sealed class BenchmarkV1RunnerTests {
             new BenchmarkComponentIdentityV1("bootstrap-only", 1),
             trace,
             BenchmarkV1Baselines.ReadAmplificationBaseBudgetR3B5Percent);
+        BenchmarkV1CaseExecution execution = BenchmarkV1Runner.ExecuteCase(
+            benchmarkCase);
+        AdmittedEvaluatorRun rawAdmitted = Assert.IsType<AdmittedEvaluatorRun>(
+            execution.Outcome);
 
         BenchmarkV1BatchRun run = BenchmarkV1Runner.Run(Batch(benchmarkCase));
 
+        Assert.Equal(0, rawAdmitted.Metrics.WorkloadPhysicalWriteBytes);
+        Assert.True(rawAdmitted.Metrics.TerminalSettlementPhysicalWriteBytes > 0);
+        Assert.Equal(
+            rawAdmitted.Metrics.TerminalSettlementPhysicalWriteBytes,
+            rawAdmitted.Metrics.TotalPhysicalWriteBytes);
         Assert.Equal(0, benchmarkCase.ManifestCase.EvaluatedWorkloadStepCount);
         AdmittedOutcomeReportV1 admitted = Assert.IsType<AdmittedOutcomeReportV1>(
             Assert.Single(run.Report.Cases).Outcome);
         Assert.Equal(0, admitted.Metrics.PeakWorkloadCommitWriteBytes);
         Assert.Equal(0, admitted.Metrics.WorkloadPhysicalWriteBytes);
+        string reportJson = System.Text.Encoding.UTF8.GetString(
+            BenchmarkV1Json.WriteReport(run.Report));
+        Assert.DoesNotContain(
+            "\"totalPhysicalWriteBytes\"",
+            reportJson,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "\"terminalSettlementPhysicalWriteBytes\"",
+            reportJson,
+            StringComparison.Ordinal);
     }
 
     [Fact]
@@ -341,7 +354,7 @@ public sealed class BenchmarkV1RunnerTests {
             BenchmarkV1ProtocolIdentities.Evaluator,
             BenchmarkV1ProtocolIdentities.TerminalSettlement,
             BenchmarkV1ProtocolIdentities.ReadSchedule,
-            new BenchmarkComponentIdentityV1("raw-wpfr", 3),
+            new BenchmarkComponentIdentityV1("raw-wpfr", 4),
             BenchmarkV1ProtocolIdentities.FrameLayout,
             BenchmarkV1ProtocolIdentities.RevisionGrammar,
             [benchmarkCase]));
@@ -375,7 +388,6 @@ public sealed class BenchmarkV1RunnerTests {
         BenchmarkReportV1 report,
         string caseId,
         long workloadWriteBytes,
-        long terminalWriteBytes,
         long peakWorkloadWriteBytes,
         long maxCurrentFileTailBytes,
         long totalColdReadBytes) {
@@ -383,12 +395,6 @@ public sealed class BenchmarkV1RunnerTests {
             FindCase(report, caseId).Outcome);
         EvaluatorMetricsReportV1 metrics = admitted.Metrics;
         Assert.Equal(workloadWriteBytes, metrics.WorkloadPhysicalWriteBytes);
-        Assert.Equal(
-            terminalWriteBytes,
-            metrics.TerminalSettlementPhysicalWriteBytes);
-        Assert.Equal(
-            workloadWriteBytes + terminalWriteBytes,
-            metrics.TotalPhysicalWriteBytes);
         Assert.Equal(
             67206,
             metrics.TotalWorkloadDeltaReferencePayloadBytes);

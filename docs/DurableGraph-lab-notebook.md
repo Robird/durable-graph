@@ -763,6 +763,13 @@
 
 ## 6. 船长日志
 
+### 2026-09-01：canonical 写入评价只保留 Wworkload
+
+- **Decided**：report schema 5 / metrics `raw-wpfr/5` / corpus revision 16 从 canonical metrics 删除 closed-horizon total 与 `Wterminal`，只保留 `Wworkload` 作为策略 write comparator；report 共七个整数：Wworkload、两项 references、Pworkload、F、R、L。
+- **Decided**：terminal settlement 仍是 admitted outcome 的闭合、容量与 reconstruction 验证步骤；其写入及 `Wworkload + Wterminal` 守恒继续在 evaluator 内部计算，并以 XML doc 标明只作 cutoff-liability/accounting 诊断。
+- **Observed**：active-hundred 上 `(4,4%)` 比 `(3,5%)` 少写 `1352B Wworkload` 且 Pworkload 低 28B；`(3,5%)` 的 F/R 分别低 `11004B/322448B`。这是自然写入/峰值与 closed-horizon file guardrail/累计冷读的 Pareto trade；有限 workload 的自然 Rotate 截止相位仍未消失。
+- **Supersedes**：下方 schema 4 决定中“closed-horizon W 与 Wterminal 继续作为 canonical report 指标”的部分；其原始数据仍是历史实现事实。
+
 ### 2026-09-01：退役 no-migration 与 paced-one-debt profile
 
 - **Decided**：`DeltaReference` 与 `BaseReference` 已承担 strategy-independent 写入参照，不再用两个行为很弱的 profile 充当写入 baseline。
@@ -774,7 +781,7 @@
 - **Problem**：schema 3 的 P 取 workload 与一个人工 terminal-settlement Commit 的共同峰值；当 terminal 主导时会遮住自然 Save 峰值。T、final cursor、settlement 明细及两个可由 manifest/protocol 推导的 counts 也把终点相位与内部认证信息带进了可比较报告。
 - **Implemented**：corpus revision 14 / metrics `raw-wpfr/4` / report schema 4 将 canonical P 改为 workload-only `PeakWorkloadCommitWriteBytes`；terminal burst 已由唯一 synthetic Commit 的 `Wterminal` 精确表达，旧 closed peak 可按 `max(Pworkload,Wterminal)` 派生。report 的 metrics 仅保留九个整数：`W/Wworkload/Wterminal`、两项 payload references、Pworkload、F、R、L；typed outcome position 仍统一保留 phase 与 completed/total workload counts。T、final cursor、settlement 与冗余 metric counts 保留在 evaluator 内部用于正确性/专项诊断。F 仍是全过程 Current-file high-water capacity guardrail，不是终点快照。
 - **Observed**：active-hundred 的 no-migration、paced、Adaptive `(3,5%)`、Adaptive `(4,4%)` 的 `Pworkload` 为 `2044/2128/2176/2148`。paced 被 no-migration 在 W/Pworkload/F/R 四项严格支配。Adaptive `(3,5%)` 相比 `(4,4%)` 将 W/F/R 分别降低 `1940/11004/322448B`，但 Pworkload 高 28B；修正后的关系是窄峰值交换，不是 schema-3 所显示的严格支配。
-- **Boundary / Next**：closed-horizon W 与 `Wterminal` 继续保留，避免奖励延期清债；canonical report 的瘦身不删除 evaluator outcome 中的认证信息。下一步由这个白盒交换设计首个独立 candidate，不引入 score、未来视野或新的 policy facts。
+- **Superseded**：当时决定在 canonical report 保留 closed-horizon W 与 `Wterminal`；2026-09-01 的 schema 5 已将二者降为 evaluator 内部诊断，只保留 Wworkload 作为 write comparator。
 
 ### 2026-08-31：拆分 workload/terminal 写入并加入 payload references
 

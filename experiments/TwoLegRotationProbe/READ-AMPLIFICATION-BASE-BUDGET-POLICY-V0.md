@@ -132,7 +132,7 @@ with the existing planners/evaluator.
 5. A policy-selected exact capacity failure must remain typed and cause no fallback or
    Store mutation. The unchanged harness retains its existing generic
    `RejectedUnproven` contract; v0 does not duplicate that fixture.
-6. Evaluator comparison retains raw W/P/F/R and may report no winner. Benchmark-v1
+6. Evaluator comparison retains raw Wworkload/Pworkload/F/R and may report no winner. Benchmark-v1
    binds only the two named parameter tuples as atomic selection profiles; it does not
    accept arbitrary decimals or expose a policy plugin surface.
 
@@ -160,7 +160,7 @@ choice inert. Strict target selection gives
 `(3,5%)=[Stay,Rotate,Stay]` and `(4,4%)=[Stay,Stay,Rotate]`, proving the 5%/4%
 boundary. This does not turn payload `E/G` into exact physical sizing authority.
 
-Benchmark corpus revision 15 registers only these two Adaptive bindings. The older
+Benchmark corpus revision 16 registers only these two Adaptive bindings. The older
 no-migration and paced-one-debt profiles, controls, and 64-case report are archived at
 Git tag `research/no-migration-paced-baselines-20260901`; `DeltaReference` and
 `BaseReference` now provide strategy-independent write comparators. Current corpus

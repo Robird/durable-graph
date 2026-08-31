@@ -249,32 +249,25 @@ internal sealed record EvaluatorPositionReportV1 {
         position.TotalWorkloadStepCount);
 }
 
+/// <summary>
+/// Strategy-comparable workload metrics. Synthetic terminal-settlement write
+/// accounting remains internal to <see cref="EvaluatorRawMetrics"/> and is not
+/// projected into this report.
+/// </summary>
 internal sealed record EvaluatorMetricsReportV1 {
     public EvaluatorMetricsReportV1(
-        long totalPhysicalWriteBytes,
         long workloadPhysicalWriteBytes,
-        long terminalSettlementPhysicalWriteBytes,
         long totalWorkloadDeltaReferencePayloadBytes,
         long totalWorkloadBaseReferencePayloadBytes,
         long peakWorkloadCommitWriteBytes,
         long maxCurrentFileTailBytes,
         long totalWorkloadColdReadBytes,
         long totalWorkloadLogicalBasePayloadBytes) {
-        ArgumentOutOfRangeException.ThrowIfNegative(totalPhysicalWriteBytes);
         ArgumentOutOfRangeException.ThrowIfNegative(workloadPhysicalWriteBytes);
-        ArgumentOutOfRangeException.ThrowIfNegative(
-            terminalSettlementPhysicalWriteBytes);
         ArgumentOutOfRangeException.ThrowIfNegative(
             totalWorkloadDeltaReferencePayloadBytes);
         ArgumentOutOfRangeException.ThrowIfNegative(
             totalWorkloadBaseReferencePayloadBytes);
-        if (checked(workloadPhysicalWriteBytes +
-            terminalSettlementPhysicalWriteBytes) != totalPhysicalWriteBytes) {
-            throw new ArgumentException(
-                "Total physical writes must equal workload plus terminal settlement writes.",
-                nameof(totalPhysicalWriteBytes));
-        }
-
         ArgumentOutOfRangeException.ThrowIfNegative(peakWorkloadCommitWriteBytes);
         if (maxCurrentFileTailBytes < RbfV040Layout.InitialTailOffsetBytes) {
             throw new ArgumentOutOfRangeException(nameof(maxCurrentFileTailBytes));
@@ -305,10 +298,7 @@ internal sealed record EvaluatorMetricsReportV1 {
                 nameof(totalWorkloadColdReadBytes));
         }
 
-        TotalPhysicalWriteBytes = totalPhysicalWriteBytes;
         WorkloadPhysicalWriteBytes = workloadPhysicalWriteBytes;
-        TerminalSettlementPhysicalWriteBytes =
-            terminalSettlementPhysicalWriteBytes;
         TotalWorkloadDeltaReferencePayloadBytes =
             totalWorkloadDeltaReferencePayloadBytes;
         TotalWorkloadBaseReferencePayloadBytes =
@@ -319,11 +309,11 @@ internal sealed record EvaluatorMetricsReportV1 {
         TotalWorkloadLogicalBasePayloadBytes = totalWorkloadLogicalBasePayloadBytes;
     }
 
-    public long TotalPhysicalWriteBytes { get; }
-
+    /// <summary>
+    /// Physical bytes appended by successful caller workload Saves. This is the
+    /// sole canonical write total used to compare strategies.
+    /// </summary>
     public long WorkloadPhysicalWriteBytes { get; }
-
-    public long TerminalSettlementPhysicalWriteBytes { get; }
 
     public long TotalWorkloadDeltaReferencePayloadBytes { get; }
 
@@ -340,9 +330,7 @@ internal sealed record EvaluatorMetricsReportV1 {
     public static EvaluatorMetricsReportV1 Project(EvaluatorRawMetrics metrics) {
         ArgumentNullException.ThrowIfNull(metrics);
         return new EvaluatorMetricsReportV1(
-            metrics.TotalPhysicalWriteBytes,
             metrics.WorkloadPhysicalWriteBytes,
-            metrics.TerminalSettlementPhysicalWriteBytes,
             metrics.TotalWorkloadDeltaReferencePayloadBytes,
             metrics.TotalWorkloadBaseReferencePayloadBytes,
             metrics.PeakWorkloadCommitWriteBytes,

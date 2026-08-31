@@ -367,8 +367,9 @@ Target schedules and source-debt triggers remain caller-owned experimental contr
 
 The experiment-only benchmark runner composes frozen workload traces, one named
 step-0 A/B bootstrap, organizer-supplied strategy bindings, and `EvaluatorV1Session`.
-Step 0 creates one shared full-OVD A Frame and a metadata-only B anchor outside W/P;
-the evaluator consumes the remaining steps and actually charges terminal settlement.
+Step 0 creates one shared full-OVD A Frame and a metadata-only B anchor outside canonical
+workload W/P; the evaluator consumes the remaining steps, then executes and internally
+accounts for terminal settlement.
 The current canonical execution toolkit exposes only the current payload view, not
 future steps, exact feasibility, metrics, addresses, or observations.
 
@@ -379,8 +380,8 @@ During that run, `StrategyRunContextV1` accepts complete Stay/Rotate selections 
 returns an Arena-certified `StrategyRunProductV1`: final in-memory `RbfFileStore`,
 workload Commit receipts, final checkpoint, typed termination, and terminal-settlement
 Revision count. The product contains no candidate-declared metrics; exact planning,
-admission, apply, settlement, final-state validation, W/P/F/R/L, and write/reference
-diagnostics remain Arena-owned.
+admission, apply, settlement, final-state validation, canonical Wworkload/Pworkload/R/L,
+closed-horizon F, write/reference metrics, and internal terminal accounting remain Arena-owned.
 The constructors are intentionally closed in this first internal-track proof; accepting
 an arbitrary hand-built Store/ledger requires a separate exhaustive artifact validator.
 
@@ -390,22 +391,26 @@ manifest SHA-256 and projects the four typed outcomes; only admitted cases conta
 compact canonical metric set. R is the sum of one empty-cache cold
 load after every successful workload Save; L is the matching post-live Base-byte sum, so
 `R/L` is an exact aggregate amplification ratio. Terminal cold-head T remains an internal
-diagnostic rather than a comparable report field. Report schema 4 preserves exact workload
-versus terminal-settlement physical writes
-and two workload-only payload references: Inserts count as Base in both; Updates count as
-Delta or resulting Base respectively. Remove, NoChange, bootstrap, settlement, and rejected
-Saves do not enter those references. W must equal the two physical-write components.
+diagnostic rather than a comparable report field. Metrics identity `raw-wpfr/5` and report
+schema 5 publish only workload physical writes plus two workload-only payload references:
+Inserts count as Base in both;
+Updates count as Delta or resulting Base respectively. Remove, NoChange, bootstrap,
+settlement, and rejected Saves do not enter those references. The evaluator still retains
+terminal-settlement and total physical writes internally and verifies
+`Wtotal = Wworkload + Wterminal`; neither internal value is a policy comparator.
 The references are synthetic foreground payload totals—not physical all-Delta/all-Base
 baseline runs, bounds, ratios, or scores—and the report emits no derived floating point.
 Canonical P is the largest successful workload Commit; the single synthetic settlement
-burst is already exactly `Wterminal`, and the old closed-horizon peak is derivable as their
-maximum. F remains the whole-run Current-file high-water guardrail. Final cursor,
+burst is already exactly internal `Wterminal`, and the old closed-horizon peak is derivable
+as its maximum with canonical P. F remains the whole-run Current-file high-water guardrail;
+because it includes settlement checkpoints, it deliberately remains terminal-phase
+sensitive. Final cursor,
 settlement details, redundant metric counts, and T stay inside the certified evaluator product and
 tests. This is a compact comparable projection, not a full diagnostic dump, parser,
 persisted product format, score, or winner.
 
 Manifest schema 2 represents one atomic `selectionProfile` identity per case rather
-than a target/decision cross-product. Corpus revision 15 runs the two active Adaptive
+than a target/decision cross-product. Corpus revision 16 runs the two active Adaptive
 profiles over sixteen traces (32 admitted cases). The retired no-migration and
 paced-one-debt profiles are archived at Git tag
 `research/no-migration-paced-baselines-20260901`; strategy-independent
@@ -467,9 +472,9 @@ available from Git tag `research/no-migration-paced-baselines-20260901`.
 | Baseline policy matrix | Base, Delta, and a local ratio trade modeled writes against a named final reconstruction snapshot; there is no universal winner. | This predates cumulative R and is not the canonical strategy comparator. [`PolicyMatrixTests.cs`](Tests/PolicyMatrixTests.cs) |
 | Terminal-C sizing | A high-ticket External binding can overflow when same-state Base+Self fits, so per-object token savings cannot replace whole-candidate sizing. | Provisional grammar only. [`ProvisionalRevisionV0GrammarTests.cs`](Tests/ProvisionalRevisionV0GrammarTests.cs) |
 | Adaptive read-amplification/Base-budget v0 | Two payload-proxy parameters select Base/Delta, reserve old-A progress per Stay, and trigger Rotate below a strict debt share. | Payload heuristic only, not encoded-byte authority, tuned defaults, or a winner. [`READ-AMPLIFICATION-BASE-BUDGET-POLICY-V0.md`](READ-AMPLIFICATION-BASE-BUDGET-POLICY-V0.md), [`ReadAmplificationBaseBudgetPolicyCapacityTests.cs`](Tests/ReadAmplificationBaseBudgetPolicyCapacityTests.cs) |
-| Active hundred mixed | Both active profiles share Delta/Base references `67206/165606`. Adaptive `(3,5%)` lowers closed W/F/R relative to `(4,4%)`, while `(4,4%)` lowers workload P by 28B. | Adjustable synthetic workload and narrow Pareto trade, not a golden benchmark or steady-state winner. [`BenchmarkV1Corpus.cs`](Benchmarking/BenchmarkV1Corpus.cs), [`EVALUATOR-V1.md`](EVALUATOR-V1.md) |
+| Active hundred mixed | Both active profiles share Delta/Base references `67206/165606`. Adaptive `(4,4%)` lowers workload W/P by `1352/28B`; Adaptive `(3,5%)` lowers closed-horizon F and cumulative R by `11004/322448B`. | Adjustable synthetic workload and write/peak versus file-tail/read Pareto trade, not a golden benchmark or steady-state winner. [`BenchmarkV1Corpus.cs`](Benchmarking/BenchmarkV1Corpus.cs), [`EVALUATOR-V1.md`](EVALUATOR-V1.md) |
 | Capacity coupling | Selected hard rejection preserves typed failure, no fallback, no mutation, and no metrics even when another path is feasible. | No complete repair/search or file-size policy. [`ReadAmplificationBaseBudgetPolicyCapacityTests.cs`](Tests/ReadAmplificationBaseBudgetPolicyCapacityTests.cs), [`GroupedForegroundBurstCapacityCouplingTests.cs`](Tests/GroupedForegroundBurstCapacityCouplingTests.cs) |
-| Evaluator and benchmark consumer | Terminal settlement is charged; W is phase-conserved; P is workload-only; R/L samples every successful workload Save; report metrics are Arena-owned. Revision 15 runs 32 admitted cases across sixteen traces and two active profiles. | Internal certified-product track, not an untrusted-artifact judge, score, or frontier. [`EVALUATOR-V1.md`](EVALUATOR-V1.md), [`BenchmarkV1RunnerTests.cs`](Tests/BenchmarkV1RunnerTests.cs), [`BenchmarkV1JsonTests.cs`](Tests/BenchmarkV1JsonTests.cs) |
+| Evaluator and benchmark consumer | Terminal settlement is mandatory and internally accounted; canonical W/P are workload-only; F remains a closed-horizon guardrail; R/L samples every successful workload Save. Revision 16 runs 32 admitted cases across sixteen traces and two active profiles. | Internal certified-product track, not an untrusted-artifact judge, score, or frontier. [`EVALUATOR-V1.md`](EVALUATOR-V1.md), [`BenchmarkV1RunnerTests.cs`](Tests/BenchmarkV1RunnerTests.cs), [`BenchmarkV1JsonTests.cs`](Tests/BenchmarkV1JsonTests.cs) |
 | Continuous rotation | A caller script crosses `A/B -> B/C -> C/D` while preserving exact state, reconstruction closure, and Stay certificates. | Not a stateful runner or durable publication path. [`ContinuousMultiRotationTests.cs`](Tests/ContinuousMultiRotationTests.cs) |
 
 ### Accepted source-partition provenance

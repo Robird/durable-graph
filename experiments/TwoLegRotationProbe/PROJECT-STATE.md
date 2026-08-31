@@ -105,12 +105,13 @@ PublishedRevision 为 shared prior-snapshot anchor。accepted new head 的 curre
   step index、未来 workload、candidate feasibility 或 observation 后再选择 target/decisions；只有命名反例
   证明这组输入不足时，才考虑增加一个最小事实；
 - profile 比较只在同 manifest（因而 protocol/layout/read identities 相同）、同 workload、同 evaluator
-  horizon 的 admitted outcomes 之间进行。效率比较使用 W、workload-only P 与 R；F 是文件容量/活性
-  guardrail，不与前三者合成标量。typed inadmissibility 保持在排序之外；
-- canonical report 保持 typed position 与九个 admitted metric 整数：`W/Wworkload/Wterminal`、workload Delta/Base
-  payload references、workload-only P、F、R、L。`W = Wworkload + Wterminal`；references 不是物理 baseline、
-  界或 score。terminal cold-head T、final cursor、settlement 细节、可由 manifest 推导的 metric counts、per-Save
-  samples 与 Frame provenance 留在 evaluator 内部/owning tests；
+  horizon 的 admitted outcomes 之间进行。效率比较使用 workload-only W/P 与 R；F 是包含 terminal settlement
+  checkpoint 的 closed-horizon 文件容量/活性 guardrail，可能保留终相位敏感性，不与前三者合成标量。
+  typed inadmissibility 保持在排序之外；
+- canonical report 保持 typed position 与七个 admitted metric 整数：`Wworkload`、workload Delta/Base payload
+  references、workload-only P、F、R、L。references 不是物理 baseline、界或 score。`Wterminal` 与
+  `Wtotal = Wworkload + Wterminal` 的守恒校验、terminal cold-head T、final cursor、settlement 细节、可由
+  manifest 推导的 metric counts、per-Save samples 与 Frame provenance 留在 evaluator 内部/owning tests；
 - 文件被物理删除后的历史不可导航不属于格式需要抵抗的故障模型。
 
 ## 当前具备的实验积木
@@ -123,7 +124,8 @@ PublishedRevision 为 shared prior-snapshot anchor。accepted new head 的 curre
 - caller-explicit Stay-B / Rotate-C planning、paired evaluation、exact hard-capacity filter、
   completion certificate 与无 fallback apply；
 - evaluator v1：fresh Store、typed outcomes、一次真实 terminal settlement，以及
-  `W/Wworkload/Wterminal`、workload-only P、F、累计 R/L、Delta/Base references；
+  canonical `Wworkload`、workload-only P、F、累计 R/L、Delta/Base references；terminal/total write
+  accounting 继续在 evaluator 内部验证 closure 与守恒；
 - `Arena <- Baselines <- Tests` 单向程序集边界；candidate 只作在线选择，Arena 持有
   normalize、定尺、admission、apply、settlement、状态验真和 metrics；
 - 两个 active Adaptive bindings：read-amplification/Base-budget `(3,5%)` 与 `(4,4%)`；
@@ -134,15 +136,16 @@ PublishedRevision 为 shared prior-snapshot anchor。accepted new head 的 curre
 
 ## 当前研究焦点
 
-Corpus revision 15 在十六条 trace 上运行两个 active Adaptive profiles，共 32 admitted cases。
+Metrics identity `raw-wpfr/5`、report schema 5、Corpus revision 16 在十六条 trace 上运行两个
+active Adaptive profiles，共 32 admitted cases。
 `DeltaReference` 与 `BaseReference` 是 strategy-independent 写入参照，替代退役 profile 的
 “基线策略”职责。
 
 `active-hundred-mixed` 当前提供最有用的长周期反馈：两组 profile 共享
 `Delta/Base references=67206/165606` 与 `L=273804`；Adaptive `(3,5%)` 相比 `(4,4%)`
-少 `1940B W`、`11004B F`、`322448B R`，但 workload-P 高 `28B`。这证明当前存在窄峰值
-交换，也暴露 Adaptive 可能在持续活跃对象上进行不必要 Base 写；它不是 winner、默认参数或
-steady-state 结论。
+多 `1352B Wworkload`、workload-P 高 `28B`，但少 `11004B F` 与 `322448B R`。这证明当前是
+自然写入/峰值与 closed-horizon 文件高水位/累计冷读之间的交换，也暴露 Adaptive 可能在持续活跃
+对象上进行不必要 Base 写；它不是 winner、默认参数或 steady-state 结论。
 
 ## 下一编码切片
 
@@ -169,11 +172,12 @@ steady-state 结论。
   consumer，再拆 strategy-neutral suite hash 与 per-strategy report identity；
 - 当前 `StrategyRunProductV1` 由 Arena context 认证，不接受候选任意手工构造的 Store/ledger；若首轮策略确实
   需要绕过 canonical planner/apply toolkit，须先实现 exhaustive Frame enumeration、逐 Commit prefix-state
-  validation、layout/ticket/OVD closure 检查与 offline W/P/F/R recomputation；
+  validation、layout/ticket/OVD closure 检查与 offline `Wworkload/Pworkload/F/R/L` recomputation，并独立复核
+  internal terminal/total write conservation；
 - `StrategyBindingV1` 每 case 调用 executor factory，防止意外复用 captured instance；static mutable state
   仍不是机械隔离的故障模型，首轮 packet 需加入 fresh-fork repeat 与 case-order permutation gate；
 - 产品若最终必须发布唯一默认 profile，仍需要真实 workload/SLO 给出 Peak、file tail 与 read guardrails；
-  在此之前只报告 per-workload Pareto 与 `no winner`，不使用裸加权和或严格 W-first 字典序。
+  在此之前只报告 per-workload Pareto 与 `no winner`，不使用裸加权和或严格 Wworkload-first 字典序。
 
 ## 明确暂缓
 

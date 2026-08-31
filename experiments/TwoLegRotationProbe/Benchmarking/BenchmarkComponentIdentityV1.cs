@@ -21,7 +21,7 @@ internal static class BenchmarkV1Identities {
         new("two-leg-benchmark-manifest", 2);
 
     public static readonly BenchmarkComponentIdentityV1 ReportSchema =
-        new("two-leg-benchmark-report", 4);
+        new("two-leg-benchmark-report", 5);
 
     public static readonly BenchmarkComponentIdentityV1 SourceFixture =
         new("trace-step0-single-a-full-base-then-b-anchor", 1);

@@ -15,7 +15,7 @@ internal static class BenchmarkV1ProtocolIdentities {
         new("after-every-workload-save-cold-load", 1);
 
     public static readonly BenchmarkComponentIdentityV1 Metrics =
-        new("raw-wpfr", 4);
+        new("raw-wpfr", 5);
 
     public static readonly BenchmarkComponentIdentityV1 FrameLayout =
         new("rbf-v0.40-envelope", 1);
@@ -57,7 +57,7 @@ internal static class BenchmarkV1ProtocolIdentities {
 
 internal static class BenchmarkV1Corpus {
     public const string ManifestId = "benchmark-v1";
-    public const int ManifestRevision = 15;
+    public const int ManifestRevision = 16;
     public const string ActiveHundredMixedAdaptiveR3B5PercentCaseId =
         "active-hundred-mixed-read-amplification-r3-b5pct";
     public const string ActiveHundredMixedAdaptiveR4B4PercentCaseId =
