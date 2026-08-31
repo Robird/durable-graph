@@ -195,15 +195,15 @@ PublishedRevision 为 shared prior-snapshot anchor。accepted new head 的 curre
   batch runner 只在 session Store 上 normalize/evaluate/apply，typed rejection 不 fallback；canonical UTF-8
   manifest/report 使用固定 tokens/order、16位 hex seed、manifest+trace SHA-256，只有 admitted 输出 W/P/F/R、
   final cursor 与 settlement 摘要；manifest schema 2 以单一 `selectionProfile` 取代 target/decision 双栏，
-  corpus revision 7 在六条既有 trace 与 matched `size-skew-low-id-small/large` pair 上各运行
-  no-migration、paced、Adaptive `(3,5%)`、Adaptive `(4,4%)`，共 32 cases；identity-only
+  corpus revision 8 在八条既有 trace 与 matched `lifecycle-transient-overlap/serial` pair 上各运行
+  no-migration、paced、Adaptive `(3,5%)`、Adaptive `(4,4%)`，共 40 cases；identity-only
   manifest case 不可执行并 fail-close；
 - 多策略 Arena vertical proof：项目已拆为 `Arena <- Baselines <- Tests` 单向依赖；四个现有策略的完整运行
   delegate 与 Adaptive 实现位于独立 Baselines 程序集。public `StrategyStepViewV1` 保留 `G/E/H/D/B`、
   Insert/Update/Remove/NoChange 与 parent debt，`StrategyRunContextV1` 只逐步开放当前 Save，并由 Arena
   构造 final Store、workload Commit receipts、final checkpoint 与 typed termination。策略不声明 W/P/F/R；
-  原有 cases 的 typed outcomes、exact vectors 与 trace hashes 不漂移；扩为 32 cases 后 manifest/report
-  使用 revision 7 的新 canonical hashes；
+  原有 cases 的 typed outcomes、exact vectors 与 trace hashes 不漂移；扩为 40 cases 后 manifest/report
+  使用 revision 8 的新 canonical hashes；
 - canonical parameter evidence：前两条 trace 遮蔽 Adaptive 参数；threshold-band 形成三个互不支配向量并
   隔离 read limit，debt-share dilution 则让共享 `G=1000,E=40` source 的 Adaptive pair 产生严格 5%/4%
   target 分叉。它们只覆盖有限 horizon，不选择 winner、默认参数或稳态结论；
@@ -216,6 +216,14 @@ PublishedRevision 为 shared prior-snapshot anchor。accepted new head 的 curre
   以更高 W/F/R 且相同 P 显示尺寸到 ID 绑定对 immediate-vs-terminal placement 的敏感性。
   ordinary bootstrap 把两个 Base 共置一个 A Frame，因此 workload checkpoint 两种迁移都不释放该 Frame；
   这不是旧 singleton-Frame release oracle 的复制；
+- canonical transient-lifecycle pair：两条 trace 使用相同 Create/Remove multiset、ObjectId、payload、horizon
+  与最终状态，只交换 `Create101` 与 `Remove100` 的次序；这改变 transient 的生命周期重叠与驻留跨度，
+  并使 peak live-set 从 overlap 的 2 变为 serial 的 1。
+  八个 cases 均 admitted，以四个 workload Commits 加 direct settlement 得到 `M=5`。
+  no-migration 在 pair 内都走 `Stay/Stay/Stay/Stay` 并终止于 scope `2/3`；ObjectId-first paced/两组
+  Adaptive 都走 `Stay/Stay/Rotate/Stay` 并终止于 `3/4`。serial 的主观察是这三组策略的 F 降低
+  408B；4B W 差是当前 layout fallout。这不外推 churn rate、lifetime prediction、GC、steady state
+  或建议业务串行化；
 - named fixed-two-scope-advances diagnostic：窄 `ExecuteCase` seam 复用 canonical benchmark-v1 执行路径，
   test-local continuation 只为 control 真实追加一个 zero-workload terminal settlement。两侧最终同为 scope 3/4；
   control `commits/W/P/F/R=6/944/680/680/752`、paced `5/1536/696/804/756`。control final Previous debt
@@ -229,19 +237,19 @@ synthetic evidence，仍不代表一般 pressure-aware rotation trigger 已解�
 
 ## 当前研究焦点
 
-内部赛道 vertical proof、两类 parameter discriminator 与 locality/size-skew matched families 已闭合。
-revision 7 以八条 trace 运行 32 cases；当前焦点继续转向首轮 competition packet 所需的 strategy-neutral
+内部赛道 vertical proof、两类 parameter discriminator 与 locality/size/lifecycle matched families 已闭合。
+revision 8 以十条 trace 运行 40 cases；当前焦点继续转向首轮 competition packet 所需的 strategy-neutral
 因果多样性，仍不引入 optimizer、插件发现、排行榜或标量分数。
 
 ## 下一编码切片
 
-先增加最小 lifecycle/churn family，再依次补 debt pressure、burst/capacity 与 horizon phase；
+先增加最小 debt-pressure family，再依次补 burst/capacity 与 horizon phase；
 每个 family 仍先以 ordinary matched trace 检验现有 Arena，若 canonical outcome 无辨别力就保留真实负结果。
 
 ## 近期 roadmap
 
-1. **隔离 lifecycle/churn**：用最小 matched family 检验 Create/Remove 与对象寿命对迁债/轮转的影响；
-2. **增加其余因果多样性**：按 debt pressure、burst/capacity 与 horizon phase 增加最小 workload
+1. **隔离 debt pressure**：用最小 matched family 检验不同 A-debt 压力下的迁移与轮转选择；
+2. **增加其余因果多样性**：按 burst/capacity 与 horizon phase 增加最小 workload
    family，不以 seed 数冒充多样性；
 3. **冻结 competition packet**：记录 Arena contract、suite revision、evaluator/settlement/layout identities、
    candidate 目录权限与 prior-art 输入；

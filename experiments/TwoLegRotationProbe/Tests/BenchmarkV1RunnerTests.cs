@@ -13,12 +13,12 @@ namespace Atelia.TwoLegRotationProbe.Tests;
 
 public sealed class BenchmarkV1RunnerTests {
     [Fact]
-    public void Frozen_corpus_defines_eight_workloads_with_four_selection_profiles_each() {
+    public void Frozen_corpus_defines_ten_workloads_with_four_selection_profiles_each() {
         BenchmarkV1BatchDefinition definition = BenchmarkV1Corpus.Create(
             BenchmarkV1Baselines.All);
 
         Assert.Equal(2, definition.Manifest.Schema.Version);
-        Assert.Equal(7, definition.Manifest.ManifestRevision);
+        Assert.Equal(8, definition.Manifest.ManifestRevision);
         Assert.Equal(BenchmarkV1ProtocolIdentities.Evaluator, definition.Manifest.Evaluator);
         Assert.Equal(
             BenchmarkV1ProtocolIdentities.TerminalSettlement,
@@ -33,13 +33,21 @@ public sealed class BenchmarkV1RunnerTests {
         Assert.Equal(
             BenchmarkV1ProtocolIdentities.RevisionGrammar,
             definition.Manifest.RevisionGrammar);
-        Assert.Equal(32, definition.Cases.Count);
+        Assert.Equal(40, definition.Cases.Count);
         Assert.Equal(
             [
                 BenchmarkV1Corpus.DebtZeroThenRotateNoMigrationCaseId,
                 BenchmarkV1Corpus.DebtZeroThenRotatePacedCaseId,
                 BenchmarkV1Corpus.DebtZeroThenRotateAdaptiveR3B5PercentCaseId,
                 BenchmarkV1Corpus.DebtZeroThenRotateAdaptiveR4B4PercentCaseId,
+                BenchmarkV1Corpus.LifecycleTransientOverlapNoMigrationCaseId,
+                BenchmarkV1Corpus.LifecycleTransientOverlapPacedCaseId,
+                BenchmarkV1Corpus.LifecycleTransientOverlapAdaptiveR3B5PercentCaseId,
+                BenchmarkV1Corpus.LifecycleTransientOverlapAdaptiveR4B4PercentCaseId,
+                BenchmarkV1Corpus.LifecycleTransientSerialNoMigrationCaseId,
+                BenchmarkV1Corpus.LifecycleTransientSerialPacedCaseId,
+                BenchmarkV1Corpus.LifecycleTransientSerialAdaptiveR3B5PercentCaseId,
+                BenchmarkV1Corpus.LifecycleTransientSerialAdaptiveR4B4PercentCaseId,
                 BenchmarkV1Corpus.LocalityHighIdNoMigrationCaseId,
                 BenchmarkV1Corpus.LocalityHighIdPacedCaseId,
                 BenchmarkV1Corpus.LocalityHighIdAdaptiveR3B5PercentCaseId,
@@ -167,6 +175,30 @@ public sealed class BenchmarkV1RunnerTests {
         BenchmarkV1CaseDefinition sizeSkewSmallAdaptive44 = FindCaseDefinition(
             definition,
             BenchmarkV1Corpus.SizeSkewLowIdSmallAdaptiveR4B4PercentCaseId);
+        BenchmarkV1CaseDefinition lifecycleOverlapNoMigration = FindCaseDefinition(
+            definition,
+            BenchmarkV1Corpus.LifecycleTransientOverlapNoMigrationCaseId);
+        BenchmarkV1CaseDefinition lifecycleOverlapPaced = FindCaseDefinition(
+            definition,
+            BenchmarkV1Corpus.LifecycleTransientOverlapPacedCaseId);
+        BenchmarkV1CaseDefinition lifecycleOverlapAdaptive35 = FindCaseDefinition(
+            definition,
+            BenchmarkV1Corpus.LifecycleTransientOverlapAdaptiveR3B5PercentCaseId);
+        BenchmarkV1CaseDefinition lifecycleOverlapAdaptive44 = FindCaseDefinition(
+            definition,
+            BenchmarkV1Corpus.LifecycleTransientOverlapAdaptiveR4B4PercentCaseId);
+        BenchmarkV1CaseDefinition lifecycleSerialNoMigration = FindCaseDefinition(
+            definition,
+            BenchmarkV1Corpus.LifecycleTransientSerialNoMigrationCaseId);
+        BenchmarkV1CaseDefinition lifecycleSerialPaced = FindCaseDefinition(
+            definition,
+            BenchmarkV1Corpus.LifecycleTransientSerialPacedCaseId);
+        BenchmarkV1CaseDefinition lifecycleSerialAdaptive35 = FindCaseDefinition(
+            definition,
+            BenchmarkV1Corpus.LifecycleTransientSerialAdaptiveR3B5PercentCaseId);
+        BenchmarkV1CaseDefinition lifecycleSerialAdaptive44 = FindCaseDefinition(
+            definition,
+            BenchmarkV1Corpus.LifecycleTransientSerialAdaptiveR4B4PercentCaseId);
         AssertMatchedWorkload(
             debtNoMigration,
             debtPaced,
@@ -207,6 +239,16 @@ public sealed class BenchmarkV1RunnerTests {
             sizeSkewSmallPaced,
             sizeSkewSmallAdaptive35,
             sizeSkewSmallAdaptive44);
+        AssertMatchedWorkload(
+            lifecycleOverlapNoMigration,
+            lifecycleOverlapPaced,
+            lifecycleOverlapAdaptive35,
+            lifecycleOverlapAdaptive44);
+        AssertMatchedWorkload(
+            lifecycleSerialNoMigration,
+            lifecycleSerialPaced,
+            lifecycleSerialAdaptive35,
+            lifecycleSerialAdaptive44);
         BenchmarkComponentIdentityV1[] expectedProfiles = [
             BenchmarkV1Baselines.DebtZeroThenRotateDeltaNoMigration.Identity,
             BenchmarkV1Baselines
@@ -221,8 +263,10 @@ public sealed class BenchmarkV1RunnerTests {
                     benchmarkCase.ManifestCase.SelectionProfile)
                 .Distinct()
                 .OrderBy(static profile => profile.Id));
-        Assert.Equal(8, new[] {
+        Assert.Equal(10, new[] {
             debtNoMigration.ManifestCase.ResolvedTraceSha256,
+            lifecycleOverlapNoMigration.ManifestCase.ResolvedTraceSha256,
+            lifecycleSerialNoMigration.ManifestCase.ResolvedTraceSha256,
             localityHighNoMigration.ManifestCase.ResolvedTraceSha256,
             localityLowNoMigration.ManifestCase.ResolvedTraceSha256,
             mixedNoMigration.ManifestCase.ResolvedTraceSha256,
@@ -348,10 +392,10 @@ public sealed class BenchmarkV1RunnerTests {
             BenchmarkV1Json.WriteReport(first.Report),
             BenchmarkV1Json.WriteReport(second.Report));
         Assert.Equal(
-            "e5486f5eb2891712dc8a4481ca6bd108d24950f473d75b0ac833bb9fc33a324c",
+            "2d00cc8d17e3a5bc4f5b90ceeaed12b62859f985c1aed0d800792a676be8e183",
             first.Report.ManifestSha256);
         Assert.Equal(
-            "a1cedba791b7cfb117a23f9e1461608fa975b1c83edb262a20c295a7616fe910",
+            "11be3d2e6e5a662e0507cd46bf86a473c108b7d5dc272c6d61120c3983236729",
             BenchmarkV1Json.ComputeSha256(
                 BenchmarkV1Json.WriteReport(first.Report)));
         Assert.Equal(
@@ -545,6 +589,54 @@ public sealed class BenchmarkV1RunnerTests {
             FindCase(
                 first.Report,
                 BenchmarkV1Corpus.SizeSkewLowIdSmallAdaptiveR4B4PercentCaseId)
+                .ResolvedTraceSha256);
+        Assert.Equal(
+            "eea0f08a47c5fcb466bbbad0a66d3fbe6411ef5fecb49e4e12777d7e51c5ee43",
+            FindCase(
+                first.Report,
+                BenchmarkV1Corpus.LifecycleTransientOverlapNoMigrationCaseId)
+                .ResolvedTraceSha256);
+        Assert.Equal(
+            "eea0f08a47c5fcb466bbbad0a66d3fbe6411ef5fecb49e4e12777d7e51c5ee43",
+            FindCase(
+                first.Report,
+                BenchmarkV1Corpus.LifecycleTransientOverlapPacedCaseId)
+                .ResolvedTraceSha256);
+        Assert.Equal(
+            "eea0f08a47c5fcb466bbbad0a66d3fbe6411ef5fecb49e4e12777d7e51c5ee43",
+            FindCase(
+                first.Report,
+                BenchmarkV1Corpus.LifecycleTransientOverlapAdaptiveR3B5PercentCaseId)
+                .ResolvedTraceSha256);
+        Assert.Equal(
+            "eea0f08a47c5fcb466bbbad0a66d3fbe6411ef5fecb49e4e12777d7e51c5ee43",
+            FindCase(
+                first.Report,
+                BenchmarkV1Corpus.LifecycleTransientOverlapAdaptiveR4B4PercentCaseId)
+                .ResolvedTraceSha256);
+        Assert.Equal(
+            "637764ae11d12e1f03ebb51418498d4a58f4240dd06ee6d7d1c85e4a118e462c",
+            FindCase(
+                first.Report,
+                BenchmarkV1Corpus.LifecycleTransientSerialNoMigrationCaseId)
+                .ResolvedTraceSha256);
+        Assert.Equal(
+            "637764ae11d12e1f03ebb51418498d4a58f4240dd06ee6d7d1c85e4a118e462c",
+            FindCase(
+                first.Report,
+                BenchmarkV1Corpus.LifecycleTransientSerialPacedCaseId)
+                .ResolvedTraceSha256);
+        Assert.Equal(
+            "637764ae11d12e1f03ebb51418498d4a58f4240dd06ee6d7d1c85e4a118e462c",
+            FindCase(
+                first.Report,
+                BenchmarkV1Corpus.LifecycleTransientSerialAdaptiveR3B5PercentCaseId)
+                .ResolvedTraceSha256);
+        Assert.Equal(
+            "637764ae11d12e1f03ebb51418498d4a58f4240dd06ee6d7d1c85e4a118e462c",
+            FindCase(
+                first.Report,
+                BenchmarkV1Corpus.LifecycleTransientSerialAdaptiveR4B4PercentCaseId)
                 .ResolvedTraceSha256);
     }
 

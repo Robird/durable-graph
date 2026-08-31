@@ -763,11 +763,17 @@
 
 ## 6. 船长日志
 
+### 2026-08-31：将 transient overlap/serial 收编为 canonical lifecycle family
+
+- **Implemented**：corpus revision 8 新增 `lifecycle-transient-overlap/serial`；两条 ordinary trace 共享 step0 的两个 100B 对象，并以相同 IDs/payloads/horizon 对两个 400B transient 对象执行相同 Create/Remove multiset，最终状态完全相同。
+- **Observed**：40 cases 全部 admitted，均为四个 workload Commits 加 direct settlement。no-migration 在 pair 内均为 `Stay/Stay/Stay/Stay` 并终止于 scope `2/3`；paced 与两组 Adaptive 均为 `Stay/Stay/Rotate/Stay` 并终止于 `3/4`。overlap/serial 的 peak transient live-set 分别为 2/1，后三组策略的主差异是 serial 将 F 降低 408B。
+- **Boundary / Next**：4B W 差是当前 provisional layout fallout；本 family 只证明当前策略对有限 horizon 内等尺寸 transient overlap 敏感，不是 churn rate/lifetime prediction、GC、steady state、winner/default，也不建议应用串行化。下一步隔离 debt pressure，再研究 burst/capacity 与 horizon phase。
+
 ### 2026-08-31：将 ordinary size-skew 置换收编为 canonical matched family
 
 - **Implemented**：corpus revision 7 新增 `size-skew-low-id-small/large`；两条 trace 只交换 20B/100B payload 与 ObjectId 的绑定，形成八 traces x 四 Baselines 的 32-case matrix。
 - **Observed**：32 cases 全部 admitted。size-skew 两侧均以一个 workload Commit 加 direct settlement 到 scope `2/3`；no-migration 对置换不变，paced 与两组 Adaptive 在各 trace 内相等，low-id-large 以相同 P 换来更高 W/F/R。
-- **Boundary / Next**：ordinary bootstrap 把两个 Base 共置一个 A Frame，两种 workload 迁移都不立即释放它；结果只证明当前 ObjectId-first progress 对尺寸到 ID 绑定及 immediate-vs-terminal placement 敏感，不是旧 singleton-Frame release oracle、winner 或默认策略。下一步隔离 lifecycle/churn，再研究 debt pressure、burst/capacity 与 horizon phase。
+- **Boundary**：ordinary bootstrap 把两个 Base 共置一个 A Frame，两种 workload 迁移都不立即释放它；结果只证明当前 ObjectId-first progress 对尺寸到 ID 绑定及 immediate-vs-terminal placement 敏感，不是旧 singleton-Frame release oracle、winner 或默认策略。其后的 lifecycle 切片已由上条记录闭合。
 
 ### 2026-08-31：将 locality/ObjectId permutation 收编为 matched canonical family
 

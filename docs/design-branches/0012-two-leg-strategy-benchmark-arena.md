@@ -172,7 +172,7 @@ strategy-neutral suite identity 与 per-strategy run identity。
 
 - Arena、Baselines、Tests 三程序集 build 通过，dependency 单向；
 - 四个 strategy executor 的实际 assembly 是 `Atelia.TwoLegRotationProbe.Baselines`；
-- corpus revision 7 以八条 trace 运行 32 个 admitted cases；原有 typed outcomes、W/P/F/R 与 trace SHA
+- corpus revision 8 以十条 trace 运行 40 个 admitted cases；原有 typed outcomes、W/P/F/R 与 trace SHA
   不漂移，扩容后的 manifest/report 使用新 canonical hashes；
 - canonical `read-amplification-threshold-band` 形成三个互不支配 unique vectors，并区分两组 Adaptive
   参数；它是 hot-chain reset 与 co-resident expiry/Frame-unpin 的综合见证，不是纯 `E/G` rotation band；
@@ -184,12 +184,17 @@ strategy-neutral suite identity 与 per-strategy run identity。
   ObjectId-first paced/Adaptive 的 low-id-large 结果提高 W/F/R 而 P 相同。ordinary bootstrap
   使两个 Base 共居 A Frame，因此这是 immediate-vs-terminal placement 证据，不是旧
   singleton-Frame release oracle；
+- matched transient-lifecycle family 固定 Create/Remove multiset、ObjectId、payload、horizon 与最终状态，
+  只交换 `Create101` 与 `Remove100` 的次序，由此改变 transient 的重叠/驻留跨度并把 peak live-set
+  从 2 改为 1。no-migration 对置换不变；
+  ObjectId-first paced/Adaptive 保持 pair 内 cadence，serial 的主观察是 F 降低 408B。这不外推
+  churn rate、lifetime prediction、GC、steady state 或业务串行化；
 - Remove+Insert 反例锁定 parent debt 与 `E` 不混淆；
 - Arena-certified product 暴露 Store、workload receipts、final checkpoint 与 termination，不暴露 metrics。
 
 ## 下一阶段
 
-1. 先补 lifecycle/churn，再按 debt pressure、burst/capacity 与 horizon phase 补齐最小 workload families；
+1. 先补 debt pressure，再按 burst/capacity 与 horizon phase 补齐最小 workload families；
 2. 冻结 competition packet：contract、suite revision、evaluator/settlement/layout identities、prior art、目录权限；
 3. 再启动多个独立 candidate projects，由 organizer 集成复跑，不排榜；
 4. 只有 candidate 真实需要直接物理 Store 输出时才实现 untrusted artifact validator。

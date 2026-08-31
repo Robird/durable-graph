@@ -57,7 +57,7 @@ internal static class BenchmarkV1ProtocolIdentities {
 
 internal static class BenchmarkV1Corpus {
     public const string ManifestId = "benchmark-v1";
-    public const int ManifestRevision = 7;
+    public const int ManifestRevision = 8;
     public const string DebtZeroThenRotateNoMigrationCaseId =
         "debt-zero-then-rotate-no-migration";
     public const string DebtZeroThenRotatePacedCaseId =
@@ -122,6 +122,22 @@ internal static class BenchmarkV1Corpus {
         "size-skew-low-id-large-read-amplification-r3-b5pct";
     public const string SizeSkewLowIdLargeAdaptiveR4B4PercentCaseId =
         "size-skew-low-id-large-read-amplification-r4-b4pct";
+    public const string LifecycleTransientOverlapNoMigrationCaseId =
+        "lifecycle-transient-overlap-no-migration";
+    public const string LifecycleTransientOverlapPacedCaseId =
+        "lifecycle-transient-overlap-paced";
+    public const string LifecycleTransientOverlapAdaptiveR3B5PercentCaseId =
+        "lifecycle-transient-overlap-read-amplification-r3-b5pct";
+    public const string LifecycleTransientOverlapAdaptiveR4B4PercentCaseId =
+        "lifecycle-transient-overlap-read-amplification-r4-b4pct";
+    public const string LifecycleTransientSerialNoMigrationCaseId =
+        "lifecycle-transient-serial-no-migration";
+    public const string LifecycleTransientSerialPacedCaseId =
+        "lifecycle-transient-serial-paced";
+    public const string LifecycleTransientSerialAdaptiveR3B5PercentCaseId =
+        "lifecycle-transient-serial-read-amplification-r3-b5pct";
+    public const string LifecycleTransientSerialAdaptiveR4B4PercentCaseId =
+        "lifecycle-transient-serial-read-amplification-r4-b4pct";
 
     public static BenchmarkV1BatchDefinition Create(
         IEnumerable<StrategyBindingV1> strategies) {
@@ -244,6 +260,52 @@ internal static class BenchmarkV1Corpus {
             new BenchmarkComponentIdentityV1("size-skew-low-id-large", 1),
             sizeSkewLowIdLargeTrace,
             frozenStrategies);
+        SaveStep lifecycleStep0 = new([
+            new CreateObject(10, 100),
+            new CreateObject(20, 100),
+        ]);
+        SaveStep lifecycleCreate100 = new([new CreateObject(100, 400)]);
+        SaveStep lifecycleCreate101 = new([new CreateObject(101, 400)]);
+        SaveStep lifecycleRemove100 = new([new RemoveObject(100)]);
+        SaveStep lifecycleRemove101 = new([new RemoveObject(101)]);
+        WorkloadTrace lifecycleTransientOverlapTrace = new(
+            scenarioName: "lifecycle-transient-overlap",
+            generatorId: "handwritten",
+            generatorVersion: 1,
+            seed: 0,
+            [
+                lifecycleStep0,
+                lifecycleCreate100,
+                lifecycleCreate101,
+                lifecycleRemove100,
+                lifecycleRemove101,
+            ]);
+        WorkloadTrace lifecycleTransientSerialTrace = new(
+            scenarioName: "lifecycle-transient-serial",
+            generatorId: "handwritten",
+            generatorVersion: 1,
+            seed: 0,
+            [
+                lifecycleStep0,
+                lifecycleCreate100,
+                lifecycleRemove100,
+                lifecycleCreate101,
+                lifecycleRemove101,
+            ]);
+        BenchmarkV1CaseDefinition[] lifecycleTransientOverlapCases =
+            CreateStrategyCases(
+                new BenchmarkComponentIdentityV1(
+                    "lifecycle-transient-overlap",
+                    1),
+                lifecycleTransientOverlapTrace,
+                frozenStrategies);
+        BenchmarkV1CaseDefinition[] lifecycleTransientSerialCases =
+            CreateStrategyCases(
+                new BenchmarkComponentIdentityV1(
+                    "lifecycle-transient-serial",
+                    1),
+                lifecycleTransientSerialTrace,
+                frozenStrategies);
         return new BenchmarkV1BatchDefinition(
             ManifestId,
             ManifestRevision,
@@ -262,6 +324,8 @@ internal static class BenchmarkV1Corpus {
                 .. localityHighIdCases,
                 .. sizeSkewLowIdSmallCases,
                 .. sizeSkewLowIdLargeCases,
+                .. lifecycleTransientOverlapCases,
+                .. lifecycleTransientSerialCases,
             ]);
     }
 
