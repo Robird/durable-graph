@@ -12,12 +12,10 @@ internal sealed class BenchmarkV1CaseDefinition {
         string caseId,
         BenchmarkComponentIdentityV1 traceDefinition,
         WorkloadTrace trace,
-        BenchmarkComponentIdentityV1 targetTreatment,
-        BenchmarkComponentIdentityV1 decisionTreatment) {
+        BenchmarkComponentIdentityV1 selectionProfile) {
         ArgumentNullException.ThrowIfNull(traceDefinition);
         ArgumentNullException.ThrowIfNull(trace);
-        ArgumentNullException.ThrowIfNull(targetTreatment);
-        ArgumentNullException.ThrowIfNull(decisionTreatment);
+        ArgumentNullException.ThrowIfNull(selectionProfile);
 
         if (!StringComparer.Ordinal.Equals(traceDefinition.Id, trace.ScenarioName)) {
             throw new ArgumentException(
@@ -26,9 +24,7 @@ internal sealed class BenchmarkV1CaseDefinition {
                 nameof(traceDefinition));
         }
 
-        BenchmarkV1TreatmentSelector.Validate(
-            targetTreatment,
-            decisionTreatment);
+        BenchmarkV1SelectionProfileSelector.Validate(selectionProfile);
 
         Trace = trace;
         ManifestCase = new BenchmarkCaseManifestV1(
@@ -43,8 +39,7 @@ internal sealed class BenchmarkV1CaseDefinition {
             bootstrapStepCount: 1,
             traceStepCount: trace.Steps.Count,
             evaluatedWorkloadStepCount: trace.Steps.Count - 1,
-            targetTreatment,
-            decisionTreatment);
+            selectionProfile);
     }
 
     public BenchmarkCaseManifestV1 ManifestCase { get; }

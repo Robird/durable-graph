@@ -763,6 +763,12 @@
 
 ## 6. 船长日志
 
+### 2026-08-31：将 Adaptive 原子 profiles 接入 benchmark-v1
+
+- **Decided**：manifest schema 2 以单一 `selectionProfile` 取代 target/decision 双栏；corpus revision 3 注册 no-migration、paced、Adaptive `(3,5%)`、Adaptive `(4,4%)` 四个 exact profiles。Adaptive identity 固定映射 decimal 参数，只读取当前 normalized facts；不解析 ID、不接受任意参数、不引入 plugin/fallback。
+- **Observed**：两个 frozen workloads 共 8 cases 全部 admitted，旧四 case raw/scope 与 trace SHA 不变。handwritten 上 no-migration 为 `856/680/680/832`，其余三 profile 同为 `1536/696/804/756`；mixed 上 controls 同为 `368/164/344/352`，两 Adaptive 同为 `440/164/184/280`。每组有两个互不支配 unique vectors，但 `(3,5%)`/`(4,4%)` 都被 workload 遮蔽。
+- **Verified / Next**：独立 `H=300,D=50,B=100,G=2500` checkpoint 使两 profile 分别选择 Base/Delta，并逐字段等于 direct policy，锁定 registry 没有错绑参数。下一步把已有 threshold-band trace 接入相同 corpus，先获得 canonical 参数辨别证据，再做不合分的 Pareto reduction。
+
 ### 2026-08-31：闭合 common third-epoch continuation discriminator
 
 - **Observed**：fixed-cadence 两侧第二 epoch 终点同为 scope `3/4`、Previous debt `{10,20,30}`、per-object `H/B=1`、Current tail 52B；control 的三个 cold Base 共置一个 file-3 Frame，paced 分散在三个 Frames，source cold-head read 分别为 700/792B。

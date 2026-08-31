@@ -29,6 +29,13 @@ public sealed class BenchmarkV1JsonTests {
             "\"seed\":\"ffffffffffffffff\"",
             json,
             StringComparison.Ordinal);
+        Assert.Contains(
+            "\"schema\":{\"id\":\"two-leg-benchmark-manifest\",\"version\":2}",
+            json,
+            StringComparison.Ordinal);
+        Assert.Contains("\"selectionProfile\":", json, StringComparison.Ordinal);
+        Assert.DoesNotContain("\"targetTreatment\":", json, StringComparison.Ordinal);
+        Assert.DoesNotContain("\"decisionTreatment\":", json, StringComparison.Ordinal);
         Assert.True(
             json.IndexOf("\"caseId\":\"a-first\"", StringComparison.Ordinal) <
             json.IndexOf("\"caseId\":\"z-last\"", StringComparison.Ordinal));
@@ -70,8 +77,7 @@ public sealed class BenchmarkV1JsonTests {
             bootstrapStepCount: 1,
             traceStepCount: 1,
             evaluatedWorkloadStepCount: 0,
-            Component("target"),
-            Component("decision")));
+            Component("selection-profile")));
     }
 
     [Fact]
@@ -114,14 +120,12 @@ public sealed class BenchmarkV1JsonTests {
             "same-case",
             Component("hash-test"),
             Trace(seed: 42, updatedBaseBytes: 25),
-            BenchmarkV1TreatmentIdentities.DebtZeroThenRotate,
-            BenchmarkV1TreatmentIdentities.DeltaNoMigration);
+            BenchmarkV1SelectionProfiles.DebtZeroThenRotateDeltaNoMigration.Identity);
         BenchmarkV1CaseDefinition secondCase = new(
             "same-case",
             Component("hash-test"),
             Trace(seed: 42, updatedBaseBytes: 26),
-            BenchmarkV1TreatmentIdentities.DebtZeroThenRotate,
-            BenchmarkV1TreatmentIdentities.DeltaNoMigration);
+            BenchmarkV1SelectionProfiles.DebtZeroThenRotateDeltaNoMigration.Identity);
         BenchmarkManifestV1 firstManifest = Batch(firstCase).Manifest;
         BenchmarkManifestV1 secondManifest = Batch(secondCase).Manifest;
 
@@ -208,7 +212,7 @@ public sealed class BenchmarkV1JsonTests {
         byte[] bytes = BenchmarkV1Json.WriteReport(report);
         string json = System.Text.Encoding.UTF8.GetString(bytes);
         Assert.Equal(
-            "fd49d80c2cb4bf10f36ba32273a4cb58bec8a547720b793104c2f0885c629948",
+            "9468261733b643eb696fc743ba931a73f0e26f2f22cee03da40fd5f7d3cea611",
             BenchmarkV1Json.ComputeSha256(bytes));
         using JsonDocument document = JsonDocument.Parse(bytes);
         JsonElement cases = document.RootElement.GetProperty("cases");
@@ -424,8 +428,7 @@ public sealed class BenchmarkV1JsonTests {
         bootstrapStepCount,
         traceStepCount,
         evaluatedWorkloadStepCount,
-        Component("fixed-target"),
-        Component("base-or-delta"));
+        Component("selection-profile"));
 
     private static BenchmarkComponentIdentityV1 Component(string id) => new(id, 1);
 

@@ -56,28 +56,40 @@ internal static class BenchmarkV1ProtocolIdentities {
 
 internal static class BenchmarkV1Corpus {
     public const string ManifestId = "benchmark-v1";
-    public const int ManifestRevision = 2;
+    public const int ManifestRevision = 3;
     public const string DebtZeroThenRotateNoMigrationCaseId =
         "debt-zero-then-rotate-no-migration";
     public const string DebtZeroThenRotatePacedCaseId =
         "debt-zero-then-rotate-paced";
+    public const string DebtZeroThenRotateAdaptiveR3B5PercentCaseId =
+        "debt-zero-then-rotate-read-amplification-r3-b5pct";
+    public const string DebtZeroThenRotateAdaptiveR4B4PercentCaseId =
+        "debt-zero-then-rotate-read-amplification-r4-b4pct";
     public const string MixedSmallNoMigrationCaseId =
         "mixed-small-no-migration";
     public const string MixedSmallPacedCaseId =
         "mixed-small-paced";
+    public const string MixedSmallAdaptiveR3B5PercentCaseId =
+        "mixed-small-read-amplification-r3-b5pct";
+    public const string MixedSmallAdaptiveR4B4PercentCaseId =
+        "mixed-small-read-amplification-r4-b4pct";
 
     public static BenchmarkV1BatchDefinition Create() {
         WorkloadTrace debtZeroThenRotateTrace = CreateDebtZeroThenRotateTrace();
         GeneratedScenario generated = ScenarioGenerator.Generate(
             CreateMixedSmallDefinition());
-        BenchmarkV1CaseDefinition[] debtZeroThenRotatePair = CreateDecisionPair(
+        BenchmarkV1CaseDefinition[] debtZeroThenRotateCases = CreateProfileCases(
             DebtZeroThenRotateNoMigrationCaseId,
             DebtZeroThenRotatePacedCaseId,
+            DebtZeroThenRotateAdaptiveR3B5PercentCaseId,
+            DebtZeroThenRotateAdaptiveR4B4PercentCaseId,
             new BenchmarkComponentIdentityV1("debt-zero-then-rotate", 1),
             debtZeroThenRotateTrace);
-        BenchmarkV1CaseDefinition[] mixedSmallPair = CreateDecisionPair(
+        BenchmarkV1CaseDefinition[] mixedSmallCases = CreateProfileCases(
             MixedSmallNoMigrationCaseId,
             MixedSmallPacedCaseId,
+            MixedSmallAdaptiveR3B5PercentCaseId,
+            MixedSmallAdaptiveR4B4PercentCaseId,
             new BenchmarkComponentIdentityV1("mixed-small", 1),
             generated.Trace);
         return new BenchmarkV1BatchDefinition(
@@ -90,28 +102,42 @@ internal static class BenchmarkV1Corpus {
             BenchmarkV1ProtocolIdentities.FrameLayout,
             BenchmarkV1ProtocolIdentities.RevisionGrammar,
             [
-                .. debtZeroThenRotatePair,
-                .. mixedSmallPair,
+                .. debtZeroThenRotateCases,
+                .. mixedSmallCases,
             ]);
     }
 
-    private static BenchmarkV1CaseDefinition[] CreateDecisionPair(
+    private static BenchmarkV1CaseDefinition[] CreateProfileCases(
         string noMigrationCaseId,
         string pacedCaseId,
+        string adaptiveR3B5PercentCaseId,
+        string adaptiveR4B4PercentCaseId,
         BenchmarkComponentIdentityV1 traceDefinition,
         WorkloadTrace trace) => [
             new BenchmarkV1CaseDefinition(
                 noMigrationCaseId,
                 traceDefinition,
                 trace,
-                BenchmarkV1TreatmentIdentities.DebtZeroThenRotate,
-                BenchmarkV1TreatmentIdentities.DeltaNoMigration),
+                BenchmarkV1SelectionProfiles
+                    .DebtZeroThenRotateDeltaNoMigration.Identity),
             new BenchmarkV1CaseDefinition(
                 pacedCaseId,
                 traceDefinition,
                 trace,
-                BenchmarkV1TreatmentIdentities.DebtZeroThenRotate,
-                BenchmarkV1TreatmentIdentities.DeltaPacedOneDebtByObjectId),
+                BenchmarkV1SelectionProfiles
+                    .DebtZeroThenRotateDeltaPacedOneDebtByObjectId.Identity),
+            new BenchmarkV1CaseDefinition(
+                adaptiveR3B5PercentCaseId,
+                traceDefinition,
+                trace,
+                BenchmarkV1SelectionProfiles
+                    .ReadAmplificationBaseBudgetR3B5Percent.Identity),
+            new BenchmarkV1CaseDefinition(
+                adaptiveR4B4PercentCaseId,
+                traceDefinition,
+                trace,
+                BenchmarkV1SelectionProfiles
+                    .ReadAmplificationBaseBudgetR4B4Percent.Identity),
         ];
 
     private static WorkloadTrace CreateDebtZeroThenRotateTrace() => new(

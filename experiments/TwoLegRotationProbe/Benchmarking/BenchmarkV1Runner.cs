@@ -50,9 +50,8 @@ internal static class BenchmarkV1Runner {
                 session.Cursor.PublishedRevisionAddress,
                 trace.Steps[traceStepIndex]);
             BenchmarkV1StepSelection selection =
-                BenchmarkV1TreatmentSelector.Select(
-                    manifestCase.TargetTreatment,
-                    manifestCase.DecisionTreatment,
+                BenchmarkV1SelectionProfileSelector.Select(
+                    manifestCase.SelectionProfile,
                     facts);
             ExplicitCandidatePairEvaluation pair =
                 ExplicitCandidatePairEvaluator.Evaluate(

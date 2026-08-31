@@ -132,8 +132,9 @@ with the existing planners/evaluator.
 5. A policy-selected exact capacity failure must remain typed and cause no fallback or
    Store mutation. The unchanged harness retains its existing generic
    `RejectedUnproven` contract; v0 does not duplicate that fixture.
-6. Evaluator comparison retains raw W/P/F/R and may report no winner. V0 does not enter
-   the canonical benchmark registry/report until another consumer justifies that change.
+6. Evaluator comparison retains raw W/P/F/R and may report no winner. Benchmark-v1
+   binds only the two named parameter tuples as atomic selection profiles; it does not
+   accept arbitrary decimals or expose a policy plugin surface.
 
 Known blind spots are intentional: equal payload projections may hide different shared
 Frame pressure; the simple trigger may rotate frequently on some traces; soft payload
@@ -192,3 +193,14 @@ Both final per-object payload ratios are `H/B=1`; their different R is retained
 full-Frame layout/provenance, not object payload-chain amplification. The witness does
 not select a default, model steady state, or turn payload `E/G` into physical sizing
 authority.
+
+Manifest-schema v2 / corpus revision 3 now runs `(3,5%)` and `(4,4%)` as atomic
+selection profiles beside no-migration and paced controls on two frozen workloads. The
+profiles are exact closed-registry identities; one discriminating checkpoint verifies
+that they bind the intended decimal parameters rather than merely producing the same
+result on the corpus. Both benchmark workloads nevertheless mask the parameter
+difference. On `debt-zero-then-rotate`, Adaptive equals paced at
+`W/P/F/R=1536/696/804/756`; on `mixed-small`, both Adaptive profiles produce
+`440/164/184/280` versus the controls' `368/164/344/352`. Each workload therefore has
+two incomparable unique vectors, but neither distinguishes the Adaptive tuples or
+selects a default.

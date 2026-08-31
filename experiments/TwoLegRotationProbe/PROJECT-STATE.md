@@ -181,15 +181,16 @@ PublishedRevision 为 shared prior-snapshot anchor。accepted new head 的 curre
   terminal source A 已退出 final B/C current reconstruction；
 - benchmark-v1 consumer：closed registry 把 trace step0 Create-only population 共置为一个 full-OVD A Frame，
   再写 metadata-only B anchor，evaluator 只消费 steps[1..]；manifest 固定 fixture/trace/generator/seed、expanded
-  trace SHA-256、target/decision treatment 与 evaluator/settlement/accounting/layout/grammar/read-schedule identity；
+  trace SHA-256、atomic selection profile 与 evaluator/settlement/accounting/layout/grammar/read-schedule identity；
   batch runner 只在 session Store 上 normalize/evaluate/apply，typed rejection 不 fallback；canonical UTF-8
   manifest/report 使用固定 tokens/order、16位 hex seed、manifest+trace SHA-256，只有 admitted 输出 W/P/F/R、
-  final cursor 与 settlement 摘要；corpus revision 2 已形成 handwritten 与 seed12345 mixed 两组
-  no-migration/paced matched pair，并由构造与测试锁定除 CaseId 外唯一实验输入差异是 decision treatment；
-- 首组 matched evidence：mixed pair 因两个 workload step 都没有 eligible A-debt `NoChange` 而产出完全相同的
-  `W/P/F/R=368/164/344/352`，构成 negative control；handwritten no-migration 为
-  `856/680/680/832 @ scope 2/3`，paced 为 `1536/696/804/756 @ scope 3/4`。后者在 workload 内多轮转一次，
-  又被 terminal settlement 无条件轮转，因此证明的是 horizon/rotation coupling，不是 paced 的一般优劣；
+  final cursor 与 settlement 摘要；manifest schema 2 以单一 `selectionProfile` 取代 target/decision 双栏，
+  corpus revision 3 在 handwritten 与 seed12345 mixed 两组 workload 上各运行 no-migration、paced、Adaptive
+  `(3,5%)`、Adaptive `(4,4%)`，unknown/wrong-version profile fail-close；
+- 首组跨 workload profile evidence：handwritten 上 no-migration 为 `856/680/680/832`，其余三 profile 同为
+  `1536/696/804/756`；mixed 上 no-migration/paced 同为 `368/164/344/352`，两 Adaptive 同为
+  `440/164/184/280`。每个 workload 都有两个互不支配的 unique vectors，而两组 Adaptive 参数均被现有
+  corpus 遮蔽；独立 ratio=3.5 checkpoint 已锁 profile 到 exact decimal 参数，而不是只看同结果；
 - named fixed-two-scope-advances diagnostic：窄 `ExecuteCase` seam 复用 canonical benchmark-v1 执行路径，
   test-local continuation 只为 control 真实追加一个 zero-workload terminal settlement。两侧最终同为 scope 3/4；
   control `commits/W/P/F/R=6/944/680/680/752`、paced `5/1536/696/804/756`。control final Previous debt
@@ -214,29 +215,30 @@ continuation-state discriminator 已闭合：相同 coarse semantic/policy input
 都可能发生冷启动”的 guardrail 是两个不同问题，不能用 final R 自动替代后者；当前仍不把中间读轨迹
 提升成第五 score。
 
-下一焦点是让 adaptive profiles 进入相同 benchmark horizon，形成跨 workload 的 comparable raw evidence。
-由于 adaptive 的 target 与 Base/Delta/migration decisions 来自同一次 coupled selection，接入时应保持一个
-named profile 的原子身份，不能让 manifest 暗示 target/decision 可以任意交叉组合。
+Adaptive named profiles 已进入相同 benchmark horizon：单一 profile identity 原子选择 target 与两侧
+decisions，manifest schema 2 不再表达伪 target/decision 笛卡尔积；旧四 case 的 raw/scopes 与两条 trace hash
+保持不变。当前两个 frozen workloads 都把 `(3,5%)` 与 `(4,4%)` 压成同一结果，因此它们能证明跨 profile
+trade 和参数遮蔽，却不能支撑调参或默认值选择。
 
 ## 下一编码切片
 
-把 adaptive `(3,5%)` 与 `(4,4%)` 作为两个 coupled named profiles 接入 closed benchmark-v1 runner，先复用
-现有两个 frozen workloads 形成 matched、typed outcomes。保持 hard rejection 非数值化，不扩张 W/P/F/R
-report schema；若现有 target/decision 双 identity 无法无歧义表达 coupled profile，先以最小版本化 binding
-修正 manifest contract，而不是开放任意策略插件或参数 cross-product。
+把已经能区分 `(3,5%)`/`(4,4%)` 的 threshold-band trace 以第三个 frozen workload 接入 corpus，验证现有
+step0 bootstrap/evaluator horizon 能复现其参数分叉；仍对四个 atomic profiles 使用同一输入。只增加一条已
+有因果证据的 workload，不引入任意 scenario 搜索、scalar score 或新 report 字段；若 canonical bootstrap
+改变既有因果条件，则保留 typed discrepancy，而不是强行匹配 test-local golden。
 
 ## 近期 roadmap
 
-1. **接入 adaptive named profiles**：保持 coupled target/decision 身份，在两个 frozen workloads 上复用同一
-   evaluator/horizon；
-2. **形成 Pareto evidence**：只在同 manifest/workload/horizon 的 admitted outcomes 间比较 raw vectors，
-   inadmissibility 保持独立，不提前合分；
+1. **增加参数辨别 workload**：把 threshold-band causal trace 接入同一 atomic-profile benchmark；
+2. **形成 Pareto reduction**：只在同 manifest/workload/horizon 的 admitted outcomes 间比较 raw vectors，
+   exact ties 归为等价类，inadmissibility 保持独立，不提前合分；
 3. **再启动自动优化**：只允许修改窄 policy seam，保留 Pareto candidates/counterexamples，允许 `no winner`。
 
 ## 未闭合事项
 
-- 小型 matrix 已分别锁定参数被遮蔽、read-threshold、Base-fraction target 与 typed inadmissibility；它仍只有
-  bounded synthetic shapes，不能据此选择默认参数或假定真实 workload 上存在同一 Pareto 前沿；
+- 小型 matrix 已分别锁定参数被遮蔽、read-threshold、Base-fraction target 与 typed inadmissibility；现有
+  canonical corpus 的两个 workloads 仍无法区分 Adaptive 参数，需要至少一个参数辨别 workload 才适合进入
+  profile-level Pareto reduction，且仍不能据此选择产品默认值；
 - common third epoch 已证明 retained Frame provenance 会改变 workload-checkpoint cold reads，却可在旧 Frame
   全部覆盖后得到相同 closed W/P/F/R；是否把 intermediate cold-read pressure 设为 guardrail，仍需 workload
   restart/read schedule，而不能从 final-only R 推导；

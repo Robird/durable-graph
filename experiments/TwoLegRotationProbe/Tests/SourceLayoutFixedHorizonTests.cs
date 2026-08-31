@@ -41,19 +41,21 @@ public sealed partial class RotationPolicyComparisonTests {
         FixedHorizonCellResult sharedNoMigration = RunFixedHorizonCell(
             shared,
             trace,
-            BenchmarkV1TreatmentIdentities.DeltaNoMigration);
+            BenchmarkV1SelectionProfiles.DebtZeroThenRotateDeltaNoMigration.Identity);
         FixedHorizonCellResult sharedPaced = RunFixedHorizonCell(
             shared,
             trace,
-            BenchmarkV1TreatmentIdentities.DeltaPacedOneDebtByObjectId);
+            BenchmarkV1SelectionProfiles
+                .DebtZeroThenRotateDeltaPacedOneDebtByObjectId.Identity);
         FixedHorizonCellResult splitNoMigration = RunFixedHorizonCell(
             split,
             trace,
-            BenchmarkV1TreatmentIdentities.DeltaNoMigration);
+            BenchmarkV1SelectionProfiles.DebtZeroThenRotateDeltaNoMigration.Identity);
         FixedHorizonCellResult splitPaced = RunFixedHorizonCell(
             split,
             trace,
-            BenchmarkV1TreatmentIdentities.DeltaPacedOneDebtByObjectId);
+            BenchmarkV1SelectionProfiles
+                .DebtZeroThenRotateDeltaPacedOneDebtByObjectId.Identity);
 
         FixedHorizonRawVector noMigrationSegment1 = new(5, 1476, 1288, 1288, 1320);
         FixedHorizonRawVector noMigrationSegment2 = new(1, 80, 80, 1288, 1352);
@@ -109,7 +111,7 @@ public sealed partial class RotationPolicyComparisonTests {
     private static FixedHorizonCellResult RunFixedHorizonCell(
         AnchoredInteractionFixture fixture,
         WorkloadTrace trace,
-        BenchmarkComponentIdentityV1 decisionTreatment) {
+        BenchmarkComponentIdentityV1 selectionProfile) {
         PolicySource source = fixture.Source;
         long sourceTailBytes = FixedHorizonTotalTailBytes(source.Store);
         EvaluatorV1Session first = new(
@@ -124,9 +126,9 @@ public sealed partial class RotationPolicyComparisonTests {
                 first.Cursor.FileScope.CurrentFileNumber,
                 first.Cursor.PublishedRevisionAddress,
                 trace.Steps[stepIndex]);
-            BenchmarkV1StepSelection selection = BenchmarkV1TreatmentSelector.Select(
-                BenchmarkV1TreatmentIdentities.DebtZeroThenRotate,
-                decisionTreatment,
+            BenchmarkV1StepSelection selection =
+                BenchmarkV1SelectionProfileSelector.Select(
+                selectionProfile,
                 facts);
             Assert.Equal(CandidateTarget.StayB, selection.Target);
 

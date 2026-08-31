@@ -157,7 +157,7 @@ queries beyond current reconstruction.
 
 `BenchmarkV1Runner` is the first real consumer of the evaluator seam. Every case is
 resolved from one closed registry and carries versioned identities for source fixture,
-trace definition, generator, target/decision treatments, evaluator, settlement,
+trace definition, generator, one atomic selection profile, evaluator, settlement,
 accounting, provisional frame layout/grammar, and read schedule. Its manifest also
 contains the SHA-256 of the exact expanded trace, so generator or handwritten payload
 drift changes the manifest hash before a result is accepted.
@@ -170,9 +170,11 @@ single-A-Frame topology is an explicit experimental treatment, not a general sou
 layout claim; exceeding its one-Frame envelope fails the batch instead of becoming an
 evaluator capacity outcome.
 
-The closed policy registry currently exposes one historical-facts-only target,
-`debt-zero-then-rotate/1`, and two Delta decision treatments: no migration or migrate
-the smallest eligible A-debt NoChange ObjectId. Selectors receive only current
+The closed policy registry exposes four atomic selection profiles: debt-zero rotation
+with either no migration or smallest-eligible-debt pacing, plus Adaptive `(3,5%)` and
+`(4,4%)`. Each exact identity selects Target, Stay-B decisions, and Rotate-C decisions
+in one call. Adaptive IDs map to fixed decimal parameters in the registry; IDs are not
+parsed and arbitrary parameter input is not accepted. Selectors receive only current
 `NormalizedSaveFacts`; they cannot inspect step index, future trace, candidate
 feasibility, or observations, and never fall back after rejection.
 
@@ -184,30 +186,41 @@ dump of `FinalColdHeadReadObservation` or candidate diagnostics. Rejected leaves
 no metrics/cursor/settlement properties. V1 is writer-only: external parsing, file I/O,
 and CLI publication remain outside this slice.
 
-Corpus revision 2 runs both decision treatments over two matched inputs. Within each
-pair the source fixture, exact expanded trace, target treatment, evaluator protocols,
-and accounting horizon are identical; apart from the case ID, the only experimental
-input that changes is the decision treatment. The canonical raw outcomes are:
+Corpus revision 3 runs all four profiles over two matched inputs. Within each workload
+group the source fixture, exact expanded trace, evaluator protocols, and accounting
+horizon are identical; apart from the case ID, the only experimental input that changes
+is the atomic selection profile. The canonical raw outcomes are:
 
-| Trace | Decision treatment | W | P | F | R | Final scope |
+| Trace | Selection profile | W | P | F | R | Final scope |
 |---|---|---:|---:|---:|---:|---|
 | `debt-zero-then-rotate` | no migration | 856 | 680 | 680 | 832 | 2/3 |
 | `debt-zero-then-rotate` | paced one debt | 1536 | 696 | 804 | 756 | 3/4 |
+| `debt-zero-then-rotate` | Adaptive `(3,5%)` | 1536 | 696 | 804 | 756 | 3/4 |
+| `debt-zero-then-rotate` | Adaptive `(4,4%)` | 1536 | 696 | 804 | 756 | 3/4 |
 | `mixed-small` seed 12345 | no migration | 368 | 164 | 344 | 352 | 2/3 |
 | `mixed-small` seed 12345 | paced one debt | 368 | 164 | 344 | 352 | 2/3 |
+| `mixed-small` seed 12345 | Adaptive `(3,5%)` | 440 | 164 | 184 | 280 | 3/4 |
+| `mixed-small` seed 12345 | Adaptive `(4,4%)` | 440 | 164 | 184 | 280 | 3/4 |
 
-All four cases are admitted. `mixed-small` is a negative control: neither evaluated
-step contains an eligible A-debt `NoChange`, so the two treatment labels execute the
-same decisions and produce the same result. The handwritten pair is active, but it
-also exposes the current horizon coupling: pacing rotates once during the workload,
-then the unconditional terminal settlement rotates again. Its higher W/P/F and lower
-R therefore cannot be attributed to a general pacing effect or used to name a winner.
+All eight cases are admitted. On `debt-zero-then-rotate`, both Adaptive profiles equal
+paced exactly; on `mixed-small`, no-migration equals paced while both Adaptive profiles
+equal each other. Thus the frozen corpus masks the parameter difference. The two unique
+vectors on each workload are nevertheless incomparable: Adaptive pays 72 more W on
+`mixed-small` for equal P, 160 lower F, and 72 lower R, while the handwritten control
+trades lower W/P/F for higher R. This is matched Pareto evidence, not a default profile.
 
-The manifest revision changed without changing the v1 JSON schemas. Pair identity is
-currently enforced by corpus construction and executable tests; no duplicate
-`ComparisonGroupId`, generic policy interface, or score was introduced. The report
-also rejects an outcome whose declared workload horizon differs from its manifest, or
-whose admitted/capacity phase cannot be emitted by evaluator v1.
+Manifest schema version 2 replaces the old target/decision pair with one
+`selectionProfile`; corpus revision 3 records the eight-case expansion. Report schema
+and W/P/F/R leaves are unchanged and remain bound through the manifest SHA-256. There
+is no compatibility layer, generic policy interface, arbitrary parameter input, or
+score. The report also rejects an outcome whose declared workload horizon differs from
+its manifest, or whose admitted/capacity phase cannot be emitted by evaluator v1.
+Executable authority is split between
+[`BenchmarkV1RunnerTests.cs`](Tests/BenchmarkV1RunnerTests.cs) for the eight cases and
+canonical hashes,
+[`BenchmarkAdaptiveSelectionProfileTests.cs`](Tests/BenchmarkAdaptiveSelectionProfileTests.cs)
+for divergent exact parameter binding, and
+[`BenchmarkV1JsonTests.cs`](Tests/BenchmarkV1JsonTests.cs) for the schema-2 JSON leaf.
 
 ### Named fixed-two-scope-advances diagnostic
 
@@ -433,7 +446,9 @@ and [`ReadAmplificationBaseBudgetPolicyCapacityTests.cs`](Tests/ReadAmplificatio
 - decide whether the optimization protocol needs an intermediate cold-read guardrail or
   intentionally keeps v1's final-head-only R; the common third epoch proves these are
   observably different questions;
-- bind the coupled adaptive target/decision profiles into the closed benchmark runner
-  without presenting their two halves as an arbitrary cross-product;
+- add the existing threshold-band causal trace as a third frozen workload because the
+  current two-workload corpus masks `(3,5%)` versus `(4,4%)`;
+- only then define a minimal Pareto comparison over same-workload admitted profile
+  results, preserving exact ties and keeping typed inadmissibility outside ranking;
 - retain Pareto/raw outcomes until workload/SLO evidence justifies guardrails or a
   ranking rule.

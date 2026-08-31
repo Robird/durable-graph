@@ -18,7 +18,7 @@ internal sealed record BenchmarkComponentIdentityV1 {
 
 internal static class BenchmarkV1Identities {
     public static readonly BenchmarkComponentIdentityV1 ManifestSchema =
-        new("two-leg-benchmark-manifest", 1);
+        new("two-leg-benchmark-manifest", 2);
 
     public static readonly BenchmarkComponentIdentityV1 ReportSchema =
         new("two-leg-benchmark-report", 1);

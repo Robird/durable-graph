@@ -86,8 +86,7 @@ internal sealed record BenchmarkCaseManifestV1 {
         int bootstrapStepCount,
         int traceStepCount,
         int evaluatedWorkloadStepCount,
-        BenchmarkComponentIdentityV1 targetTreatment,
-        BenchmarkComponentIdentityV1 decisionTreatment) {
+        BenchmarkComponentIdentityV1 selectionProfile) {
         BenchmarkV1Text.ValidateId(caseId, nameof(caseId));
         ArgumentNullException.ThrowIfNull(sourceFixture);
         if (sourceFixture != BenchmarkV1Identities.SourceFixture) {
@@ -129,10 +128,8 @@ internal sealed record BenchmarkCaseManifestV1 {
         BootstrapStepCount = bootstrapStepCount;
         TraceStepCount = traceStepCount;
         EvaluatedWorkloadStepCount = evaluatedWorkloadStepCount;
-        TargetTreatment = targetTreatment ??
-            throw new ArgumentNullException(nameof(targetTreatment));
-        DecisionTreatment = decisionTreatment ??
-            throw new ArgumentNullException(nameof(decisionTreatment));
+        SelectionProfile = selectionProfile ??
+            throw new ArgumentNullException(nameof(selectionProfile));
     }
 
     public string CaseId { get; }
@@ -153,7 +150,5 @@ internal sealed record BenchmarkCaseManifestV1 {
 
     public int EvaluatedWorkloadStepCount { get; }
 
-    public BenchmarkComponentIdentityV1 TargetTreatment { get; }
-
-    public BenchmarkComponentIdentityV1 DecisionTreatment { get; }
+    public BenchmarkComponentIdentityV1 SelectionProfile { get; }
 }

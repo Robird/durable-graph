@@ -91,8 +91,7 @@ internal static class BenchmarkV1Json {
         writer.WriteNumber(
             "evaluatedWorkloadStepCount",
             benchmarkCase.EvaluatedWorkloadStepCount);
-        WriteComponent(writer, "targetTreatment", benchmarkCase.TargetTreatment);
-        WriteComponent(writer, "decisionTreatment", benchmarkCase.DecisionTreatment);
+        WriteComponent(writer, "selectionProfile", benchmarkCase.SelectionProfile);
         writer.WriteEndObject();
     }
 
