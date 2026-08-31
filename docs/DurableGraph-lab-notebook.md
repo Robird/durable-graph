@@ -763,11 +763,17 @@
 
 ## 6. 船长日志
 
+### 2026-08-31：将 ordinary size-skew 置换收编为 canonical matched family
+
+- **Implemented**：corpus revision 7 新增 `size-skew-low-id-small/large`；两条 trace 只交换 20B/100B payload 与 ObjectId 的绑定，形成八 traces x 四 Baselines 的 32-case matrix。
+- **Observed**：32 cases 全部 admitted。size-skew 两侧均以一个 workload Commit 加 direct settlement 到 scope `2/3`；no-migration 对置换不变，paced 与两组 Adaptive 在各 trace 内相等，low-id-large 以相同 P 换来更高 W/F/R。
+- **Boundary / Next**：ordinary bootstrap 把两个 Base 共置一个 A Frame，两种 workload 迁移都不立即释放它；结果只证明当前 ObjectId-first progress 对尺寸到 ID 绑定及 immediate-vs-terminal placement 敏感，不是旧 singleton-Frame release oracle、winner 或默认策略。下一步隔离 lifecycle/churn，再研究 debt pressure、burst/capacity 与 horizon phase。
+
 ### 2026-08-31：将 locality/ObjectId permutation 收编为 matched canonical family
 
 - **Implemented**：corpus revision 6 新增 `locality-next-update-low-id/high-id`；两条 trace 共享 bootstrap 与首个 `StrategyStepViewV1`/selection，只在下一次等尺寸 Update 的 ObjectId 上置换，形成六 traces x 四 Baselines 的 24-case matrix。
 - **Observed**：全部选择 `Stay/Stay`，以两个 workload Commits 加 direct settlement 到 scope `2/3`。no-migration low/high 同为 `448/256/256/248`；paced 为 `456/256/448/440`、`452/152/340/292`；两组 Adaptive 参数在各 trace 内相等，low/high 为 `452/252/444/288`、`348/152/340/332`。
-- **Boundary / Next**：候选首步看不到 future Update；结果只证明 ObjectId-first assignment 对 next-update locality 敏感，不是长期 hot/cold、温度推断、旧 singleton-Frame oracle 复制、winner 或默认策略。下一步把 payload-skew 化简为 ordinary matched size-skew family。
+- **Boundary**：候选首步看不到 future Update；结果只证明 ObjectId-first assignment 对 next-update locality 敏感，不是长期 hot/cold、温度推断、旧 singleton-Frame oracle 复制、winner 或默认策略。其后的 size-skew 切片已由上条记录闭合。
 
 ### 2026-08-31：将 debt-share target boundary 收编为第四个 canonical workload
 

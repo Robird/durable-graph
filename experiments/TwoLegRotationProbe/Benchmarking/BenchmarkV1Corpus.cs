@@ -57,7 +57,7 @@ internal static class BenchmarkV1ProtocolIdentities {
 
 internal static class BenchmarkV1Corpus {
     public const string ManifestId = "benchmark-v1";
-    public const int ManifestRevision = 6;
+    public const int ManifestRevision = 7;
     public const string DebtZeroThenRotateNoMigrationCaseId =
         "debt-zero-then-rotate-no-migration";
     public const string DebtZeroThenRotatePacedCaseId =
@@ -106,6 +106,22 @@ internal static class BenchmarkV1Corpus {
         "locality-next-update-high-id-read-amplification-r3-b5pct";
     public const string LocalityHighIdAdaptiveR4B4PercentCaseId =
         "locality-next-update-high-id-read-amplification-r4-b4pct";
+    public const string SizeSkewLowIdSmallNoMigrationCaseId =
+        "size-skew-low-id-small-no-migration";
+    public const string SizeSkewLowIdSmallPacedCaseId =
+        "size-skew-low-id-small-paced";
+    public const string SizeSkewLowIdSmallAdaptiveR3B5PercentCaseId =
+        "size-skew-low-id-small-read-amplification-r3-b5pct";
+    public const string SizeSkewLowIdSmallAdaptiveR4B4PercentCaseId =
+        "size-skew-low-id-small-read-amplification-r4-b4pct";
+    public const string SizeSkewLowIdLargeNoMigrationCaseId =
+        "size-skew-low-id-large-no-migration";
+    public const string SizeSkewLowIdLargePacedCaseId =
+        "size-skew-low-id-large-paced";
+    public const string SizeSkewLowIdLargeAdaptiveR3B5PercentCaseId =
+        "size-skew-low-id-large-read-amplification-r3-b5pct";
+    public const string SizeSkewLowIdLargeAdaptiveR4B4PercentCaseId =
+        "size-skew-low-id-large-read-amplification-r4-b4pct";
 
     public static BenchmarkV1BatchDefinition Create(
         IEnumerable<StrategyBindingV1> strategies) {
@@ -195,6 +211,39 @@ internal static class BenchmarkV1Corpus {
             new BenchmarkComponentIdentityV1("locality-next-update-high-id", 1),
             localityHighIdTrace,
             frozenStrategies);
+        SaveStep sizeSkewStep1 = new([new CreateObject(1001, 1)]);
+        WorkloadTrace sizeSkewLowIdSmallTrace = new(
+            scenarioName: "size-skew-low-id-small",
+            generatorId: "handwritten",
+            generatorVersion: 1,
+            seed: 0,
+            [
+                new SaveStep([
+                    new CreateObject(10, 20),
+                    new CreateObject(20, 100),
+                ]),
+                sizeSkewStep1,
+            ]);
+        WorkloadTrace sizeSkewLowIdLargeTrace = new(
+            scenarioName: "size-skew-low-id-large",
+            generatorId: "handwritten",
+            generatorVersion: 1,
+            seed: 0,
+            [
+                new SaveStep([
+                    new CreateObject(10, 100),
+                    new CreateObject(20, 20),
+                ]),
+                sizeSkewStep1,
+            ]);
+        BenchmarkV1CaseDefinition[] sizeSkewLowIdSmallCases = CreateStrategyCases(
+            new BenchmarkComponentIdentityV1("size-skew-low-id-small", 1),
+            sizeSkewLowIdSmallTrace,
+            frozenStrategies);
+        BenchmarkV1CaseDefinition[] sizeSkewLowIdLargeCases = CreateStrategyCases(
+            new BenchmarkComponentIdentityV1("size-skew-low-id-large", 1),
+            sizeSkewLowIdLargeTrace,
+            frozenStrategies);
         return new BenchmarkV1BatchDefinition(
             ManifestId,
             ManifestRevision,
@@ -211,6 +260,8 @@ internal static class BenchmarkV1Corpus {
                 .. debtShareDilutionCases,
                 .. localityLowIdCases,
                 .. localityHighIdCases,
+                .. sizeSkewLowIdSmallCases,
+                .. sizeSkewLowIdLargeCases,
             ]);
     }
 
