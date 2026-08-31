@@ -204,27 +204,36 @@ public sealed partial class RotationPolicyComparisonTests {
             new SaveStep([new UpdateObject(10, 100, 50)]),
             new SaveStep([new CreateObject(1001, 1)]),
         ];
-        ReadAmplificationBaseBudgetPolicyParameters parameters = new(3m, 0.05m);
+        ReadAmplificationBaseBudgetPolicyParameters adaptive35Parameters =
+            new(3m, 0.05m);
+        ReadAmplificationBaseBudgetPolicyParameters adaptive44Parameters =
+            new(4m, 0.04m);
 
         AdaptiveMatchedRun control = RunAdaptiveMatchedTreatment(
             source,
             steps,
             AdaptiveMatchedTreatment.DeltaNoMigration,
-            parameters);
+            adaptive35Parameters);
         AdaptiveMatchedRun paced = RunAdaptiveMatchedTreatment(
             source,
             steps,
             AdaptiveMatchedTreatment.DeltaPacedOneDebt,
-            parameters);
-        AdaptiveMatchedRun adaptive = RunAdaptiveMatchedTreatment(
+            adaptive35Parameters);
+        AdaptiveMatchedRun adaptive35 = RunAdaptiveMatchedTreatment(
             source,
             steps,
             AdaptiveMatchedTreatment.Adaptive,
-            parameters);
+            adaptive35Parameters);
+        AdaptiveMatchedRun adaptive44 = RunAdaptiveMatchedTreatment(
+            source,
+            steps,
+            AdaptiveMatchedTreatment.Adaptive,
+            adaptive44Parameters);
 
         Assert.Equal(AdaptiveMatchedTargets, control.Targets);
         Assert.Equal(AdaptiveMatchedTargets, paced.Targets);
-        Assert.Equal(AdaptiveMatchedTargets, adaptive.Targets);
+        Assert.Equal(AdaptiveMatchedTargets, adaptive35.Targets);
+        Assert.Equal(adaptive35.Targets, adaptive44.Targets);
         Assert.Equal(
             [
                 new uint[] { 10, 20, 30, 40 },
@@ -233,13 +242,20 @@ public sealed partial class RotationPolicyComparisonTests {
                 new uint[] { 10 },
                 Array.Empty<uint>(),
             ],
-            adaptive.SourceDebtByStep);
+            adaptive35.SourceDebtByStep);
+        Assert.Equal(adaptive35.SourceDebtByStep, adaptive44.SourceDebtByStep);
         Assert.Equal(
             [20U, 30U, 40U, 10U, null],
-            adaptive.ProgressOverrideObjectIds);
+            adaptive35.ProgressOverrideObjectIds);
+        Assert.Equal(
+            adaptive35.ProgressOverrideObjectIds,
+            adaptive44.ProgressOverrideObjectIds);
         Assert.Equal(
             [new uint[] { 20 }, new uint[] { 30 }, new uint[] { 40 }, [], []],
-            adaptive.MigrationObjectIdsByStep);
+            adaptive35.MigrationObjectIdsByStep);
+        Assert.Equal(
+            adaptive35.MigrationObjectIdsByStep,
+            adaptive44.MigrationObjectIdsByStep);
         Assert.Equal(
             [
                 new UpdateWriteDecision(10, UpdateWriteMode.Delta),
@@ -247,23 +263,34 @@ public sealed partial class RotationPolicyComparisonTests {
                 new UpdateWriteDecision(10, UpdateWriteMode.Delta),
                 new UpdateWriteDecision(10, UpdateWriteMode.Base),
             ],
-            adaptive.UpdateDecisionsByStep.Take(4).Select(Assert.Single));
-        Assert.Empty(adaptive.UpdateDecisionsByStep[4]);
+            adaptive35.UpdateDecisionsByStep.Take(4).Select(Assert.Single));
+        Assert.Empty(adaptive35.UpdateDecisionsByStep[4]);
         Assert.Equal(
-            [100L, 150L, 200L, 250L, 300L],
-            control.HotObjectSourceReconstructionPayloadBytesByStep);
-        Assert.Equal(
-            control.HotObjectSourceReconstructionPayloadBytesByStep,
-            paced.HotObjectSourceReconstructionPayloadBytesByStep);
-        Assert.Equal(
-            [100L, 150L, 200L, 250L, 100L],
-            adaptive.HotObjectSourceReconstructionPayloadBytesByStep);
+            adaptive35.UpdateDecisionsByStep,
+            adaptive44.UpdateDecisionsByStep);
+        AssertRealizedHotObjectHeadToBasePayloads(
+            control,
+            [100L, 150L, 200L, 250L, 300L, 100L]);
+        AssertRealizedHotObjectHeadToBasePayloads(
+            paced,
+            [100L, 150L, 200L, 250L, 300L, 100L]);
+        AssertRealizedHotObjectHeadToBasePayloads(
+            adaptive35,
+            [100L, 150L, 200L, 250L, 100L, 100L]);
+        AssertRealizedHotObjectHeadToBasePayloads(
+            adaptive44,
+            [100L, 150L, 200L, 250L, 100L, 100L]);
+        AssertRealizedHeadToBasePayloadCheckpointsEqual(
+            adaptive35,
+            adaptive44);
 
         Assert.Equal([10U, 20U, 30U, 40U, 1001U], control.FinalDebtObjectIds);
         Assert.Equal([10U, 1001U], paced.FinalDebtObjectIds);
-        Assert.Equal([1001U], adaptive.FinalDebtObjectIds);
+        Assert.Equal([1001U], adaptive35.FinalDebtObjectIds);
+        Assert.Equal(adaptive35.FinalDebtObjectIds, adaptive44.FinalDebtObjectIds);
         AssertExactState(control.FinalState, paced.FinalState);
-        AssertExactState(control.FinalState, adaptive.FinalState);
+        AssertExactState(control.FinalState, adaptive35.FinalState);
+        AssertExactState(adaptive35.FinalState, adaptive44.FinalState);
 
         Assert.Equal(
             new FixedHorizonRawVector(6, 924, 476, 476, 524),
@@ -273,28 +300,35 @@ public sealed partial class RotationPolicyComparisonTests {
             paced.Raw);
         Assert.Equal(
             new FixedHorizonRawVector(6, 1296, 472, 796, 524),
-            adaptive.Raw);
+            adaptive35.Raw);
+        Assert.Equal(
+            new FixedHorizonRawVector(6, 1296, 472, 796, 524),
+            adaptive44.Raw);
 
         // These are raw fixed-horizon facts, not a scalar score or winner.
         Assert.Equal(372,
-            adaptive.Raw.TotalPhysicalWriteBytes -
+            adaptive35.Raw.TotalPhysicalWriteBytes -
                 control.Raw.TotalPhysicalWriteBytes);
         Assert.Equal(-4,
-            adaptive.Raw.PeakCommitWriteBytes - control.Raw.PeakCommitWriteBytes);
+            adaptive35.Raw.PeakCommitWriteBytes - control.Raw.PeakCommitWriteBytes);
         Assert.Equal(320,
-            adaptive.Raw.MaxCurrentFileTailBytes -
+            adaptive35.Raw.MaxCurrentFileTailBytes -
                 control.Raw.MaxCurrentFileTailBytes);
         Assert.Equal(0,
-            adaptive.Raw.FinalColdHeadReadBytes -
+            adaptive35.Raw.FinalColdHeadReadBytes -
                 control.Raw.FinalColdHeadReadBytes);
+
+        // This fixture is intentionally parameter-insensitive. On the fourth
+        // Update, (H + D) / B is exactly 3, so neither strict threshold selects
+        // Base; both variants write Base because the progress override selects 10.
         Assert.Equal(48,
-            adaptive.Raw.TotalPhysicalWriteBytes - paced.Raw.TotalPhysicalWriteBytes);
+            adaptive35.Raw.TotalPhysicalWriteBytes - paced.Raw.TotalPhysicalWriteBytes);
         Assert.Equal(100,
-            adaptive.Raw.PeakCommitWriteBytes - paced.Raw.PeakCommitWriteBytes);
+            adaptive35.Raw.PeakCommitWriteBytes - paced.Raw.PeakCommitWriteBytes);
         Assert.Equal(48,
-            adaptive.Raw.MaxCurrentFileTailBytes - paced.Raw.MaxCurrentFileTailBytes);
+            adaptive35.Raw.MaxCurrentFileTailBytes - paced.Raw.MaxCurrentFileTailBytes);
         Assert.Equal(0,
-            adaptive.Raw.FinalColdHeadReadBytes - paced.Raw.FinalColdHeadReadBytes);
+            adaptive35.Raw.FinalColdHeadReadBytes - paced.Raw.FinalColdHeadReadBytes);
     }
 
     private static AdaptiveMatchedRun RunAdaptiveMatchedTreatment(
@@ -314,7 +348,10 @@ public sealed partial class RotationPolicyComparisonTests {
         List<uint?> progressOverrideObjectIds = [];
         List<uint[]> migrationObjectIdsByStep = [];
         List<UpdateWriteDecision[]> updateDecisionsByStep = [];
-        List<long> hotObjectSourceReconstructionPayloadBytesByStep = [];
+        List<RealizedReconstructionPayloadAmplificationDiagnostic>
+            realizedHeadToBasePayloadAmplificationCheckpoints = [
+                CaptureRealizedHeadToBasePayloadAmplification(session),
+            ];
 
         for (int index = 0; index < steps.Count; index++) {
             SaveStep step = steps[index];
@@ -324,8 +361,6 @@ public sealed partial class RotationPolicyComparisonTests {
                 session.Cursor.PublishedRevisionAddress,
                 step);
             sourceDebtByStep.Add(GetSourcePreviousDebtObjectIds(facts));
-            hotObjectSourceReconstructionPayloadBytesByStep.Add(
-                facts.ParentLive[10].HeadReconstructionObjectPayloadBytes);
 
             CandidateTarget target = AdaptiveMatchedTargets[index];
             StayBSaveDecision stayB;
@@ -403,6 +438,8 @@ public sealed partial class RotationPolicyComparisonTests {
             ApplyExpectedState(expectedState, step);
             AssertExactState(expectedState, facts.PostLiveStates);
             AssertRuntimeStateAndClosure(session.Store, session.Cursor, expectedState);
+            realizedHeadToBasePayloadAmplificationCheckpoints.Add(
+                CaptureRealizedHeadToBasePayloadAmplification(session));
         }
 
         AdmittedEvaluatorRun admitted = Assert.IsType<AdmittedEvaluatorRun>(
@@ -421,7 +458,9 @@ public sealed partial class RotationPolicyComparisonTests {
                 session.Store,
                 ObjectVersionDictionaryReader.MaterializeLive(
                     session.Store,
-                    admitted.FinalCursor.PublishedRevisionAddress).Bindings);
+                admitted.FinalCursor.PublishedRevisionAddress).Bindings);
+        realizedHeadToBasePayloadAmplificationCheckpoints.Add(
+            CaptureRealizedHeadToBasePayloadAmplification(session));
         return new AdaptiveMatchedRun(
             ProjectFixedHorizonRaw(admitted),
             targets,
@@ -429,11 +468,64 @@ public sealed partial class RotationPolicyComparisonTests {
             progressOverrideObjectIds,
             migrationObjectIdsByStep,
             updateDecisionsByStep,
-            hotObjectSourceReconstructionPayloadBytesByStep,
+            realizedHeadToBasePayloadAmplificationCheckpoints,
             GetFixedHorizonPreviousDebtObjectIds(
                 session.Store,
                 admitted.FinalCursor),
             finalState);
+    }
+
+    private static RealizedReconstructionPayloadAmplificationDiagnostic
+        CaptureRealizedHeadToBasePayloadAmplification(EvaluatorV1Session session) {
+        NormalizedSaveFacts facts = SaveStepNormalizer.NormalizeMaintenanceOnly(
+            session.Store,
+            session.Cursor.FileScope.CurrentFileNumber,
+            session.Cursor.PublishedRevisionAddress);
+        return RealizedReconstructionPayloadAmplificationDiagnostic.Capture(facts);
+    }
+
+    private static void AssertRealizedHotObjectHeadToBasePayloads(
+        AdaptiveMatchedRun run,
+        IReadOnlyList<long> expectedInitialAndWorkloadHeadPayloadBytes) {
+        RealizedReconstructionPayloadAmplificationSample[] hotSamples = run
+            .RealizedHeadToBasePayloadAmplificationCheckpoints
+            .Select(checkpoint => checkpoint.Samples.Single(
+                static sample => sample.ObjectId == 10))
+            .ToArray();
+
+        Assert.Equal(
+            expectedInitialAndWorkloadHeadPayloadBytes.Count + 1,
+            hotSamples.Length);
+        Assert.Equal(
+            expectedInitialAndWorkloadHeadPayloadBytes,
+            hotSamples
+                .Take(expectedInitialAndWorkloadHeadPayloadBytes.Count)
+                .Select(static sample =>
+                    sample.HeadReconstructionObjectPayloadBytes));
+        Assert.All(
+            hotSamples,
+            static sample => Assert.Equal(100, sample.BasePayloadBytes));
+
+        RealizedReconstructionPayloadAmplificationSample final = hotSamples[^1];
+        Assert.Equal(100, final.HeadReconstructionObjectPayloadBytes);
+        Assert.Equal(100, final.BasePayloadBytes);
+    }
+
+    private static void AssertRealizedHeadToBasePayloadCheckpointsEqual(
+        AdaptiveMatchedRun expected,
+        AdaptiveMatchedRun actual) {
+        Assert.Equal(
+            expected.RealizedHeadToBasePayloadAmplificationCheckpoints.Count,
+            actual.RealizedHeadToBasePayloadAmplificationCheckpoints.Count);
+        for (int index = 0;
+            index < expected.RealizedHeadToBasePayloadAmplificationCheckpoints.Count;
+            index++) {
+            Assert.Equal(
+                expected.RealizedHeadToBasePayloadAmplificationCheckpoints[index]
+                    .Samples,
+                actual.RealizedHeadToBasePayloadAmplificationCheckpoints[index]
+                    .Samples);
+        }
     }
 
     private enum AdaptiveMatchedTreatment {
@@ -449,7 +541,8 @@ public sealed partial class RotationPolicyComparisonTests {
         IReadOnlyList<uint?> ProgressOverrideObjectIds,
         IReadOnlyList<uint[]> MigrationObjectIdsByStep,
         IReadOnlyList<UpdateWriteDecision[]> UpdateDecisionsByStep,
-        IReadOnlyList<long> HotObjectSourceReconstructionPayloadBytesByStep,
+        IReadOnlyList<RealizedReconstructionPayloadAmplificationDiagnostic>
+            RealizedHeadToBasePayloadAmplificationCheckpoints,
         uint[] FinalDebtObjectIds,
         IReadOnlyDictionary<uint, LogicalObjectState> FinalState);
 }

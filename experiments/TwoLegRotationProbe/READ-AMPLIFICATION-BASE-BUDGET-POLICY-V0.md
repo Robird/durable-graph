@@ -149,17 +149,34 @@ proves `(251 + 50) / 100 = 3.01` selects Base through the ordinary planner/apply
 independently of the progress override. A policy-selected oversized Rotate-C also
 returns typed `PayloadAndTailMetaLength` rejection without fallback or Store mutation.
 
-The first matched-cadence workload uses parameters `(3, 5%)`, four 100-byte old-A
-objects, four repeated 50-byte Updates of object 10, then one Insert. Adaptive naturally
-selects `Stay, Stay, Stay, Stay, Rotate`; the controls are held to that same target
+The first matched-cadence workload uses four 100-byte old-A objects, four repeated
+50-byte Updates of object 10, then one Insert. Both `(3,5%)` and `(4,4%)` naturally
+select `Stay, Stay, Stay, Stay, Rotate`; the controls are held to that same target
 cadence. Control/paced/adaptive produce W/P/F/R `924/476/476/524`,
-`1248/372/748/524`, and `1296/472/796/524`; exact final debt and the comparison table
-remain in [`EVALUATOR-V1.md`](EVALUATOR-V1.md).
+`1248/372/748/524`, and `1296/472/796/524`; the two adaptive parameter sets are exactly
+equal. Their 20B/16B budgets cannot fit a 100B optional Base, while the fourth Save's
+progress floor forces the last A-dependent hot object to Base. This negative control
+shows that changing parameters need not change the realized policy.
 
-Adaptive resets object 10's source reconstruction payload sequence from the controls'
-`100,150,200,250,300` to `100,150,200,250,100`. Nevertheless paced strictly dominates
+Across the initial head and four Update result heads, Adaptive resets object 10's
+realized reconstruction payload sequence from the controls' `100,150,200,250,300` to
+`100,150,200,250,100`. Nevertheless paced strictly dominates
 adaptive in W/P/F with equal final-only R in this fixture. Subsequent rotation and
 terminal settlement hide the intermediate chain reset from R; this is both a policy
 counterexample and evidence that a strategy optimizing intermediate amplification needs
-a separately named diagnostic before parameter search. It is not a general paced-policy
-winner or a reason to alter the canonical evaluator schema.
+a separately named diagnostic before parameter search. The implemented test-local
+diagnostic records raw realized `H/B` at accepted head checkpoints, explicitly
+distinguishes `0/0` from positive-over-zero infinity, and remains outside the canonical
+evaluator.
+
+A second threshold-band workload keeps target and progress identical while making each
+parameter set's different remaining budget non-binding: both Stay eight times and migrate
+`1..8`, and both can afford the hot object's 10-byte optional Base after each one-byte
+progress action. At prospective ratio
+`3.5`, only `(3,5%)` writes Base; `(4,4%)` retains Delta, and its following exact `4.0`
+equality also remains Delta. The resulting `(3,5%)` / `(4,4%)` W/P/F/R vectors are
+`1516/1056/1056/1212` and `1512/1056/1056/1472`; final hot realized `H/B` is `15/10`
+versus `40/10`, over 2 versus 7 reconstruction Frames. Thus this synthetic fixture buys
+4 fewer written bytes with 260 more final cold-read bytes, while the common terminal
+evacuation keeps P/F equal. It is a local W/R trade, not a Peak result, tuned default,
+general paced-policy winner, or reason to alter the canonical evaluator schema.

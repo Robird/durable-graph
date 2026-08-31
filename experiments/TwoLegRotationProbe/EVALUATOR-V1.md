@@ -316,19 +316,47 @@ two scope advances, final scope `3/4`, and the same logical state:
 | Delta, no migration | 924 | 476 | 476 | 524 | 10,20,30,40,1001 |
 | Delta, paced one debt | 1248 | 372 | 748 | 524 | 10,1001 |
 | Adaptive `(3,5%)` | 1296 | 472 | 796 | 524 | 1001 |
+| Adaptive `(4,4%)` | 1296 | 472 | 796 | 524 | 1001 |
 
-The adaptive action sequence migrates `20,30,40`, then writes hot object `10` as Base;
-its source reconstruction payload becomes `100,150,200,250,100`, versus
-`100,150,200,250,300` for both controls. Paced nevertheless strictly dominates adaptive
-in W/P/F with equal final-only R in this fixture. The two subsequent rotations make R
-blind to the intermediate reset; that is a measurement/horizon boundary, not evidence
-that read amplification has no value and not a general policy ranking.
+Both adaptive parameter sets migrate `20,30,40`, then write hot object `10` as Base.
+Across the initial head and four Update result heads, their realized reconstruction
+payload is `100,150,200,250,100`, versus `100,150,200,250,300` for both controls. They
+are exactly equal because the
+20B/16B soft budgets cannot fit a 100B optional Base and the fourth Save's progress
+floor—not either strict read threshold—forces the remaining A-dependent hot object to
+Base. This is a parameter-insensitive negative control. Paced nevertheless strictly
+dominates both adaptive rows in W/P/F with equal final-only R in this fixture. The two
+subsequent rotations make R blind to the intermediate reset; that is a
+measurement/horizon boundary, not evidence that read amplification has no value and not
+a general policy ranking.
+
+The test-local realized diagnostic records raw per-object `H/B` at initial, accepted
+workload, and admitted final-settlement heads, with `0/0` and positive-over-zero
+represented explicitly. It is distinct from the
+prospective policy operand `(H+D)/B`, and it is neither physical Frame IO nor a fifth
+canonical metric.
+
+A separate threshold-band fixture makes the hot object B-contained, leaves one-byte
+NoChange objects to satisfy progress, and gives both parameter sets enough discretionary
+budget for its 10-byte Base. Both sides therefore Stay eight times and migrate `1..8`;
+only prospective amplification `3.5` distinguishes the strict limits:
+
+| Parameters | W | P | F | R | Final hot H/B | Hot reconstruction Frames |
+|---|---:|---:|---:|---:|---:|---:|
+| Adaptive `(3,5%)` | 1516 | 1056 | 1056 | 1212 | 15/10 | 2 |
+| Adaptive `(4,4%)` | 1512 | 1056 | 1056 | 1472 | 40/10 | 7 |
+
+Here `(4,4%)` writes 4 fewer physical bytes and reads 260 more bytes at final cold load;
+P/F remain equal because the shared 1000-byte terminal evacuation dominates them. This
+is a bounded W/R discriminator, not a Peak result, tuned default, or general winner.
 
 The selector uses payload proxies only. A separate B-contained hot-chain witness proves
 strictly above-limit Base selection through exact planning/apply, while a policy-selected
 oversized Rotate proves typed capacity rejection, no fallback, and zero Store mutation.
 None of these test-local diagnostics changes the v1 report schema. Executable authority
-lives in [`ReadAmplificationBaseBudgetPolicyIntegrationTests.cs`](Tests/ReadAmplificationBaseBudgetPolicyIntegrationTests.cs)
+lives in [`ReadAmplificationBaseBudgetPolicyIntegrationTests.cs`](Tests/ReadAmplificationBaseBudgetPolicyIntegrationTests.cs),
+[`ReadAmplificationBaseBudgetPolicyThresholdBandTests.cs`](Tests/ReadAmplificationBaseBudgetPolicyThresholdBandTests.cs),
+[`RealizedReconstructionPayloadAmplificationDiagnosticTests.cs`](Tests/RealizedReconstructionPayloadAmplificationDiagnosticTests.cs),
 and [`ReadAmplificationBaseBudgetPolicyCapacityTests.cs`](Tests/ReadAmplificationBaseBudgetPolicyCapacityTests.cs).
 
 ## Still open before strategy selection
@@ -336,8 +364,7 @@ and [`ReadAmplificationBaseBudgetPolicyCapacityTests.cs`](Tests/ReadAmplificatio
 - continue both aligned logical/scope/debt endpoints through one identical third epoch
   before deciding whether debt membership and payload bytes are sufficient continuation
   state or retained physical layout/provenance state remains decision-relevant;
-- define one test-local intermediate per-object reconstruction-amplification diagnostic,
-  now that an implemented strategy directly optimizes it; do not silently add a fifth
-  canonical score;
+- add a Base-fraction target-band discriminator and then reduce the small test-local
+  parameter/workload matrix without silently adding a fifth canonical score;
 - retain Pareto/raw outcomes until workload/SLO evidence justifies guardrails or a
   ranking rule.

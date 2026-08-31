@@ -763,6 +763,13 @@
 
 ## 6. 船长日志
 
+### 2026-08-31：加入 realized H/B diagnostic 与首个参数辨别器
+
+- **Observed**：test-local diagnostic 从 accepted head 的 OVD/reconstruction authority 冻结全部 live object 的原始 `H/B`，显式区分 finite、`0/0` 与 positive-over-zero infinity；不带候选 Delta、不汇总共享 Frame，也不扩张 canonical evaluator/report。
+- **Observed**：原 matched cadence 中 `(3,5%)` 与 `(4,4%)` 均为 `1296/472/796/524`；soft budget 和 progress floor 完全遮蔽参数变化，故将其固定为 parameter-insensitive negative control。
+- **Observed**：独立 threshold-band witness 排除 target/progress/budget 混淆后，`(3,5%)` 与 `(4,4%)` 分别得到 `1516/1056/1056/1212`、`1512/1056/1056/1472`，final hot `H/B=15/10`、`40/10`；本 trace 只证明少写 4B/多读 260B 的局部 W/R trade，共同 terminal evacuation 主导相同 P/F。
+- **Open**：下一参数辨别器应隔离 `E/G` 落在 `[4%,5%)` 的 target 分叉，再决定 test-local matrix reduction 形状；不提前合成第五 score 或默认参数。
+
 ### 2026-08-31：落地 read-amplification + Base-budget policy v0
 
 - **Observed**：以 synthetic payload proxy 实现两参数纯 selector：严格读放大/轮转边界、5% soft Base envelope、`Base<=Delta` 弱支配、NoChange-first one-debt progress、target-specific Stay/Rotate decisions；最终仍由 existing whole-candidate hard gates 接纳。
