@@ -1,10 +1,17 @@
 # DurableGraph StateStore 基础设计
 
-> 状态：Working Design
+> 状态：Superseded product layout / TwoLeg technical reserve
 >
-> 更新日期：2026-08-29
+> 更新日期：2026-09-02
 >
-> 边界：本文记录当前已选择的基础形状与仍在研究的策略问题，不代表已经实现或冻结的 wire format。
+> Authority：当前产品候选的跨文件地址与 rollover 以
+> [`DB-014`](design-branches/0014-multi-segment-backward-file-distance.md) 为准。本文的 1-bit
+> same/previous 地址、A/B/C bridge、two-file reconstruction closure、evacuation 与
+> `CanPrepareAndRotate` 不再是产品 hard law，只保留为 `TwoLegRotationProbe` 的可执行研究说明。
+
+one-frame candidate、ObjectVersion Base/Delta、runtime OVD authority、absolute-normalize 和
+current/lineage 分层仍是可复用的 provisional 研究资产，但其正式 wire、跨文件引用和 publication 必须在
+MultiSegment 路线重新验证；本文不能作为 DB-014 未实现能力的证据。
 
 ## 1. 当前范围与运行模型
 
@@ -213,7 +220,7 @@ self-ticket fixed point 的依据见 [`state-store-addressing-design.md`](state-
 
 轮转过程中物理上允许短暂同时存在 A/B/C。双文件约束描述的是 published current Revision 的读取闭包，不是每个瞬间目录里只能存在两个文件。
 
-## 9. 待研究：统一的自适应 Rebase/Deltify/Rotation 策略
+## 9. 冻结的 TwoLeg 自适应 Rebase/Deltify/Rotation 问题
 
 当前不引入 `MaxLogicalChainBytes`、`TargetFileBytes` 等经验超参数。希望研究能否从以下事实量推导统一策略：
 

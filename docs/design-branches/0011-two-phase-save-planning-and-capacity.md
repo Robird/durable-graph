@@ -1,12 +1,16 @@
 # DB-011：Save 策略规划与容量可行性是否分成两阶段
 
-> 状态：Open
+> 状态：Superseded（产品 normal Save）；保留为 TwoLeg planning/admission 证据
 >
 > 创建日期：2026-08-29
 >
-> 当前原型方向：先在“假设目标文件可容纳”的模型中分别生成一个 Stay-B 与 Rotate-C 偏好计划，
+> 历史原型方向：先在“假设目标文件可容纳”的模型中分别生成一个 Stay-B 与 Rotate-C 偏好计划，
 > 再用唯一 exact candidate builder 做地址、单帧、文件尾和 closure 可行性过滤。首版不在同一 target
 > 内搜索次优容量修复；两个偏好计划都不可行时 fail closed，并记录为未搜索而非一般无解。
+>
+> 2026-09-02：[`DB-014`](0014-multi-segment-backward-file-distance.md) 让文件 rollover 与
+> Base/Deltify/OVD membership 解耦，产品 normal Save 不再产生 Stay-B/Rotate-C target pair、A-debt 或
+> completion certificate。本文件只保存 preference/admission 分层与 no-fallback 的 TwoLeg 证据。
 
 ## 问题
 
@@ -148,13 +152,10 @@ concrete CanPrepareAndRotate continuation certificate
 - 没有具体 completion certificate 的 candidate 只能保守拒绝；
 - `RejectedCapacityUnsearched`、`RejectedUnproven` 与一般不可行必须区分。
 
-## 近期证据计划
+## 冻结时未执行的扩展
 
-1. unified `BuildStayB` / `BuildRotateC` 接受显式 actions，不实现 capacity repair；
-2. paired fixtures 覆盖 Remove 后 PostLive、巨大 NoChange A debt、B-local shared-frame read 与 terminal
-   External/Base+Self；
-3. scripted continuous runner 记录两个 preferred plans 的 feasibility disposition；
-4. 只有实际出现有价值的 capacity false-negative，才冻结状态实验 alternative menu/search。
+同 target capacity repair、bounded alternative menu 与 constraint-aware solver 均未实现。只有 TwoLeg
+再次成为产品候选，且普通 workload 出现有价值的 capacity false-negative 时，才重启这些问题。
 
 ## 重访触发条件
 

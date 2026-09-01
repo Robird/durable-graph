@@ -1,6 +1,6 @@
 # Adaptive rotation control candidate
 
-> Status: candidate design; not implemented.
+> Status: deferred research candidate; not implemented. TwoLeg was paused on 2026-09-02.
 >
 > Scope: one TwoLeg segment. Tiered Hot/Cold composition is a separate deferred branch in
 > [`DB-013`](../../docs/design-branches/0013-tiered-state-segments.md).
@@ -203,9 +203,10 @@ same generation, while “time since domain modification” is a different read/
 When `Ready && !Pressured`, low-amplification readiness progress stops. If later Insert/Remove/size
 changes make readiness false again, progress resumes. ReadMotive decisions remain independent.
 
-## Discriminating evidence before implementation promotion
+## Evidence required if the candidate is reactivated
 
-Do not expand the official corpus mechanically. Use small test-local traces first:
+Do not resume from an implementation task list. After an explicit TwoLeg reactivation,
+use small test-local traces first:
 
 1. **Persistent versus naturally retired cold debt** — identical prefix with many small, budget-fit
    A-debt objects; one arm remains cold, the other removes them before rotation. This measures the
@@ -219,10 +220,10 @@ Do not expand the official corpus mechanically. Use small test-local traces firs
 4. Retain `active-hundred-mixed-cold-debt` as the complex integration regression and
    `oversized-cold-nochange-tiny-clock` as the no-progress-overshoot guard.
 
-The first coding slice should build the two narrow discriminators and one isolated candidate rather
-than mutate the v2 baseline in place. Only after raw target/migration sequences and
-`Wworkload/Pworkload/F/R/L` select a useful control should the active Adaptive profile version change
-or a trace enter the official corpus.
+The first reactivation slice would build the two narrow discriminators and one isolated candidate
+rather than mutate the v2 baseline in place. Only after raw target/migration sequences and
+`Wworkload/Pworkload/F/R/L` select a useful control could the frozen Adaptive profile version change
+or a trace enter a successor corpus.
 
 ## Explicitly not decided
 

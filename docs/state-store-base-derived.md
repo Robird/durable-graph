@@ -1,10 +1,12 @@
 # StateStore 基础设计的派生结论
 
-> 状态：Derived Notes
+> 状态：Superseded product derivation / TwoLeg technical reserve
 >
-> 更新日期：2026-08-29
+> 更新日期：2026-09-02
 >
-> 性质：本文不是独立设计 authority。基础决策以 [`state-store-base-design.md`](state-store-base-design.md) 为准，地址 wire 以 [`state-store-addressing-design.md`](state-store-addressing-design.md) 为准。
+> 性质：本文不是独立设计 authority。A/B/C、two-file closure、evacuation 与相邻地址均只属于冻结的
+> TwoLeg 路线。当前产品候选见 [`DB-014`](design-branches/0014-multi-segment-backward-file-distance.md)；
+> 本文不得作为 MultiSegment 已实现行为或 wire 的证据。
 
 ## 1. A/B/C 模型
 

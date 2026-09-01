@@ -1,7 +1,7 @@
 # DurableGraph 后续研究与实现路线
 
 > 状态：Living Roadmap  
-> 更新日期：2026-08-29
+> 更新日期：2026-09-02
 > 用途：记录当前证据支持的研究顺序、每个切片的问题和可执行闸门。  
 > 边界：本文不是当前实现事实、冻结 API 或持久格式规格；源码、测试和可复现输出优先，已完成实验的事实记录在 `DurableGraph-lab-notebook.md`。
 
@@ -32,23 +32,21 @@
 
 ## 2. 当前研究方向
 
-### 2.1 当前优先验证 StateStore 双腿轮转策略
+### 2.1 当前优先验证多历史 Segment StateStore
 
-R1–R3 已经使 logical graph 的后续状态律相对清晰。当前最大设计不确定性转为 StateStore 的 two-leg file rotation：在每个 published current Revision 最多引用 current/previous 两文件的前提下，能否以渐进 Base/Delta/Base migration 避免集中 full checkpoint，并形成稳定的自适应策略。
+产品候选已放弃 latest reconstruction 仅限相邻两文件的 hard law。当前优先探针使用 1-based FileNumber、
+canonical filename 与 `BackwardFileDistance` 引用任意 earlier Segment；soft file rollover 不改变
+Base/Deltify 或 OVD membership。当前 authority 与活跃 roadmap 分别位于：
 
-首轮仍使用纯内存、deterministic 模拟，不绑定真实 RBF I/O。模拟必须把 two-file reconstruction closure、`RelativeFrameTicket` 可表示范围、one-frame bounds、C evacuation capacity 与 B OVD locator 可解析性当作 correctness oracle；Base/Delta、cold Base migration 与 rotation 时机只是被比较的 policy。
+- [`DB-014`](design-branches/0014-multi-segment-backward-file-distance.md)
+- [`MultiSegmentStateStoreProbe/PROJECT-STATE.md`](../experiments/MultiSegmentStateStoreProbe/PROJECT-STATE.md)
 
-相关基础设计与开放分叉：
-
-- `state-store-base-design.md`
-- `state-store-base-derived.md`
-- `state-store-addressing-design.md`
-- `design-branches/0007-adaptive-two-leg-rotation-policy.md`
-- `design-branches/0011-two-phase-save-planning-and-capacity.md`
+`state-store-base-design.md`、`state-store-base-derived.md`、`state-store-addressing-design.md` 与 DB-007/011
+保留 TwoLeg 技术储备和可复用局部结论，但不再描述产品当前地址或轮转方向。
 
 ### 2.2 继续闭合 logical graph 语义，再固定产品 bytes
 
-R1/R2 已回答 current graph capture/delta，R3a/R3b 已闭合 historical records → normalized baseline → current CLR root。R4 仍将验证 logical StateMap、record reuse 与 repeated delta apply；它没有被否定，只是当前研究优先级让位于风险更高的 two-leg rotation 策略。
+R1/R2 已回答 current graph capture/delta，R3a/R3b 已闭合 historical records → normalized baseline → current CLR root。R4 仍将验证 logical StateMap、record reuse 与 repeated delta apply；它没有被否定。当前持久化地址与 rollover 风险由独立 MultiSegment probe 自底向上验证，两条路线在产品整合前保持分离。
 
 继续使用 test-only 内存逻辑值。`BinaryReader` / `BinaryWriter` 只在 logical Load/materialize/delta 状态律闭合后介入，避免过早冻结 framing、引用编码、canonical order 和 malformed-input contract。
 
@@ -101,10 +99,14 @@ R1 Graph Delta semantic probe (Concluded)
     -> R3a normalized flat-graph Load (Concluded)
     -> R3b two-pass CLR hydrate (Concluded)
 
-Current priority research track:
-    S1 in-memory adaptive two-leg rotation simulation
-        -> S2 RelativeFrameTicket / one-frame layout probe
-        -> S3 RBF publication and reopen fault probe
+Current persistence research track:
+    M1 BackwardFileDistance and canonical filename (initial slice concluded)
+        -> M2 in-memory append-only Segment/Frame store and soft rollover
+        -> M3 cross-file OVD reconstruction and reopen/fail-close
+        -> M4 recovery-closure inspection before any compaction/GC
+
+Parked technical reserve:
+    S1 TwoLegRotationProbe (paused; executable subsolution and research tag retained)
 
 Product vertical sequence retained:
     R4 in-memory StateMap and repeated logical delta apply
@@ -215,70 +217,20 @@ materialized root 是可丢弃 working graph，不是 baseline、StateMap 或第
 
 ### S1：内存自适应双腿轮转策略模拟
 
-状态：In Progress。当前优先研究切片；deterministic workload、三条 Base/Delta 基线、runtime OVD authority、symbolic materialization 与 provisional RBF v0.40 size envelope 已形成逐 Save 闭环。DB-009 已选择 relay-free，DB-010 已选择 Revision shared prior-snapshot anchor；immediate A/B→B/C 与 explicit caller-selected B Base migration 均已完成 pure plan、append、`MaterializeLive`、reconstruction/closure 复验，但不发布 StateStore head。尚未实现 OVD/object bytes writer/parser、publication/reopen/crash、shared-frame-aware 或 rotation-aware 自适应策略、completion search 或正式 `CanPrepareAndRotate` decision procedure。不修改 R1–R3 已验证结论，也不把 StateStore working design 描述为产品实现事实。
+状态：Paused Technical Reserve。该路线已形成独立、可执行的 Arena/Baselines/Tests subsolution，覆盖
+deterministic workloads、runtime OVD、Base/Delta reconstruction、provisional RBF v0.40 sizing、
+Stay-B/Rotate-C、preparatory migration、continuous rotation、typed admission/no-fallback、finite completion
+certificate 与 W/P/F/R/L evaluator。它没有实现正式 wire、publication/reopen/crash、GC、完备 solver 或
+完整 Adaptive 控制器。
 
-问题：在不先引入固定 `MaxLogicalChainBytes`、`TargetFileBytes` 或 migration-byte budget 的情况下，能否用无权重事实量设计并比较 Base、Delta、渐进 cold Base migration 与正式 rotation 的候选策略？
+产品候选转向 DB-014，因此 A/B/C、1-bit RelativeFrameTicket、A-debt evacuation 与
+`CanPrepareAndRotate` 不进入正常 Save。完整冻结边界、未闭合项、可复用资产与恢复条件见
+[`TwoLegRotationProbe/PROJECT-STATE.md`](../experiments/TwoLegRotationProbe/PROJECT-STATE.md)；实现证据见其
+README/tests，annotated recovery tag 为 `research/two-leg-rotation-probe-tech-reserve-20260902`。
 
-最小模型：
-
-- A=OldPrevious、B=Current、C=Next 的纯内存文件与 Revision frames；
-- per-object Base/Delta chain、latest head、terminating Base 与 absolute addresses；
-- one Revision/one frame 的真实 payload/TailMeta/frame-start estimator；
-- B 中 preparatory Base migrations 与 C 中 evacuation Bases；
-- ObjectVersionDict absolute-normalize / relative-encode 的模拟；
-- 一个不含物理 I/O 的 logical graph oracle。
-
-硬闸门：
-
-```text
-Materialize(candidate) == expected logical graph
-ReconstructionFiles(candidate) ⊆ {Current, Previous}
-CanPrepareAndRotate(successful post-state) == true
-all frame starts/tickets/layouts are representable
-failed plan leaves published state unchanged
-```
-
-`CanPrepareAndRotate` 是当前选择的 liveness admission invariant，不是格式可读性定律；某个状态的
-true 必须有具体有限 completion witness。未来 bounded explorer 的 `NotFoundWithinBounds` 只表示它没有在声明的
-输入与动作边界内找到 witness，不能冒充一般无解证明。
-
-模拟记录原始 bytes、frame sets、lineage、evacuation debt、useful/unused reads 与布局事实；所有比例和加权 score 后算。至少比较 AlwaysBase、AlwaysDelta-when-legal、StateJournal-style local cost、Previous-ratio、渐进 cold Base migration 与统一策略候选。
-
-当前 executable baseline：
-
-- deterministic Field/List workload 与三条 policy baseline；
-- one Revision/one in-memory RBF Frame、runtime OVD authority、absolute StateMap、symbolic Delta apply；
-- exact v0.40 envelope 与 size-only `ProvisionalRevisionV0`，但无 bytes writer/parser；
-- relay-free immediate A/B→B/C plan/apply/runtime verification；
-- caller-selected nonempty A-debt B migration plan/append：在 B 写 same-state/same-ordinal Base，
-  OVD Delta over source，并在 plan 与 append 前复验全部 live reconstruction/A-B closure；
-- Revision shared prior-snapshot anchor，Base 无 direct parent/token，Delta 保留 exact parent；
-- canonical AA/BA/BB、mixed new/domain/relocated/Delta、genesis/Absent/visible Remove/malformed anchor；
-- 真实 `3 x 140,000,000` payload witness：immediate C 与合并两对象 B batch 失败，一批 B migration
-  后 C 仍失败，两批后 C 成功；`head@B / Base@A` 也通过；
-- terminal C exact-sizing discriminator：合法最大 Previous ticket 需要 10-byte VarUInt；mandatory
-  payload `268,435,390` 时 External total 恰为 `268,435,428`，加一后溢出；同一加一候选使用
-  zero-payload same-state Base + Self 后 total 为 `268,435,427`，padding 后 frame 恰达上限，address
-  tokens `21 -> 12`；
-- 完整 Probe 221/221。
-
-当前 provisional matrix（modeled file/final full-frame read）为 hot/cold
-`1864/1132`、`1428/1396`、`1500/1132`，fixed mixed
-`516/176`、`460/444`、`460/296`。它只展示 tradeoff，不选择 winner。
-
-该 sizing discriminator 只证明当前 provisional v0 grammar 下 External 不支配 optional same-state
-relocation；未实现 runtime action，不证明扩大 `CanPrepareAndRotate` 可达集、planner completeness 或
-未来 wire format。whole-candidate estimator 是唯一尺寸 authority，不引入 per-object additive savings。
-
-S1 下一步先从 parent snapshot 派生 `Insert / Update / Remove / NoChange`，并建立 unified per-Save
-candidate。首版在假设可容纳下分别生成 PreferredStayB/PreferredRotateC，再 exact-filter 地址、Frame/File
-capacity、closure 与 completion certificate；不搜索同一 target 的次优容量修补。随后用 scripted actions
-跑通连续多 Save 和多次轮转，记录 A debt、headroom、write peak 与 reconstruction 原始量，并比较简单
-策略。bounded/canonical explorer 只在出现具体 `RejectedUnproven`、`RejectedCapacityUnsearched` 或疑似
-heuristic false-negative 后介入；找到的 witness 可证明 true，`NotFoundWithinBounds` 不证明一般无解。
-真实 bytes/publication/reopen/crash 继续分离。旧 Relay discriminator 由 tag
-`research/relay-vs-relay-free-20260829`、DB-009 和实验簿归档；本 live roadmap 不重复历史 golden。
-文件被物理删除后不可访问仍不属于格式故障模型。
+只有 DB-014 无法满足真实的有界 dependency file count、在线磁盘退休、backup/rescue 或 compaction SLO
+时，才重启 TwoLeg 或从中抽取 incremental cleaner。历史实验细节保留在本实验簿与 DB-007/011/012，
+不再由 live roadmap 逐条维护。
 
 ### R4：内存 StateMap 与重复逻辑 delta apply
 

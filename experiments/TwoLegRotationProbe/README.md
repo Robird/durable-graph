@@ -3,9 +3,15 @@
 This isolated .NET 10/xUnit subproject is the in-memory workbench for exploring
 two-leg StateStore file rotation and Base-or-Deltify policies.
 
-The compact current goal, near-term roadmap, and unresolved work live in
-[`PROJECT-STATE.md`](PROJECT-STATE.md). This README describes the implemented
-model and executable evidence; it is not the active backlog.
+> Status: paused executable technical reserve as of 2026-09-02. DurableGraph's
+> current product candidate uses multi-segment historical references; see
+> [`DB-014`](../../docs/design-branches/0014-multi-segment-backward-file-distance.md)
+> and [`MultiSegmentStateStoreProbe`](../MultiSegmentStateStoreProbe/README.md).
+
+The compact freeze boundary, known limitations, reusable assets, and reactivation
+conditions live in [`PROJECT-STATE.md`](PROJECT-STATE.md). This README describes the
+implemented model and executable evidence; it is neither an active backlog nor the
+current product StateStore design.
 
 Documentation responsibilities are deliberately split:
 
@@ -16,10 +22,10 @@ Documentation responsibilities are deliberately split:
   [`../../docs/design-branches/`](../../docs/design-branches/);
 - related storage-system and algorithm references live in
   [`PRIOR-ART.md`](PRIOR-ART.md);
-- current work and next slices live only in `PROJECT-STATE.md`.
+- the parked status and reactivation conditions live only in `PROJECT-STATE.md`.
 
-New experiments should replace or merge a selected-evidence entry below rather
-than append another chronological chapter.
+If the research route is explicitly reactivated, new experiments should replace or
+merge a selected-evidence entry below rather than append another chronological chapter.
 
 Run the probe from the repository root:
 
@@ -34,8 +40,8 @@ TwoLegRotationProbe.Tests -> TwoLegRotationProbe.Baselines -> TwoLegRotationProb
                          \------------------------------->
 ```
 
-The root project is the Arena class library. `Baselines/` owns the four existing
-benchmark strategies; `Tests/` is the organizer and white-box verification project.
+The root project is the Arena class library. `Baselines/` owns the two frozen registered
+Adaptive benchmark profiles; `Tests/` is the organizer and white-box verification project.
 The Arena has no reference back to Baselines.
 
 Within one file epoch:
@@ -415,7 +421,7 @@ tests. This is a compact comparable projection, not a full diagnostic dump, pars
 persisted product format, score, or winner.
 
 Manifest schema 2 represents one atomic `selectionProfile` identity per case rather
-than a target/decision cross-product. Corpus revision 18 runs the two active Adaptive
+than a target/decision cross-product. Corpus revision 18 runs the two frozen Adaptive
 v2 profiles over eighteen traces (36 admitted cases). The profile IDs are unchanged,
 while their component versions are 2 because the corrected selection behavior changes
 the manifest contract. The retired no-migration and
@@ -474,7 +480,8 @@ capacity or completion rejection outcomes.
 
 ## Selected executable evidence
 
-This README keeps only evidence that still shapes current implementation or strategy work.
+This README keeps only evidence that shapes the frozen implementation or would matter if
+the research route is reactivated.
 The retired no-migration/paced profile matrix and its dedicated phase diagnostics are
 available from Git tag `research/no-migration-paced-baselines-20260901`.
 
@@ -483,10 +490,10 @@ available from Git tag `research/no-migration-paced-baselines-20260901`.
 | Baseline policy matrix | Base, Delta, and a local ratio trade modeled writes against a named final reconstruction snapshot; there is no universal winner. | This predates cumulative R and is not the canonical strategy comparator. [`PolicyMatrixTests.cs`](Tests/PolicyMatrixTests.cs) |
 | Terminal-C sizing | A high-ticket External binding can overflow when same-state Base+Self fits, so per-object token savings cannot replace whole-candidate sizing. | Provisional grammar only. [`ProvisionalRevisionV0GrammarTests.cs`](Tests/ProvisionalRevisionV0GrammarTests.cs) |
 | Adaptive read-amplification/Base-budget v0 | Strict Update/target-supported NoChange motives share one amplification-sorted budget prefix; there is no unconditional progress or NoChange priority. Rotate evacuation consumes the soft payload envelope first. | `Q` is a synthetic payload pacing proxy, not an exact physical P cap, encoded-byte authority, tuned default, or winner. [`READ-AMPLIFICATION-BASE-BUDGET-POLICY-V0.md`](READ-AMPLIFICATION-BASE-BUDGET-POLICY-V0.md), [`ReadAmplificationBaseBudgetPolicyCapacityTests.cs`](Tests/ReadAmplificationBaseBudgetPolicyCapacityTests.cs) |
-| Active hundred mixed | Both active profiles share Delta/Base references `67206/165606`. Adaptive `(4,4%)` lowers workload W/P by `1668/24B`; Adaptive `(3,5%)` lowers closed-horizon F and cumulative R by `32920/253048B`. | Adjustable synthetic workload and write/peak versus file-tail/read Pareto trade, not a golden benchmark or steady-state winner. [`BenchmarkV1Corpus.cs`](Benchmarking/BenchmarkV1Corpus.cs), [`EVALUATOR-V1.md`](EVALUATOR-V1.md) |
+| Active hundred mixed | Both frozen profiles share Delta/Base references `67206/165606`. Adaptive `(4,4%)` lowers workload W/P by `1668/24B`; Adaptive `(3,5%)` lowers closed-horizon F and cumulative R by `32920/253048B`. | Adjustable synthetic workload and write/peak versus file-tail/read Pareto trade, not a golden benchmark or steady-state winner. [`BenchmarkV1Corpus.cs`](Benchmarking/BenchmarkV1Corpus.cs), [`EVALUATOR-V1.md`](EVALUATOR-V1.md) |
 | Oversized cold NoChange | The old unconditional migration produced `Pworkload=10052`; the v2 regression requires `Pworkload < 10000`, so the 10,000-byte unmotivated Base cannot escape the envelope. | White-box adversarial witness; it intentionally does not lock the corrected incidental metric. [`BenchmarkV1Corpus.cs`](Benchmarking/BenchmarkV1Corpus.cs), [`BenchmarkV1RunnerTests.cs`](Tests/BenchmarkV1RunnerTests.cs) |
 | Capacity coupling | Selected hard rejection preserves typed failure, no fallback, no mutation, and no metrics even when another path is feasible. | No complete repair/search or file-size policy. [`ReadAmplificationBaseBudgetPolicyCapacityTests.cs`](Tests/ReadAmplificationBaseBudgetPolicyCapacityTests.cs), [`GroupedForegroundBurstCapacityCouplingTests.cs`](Tests/GroupedForegroundBurstCapacityCouplingTests.cs) |
-| Evaluator and benchmark consumer | Terminal settlement is mandatory and internally accounted; canonical W/P are workload-only; F remains a closed-horizon guardrail; R/L samples every successful workload Save. Revision 18 runs 36 admitted cases across eighteen traces and two active v2 profiles. | Internal certified-product track, not an untrusted-artifact judge, score, or frontier. [`EVALUATOR-V1.md`](EVALUATOR-V1.md), [`BenchmarkV1RunnerTests.cs`](Tests/BenchmarkV1RunnerTests.cs), [`BenchmarkV1JsonTests.cs`](Tests/BenchmarkV1JsonTests.cs) |
+| Evaluator and benchmark consumer | Terminal settlement is mandatory and internally accounted; canonical W/P are workload-only; F remains a closed-horizon guardrail; R/L samples every successful workload Save. Revision 18 runs 36 admitted cases across eighteen traces and two frozen v2 profiles. | Internal certified-product track, not an untrusted-artifact judge, score, or frontier. [`EVALUATOR-V1.md`](EVALUATOR-V1.md), [`BenchmarkV1RunnerTests.cs`](Tests/BenchmarkV1RunnerTests.cs), [`BenchmarkV1JsonTests.cs`](Tests/BenchmarkV1JsonTests.cs) |
 | Continuous rotation | A caller script crosses `A/B -> B/C -> C/D` while preserving exact state, reconstruction closure, and Stay certificates. | Not a stateful runner or durable publication path. [`ContinuousMultiRotationTests.cs`](Tests/ContinuousMultiRotationTests.cs) |
 
 ### Accepted source-partition provenance
@@ -559,6 +566,6 @@ The rejected relay alternatives are preserved by annotated tag
 `research/relay-vs-relay-free-20260829` and
 [`DB-009`](../../docs/design-branches/0009-base-lineage-parent-locator.md);
 [`DB-010`](../../docs/design-branches/0010-base-lineage-anchor-scope.md) records
-the selected shared-anchor lineage model. See
-[`PROJECT-STATE.md`](PROJECT-STATE.md) for active work rather than extending
-this README with a backlog.
+the selected shared-anchor lineage model. See [`PROJECT-STATE.md`](PROJECT-STATE.md)
+for the paused boundary and reactivation conditions rather than extending this README
+with a backlog.

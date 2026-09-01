@@ -1,7 +1,8 @@
 # TwoLeg evaluator v1 admissibility and accounting contract
 
 > Status: typed outcome, closed-horizon session, cross-assembly matched batch, and
-> canonical machine-readable manifest/report implemented.
+> canonical machine-readable manifest/report implemented; frozen as a paused TwoLeg
+> research contract on 2026-09-02.
 
 This document fixes the first executable protocol and raw measurement schedule for
 comparing admitted TwoLeg policy runs. It does not define a scalar score, a winner,
@@ -296,15 +297,9 @@ Exact executable authority is
 migration actions may still isolate a mechanism, but they are not registered profiles,
 manifest cases, or score-table rows.
 
-## Next strategy work
+## Deferred follow-up
 
-- design one minimal response to the now-observed stable low-amplification A-debt stall;
-  keep general Ready-to-Rotate versus Should-Rotate hysteresis as a separate candidate;
-- preserve the corrected strict motive and soft budget behavior; do not restore an
-  unconditional progress floor or a NoChange-first category rule;
-- add or change a workload only when white-box candidate review exposes one concrete
-  blind spot;
-- keep raw typed outcomes and Pareto comparisons; do not introduce a scalar score,
-  leaderboard, or automatic search yet;
-- close determinism/order/artifact qualification only after the candidate shape is ready
-  for a frozen round packet.
+No strategy work is active. The unimplemented ReadinessProgress/ShouldRotate analysis is
+preserved in [`ADAPTIVE-ROTATION-CONTROL-CANDIDATE.md`](ADAPTIVE-ROTATION-CONTROL-CANDIDATE.md).
+If TwoLeg is explicitly reactivated, retain raw typed outcomes and Pareto comparisons;
+do not infer a scalar winner from this protocol.

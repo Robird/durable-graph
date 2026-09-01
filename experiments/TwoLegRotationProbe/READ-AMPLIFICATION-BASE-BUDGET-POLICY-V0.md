@@ -1,6 +1,7 @@
 # Read-amplification + Base-budget policy v0
 
-> Status: implemented experimental policy with bounded executable evidence.
+> Status: frozen implemented experiment with bounded executable evidence; not an active
+> product-policy candidate after the TwoLeg route was paused on 2026-09-02.
 
 This note freezes the smallest executable interpretation of the two-parameter policy.
 It is an experiment contract, not a product policy, durable format, score, or winner.

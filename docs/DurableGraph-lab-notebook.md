@@ -18,7 +18,7 @@
 
 ## 2. 当前基线
 
-记录日期：2026-08-30
+记录日期：2026-09-02
 
 - **Observed**：仓库已跑通 boxed-value 的内存 Save/Load 与 read-time upgrade demo，并以隔离探针跑通单类型 Flat Graph Delta R1、generated graph operations R2、StoredGraphImage normalization R3a 与 two-pass CLR materialization R3b；production runtime/default Generator 仍无对象身份、reference graph、wire format 或持久化实现。
 - **Observed**：`DurableGraph.slnx` 包含 runtime、Generator、Build tool、CLI 和 Tests 五个项目；Build tool 是随 NuGet 包部署的私有 snapshot-history publisher/verifier，不承载运行时持久化语义。
@@ -49,10 +49,12 @@
 - Generated Graph Operations R2：internal、无 `[Generator]` 的 probe generator 已产生强类型 Capture/Snapshot equality/reference visitor，并与 R1 oracle 做差分验证；默认 package analyzer 路径不运行它。
 - Stored Graph Normalization R3a：test-only mixed V1/V2 record table 经全表 exact preflight、typed decode/upgrade 与 source-reference gate 归一化成 current-Snapshot baseline。
 - CLR Graph Materialization R3b：只对 normalized current root closure allocate-all/hydrate-all，恢复 sharing/cycles 后 root-only exposure；disconnected source rows 不分配。
-- StateStore 基础设计：选择 one-Revision/one-RBF-frame、object-level version chains、ObjectVersionDict authority、LSB-tagged `RelativeFrameTicket` 与 current-head two-file reconstruction closure；产品实现尚未开始，TwoLegRotationProbe 已进入 provisional layout 模拟。
-- 双腿轮转派生说明：记录 A/B/C evacuation、Revision shared prior-snapshot anchor、absolute-normalized ObjectVersionDict、one-frame bounds 与 `CanPrepareAndRotate` liveness admission invariant。
-- Adaptive rotation branch DB-007：隔离尚未裁决的统一 Base/Delta/cold-migration/rotation 策略和内存模拟输入。
-- Two-leg rotation probe：以独立 xUnit 项目建立 exact RBF v0.40 envelope、相邻 FileScope、runtime OVD authority、Frame/ObjectVersion 父链、deterministic workload 和三种 policy；StateMap 由 OVD replay 派生，并保留 contextual-self `ProvisionalRevisionV0` 组件尺寸/provenance。
+- Multi-segment StateStore candidate：DB-014 已选择 1-based FileNumber、canonical filename 与
+  `BackwardFileDistance` 任意 earlier-file reference；当前隔离 probe 只实现地址/编码首切片。
+- StateStore TwoLeg 基础/地址/派生文档：相邻 FileScope、1-bit `RelativeFrameTicket`、A/B/C evacuation 与
+  `CanPrepareAndRotate` 已被产品路线 supersede，完整保留为 TwoLeg 技术储备。
+- Two-leg rotation probe：独立 Arena/Baselines/Tests subsolution 已冻结；保留 runtime OVD、Base/Delta、
+  continuous rotation、typed admission/no-fallback、completion certificate 与 evaluator 证据，不再维护活跃策略 roadmap。
 - Candidate design branches：在 `docs/design-branches/` 隔离尚未裁决的架构分叉。
 - 本实验簿：保存随实验演化的项目认识。
 
@@ -73,23 +75,18 @@
 - **Decided**：materialized CLR root 是 disposable working graph，不是 baseline/StateMap authority；`RequiresRewrite` 只影响 Save。R4 将从带 disconnected rows/rewrite obligations 的 source StateMap 开始验证 apply 后 exact clean closure。
 - **Decided**：historical payload 在读取边界 exact decode 并升级到 current Snapshot；reachable upgraded node 在下一次显式 Save whole-object rewrite，unreachable upgraded node 不被保活。
 - **Decided**：normalized baseline 是派生比较投影，不复制 per-entry source Schema/object address；未来 persistent Save 通过 graph-level exact head + authoritative StateMap 与 projection 的同源 bundle 取得 provenance。
-- **Decided**：当前研究优先级从低风险的 R4 logical StateMap/apply 暂时切换到 StateStore 双腿轮转；R4–R7 依赖顺序保留，未被否定。
-- **Decided**：首版只保证 latest published Revision，采用进程独占 single writer；一次 Revision 暂为一个 RBF Frame，越过约 256 MiB payload/TailMeta 或 64 KiB TailMeta 边界时 fail closed，Extent 留待容量证据。
-- **Decided**：持久地址使用 LSB-tagged `RelativeFrameTicket = (SizedPtr.Serialize() << 1) | same/previous`，进程内 authority 使用 `AbsoluteFrameAddress`；接受约 512 GiB 最大 frame-start 的容量代价。
-- **Decided**：同 Revision 的 OVD binding 用字段级 `BindSelf=1`，不把 Self 加入通用 RelativeFrameTicket；RBF context 已提供 containing ticket，TailMeta 保存 OVD/record offset。literal self-ticket 因重复信息和多固定点 canonicality 被当前 Working Design 淘汰，multi-frame 时重访 DB-008。
-- **Decided**：Delta 以 `DeltaParentFrameTicket` 直接指 exact ObjectVersion；Base 不保存 direct
-  parent，lineage 统一使用 containing Revision OVD 的 shared prior-snapshot anchor。从 A/B 轮转到
-  B/C 时，C OVD anchor 指最终 B PublishedRevision；不写 per-Object forwarding record。
-- **Rejected**：B 中 forwarding RelayRevision 只优化罕见 lineage/TailMeta reads，却扩大写入、容量、durable 顺序与恢复状态；竞争实现由 tag `research/relay-vs-relay-free-20260829` 保存，裁决见 DB-009。
-- **Decided**：物理删除文件后的数据不可访问不属于地址格式需要抵抗的故障模型；Base locator 只承诺 retained files 之间的 lineage 可导航。
-- **Observed**：S1 preparatory baseline 已把冻结 workload 的每个 Save 编译为带 runtime OVD 的单个 Frame；live StateMap 从 OVD replay 派生，Base lineage 读取 Revision shared anchor，Delta reconstruction/lineage 读取 exact parent，并以 checked symbolic Delta apply 逐 prefix 对照 logical replay。
-- **Observed**：S1b 已对给定 Payload/TailMeta 长度复刻 exact RBF v0.40 envelope，并把 synthetic workload 接入逐 Save write 与 post-save reconstruction/co-read observations；accounting 明示排除 DG header/OVD/index/VarUInt，所以尚不能证明完整 Revision bytes、容量安全或策略 winner。
-- **Observed**：S1c 已加入 ratio=3 的 `ObjectPayloadReadAmplification3` 与四场景 matrix；per-object reconstruction payload 随 ObjectVersion 保存并由 oracle 重算，但不计入 layout。结果只证明局部策略形成可复现 tradeoff，不代表 exact StateJournal port 或 winner。
-- **Observed**：S1d `ProvisionalRevisionV0` 已按临时 grammar 计入 domain headers、OVD、TailMeta directory、relative VarUInt 与 exact RBF envelope；run-level provenance、layout、capacity gates、contextual Self 和旧 baseline 回归均有 executable evidence。它仍是 size-only estimator，不是 byte codec 或 rotation capacity proof。
-- **Observed**：caller-explicit Stay-B/Rotate-C 已在同一 normalized facts 上进入 paired evaluation；五类 Frame/address hard gate 使用窄 typed rejection，其他 decision/source/model 错误仍 fail closed。一侧容量失败不阻止另一侧尝试，成功侧保留 exact plan/candidate/estimate identity。
-- **Decided**：paired raw observations 不重估 candidate 或重放 source authority；foreground/maintenance bytes 只 join 既有 domain-record estimate，PostLive read/debt 只 union candidate 与冻结 reconstruction paths。source stored layout 在纳入 provisional read metrics 前由同一唯一 estimator 复核，provenance 不一致直接 fail closed。结果无 winner、总分、repair、append 或 publication。
-- **Decided**：当前不引入 `MaxLogicalChainBytes`、`TargetFileBytes` 或固定 migration budget；先在纯内存模拟中采集无权重原始量，比较自适应统一策略。
-- **Open**：统一策略能否仅依靠 two-file pressure、lineage/reconstruction overhead 与渐进 cold Base migration 自动收敛；`CanPrepareAndRotate == true` 必须有具体 completion witness，bounded explorer 的 `NotFoundWithinBounds` 不证明一般无解。
+- **Decided**：当前持久化优先级转向 DB-014 / `MultiSegmentStateStoreProbe`；文件 rollover 与
+  Base/Deltify/OVD membership 解耦，冷 ObjectVersion 不因切文件而强制 relocation。
+- **Observed**：MultiSegment 首切片只实现 FileNumber、canonical filename、absolute address、
+  BackwardFrameReference 与 canonical Base128 fail-close；Segment store、soft rollover、OVD、reopen、
+  PublishedHead、recovery closure 与 GC 均未实现。
+- **Decided**：TwoLeg 全子树保持完整可执行但默认不活跃；相邻两文件 closure、1-bit relative ticket、
+  A-debt、Stay/Rotate 与 terminal settlement 不迁移到 DB-014 正常 Save。
+- **Decided**：可复用的是 absolute-normalize/relative-reencode、OVD authority、Base/Delta reconstruction、
+  current/lineage 分层、whole-candidate gate、no-fallback apply、deterministic workload 与 raw evaluator 思想。
+- **Decided**：R4–R7 logical graph 依赖顺序保留；产品整合前与 MultiSegment 持久化探针继续分离。
+- **Open**：DB-014 的 in-memory Segment/Frame store、soft target rollover、跨 F1–F4 OVD recovery、
+  canonical reopen/PublishedHead、missing dependency fail-close 与 derived recovery closure。
 - **Open**：Schema runtime representation 与 canonical authority 的候选分叉记录在 `DB-001`，等待 exact codec/persistent format 实验裁决。
 - **Open**：哪些类型和 API 最终属于核心程序集，等待真实代码形状出现后再判断。
 
@@ -762,6 +759,13 @@
 ```
 
 ## 6. 船长日志
+
+### 2026-09-02：将 TwoLegRotationProbe 冻结为可执行技术储备
+
+- **Decided**：不再继续 Adaptive、策略竞赛、capacity repair 或 TwoLeg publication；完整保留独立源码、362 个测试、Arena/Baselines/evaluator/workloads 与研究文档，压缩活跃 `PROJECT-STATE`，不做半残式删测试。
+- **Superseded**：产品地址和 rollover authority 由 DB-014 接管；旧 StateStore base/addressing/derived 文档的相邻两文件、1-bit ticket、A/B/C evacuation 与 `CanPrepareAndRotate` 只属于冻结 TwoLeg grammar。
+- **Preserved**：runtime OVD、absolute-normalize、Base/Delta 与 current/lineage 分层、whole-candidate hard gate、no-fallback apply、typed outcomes、deterministic workload 和 W/P/R/L 测量思想可供 MultiSegment 选择性移植；TwoLeg topology/debt machinery 不移植。
+- **Verified**：TwoLeg tests 362/362；TwoLeg subsolution 与 root solution 均 0 warning / 0 error；format verification 与文档 link/diff checks passed。annotated recovery tag 为 `research/two-leg-rotation-probe-tech-reserve-20260902`。
 
 ### 2026-09-02：选择多历史 Segment 产品路线并建立地址 Probe
 

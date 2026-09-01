@@ -1,11 +1,11 @@
 # DB-012：TwoLeg 多策略 Benchmark Arena 的最小边界
 
-> 状态：Partially implemented；当前 internal-track vertical proof 已选定，正式候选赛道仍 Open
+> 状态：Deferred；internal-track vertical proof 已实现并冻结
 >
 > 创建日期：2026-08-31
 >
-> 当前推荐：静态链接、确定性、workload/product-first；先用 Arena 认证的 canonical execution toolkit
-> 支撑独立策略程序集，再由真实候选需求决定是否开放任意物理 artifact 的离线验真。
+> 冻结边界：静态链接、确定性、workload/product-first 的 Arena 已可执行；正式候选赛道、任意物理
+> artifact 离线验真和独立发布均未启动。2026-09-02 起 TwoLeg 路线暂停。
 
 ## 目标
 
@@ -191,14 +191,13 @@ strategy-neutral suite identity 与 per-strategy run identity。
 - typed capacity tests 继续证明 selected rejection、no fallback、zero mutation/no metrics；
 - Arena-certified product 暴露 Store、workload receipts、final checkpoint 与 termination，不暴露 candidate metrics。
 
-## 下一阶段
+## 冻结时未执行的扩展
 
-1. 为已由复合 workload 证实的 stable A-debt 停滞设计受预算约束的最小 progress 回应；不要恢复会绕过
-   Base 预算的无条件 progress floor；
-2. 区分 Ready-to-Rotate 与 Should-Rotate，评估最小 hysteresis 是否能避免过早或振荡轮转；
-3. 基于上一轮 Update 的热度修正与按 `Base - Delta` 边际成本选择保留为独立候选，不混入 baseline
-   bug fix；candidate 稳定后再闭合 determinism/order/artifact 与 qualification gates；
-4. 只有 candidate 确实需要直接物理 Store 输出时才实现 untrusted artifact validator。
+- stable A-debt 的预算内 progress、Ready/Should hysteresis 与 hotness/marginal-cost candidate 未实现；
+- determinism/order/artifact qualification 没有冻结正式 competition packet；
+- hand-built physical Store/ledger 的 untrusted artifact validator 未实现。
+
+这些不是当前 backlog。只有 TwoLeg 明确恢复并出现真实多策略或 direct-artifact consumer 时才重访。
 
 ## 明确暂缓
 

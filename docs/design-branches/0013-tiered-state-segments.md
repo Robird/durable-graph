@@ -6,6 +6,9 @@
 >
 > 边界：本文记录单层 TwoLeg 的结构性下界与一个候选产品架构，不是当前 wire format、
 > `TwoLegRotationProbe` 实现计划或已接受设计。
+>
+> 2026-09-02：产品路线已选择 [`DB-014`](0014-multi-segment-backward-file-distance.md)。DB-013
+> 只在 TwoLeg 明确重启或出现独立 Hot/Cold placement consumer 时重访。
 
 ## 问题
 
@@ -93,9 +96,9 @@ publication 与运维复杂性。
 
 ## 对单层 TwoLeg 研究的影响
 
-`TwoLegRotationProbe` 继续研究单个 segment 内的 Rotate-or-Stay 与 Base-or-Deltify。后续进度机制应针对
-预算可分解的小中型 A debt，保证轮转准备不会因低 read amplification 永久停滞；不得声称它消除了
-大冷对象每个本层 epoch 的复制下界，也不得让不可分割对象无条件绕过写入峰值 envelope。
+若 `TwoLegRotationProbe` 未来重启，单个 segment 内的进度机制应只针对预算可分解的小中型 A debt；
+不得声称它消除了大冷对象每个本层 epoch 的复制下界，也不得让不可分割对象无条件绕过写入峰值
+envelope。当前没有活跃实现计划。
 
 ## 重访触发条件与最小探针
 

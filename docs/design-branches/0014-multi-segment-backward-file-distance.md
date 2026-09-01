@@ -6,6 +6,10 @@
 >
 > 边界：本文记录 DurableGraph 产品路线的下一持久化探针，不代表当前 runtime 已实现持久 StateStore，
 > 也不否定独立 `TwoLegRotationProbe` 的研究价值。
+>
+> Authority：本文 supersede `state-store-base-design.md` 中相邻两文件 closure/evacuation/rotation 的
+> 产品部分，以及 `state-store-addressing-design.md` 的 1-bit same/previous external-reference grammar。
+> 旧文档保留为 TwoLeg 可执行研究说明；one-frame、OVD、Base/Delta 与 lineage 等可复用部分仍需逐项验证。
 
 ## 裁决
 

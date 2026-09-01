@@ -1,10 +1,13 @@
 # StateStore 地址编码设计
 
-> 状态：Working Design
+> 状态：Superseded product grammar / TwoLeg technical reserve
 >
-> 更新日期：2026-08-28
+> 更新日期：2026-09-02
 >
-> 职责：本文是 `RelativeFrameTicket` 与 `AbsoluteFrameAddress` 的地址语义和 wire encoding 单一来源；不决定何时 Rebase、Deltify 或轮转。
+> 职责：本文只保存 `TwoLegRotationProbe` 的 1-bit same/previous `RelativeFrameTicket` grammar。
+> 当前产品候选允许引用任意 earlier file，其地址 authority 是
+> [`DB-014`](design-branches/0014-multi-segment-backward-file-distance.md) 的
+> `BackwardFileDistance + FrameTicketCode`。两种 grammar 互不兼容，本文不再是产品 wire 单一来源。
 
 ## 1. 类型边界
 

@@ -28,11 +28,11 @@
 | [DB-004](0004-snapshot-history-authoring-and-publishing.md) | Snapshot History 创作与发布 | Open | 正式 Generator publisher、团队/CI 摩擦或 persistent Schema authority 实验 |
 | [DB-005](0005-durable-inheritance-flattening.md) | Durable 继承展平 | Deferred | 首个真实 durable inheritance 模型或 composition 对照 |
 | [DB-006](0006-flat-graph-delta-prototype.md) | Flat Graph Delta 原型 | Chosen | R4 logical StateMap/apply、production reference adapter、persistent head 或 measured baseline cost |
-| [DB-007](0007-adaptive-two-leg-rotation-policy.md) | 自适应双腿轮转与 Rebase/Deltify 策略 | Open | Need-only readiness-progress 与 leg-pressure 判别实验、真实 RBF read log 或明确 P/F SLO |
+| [DB-007](0007-adaptive-two-leg-rotation-policy.md) | 自适应双腿轮转与 Rebase/Deltify 策略 | Deferred | DB-014 无法满足有界 dependency/retention SLO，TwoLeg 被明确重启 |
 | [DB-008](0008-revision-contextual-self-address.md) | Revision 内的 contextual self address | Chosen | multi-frame Revision、脱离 containing ticket 的裸 OVD 消费者或真实 codec 对照数据 |
 | [DB-009](0009-base-lineage-parent-locator.md) | Base lineage direct parent 与 Revision locator | Chosen | 真实 lineage consumer 出现且 OVD/TailMeta lookup 成为稳定瓶颈 |
 | [DB-010](0010-base-lineage-anchor-scope.md) | Base lineage anchor 的作用域 | Chosen | mixed-provenance Revision、import/rescue/stale Save 或 DurableId reuse/epoch |
-| [DB-011](0011-two-phase-save-planning-and-capacity.md) | Save 策略规划与容量可行性分层 | Open | 普通 workload 中稳定出现 capacity false-negative、次优可行候选或 continuation 证书差异 |
-| [DB-012](0012-two-leg-strategy-benchmark-arena.md) | TwoLeg 多策略 Benchmark Arena 的最小边界 | Partially implemented | 首轮 workload packet、任意 hand-built artifact consumer 或第二 engine/runner |
-| [DB-013](0013-tiered-state-segments.md) | 按写入温度分片的双层 State segments | Deferred | 必须原子共存且不适合 Artifact/独立 Store 的 mutable-cold consumer 与明确 P/F/写入 guardrail |
+| [DB-011](0011-two-phase-save-planning-and-capacity.md) | Save 策略规划与容量可行性分层 | Superseded | TwoLeg 重新成为产品候选且出现普通 workload capacity false-negative |
+| [DB-012](0012-two-leg-strategy-benchmark-arena.md) | TwoLeg 多策略 Benchmark Arena 的最小边界 | Deferred | TwoLeg 研究明确恢复并出现真实多策略或 hand-built artifact consumer |
+| [DB-013](0013-tiered-state-segments.md) | 按写入温度分片的双层 State segments | Deferred | TwoLeg 重启，或出现必须原子共存的独立 Hot/Cold placement consumer |
 | [DB-014](0014-multi-segment-backward-file-distance.md) | 多历史 Segment 与 BackwardFileDistance 地址 | Chosen | MultiSegment probe 的跨四文件恢复、reopen/fail-close 与 recovery-closure evidence |

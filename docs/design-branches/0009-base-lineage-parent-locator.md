@@ -11,6 +11,10 @@
 >
 > 竞争方案归档：annotated tag `research/relay-vs-relay-free-20260829`
 > 指向提交 `b84620b`。
+>
+> Scope：该裁决保留 Base lineage 经 prior Revision OVD 查找的语义；文中的 A/B/C bridge、preparatory
+> B migration 与 adjacent-file locator 只属于冻结 TwoLeg topology。当前产品文件地址见
+> [`DB-014`](0014-multi-segment-backward-file-distance.md)。
 
 ## 裁决
 

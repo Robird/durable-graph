@@ -1,16 +1,16 @@
 # DB-007：自适应双腿轮转与 Rebase/Deltify 策略
 
-> 状态：Open
+> 状态：Deferred
 >
 > 创建日期：2026-08-28
 >
 > 更新日期：2026-09-01
 >
-> 当前方向：可执行 workload 已观察到 budget-compatible 低放大 A-debt 连续 64 个自然 Save 保持 Stay；
+> 冻结结论：可执行 workload 已观察到 budget-compatible 低放大 A-debt 连续 64 个自然 Save 保持 Stay；
 > 在相同 strategy view 持续重复的条件下，pure selector 会 indefinitely stall，这是源码推导而非无限期测量。
-> 后续控制分成 ReadMotive、ReadinessProgress 与 ShouldRotate。候选公式、边界与判别实验见
+> 未实现的后续控制分成 ReadMotive、ReadinessProgress 与 ShouldRotate。候选公式、边界与判别实验见
 > [`ADAPTIVE-ROTATION-CONTROL-CANDIDATE.md`](../../experiments/TwoLegRotationProbe/ADAPTIVE-ROTATION-CONTROL-CANDIDATE.md)。
-> 旧 frame-release 与 bounded explorer 方向仅在新的物理布局反例或具体保守拒绝出现后重启。
+> 2026-09-02 起 TwoLeg 路线暂停；产品候选转向 [`DB-014`](0014-multi-segment-backward-file-distance.md)。
 
 > Authority boundary：本文保存 2026-08-28 至 2026-08-30 的候选分支与历史探针证据，不是当前
 > benchmark baseline 的算法规格。文中 `progress floor`、NoChange-first 与“当前 executable baseline”
@@ -97,7 +97,7 @@ EvacuationSet。caller-selected B migrations 现在可以与 final C rotation �
 batches 及 terminal C action，再用同一 runtime OVD/reconstruction/layout oracle 复验。便宜
 heuristic 不能自行宣称 completeness，但 explorer 不再作为首个连续策略循环的前置依赖。
 
-## 当前 executable baseline
+## 冻结时的 executable evidence
 
 - deterministic Field/List workload generation 与 replay；Create/Update/Remove 尺寸态连续且禁止
   ObjectId reuse；
@@ -149,7 +149,7 @@ completeness 或未来 wire format。尺寸裁决始终以 whole-candidate estim
 
 这些数字只证明 write/read tradeoff 可观测，不选择 winner。
 
-## 未闭合事项与顺序
+## 冻结时未闭合事项
 
 1. 构造等 Base payload、固定单对象迁移数量的选择冲突：ObjectId-first 选中仍与其他 debt 共帧的对象，
    frame-release-aware 选中独占另一 Frame 的对象；比较即时 exact Frame release、append 与换腿后 debt；

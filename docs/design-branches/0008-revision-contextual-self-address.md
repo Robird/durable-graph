@@ -5,6 +5,10 @@
 > 创建日期：2026-08-29
 >
 > 当前方向：`TwoLegRotationProbe` 已用 `ProvisionalRevisionV0` 选择字段级 `Self`；不把临时 record/opcode/layout 提升为正式 wire format。
+>
+> 2026-09-02：字段局部 `BindSelf` 仍与 [`DB-014`](0014-multi-segment-backward-file-distance.md)
+> 相容；本文其余 same/previous external binding grammar 只作为 TwoLeg executable evidence，产品 external
+> reference 改由 BackwardFileDistance 表达。
 
 ## 问题
 
