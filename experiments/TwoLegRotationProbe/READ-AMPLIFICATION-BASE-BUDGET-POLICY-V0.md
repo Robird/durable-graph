@@ -191,3 +191,8 @@ The aligned-channel `active-hundred-mixed-cold-debt` workload separately exposes
 remaining liveness blind spot: 20 low-amplification cold A-debt objects survive all 64
 natural Saves and both profiles select only Stay. This is evidence for a future bounded
 progress repair, not part of the v0 selector contract.
+
+The candidate successor model separates ReadMotive, budget-constrained ReadinessProgress,
+and ShouldRotate pressure; it is documented in
+[`ADAPTIVE-ROTATION-CONTROL-CANDIDATE.md`](ADAPTIVE-ROTATION-CONTROL-CANDIDATE.md) and is not
+implemented by this v0 contract.

@@ -4,12 +4,13 @@
 >
 > 创建日期：2026-08-28
 >
-> 更新日期：2026-08-30
+> 更新日期：2026-09-01
 >
-> 当前方向：统一 per-Save candidate、连续换腿、scope-safe observations、changed A-debt
-> Base/Delta、role-disjoint cold-migration 2x2 与 source payload-Frame partition discriminator 已闭合；
-> 下一步比较等写入 payload 下的 ObjectId-first 与 frame-release-aware 单对象迁移选择。bounded explorer
-> 只在出现具体保守拒绝或疑似 false-negative 后介入。
+> 当前方向：可执行 workload 已观察到 budget-compatible 低放大 A-debt 连续 64 个自然 Save 保持 Stay；
+> 在相同 strategy view 持续重复的条件下，pure selector 会 indefinitely stall，这是源码推导而非无限期测量。
+> 后续控制分成 ReadMotive、ReadinessProgress 与 ShouldRotate。候选公式、边界与判别实验见
+> [`ADAPTIVE-ROTATION-CONTROL-CANDIDATE.md`](../../experiments/TwoLegRotationProbe/ADAPTIVE-ROTATION-CONTROL-CANDIDATE.md)。
+> 旧 frame-release 与 bounded explorer 方向仅在新的物理布局反例或具体保守拒绝出现后重启。
 
 > Authority boundary：本文保存 2026-08-28 至 2026-08-30 的候选分支与历史探针证据，不是当前
 > benchmark baseline 的算法规格。文中 `progress floor`、NoChange-first 与“当前 executable baseline”
@@ -28,6 +29,10 @@
 
 当前没有证据表明 `TotalPersistBytes`、Previous-file ratio 或任一单标量是充分统计量；允许最终
 不存在唯一 winner。
+
+2026-09-01 的当前裁决只冻结概念分层与 test-local 路线，不宣称新的 Adaptive 控制器已实现。
+特别地，大型不可分割冷对象的单层复制下界已拆到 [`DB-013`](0013-tiered-state-segments.md)；
+DB-007 只继续研究单个 segment 内预算可分解的轮转进度和时机。
 
 ## 已选择的硬约束
 

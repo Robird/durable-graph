@@ -763,12 +763,19 @@
 
 ## 6. 船长日志
 
+### 2026-09-01：拆分 Adaptive readiness progress 与 Rotate pressure
+
+- **Decided**：大型不可分割冷对象每个单层 epoch 必须支付完整 Base，是 TwoLeg 结构性下界；双层同构 Hot/Cold segments 以 DB-013 记录为 deferred 产品分叉，当前不扩 Arena/wire。
+- **Concluded**：Adaptive 后续控制拆为 ReadMotive、ReadinessProgress、ShouldRotate。首个局部候选用 `ReadyMaxE=ceil(G*f)-1` 与 Need-only preparation；A-dependent Update/NoChange 获得不可饿死、fit-and-skip、严格不越 `Q` 的进度席位，达到 Ready 后停止低放大迁移。
+- **Rejected for now**：Fill-Q 会把更多 Base 提前写进即将成为 Previous 的 B；banked credit 若能跨 `Q` 只会恢复尖峰，若不能则不比本轮预算席位多提供能力；per-object debt age 在单 epoch 内也没有新增信息。
+- **Open / Next**：ready-only target 在 `E==0` 且 foreground 每轮自然 Base 时可退化成一 Revision 一文件。先用 near-ready sawtooth 与 same-age/different-leg-pressure 两个 test-local discriminator，再选择 Should pressure；可恢复的 post-opening Current-leg physical growth 是 leading product signal，但 threshold 尚未裁决。
+
 ### 2026-09-01：复合 workload 证实 Adaptive 的 stable A-debt 停滞
 
 - **Question**：修复无动机 progress floor 后，现实感更强的持续活跃对象群中，低放大率冷 A-debt 是否会长期阻塞 Rotate。
 - **Implemented**：加入只负责对齐 Save timeline、隔离 ObjectId ownership 并合并 change lanes 的 `WorkloadTraceComposer`；corpus revision 18 保留原 `active-hundred-mixed`，另叠加 20 个 bootstrap-only、合计 1120B 的冷对象 channel，形成十八 workloads × 两 profiles = 36 cases。
 - **Observed**：两 profile 在复合 trace 的 64 个 workload Saves 中全部选择 Stay，末端 20 个冷对象仍从 A 重建；`(3,5%)` 的 `W/P/F/R/L=117404/2076/117448/4166576/345484`，`(4,4%)` 为 `115692/2056/115736/4108844/345484`。
-- **Concluded / Next**：stable low-amplification A-debt stall 已从假说变成有限 horizon 可执行反例。下一步只设计一个受软预算约束的最小 progress 补丁；不同时混入一般 Rotate hysteresis，也不恢复绕过预算的无条件迁移。
+- **Concluded / Superseded next step**：stable low-amplification A-debt stall 已从假说变成有限 horizon 可执行反例。最初计划只补 progress；上方后续研究证明 Need-only preparation 还必须与独立 ShouldRotate 语义共同设计，仍不恢复绕过预算的无条件迁移。
 
 ### 2026-09-01：修复 Adaptive NoChange progress 越过 Base 预算
 

@@ -162,31 +162,45 @@ NoChange 以严格 `H/B` 产生 Base 动机；统一按放大率/ObjectId 排序
 `115692/2056/115736/4108844/345484`。这已把“稳定低放大 A debt 长期阻塞 Rotate”从假说提升为有限
 horizon 可执行反例；它不证明生产频率、无限期停滞或补丁优劣。
 
+当前设计研究已把该现象拆成三个正交职责：ReadMotive 选择 Base/Delta，ReadinessProgress 在 `Q` 内把
+旧 A evacuation 压入严格 readiness band，ShouldRotate 再判断 Current leg 是否值得迈腿。Readiness 的
+候选采用 `ReadyMaxE=ceil(G*f)-1` 与 Need-only preparation；它只搬到下一轮可低峰 Rotate 所需，不机械
+填满 `Q`。另一个推导反例表明 `E==0` 且 foreground 每轮自然 Base 时，当前 ready-only target 会每 Save
+Rotate，因此 progress 不能被误称为完整时机算法。具体候选与证据边界见
+[`ADAPTIVE-ROTATION-CONTROL-CANDIDATE.md`](ADAPTIVE-ROTATION-CONTROL-CANDIDATE.md)。
+
+大型不可分割冷对象则是单层结构性边界：每个本层 epoch 在退休 A 前都必须支付一次完整 Base，策略只能
+平滑而不能消除。候选双层同构 Hot/Cold segments 已记录为 deferred [`DB-013`](../../docs/design-branches/0013-tiered-state-segments.md)，
+不进入当前单层策略实现。
+
 ## 下一编码切片
 
-先针对已证实的稳定冷 A-debt 停滞设计一个最小独立补丁；暂不同时引入一般 Rotate hysteresis。
-不得恢复会绕过 `Q` 的 unconditional progress、增加未来视野或 feasibility oracle；复跑 36-case suite 并报告
-typed outcomes、references 与 raw metrics，不合分、不排榜。
+先不原地修改 Adaptive v2。用 test-local 白盒 trace 闭合两个因果判别：near-ready Need-versus-Fill
+sawtooth，以及相同 `G/E/Q` 和 Save age、不同 Current-leg write pressure 的 paired trace；随后实现一个隔离
+candidate，组合 Need-only、严格 `Q` 内的 readiness progress 与一个明确命名的 experimental Should pressure。
+不得增加未来视野或 feasibility oracle，也不得把 progress 的有条件 liveness 冒充 oversized debt 的一般解。
 
 ## 近期 roadmap
 
-1. **设计冷债进度补丁**：在保持单次 Base 软预算与严格读放大动机的前提下，为 stable A debt 提供有界、
-   可累计的 Rotate 进度；先比较最小状态事实或无状态替代，不把 Should-Rotate hysteresis 一并混入；
-2. **实现策略回应**：只对该已证实短板构造一个最小独立 candidate，不改变 Arena contract 或让策略读取
-   未来/feasibility；随后报告 typed outcomes 与 raw metrics，不合分、不排榜；
-3. **按弱点而非目录扩容**：只有 candidate 复审指出新的具体 blind spot，才增加或调整最小 validation；
-   不再按 generic axis 或 seed 数机械扩 corpus；
-4. **候选成形后再封包**：闭合 determinism/order/artifact 与 qualification gates，冻结 `ROUND-1` packet/tag，
-   再启动并行 candidate round。
+1. **闭合局部判别**：test-local 验证 Need-only 比 Fill-Q 少携带下一 epoch debt，并暴露 ready-only 的短 leg
+   churn；再用 low/high leg-pressure pair 判别 Save age、foreground payload 与 physical tail-growth facts；
+2. **实现隔离 candidate**：ReadMotive 保持独立；A-dependent Update/NoChange 获得不可饿死、fit-and-skip、
+   不越 `Q` 的 Need-only progress；Should pressure 先作为实验参数，不提升为产品 invariant；
+3. **复跑统一 suite**：保留 v2 baseline 作为因果对照，报告 typed outcomes、target/migration sequence 与
+   raw W/P/F/R/L；只有机制产生稳定价值后才 bump active profile 或提升 workload；
+4. **候选成形后再封包**：按弱点而非目录扩 validation，闭合 determinism/order/artifact gates 后再冻结
+   `ROUND-1` packet/tag；DB-013 只在其 mutable-cold consumer/SLO 触发条件成立后重启。
 
 ## 未闭合事项
 
 - 哪些互相正交的因果 workload 轴足以支撑“没有明显短板”仍未知；统一 suite 只提供可重复 synthetic evidence，
   不能声称代表生产；
-- 无 unconditional progress 后，低放大率稳定 A debt 在复合对抗 trace 的 64 个自然 Save 中全部未动并阻塞
-  Rotate；应使用累计 budget、债务年龄、受预算约束的 progress 或其他最小机制，尚未裁决；
-- 当前 `E/G` Rotate trigger 只证明迁移代价低于比例阈值，没有 leg age/write/file pressure，因此混淆
-  Ready-to-Rotate 与 Should-Rotate；简单 hysteresis 的事实输入与收益仍待白盒验证；
+- Need-only readiness-progress 的整数语义与不越 `Q` 边界已形成候选，但 debt greedy 顺序不承诺单步
+  knapsack 完备；若每个剩余对象都大于 `Q` 或 exact admission 持续拒绝，则不承诺 eventual Rotate；
+- `E/G` 只定义 Ready-to-Rotate；ShouldRotate 的 leading product amortization signal 是排除 opening
+  Revision 后的可恢复 Current-leg physical growth，但 threshold/frozen reference scope 未裁决，且绝对
+  tail/capacity pressure 仍是另一事实。accepted foreground payload 可作首个 experiment，Save count 只适合
+  作 max-lag backstop；
 - 当前 payload-only canonical toolkit 是否足以产生结构多样的首轮 candidate，需由首轮结果验证；Frame-aware
   facts 仅在 payload-identical 布局造成 canonical outcome 反转或 Frame-aware oracle 进入新 Pareto 点时进入 V2；
 - 当前 profile-matrix manifest 可由 organizer 冻结候选后统一重跑；若出现分批 strategy report 缓存/比较
@@ -203,6 +217,7 @@ typed outcomes、references 与 raw metrics，不合分、不排榜。
 ## 明确暂缓
 
 - object references、reachability、GC、serialization 与 durable graph product integration；
+- DB-013 双层 Hot/Cold segments、自动冷热识别、跨层迁移与 composite durable publication；
 - byte writer/parser、正式 wire format、Extent/multi-frame Revision；
 - durable publication、crash/reopen、concurrency、store identity 与文件 GC；
 - 完备 feasibility solver、一般图搜索、动态策略插件/MEF/assembly scanning；
@@ -224,9 +239,11 @@ typed outcomes、references 与 raw metrics，不合分、不排榜。
 - 已实现模型与运行方式：[`README.md`](README.md)
 - evaluator v1 admissibility/settlement/指标合约：[`EVALUATOR-V1.md`](EVALUATOR-V1.md)
 - 当前候选策略契约：[`READ-AMPLIFICATION-BASE-BUDGET-POLICY-V0.md`](READ-AMPLIFICATION-BASE-BUDGET-POLICY-V0.md)
+- Adaptive 后续控制候选：[`ADAPTIVE-ROTATION-CONTROL-CANDIDATE.md`](ADAPTIVE-ROTATION-CONTROL-CANDIDATE.md)
 - 前人成果与算法参考：[`PRIOR-ART.md`](PRIOR-ART.md)
 - 活跃设计分叉：[`../../docs/design-branches/0007-adaptive-two-leg-rotation-policy.md`](../../docs/design-branches/0007-adaptive-two-leg-rotation-policy.md)
 - 多策略 Arena 边界：[`../../docs/design-branches/0012-two-leg-strategy-benchmark-arena.md`](../../docs/design-branches/0012-two-leg-strategy-benchmark-arena.md)
+- 双层同构 State segments：[`../../docs/design-branches/0013-tiered-state-segments.md`](../../docs/design-branches/0013-tiered-state-segments.md)
 - Plan/容量分层：[`../../docs/design-branches/0011-two-phase-save-planning-and-capacity.md`](../../docs/design-branches/0011-two-phase-save-planning-and-capacity.md)
 - StateStore 基础约束：[`../../docs/state-store-base-design.md`](../../docs/state-store-base-design.md)
 - 地址 authority：[`../../docs/state-store-addressing-design.md`](../../docs/state-store-addressing-design.md)
