@@ -35,3 +35,4 @@
 | [DB-011](0011-two-phase-save-planning-and-capacity.md) | Save 策略规划与容量可行性分层 | Open | 普通 workload 中稳定出现 capacity false-negative、次优可行候选或 continuation 证书差异 |
 | [DB-012](0012-two-leg-strategy-benchmark-arena.md) | TwoLeg 多策略 Benchmark Arena 的最小边界 | Partially implemented | 首轮 workload packet、任意 hand-built artifact consumer 或第二 engine/runner |
 | [DB-013](0013-tiered-state-segments.md) | 按写入温度分片的双层 State segments | Deferred | 必须原子共存且不适合 Artifact/独立 Store 的 mutable-cold consumer 与明确 P/F/写入 guardrail |
+| [DB-014](0014-multi-segment-backward-file-distance.md) | 多历史 Segment 与 BackwardFileDistance 地址 | Chosen | MultiSegment probe 的跨四文件恢复、reopen/fail-close 与 recovery-closure evidence |

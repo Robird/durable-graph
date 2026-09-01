@@ -763,6 +763,13 @@
 
 ## 6. 船长日志
 
+### 2026-09-02：选择多历史 Segment 产品路线并建立地址 Probe
+
+- **Decided**：产品候选放弃 latest reconstruction 仅限相邻两文件的格式约束；文件切换只由 soft target/RBF hard bounds 控制，Base/Deltify 与未来 compaction 独立。TwoLeg 保留为研究路线。
+- **Decided**：FileNumber 使用目录内 1-based `UInt32`，canonical filename 直接寻址，不增加集中 catalog 或 StoreId/FileId 文件头；wire 使用无固定 horizon 的 canonical `VarUInt32 BackwardFileDistance`，runtime 立即 absolute-normalize。
+- **Implemented**：新增隔离 `MultiSegmentStateStoreProbe` 与独立 tests/slnx；首批 executable vectors 覆盖 same/previous/>65,535/最大距离、十位 `.rbf` 文件名，以及 Base128 overlong/overflow/truncated/required-zero fail-close。
+- **Boundary / Next**：`FrameTicketCode` 仍是 `SizedPtr` stand-in，尚无 RBF/OVD/reopen/GC。下一切片只做 in-memory Segment/Frame store 与 soft rollover，不进入 `src/DurableGraph`。
+
 ### 2026-09-01：拆分 Adaptive readiness progress 与 Rotate pressure
 
 - **Decided**：大型不可分割冷对象每个单层 epoch 必须支付完整 Base，是 TwoLeg 结构性下界；双层同构 Hot/Cold segments 以 DB-013 记录为 deferred 产品分叉，当前不扩 Arena/wire。
