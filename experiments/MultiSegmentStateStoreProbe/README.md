@@ -19,4 +19,5 @@ dotnet test experiments\MultiSegmentStateStoreProbe\MultiSegmentStateStoreProbe.
 ```
 
 当前决策、roadmap 和未闭合事项见 [`PROJECT-STATE.md`](PROJECT-STATE.md)，地址路线见
-[`DB-014`](../../docs/design-branches/0014-multi-segment-backward-file-distance.md)。
+[`DB-014`](../../docs/design-branches/0014-multi-segment-backward-file-distance.md)。后续编码的全景目标与
+关键不变量以 [`TARGET-DESIGN.md`](TARGET-DESIGN.md) 为主入口。

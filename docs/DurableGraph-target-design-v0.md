@@ -436,6 +436,10 @@ Source Generator 为每个 durable type 生成：
 
 性质：逻辑可变、物理 append-only、权威。
 
+StateStore 当前选定的多历史 Segment 地址、rollover、OVD/ObjectVersion 与恢复目标，详见
+[`MultiSegmentStateStoreProbe/TARGET-DESIGN.md`](../experiments/MultiSegmentStateStoreProbe/TARGET-DESIGN.md)。
+本节只保留 DurableGraph 全局职责，不重复冻结该探针的 provisional 类型与 wire。
+
 保存：
 
 - object version record；
@@ -915,4 +919,3 @@ RebuildTransient
 最初的正确目标不是“建成一个数据库”，而是证明下面这条闭环可以成立：
 
 > 普通 C# 领域对象 → 生成精确 Schema 与 codec → 保存时发现真实差异 → append 新对象版本 → 单一 manifest 发布 → 用历史 Schema 可靠加载 → 显式升级 → 重建 transient/derived 状态。
-

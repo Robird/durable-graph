@@ -50,7 +50,8 @@
 - Stored Graph Normalization R3a：test-only mixed V1/V2 record table 经全表 exact preflight、typed decode/upgrade 与 source-reference gate 归一化成 current-Snapshot baseline。
 - CLR Graph Materialization R3b：只对 normalized current root closure allocate-all/hydrate-all，恢复 sharing/cycles 后 root-only exposure；disconnected source rows 不分配。
 - Multi-segment StateStore candidate：DB-014 已选择 1-based FileNumber、canonical filename 与
-  `BackwardFileDistance` 任意 earlier-file reference；当前隔离 probe 只实现地址/编码首切片。
+  `BackwardFileDistance` 任意 earlier-file reference；项目级 `TARGET-DESIGN.md` 已收敛地址、OVD、
+  Base/Delta、Save/Load、publication、策略/评价与实现 gates，当前代码仍只实现地址/编码首切片。
 - StateStore TwoLeg 基础/地址/派生文档：相邻 FileScope、1-bit `RelativeFrameTicket`、A/B/C evacuation 与
   `CanPrepareAndRotate` 已被产品路线 supersede，完整保留为 TwoLeg 技术储备。
 - Two-leg rotation probe：独立 Arena/Baselines/Tests subsolution 已冻结；保留 runtime OVD、Base/Delta、
@@ -759,6 +760,14 @@
 ```
 
 ## 6. 船长日志
+
+### 2026-09-02：收敛 MultiSegment StateStore 实现主设计
+
+- **Decided**：新增项目级 `TARGET-DESIGN.md`，把 DB-014 的路线裁决展开为唯一 authority、origin-scoped address、OVD/ObjectVersion、Save/Load、rollover、publication、baseline policy、W/P/F/R/L 与 G0-G6 executable gates；README 和 PROJECT-STATE 只保留现状导航与活跃工作集。
+- **Decided**：rollover 复用同一个 origin-free logical plan，但必须按新文件 origin 重新 relativize、编码和定尺；它不重跑 Base/Deltify/OVD policy。
+- **Decided**：保留 shared PriorRevision 与 Base lineage；OVD Base 的 prior 是 lineage-only，不进入 current recovery closure。保留可选 SameStateRebase 作为读放大维护，删除 TwoLeg evacuation/rotation 语义。
+- **Boundary**：durable-before-publish 是目标 law；head carrier、atomic publication、file/directory flush、orphan 后 FileNumber allocation 与正式 wire 仍待 filesystem/RBF gate。当前没有把目标能力描述成已实现。
+- **Review**：四路独立 thesis、交叉质询与终审已收敛；无架构 blocker。终审补齐 current-required 与 lineage-only dependency、派生 NoChange、首次文件、OVD Delta canonicality、零尺寸 amplification、物理 W/P 与 Empty-vs-missing head 边界。
 
 ### 2026-09-02：将 TwoLegRotationProbe 冻结为可执行技术储备
 

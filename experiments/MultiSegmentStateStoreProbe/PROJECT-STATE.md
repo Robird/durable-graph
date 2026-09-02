@@ -12,6 +12,8 @@
 本探针不修改 `src/DurableGraph`，不依赖或替代 `TwoLegRotationProbe`；产品整合只发生在地址、跨文件
 重建、reopen 与 fail-close evidence 闭合之后。
 
+后续实现以 [`TARGET-DESIGN.md`](TARGET-DESIGN.md) 为全景规范；本文件只保留当前工作集，不重复长期设计。
+
 ## 已选择不变量
 
 - FileNumber 是 1-based `UInt32`，`0` 非法；published FileNumber 不复用，overflow fail closed；
@@ -37,20 +39,26 @@
 ## 当前焦点
 
 建立最小 in-memory append-only Segment/Frame store 与 soft `TargetFileBytes` rollover，让文件切换只改变
-append destination，不改变任何 ObjectVersion Base/Delta 决策。
+append destination，不改变任何 ObjectVersion Base/Delta 决策。logical plan 在 placement 前冻结；若
+切换到新文件，必须按新 origin 重新 relativize、编码和定尺，而不是复用旧 bytes/estimate 或重跑 policy。
+
+基础能力缺失时，先检查冻结的 `TwoLegRotationProbe` 是否已有同领域机制。只复用代码片段、测试意图或
+设计思想，不建立项目依赖，也不带回 A/B/C、A-debt、evacuation、paired candidate 或 terminal settlement。
 
 ## 近期 roadmap
 
-1. runtime OVD 跨 F1-F4 materialization，冷 Base 留在 F1、热 Delta 推进；
-2. OVD Base 在新文件重编码 historical heads，验证不 relocation 对象；
-3. filesystem naming/reopen、exact PublishedHead 与 missing dependency fail-close；
-4. derived recovery-closure/pinned-file inspection；
-5. evidence 充分后，把最小地址与 reader contract 整合到产品 StateStore。
+1. 强类型 FrameTicket、same-file earlier validation、append-only store 与 soft rollover；
+2. runtime OVD/ObjectVersion 跨 F1-F4 materialization，冷 Base 留在 F1、热 Delta 推进；
+3. origin-free RevisionPlan、OVD Base historical-head reencode、shared-prior lineage 与 logical publication；
+4. 移植 deterministic workload、精简 BaseBudget policy 与 W/P/F/R/L evaluator；
+5. filesystem naming/reopen、exact PublishedHead、durability gates 与 missing dependency fail-close；
+6. evidence 充分后，把最小地址与 reader contract 整合到产品 StateStore。
 
 ## 未闭合事项
 
 - exact filename prefix/extension 是否沿用本探针的十位十进制 `.rbf`；
 - 正式 `SizedPtr` canonical encoding 与 BackwardFileDistance 的 record framing；
+- 当前 opaque FrameTicketCode 如何演化为可验证 same-file earlier 和可测 Frame length 的强类型 ticket；
 - OVD Base/Deltify 的独立 read-amplification policy；
 - `TargetFileBytes` 的 API、dedicated oversize file 与 hard bound；
 - orphan file reconciliation、published head durability 与目录 metadata flush；

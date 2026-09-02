@@ -10,6 +10,9 @@
 > Authority：本文 supersede `state-store-base-design.md` 中相邻两文件 closure/evacuation/rotation 的
 > 产品部分，以及 `state-store-addressing-design.md` 的 1-bit same/previous external-reference grammar。
 > 旧文档保留为 TwoLeg 可执行研究说明；one-frame、OVD、Base/Delta 与 lineage 等可复用部分仍需逐项验证。
+>
+> 实现入口：完整目标模型、Save/Load 流程、策略/评价边界与 executable gates 见
+> [`MultiSegmentStateStoreProbe/TARGET-DESIGN.md`](../../experiments/MultiSegmentStateStoreProbe/TARGET-DESIGN.md)。
 
 ## 裁决
 
