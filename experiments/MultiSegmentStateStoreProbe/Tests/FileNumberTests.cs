@@ -18,7 +18,7 @@ public sealed class FileNumberTests {
         Assert.Throws<InvalidDataException>(() => invalid.Next());
         Assert.Throws<InvalidDataException>(() => FileNameConvention.Format(invalid));
         Assert.Throws<InvalidDataException>(() =>
-            new AbsoluteFrameAddress(invalid, frameTicketCode: 1));
+            new AbsoluteFrameAddress(invalid, new FrameTicket(4, 24)));
     }
 
     [Theory]

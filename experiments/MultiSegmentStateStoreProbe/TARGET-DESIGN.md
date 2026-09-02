@@ -140,9 +140,8 @@ AbsoluteFrameAddress
     FrameTicket          // probe-local strong value，提供 start/length
 ```
 
-`FrameTicket` 必须能提供 Frame start/length，以便验证 same-file strictly-earlier、读取模拟 Frame 和计算
-物理指标。当前 `ulong FrameTicketCode` 只足以验证编码边界，应在 G1 演化为 probe-local strong value；
-与真实 `Atelia.Data.SizedPtr` 的整合属于阶段 B。
+`FrameTicket` 提供 Frame start/length，以便验证 same-file strictly-earlier、读取模拟 Frame 和计算物理指标；
+当前 G1 已实现 probe-local strong value。与真实 `Atelia.Data.SizedPtr` 的整合属于阶段 B。
 
 ObjectVersion 的逻辑定位是 `(AbsoluteFrameAddress, ObjectId)`；是否建立单独 C# wrapper 由实现切片决定，
 不形成另一套持久 identity。
@@ -159,8 +158,7 @@ RelativeFrameTicket
 targetFileNumber = originFileNumber - BackwardFileDistance
 ```
 
-当前代码中的 `BackwardFrameReference` 是这一概念的第一切片。实现演进时应合并/重命名，而不是并存两套
-relative authority。
+当前代码以 `RelativeFrameTicket` 实现这一概念，不再保留旧 `BackwardFrameReference` authority。
 
 `FileScope` 是解释 relative value 的小型上下文：
 

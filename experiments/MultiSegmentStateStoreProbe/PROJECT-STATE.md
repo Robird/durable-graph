@@ -30,35 +30,37 @@
 ## 当前具备
 
 - 1-based checked FileNumber 与十位十进制 `.rbf` canonical filename round-trip；
-- runtime `AbsoluteFrameAddress` 与 required `BackwardFrameReference`；
+- strong `{OffsetBytes, LengthBytes}` FrameTicket、runtime `AbsoluteFrameAddress` 与 required
+  `RelativeFrameTicket`；
 - same/previous/>65,535/UInt32 最大距离的 absolute-relative round-trip；
 - canonical VarUInt32/VarUInt64 writer-reader，以及 overlong、overflow、truncated 与 zero-ticket fail-close；
+- same-file strictly-earlier validation 与 provisional single-Frame envelope hard bounds；
+- in-memory append-only Segment/Store、origin-free logical plan、origin-dependent render/measure；
+- soft `TargetFileBytes` rollover：nonempty crossing 只重编码同一 plan，empty oversize 原地容纳，下一 Save
+  自然切换；hard bound 或 FileNumber overflow typed reject 且不 append/publish；
 - 独立 core/test `.slnx`，不进入产品 solution 或 TwoLeg 子树。
 
-`FrameTicketCode` 仍只是 non-zero opaque `SizedPtr` stand-in；当前没有正式 RBF wire、Frame store、OVD
-或持久 StateStore。
+当前 Frame envelope、relative codec 和 synthetic plan 都只是内存探针 grammar；没有正式 RBF wire、OVD 或
+持久 StateStore。
 
 ## 当前焦点
 
-建立最小 in-memory append-only Segment/Frame store 与 soft `TargetFileBytes` rollover，让文件切换只改变
-append destination，不改变任何 ObjectVersion Base/Delta 决策。logical plan 在 placement 前冻结；若
-切换到新文件，必须按新 origin 重新 relativize、编码和定尺，而不是复用旧 bytes/estimate 或重跑 policy。
+建立 runtime Revision/OVD/ObjectVersion immutable model 与 current-state reader，用 F1-F4 证明冷 Base 可留在
+F1、热对象和 Revision 独立推进，并让 required missing、future、same-file non-earlier、cycle 与错误 ObjectId
+全部 fail closed。
 
 基础能力缺失时，先检查冻结的 `TwoLegRotationProbe` 是否已有同领域机制。只复用代码片段、测试意图或
 设计思想，不建立项目依赖，也不带回 A/B/C、A-debt、evacuation、paired candidate 或 terminal settlement。
 
 ## 近期 roadmap
 
-1. 强类型 FrameTicket、same-file earlier validation、append-only store 与 soft rollover；
-2. runtime OVD/ObjectVersion 跨 F1-F4 materialization，冷 Base 留在 F1、热 Delta 推进；
-3. origin-free RevisionPlan、OVD Base historical-head reencode、shared-prior lineage 与 logical publication；
-4. 移植 deterministic workload、精简 BaseBudget policy 与 W/P/F/R/L evaluator；完成后停止 Probe。
+1. runtime OVD/ObjectVersion 跨 F1-F4 materialization，冷 Base 留在 F1、热 Delta 推进；
+2. origin-free RevisionPlan、OVD Base historical-head reencode、shared-prior lineage 与 logical publication；
+3. 移植 deterministic workload、精简 BaseBudget policy 与 W/P/F/R/L evaluator；完成后停止 Probe。
 
 ## 未闭合事项
 
-- 当前 opaque FrameTicketCode 如何演化为可验证 same-file earlier 和可测 Frame length 的强类型 ticket；
-- OVD Base/Deltify 的独立 read-amplification policy；
-- `TargetFileBytes` 的 API、dedicated oversize file 与 hard bound；
+- OVD Base/Delta 的显式 caller choice 与 current reconstruction；自动 OVD policy 暂缓；
 - SameStateRebase 的 W/R tradeoff 与是否保留在 adaptive baseline。
 
 ## 明确暂缓

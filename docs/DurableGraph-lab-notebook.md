@@ -79,15 +79,16 @@
 - **Decided**：当前持久化优先级转向 DB-014 / `MultiSegmentStateStoreProbe`；文件 rollover 与
   Base/Deltify/OVD membership 解耦，冷 ObjectVersion 不因切文件而强制 relocation。
 - **Observed**：MultiSegment 首切片只实现 FileNumber、canonical filename、absolute address、
-  BackwardFrameReference 与 canonical Base128 fail-close；Segment store、soft rollover、OVD、reopen、
-  PublishedHead、recovery closure 与 GC 均未实现。
+  RelativeFrameTicket 与 canonical Base128 fail-close；G1 又实现 strong FrameTicket、same-file strictly-earlier、
+  append-only in-memory Segment/Store、唯一 provisional envelope estimator 与 soft rollover re-render。typed hard
+  reject 与 FileNumber overflow 均不 append/publish；OVD、reconstruction、正式 reopen 与 GC 仍未实现。
 - **Decided**：TwoLeg 全子树保持完整可执行但默认不活跃；相邻两文件 closure、1-bit relative ticket、
   A-debt、Stay/Rotate 与 terminal settlement 不迁移到 DB-014 正常 Save。
 - **Decided**：可复用的是 absolute-normalize/relative-reencode、OVD authority、Base/Delta reconstruction、
   current/lineage 分层、whole-candidate gate、no-fallback apply、deterministic workload 与 raw evaluator 思想。
 - **Decided**：R4–R7 logical graph 依赖顺序保留；产品整合前与 MultiSegment 持久化探针继续分离。
-- **Open**：DB-014 的 in-memory Segment/Frame store、soft target rollover、跨 F1–F4 OVD recovery、
-  canonical reopen/PublishedHead、missing dependency fail-close 与 derived recovery closure。
+- **Open**：DB-014 的跨 F1–F4 OVD/ObjectVersion recovery、origin-free Revision planning、shared-prior lineage、
+  missing dependency fail-close 与 W/P/F/R/L evaluator；正式 reopen 不属于阶段 A。
 - **Open**：Schema runtime representation 与 canonical authority 的候选分叉记录在 `DB-001`，等待 exact codec/persistent format 实验裁决。
 - **Open**：哪些类型和 API 最终属于核心程序集，等待真实代码形状出现后再判断。
 

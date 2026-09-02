@@ -3,14 +3,17 @@
 本探针验证 DurableGraph 的产品候选地址路线：Revision 和 ObjectVersion 可以引用同一 Store 目录内任意
 更早的 Segment 文件，文件切换只由目标尺寸控制，不再要求 TwoLeg evacuation。
 
-当前第一切片只验证：
+当前已用 in-memory probe 验证：
 
 - 1-based `FileNumber` 与 canonical filename direct addressing；
-- runtime absolute address 与 wire `VarUInt32 BackwardFileDistance`；
-- same/previous/远距引用、canonical Base128 和 fail-close 边界。
+- strong FrameTicket、runtime absolute address 与 probe-only `BackwardFileDistance + FrameTicket` codec；
+- same/previous/远距引用、same-file strictly-earlier、canonical Base128 和 fail-close 边界；
+- append-only Segment/Frame store、唯一 provisional envelope estimator；
+- origin-free plan 在 soft rollover 后按新 origin 重新编码和定尺，不改变 logical plan；
+- empty oversize、single-Frame hard bound、FileNumber overflow 与 reject 不发布。
 
-`ulong FrameTicketCode` 暂时代表未来 `SizedPtr.Serialize()` 的 canonical 非零值；本切片不复制
-TwoLeg provisional RBF layout，也不声称已经实现 byte writer、RBF reopen、OVD 或 StateStore。
+这些 codec、Frame envelope 和 synthetic plan 都是 provisional size-only 模型；当前不声称已经实现正式
+RBF wire、filesystem/reopen、OVD 或持久 StateStore。
 
 运行：
 
