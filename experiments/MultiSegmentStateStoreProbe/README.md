@@ -11,9 +11,12 @@
 - append-only Segment/Frame store、唯一 provisional envelope estimator；
 - origin-free plan 在 soft rollover 后按新 origin 重新编码和定尺，不改变 logical plan；
 - empty oversize、single-Frame hard bound、FileNumber overflow 与 reject 不发布。
+- Revision shared Prior、OVD Base/Delta、ObjectVersion Base/Delta 与 canonical bindings；
+- F1-F4 exact-head current reconstruction：冷 ObjectVersion 可留在 F1，热 Delta 链独立推进；
+- current-required missing、non-earlier、cycle、wrong ObjectId/parent state/ordinal 的 fail-close。
 
 这些 codec、Frame envelope 和 synthetic plan 都是 provisional size-only 模型；当前不声称已经实现正式
-RBF wire、filesystem/reopen、OVD 或持久 StateStore。
+RBF wire、filesystem/reopen、G3 Save planner/apply 或持久 StateStore。
 
 运行：
 

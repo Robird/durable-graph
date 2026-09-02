@@ -13,13 +13,15 @@ internal sealed class RenderedFrameCandidate {
         FileNumber fileNumber,
         IEnumerable<RelativeFrameTicket> relativeReferences,
         byte[] encodedReferenceBytes,
-        ProvisionalFrameLayout layout) {
+        ProvisionalFrameLayout layout,
+        RevisionFrame? revisionFrame = null) {
         Plan = plan;
         FileNumber = fileNumber;
         _relativeReferences = Array.AsReadOnly(relativeReferences.ToArray());
         _encodedReferenceBytes = (byte[])encodedReferenceBytes.Clone();
         Layout = layout;
         Address = new AbsoluteFrameAddress(fileNumber, layout.Ticket);
+        RevisionFrame = revisionFrame;
     }
 
     public OriginFreeFramePlan Plan { get; }
@@ -34,4 +36,6 @@ internal sealed class RenderedFrameCandidate {
     public ProvisionalFrameLayout Layout { get; }
 
     public AbsoluteFrameAddress Address { get; }
+
+    public RevisionFrame? RevisionFrame { get; }
 }

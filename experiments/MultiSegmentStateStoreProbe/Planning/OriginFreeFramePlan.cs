@@ -19,8 +19,18 @@ internal sealed class OriginFreeFramePlan {
             externalReferences?.ToArray() ?? []);
     }
 
+    public OriginFreeFramePlan(OriginFreeRevisionFramePlan revisionFrame) {
+        RevisionFrame = revisionFrame ??
+            throw new ArgumentNullException(nameof(revisionFrame));
+        SyntheticPayloadBytes = revisionFrame.SyntheticPayloadBytes;
+        _externalReferences = Array.AsReadOnly(
+            revisionFrame.ExternalReferences.ToArray());
+    }
+
     public int SyntheticPayloadBytes { get; }
 
     public IReadOnlyList<AbsoluteFrameAddress> ExternalReferences =>
         _externalReferences;
+
+    public OriginFreeRevisionFramePlan? RevisionFrame { get; }
 }

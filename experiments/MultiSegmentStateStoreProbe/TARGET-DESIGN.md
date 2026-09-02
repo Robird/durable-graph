@@ -650,8 +650,8 @@ G0-G4 全部闭合即停止本 Goal/Probe 阶段：
 | 项目 | 状态 |
 |---|---|
 | Multi-history address semantics、1-based FileNumber、canonical VarUInt | 已选择；地址切片已有 executable evidence |
-| OVD authority、Base/Delta、absolute-normalize/relative-reencode | 已选择；主要证据目前来自 TwoLeg，待 MultiSegment F1-F4 重验 |
-| rollover 与 Base/Deltify 解耦、origin-dependent re-render | 已选择；待 G1 executable evidence |
+| OVD authority、Base/Delta、absolute-normalize/relative-reencode | 已选择；G2 已用 MultiSegment F1-F4 重验 current reconstruction |
+| rollover 与 Base/Deltify 解耦、origin-dependent re-render | 已选择；G1 已有 executable evidence |
 | shared PriorRevision 与 Base lineage | 已选择；待 G3 MultiSegment evidence |
 | exact PublishedHead 与 append-before-publish | 已选择；阶段 A 只验证 logical in-memory order |
 | exact filename literal grammar、正式 SizedPtr/RBF record framing | 阶段 B，probe 不冻结 |

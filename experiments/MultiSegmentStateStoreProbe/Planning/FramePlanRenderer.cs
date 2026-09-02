@@ -37,11 +37,14 @@ internal static class FramePlanRenderer {
             FrameReferenceValidator.EnsureStrictlyEarlier(containing, target);
         }
 
+        RevisionFrame? revisionFrame = plan.RevisionFrame?.Render(scope);
+
         return new RenderedFrameCandidate(
             plan,
             targetFileNumber,
             relativeReferences,
             encodedReferences,
-            layout);
+            layout,
+            revisionFrame);
     }
 }
