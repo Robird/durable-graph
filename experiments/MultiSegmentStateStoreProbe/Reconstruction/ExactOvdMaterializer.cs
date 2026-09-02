@@ -18,6 +18,7 @@ internal static class ExactOvdMaterializer {
 
         List<RevisionRecord> records = [];
         HashSet<AbsoluteFrameAddress> visited = [];
+        HashSet<AbsoluteFrameAddress> requiredFrames = [];
         AbsoluteFrameAddress address = publishedHead;
 
         while (true) {
@@ -27,6 +28,7 @@ internal static class ExactOvdMaterializer {
             }
 
             RevisionFrame revision = ReadRevision(store, address, "Revision", overlay);
+            _ = requiredFrames.Add(address);
             AbsoluteFrameAddress? prior = ResolveOptionalPrior(address, revision);
             records.Add(new RevisionRecord(address, revision));
             switch (revision.ObjectVersionDictionary.Kind) {
@@ -66,17 +68,6 @@ internal static class ExactOvdMaterializer {
                             source.Address,
                             external,
                             $"External binding for ObjectId {objectId}");
-                        RevisionFrame target = ReadRevision(
-                            store,
-                            externalAddress,
-                            $"External ObjectVersion for ObjectId {objectId}",
-                            overlay);
-                        if (!target.ObjectVersions.ContainsKey(objectId)) {
-                            throw new InvalidDataException(
-                                $"External Frame {externalAddress} does not contain " +
-                                $"ObjectId {objectId}.");
-                        }
-
                         lookups[objectId] = ExactOvdLookup.Found(externalAddress);
                         break;
                     case ObjectVersionDictionaryBindingKind.Remove:
@@ -89,9 +80,31 @@ internal static class ExactOvdMaterializer {
             }
         }
 
+        foreach ((uint objectId, ExactOvdLookup lookup) in lookups) {
+            if (lookup.Kind != ExactOvdLookupKind.Found) {
+                continue;
+            }
+
+            AbsoluteFrameAddress objectVersionHead = lookup.ObjectVersionHead
+                ?? throw new InvalidDataException(
+                    $"Found OVD binding for ObjectId {objectId} has no head.");
+            RevisionFrame target = ReadRevision(
+                store,
+                objectVersionHead,
+                $"Live ObjectVersion for ObjectId {objectId}",
+                overlay);
+            _ = requiredFrames.Add(objectVersionHead);
+            if (!target.ObjectVersions.ContainsKey(objectId)) {
+                throw new InvalidDataException(
+                    $"Live ObjectVersion Frame {objectVersionHead} does not contain " +
+                    $"ObjectId {objectId}.");
+            }
+        }
+
         return new ExactOvdMaterialization(
             lookups,
-            records.Select(static record => record.Address));
+            records.Select(static record => record.Address),
+            requiredFrames);
     }
 
     private static AbsoluteFrameAddress? ResolveOptionalPrior(
@@ -146,10 +159,12 @@ internal sealed class ExactOvdMaterialization {
     private readonly ReadOnlyDictionary<uint, ExactOvdLookup> _lookups;
     private readonly ReadOnlyDictionary<uint, AbsoluteFrameAddress> _bindings;
     private readonly ReadOnlyCollection<AbsoluteFrameAddress> _revisionAddresses;
+    private readonly ReadOnlyCollection<AbsoluteFrameAddress> _requiredFrameAddresses;
 
     internal ExactOvdMaterialization(
         IEnumerable<KeyValuePair<uint, ExactOvdLookup>> lookups,
-        IEnumerable<AbsoluteFrameAddress> revisionAddresses) {
+        IEnumerable<AbsoluteFrameAddress> revisionAddresses,
+        IEnumerable<AbsoluteFrameAddress> requiredFrameAddresses) {
         SortedDictionary<uint, ExactOvdLookup> frozenLookups = new(
             lookups.ToDictionary());
         _lookups = new(frozenLookups);
@@ -160,11 +175,21 @@ internal sealed class ExactOvdMaterialization {
                     static pair => pair.Key,
                     static pair => pair.Value.ObjectVersionHead!.Value)));
         _revisionAddresses = Array.AsReadOnly(revisionAddresses.ToArray());
+        _requiredFrameAddresses = Array.AsReadOnly(requiredFrameAddresses
+            .Distinct()
+            .OrderBy(static address => address.FileNumber.Value)
+            .ThenBy(static address => address.FrameTicket.OffsetBytes)
+            .ThenBy(static address => address.FrameTicket.LengthBytes)
+            .ToArray());
     }
 
     public IReadOnlyDictionary<uint, AbsoluteFrameAddress> Bindings => _bindings;
 
     public IReadOnlyList<AbsoluteFrameAddress> RevisionAddresses => _revisionAddresses;
+
+    /// <summary>Every Frame actually read while materializing and validating this OVD.</summary>
+    public IReadOnlyList<AbsoluteFrameAddress> RequiredFrameAddresses =>
+        _requiredFrameAddresses;
 
     public ExactOvdLookup Lookup(uint objectId) =>
         _lookups.TryGetValue(objectId, out ExactOvdLookup lookup)

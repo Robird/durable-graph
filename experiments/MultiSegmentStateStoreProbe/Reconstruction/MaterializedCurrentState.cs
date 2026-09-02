@@ -9,6 +9,7 @@ internal sealed class MaterializedCurrentState {
     private readonly ReadOnlyDictionary<uint, IReadOnlyList<AbsoluteFrameAddress>>
         _objectReconstructionPaths;
     private readonly ReadOnlyCollection<AbsoluteFrameAddress> _ovdRevisionAddresses;
+    private readonly ReadOnlyCollection<AbsoluteFrameAddress> _ovdRequiredFrameAddresses;
 
     internal MaterializedCurrentState(
         AbsoluteFrameAddress publishedHead,
@@ -16,7 +17,8 @@ internal sealed class MaterializedCurrentState {
         IEnumerable<KeyValuePair<uint, LogicalObjectState>> states,
         IEnumerable<KeyValuePair<uint, IReadOnlyList<AbsoluteFrameAddress>>>
             objectReconstructionPaths,
-        IEnumerable<AbsoluteFrameAddress> ovdRevisionAddresses) {
+        IEnumerable<AbsoluteFrameAddress> ovdRevisionAddresses,
+        IEnumerable<AbsoluteFrameAddress> ovdRequiredFrameAddresses) {
         PublishedHead = publishedHead;
         _objectVersionHeads = new(new SortedDictionary<uint, AbsoluteFrameAddress>(
             objectVersionHeads.ToDictionary()));
@@ -31,6 +33,8 @@ internal sealed class MaterializedCurrentState {
 
         _objectReconstructionPaths = new(frozenPaths);
         _ovdRevisionAddresses = Array.AsReadOnly(ovdRevisionAddresses.ToArray());
+        _ovdRequiredFrameAddresses = Array.AsReadOnly(
+            ovdRequiredFrameAddresses.ToArray());
         if (!_objectVersionHeads.Keys.SequenceEqual(_states.Keys) ||
             !_states.Keys.SequenceEqual(_objectReconstructionPaths.Keys)) {
             throw new ArgumentException(
@@ -50,4 +54,7 @@ internal sealed class MaterializedCurrentState {
 
     public IReadOnlyList<AbsoluteFrameAddress> OvdRevisionAddresses =>
         _ovdRevisionAddresses;
+
+    public IReadOnlyList<AbsoluteFrameAddress> OvdRequiredFrameAddresses =>
+        _ovdRequiredFrameAddresses;
 }

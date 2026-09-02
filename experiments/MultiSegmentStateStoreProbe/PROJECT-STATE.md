@@ -1,6 +1,6 @@
 # MultiSegmentStateStoreProbe 活跃工作集
 
-> 状态：Active Research Context
+> 状态：G0-G4 complete / awaiting promotion decision
 >
 > 最近校准：2026-09-02
 
@@ -49,28 +49,32 @@
   共用 `ExactOvdMaterializer`，broken lineage 不反向破坏已验证 current load；
 - append-before-publish failure 只留下不可见 candidate；cache-install failure 后 new head 仍是 authority，并可从
   exact head 重建；Stage-A `RevisionCommitSession` 只允许 empty Store 起步，不冒充 reopen；
+- deterministic workload/generator/composer、pure ReadAmplification+BaseBudget policy 与 G3 adapter；
+- admitted-only evaluator：W/P/F 来自实际 Segment tail，R 来自 OVD required frames 与 object paths 的 unique
+  full-Frame union，L 同采样；Delta/Base references 与 `L=0` undefined 均显式；
+- SameStateRebase witness 证明恰一次 rebase 保持 ordinal、增加总 W、降低 rebase 后累计 R；统一 corpus 的
+  all-Delta/all-Base/adaptive 均产生 deterministic admitted raw report；
 - 独立 core/test `.slnx`，不进入产品 solution 或 TwoLeg 子树。
 
-当前 Frame envelope、relative codec 和 synthetic plan 都只是内存探针 grammar；没有正式 RBF wire、OVD 或
-持久 StateStore。
+当前 Frame envelope、relative codec、OVD encoding estimate 和 synthetic plan 都只是内存探针 grammar；
+没有正式 RBF/OVD wire 或持久 StateStore。
 
 ## 当前焦点
 
-把已具备的 deterministic workload 与 pure ReadAmplification+BaseBudget policy 接入 Save pipeline，并实现
-W/P/F/R/L、Delta/Base references、shared-Frame cold-read 去重、SameStateRebase 因果 witness 和三种 raw report。
+阶段 A 已闭合并停止实现；等待是否按
+[`STATESTORE-SUBSYSTEM-DESIGN.md`](STATESTORE-SUBSYSTEM-DESIGN.md) 启动独立阶段 B 的用户决定。
 
 基础能力缺失时，先检查冻结的 `TwoLegRotationProbe` 是否已有同领域机制。只复用代码片段、测试意图或
 设计思想，不建立项目依赖，也不带回 A/B/C、A-debt、evacuation、paired candidate 或 terminal settlement。
 
 ## 近期 roadmap
 
-1. 接入精简 BaseBudget policy 与 W/P/F/R/L evaluator；deterministic workload/generator/composer 和 pure policy
-   已先行具备，完成 SameStateRebase 与三策略 raw report 后停止 Probe。
+无阶段 A 后续实现项。Probe 保留为 executable specification，不在本阶段接入真实 filesystem/RBF 或产品代码。
 
 ## 未闭合事项
 
-- OVD Base/Delta 已由 caller/test 显式覆盖；自动 OVD policy 暂缓；
-- SameStateRebase 的 W/R tradeoff 与是否保留在 adaptive baseline。
+阶段 A 无未闭合事项。自动 OVD policy、产品阈值与 SameStateRebase 是否进入产品默认策略都保持阶段 B/未来
+证据问题，不影响本 Probe 完成。
 
 ## 明确暂缓
 

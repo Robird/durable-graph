@@ -39,7 +39,8 @@ internal static class CurrentStateMaterializer {
             ovd.Bindings,
             states,
             paths,
-            ovd.RevisionAddresses);
+            ovd.RevisionAddresses,
+            ovd.RequiredFrameAddresses);
     }
 
     private static ObjectReconstruction ReconstructObject(

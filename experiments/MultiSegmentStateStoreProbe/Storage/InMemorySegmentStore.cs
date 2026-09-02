@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using Atelia.MultiSegmentStateStoreProbe.Model;
 using Atelia.MultiSegmentStateStoreProbe.Planning;
 
@@ -24,6 +25,9 @@ internal sealed class InMemorySegmentStore {
     }
 
     public int SegmentCount => _segments.Count;
+
+    public IReadOnlyList<InMemorySegment> Segments =>
+        new ReadOnlyCollection<InMemorySegment>(_segments);
 
     public InMemorySegment? CurrentSegment => _segments.Count == 0
         ? null

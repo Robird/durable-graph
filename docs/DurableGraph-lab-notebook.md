@@ -85,14 +85,17 @@
   Base/Delta 与 exact-head current reconstruction。冷 head 可留在 F1，OVD Base lineage-only prior 不进入 current
   closure；G3 又闭合 exact-parent normalization、origin-free whole-candidate plan、OVD Base historical-head
   reencode、shared-prior lineage、append-before-publish orphan 与 cache-install failure。Stage-A session 只从 empty
-  Store 起步，不宣称 reopen；正式 reopen 与 GC 仍未实现。
+  Store 起步，不宣称 reopen；G4 最终接入 deterministic workload、pure ReadAmplification+BaseBudget policy 与
+  admitted-only W/P/F/R/L evaluator，并产出 all-Delta/all-Base/adaptive raw report。阶段 A G0-G4 已闭合，正式
+  reopen 与 GC 仍未实现。
 - **Decided**：TwoLeg 全子树保持完整可执行但默认不活跃；相邻两文件 closure、1-bit relative ticket、
   A-debt、Stay/Rotate 与 terminal settlement 不迁移到 DB-014 正常 Save。
 - **Decided**：可复用的是 absolute-normalize/relative-reencode、OVD authority、Base/Delta reconstruction、
   current/lineage 分层、whole-candidate gate、no-fallback apply、deterministic workload 与 raw evaluator 思想。
 - **Decided**：R4–R7 logical graph 依赖顺序保留；产品整合前与 MultiSegment 持久化探针继续分离。
-- **Open**：DB-014 的 policy-to-plan adapter、W/P/F/R/L evaluator、SameStateRebase W/R 因果证据与三策略 raw
-  report；正式 reopen 不属于阶段 A。
+- **Observed**：SameStateRebase 独立 witness 证明恰一次 rebase 保持 ordinal、增加总 W，并降低 rebase 后累计
+  R；OVD required-frame observation 只读取最终 live External targets，且与 object paths 做 full-Frame 去重。
+- **Open**：是否按阶段 B 文档把已证明语义晋升为正式 StateStore Sub-System；正式 reopen 不属于阶段 A。
 - **Open**：Schema runtime representation 与 canonical authority 的候选分叉记录在 `DB-001`，等待 exact codec/persistent format 实验裁决。
 - **Open**：哪些类型和 API 最终属于核心程序集，等待真实代码形状出现后再判断。
 

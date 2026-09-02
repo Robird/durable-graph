@@ -654,6 +654,7 @@ G0-G4 全部闭合即停止本 Goal/Probe 阶段：
 | rollover 与 Base/Deltify 解耦、origin-dependent re-render | 已选择；G1 已有 executable evidence |
 | shared PriorRevision 与 Base lineage | 已选择；G3 已有 MultiSegment point-lookup lineage evidence |
 | exact PublishedHead 与 append-before-publish | 已选择；G3 已验证 logical in-memory order 与 orphan invisibility |
+| deterministic workload、policy 与 W/P/F/R/L evaluator | G4 已验证，含 SameStateRebase 与三策略 raw report |
 | exact filename literal grammar、正式 SizedPtr/RBF record framing | 阶段 B，probe 不冻结 |
 | OVD Base/Deltify policy | 开放；首轮显式指定 |
 | GC/compaction/backup packing | 暂缓；v1 保留 published history |

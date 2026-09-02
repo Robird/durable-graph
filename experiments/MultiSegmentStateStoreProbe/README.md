@@ -18,9 +18,21 @@
   reencode；
 - shared-prior Base lineage、append-before-publish orphan 与 publish 后 cache failure；
 - deterministic workload/generator/composer 与 A/B-free ReadAmplification+BaseBudget pure policy。
+- admitted-only W/P/F/R/L、Delta/Base references、shared-Frame cold-read de-duplication；
+- SameStateRebase 的 W/R 因果 witness，以及同一 corpus 的三种 deterministic raw outcomes。
 
 这些 codec、Frame envelope 和 synthetic plan 都是 provisional size-only 模型；当前不声称已经实现正式
-RBF wire、filesystem/reopen、G4 evaluator/runner 或持久 StateStore。Stage-A commit session 只从 empty Store 启动。
+RBF/OVD wire、filesystem/reopen 或持久 StateStore。Stage-A commit session 只从 empty Store 启动。
+
+当前 canonical corpus 的 raw report：
+
+```text
+all-delta: W=2444 P=424 F=424 R/L=11004/2418 DeltaRef=1139 BaseRef=1796 Segments=8
+all-base: W=2812 P=424 F=424 R/L=6672/2418 DeltaRef=1139 BaseRef=1796 Segments=8
+adaptive-r3-b5pct: W=2436 P=424 F=424 R/L=10988/2418 DeltaRef=1139 BaseRef=1796 Segments=8
+```
+
+这些是原始观测，不是 score、rank 或 winner 声明。阶段 A 到 G4 已完成；下一步需显式决定是否晋升阶段 B。
 
 运行：
 
@@ -32,4 +44,4 @@ dotnet test experiments\MultiSegmentStateStoreProbe\MultiSegmentStateStoreProbe.
 [`DB-014`](../../docs/design-branches/0014-multi-segment-backward-file-distance.md)。阶段 A（In-Memory
 Probe，G0-G4）的目标与关键不变量以 [`TARGET-DESIGN.md`](TARGET-DESIGN.md) 为主入口；真实
 filesystem/RBF 与产品化只记录在 [`STATESTORE-SUBSYSTEM-DESIGN.md`](STATESTORE-SUBSYSTEM-DESIGN.md)。
-准备进入施工时，可直接使用 [`GOAL-G0-G4.md`](GOAL-G0-G4.md) 中经过范围约束的 Codex Goal prompt。
+已完成的阶段 A 施工边界与验证要求保留在 [`GOAL-G0-G4.md`](GOAL-G0-G4.md)。
