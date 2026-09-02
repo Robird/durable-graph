@@ -27,11 +27,13 @@ internal static class FramePlanRenderer {
         }
 
         long payloadLengthBytes = checked(
-            (long)plan.SyntheticPayloadBytes + encodedReferences.Length);
+            (long)plan.SyntheticPayloadBytes +
+            plan.SemanticMetadataPayloadBytes +
+            encodedReferences.Length);
         ProvisionalFrameLayout layout = ProvisionalFrameEnvelopeEstimator.Estimate(
             frameStartOffsetBytes,
             payloadLengthBytes,
-            tailMetadataLengthBytes: 0);
+            plan.TailMetadataBytes);
         AbsoluteFrameAddress containing = new(targetFileNumber, layout.Ticket);
         foreach (AbsoluteFrameAddress target in plan.ExternalReferences) {
             FrameReferenceValidator.EnsureStrictlyEarlier(containing, target);

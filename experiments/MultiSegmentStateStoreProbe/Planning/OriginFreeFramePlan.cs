@@ -15,6 +15,8 @@ internal sealed class OriginFreeFramePlan {
         IEnumerable<AbsoluteFrameAddress>? externalReferences = null) {
         ArgumentOutOfRangeException.ThrowIfNegative(syntheticPayloadBytes);
         SyntheticPayloadBytes = syntheticPayloadBytes;
+        SemanticMetadataPayloadBytes = 0;
+        TailMetadataBytes = 0;
         _externalReferences = Array.AsReadOnly(
             externalReferences?.ToArray() ?? []);
     }
@@ -23,11 +25,17 @@ internal sealed class OriginFreeFramePlan {
         RevisionFrame = revisionFrame ??
             throw new ArgumentNullException(nameof(revisionFrame));
         SyntheticPayloadBytes = revisionFrame.SyntheticPayloadBytes;
+        SemanticMetadataPayloadBytes = revisionFrame.SemanticMetadataPayloadBytes;
+        TailMetadataBytes = revisionFrame.TailMetadataBytes;
         _externalReferences = Array.AsReadOnly(
             revisionFrame.ExternalReferences.ToArray());
     }
 
-    public int SyntheticPayloadBytes { get; }
+    public long SyntheticPayloadBytes { get; }
+
+    public int SemanticMetadataPayloadBytes { get; }
+
+    public int TailMetadataBytes { get; }
 
     public IReadOnlyList<AbsoluteFrameAddress> ExternalReferences =>
         _externalReferences;

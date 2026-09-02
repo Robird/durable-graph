@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using Atelia.MultiSegmentStateStoreProbe.Encoding;
 using Atelia.MultiSegmentStateStoreProbe.Model;
 
 namespace Atelia.MultiSegmentStateStoreProbe.Planning;
@@ -12,6 +13,8 @@ internal sealed class OriginFreeRevisionFramePlan {
     private readonly ReadOnlyCollection<OriginFreeObjectVersion> _objectVersions;
     private readonly ReadOnlyCollection<OriginFreeObjectVersionDictionaryEntry> _ovdEntries;
     private readonly ReadOnlyCollection<AbsoluteFrameAddress> _externalReferences;
+    private readonly int _semanticMetadataPayloadBytes;
+    private readonly int _tailMetadataBytes;
 
     public OriginFreeRevisionFramePlan(
         AbsoluteFrameAddress? priorRevision,
@@ -50,6 +53,11 @@ internal sealed class OriginFreeRevisionFramePlan {
             .Where(static entry => entry.ExternalAddress is not null)
             .Select(static entry => entry.ExternalAddress!.Value));
         _externalReferences = externalReferences.AsReadOnly();
+        _semanticMetadataPayloadBytes = EstimateSemanticMetadata(
+            priorRevision,
+            canonicalVersions,
+            canonicalEntries);
+        _tailMetadataBytes = EstimateTailMetadata(canonicalVersions);
     }
 
     public AbsoluteFrameAddress? PriorRevision { get; }
@@ -62,8 +70,13 @@ internal sealed class OriginFreeRevisionFramePlan {
 
     public IReadOnlyList<AbsoluteFrameAddress> ExternalReferences => _externalReferences;
 
-    public int SyntheticPayloadBytes => checked(
-        _objectVersions.Sum(static version => version.PayloadBytes));
+    public long SyntheticPayloadBytes => _objectVersions.Aggregate(
+        0L,
+        static (total, version) => checked(total + version.PayloadBytes));
+
+    public int SemanticMetadataPayloadBytes => _semanticMetadataPayloadBytes;
+
+    public int TailMetadataBytes => _tailMetadataBytes;
 
     internal RevisionFrame Render(FileScope scope) {
         RelativeFrameTicket? prior = PriorRevision is { } priorRevision
@@ -92,6 +105,60 @@ internal sealed class OriginFreeRevisionFramePlan {
 
             previous = objectId;
         }
+    }
+
+    private static int EstimateSemanticMetadata(
+        AbsoluteFrameAddress? priorRevision,
+        IEnumerable<OriginFreeObjectVersion> versions,
+        IEnumerable<OriginFreeObjectVersionDictionaryEntry> entries) {
+        int bytes = 2; // Revision tag plus OVD kind.
+        bytes = checked(bytes + (priorRevision is null ? 1 : 2));
+        foreach (OriginFreeObjectVersion version in versions) {
+            bytes = checked(
+                bytes +
+                CanonicalUnsignedBase128.GetEncodedWidth(version.ObjectId) +
+                1 +
+                CanonicalUnsignedBase128.GetEncodedWidth(
+                    checked((ulong)version.PayloadBytes)) +
+                CanonicalUnsignedBase128.GetEncodedWidth(
+                    checked((ulong)version.ResultState.BasePayloadBytes)) +
+                CanonicalUnsignedBase128.GetEncodedWidth(
+                    checked((ulong)version.ResultState.LogicalVersionOrdinal)) +
+                sizeof(int)); // synthetic state value
+            if (version.Kind == ObjectVersionKind.Delta) {
+                LogicalObjectState expected = version.ExpectedParentState!.Value;
+                bytes = checked(
+                    bytes +
+                    CanonicalUnsignedBase128.GetEncodedWidth(
+                        checked((ulong)expected.BasePayloadBytes)) +
+                    CanonicalUnsignedBase128.GetEncodedWidth(
+                        checked((ulong)expected.LogicalVersionOrdinal)) +
+                    sizeof(int)); // expected synthetic state value
+            }
+        }
+
+        foreach (OriginFreeObjectVersionDictionaryEntry entry in entries) {
+            bytes = checked(
+                bytes +
+                CanonicalUnsignedBase128.GetEncodedWidth(entry.ObjectId) +
+                1);
+        }
+
+        return bytes;
+    }
+
+    private static int EstimateTailMetadata(
+        IReadOnlyCollection<OriginFreeObjectVersion> versions) {
+        int bytes = CanonicalUnsignedBase128.GetEncodedWidth(
+            checked((ulong)versions.Count));
+        foreach (OriginFreeObjectVersion version in versions) {
+            bytes = checked(
+                bytes +
+                CanonicalUnsignedBase128.GetEncodedWidth(version.ObjectId) +
+                1); // provisional record-offset width
+        }
+
+        return bytes;
     }
 }
 

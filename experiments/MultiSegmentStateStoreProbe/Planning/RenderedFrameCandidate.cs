@@ -38,4 +38,10 @@ internal sealed class RenderedFrameCandidate {
     public AbsoluteFrameAddress Address { get; }
 
     public RevisionFrame? RevisionFrame { get; }
+
+    public long SyntheticObjectPayloadBytes => Plan.SyntheticPayloadBytes;
+
+    public int SemanticMetadataPayloadBytes => Plan.SemanticMetadataPayloadBytes;
+
+    public int EncodedReferenceLengthBytes => _encodedReferenceBytes.Length;
 }

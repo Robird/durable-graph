@@ -43,6 +43,12 @@
 - exact-head current materializer：F1-F4 中冷对象 head 留在 F1，热对象 Delta 链推进到 F4；OVD Base 的
   lineage-only prior 只校验地址、不进入 current closure；required missing、non-earlier、cycle、wrong ObjectId/
   parent state/ordinal 均 fail closed，且失败不暴露 partial state；
+- exact-parent Save pipeline：workload normalization、显式 object/OVD selection、单一 origin-free RevisionPlan、
+  whole-candidate render/admission、append 与 logical publication 分层；OVD Base 重编码历史 head 不 relocation；
+- shared-prior lineage reader：Delta 走 exact parent，Base 经 prior OVD point lookup；current OVD replay 与 lineage
+  共用 `ExactOvdMaterializer`，broken lineage 不反向破坏已验证 current load；
+- append-before-publish failure 只留下不可见 candidate；cache-install failure 后 new head 仍是 authority，并可从
+  exact head 重建；Stage-A `RevisionCommitSession` 只允许 empty Store 起步，不冒充 reopen；
 - 独立 core/test `.slnx`，不进入产品 solution 或 TwoLeg 子树。
 
 当前 Frame envelope、relative codec 和 synthetic plan 都只是内存探针 grammar；没有正式 RBF wire、OVD 或
@@ -50,18 +56,16 @@
 
 ## 当前焦点
 
-把 workload/exact parent snapshot 归一化为 origin-free RevisionPlan，并用同一 whole-candidate renderer 完成
-OVD Base historical-head reencode、shared-prior Base lineage、append-before-publish orphan 与 cache-install
-failure 语义。
+把已具备的 deterministic workload 与 pure ReadAmplification+BaseBudget policy 接入 Save pipeline，并实现
+W/P/F/R/L、Delta/Base references、shared-Frame cold-read 去重、SameStateRebase 因果 witness 和三种 raw report。
 
 基础能力缺失时，先检查冻结的 `TwoLegRotationProbe` 是否已有同领域机制。只复用代码片段、测试意图或
 设计思想，不建立项目依赖，也不带回 A/B/C、A-debt、evacuation、paired candidate 或 terminal settlement。
 
 ## 近期 roadmap
 
-1. origin-free RevisionPlan、OVD Base historical-head reencode、shared-prior lineage 与 logical publication；
-2. 精简 BaseBudget policy 与 W/P/F/R/L evaluator；deterministic workload/generator/composer 已先行具备，
-   完成 evaluator 后停止 Probe。
+1. 接入精简 BaseBudget policy 与 W/P/F/R/L evaluator；deterministic workload/generator/composer 和 pure policy
+   已先行具备，完成 SameStateRebase 与三策略 raw report 后停止 Probe。
 
 ## 未闭合事项
 

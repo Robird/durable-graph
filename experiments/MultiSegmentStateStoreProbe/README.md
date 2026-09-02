@@ -14,9 +14,13 @@
 - Revision shared Prior、OVD Base/Delta、ObjectVersion Base/Delta 与 canonical bindings；
 - F1-F4 exact-head current reconstruction：冷 ObjectVersion 可留在 F1，热 Delta 链独立推进；
 - current-required missing、non-earlier、cycle、wrong ObjectId/parent state/ordinal 的 fail-close。
+- exact-parent normalization、origin-free RevisionPlan、whole-candidate admission 与 OVD Base historical-head
+  reencode；
+- shared-prior Base lineage、append-before-publish orphan 与 publish 后 cache failure；
+- deterministic workload/generator/composer 与 A/B-free ReadAmplification+BaseBudget pure policy。
 
 这些 codec、Frame envelope 和 synthetic plan 都是 provisional size-only 模型；当前不声称已经实现正式
-RBF wire、filesystem/reopen、G3 Save planner/apply 或持久 StateStore。
+RBF wire、filesystem/reopen、G4 evaluator/runner 或持久 StateStore。Stage-A commit session 只从 empty Store 启动。
 
 运行：
 
