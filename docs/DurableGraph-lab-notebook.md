@@ -50,8 +50,8 @@
 - Stored Graph Normalization R3a：test-only mixed V1/V2 record table 经全表 exact preflight、typed decode/upgrade 与 source-reference gate 归一化成 current-Snapshot baseline。
 - CLR Graph Materialization R3b：只对 normalized current root closure allocate-all/hydrate-all，恢复 sharing/cycles 后 root-only exposure；disconnected source rows 不分配。
 - Multi-segment StateStore candidate：DB-014 已选择 1-based FileNumber、canonical filename 与
-  `BackwardFileDistance` 任意 earlier-file reference；项目级 `TARGET-DESIGN.md` 已收敛地址、OVD、
-  Base/Delta、Save/Load、publication、策略/评价与实现 gates，当前代码仍只实现地址/编码首切片。
+  `BackwardFileDistance` 任意 earlier-file reference；阶段 A `TARGET-DESIGN.md` 只负责 G0-G4 in-memory
+  地址、OVD、Base/Delta、Save/Load、策略/评价，正式 filesystem/RBF 与产品化另由阶段 B 文档承接。
 - StateStore TwoLeg 基础/地址/派生文档：相邻 FileScope、1-bit `RelativeFrameTicket`、A/B/C evacuation 与
   `CanPrepareAndRotate` 已被产品路线 supersede，完整保留为 TwoLeg 技术储备。
 - Two-leg rotation probe：独立 Arena/Baselines/Tests subsolution 已冻结；保留 runtime OVD、Base/Delta、
@@ -761,9 +761,16 @@
 
 ## 6. 船长日志
 
+### 2026-09-02：把 MultiSegment Probe 与正式 StateStore 产品化拆成两阶段
+
+- **Decided**：`MultiSegmentStateStoreProbe` 在 G4（Workload、policy、evaluator）完成后停止；真实 filesystem/RBF、reopen、durability 与 `src/DurableGraph` 整合不再是 Probe roadmap。
+- **Decided**：保留 `TARGET-DESIGN.md` 稳定路径并收敛为阶段 A 专门规范；新增 `STATESTORE-SUBSYSTEM-DESIGN.md`，记录 G4 后的上下层契约、Atelia substrate audit、产品 authority、ProjectReference/NuGet acquisition 与 B0-B4 晋升 gates。
+- **Boundary**：阶段 A 只证明 in-memory logical publication、orphan visibility、address/OVD/reconstruction/policy/evaluator；阶段 B 从 Probe 抽取已证明语义重新实现，不直接搬运 experiment assembly、provisional wire 或 benchmark infrastructure。
+- **Prepared**：`GOAL-G0-G4.md` 已提供 4,000 字符限制内的可粘贴 `/goal` objective；stop condition 要求逐项闭合 G0-G4、验证、文档和 commits，并把阶段 B 设为硬禁区。
+
 ### 2026-09-02：收敛 MultiSegment StateStore 实现主设计
 
-- **Decided**：新增项目级 `TARGET-DESIGN.md`，把 DB-014 的路线裁决展开为唯一 authority、origin-scoped address、OVD/ObjectVersion、Save/Load、rollover、publication、baseline policy、W/P/F/R/L 与 G0-G6 executable gates；README 和 PROJECT-STATE 只保留现状导航与活跃工作集。
+- **Decided**：新增项目级 `TARGET-DESIGN.md`，把 DB-014 的路线裁决展开为唯一 authority、origin-scoped address、OVD/ObjectVersion、Save/Load、rollover、publication、baseline policy、W/P/F/R/L 与 executable gates；其原始 G5/G6 随后被上方两阶段裁决移出 Probe。
 - **Decided**：rollover 复用同一个 origin-free logical plan，但必须按新文件 origin 重新 relativize、编码和定尺；它不重跑 Base/Deltify/OVD policy。
 - **Decided**：保留 shared PriorRevision 与 Base lineage；OVD Base 的 prior 是 lineage-only，不进入 current recovery closure。保留可选 SameStateRebase 作为读放大维护，删除 TwoLeg evacuation/rotation 语义。
 - **Boundary**：durable-before-publish 是目标 law；head carrier、atomic publication、file/directory flush、orphan 后 FileNumber allocation 与正式 wire 仍待 filesystem/RBF gate。当前没有把目标能力描述成已实现。

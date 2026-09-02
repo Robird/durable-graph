@@ -1,17 +1,20 @@
-# MultiSegment StateStore 目标设计
+# 阶段 A：MultiSegment In-Memory StateStore Probe 目标设计
 
-> 状态：Selected Target Design / Probe Implementation Guide
+> 状态：Selected Target Design / G0-G4 Implementation Guide
 >
 > 最近校准：2026-09-02
 >
 > 适用范围：`experiments/MultiSegmentStateStoreProbe`
 
-本文定义 MultiSegment StateStore 探针要逐步实现和验证的完整目标。它是后续编码的主设计入口，
-但不是当前实现事实，也不冻结 DurableGraph 的公开 API、正式 wire bytes 或产品 durability 协议。
+本文定义 MultiSegment StateStore 内存探针要逐步实现和验证的完整目标，范围到 G4（Workload、policy 与
+evaluator）为止。它是阶段 A 编码的主设计入口，但不是当前实现事实，也不冻结 DurableGraph 的公开 API、
+正式 wire bytes、真实 filesystem/reopen 或产品 durability 协议。
 
 文档职责分工如下：
 
 - 本文回答“目标系统如何工作、哪些不变量必须由代码证明”；
+- [`STATESTORE-SUBSYSTEM-DESIGN.md`](STATESTORE-SUBSYSTEM-DESIGN.md) 记录阶段 B 的正式 StateStore
+  Sub-System 分层、复用调查和晋升条件；
 - [`DB-014`](../../docs/design-branches/0014-multi-segment-backward-file-distance.md) 记录为什么从
   TwoLeg 转向多历史 Segment；
 - [`PROJECT-STATE.md`](PROJECT-STATE.md) 只维护当前已完成事实、下一切片和未闭合事项；
@@ -23,9 +26,9 @@
 
 ## 1. 问题与一句话模型
 
-StateStore 物理上由一串单调编号、append-only 的 RBF 文件组成。最新 Published Revision 可以引用同一
-Store 目录内任意更早文件中的 Revision 或 ObjectVersion；文件达到 soft target 时只切换 append
-destination，不搬迁冷对象，也不改变 Base/Deltify 决策。
+本探针在内存中建模一串单调编号、append-only 的 Segment/Frame。最新 Published Revision 可以引用任意
+更早 Segment 中的 Revision 或 ObjectVersion；模拟文件达到 soft target 时只切换 append destination，
+不搬迁冷对象，也不改变 Base/Deltify 决策。
 
 ```text
 exact PublishedHead
@@ -54,7 +57,7 @@ exact PublishedHead
 - OVD Base/Delta、ObjectVersion Base/Delta 与 F1-F4 跨文件重建；
 - exact PublishedHead、orphan 不可见性和 fail-close load；
 - deterministic workload、Base/Deltify baseline policy 与原始 W/P/F/R/L 指标；
-- filesystem/reopen 阶段所需的逻辑 publication 顺序与 durability exit gates。
+- 为阶段 B 提供可抽取的逻辑 publication、地址、planner 与 evaluator 证据。
 
 ### 2.2 运行假设
 
@@ -62,24 +65,26 @@ exact PublishedHead
 - 一次 Save 从唯一 exact parent PublishedHead 派生；不支持 stale-snapshot Save、branch merge 或 import；
 - workload 中对象彼此独立，ObjectId 稳定且不复用；对象引用图、reachability 与 GC 属于 DurableGraph
   外层，不在本探针重复建模；
-- 首轮以 in-memory、size-only 模型闭合语义，再接本地 `Atelia.Rbf`；
+- 阶段 A 始终保持 in-memory、size-only/provisional-layout 模型；
 - 所有已发布历史文件可以永久保留，v1 不承诺总空间、文件数或冷读 fan-out 有界。
 
 ### 2.3 明确非目标
 
 - TwoLeg 的 A/B/C、Stay/Rotate、A-debt、evacuation、NoChange migration 与 two-file closure；
+- 真实 filesystem、RBF file handle、reopen、durable flush、head carrier 或 crash recovery；
 - 自动删除、refcount、incremental cleaner、在线 compaction 或冷热分层；
 - Extent 或一个 Revision 跨多个 Frames；
 - 多 writer、lease、分布式 CAS 或长寿命并发 reader 协议；
-- Product `CommitManifest` 的最终布局、公开 API、格式兼容和旧 probe bytes 迁移；
+- Product `CommitManifest`、正式 StateStore Sub-System、公开 API、格式兼容和旧 probe bytes 迁移；
 - Schema codec、CLR graph traversal、ArtifactStore 或 Four-Stores-One-Commit 的完整实现；
 - 标量总分、排行榜、产品默认阈值或 cold-read SLO。
 
 ## 3. 术语与唯一身份
 
-### 3.1 Store directory 与 Segment
+### 3.1 Logical Store 与 Segment
 
-v1 中一个 Segment 就是一个 canonical-named RBF file，不增加 `SegmentId`、`FileId` 或路径 catalog：
+模型中的一个 Segment 对应未来一个 canonical-named RBF file，不增加 `SegmentId`、`FileId` 或路径
+catalog：
 
 ```text
 filePath = storeDirectory / FormatCanonicalFileName(fileNumber)
@@ -93,12 +98,12 @@ filePath = storeDirectory / FormatCanonicalFileName(fileNumber)
 - path formatting/parsing 必须是一一对应的 canonical function；
 - 当前十位十进制 `.rbf` 名称只是 probe grammar，尚未冻结为产品文件名。
 
-目录边界就是 Store scope。把一个数据文件手工混入另一个目录不是受支持操作；当前不为此增加
-`StoreId`/`FileId` 文件头。
+阶段 A 不访问真实目录；`FileNameConvention` 只验证 FileNumber 到 canonical name 的 direct mapping。
+目录 scope、文件混入与 Store/File header 属于阶段 B。
 
 ### 3.2 Frame 与 Revision
 
-首版一个 Revision 对应一个 RBF Frame。Frame 包含：
+阶段 A 建模一个 Revision 对应一个 provisional RBF-like Frame。Frame 包含：
 
 ```text
 RevisionFrame
@@ -108,8 +113,8 @@ RevisionFrame
     TailMeta directory / offsets
 ```
 
-RBF Frame 是 append、完整性校验和物理读取粒度。`IRbfFile.ReadTailMeta` 的 L2 preview 只能提供路由提示；
-OVD 或 ObjectVersion 成为 authority 前，必须完成整 Frame 的 L3 验证。
+Frame 是 append、完整性校验和物理读取计量粒度。阶段 A 用 in-memory full-Frame validation 模拟 authority
+边界；`IRbfFile.ReadTailMeta` 的 L2 preview、完整 L3 read 与真实布局在阶段 B 接入。
 
 ### 3.3 PublishedHead 与 append destination
 
@@ -119,8 +124,9 @@ Save 写 OVD Base。测试 fixture 可以创建 bootstrap Revision，但它不�
 PublishedHead 所在文件不必是物理 append-current file。append destination 由当前 Store inventory 与
 rollover 规则决定；二者不能合并成一个 cursor authority。
 
-未来产品中，外层唯一 `CommitManifest` 可以精确包含 StateStore PublishedHead。StateStore 不应再发布
-第二个相互竞争的产品 authority。
+产品中 PublishedHead 由谁持久发布、如何与外层 CommitManifest 协调，属于
+[`STATESTORE-SUBSYSTEM-DESIGN.md`](STATESTORE-SUBSYSTEM-DESIGN.md) 的阶段 B 问题。阶段 A 只保留一次
+原子的 in-memory head assignment。
 
 ## 4. 地址模型
 
@@ -131,11 +137,12 @@ rollover 规则决定；二者不能合并成一个 cursor authority。
 ```text
 AbsoluteFrameAddress
     FileNumber
-    FrameTicket          // 最终为 Atelia.Data.SizedPtr 或等价强类型
+    FrameTicket          // probe-local strong value，提供 start/length
 ```
 
-`FrameTicket` 必须能提供或可靠解码 Frame start/length，以便验证 same-file strictly-earlier、读取 Frame 和
-计算物理指标。当前 `ulong FrameTicketCode` 只足以验证编码边界，不是最终 runtime model。
+`FrameTicket` 必须能提供 Frame start/length，以便验证 same-file strictly-earlier、读取模拟 Frame 和计算
+物理指标。当前 `ulong FrameTicketCode` 只足以验证编码边界，应在 G1 演化为 probe-local strong value；
+与真实 `Atelia.Data.SizedPtr` 的整合属于阶段 B。
 
 ObjectVersion 的逻辑定位是 `(AbsoluteFrameAddress, ObjectId)`；是否建立单独 C# wrapper 由实现切片决定，
 不形成另一套持久 identity。
@@ -370,7 +377,7 @@ rollover 后必须重新 relativize、编码和定尺，绝不能重跑 policy�
 
 file switch 绝不能强制 Base、SameStateRebase、OVD Base 或 cold object relocation。
 
-### 6.5 Admission、append 与 publication
+### 6.5 Admission、append 与 logical publication
 
 最终 candidate 在 append 前必须完整通过：
 
@@ -380,32 +387,28 @@ file switch 绝不能强制 Base、SameStateRebase、OVD Base 或 cold object re
 - candidate 可从 exact dependencies 完整重建；
 - append destination 与预计算 layout 一致。
 
-目标 publication 顺序：
+阶段 A 的 logical publication 顺序：
 
 ```text
-append complete candidate Frame
-durably flush all newly required data according to selected durability model
-publish exact new head
-durably publish the head
-acknowledge Save
+append complete candidate Frame to the in-memory Store
+atomically assign exact PublishedHead
+install derived cache
 ```
 
-in-memory probe 只能模拟逻辑顺序，不能声称已经实现 crash durability。真实 head carrier、atomic replace、
-文件和目录 flush matrix 仍是 filesystem gate。
+这里的 atomic 只指一次 in-memory assignment，不宣称 process/OS/power-loss durability。真实 head carrier、
+flush ordering、ambiguous I/O outcome 与 reopen 全部移入阶段 B。
 
 失败语义：
 
 - append 前 rejection：Store 与 PublishedHead 都不变；
 - append 成功、publish 前失败：旧 PublishedHead 仍是 authority，新 Frame 是不可见 candidate/orphan；
-- append outcome 本身未知或 publication outcome 不明确：session 进入 poisoned 状态，只能 reopen/reconcile，
-  不能透明 retry；
 - selected candidate hard reject 不自动换另一种 Base/Delta 或 OVD mode。
 
-只有 publish 成功后，才能从新 PublishedHead 重新 materialize并安装 volatile cache。若 durable publish 已完成
-而 cache 安装失败，commit 仍已生效；应丢弃 cache并重新 materialize，仍失败则保持新 head authority、将
-session 标记为 poisoned，并返回“已提交但当前 session 不可继续”的 typed outcome。
+只有 publish 成功后，才能从新 PublishedHead 重新 materialize 并安装 volatile cache。若 cache 安装失败，
+new head 仍是本次模拟运行的 authority；runner 应丢弃 partial cache并从 exact head重试 materialization，
+不得回滚成旧 head或重复 apply。真实“已提交但 session 不可继续”与 poisoned session 属于阶段 B。
 
-## 7. Load、reopen 与 recovery closure
+## 7. Load、materialization 与 dependency observation
 
 ### 7.1 Load current state
 
@@ -422,21 +425,19 @@ session 标记为 poisoned，并返回“已提交但当前 session 不可继续
 任一 required dependency 缺失时整个 PublishedHead fail closed。禁止跳过坏对象、产生 partial live map、搜索
 “较新可用 Frame”或退回另一个未经 authority 选择的 Revision。
 
-### 7.2 Reopen
+### 7.2 In-memory head 与 orphan observation
 
-filesystem reopen 至少区分：
+阶段 A 不扫描目录或发现 head。caller/runner 显式持有 `PublishedHead=None|Address`，并验证：
 
-1. 扫描 canonical filenames，验证重复/非法 FileNumber，并建立 volatile inventory；
-2. 从唯一 authority carrier 获得 exact PublishedHead；carrier 必须显式区分 Empty/None 与缺失、损坏，
-   不能把 HEAD metadata 丢失解释为空 Store；
-3. 按上述 Load 流程验证它；
-4. 独立派生 append destination，不能把最大文件号或最后 valid Frame当成 head；
-5. 未被 exact head 当前 closure 访问的 Frame 只能称为 `UnreachableFromCurrentHead`。
+1. `None` 精确表示本次模拟的 empty Store；
+2. 最大 FileNumber、最大 ticket 或最后 appended Frame 都不能推导 PublishedHead；
+3. append 后未 publish 的 Frame 不得被 materialization 看见；
+4. 未被 exact head 当前 closure 访问的 Frame 只能称为 `UnreachableFromCurrentHead`。
 
 仅凭当前 head 无法区分“从未发布 orphan”与“过去曾发布、现在不在 latest closure 的历史 Frame”。v1 不需要
 这个区别，因为两者都不自动删除。
 
-### 7.3 Derived recovery inspection
+### 7.3 Derived dependency inspection
 
 一次成功 current-state materialization 可附带收集：
 
@@ -571,17 +572,10 @@ W/P 必须计入本次 Save 导致的新 Segment header、Frame header/trailer�
 移植前先在 TwoLeg 中搜索同领域机制，理解测试证明的语义，再复制最小代码片段或设计思想。不得为了“复用”
 保留已经失去消费者的类型层次、public API 或 provisional wire。
 
-## 11. 最小端到端状态机
+## 11. 最小端到端执行循环
 
-Store session 只需要：
-
-```text
-Closed
-Healthy
-Poisoned
-```
-
-单次 Save 内部阶段：
+阶段 A 不建立 filesystem session lifecycle。一个隔离 simulation run 只维护 in-memory Store、exact
+PublishedHead、workload cursor 与 evaluator accumulator。单次 Save 内部阶段：
 
 ```text
 Normalize
@@ -639,18 +633,19 @@ origin-dependent render 分开、append 与 publish 分开、authority 与 deriv
 - W/P/F/R/L、Delta/Base references 与 shared-Frame cold-read de-duplication；
 - 用统一 workload 比较 all-Delta、all-Base 和 adaptive raw outcomes，不宣称 winner。
 
-### G5：Filesystem/RBF reopen
+### 阶段 A 完成边界
 
-- 替换 opaque ticket 为真实 `SizedPtr`/RBF layout；
-- canonical inventory 与 exact-head reopen；
-- L2 TailMeta 只路由、L3 Frame 才安装 authority；
-- missing current-required historical file、orphan Frame 与 malformed head fail closed；
-- 选择并用 fault injection 证明 head carrier、flush 与 poisoned-session contract。
+G0-G4 全部闭合即停止本 Goal/Probe 阶段：
 
-### G6：产品整合
+- 所有 executable gates 有聚焦测试；
+- MultiSegment subsolution tests、format verification 与 root solution build 通过；
+- 至少一个 deterministic corpus 可让 all-Delta、all-Base 与 adaptive baseline 产生 admitted raw report；
+- F1-F4、rollover re-render、OVD Base external head、SameStateRebase 与主要 fail-close 反例都有证据；
+- `PROJECT-STATE.md` 压缩为“G0-G4 complete / awaiting promotion decision”，不提前开始真实 filesystem/RBF；
+- 工作树只包含本阶段有意改动，并形成可恢复 Git commit。
 
-只有 G0-G5 的最小语义与恢复证据闭合后，才把必要地址/reader/planner contract 移入 `src/DurableGraph`。
-不把整个 probe、benchmark runner 或 provisional wire 一并产品化。
+之后若用户明确启动产品化，转入 [`STATESTORE-SUBSYSTEM-DESIGN.md`](STATESTORE-SUBSYSTEM-DESIGN.md)；
+不把整个 probe、benchmark runner 或 provisional wire 直接搬入 `src/DurableGraph`。
 
 ## 13. 目标保证、当前证据与开放机制
 
@@ -660,34 +655,32 @@ origin-dependent render 分开、append 与 publish 分开、authority 与 deriv
 | OVD authority、Base/Delta、absolute-normalize/relative-reencode | 已选择；主要证据目前来自 TwoLeg，待 MultiSegment F1-F4 重验 |
 | rollover 与 Base/Deltify 解耦、origin-dependent re-render | 已选择；待 G1 executable evidence |
 | shared PriorRevision 与 Base lineage | 已选择；待 G3 MultiSegment evidence |
-| exact PublishedHead 与 durable-before-publish | 目标保证；in-memory 只能验证逻辑顺序 |
-| head carrier、atomic publication、file/directory durability | 开放，必须在 G5 裁决 |
-| exact filename literal grammar、正式 SizedPtr record framing | probe provisional，产品未冻结 |
+| exact PublishedHead 与 append-before-publish | 已选择；阶段 A 只验证 logical in-memory order |
+| exact filename literal grammar、正式 SizedPtr/RBF record framing | 阶段 B，probe 不冻结 |
 | OVD Base/Deltify policy | 开放；首轮显式指定 |
 | GC/compaction/backup packing | 暂缓；v1 保留 published history |
 
 ## 14. 未闭合事项与重访触发条件
 
-近期必须通过实验裁决：
+阶段 A 必须通过实验裁决：
 
-- actual `SizedPtr` encoding 与 `BackwardFileDistance` 的 record framing；
-- same-file earlier validation 与 provisional RBF estimator 的最小共享边界；
+- probe-local strong FrameTicket、same-file earlier validation 与 provisional estimator 的最小边界；
 - `TargetFileBytes` API、RBF hard bound 和 FileNumber overflow outcomes；
-- OVD Base/Delta 的独立策略；
-- exact head 的 filesystem carrier、Empty marker、ambiguous outcome detection 与 directory durability；
-- crash 后 orphan/new FileNumber allocation 与 reopen append destination。
+- 证明 OVD mode 是独立决策轴，并以显式 caller/test choice 覆盖 Base 与 Delta；自动选择 policy 暂缓；
+- SameStateRebase 的可测 W/R tradeoff 与是否保留在 adaptive baseline。
 
-只有出现下列证据才扩大设计：
+阶段 A 明确不裁决：
 
-- 单 Revision 真实超过 RBF hard bound，才引入 Extent；
-- 完整 `CompactToNewStore` 的停顿或写入峰值不满足真实 SLO，才研究 incremental cleaner/TwoLeg；
-- latest recovery 的历史 file fan-out 不满足真实 SLO，才研究分层、placement 或 dependency consolidation；
-- 多 writer 成为真实 consumer，才引入 lease/CAS/fencing；
-- 两个独立 active probes 出现重复维护成本，才抽公共 experiment infrastructure；
-- 正式格式发布或已有数据必须保留，才增加 compatibility/migration machinery。
+- actual `SizedPtr`、正式 RBF grammar、real file inventory/reopen；
+- exact head carrier、Empty marker、ambiguous outcome、poisoned session 与 directory durability；
+- EventJournal/RbfSegmentStore acquisition、NuGet/ProjectReference、产品程序集/API；
+- crash 后 orphan/new FileNumber allocation 与真实 append destination。
+
+这些问题及晋升条件统一记录于
+[`STATESTORE-SUBSYSTEM-DESIGN.md`](STATESTORE-SUBSYSTEM-DESIGN.md)。
 
 首轮编码的正确终点不是“建成一个数据库”，而是用 executable evidence 证明：
 
 > 同一逻辑 Save plan 可以在不改变 Base/Deltify 的情况下跨 Segment 重新编码并发布；latest OVD 与所有
 > live ObjectVersion 可以跨任意历史文件完整恢复；冷对象不因文件切换被强制复制；所有 authority、
-> missing dependency 与 durability 边界都能被明确解释并 fail closed。
+> current-required missing dependency 与 in-memory publication 边界都能被明确解释并 fail closed。

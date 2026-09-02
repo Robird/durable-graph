@@ -9,10 +9,12 @@
 用最小、可执行的机制验证多历史 Segment StateStore：持久引用可指向同目录内任意更早文件，文件达到
 应用配置尺寸后独立切换，冷 ObjectVersion 不因文件切换被强制 Base。
 
-本探针不修改 `src/DurableGraph`，不依赖或替代 `TwoLegRotationProbe`；产品整合只发生在地址、跨文件
-重建、reopen 与 fail-close evidence 闭合之后。
+本探针不修改 `src/DurableGraph`，不依赖或替代 `TwoLegRotationProbe`；范围在 in-memory G0-G4 闭合后
+结束。真实 filesystem/RBF 与产品整合属于独立阶段 B。
 
-后续实现以 [`TARGET-DESIGN.md`](TARGET-DESIGN.md) 为全景规范；本文件只保留当前工作集，不重复长期设计。
+阶段 A 以 [`TARGET-DESIGN.md`](TARGET-DESIGN.md) 为全景规范；阶段 B 见
+[`STATESTORE-SUBSYSTEM-DESIGN.md`](STATESTORE-SUBSYSTEM-DESIGN.md)。施工入口见
+[`GOAL-G0-G4.md`](GOAL-G0-G4.md)。本文件只保留当前工作集。
 
 ## 已选择不变量
 
@@ -50,23 +52,19 @@ append destination，不改变任何 ObjectVersion Base/Delta 决策。logical p
 1. 强类型 FrameTicket、same-file earlier validation、append-only store 与 soft rollover；
 2. runtime OVD/ObjectVersion 跨 F1-F4 materialization，冷 Base 留在 F1、热 Delta 推进；
 3. origin-free RevisionPlan、OVD Base historical-head reencode、shared-prior lineage 与 logical publication；
-4. 移植 deterministic workload、精简 BaseBudget policy 与 W/P/F/R/L evaluator；
-5. filesystem naming/reopen、exact PublishedHead、durability gates 与 missing dependency fail-close；
-6. evidence 充分后，把最小地址与 reader contract 整合到产品 StateStore。
+4. 移植 deterministic workload、精简 BaseBudget policy 与 W/P/F/R/L evaluator；完成后停止 Probe。
 
 ## 未闭合事项
 
-- exact filename prefix/extension 是否沿用本探针的十位十进制 `.rbf`；
-- 正式 `SizedPtr` canonical encoding 与 BackwardFileDistance 的 record framing；
 - 当前 opaque FrameTicketCode 如何演化为可验证 same-file earlier 和可测 Frame length 的强类型 ticket；
 - OVD Base/Deltify 的独立 read-amplification policy；
 - `TargetFileBytes` 的 API、dedicated oversize file 与 hard bound；
-- orphan file reconciliation、published head durability 与目录 metadata flush；
-- GC、`CompactToNewStore`、backup packing 和 historical lineage retention。
+- SameStateRebase 的 W/R tradeoff 与是否保留在 adaptive baseline。
 
 ## 明确暂缓
 
 - 自动文件删除、incremental segment cleaner、冷热分层与跨 Store merge；
 - Extent/multi-frame Revision；
-- product public API、NuGet compatibility 或正式 wire migration；
+- filesystem/reopen、actual RBF/SizedPtr、head durability、orphan reconciliation；
+- EventJournal/RbfSegmentStore acquisition、product API、NuGet compatibility 或正式 wire migration；
 - 任何总分、默认 file target 或 cold-read SLO。

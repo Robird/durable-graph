@@ -11,8 +11,10 @@
 > 产品部分，以及 `state-store-addressing-design.md` 的 1-bit same/previous external-reference grammar。
 > 旧文档保留为 TwoLeg 可执行研究说明；one-frame、OVD、Base/Delta 与 lineage 等可复用部分仍需逐项验证。
 >
-> 实现入口：完整目标模型、Save/Load 流程、策略/评价边界与 executable gates 见
-> [`MultiSegmentStateStoreProbe/TARGET-DESIGN.md`](../../experiments/MultiSegmentStateStoreProbe/TARGET-DESIGN.md)。
+> 实现入口：阶段 A 的内存模型、Save/Load、策略/评价与 G0-G4 gates 见
+> [`TARGET-DESIGN.md`](../../experiments/MultiSegmentStateStoreProbe/TARGET-DESIGN.md)；阶段 B 的正式
+> filesystem/RBF 与产品子系统晋升见
+> [`STATESTORE-SUBSYSTEM-DESIGN.md`](../../experiments/MultiSegmentStateStoreProbe/STATESTORE-SUBSYSTEM-DESIGN.md)。
 
 ## 裁决
 
@@ -129,16 +131,17 @@ TwoLeg 仍购买一个强不变量：latest current reconstruction 只涉及常�
 backup 与 rescue dependency 更局部。若真实产品要求在线有界总磁盘、极小 dependency file count，且又
 不能接受完整 compaction，TwoLeg 或增量 cleaner 应重新进入产品比较。
 
-## 首个 Probe gate
+## 阶段 A In-Memory Probe gates
 
 在 `experiments/MultiSegmentStateStoreProbe` 隔离验证：
 
-1. 1-based FileNumber、canonical filename 与无集中 catalog 的 direct addressing；
+1. 1-based FileNumber、canonical filename mapping 与无集中 catalog 的 direct addressing 语义；
 2. `VarUInt32 BackwardFileDistance` 的 same/previous/>65,535/max-distance round-trip 与 fail-close；
-3. 冷 Base 留在 F1，热对象更新和 Revision 推进到 F2/F3/F4，latest state 仍可重建；
-4. 新文件中的 OVD Base 可引用 F1 head 而不 relocation 冷对象；
-5. soft target 切文件不改变 Base/Deltify decision；
-6. missing historical file、future reference、非 canonical distance 与错误 filename fail closed；
-7. 从 PublishedHead 派生 required files/Frames，区分 pinned 与当前可忽略的 orphan。
+3. in-memory Segment/Frame store、same-file earlier 与 soft rollover re-render；
+4. 冷 Base 留在 F1，热对象更新和 Revision 推进到 F2/F3/F4，latest state 仍可重建；
+5. 新 Segment 中的 OVD Base 可引用 F1 head 而不 relocation 冷对象，future/non-earlier/missing simulated
+   dependency fail closed；
+6. deterministic workload、Base/Deltify policy、SameStateRebase 与 W/P/F/R/L evaluator 形成完整实验闭环。
 
-Probe 通过前不修改 `src/DurableGraph` 的产品 API 或冻结正式 wire bytes。
+G0-G4 通过后 Probe 停止。真实 filename inventory、RBF/SizedPtr、filesystem reopen、durable publication 与
+`src/DurableGraph` 产品整合进入独立阶段 B；见上述两份实现入口文档。

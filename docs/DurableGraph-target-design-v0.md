@@ -438,6 +438,8 @@ Source Generator 为每个 durable type 生成：
 
 StateStore 当前选定的多历史 Segment 地址、rollover、OVD/ObjectVersion 与恢复目标，详见
 [`MultiSegmentStateStoreProbe/TARGET-DESIGN.md`](../experiments/MultiSegmentStateStoreProbe/TARGET-DESIGN.md)。
+正式子系统分层和产品化入口见
+[`STATESTORE-SUBSYSTEM-DESIGN.md`](../experiments/MultiSegmentStateStoreProbe/STATESTORE-SUBSYSTEM-DESIGN.md)。
 本节只保留 DurableGraph 全局职责，不重复冻结该探针的 provisional 类型与 wire。
 
 保存：

@@ -19,5 +19,7 @@ dotnet test experiments\MultiSegmentStateStoreProbe\MultiSegmentStateStoreProbe.
 ```
 
 当前决策、roadmap 和未闭合事项见 [`PROJECT-STATE.md`](PROJECT-STATE.md)，地址路线见
-[`DB-014`](../../docs/design-branches/0014-multi-segment-backward-file-distance.md)。后续编码的全景目标与
-关键不变量以 [`TARGET-DESIGN.md`](TARGET-DESIGN.md) 为主入口。
+[`DB-014`](../../docs/design-branches/0014-multi-segment-backward-file-distance.md)。阶段 A（In-Memory
+Probe，G0-G4）的目标与关键不变量以 [`TARGET-DESIGN.md`](TARGET-DESIGN.md) 为主入口；真实
+filesystem/RBF 与产品化只记录在 [`STATESTORE-SUBSYSTEM-DESIGN.md`](STATESTORE-SUBSYSTEM-DESIGN.md)。
+准备进入施工时，可直接使用 [`GOAL-G0-G4.md`](GOAL-G0-G4.md) 中经过范围约束的 Codex Goal prompt。
