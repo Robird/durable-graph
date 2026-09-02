@@ -10,6 +10,7 @@ internal static class BackwardFrameReferenceWireCodec {
     public static int Write(
         Span<byte> destination,
         BackwardFrameReference reference) {
+        reference.ValidateRequired();
         int distanceBytes = CanonicalUnsignedBase128.WriteUInt32(
             destination,
             reference.BackwardFileDistance);

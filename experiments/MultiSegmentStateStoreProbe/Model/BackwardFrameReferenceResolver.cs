@@ -4,6 +4,9 @@ internal static class BackwardFrameReferenceResolver {
     public static BackwardFrameReference Relativize(
         FileNumber originFileNumber,
         AbsoluteFrameAddress target) {
+        _ = originFileNumber.Value;
+        _ = target.FileNumber.Value;
+        ArgumentOutOfRangeException.ThrowIfZero(target.FrameTicketCode);
         if (target.FileNumber.Value > originFileNumber.Value) {
             throw new InvalidDataException(
                 $"Future file {target.FileNumber} cannot be referenced from file {originFileNumber}.");
@@ -16,6 +19,8 @@ internal static class BackwardFrameReferenceResolver {
     public static AbsoluteFrameAddress Resolve(
         FileNumber originFileNumber,
         BackwardFrameReference reference) {
+        _ = originFileNumber.Value;
+        reference.ValidateRequired();
         if (reference.BackwardFileDistance >= originFileNumber.Value) {
             throw new InvalidDataException(
                 $"Backward file distance {reference.BackwardFileDistance} underflows " +

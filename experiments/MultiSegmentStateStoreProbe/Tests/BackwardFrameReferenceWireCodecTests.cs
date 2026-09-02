@@ -33,4 +33,14 @@ public sealed class BackwardFrameReferenceWireCodecTests {
         Assert.Throws<InvalidDataException>(() =>
             BackwardFrameReferenceWireCodec.Read(encoded, out _));
     }
+
+    [Fact]
+    public void Default_required_reference_is_rejected_before_write() {
+        byte[] destination = new byte[
+            CanonicalUnsignedBase128.MaxUInt32Bytes +
+            CanonicalUnsignedBase128.MaxUInt64Bytes];
+
+        Assert.Throws<InvalidDataException>(() =>
+            BackwardFrameReferenceWireCodec.Write(destination, default));
+    }
 }

@@ -14,4 +14,11 @@ internal readonly record struct BackwardFrameReference {
     public uint BackwardFileDistance { get; }
 
     public ulong FrameTicketCode { get; }
+
+    internal void ValidateRequired() {
+        if (FrameTicketCode == 0) {
+            throw new InvalidDataException(
+                "A required BackwardFrameReference must have a non-zero FrameTicketCode.");
+        }
+    }
 }

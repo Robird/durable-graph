@@ -6,6 +6,7 @@ namespace Atelia.MultiSegmentStateStoreProbe.Model;
 /// </summary>
 internal readonly record struct AbsoluteFrameAddress {
     public AbsoluteFrameAddress(FileNumber fileNumber, ulong frameTicketCode) {
+        _ = fileNumber.Value;
         ArgumentOutOfRangeException.ThrowIfZero(frameTicketCode);
         FileNumber = fileNumber;
         FrameTicketCode = frameTicketCode;

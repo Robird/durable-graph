@@ -11,6 +11,16 @@ public sealed class FileNumberTests {
         Assert.Throws<OverflowException>(() => new FileNumber(uint.MaxValue).Next());
     }
 
+    [Fact]
+    public void Default_file_number_fails_closed_at_use_boundaries() {
+        FileNumber invalid = default;
+
+        Assert.Throws<InvalidDataException>(() => invalid.Next());
+        Assert.Throws<InvalidDataException>(() => FileNameConvention.Format(invalid));
+        Assert.Throws<InvalidDataException>(() =>
+            new AbsoluteFrameAddress(invalid, frameTicketCode: 1));
+    }
+
     [Theory]
     [InlineData(1u, "0000000001.rbf")]
     [InlineData(65_536u, "0000065536.rbf")]
