@@ -16,11 +16,15 @@ internal sealed class RevisionCommitSession {
 
     public RevisionCommitSession(
         InMemorySegmentStore store,
-        long targetFileBytes) {
+        long rolloverThresholdBytes) {
         ArgumentNullException.ThrowIfNull(store);
-        if (targetFileBytes < ProvisionalFrameEnvelopeEstimator.InitialTailOffsetBytes ||
-            targetFileBytes > ProvisionalFrameEnvelopeEstimator.MaxFrameStartOffsetBytes) {
-            throw new ArgumentOutOfRangeException(nameof(targetFileBytes));
+        if (rolloverThresholdBytes <=
+                ProvisionalFrameEnvelopeEstimator.InitialTailOffsetBytes ||
+            rolloverThresholdBytes >
+                ProvisionalFrameEnvelopeEstimator.MaxFrameStartOffsetBytes ||
+            (rolloverThresholdBytes &
+                ProvisionalFrameEnvelopeEstimator.AlignmentMask) != 0) {
+            throw new ArgumentOutOfRangeException(nameof(rolloverThresholdBytes));
         }
 
         if (store.SegmentCount != 0) {
@@ -29,12 +33,12 @@ internal sealed class RevisionCommitSession {
         }
 
         Store = store;
-        TargetFileBytes = targetFileBytes;
+        RolloverThresholdBytes = rolloverThresholdBytes;
     }
 
     public InMemorySegmentStore Store { get; }
 
-    public long TargetFileBytes { get; }
+    public long RolloverThresholdBytes { get; }
 
     public AbsoluteFrameAddress? PublishedHead { get; private set; }
 
@@ -71,9 +75,9 @@ internal sealed class RevisionCommitSession {
                 exception.Message);
         }
 
-        (RenderedFrameCandidate Initial, RenderedFrameCandidate Final)? placement;
+        RenderedFrameCandidate finalCandidate;
         try {
-            placement = RenderPlacement(plan);
+            finalCandidate = RenderForAppendDestination(plan);
         } catch (FrameCapacityException exception) {
             return new RejectedRevisionCommit(
                 RevisionCommitRejectionKind.Capacity,
@@ -89,8 +93,6 @@ internal sealed class RevisionCommitSession {
                     uint.MaxValue));
         }
 
-        RenderedFrameCandidate initialCandidate = placement.Value.Initial;
-        RenderedFrameCandidate finalCandidate = placement.Value.Final;
         MaterializedCurrentState admitted;
         try {
             admitted = CurrentStateMaterializer.Materialize(
@@ -125,7 +127,6 @@ internal sealed class RevisionCommitSession {
             CachedState = null;
             return new PublishedRevisionCommit(
                 plan,
-                initialCandidate,
                 finalCandidate,
                 finalCandidate.Address,
                 CacheInstalled: false,
@@ -140,7 +141,6 @@ internal sealed class RevisionCommitSession {
             CachedState = null;
             return new PublishedRevisionCommit(
                 plan,
-                initialCandidate,
                 finalCandidate,
                 finalCandidate.Address,
                 CacheInstalled: false,
@@ -149,7 +149,6 @@ internal sealed class RevisionCommitSession {
 
         return new PublishedRevisionCommit(
             plan,
-            initialCandidate,
             finalCandidate,
             finalCandidate.Address,
             CacheInstalled: true,
@@ -160,27 +159,20 @@ internal sealed class RevisionCommitSession {
         ? CurrentStateMaterializer.Materialize(Store, head)
         : throw new InvalidOperationException("The Store has no PublishedHead.");
 
-    private (RenderedFrameCandidate Initial, RenderedFrameCandidate Final)
-        RenderPlacement(RevisionPlan plan) {
+    private RenderedFrameCandidate RenderForAppendDestination(RevisionPlan plan) {
         InMemorySegment? current = Store.CurrentSegment;
         FileNumber currentFile = Store.AppendFileNumber;
         long currentTail = current?.TailOffsetBytes ??
             ProvisionalFrameEnvelopeEstimator.InitialTailOffsetBytes;
-        RenderedFrameCandidate initial = FramePlanRenderer.RenderAndMeasure(
+        if (current is not null && currentTail >= RolloverThresholdBytes) {
+            currentFile = currentFile.Next();
+            currentTail = ProvisionalFrameEnvelopeEstimator.InitialTailOffsetBytes;
+        }
+
+        return FramePlanRenderer.RenderAndMeasure(
             plan.EnvelopePlan,
             currentFile,
             currentTail);
-        if (current is not { IsEmpty: false } ||
-            initial.Layout.TailOffsetAfterBytes <= TargetFileBytes) {
-            return (initial, initial);
-        }
-
-        FileNumber nextFile = currentFile.Next();
-        RenderedFrameCandidate rerendered = FramePlanRenderer.RenderAndMeasure(
-            plan.EnvelopePlan,
-            nextFile,
-            ProvisionalFrameEnvelopeEstimator.InitialTailOffsetBytes);
-        return (initial, rerendered);
     }
 
     private static void ValidatePostState(

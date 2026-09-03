@@ -194,7 +194,7 @@ public sealed class ObjectLineageReaderTests {
     public void Later_Revision_without_PriorRevision_is_not_a_second_genesis() {
         InMemoryFrameCommitSession session = new(
             new InMemorySegmentStore(),
-            targetFileBytes: 1_000_000);
+            rolloverThresholdBytes: 1_000_000);
         _ = CommitRevision(session, new(
             priorRevision: null,
             ObjectVersionDictionaryKind.Base,
@@ -319,7 +319,7 @@ public sealed class ObjectLineageReaderTests {
 
     private static InMemoryFrameCommitSession NewOneFramePerSegmentSession() => new(
         new InMemorySegmentStore(),
-        ProvisionalFrameEnvelopeEstimator.InitialTailOffsetBytes);
+        rolloverThresholdBytes: 32);
 
     private static LogicalObjectState State(int value, int bytes, int ordinal) =>
         new(value, bytes, ordinal);

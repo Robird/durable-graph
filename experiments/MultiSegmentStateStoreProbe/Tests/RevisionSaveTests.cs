@@ -10,8 +10,7 @@ using WorkloadState = Atelia.MultiSegmentStateStoreProbe.Workloads.LogicalObject
 namespace Atelia.MultiSegmentStateStoreProbe.Tests;
 
 public sealed class RevisionSaveTests {
-    private const long OneFramePerSegmentTarget =
-        ProvisionalFrameEnvelopeEstimator.InitialTailOffsetBytes;
+    private const long OneFramePerSegmentRolloverThresholdBytes = 32;
 
     [Fact]
     public void Normalization_derives_exact_partitions_and_maps_workload_state_explicitly() {
@@ -51,7 +50,7 @@ public sealed class RevisionSaveTests {
     }
 
     [Fact]
-    public void One_frozen_plan_rerenders_on_rollover_and_OvdBase_keeps_cold_head_external() {
+    public void Final_origin_render_keeps_OvdBase_cold_head_external_after_rollover() {
         RevisionCommitSession session = NewSession();
         PublishedRevisionCommit f1 = CommitGenesis(
             session,
@@ -68,12 +67,8 @@ public sealed class RevisionSaveTests {
         PublishedRevisionCommit f2 = Assert.IsType<PublishedRevisionCommit>(
             session.Commit(updateHot, f1.PublishedHead, selection));
 
-        Assert.True(f2.RolledOver);
-        Assert.Same(f2.Plan.EnvelopePlan, f2.InitialCandidate.Plan);
         Assert.Same(f2.Plan.EnvelopePlan, f2.AppendedCandidate.Plan);
-        Assert.Equal(1u, f2.InitialCandidate.FileNumber.Value);
         Assert.Equal(2u, f2.AppendedCandidate.FileNumber.Value);
-        Assert.Equal(0u, f2.InitialCandidate.RelativeReferences[0].BackwardFileDistance);
         Assert.All(
             f2.AppendedCandidate.RelativeReferences,
             reference => Assert.Equal(1u, reference.BackwardFileDistance));
@@ -334,12 +329,12 @@ public sealed class RevisionSaveTests {
         Assert.Throws<InvalidOperationException>(() =>
             new RevisionCommitSession(
                 session.Store,
-                OneFramePerSegmentTarget));
+                OneFramePerSegmentRolloverThresholdBytes));
     }
 
     private static RevisionCommitSession NewSession() => new(
         new InMemorySegmentStore(),
-        OneFramePerSegmentTarget);
+        OneFramePerSegmentRolloverThresholdBytes);
 
     private static PublishedRevisionCommit CommitGenesis(
         RevisionCommitSession session,

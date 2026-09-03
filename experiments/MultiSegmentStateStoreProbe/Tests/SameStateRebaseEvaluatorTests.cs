@@ -52,7 +52,7 @@ public sealed class SameStateRebaseEvaluatorTests {
             new SaveStep([new UpdateObject(ClockObjectId, 1, 1)]),
         ];
         InMemorySegmentStore store = new();
-        RevisionCommitSession session = new(store, targetFileBytes: 16_384);
+        RevisionCommitSession session = new(store, rolloverThresholdBytes: 16_384);
         EvaluatorRawMetricAccumulator evaluator = new(store);
         ReadAmplificationBaseBudgetPolicyParameters parameters = new(2m, 1m);
         List<long> writes = [];

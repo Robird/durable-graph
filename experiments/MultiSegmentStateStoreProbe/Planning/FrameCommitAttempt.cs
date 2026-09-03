@@ -6,12 +6,8 @@ namespace Atelia.MultiSegmentStateStoreProbe.Planning;
 internal abstract record FrameCommitAttempt;
 
 internal sealed record PublishedFrameCommit(
-    RenderedFrameCandidate InitialCandidate,
     RenderedFrameCandidate AppendedCandidate,
-    AbsoluteFrameAddress PublishedHead) : FrameCommitAttempt {
-    public bool RolledOver => InitialCandidate.FileNumber !=
-        AppendedCandidate.FileNumber;
-}
+    AbsoluteFrameAddress PublishedHead) : FrameCommitAttempt;
 
 internal sealed record CapacityRejectedFrameCommit(
     FrameCapacityRejection Rejection) : FrameCommitAttempt;

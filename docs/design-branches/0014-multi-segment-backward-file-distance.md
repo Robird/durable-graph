@@ -73,19 +73,28 @@ Frame。地址 codec 检查整数/canonical 边界；RBF reader 仍负责目标 
 
 ## 文件切换
 
-`TargetFileBytes` 是应用配置的 soft target，不是地址格式常量：
+`RolloverThresholdBytes` 是应用配置的 soft rotation trigger，不是文件大小上限或地址格式常量。产品采用
+`RbfSegmentStore` 已有的 tail-triggered 语义：
 
 ```text
-if CurrentFile is nonempty
-    and appending candidate Revision would cross TargetFileBytes:
-    create file CurrentFileNumber + 1
+plan = FreezeLogicalDecisions(exact parent facts)
+writer = OpenActiveWriter()
+    // 内部仅在 existing TailOffset >= RolloverThresholdBytes 时 checked rotate
 
-append the same candidate Revision
+candidate = RenderOnce(plan, writer.SegmentNumber, writer.File.TailOffset)
+AppendExactlyOneRevisionFrame(candidate)
 ```
 
-切换文件不改变 Base/Deltify、OVD membership 或对象 placement 决策。若单个合法 Revision Frame 本身
-超过 soft target、但仍满足 RBF hard bounds，可写入一个 dedicated oversize file；后续 Revision 再创建
-新文件。超过单 Frame hard bound 仍 fail closed，文件切换不替代未来 Extent 设计。
+因此使当前文件越过 threshold 的 Revision 仍留在当前 Segment，下一次取得 writer 时才轮转。StateStore
+每个 Revision 单独借还一次 writer lease，并且每个 lease 只 append 一个 Revision Frame；在此前提下，文件
+最多比 threshold 多一个合法 RBF append envelope。以 2 GiB threshold 和当前约 256 MiB 单 Frame hard bound
+为例，最终文件小于约 2.25 GiB。若未来出现严格 `file <= N` 的上传、备份或介质消费者，或一个 Revision
+扩展为多 Frame/Extent，必须重访本裁决。
+
+`RolloverThresholdBytes` 必须 4-byte aligned、严格大于 header-only tail，并不超过 `SizedPtr` 最大可表示
+Frame start。轮转前须 checked 计算 next FileNumber；超过单 Frame hard bound 仍 fail closed。切换文件不
+改变 Base/Deltify、OVD membership 或对象 placement 决策，也不要求 StateStore 预估下一个 Frame 的物理
+长度、显式要求轮转或为 placement 重复编码。
 
 ## OVD 与 ObjectVersion
 
@@ -106,7 +115,7 @@ v1 保证：
 - candidate dependencies durable 后才发布，未发布新文件只是 orphan；
 - latest OVD 与所有 live ObjectVersion reconstruction chains 可跨历史文件完整恢复；
 - future、missing、malformed、non-earlier 或循环 reference fail closed；
-- 每个数据文件受 soft target 与 RBF hard bounds 约束。
+- 文件轮转受 soft threshold 触发，单个 Frame 受 RBF hard bounds 约束；文件允许一次 append 的有界 overshoot。
 
 v1 不保证：
 
@@ -137,7 +146,7 @@ backup 与 rescue dependency 更局部。若真实产品要求在线有界总磁
 
 1. 1-based FileNumber、canonical filename mapping 与无集中 catalog 的 direct addressing 语义；
 2. `VarUInt32 BackwardFileDistance` 的 same/previous/>65,535/max-distance round-trip 与 fail-close；
-3. in-memory Segment/Frame store、same-file earlier 与 soft rollover re-render；
+3. in-memory Segment/Frame store、same-file earlier、tail-triggered rollover 与 final-origin single render；
 4. 冷 Base 留在 F1，热对象更新和 Revision 推进到 F2/F3/F4，latest state 仍可重建；
 5. 新 Segment 中的 OVD Base 可引用 F1 head 而不 relocation 冷对象，future/non-earlier/missing simulated
    dependency fail closed；

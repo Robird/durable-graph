@@ -1,10 +1,15 @@
 # Codex Goal：完成阶段 A G0-G4
 
-> 状态：Ready-to-use Goal Prompt
+> 状态：Completed Historical Work Order / Do Not Rerun
 >
 > 最近校准：2026-09-02
 >
 > 适用范围：`experiments/MultiSegmentStateStoreProbe`
+
+> 历史说明：下方 prompt 记录完成 G0-G4 时的施工合同，其中 candidate-crossing/rerender placement 已由
+> 后续 tail-triggered rollover 决策取代。当前实现与规范以 `TARGET-DESIGN.md`、`PROJECT-STATE.md` 和源码
+> 为准；不要再次粘贴执行本 Goal。旧完整可执行状态保存在 commit
+> `556365b0043519b3ff94a98a26818495ff327986`。
 
 ## 使用说明
 

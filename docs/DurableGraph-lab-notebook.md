@@ -80,8 +80,9 @@
   Base/Deltify/OVD membership 解耦，冷 ObjectVersion 不因切文件而强制 relocation。
 - **Observed**：MultiSegment 首切片只实现 FileNumber、canonical filename、absolute address、
   RelativeFrameTicket 与 canonical Base128 fail-close；G1 又实现 strong FrameTicket、same-file strictly-earlier、
-  append-only in-memory Segment/Store、唯一 provisional envelope estimator 与 soft rollover re-render。typed hard
-  reject 与 FileNumber overflow 均不 append/publish；G2 又以 F1-F4 验证 Revision shared Prior、OVD/ObjectVersion
+  append-only in-memory Segment/Store、唯一 provisional envelope estimator 与 tail-triggered rollover：crossing
+  append 留在当前 Segment，下一 Save 在 final-origin render 前轮转。typed hard reject 与 FileNumber overflow 均
+  不 append/publish；显式 multi-origin witness 保留 relative re-encode 定律；G2 又以 F1-F4 验证 Revision shared Prior、OVD/ObjectVersion
   Base/Delta 与 exact-head current reconstruction。冷 head 可留在 F1，OVD Base lineage-only prior 不进入 current
   closure；G3 又闭合 exact-parent normalization、origin-free whole-candidate plan、OVD Base historical-head
   reencode、shared-prior lineage、append-before-publish orphan 与 cache-install failure。Stage-A session 只从 empty
@@ -769,6 +770,21 @@
 
 ## 6. 船长日志
 
+### 2026-09-02：采用 RbfSegmentStore 的 tail-triggered rollover
+
+- **Decided**：`RolloverThresholdBytes` 只在每次取得 writer 前与 existing `TailOffset` 比较；达到或超过时
+  checked 切换 Segment，随后在 lease 选定的 final origin render 一次。crossing Revision 留在当前文件，下一
+  Save 才轮转。threshold 是 soft trigger，不是严格文件大小上限。
+- **Simplified**：删除 candidate-aware prospective sizing、explicit rotate、current/next 双 render、
+  `InitialCandidate` 与 placement-derived `RolledOver`。origin-free logical plan、absolute-normalize、final-origin
+  relative encoding、RBF hard gates 与 one-Revision/one-Frame 继续保留。
+- **Boundary**：每个 Save 单独借还 writer lease且只 append 一个 Revision Frame，因而 overshoot 最多一个合法
+  RBF append envelope；2 GiB threshold 在当前约 256 MiB Frame hard bound 下得到小于约 2.25 GiB 的文件。
+  threshold 必须大于 header-only tail、4-byte aligned 且不超过最大 Frame start；strict file-size consumer 或
+  multi-frame/Extent 出现时重访。
+- **Superseded evidence**：commit `556365b0043519b3ff94a98a26818495ff327986` 保留旧
+  candidate-crossing/rerender Probe、测试与 raw reports；当前主线更新 golden，不保留双 rollover policy。
+
 ### 2026-09-02：把 MultiSegment Probe 与正式 StateStore 产品化拆成两阶段
 
 - **Decided**：`MultiSegmentStateStoreProbe` 在 G4（Workload、policy、evaluator）完成后停止；真实 filesystem/RBF、reopen、durability 与 `src/DurableGraph` 整合不再是 Probe roadmap。
@@ -779,7 +795,9 @@
 ### 2026-09-02：收敛 MultiSegment StateStore 实现主设计
 
 - **Decided**：新增项目级 `TARGET-DESIGN.md`，把 DB-014 的路线裁决展开为唯一 authority、origin-scoped address、OVD/ObjectVersion、Save/Load、rollover、publication、baseline policy、W/P/F/R/L 与 executable gates；其原始 G5/G6 随后被上方两阶段裁决移出 Probe。
-- **Decided**：rollover 复用同一个 origin-free logical plan，但必须按新文件 origin 重新 relativize、编码和定尺；它不重跑 Base/Deltify/OVD policy。
+- **Superseded**：当时要求 candidate crossing 时按 next origin 重新 relativize、编码和定尺；后续已采用
+  `RbfSegmentStore` tail-triggered writer acquisition，正常 Save 只在 final origin render 一次。origin-free plan
+  与 representation/file-placement 解耦仍保留。
 - **Decided**：保留 shared PriorRevision 与 Base lineage；OVD Base 的 prior 是 lineage-only，不进入 current recovery closure。保留可选 SameStateRebase 作为读放大维护，删除 TwoLeg evacuation/rotation 语义。
 - **Boundary**：durable-before-publish 是目标 law；head carrier、atomic publication、file/directory flush、orphan 后 FileNumber allocation 与正式 wire 仍待 filesystem/RBF gate。当前没有把目标能力描述成已实现。
 - **Review**：四路独立 thesis、交叉质询与终审已收敛；无架构 blocker。终审补齐 current-required 与 lineage-only dependency、派生 NoChange、首次文件、OVD Delta canonicality、零尺寸 amplification、物理 W/P 与 Empty-vs-missing head 边界。

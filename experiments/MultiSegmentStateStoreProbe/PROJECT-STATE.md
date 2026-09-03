@@ -7,14 +7,15 @@
 ## 目标
 
 用最小、可执行的机制验证多历史 Segment StateStore：持久引用可指向同目录内任意更早文件，文件达到
-应用配置尺寸后独立切换，冷 ObjectVersion 不因文件切换被强制 Base。
+应用配置的 soft rollover threshold 后，在下一次 Save 前独立切换，冷 ObjectVersion 不因文件切换被强制
+Base。
 
 本探针不修改 `src/DurableGraph`，不依赖或替代 `TwoLegRotationProbe`；范围在 in-memory G0-G4 闭合后
 结束。真实 filesystem/RBF 与产品整合属于独立阶段 B。
 
 阶段 A 以 [`TARGET-DESIGN.md`](TARGET-DESIGN.md) 为全景规范；阶段 B 见
 [`STATESTORE-SUBSYSTEM-DESIGN.md`](STATESTORE-SUBSYSTEM-DESIGN.md)。施工入口见
-[`GOAL-G0-G4.md`](GOAL-G0-G4.md)。本文件只保留当前工作集。
+[`GOAL-G0-G4.md`](GOAL-G0-G4.md)，现仅作为 completed historical work order。本文件只保留当前工作集。
 
 ## 已选择不变量
 
@@ -25,6 +26,9 @@
 - 不采用固定 `UInt16` horizon；
 - future、underflow、zero target、non-canonical VarUInt 和 required zero FrameTicket fail closed；
 - OVD `BindSelf` 与 optional None 保持字段局部语义，不混入通用 required reference；
+- `RolloverThresholdBytes` 只在 writer acquisition 前与 existing tail 比较；crossing append 留在当前文件，
+  下一次 Save 才轮转；threshold 不是文件大小上限；
+- 每个 Save 只取得一个 writer lease、只 append 一个 Revision Frame，final Segment 确定后只 render 一次；
 - v1 可保留所有 published 文件，不承诺总磁盘、依赖文件数或 cold-read fan-out 有界。
 
 ## 当前具备
@@ -36,8 +40,9 @@
 - canonical VarUInt32/VarUInt64 writer-reader，以及 overlong、overflow、truncated 与 zero-ticket fail-close；
 - same-file strictly-earlier validation 与 provisional single-Frame envelope hard bounds；
 - in-memory append-only Segment/Store、origin-free logical plan、origin-dependent render/measure；
-- soft `TargetFileBytes` rollover：nonempty crossing 只重编码同一 plan，empty oversize 原地容纳，下一 Save
-  自然切换；hard bound 或 FileNumber overflow typed reject 且不 append/publish；
+- tail-triggered `RolloverThresholdBytes`：existing tail 达到 threshold 时下一 Save 在 render 前轮转；crossing
+  append 与 empty oversize 原地容纳；final origin 只 render 一次；hard bound 或 FileNumber overflow typed reject
+  且不 append/publish；
 - immutable Revision/OVD/ObjectVersion model：shared optional PriorRevision 位于 Revision；OVD Base/Delta 与
   BindSelf/External/Remove、ObjectVersion Base/Delta 均有 canonical shape；
 - exact-head current materializer：F1-F4 中冷对象 head 留在 F1，热对象 Delta 链推进到 F4；OVD Base 的
@@ -56,7 +61,8 @@
   all-Delta/all-Base/adaptive 均产生 deterministic admitted raw report；
 - 独立 core/test `.slnx`，不进入产品 solution 或 TwoLeg 子树。
 
-当前 Frame envelope、relative codec、OVD encoding estimate 和 synthetic plan 都只是内存探针 grammar；
+当前 Frame envelope、relative codec、OVD encoding estimate 和 synthetic plan 都只是内存探针 grammar；soft
+threshold 的 overshoot 上界依赖 one-Revision/one-Frame discipline，严格文件大小上限不是当前保证；
 没有正式 RBF/OVD wire 或持久 StateStore。
 
 ## 当前焦点

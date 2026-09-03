@@ -25,14 +25,10 @@ internal sealed record AppendedUnpublishedRevisionCommit(
 
 internal sealed record PublishedRevisionCommit(
     RevisionPlan Plan,
-    RenderedFrameCandidate InitialCandidate,
     RenderedFrameCandidate AppendedCandidate,
     AbsoluteFrameAddress PublishedHead,
     bool CacheInstalled,
-    MaterializedCurrentState? CachedState) : RevisionCommitAttempt {
-    public bool RolledOver => InitialCandidate.FileNumber !=
-        AppendedCandidate.FileNumber;
-}
+    MaterializedCurrentState? CachedState) : RevisionCommitAttempt;
 
 internal sealed class RevisionCommitHooks {
     /// <summary>

@@ -27,8 +27,8 @@ evaluator）为止。它是阶段 A 编码的主设计入口，但不是当前�
 ## 1. 问题与一句话模型
 
 本探针在内存中建模一串单调编号、append-only 的 Segment/Frame。最新 Published Revision 可以引用任意
-更早 Segment 中的 Revision 或 ObjectVersion；模拟文件达到 soft target 时只切换 append destination，
-不搬迁冷对象，也不改变 Base/Deltify 决策。
+更早 Segment 中的 Revision 或 ObjectVersion；每次 Save 在取得 writer 前仅按现有文件 tail 与 soft rollover
+threshold 决定 append destination，随后在最终 origin 编码一次，不搬迁冷对象，也不改变 Base/Deltify 决策。
 
 ```text
 exact PublishedHead
@@ -337,41 +337,46 @@ policy 只产生逻辑决策：
 随后构造一个 origin-free `RevisionPlan`。其中所有 external heads、Delta parents 与 PriorRevision 都保持
 absolute address。此时还没有持久 relative bytes，也没有选择新的策略分支。
 
-### 6.3 Placement、重编码与定尺
+### 6.3 Placement、编码与定尺
 
 正确顺序是：
 
 ```text
 plan = FreezeLogicalDecisions(exact parent facts)
 
-currentCandidate = RenderAndMeasure(plan, appendCurrentFile)
-if appendCurrentFile is nonempty
-    and currentCandidate.TailAfter > TargetFileBytes:
-    targetFile = appendCurrentFile.Next()
-    finalCandidate = RenderAndMeasure(plan, targetFile)
+if appendCurrentFile.TailOffset >= RolloverThresholdBytes:
+    targetFile = appendCurrentFile.NextChecked()
+    targetTail = RbfHeaderOnlyTail
 else:
-    finalCandidate = currentCandidate
+    targetFile = appendCurrentFile
+    targetTail = appendCurrentFile.TailOffset
 
-ValidateHardBounds(finalCandidate)
-Append(finalCandidate)
+candidate = RenderAndMeasure(plan, targetFile, targetTail)
+ValidateHardBounds(candidate)
+AppendExactlyOneRevisionFrame(candidate)
 ```
 
 若 Store 尚无数据文件，首次 placement 创建 F1。若最大号文件存在但尚无完整 Frame，则它是可复用的 empty
-append destination；这里的 `nonempty` 指“至少含一个完整 Frame”，不是“RBF header 占用了字节”。
+append destination。`RolloverThresholdBytes` 必须 4-byte aligned、严格大于 header-only tail，并且不超过
+最大可表示 Frame start，因而 header-only Segment 不会被连续跳过，正常 writer 也不会在轮转前进入不可寻址
+的 Frame start。
 
-“same candidate”只表示同一个 logical plan、Base/Delta decisions 与 OVD membership；它不表示相同的 bytes、
-relative tickets 或 layout estimate。文件号变化会改变 `BackwardFileDistance` 及其 VarUInt 宽度，因此
-rollover 后必须重新 relativize、编码和定尺，绝不能重跑 policy。
+文件选择不读取 candidate 大小，也不重新运行 policy。文件号变化会改变 `BackwardFileDistance` 及其 VarUInt
+宽度，因此必须先确定最终 Segment，再从 plan 中保存的 absolute addresses 生成 relative references。显式
+multi-origin renderer witness 继续证明：同一个 plan 在不同 origin 的 raw bytes/layout 可以不同，但解析后必须
+回到相同 absolute targets；正常 Save 只在最终 origin render 一次。
 
-### 6.4 Soft target 与 oversize
+### 6.4 Soft rollover threshold 与 overshoot
 
-`TargetFileBytes` 是 placement trigger，不是 hard capacity：
+`RolloverThresholdBytes` 是下一次取得 writer 前的 soft trigger，不是文件大小上限：
 
-- current file 非空且 append 后越过 target：最多切换一次到 next file；
-- fresh/empty file 上的单个合法 Revision 即使超过 target 仍然 append；
-- 下一次 Save 看到 nonempty oversize file 后自然切换到新文件；
+- existing tail 小于 threshold：本次 Revision 留在当前文件，即使 append 后越过 threshold；
+- existing tail 达到或超过 threshold：本次 Save 在 render 前 checked 切换到 next file；
+- fresh/empty file 上的单个合法 Revision 即使超过 threshold 仍然 append；
+- StateStore 每次 Save 单独借还 writer lease，且每个 lease 只 append 一个 Revision Frame，因此 overshoot 最多
+  来自一个合法 RBF append envelope；
 - 不引入 `OversizeSegment` 类型或循环创建空文件；
-- 若最终 candidate 超过 RBF single-Frame hard bounds，typed reject，不拆分、不 fallback、不改策略。
+- 若 candidate 超过 RBF single-Frame hard bounds，typed reject，不拆分、不 fallback、不改策略。
 
 file switch 绝不能强制 Base、SameStateRebase、OVD Base 或 cold object relocation。
 
@@ -578,16 +583,16 @@ PublishedHead、workload cursor 与 evaluator accumulator。单次 Save 内部�
 ```text
 Normalize
 Plan
-Render current origin
-[Render next origin after one soft rollover]
+Select append origin from existing Segment tail
+Render selected origin once
 Admit
 Append
 Publish
 Install derived cache
 ```
 
-这些阶段不必各自形成公开对象或 durable state。真正必须保留的边界是：logical decision 与
-origin-dependent render 分开、append 与 publish 分开、authority 与 derived cache 分开。
+这些阶段不必各自形成公开对象或 durable state。真正必须保留的边界是：logical decision 与 final-origin
+render 分开、append 与 publish 分开、authority 与 derived cache 分开。
 
 ## 12. 实现 roadmap 与 executable gates
 
@@ -598,12 +603,13 @@ origin-dependent render 分开、append 与 publish 分开、authority 与 deriv
 - distance 0/1/>65,535/max round-trip；
 - canonical VarUInt 与 underflow/future/zero-ticket fail-close。
 
-### G1：Frame store 与 soft rollover
+### G1：Frame store 与 tail-triggered soft rollover
 
 - 强类型 FrameTicket/布局，能验证 same-file earlier；
 - in-memory append-only Segment/FileStore；
-- nonempty crossing、empty oversize、hard-bound rejection；
-- rollover 前后 logical plan 完全相同，但 encoded bytes/layout 可不同；
+- crossing append 留在当前 Segment，下一次 Save 在 render 前轮转；
+- empty oversize、threshold equality、hard-bound rejection；
+- final Segment 确定后只 render 一次；显式 multi-origin witness 独立证明 relative re-encode；
 - rejection 不发布 head。
 
 ### G2：OVD 与 ObjectVersion reconstruction
@@ -638,7 +644,8 @@ G0-G4 全部闭合即停止本 Goal/Probe 阶段：
 - 所有 executable gates 有聚焦测试；
 - MultiSegment subsolution tests、format verification 与 root solution build 通过；
 - 至少一个 deterministic corpus 可让 all-Delta、all-Base 与 adaptive baseline 产生 admitted raw report；
-- F1-F4、rollover re-render、OVD Base external head、SameStateRebase 与主要 fail-close 反例都有证据；
+- F1-F4、tail-triggered rollover、multi-origin re-encode、OVD Base external head、SameStateRebase 与主要
+  fail-close 反例都有证据；
 - `PROJECT-STATE.md` 压缩为“G0-G4 complete / awaiting promotion decision”，不提前开始真实 filesystem/RBF；
 - 工作树只包含本阶段有意改动，并形成可恢复 Git commit。
 
@@ -651,7 +658,7 @@ G0-G4 全部闭合即停止本 Goal/Probe 阶段：
 |---|---|
 | Multi-history address semantics、1-based FileNumber、canonical VarUInt | 已选择；地址切片已有 executable evidence |
 | OVD authority、Base/Delta、absolute-normalize/relative-reencode | 已选择；G2 已用 MultiSegment F1-F4 重验 current reconstruction |
-| rollover 与 Base/Deltify 解耦、origin-dependent re-render | 已选择；G1 已有 executable evidence |
+| tail-triggered rollover 与 Base/Deltify 解耦、final-origin single render | 已选择；G1 已有 executable evidence |
 | shared PriorRevision 与 Base lineage | 已选择；G3 已有 MultiSegment point-lookup lineage evidence |
 | exact PublishedHead 与 append-before-publish | 已选择；G3 已验证 logical in-memory order 与 orphan invisibility |
 | deterministic workload、policy 与 W/P/F/R/L evaluator | G4 已验证，含 SameStateRebase 与三策略 raw report |
@@ -664,7 +671,7 @@ G0-G4 全部闭合即停止本 Goal/Probe 阶段：
 阶段 A 必须通过实验裁决：
 
 - probe-local strong FrameTicket、same-file earlier validation 与 provisional estimator 的最小边界；
-- `TargetFileBytes` API、RBF hard bound 和 FileNumber overflow outcomes；
+- `RolloverThresholdBytes` range、RBF hard bound 和 FileNumber overflow outcomes；
 - 证明 OVD mode 是独立决策轴，并以显式 caller/test choice 覆盖 Base 与 Delta；自动选择 policy 暂缓；
 - SameStateRebase 的可测 W/R tradeoff 与是否保留在 adaptive baseline。
 
@@ -680,6 +687,6 @@ G0-G4 全部闭合即停止本 Goal/Probe 阶段：
 
 首轮编码的正确终点不是“建成一个数据库”，而是用 executable evidence 证明：
 
-> 同一逻辑 Save plan 可以在不改变 Base/Deltify 的情况下跨 Segment 重新编码并发布；latest OVD 与所有
+> 同一逻辑 Save plan 可以在不改变 Base/Deltify 的情况下先选择最终 Segment、再编码一次并发布；latest OVD 与所有
 > live ObjectVersion 可以跨任意历史文件完整恢复；冷对象不因文件切换被强制复制；所有 authority、
 > current-required missing dependency 与 in-memory publication 边界都能被明确解释并 fail closed。

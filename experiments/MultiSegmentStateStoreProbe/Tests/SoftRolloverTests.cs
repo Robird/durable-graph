@@ -5,73 +5,124 @@ using Atelia.MultiSegmentStateStoreProbe.Storage;
 namespace Atelia.MultiSegmentStateStoreProbe.Tests;
 
 public sealed class SoftRolloverTests {
-    private const long OneEmptyFrameTargetBytes = 32;
+    private const long OneEmptyFrameRolloverThresholdBytes = 32;
 
     [Fact]
-    public void Target_must_keep_future_frame_starts_representable() {
+    public void Threshold_must_be_above_the_header_aligned_and_keep_frame_starts_representable() {
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            new InMemoryFrameCommitSession(
+                new InMemorySegmentStore(),
+                ProvisionalFrameEnvelopeEstimator.InitialTailOffsetBytes));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            new InMemoryFrameCommitSession(
+                new InMemorySegmentStore(),
+                ProvisionalFrameEnvelopeEstimator.InitialTailOffsetBytes + 1));
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             new InMemoryFrameCommitSession(
                 new InMemorySegmentStore(),
                 ProvisionalFrameEnvelopeEstimator.MaxFrameStartOffsetBytes + 1));
+
+        _ = new InMemoryFrameCommitSession(
+            new InMemorySegmentStore(),
+            ProvisionalFrameEnvelopeEstimator.MaxFrameStartOffsetBytes);
     }
 
     [Fact]
-    public void Nonempty_crossing_rerenders_the_same_plan_at_the_next_origin() {
+    public void Crossing_append_stays_and_the_next_commit_rotates_before_render() {
         InMemoryFrameCommitSession session = new(
             new InMemorySegmentStore(),
-            OneEmptyFrameTargetBytes);
+            rolloverThresholdBytes: 64);
         PublishedFrameCommit first = Assert.IsType<PublishedFrameCommit>(
             session.Commit(new OriginFreeFramePlan(0)));
-        for (int fileNumber = 2; fileNumber <= 128; fileNumber++) {
-            PublishedFrameCommit seeded = Assert.IsType<PublishedFrameCommit>(
-                session.Commit(new OriginFreeFramePlan(0)));
-            Assert.Equal((uint)fileNumber, seeded.PublishedHead.FileNumber.Value);
-        }
+        Assert.Equal(32, session.Store.CurrentSegment!.TailOffsetBytes);
 
-        OriginFreeFramePlan boundaryPlan = new(
+        PublishedFrameCommit crossing = Assert.IsType<PublishedFrameCommit>(
+            session.Commit(new OriginFreeFramePlan(syntheticPayloadBytes: 40)));
+        Assert.Equal(first.PublishedHead.FileNumber, crossing.PublishedHead.FileNumber);
+        Assert.True(session.Store.CurrentSegment.TailOffsetBytes > 64);
+        Assert.Equal(1, session.Store.SegmentCount);
+
+        OriginFreeFramePlan nextPlan = new(
             syntheticPayloadBytes: 1,
             externalReferences: [first.PublishedHead]);
-        PublishedFrameCommit result = Assert.IsType<PublishedFrameCommit>(
-            session.Commit(boundaryPlan));
+        PublishedFrameCommit next = Assert.IsType<PublishedFrameCommit>(
+            session.Commit(nextPlan));
+        Assert.Equal(2u, next.PublishedHead.FileNumber.Value);
+        Assert.Same(nextPlan, next.AppendedCandidate.Plan);
+        Assert.Equal(1u, Assert.Single(
+            next.AppendedCandidate.RelativeReferences).BackwardFileDistance);
+        Assert.Equal(next.PublishedHead, session.PublishedHead);
+        Assert.Equal(2, session.Store.SegmentCount);
+    }
 
-        Assert.True(result.RolledOver);
-        Assert.Same(boundaryPlan, result.InitialCandidate.Plan);
-        Assert.Same(boundaryPlan, result.AppendedCandidate.Plan);
+    [Fact]
+    public void Explicit_origins_reencode_the_same_absolute_reference() {
+        AbsoluteFrameAddress earlier = new(
+            new FileNumber(1),
+            new FrameTicket(4, 24));
+        OriginFreeFramePlan plan = new(
+            syntheticPayloadBytes: 1,
+            externalReferences: [earlier]);
+
+        RenderedFrameCandidate distance127 = FramePlanRenderer.RenderAndMeasure(
+            plan,
+            new FileNumber(128),
+            ProvisionalFrameEnvelopeEstimator.InitialTailOffsetBytes);
+        RenderedFrameCandidate distance128 = FramePlanRenderer.RenderAndMeasure(
+            plan,
+            new FileNumber(129),
+            ProvisionalFrameEnvelopeEstimator.InitialTailOffsetBytes);
+
         Assert.Equal(127u, Assert.Single(
-            result.InitialCandidate.RelativeReferences).BackwardFileDistance);
+            distance127.RelativeReferences).BackwardFileDistance);
         Assert.Equal(128u, Assert.Single(
-            result.AppendedCandidate.RelativeReferences).BackwardFileDistance);
-        Assert.Equal(3, result.InitialCandidate.EncodedReferenceBytes.Length);
-        Assert.Equal(4, result.AppendedCandidate.EncodedReferenceBytes.Length);
+            distance128.RelativeReferences).BackwardFileDistance);
+        Assert.Equal(3, distance127.EncodedReferenceBytes.Length);
+        Assert.Equal(4, distance128.EncodedReferenceBytes.Length);
         Assert.NotEqual(
-            result.InitialCandidate.Layout.FrameLengthBytes,
-            result.AppendedCandidate.Layout.FrameLengthBytes);
-        Assert.Equal(129u, result.PublishedHead.FileNumber.Value);
-        Assert.Equal(result.PublishedHead, session.PublishedHead);
-        Assert.Equal(129, session.Store.SegmentCount);
-        Assert.Equal(1, session.Store.GetSegment(new FileNumber(128)).FrameCount);
-        Assert.Same(
-            result.AppendedCandidate,
-            session.Store.Read(result.PublishedHead));
+            distance127.Layout.FrameLengthBytes,
+            distance128.Layout.FrameLengthBytes);
+        Assert.Equal(earlier, new FileScope(distance127.FileNumber).ResolveEarlier(
+            distance127.Address.FrameTicket,
+            Assert.Single(distance127.RelativeReferences)));
+        Assert.Equal(earlier, new FileScope(distance128.FileNumber).ResolveEarlier(
+            distance128.Address.FrameTicket,
+            Assert.Single(distance128.RelativeReferences)));
+    }
+
+    [Fact]
+    public void Tail_equal_to_threshold_rotates_before_render() {
+        InMemoryFrameCommitSession session = new(
+            new InMemorySegmentStore(),
+            OneEmptyFrameRolloverThresholdBytes);
+        PublishedFrameCommit first = Assert.IsType<PublishedFrameCommit>(
+            session.Commit(new OriginFreeFramePlan(0)));
+        Assert.Equal(OneEmptyFrameRolloverThresholdBytes,
+            session.Store.CurrentSegment!.TailOffsetBytes);
+
+        PublishedFrameCommit second = Assert.IsType<PublishedFrameCommit>(
+            session.Commit(new OriginFreeFramePlan(0)));
+
+        Assert.Equal(1u, first.PublishedHead.FileNumber.Value);
+        Assert.Equal(2u, second.PublishedHead.FileNumber.Value);
+        Assert.Equal(2, session.Store.SegmentCount);
     }
 
     [Fact]
     public void Empty_oversize_is_accepted_and_the_next_commit_rolls_naturally() {
         InMemoryFrameCommitSession session = new(
             new InMemorySegmentStore(),
-            OneEmptyFrameTargetBytes);
+            OneEmptyFrameRolloverThresholdBytes);
 
         PublishedFrameCommit oversize = Assert.IsType<PublishedFrameCommit>(
             session.Commit(new OriginFreeFramePlan(100)));
-        Assert.False(oversize.RolledOver);
         Assert.Equal(1u, oversize.PublishedHead.FileNumber.Value);
         Assert.True(
             oversize.AppendedCandidate.Layout.TailOffsetAfterBytes >
-            OneEmptyFrameTargetBytes);
+            OneEmptyFrameRolloverThresholdBytes);
 
         PublishedFrameCommit next = Assert.IsType<PublishedFrameCommit>(
             session.Commit(new OriginFreeFramePlan(0)));
-        Assert.True(next.RolledOver);
         Assert.Equal(2u, next.PublishedHead.FileNumber.Value);
         Assert.Equal(2, session.Store.SegmentCount);
     }
@@ -80,7 +131,9 @@ public sealed class SoftRolloverTests {
     public void Existing_empty_max_segment_is_reused_for_its_first_frame() {
         InMemorySegmentStore store = new(new FileNumber(uint.MaxValue));
         InMemorySegment empty = store.CreateEmptyAppendSegment();
-        InMemoryFrameCommitSession session = new(store, OneEmptyFrameTargetBytes);
+        InMemoryFrameCommitSession session = new(
+            store,
+            OneEmptyFrameRolloverThresholdBytes);
 
         PublishedFrameCommit result = Assert.IsType<PublishedFrameCommit>(
             session.Commit(new OriginFreeFramePlan(100)));
@@ -90,14 +143,14 @@ public sealed class SoftRolloverTests {
         Assert.Equal(1, empty.FrameCount);
         Assert.Equal(uint.MaxValue, result.PublishedHead.FileNumber.Value);
         Assert.True(result.AppendedCandidate.Layout.TailOffsetAfterBytes >
-            OneEmptyFrameTargetBytes);
+            OneEmptyFrameRolloverThresholdBytes);
     }
 
     [Fact]
     public void Hard_bound_rejection_does_not_append_or_publish() {
         InMemoryFrameCommitSession session = new(
             new InMemorySegmentStore(),
-            OneEmptyFrameTargetBytes);
+            OneEmptyFrameRolloverThresholdBytes);
 
         CapacityRejectedFrameCommit rejected =
             Assert.IsType<CapacityRejectedFrameCommit>(session.Commit(
@@ -116,7 +169,7 @@ public sealed class SoftRolloverTests {
     public void Payload_plus_reference_overflow_is_a_typed_rejection() {
         InMemoryFrameCommitSession session = new(
             new InMemorySegmentStore(),
-            OneEmptyFrameTargetBytes);
+            OneEmptyFrameRolloverThresholdBytes);
         AbsoluteFrameAddress earlier = new(
             new FileNumber(1),
             new FrameTicket(4, 24));
@@ -138,7 +191,7 @@ public sealed class SoftRolloverTests {
         InMemorySegmentStore store = new(new FileNumber(uint.MaxValue));
         InMemoryFrameCommitSession session = new(
             store,
-            OneEmptyFrameTargetBytes);
+            OneEmptyFrameRolloverThresholdBytes);
         PublishedFrameCommit first = Assert.IsType<PublishedFrameCommit>(
             session.Commit(new OriginFreeFramePlan(0)));
 

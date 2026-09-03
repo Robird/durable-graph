@@ -65,7 +65,7 @@ internal sealed class BenchmarkBatchReport {
 }
 
 internal static class MultiSegmentBenchmarkRunner {
-    public const long DefaultTargetFileBytes = 512;
+    public const long DefaultRolloverThresholdBytes = 512;
 
     public static BenchmarkBatchReport RunCanonicalBatch() {
         WorkloadTrace trace = MultiSegmentBenchmarkCorpus.CreateDeterministicMixedTrace();
@@ -79,7 +79,7 @@ internal static class MultiSegmentBenchmarkRunner {
     public static BenchmarkRunOutcome Run(
         WorkloadTrace trace,
         BenchmarkPolicyKind policy,
-        long targetFileBytes = DefaultTargetFileBytes,
+        long rolloverThresholdBytes = DefaultRolloverThresholdBytes,
         ReadAmplificationBaseBudgetPolicyParameters? adaptiveParameters = null) {
         ArgumentNullException.ThrowIfNull(trace);
         if (!Enum.IsDefined(policy)) {
@@ -98,7 +98,7 @@ internal static class MultiSegmentBenchmarkRunner {
             _ => throw new ArgumentOutOfRangeException(nameof(policy)),
         };
         InMemorySegmentStore store = new();
-        RevisionCommitSession session = new(store, targetFileBytes);
+        RevisionCommitSession session = new(store, rolloverThresholdBytes);
         EvaluatorRawMetricAccumulator evaluator = new(store);
         for (int saveOrdinal = 0; saveOrdinal < trace.Steps.Count; saveOrdinal++) {
             SaveStep step = trace.Steps[saveOrdinal];

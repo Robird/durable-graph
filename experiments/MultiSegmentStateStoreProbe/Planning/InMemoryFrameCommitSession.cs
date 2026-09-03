@@ -4,33 +4,34 @@ using Atelia.MultiSegmentStateStoreProbe.Storage;
 namespace Atelia.MultiSegmentStateStoreProbe.Planning;
 
 /// <summary>
-/// G1 append/publish seam. Soft placement may re-render one logical plan at the next
-/// origin; it never changes the plan or retries a different representation.
+/// G1 append/publish seam. The existing tail selects the append Segment before the
+/// logical plan is rendered once at that final origin.
 /// </summary>
 internal sealed class InMemoryFrameCommitSession {
     public InMemoryFrameCommitSession(
         InMemorySegmentStore store,
-        long targetFileBytes) {
+        long rolloverThresholdBytes) {
         ArgumentNullException.ThrowIfNull(store);
-        if (targetFileBytes < ProvisionalFrameEnvelopeEstimator.InitialTailOffsetBytes) {
-            throw new ArgumentOutOfRangeException(nameof(targetFileBytes));
-        }
-
-        if (targetFileBytes >
-            ProvisionalFrameEnvelopeEstimator.MaxFrameStartOffsetBytes) {
+        if (rolloverThresholdBytes <=
+                ProvisionalFrameEnvelopeEstimator.InitialTailOffsetBytes ||
+            rolloverThresholdBytes >
+                ProvisionalFrameEnvelopeEstimator.MaxFrameStartOffsetBytes ||
+            (rolloverThresholdBytes &
+                ProvisionalFrameEnvelopeEstimator.AlignmentMask) != 0) {
             throw new ArgumentOutOfRangeException(
-                nameof(targetFileBytes),
-                targetFileBytes,
-                "The target must not exceed the largest representable Frame start.");
+                nameof(rolloverThresholdBytes),
+                rolloverThresholdBytes,
+                "The rollover threshold must be aligned, greater than the header-only " +
+                "tail, and no greater than the largest representable Frame start.");
         }
 
         Store = store;
-        TargetFileBytes = targetFileBytes;
+        RolloverThresholdBytes = rolloverThresholdBytes;
     }
 
     public InMemorySegmentStore Store { get; }
 
-    public long TargetFileBytes { get; }
+    public long RolloverThresholdBytes { get; }
 
     public AbsoluteFrameAddress? PublishedHead { get; private set; }
 
@@ -40,23 +41,9 @@ internal sealed class InMemoryFrameCommitSession {
         FileNumber currentFileNumber = Store.AppendFileNumber;
         long currentTail = current?.TailOffsetBytes ??
             ProvisionalFrameEnvelopeEstimator.InitialTailOffsetBytes;
-
-        RenderedFrameCandidate initialCandidate;
-        try {
-            initialCandidate = FramePlanRenderer.RenderAndMeasure(
-                plan,
-                currentFileNumber,
-                currentTail);
-        } catch (FrameCapacityException exception) {
-            return new CapacityRejectedFrameCommit(exception.Rejection);
-        }
-
-        RenderedFrameCandidate appendedCandidate = initialCandidate;
-        if (current is { IsEmpty: false } &&
-            initialCandidate.Layout.TailOffsetAfterBytes > TargetFileBytes) {
-            FileNumber nextFileNumber;
+        if (current is not null && currentTail >= RolloverThresholdBytes) {
             try {
-                nextFileNumber = currentFileNumber.Next();
+                currentFileNumber = currentFileNumber.Next();
             } catch (OverflowException) {
                 return new CapacityRejectedFrameCommit(new FrameCapacityRejection(
                     FrameCapacityLimit.FileNumber,
@@ -64,20 +51,22 @@ internal sealed class InMemoryFrameCommitSession {
                     uint.MaxValue));
             }
 
-            try {
-                appendedCandidate = FramePlanRenderer.RenderAndMeasure(
-                    plan,
-                    nextFileNumber,
-                    ProvisionalFrameEnvelopeEstimator.InitialTailOffsetBytes);
-            } catch (FrameCapacityException exception) {
-                return new CapacityRejectedFrameCommit(exception.Rejection);
-            }
+            currentTail = ProvisionalFrameEnvelopeEstimator.InitialTailOffsetBytes;
+        }
+
+        RenderedFrameCandidate appendedCandidate;
+        try {
+            appendedCandidate = FramePlanRenderer.RenderAndMeasure(
+                plan,
+                currentFileNumber,
+                currentTail);
+        } catch (FrameCapacityException exception) {
+            return new CapacityRejectedFrameCommit(exception.Rejection);
         }
 
         Store.Append(appendedCandidate);
         PublishedHead = appendedCandidate.Address;
         return new PublishedFrameCommit(
-            initialCandidate,
             appendedCandidate,
             appendedCandidate.Address);
     }

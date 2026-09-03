@@ -19,14 +19,17 @@ public sealed class BenchmarkRunnerTests {
             run.Metrics.TotalWorkloadDeltaReferencePayloadBytes).Distinct());
         Assert.Single(admitted.Select(static run =>
             run.Metrics.TotalWorkloadBaseReferencePayloadBytes).Distinct());
+        Assert.All(admitted, static run => Assert.True(
+            run.Metrics.MaxSegmentTailBytes >
+            MultiSegmentBenchmarkRunner.DefaultRolloverThresholdBytes));
 
         Assert.Equal(string.Join(Environment.NewLine, new[] {
-            "all-delta: W=2444 P=424 F=424 R/L=11004/2418 " +
-                "DeltaRef=1139 BaseRef=1796 Segments=8",
-            "all-base: W=2812 P=424 F=424 R/L=6672/2418 " +
-                "DeltaRef=1139 BaseRef=1796 Segments=8",
-            "adaptive-r3-b5pct: W=2436 P=424 F=424 R/L=10988/2418 " +
-                "DeltaRef=1139 BaseRef=1796 Segments=8",
+            "all-delta: W=2440 P=424 F=692 R/L=11052/2418 " +
+                "DeltaRef=1139 BaseRef=1796 Segments=4",
+            "all-base: W=2808 P=424 F=744 R/L=6692/2418 " +
+                "DeltaRef=1139 BaseRef=1796 Segments=4",
+            "adaptive-r3-b5pct: W=2436 P=424 F=692 R/L=11044/2418 " +
+                "DeltaRef=1139 BaseRef=1796 Segments=4",
         }), first.FormatRaw());
     }
 

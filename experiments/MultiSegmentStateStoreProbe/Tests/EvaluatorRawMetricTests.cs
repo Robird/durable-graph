@@ -11,7 +11,7 @@ public sealed class EvaluatorRawMetricTests {
     [Fact]
     public void Shared_Revision_Frame_is_counted_once_across_OVD_and_objects() {
         InMemorySegmentStore store = new();
-        RevisionCommitSession session = new(store, targetFileBytes: 4096);
+        RevisionCommitSession session = new(store, rolloverThresholdBytes: 4096);
         SaveStep step = new([
             new CreateObject(1, 10),
             new CreateObject(2, 20),
@@ -36,7 +36,7 @@ public sealed class EvaluatorRawMetricTests {
     [Fact]
     public void Ovd_observation_tracks_only_frames_required_by_final_live_bindings() {
         InMemorySegmentStore store = new();
-        RevisionCommitSession session = new(store, targetFileBytes: 128);
+        RevisionCommitSession session = new(store, rolloverThresholdBytes: 128);
         SaveStep insert = new([new CreateObject(1, 10)]);
         NormalizedSaveFacts insertFacts = Normalize(session, insert);
         PublishedRevisionCommit f1 = Commit(
@@ -88,7 +88,7 @@ public sealed class EvaluatorRawMetricTests {
     [Fact]
     public void Accumulator_reports_exact_W_P_F_R_L_and_payload_references() {
         InMemorySegmentStore store = new();
-        RevisionCommitSession session = new(store, targetFileBytes: 128);
+        RevisionCommitSession session = new(store, rolloverThresholdBytes: 128);
         EvaluatorRawMetricAccumulator evaluator = new(store);
         SaveStep[] steps = [
             new SaveStep([new CreateObject(1, 10), new CreateObject(2, 20)]),
@@ -126,7 +126,7 @@ public sealed class EvaluatorRawMetricTests {
     [Fact]
     public void Typed_rejection_adds_no_penalty_or_sample() {
         InMemorySegmentStore store = new();
-        RevisionCommitSession session = new(store, targetFileBytes: 4096);
+        RevisionCommitSession session = new(store, rolloverThresholdBytes: 4096);
         EvaluatorRawMetricAccumulator evaluator = new(store);
         SaveStep step = new([new CreateObject(1, 10)]);
         RevisionSaveSelection invalidSelection = new(
@@ -149,7 +149,7 @@ public sealed class EvaluatorRawMetricTests {
     [Fact]
     public void Empty_live_graph_keeps_R_but_makes_aggregate_R_over_L_undefined() {
         InMemorySegmentStore store = new();
-        RevisionCommitSession session = new(store, targetFileBytes: 4096);
+        RevisionCommitSession session = new(store, rolloverThresholdBytes: 4096);
         SaveStep insert = new([new CreateObject(1, 10)]);
         NormalizedSaveFacts insertFacts = Normalize(session, insert);
         _ = Commit(

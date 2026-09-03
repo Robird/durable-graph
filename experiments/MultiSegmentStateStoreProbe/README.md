@@ -1,7 +1,8 @@
 # MultiSegmentStateStoreProbe
 
 本探针验证 DurableGraph 的产品候选地址路线：Revision 和 ObjectVersion 可以引用同一 Store 目录内任意
-更早的 Segment 文件，文件切换只由目标尺寸控制，不再要求 TwoLeg evacuation。
+更早的 Segment 文件；文件只在下一次 Save 前按 existing tail 与 soft rollover threshold 切换，不再要求
+TwoLeg evacuation，也不把 threshold 冒充严格文件上限。
 
 当前已用 in-memory probe 验证：
 
@@ -9,8 +10,9 @@
 - strong FrameTicket、runtime absolute address 与 probe-only `BackwardFileDistance + FrameTicket` codec；
 - same/previous/远距引用、same-file strictly-earlier、canonical Base128 和 fail-close 边界；
 - append-only Segment/Frame store、唯一 provisional envelope estimator；
-- origin-free plan 在 soft rollover 后按新 origin 重新编码和定尺，不改变 logical plan；
-- empty oversize、single-Frame hard bound、FileNumber overflow 与 reject 不发布。
+- crossing append 留在当前 Segment、下一 Save 在 render 前轮转、final origin single render；
+- 显式 multi-origin witness 仍证明 relative reference 必须随 containing origin 重编码；
+- empty oversize、single-Frame hard bound、FileNumber overflow 与 reject 不发布；
 - Revision shared Prior、OVD Base/Delta、ObjectVersion Base/Delta 与 canonical bindings；
 - F1-F4 exact-head current reconstruction：冷 ObjectVersion 可留在 F1，热 Delta 链独立推进；
 - current-required missing、non-earlier、cycle、wrong ObjectId/parent state/ordinal 的 fail-close。
@@ -27,12 +29,14 @@ RBF/OVD wire、filesystem/reopen 或持久 StateStore。Stage-A commit session �
 当前 canonical corpus 的 raw report：
 
 ```text
-all-delta: W=2444 P=424 F=424 R/L=11004/2418 DeltaRef=1139 BaseRef=1796 Segments=8
-all-base: W=2812 P=424 F=424 R/L=6672/2418 DeltaRef=1139 BaseRef=1796 Segments=8
-adaptive-r3-b5pct: W=2436 P=424 F=424 R/L=10988/2418 DeltaRef=1139 BaseRef=1796 Segments=8
+all-delta: W=2440 P=424 F=692 R/L=11052/2418 DeltaRef=1139 BaseRef=1796 Segments=4
+all-base: W=2808 P=424 F=744 R/L=6692/2418 DeltaRef=1139 BaseRef=1796 Segments=4
+adaptive-r3-b5pct: W=2436 P=424 F=692 R/L=11044/2418 DeltaRef=1139 BaseRef=1796 Segments=4
 ```
 
-这些是原始观测，不是 score、rank 或 winner 声明。阶段 A 到 G4 已完成；下一步需显式决定是否晋升阶段 B。
+canonical runner 的 rollover threshold 是 512 bytes；`F > 512` 是 crossing append 被允许后留下的预期
+观测，不是 hard-bound violation。这些是原始观测，不是 score、rank 或 winner 声明。阶段 A 到 G4 已完成；
+下一步需显式决定是否晋升阶段 B。
 
 运行：
 

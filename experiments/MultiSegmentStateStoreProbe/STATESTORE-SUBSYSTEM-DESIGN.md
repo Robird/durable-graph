@@ -8,7 +8,8 @@
 
 本文记录如何把 [`TARGET-DESIGN.md`](TARGET-DESIGN.md) 已验证的 MultiSegment 语义晋升为
 `src/DurableGraph` 内的正式 StateStore 子系统。它不是阶段 A Goal 的一部分，也不表示当前已经选择
-EventJournal、RbfSegmentStore、NuGet acquisition、head carrier、正式 wire 或程序集边界。
+EventJournal、NuGet acquisition、head carrier、正式 wire 或程序集边界。Segment lifecycle/rollover 优先采用
+当前 `RbfSegmentStore` 语义，但仍须用真实 I/O spike 闭合其 guardrails 与 recovery 缺口。
 
 阶段 B 的基本原则是“从 Probe 抽取已证明的语义，重新实现正式子系统”，而不是把整个 experiment project、
 benchmark runner、size-only payload 或 provisional codec 搬进产品。
@@ -83,7 +84,8 @@ src/DurableGraph/StateStore/
 - 维护 Revision、OVD 与 ObjectVersion 的 append-only record model；
 - 从 exact parent StateHead 归一化本次 membership/change facts；
 - 在上层提供的 opaque Base/Delta candidates 中选择 representation；
-- 冻结 origin-free Revision plan，选择 Segment，重新 relative-encode 并 exact-size；
+- 冻结 origin-free Revision plan；每个 Save 新借 writer，让 `RbfSegmentStore` 先按 existing tail 选择最终
+  Segment，再相对 lease origin 编码和 exact-size 一次；
 - 通过 RBF hard gates 后 append candidate；
 - 返回 exact candidate StateHead 与 dependency/durability information；
 - 从 exact StateHead 读取 OVD 和 raw ObjectVersion chains；
@@ -194,16 +196,44 @@ E:\repos\Atelia-org\atelia\src\EventJournal
 E:\repos\Atelia-org\atelia\src\Rbf
 ```
 
-初步角色假设：
+当前角色裁决：
 
-- `RbfSegmentStore`：多 Segment append、file inventory、rollover/reopen 的首选底座候选；
-- `EventJournal`：exact head、candidate/durable/publish、poison/reconcile 与 fault-injection 的参考或上层复用候选；
-- `Rbf`：Frame append/read、`SizedPtr`、L2/L3 integrity 与 hard bounds 的基础事实。
+- `RbfSegmentStore`：多 Segment append、file inventory、tail-triggered rollover/reopen 的首选底座；
+- `Rbf`：Frame append/read、`SizedPtr`、L2/L3 integrity 与 hard bounds 的基础事实；
+- `EventJournal`：exact head、candidate/durable/publish、poison/reconcile 与 fault-injection 的参考，不直接成为
+  StateStore 或外层 CommitManifest authority。
 
-这些是假设，不是当前裁决。若 EventJournal 的 event semantics、head shape 或 record contract 会扭曲 OVD
-StateStore，应只摘取其 publication/recovery 思想或下沉复用 RbfSegmentStore；不要为复用而改写领域模型。
+若 `RbfSegmentStore` 的 recovery/failure 行为不能满足 outer-authority-aware reopen，应先补窄 substrate seam，
+而不是恢复 candidate-aware placement 或复制整套 Segment manager。若 EventJournal 的 event semantics、head
+shape 或 record contract 会扭曲 OVD StateStore，应只摘取其 publication/recovery 思想；不要为复用而改写
+领域模型。
 
-### 7.1 获取方式
+### 7.1 已选择的 rollover 语义
+
+产品直接采用 `RbfSegmentStore.OpenActiveWriter()` 的 existing-tail trigger：
+
+```text
+plan = FreezeLogicalDecisions(exact parent facts)
+writer = OpenActiveWriter()
+    // existing TailOffset >= RolloverThresholdBytes 时才 checked rotate
+candidate = RenderOnce(plan, writer.SegmentNumber, writer.File.TailOffset)
+AppendExactlyOneRevisionFrame(candidate)
+```
+
+- crossing Revision 留在当前 Segment；下一次 Save 才轮转；
+- StateStore 每个 Save 单独借还 lease，每个 lease 只 append 一个 Revision Frame；
+- 因此文件允许最多一个合法 RBF append envelope 的 overshoot；threshold 不是严格文件上限；
+- threshold 必须 4-byte aligned、严格大于 header-only tail，并不超过 `SizedPtr` 最大 Frame start；
+- next SegmentNumber 必须在 dispose/create/mutation 前 checked；
+- writer acquisition 已创建新 Segment 后若 render/admission 失败，可以留下 header-only active Segment；它不获
+  authority，后续 Save 直接复用，不为回滚该文件重新引入 prospective sizing/explicit rotate；
+- 若未来 Extent/multi-frame Revision 或严格 `file <= N` consumer 出现，重访本裁决。
+
+这删除了“先按 current origin render/measure、crossing 时显式轮转、再按 next origin render”的双 candidate
+路径。origin-free plan 仍保留，但正常 Save 只在 lease 选定的最终 origin 编码一次；RBF append 继续拥有
+single-Frame hard capacity 的最终 gate。
+
+### 7.2 获取方式
 
 活跃跨仓库共同开发阶段，`ProjectReference` 最接近 editable source workflow。接口稳定、需要验证真实消费和
 依赖边界后，再发布单调递增版本的本机 NuGet dev packages。
@@ -218,7 +248,8 @@ package source/version、固定 commit checkout 或其他明确 acquisition cont
 
 - 读取当前 EventJournal/RbfSegmentStore/Rbf source、tests 与 package metadata；
 - 建立能力/缺口矩阵：Segment naming、append、rollover、head、flush、reopen、fault model；
-- 用最小 spike 验证选择，不先设计 adapter framework。
+- 用最小 spike 验证 threshold range、checked FileNumber overflow、header-only/torn newest Segment 和 outer-head
+  reopen；不增加 prospective-size/explicit-rotate adapter framework。
 
 ### B1：产品子系统契约
 
@@ -231,7 +262,7 @@ package source/version、固定 commit checkout 或其他明确 acquisition cont
 
 - 用真实 `SizedPtr` 和 RBF layout 替换 probe stand-ins；
 - 实现 canonical Segment inventory、append、reopen 与 current-required dependency read；
-- 保持 origin-free plan 与 rollover re-render 语义；
+- 保持 origin-free plan，并在 `OpenActiveWriter()` 选定的 final origin render/append 一次；
 - 对照 Probe vectors 做 differential tests。
 
 ### B3：外层 commit integration
@@ -262,7 +293,7 @@ Probe 应长期保留为 executable specification、策略实验台和 different
 ## 10. 阶段 B 成功条件
 
 - 上下层 contract 不让 StateStore 依赖领域 Schema/CLR model；
-- 正式实现保持阶段 A 的地址、OVD、Base/Delta、rollover 与 evaluator 语义；
+- 正式实现保持阶段 A 的地址、OVD、Base/Delta、tail-triggered rollover 与 evaluator 语义；
 - 真实 RBF reopen 能从外层 exact authority 恢复 current state；
 - process/OS crash fault points 只产生可裁决 old/new 或明确 poisoned outcome；
 - missing/corrupt current dependency fail closed，不产生 partial object graph；

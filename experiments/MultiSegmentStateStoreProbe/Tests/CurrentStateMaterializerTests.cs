@@ -347,7 +347,7 @@ public sealed class CurrentStateMaterializerTests {
 
     private static InMemoryFrameCommitSession NewOneFramePerSegmentSession() => new(
         new InMemorySegmentStore(),
-        ProvisionalFrameEnvelopeEstimator.InitialTailOffsetBytes);
+        rolloverThresholdBytes: 32);
 
     private static OriginFreeRevisionFramePlan EmptyBase() => new(
         priorRevision: null,
