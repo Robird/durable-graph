@@ -3,9 +3,13 @@
     <Project Path="src/DurableGraph.Build/DurableGraph.Build.csproj" />
     <Project Path="src/DurableGraph.Cli/DurableGraph.Cli.csproj" />
     <Project Path="src/DurableGraph.Generator/DurableGraph.Generator.csproj" />
+    <Project Path="src/DurableGraph.StateStore.Storage/DurableGraph.StateStore.Storage.csproj" />
+    <Project Path="src/DurableGraph.StateStore/DurableGraph.StateStore.csproj" />
     <Project Path="src/DurableGraph/DurableGraph.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/DurableGraph.StateStore.Storage.Tests/DurableGraph.StateStore.Storage.Tests.csproj" />
+    <Project Path="tests/DurableGraph.StateStore.Tests/DurableGraph.StateStore.Tests.csproj" />
     <Project Path="tests/DurableGraph.Tests/DurableGraph.Tests.csproj" />
   </Folder>
 </Solution>
