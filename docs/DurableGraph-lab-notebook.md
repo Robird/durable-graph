@@ -51,7 +51,8 @@
 - CLR Graph Materialization R3b：只对 normalized current root closure allocate-all/hydrate-all，恢复 sharing/cycles 后 root-only exposure；disconnected source rows 不分配。
 - Multi-segment StateStore candidate：DB-014 已选择 1-based FileNumber、canonical filename 与
   `BackwardFileDistance` 任意 earlier-file reference；阶段 A `TARGET-DESIGN.md` 只负责 G0-G4 in-memory
-  地址、OVD、Base/Delta、Save/Load、策略/评价，正式 filesystem/RBF 与产品化另由阶段 B 文档承接。
+  地址、OVD、Base/Delta、Save/Load、策略/评价；阶段 B 已建立 `StateStore -> StateStore.Storage ->
+  RbfSegmentStore` 空壳程序集依赖链，正式 filesystem/RBF 语义仍待逐片验证。
 - StateStore TwoLeg 基础/地址/派生文档：相邻 FileScope、1-bit `RelativeFrameTicket`、A/B/C evacuation 与
   `CanPrepareAndRotate` 已被产品路线 supersede，完整保留为 TwoLeg 技术储备。
 - Two-leg rotation probe：独立 Arena/Baselines/Tests subsolution 已冻结；保留 runtime OVD、Base/Delta、
@@ -96,7 +97,9 @@
 - **Decided**：R4–R7 logical graph 依赖顺序保留；产品整合前与 MultiSegment 持久化探针继续分离。
 - **Observed**：SameStateRebase 独立 witness 证明恰一次 rebase 保持 ordinal、增加总 W，并降低 rebase 后累计
   R；OVD required-frame observation 只读取最终 live External targets，且与 object paths 做 full-Frame 去重。
-- **Open**：是否按阶段 B 文档把已证明语义晋升为正式 StateStore Sub-System；正式 reopen 不属于阶段 A。
+- **Decided**：按阶段 B 文档把已证明语义晋升为正式 StateStore Sub-System；先建立独立
+  `Atelia.DurableGraph.StateStore` 与 `Atelia.DurableGraph.StateStore.Storage` 空壳；前者单向引用后者，只有
+  Storage 直接引用当前 `RbfSegmentStore` source，正式 reopen 仍待后续切片。
 - **Open**：Schema runtime representation 与 canonical authority 的候选分叉记录在 `DB-001`，等待 exact codec/persistent format 实验裁决。
 - **Open**：哪些类型和 API 最终属于核心程序集，等待真实代码形状出现后再判断。
 
@@ -769,6 +772,20 @@
 ```
 
 ## 6. 船长日志
+
+### 2026-09-03：启动正式 StateStore 阶段 B
+
+- **Decided**：建立独立 `src/DurableGraph.StateStore` 项目；程序集名和根命名空间均为
+  `Atelia.DurableGraph.StateStore`；随后建立 `Atelia.DurableGraph.StateStore.Storage`，冻结
+  `StateStore -> StateStore.Storage -> RbfSegmentStore` 的单向项目引用链。
+- **Observed**：只有 Storage 直接 ProjectReference 当前 sibling `atelia/src/RbfSegmentStore`；地址模型开始使用
+  `SizedPtr` 后又显式引用 `Data`，其余 substrate 依赖由现有项目图传递。两个产品程序集均有只引用各自被测
+  项目的 xUnit 项目。
+- **Observed**：首个 Storage 机制切片随后加入空壳 `StateRevision`、runtime
+  `AbsoluteFrameAddress { UInt32 FileNumber, SizedPtr FrameTicket }` 与 `FileScope`；0 distance 表示当前文件，
+  future/zero/underflow fail closed，并以 focused tests 覆盖同文件、远距及 UInt32 边界往返。
+- **Boundary**：产品内存模型不移植 Probe `RelativeFrameTicket`；`BackwardFileDistance` 只作为后续 wire codec
+  瞬时值。当前仍没有 wire bytes、Revision 内容或文件 I/O。
 
 ### 2026-09-02：采用 RbfSegmentStore 的 tail-triggered rollover
 

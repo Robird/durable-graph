@@ -35,8 +35,9 @@ adaptive-r3-b5pct: W=2436 P=424 F=692 R/L=11044/2418 DeltaRef=1139 BaseRef=1796 
 ```
 
 canonical runner 的 rollover threshold 是 512 bytes；`F > 512` 是 crossing append 被允许后留下的预期
-观测，不是 hard-bound violation。这些是原始观测，不是 score、rank 或 winner 声明。阶段 A 到 G4 已完成；
-下一步需显式决定是否晋升阶段 B。
+观测，不是 hard-bound violation。这些是原始观测，不是 score、rank 或 winner 声明。阶段 A 到 G4 已完成并
+冻结；阶段 B 已建立 `DurableGraph.StateStore -> DurableGraph.StateStore.Storage -> RbfSegmentStore` 的空壳
+程序集依赖链，并完成绝对 Frame 地址与 `FileScope` 换算的首个产品切片；尚未实现正式 wire 或持久行为。
 
 运行：
 

@@ -1,14 +1,16 @@
 # 阶段 B：正式 StateStore Sub-System 晋升设计
 
-> 状态：Deferred Promotion Design
+> 状态：Stage B Started / Empty Product Assembly
 >
-> 最近校准：2026-09-02
+> 最近校准：2026-09-03
 >
 > 启动条件：阶段 A G0-G4 全部闭合，并由用户明确启动产品化
 
 本文记录如何把 [`TARGET-DESIGN.md`](TARGET-DESIGN.md) 已验证的 MultiSegment 语义晋升为
-`src/DurableGraph` 内的正式 StateStore 子系统。它不是阶段 A Goal 的一部分，也不表示当前已经选择
-EventJournal、NuGet acquisition、head carrier、正式 wire 或程序集边界。Segment lifecycle/rollover 优先采用
+`src/DurableGraph.StateStore` 内的正式 StateStore 子系统。阶段 B 已由用户明确启动，并选择独立
+`Atelia.DurableGraph.StateStore` 与 `Atelia.DurableGraph.StateStore.Storage` 程序集；前者单向引用后者，只有
+Storage 持有跨仓库 substrate ProjectReference：`RbfSegmentStore` 以及地址模型直接使用的 `Data/SizedPtr`。
+当前仍未选择 EventJournal、NuGet acquisition、head carrier 或正式 wire。Segment lifecycle/rollover 优先采用
 当前 `RbfSegmentStore` 语义，但仍须用真实 I/O spike 闭合其 guardrails 与 recovery 缺口。
 
 阶段 B 的基本原则是“从 Probe 抽取已证明的语义，重新实现正式子系统”，而不是把整个 experiment project、
@@ -58,14 +60,36 @@ StateStore Sub-System
 Outer DurableGraph CommitManifest publication
 ```
 
-这是逻辑子系统边界，不等于立即拆新 assembly。初始产品实现优先放在：
+这是逻辑子系统边界。首批产品空壳程序集已经建立在：
 
 ```text
-src/DurableGraph/StateStore/
+src/DurableGraph.StateStore/
+src/DurableGraph.StateStore.Storage/
 ```
 
-只有真实的依赖隔离、独立消费者、打包或测试成本证明有益时，才考虑
-`DurableGraph.StateStore` 独立项目。
+由仓库公共属性得到对应程序集名和根命名空间 `Atelia.DurableGraph.StateStore` 与
+`Atelia.DurableGraph.StateStore.Storage`。已冻结的项目引用方向是：
+
+```text
+DurableGraph.StateStore -> DurableGraph.StateStore.Storage -> RbfSegmentStore
+                                                        \-> Data (SizedPtr)
+```
+
+StateStore 不直接引用 RBF substrate；Storage 不反向引用 StateStore。该边界用于隔离上层
+Serialization/VersionedSchema、StateStore 语义与下层 RBF/Segment 文件存储依赖；当前空壳不预先裁决
+public API 或正式 wire。
+
+### 2.1 首个 Storage 地址模型切片
+
+`DurableGraph.StateStore.Storage` 已建立最小产品地址模型：
+
+- 空壳 `StateRevision` 只占据后续 Revision 内容模型的位置；
+- runtime `AbsoluteFrameAddress` 始终保存 1-based `UInt32 FileNumber` 与真实 `SizedPtr FrameTicket`；
+- `FileScope` 以 containing/current FileNumber 在 absolute FileNumber 与 `BackwardFileDistance` 之间换算；
+- distance `0` 表示当前文件，future absolute file、file zero 与 distance underflow fail closed；
+- 产品内存模型没有 `RelativeFrameTicket`；相对距离只允许作为后续 wire codec 的瞬时短编码值。
+
+该切片尚未定义 wire bytes、same-file strictly-earlier Frame 校验、Revision 内容或任何文件 I/O。
 
 ## 3. 上下层职责
 
@@ -256,11 +280,11 @@ package source/version、固定 commit checkout 或其他明确 acquisition cont
 - 定义 internal `PreparedStateCommit`、candidate StateHead 与 read result；
 - 冻结 dependency direction，确保 StateStore 不依赖 Schema/CLR materialization；
 - 决定 SameStateRebase payload acquisition；
-- 先在现有 `DurableGraph` assembly 内形成 vertical slice。
+- 先在 `DurableGraph.StateStore` 与 `DurableGraph.StateStore.Storage` 的已选单向边界内形成 vertical slice。
 
 ### B2：真实 RBF/Segment persistence
 
-- 用真实 `SizedPtr` 和 RBF layout 替换 probe stand-ins；
+- 在 `DurableGraph.StateStore.Storage` 中用真实 `SizedPtr` 和 RBF layout 替换 probe stand-ins；
 - 实现 canonical Segment inventory、append、reopen 与 current-required dependency read；
 - 保持 origin-free plan，并在 `OpenActiveWriter()` 选定的 final origin render/append 一次；
 - 对照 Probe vectors 做 differential tests。

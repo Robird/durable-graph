@@ -1,8 +1,8 @@
 # MultiSegmentStateStoreProbe 活跃工作集
 
-> 状态：G0-G4 complete / awaiting promotion decision
+> 状态：G0-G4 complete / Stage B product scaffold created
 >
-> 最近校准：2026-09-02
+> 最近校准：2026-09-03
 
 ## 目标
 
@@ -67,15 +67,21 @@ threshold 的 overshoot 上界依赖 one-Revision/one-Frame discipline，严格�
 
 ## 当前焦点
 
-阶段 A 已闭合并停止实现；等待是否按
-[`STATESTORE-SUBSYSTEM-DESIGN.md`](STATESTORE-SUBSYSTEM-DESIGN.md) 启动独立阶段 B 的用户决定。
+阶段 A 已闭合并停止实现。用户已按
+[`STATESTORE-SUBSYSTEM-DESIGN.md`](STATESTORE-SUBSYSTEM-DESIGN.md) 启动阶段 B；产品侧现有独立空壳项目
+`src/DurableGraph.StateStore`、`src/DurableGraph.StateStore.Storage` 及各自配套的 xUnit 空壳项目。
+`DurableGraph.StateStore` 单向引用 `DurableGraph.StateStore.Storage`，只有 Storage 直接 ProjectReference 当前
+`RbfSegmentStore` checkout，并因公开地址模型使用 `SizedPtr` 而显式引用 `Data`。Storage 的首个产品切片已有空壳 `StateRevision`、runtime
+`AbsoluteFrameAddress { UInt32 FileNumber, SizedPtr FrameTicket }` 与只负责 absolute FileNumber /
+`BackwardFileDistance` 换算的 `FileScope`；尚无正式 wire、Revision 内容、filesystem Save/Load 或 reopen 行为。
 
 基础能力缺失时，先检查冻结的 `TwoLegRotationProbe` 是否已有同领域机制。只复用代码片段、测试意图或
 设计思想，不建立项目依赖，也不带回 A/B/C、A-debt、evacuation、paired candidate 或 terminal settlement。
 
 ## 近期 roadmap
 
-无阶段 A 后续实现项。Probe 保留为 executable specification，不在本阶段接入真实 filesystem/RBF 或产品代码。
+无阶段 A 后续实现项。Probe 保留为 executable specification；阶段 B 将从一个具有明确问题和可执行
+成功/失败判据的最小产品切片开始，不把 Probe 项目或 provisional wire 直接搬入产品程序集。
 
 ## 未闭合事项
 
@@ -87,5 +93,5 @@ threshold 的 overshoot 上界依赖 one-Revision/one-Frame discipline，严格�
 - 自动文件删除、incremental segment cleaner、冷热分层与跨 Store merge；
 - Extent/multi-frame Revision；
 - filesystem/reopen、actual RBF/SizedPtr、head durability、orphan reconciliation；
-- EventJournal/RbfSegmentStore acquisition、product API、NuGet compatibility 或正式 wire migration；
+- EventJournal acquisition、product API、NuGet compatibility 或正式 wire migration；
 - 任何总分、默认 file target 或 cold-read SLO。
