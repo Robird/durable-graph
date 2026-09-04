@@ -7,7 +7,16 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
+      <_Parameter1>Atelia.DurableGraph.StateStore.Storage.Tests</_Parameter1>
+    </AssemblyAttribute>
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\DurableGraph.StateStore.Serialization\DurableGraph.StateStore.Serialization.csproj" />
     <ProjectReference Include="..\..\..\atelia\src\Data\Data.csproj" />
+    <ProjectReference Include="..\..\..\atelia\src\Primitives\Primitives.csproj" />
+    <ProjectReference Include="..\..\..\atelia\src\Rbf\Rbf.csproj" />
     <ProjectReference Include="..\..\..\atelia\src\RbfSegmentStore\RbfSegmentStore.csproj" />
   </ItemGroup>
 

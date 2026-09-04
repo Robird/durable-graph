@@ -4,7 +4,7 @@ namespace Atelia.DurableGraph.StateStore.Storage;
 /// Converts between absolute file numbers and backward distances relative to one
 /// containing file.
 /// </summary>
-public sealed class FileScope {
+public readonly struct FileScope {
     public FileScope(uint currentFileNumber) {
         ArgumentOutOfRangeException.ThrowIfZero(currentFileNumber);
         CurrentFileNumber = currentFileNumber;
@@ -13,6 +13,7 @@ public sealed class FileScope {
     public uint CurrentFileNumber { get; }
 
     public uint ToAbsoluteFileNumber(uint backwardFileDistance) {
+        ValidateRequired(nameof(CurrentFileNumber));
         if (backwardFileDistance >= CurrentFileNumber) {
             throw new InvalidDataException(
                 $"Backward file distance {backwardFileDistance} underflows " +
@@ -23,6 +24,7 @@ public sealed class FileScope {
     }
 
     public uint ToBackwardFileDistance(uint absoluteFileNumber) {
+        ValidateRequired(nameof(CurrentFileNumber));
         ArgumentOutOfRangeException.ThrowIfZero(absoluteFileNumber);
         if (absoluteFileNumber > CurrentFileNumber) {
             throw new InvalidDataException(
@@ -31,5 +33,14 @@ public sealed class FileScope {
         }
 
         return CurrentFileNumber - absoluteFileNumber;
+    }
+
+    internal void ValidateRequired(string parameterName) {
+        if (CurrentFileNumber == 0) {
+            throw new ArgumentOutOfRangeException(
+                parameterName,
+                this,
+                "A FileScope requires a 1-based CurrentFileNumber.");
+        }
     }
 }

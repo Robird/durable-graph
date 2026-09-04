@@ -1,15 +1,16 @@
 # 阶段 B：正式 StateStore Sub-System 晋升设计
 
-> 状态：Stage B Started / Empty Product Assembly
+> 状态：Stage B Started / Membership Head Map and Shared Serialization Leaf
 >
-> 最近校准：2026-09-03
+> 最近校准：2026-09-04
 >
 > 启动条件：阶段 A G0-G4 全部闭合，并由用户明确启动产品化
 
 本文记录如何把 [`TARGET-DESIGN.md`](TARGET-DESIGN.md) 已验证的 MultiSegment 语义晋升为
 `src/DurableGraph.StateStore` 内的正式 StateStore 子系统。阶段 B 已由用户明确启动，并选择独立
-`Atelia.DurableGraph.StateStore` 与 `Atelia.DurableGraph.StateStore.Storage` 程序集；前者单向引用后者，只有
-Storage 持有跨仓库 substrate ProjectReference：`RbfSegmentStore` 以及地址模型直接使用的 `Data/SizedPtr`。
+`Atelia.DurableGraph.StateStore`、`Atelia.DurableGraph.StateStore.Storage` 与 BCL-only
+`Atelia.DurableGraph.StateStore.Serialization` 程序集。StateStore 单向引用 Storage；Storage 引用 Serialization，
+并持有跨仓库 substrate ProjectReference：`RbfSegmentStore` 以及地址模型直接使用的 `Data/SizedPtr`。
 当前仍未选择 EventJournal、NuGet acquisition、head carrier 或正式 wire。Segment lifecycle/rollover 优先采用
 当前 `RbfSegmentStore` 语义，但仍须用真实 I/O spike 闭合其 guardrails 与 recovery 缺口。
 
@@ -60,36 +61,104 @@ StateStore Sub-System
 Outer DurableGraph CommitManifest publication
 ```
 
-这是逻辑子系统边界。首批产品空壳程序集已经建立在：
+这是逻辑子系统边界。首批产品程序集已经建立在：
 
 ```text
 src/DurableGraph.StateStore/
 src/DurableGraph.StateStore.Storage/
+src/DurableGraph.StateStore.Serialization/
 ```
 
-由仓库公共属性得到对应程序集名和根命名空间 `Atelia.DurableGraph.StateStore` 与
-`Atelia.DurableGraph.StateStore.Storage`。已冻结的项目引用方向是：
+由仓库公共属性得到对应程序集名和根命名空间 `Atelia.DurableGraph.StateStore`、
+`Atelia.DurableGraph.StateStore.Storage` 与 `Atelia.DurableGraph.StateStore.Serialization`。当前项目引用方向是：
 
 ```text
 DurableGraph.StateStore -> DurableGraph.StateStore.Storage -> RbfSegmentStore
                                                         \-> Data (SizedPtr)
+                                                        \-> DurableGraph.StateStore.Serialization -> BCL only
 ```
 
-StateStore 不直接引用 RBF substrate；Storage 不反向引用 StateStore。该边界用于隔离上层
-Serialization/VersionedSchema、StateStore 语义与下层 RBF/Segment 文件存储依赖；当前空壳不预先裁决
-public API 或正式 wire。
+StateStore 不直接引用 RBF substrate，Storage 不反向引用 StateStore；StateStore 当前也不直接引用
+Serialization，等第一个真实 ObjectVersion consumer 出现再加入这条依赖。独立 leaf assembly 让 Storage wire
+可复用无上下文 binary primitives，同时保持 RBF 文件逻辑与上层 VersionedSchema/对象 codec 的单向边界。
+当前 membership-only 纵切不预先裁决完整 public API 或正式 wire compatibility。
 
-### 2.1 首个 Storage 地址模型切片
+### 2.1 Storage 地址模型切片
 
 `DurableGraph.StateStore.Storage` 已建立最小产品地址模型：
 
-- 空壳 `StateRevision` 只占据后续 Revision 内容模型的位置；
-- runtime `AbsoluteFrameAddress` 始终保存 1-based `UInt32 FileNumber` 与真实 `SizedPtr FrameTicket`；
+- runtime `FrameAddress` 始终保存 1-based `UInt32 FileNumber` 与真实 `SizedPtr FrameTicket`；
 - `FileScope` 以 containing/current FileNumber 在 absolute FileNumber 与 `BackwardFileDistance` 之间换算；
 - distance `0` 表示当前文件，future absolute file、file zero 与 distance underflow fail closed；
 - 产品内存模型没有 `RelativeFrameTicket`；相对距离只允许作为后续 wire codec 的瞬时短编码值。
 
-该切片尚未定义 wire bytes、same-file strictly-earlier Frame 校验、Revision 内容或任何文件 I/O。
+### 2.2 Live Object membership Storage 切片
+
+`StateRevision` 当前只建模 live Object membership metadata，不包含 Object payload：
+
+```text
+StateRevision
+    ParentRevisionAddress?
+    BaseObjectIds
+    DeltaObjectIds
+    ObjectHeadMap Base  { ExternalObjectHeads }
+                  Delta { RemovedObjectIds }
+```
+
+- `ObjectId` 暂用 provisional 1-based `UInt32`，不裁决正式 `DurableId` identity/encoding；
+- 本 Revision 的 Base/Delta ObjectIds 都隐式以 containing Revision Frame 作为 current head，不重复持久
+  `BindSelf`；Base/Delta object representation 与 ObjectHeadMap Base/Delta 是正交轴；
+- ObjectHeadMap Delta 从 exact parent 继承，应用 Removes，再由本地 ObjectIds 覆盖/增加；未出现的 ID 隐式
+  inherit，不持久 `InheritSet`；Remove 的完整性由上层调用方负责，Storage 不从对象图猜测遗漏；
+- ObjectHeadMap Base 的 `local ObjectIds + ExternalObjectHeads` 是完整 live map，current membership 在此早停；
+  non-genesis Base 的 Parent 仍可供后续 lineage 使用，但 live-head materializer 不读取它；
+- genesis 没有可供 Delta ObjectVersion 引用的 prior version，因此只允许 local Base ObjectIds；所有 required
+  FrameAddress 必须含非空 ticket，并且 Parent/External head 必须严格早于 containing Revision Frame；
+- immutable model 会 canonical sort，并拒绝 zero、duplicate、local Base/Delta overlap、local/external overlap 与
+  local/remove overlap。
+
+当前 provisional membership wire 有固定 RBF tag/version，ObjectIds 使用 canonical VarUInt32；FrameAddress 只在
+wire 中编码为 `VarUInt32 BackwardFileDistance + VarUInt64 SizedPtr.Serialize()`，decode 后立即 absolute-normalize。
+`StateRevisionWireReader/Writer` 与 `FrameAddressWireCodec` 通过 leaf assembly 的 `BinaryPayloadReader/Writer`
+统一这些 primitive；Storage 自有 `CanonicalVarUInt` 已删除。迁移前后的既有 v1 golden bytes 相同，这是本轮
+回归证据，不是正式 compatibility 承诺。composite FrameAddress decode 失败不推进外层 reader cursor。
+reader 拒绝 unknown version/kind、bad presence marker、overlong/overflow/truncated VarUInt、非升序/重复 ID、
+count 越界、future-file/underflow、集合语义冲突与 trailing bytes。wire codec 不接收 containing Frame offset，
+也不判断 same-file chronology；这是依赖 containing/target 两个完整 absolute addresses 的 graph invariant，
+由 `LiveObjectHeadMapMaterializer` 在消费 Parent/External head 时验证。parent chain 每步严格下降已经排除 cycle，
+因此 materializer 不维护 visited set。当前 wire writer/reader 对每个集合采用 provisional 1,000,000 项硬上限，
+先拒绝再分配；该值不是正式格式承诺。
+
+`StateRevisionStore` 每次 Append 先取得 `RbfSegmentStore.OpenActiveWriter()` 的 final Segment，再通过
+`IRbfFile.BeginAppend()` 将 wire 直接编码到 `RbfFrameBuilder.PayloadAndMeta`，最后 `EndAppend()` exactly one
+Frame；Read 从 exact `FrameAddress` 取得完整 RBF Frame、校验 tag/TailMeta 后 decode。
+`Read` 只验证单 Frame 完整性、canonical wire 与 record-local shape；
+`ReadLiveObjectHeads(exactRevisionHead)` 是唯一 membership replay authority，并验证跨 Frame graph chronology。
+它返回 immutable、ObjectId 升序的 shallow `{ObjectId -> absolute FrameAddress}` map：local ID 指向 containing
+Revision Frame，Base external ID 保留记录的旧地址；该 API 不读取或验证目标是否为 ObjectVersion record。
+chronology 不认证 ticket 的文件 provenance，跨文件误配仍须由未来真实需求决定是否引入 store identity 或更强的
+resolve-time identity validation。
+真实文件测试已覆盖 append/read、dispose/reopen 冷读、多 Revision inherit/update/add/remove/no-change/
+reappearance，以及 tail-triggered 跨 Segment Parent/External checkpoint 的 exact head values；编码或提交前校验
+失败会由 builder Dispose 执行 Auto-Abort，不会提交 partial Frame。若 writer acquisition 先触发轮转，失败可
+留下 header-only active Segment；测试证明它会被后续 append 复用。
+
+当前仍未实现 Object payload、自动 checkpoint policy、skip、durable publication 或正式 wire compatibility。
+
+### 2.3 StateStore payload serialization primitive 切片
+
+独立、BCL-only 的 `Atelia.DurableGraph.StateStore.Serialization` assembly 承载五个 internal primitives：
+`BinaryPayloadReader`、`BinaryPayloadWriter`、`CanonicalVarInt`、`StringPayloadCodec` 与
+`NullablePayloadHeader`。它们作为 Storage wire 及后续 Base/Delta Object payload codec 的无上下文底层工具，
+覆盖 canonical unsigned Base128、signed ZigZag、little-endian fixed-width floating point、Boolean、count/bytes
+与 adaptive string；不带入 StateJournal 的 Symbol、Revision、pool、Tagged 或 `asKey` 语义。
+
+string wire 沿用“UTF-8 严格更短才选择，否则 UTF-16LE”的 header 布局，并扩充为 strict UTF-8、tie 固定
+UTF-16LE、unpaired surrogate 经 raw UTF-16 code units 无损往返，以及 reader 对非最短 alternate encoding 的
+fail-close。assembly 只通过 `InternalsVisibleTo` 向 Storage、Serialization.Tests 与 Storage.Tests 开放这些
+类型；专属 Serialization.Tests 的 65 个 cases 约束 primitive golden、canonical/fail-close 与 cursor rollback。
+StateStore 尚未接入 ObjectVersion，也没有对 Serialization 的直接项目引用；当前格式不是正式 compatibility
+承诺。
 
 ## 3. 上下层职责
 
@@ -149,6 +218,9 @@ PreparedStateCommit
 
 StateStore 从 exact parent OVD 与显式变化集合派生/验证 NoChanges。这样 caller 无法漏报一个旧对象并让
 lower layer 产生第二套 membership interpretation。
+
+Storage 层不遍历对象图，也不判断调用方是否漏报 Remove；它只把上层已经冻结的 local ObjectIds、Removes
+与显式 ObjectHeadMap Base/Delta 忠实写入并重放。
 
 payload 对 StateStore 是 opaque bytes，但至少携带策略所需的长度和 codec/schema fence。具体 fence 是
 SchemaKey、SchemaHash、codec identity 还是外层 record metadata，必须在产品 vertical slice 中裁决。

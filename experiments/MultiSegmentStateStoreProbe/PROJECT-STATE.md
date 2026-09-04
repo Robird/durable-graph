@@ -1,8 +1,8 @@
 # MultiSegmentStateStoreProbe 活跃工作集
 
-> 状态：G0-G4 complete / Stage B product scaffold created
+> 状态：G0-G4 complete / Stage B membership head map and shared serialization leaf implemented
 >
-> 最近校准：2026-09-03
+> 最近校准：2026-09-04
 
 ## 目标
 
@@ -38,7 +38,7 @@ Base。
   `RelativeFrameTicket`；
 - same/previous/>65,535/UInt32 最大距离的 absolute-relative round-trip；
 - canonical VarUInt32/VarUInt64 writer-reader，以及 overlong、overflow、truncated 与 zero-ticket fail-close；
-- same-file strictly-earlier validation 与 provisional single-Frame envelope hard bounds；
+- graph traversal 的 same-file strictly-earlier validation 与 provisional single-Frame envelope hard bounds；
 - in-memory append-only Segment/Store、origin-free logical plan、origin-dependent render/measure；
 - tail-triggered `RolloverThresholdBytes`：existing tail 达到 threshold 时下一 Save 在 render 前轮转；crossing
   append 与 empty oversize 原地容纳；final origin 只 render 一次；hard bound 或 FileNumber overflow typed reject
@@ -68,20 +68,39 @@ threshold 的 overshoot 上界依赖 one-Revision/one-Frame discipline，严格�
 ## 当前焦点
 
 阶段 A 已闭合并停止实现。用户已按
-[`STATESTORE-SUBSYSTEM-DESIGN.md`](STATESTORE-SUBSYSTEM-DESIGN.md) 启动阶段 B；产品侧现有独立空壳项目
-`src/DurableGraph.StateStore`、`src/DurableGraph.StateStore.Storage` 及各自配套的 xUnit 空壳项目。
-`DurableGraph.StateStore` 单向引用 `DurableGraph.StateStore.Storage`，只有 Storage 直接 ProjectReference 当前
-`RbfSegmentStore` checkout，并因公开地址模型使用 `SizedPtr` 而显式引用 `Data`。Storage 的首个产品切片已有空壳 `StateRevision`、runtime
-`AbsoluteFrameAddress { UInt32 FileNumber, SizedPtr FrameTicket }` 与只负责 absolute FileNumber /
-`BackwardFileDistance` 换算的 `FileScope`；尚无正式 wire、Revision 内容、filesystem Save/Load 或 reopen 行为。
+[`STATESTORE-SUBSYSTEM-DESIGN.md`](STATESTORE-SUBSYSTEM-DESIGN.md) 启动阶段 B；产品侧现有空壳
+`src/DurableGraph.StateStore`、已有首个纵切的 `src/DurableGraph.StateStore.Storage`，以及 BCL-only
+`src/DurableGraph.StateStore.Serialization`；三者均有配套 xUnit 项目，Serialization.Tests 当前有 65 个 cases。
+`DurableGraph.StateStore` 单向引用 `DurableGraph.StateStore.Storage`；Storage 再引用 BCL-only
+`DurableGraph.StateStore.Serialization`，并直接 ProjectReference 当前 `RbfSegmentStore` checkout 及地址模型所需
+`Data/SizedPtr`。上层 StateStore 尚不直接引用 Serialization，等第一个真实 ObjectVersion consumer 再建立该边。
+Storage 当前已有 runtime
+`FrameAddress { UInt32 FileNumber, SizedPtr FrameTicket }`、`FileScope`、immutable membership-only
+`StateRevision`、纯 live-head map materializer、provisional canonical wire 与真实 `StateRevisionStore`
+append/read/head reconstruction。
+`StateRevisionWireReader/Writer` 与 `FrameAddressWireCodec` 已共用 Serialization 的 internal
+`BinaryPayloadReader/Writer`；`StateRevisionStore` 通过 RBF `BeginAppend/EndAppend` 把 wire 直接编码到
+`PayloadAndMeta`，不再构造并复制完整 `byte[]`。Storage 自有 VarUInt 实现已删除，既有 v1 golden bytes 保持
+不变。wire codec 不再接收 containing Frame offset；same-file chronology 在持有完整 absolute addresses 的
+live-head traversal 层验证，严格下降关系同时保证 parent chain 无环，无需 visited set。
+`StateRevisionStore.ReadLiveObjectHeads(exactRevisionHead)` 是唯一 membership replay authority；它在 traversal
+内部保留 `{FrameAddress, StateRevision}`，返回 immutable、ObjectId 升序的 shallow
+`{ObjectId -> absolute FrameAddress}` map。local ID 指向 containing Revision Frame，Base external ID 保留记录的
+旧 head，Base 早停；不读取或验证 ObjectVersion record。纯语义与真实文件测试已覆盖 exact head values、reopen、
+多 Delta、Remove/reappearance、跨 Segment checkpoint，以及编码失败不提交 partial Frame；若 writer
+acquisition 触发轮转，可留下并复用 header-only active Segment。实施边界见
+[`WORK-ORDER-STATESTORE-LIVE-OBJECT-HEADS.md`](WORK-ORDER-STATESTORE-LIVE-OBJECT-HEADS.md)。尚无 ObjectVersion
+payload record、自动 checkpoint policy、skip、published head/durability 或正式 wire compatibility。
 
 基础能力缺失时，先检查冻结的 `TwoLegRotationProbe` 是否已有同领域机制。只复用代码片段、测试意图或
 设计思想，不建立项目依赖，也不带回 A/B/C、A-debt、evacuation、paired candidate 或 terminal settlement。
 
 ## 近期 roadmap
 
-无阶段 A 后续实现项。Probe 保留为 executable specification；阶段 B 将从一个具有明确问题和可执行
-成功/失败判据的最小产品切片开始，不把 Probe 项目或 provisional wire 直接搬入产品程序集。
+无阶段 A 后续实现项。Probe 保留为 executable specification；阶段 B 的 exact
+`{ObjectId -> FrameAddress}` enumeration 已闭合，下一步可基于它与共享 payload primitives 建立第一个
+ObjectVersion 内容纵切，并在出现该真实 consumer 时决定是否加入 `StateStore -> Serialization` 引用；不把
+Probe 项目、size-only payload 或 benchmark infrastructure 直接搬入产品程序集。
 
 ## 未闭合事项
 
@@ -92,6 +111,6 @@ threshold 的 overshoot 上界依赖 one-Revision/one-Frame discipline，严格�
 
 - 自动文件删除、incremental segment cleaner、冷热分层与跨 Store merge；
 - Extent/multi-frame Revision；
-- filesystem/reopen、actual RBF/SizedPtr、head durability、orphan reconciliation；
+- Object payload、head durability、orphan reconciliation；
 - EventJournal acquisition、product API、NuGet compatibility 或正式 wire migration；
 - 任何总分、默认 file target 或 cold-read SLO。

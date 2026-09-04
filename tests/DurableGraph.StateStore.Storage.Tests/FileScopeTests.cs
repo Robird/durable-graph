@@ -27,6 +27,16 @@ public sealed class FileScopeTests {
     }
 
     [Fact]
+    public void Default_scope_is_rejected_by_both_conversions() {
+        FileScope scope = default;
+
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            scope.ToAbsoluteFileNumber(0));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            scope.ToBackwardFileDistance(1));
+    }
+
+    [Fact]
     public void Absolute_file_number_is_one_based() {
         FileScope scope = new(10);
 

@@ -18,10 +18,12 @@
 
 ## 2. 当前基线
 
-记录日期：2026-09-02
+记录日期：2026-09-04
 
 - **Observed**：仓库已跑通 boxed-value 的内存 Save/Load 与 read-time upgrade demo，并以隔离探针跑通单类型 Flat Graph Delta R1、generated graph operations R2、StoredGraphImage normalization R3a 与 two-pass CLR materialization R3b；production runtime/default Generator 仍无对象身份、reference graph、wire format 或持久化实现。
-- **Observed**：`DurableGraph.slnx` 包含 runtime、Generator、Build tool、CLI 和 Tests 五个项目；Build tool 是随 NuGet 包部署的私有 snapshot-history publisher/verifier，不承载运行时持久化语义。
+- **Observed**：`DurableGraph.slnx` 当前包含原 runtime、Generator、Build tool、CLI 和 Tests，以及三个
+  StateStore 产品项目和三个配套测试项目；Build tool 仍是随 NuGet 包部署的私有 snapshot-history
+  publisher/verifier，不承载运行时持久化语义。
 - **Observed**：核心库将 Generator 作为 Roslyn analyzer 引用；CLI 引用核心库；测试项目引用核心库和 Generator。
 - **Observed**：运行时项目和测试项目目标框架为 `net10.0`；Generator 为兼容 Roslyn 加载而目标框架为 `netstandard2.0`。
 - **Observed**：`Directory.Build.props` 将程序集名、根命名空间和包名统一加上 `Atelia.` 前缀。
@@ -51,8 +53,9 @@
 - CLR Graph Materialization R3b：只对 normalized current root closure allocate-all/hydrate-all，恢复 sharing/cycles 后 root-only exposure；disconnected source rows 不分配。
 - Multi-segment StateStore candidate：DB-014 已选择 1-based FileNumber、canonical filename 与
   `BackwardFileDistance` 任意 earlier-file reference；阶段 A `TARGET-DESIGN.md` 只负责 G0-G4 in-memory
-  地址、OVD、Base/Delta、Save/Load、策略/评价；阶段 B 已建立 `StateStore -> StateStore.Storage ->
-  RbfSegmentStore` 空壳程序集依赖链，正式 filesystem/RBF 语义仍待逐片验证。
+  地址、OVD、Base/Delta、Save/Load、策略/评价；阶段 B 已建立 `StateStore -> StateStore.Storage`，由 Storage
+  同时引用 RBF substrate 与 BCL-only `StateStore.Serialization` leaf，并完成 live ObjectId membership 的
+  semantic/wire/真实文件纵切。StateStore 尚无 ObjectVersion consumer，暂不直接引用 Serialization。
 - StateStore TwoLeg 基础/地址/派生文档：相邻 FileScope、1-bit `RelativeFrameTicket`、A/B/C evacuation 与
   `CanPrepareAndRotate` 已被产品路线 supersede，完整保留为 TwoLeg 技术储备。
 - Two-leg rotation probe：独立 Arena/Baselines/Tests subsolution 已冻结；保留 runtime OVD、Base/Delta、
@@ -773,6 +776,58 @@
 
 ## 6. 船长日志
 
+### 2026-09-04：建立共享 StateStore payload serialization leaf
+
+- **Implemented**：把五个 internal primitives 移入 BCL-only
+  `Atelia.DurableGraph.StateStore.Serialization` assembly：ref-struct `BinaryPayloadReader/Writer`、
+  `CanonicalVarInt`、`StringPayloadCodec` 与 `NullablePayloadHeader`。它只向 Storage 及相关测试开放 internals；
+  StateStore 等第一个真实 ObjectVersion consumer 出现后再决定直接引用。
+- **Provenance**：实现裁剪自 `atelia` StateJournal `BinaryDiffReader/Writer` 的 Bare 思想；相关源文件最后变更
+  commit 为 `1e1f9e3132b0756769bfecf9258ff06cee01c17c`。没有引入 StateJournal 项目依赖，也没有搬入 Symbol、
+  Revision、pool、Tagged、ByteString 或 `asKey`。
+- **Invariant**：reader 拒绝 ordinary/max-width overlong、overflow 与 truncated VarInt，失败不推进 cursor；string
+  仅在 strict UTF-8 严格更短时采用 UTF-8，tie 用 UTF-16LE，并拒绝非最短 alternate encoding。unpaired surrogate
+  通过 raw UTF-16LE code units 无损往返，不允许 replacement fallback 静默改值。
+- **Integrated**：Storage 改为 `Storage -> Serialization`；`StateRevisionWireReader/Writer` 与
+  `FrameAddressWireCodec` 共用 `BinaryPayloadReader/Writer`，删除 Storage 自有 `CanonicalVarUInt`。既有 v1
+  golden bytes 不变，composite FrameAddress 失败时外层 cursor 回滚。`StateRevisionStore` 通过 RBF
+  `BeginAppend/EndAppend` 直接编码到 `PayloadAndMeta`，删除生产路径的完整 payload staging/copy；编码失败由
+  builder Auto-Abort，不提交 partial Frame。writer acquisition 先触发轮转时，可留下并复用 header-only active
+  Segment。wire codec 随后删除仅为 same-file chronology 传播的 containing Frame offset；该相对 invariant
+  留在持有完整 absolute containing/target addresses 的 live-head traversal。parent chain 每步严格下降同时排除
+  cycle，因此 materializer 删除 visited set。
+- **Boundary**：这只是尚未接 ObjectVersion 的 internal provisional codec，不是 public API 或正式 wire
+  compatibility；ObjectVersion/frame envelope 后续负责具体资源 hard bound。
+- **Verified**：专属 Serialization.Tests 的 65 个 focused cases 覆盖独立 reader/writer golden、canonical/malformed
+  VarInt、bounded `IBufferWriter`、浮点 bit pattern、string 两种编码、nullable、unpaired surrogate 与失败 cursor
+  rollback；Storage integration tests 另覆盖 wire golden、address cursor rollback 与 append 前失败不改 RBF tail。
+
+### 2026-09-04：完成 StateRevision live membership 文件纵切
+
+- **Decided**：Storage 暂用 provisional 1-based `UInt32 ObjectId`；`StateRevision` 以 local Base/Delta IDs 隐式
+  发布 containing Frame head，ObjectHeadMap Delta 只保存 Removes 并继承 exact parent，Base 只保存 cold
+  External heads 并成为 current membership 早停点。不持久 `InheritSet` 或重复 `BindSelf`。
+- **Boundary**：Remove 的正确与完整由上层调用方负责；Storage 不遍历对象图或猜测遗漏，只验证收到的
+  Revision 自身 canonical shape。Object representation Base/Delta 与 ObjectHeadMap Base/Delta 保持正交。
+- **Invariant**：genesis 不允许 Delta ObjectVersion；required FrameAddress 必须含非空 ticket，Parent 与
+  External head 在 graph traversal 时必须严格早于 containing Revision。单 Frame wire decode 不接收 containing
+  offset，也不冒充跨文件 ticket provenance validation。wire collection 暂设每集合 1,000,000 项硬上限，并在
+  分配前 fail closed；该上限不是正式 compatibility 决策。
+- **Implemented**：加入 immutable `StateRevision`、纯 `LiveObjectHeadMapMaterializer`、provisional wire
+  reader-writer、wire-only backward distance 转换，以及基于真实 `RbfSegmentStore` 的
+  `StateRevisionStore.Append/Read/ReadLiveObjectHeads`。materializer 保留每个 pending Delta 的 containing address，
+  从完整 Base 向前应用 Remove 与 local overwrite，返回 immutable、ObjectId 升序的 shallow
+  `{ObjectId -> absolute FrameAddress}` map。
+- **Verified**：独立 semantic oracle 证明 local self-binding、external preservation、inherit/update/add/remove、
+  no-change、repeated overwrite、Remove 后 reappearance、Base early-stop、升序与不可变结果，以及 future
+  parent/external fail-close；真实 RBF 测试在写入期及 dispose/reopen 后核验 exact head values，并覆盖 1→2→3
+  tail-triggered rollover checkpoint。既有手写 golden bytes、malformed、append/read 与 Auto-Abort 测试保持通过。
+- **Boundary**：`FrameAddress` 继续是 RBF `EndAppend` 后产生的唯一物理 identity；不增加
+  `StateRevisionBuilder`、self-address 或 addressed snapshot。head map 只是 membership declaration，不读取或验证
+  ObjectVersion record；Object payload、lineage、自动 checkpoint、skip、durable publication、GC 与正式 wire
+  compatibility 仍未实现。实施边界见
+  `experiments/MultiSegmentStateStoreProbe/WORK-ORDER-STATESTORE-LIVE-OBJECT-HEADS.md`。
+
 ### 2026-09-03：启动正式 StateStore 阶段 B
 
 - **Decided**：建立独立 `src/DurableGraph.StateStore` 项目；程序集名和根命名空间均为
@@ -782,7 +837,7 @@
   `SizedPtr` 后又显式引用 `Data`，其余 substrate 依赖由现有项目图传递。两个产品程序集均有只引用各自被测
   项目的 xUnit 项目。
 - **Observed**：首个 Storage 机制切片随后加入空壳 `StateRevision`、runtime
-  `AbsoluteFrameAddress { UInt32 FileNumber, SizedPtr FrameTicket }` 与 `FileScope`；0 distance 表示当前文件，
+  `FrameAddress { UInt32 FileNumber, SizedPtr FrameTicket }` 与 `FileScope`；0 distance 表示当前文件，
   future/zero/underflow fail closed，并以 focused tests 覆盖同文件、远距及 UInt32 边界往返。
 - **Boundary**：产品内存模型不移植 Probe `RelativeFrameTicket`；`BackwardFileDistance` 只作为后续 wire codec
   瞬时值。当前仍没有 wire bytes、Revision 内容或文件 I/O。

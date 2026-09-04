@@ -12,6 +12,12 @@ namespace Atelia.DurableGraph.StateStore.Storage;
 public readonly record struct FrameAddress {
     public FrameAddress(uint fileNumber, SizedPtr frameTicket) {
         ArgumentOutOfRangeException.ThrowIfZero(fileNumber);
+        if (frameTicket.Length == 0) {
+            throw new ArgumentOutOfRangeException(
+                nameof(frameTicket),
+                frameTicket,
+                "A FrameAddress requires a non-empty SizedPtr.");
+        }
 
         FileNumber = fileNumber;
         FrameTicket = frameTicket;

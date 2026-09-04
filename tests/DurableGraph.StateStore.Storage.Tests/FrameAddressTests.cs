@@ -18,4 +18,10 @@ public sealed class FrameAddressTests {
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             new FrameAddress(0, SizedPtr.Create(64, 128)));
     }
+
+    [Fact]
+    public void Frame_ticket_must_be_non_empty() {
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            new FrameAddress(1, default));
+    }
 }

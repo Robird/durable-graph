@@ -23,8 +23,9 @@ TwoLeg evacuation，也不把 threshold 冒充严格文件上限。
 - admitted-only W/P/F/R/L、Delta/Base references、shared-Frame cold-read de-duplication；
 - SameStateRebase 的 W/R 因果 witness，以及同一 corpus 的三种 deterministic raw outcomes。
 
-这些 codec、Frame envelope 和 synthetic plan 都是 provisional size-only 模型；当前不声称已经实现正式
-RBF/OVD wire、filesystem/reopen 或持久 StateStore。Stage-A commit session 只从 empty Store 启动。
+上述 Stage-A codec、Frame envelope 和 synthetic plan 都是 provisional size-only 模型；Probe 项目本身不实现
+真实 RBF/OVD wire、filesystem/reopen 或持久 StateStore。Stage-A commit session 只从 empty Store 启动；
+与之分离的 Stage-B 产品切片状态见下文。
 
 当前 canonical corpus 的 raw report：
 
@@ -36,8 +37,11 @@ adaptive-r3-b5pct: W=2436 P=424 F=692 R/L=11044/2418 DeltaRef=1139 BaseRef=1796 
 
 canonical runner 的 rollover threshold 是 512 bytes；`F > 512` 是 crossing append 被允许后留下的预期
 观测，不是 hard-bound violation。这些是原始观测，不是 score、rank 或 winner 声明。阶段 A 到 G4 已完成并
-冻结；阶段 B 已建立 `DurableGraph.StateStore -> DurableGraph.StateStore.Storage -> RbfSegmentStore` 的空壳
-程序集依赖链，并完成绝对 Frame 地址与 `FileScope` 换算的首个产品切片；尚未实现正式 wire 或持久行为。
+冻结；阶段 B 已建立 `DurableGraph.StateStore -> DurableGraph.StateStore.Storage`，并让 Storage 同时引用
+BCL-only `DurableGraph.StateStore.Serialization` 与 `RbfSegmentStore`。`FrameAddress`、membership-only
+`StateRevision`、provisional canonical wire 与真实 RBF/Segment append/read/reopen 已落地；Storage wire 已共用
+Serialization 的 internal primitive/adaptive-string substrate，既有 v1 golden bytes 保持不变。StateStore 尚无
+ObjectVersion consumer，因而暂不直接引用 Serialization；自动 checkpoint 与正式 wire compatibility 也未实现。
 
 运行：
 

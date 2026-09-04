@@ -16,11 +16,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\DurableGraph.StateStore.Serialization\DurableGraph.StateStore.Serialization.csproj" />
-    <ProjectReference Include="..\..\src\DurableGraph.StateStore.Storage\DurableGraph.StateStore.Storage.csproj" />
-    <ProjectReference Include="..\..\..\atelia\src\Data\Data.csproj" />
-    <ProjectReference Include="..\..\..\atelia\src\Primitives\Primitives.csproj" />
-    <ProjectReference Include="..\..\..\atelia\src\Rbf\Rbf.csproj" />
-    <ProjectReference Include="..\..\..\atelia\src\RbfSegmentStore\RbfSegmentStore.csproj" />
   </ItemGroup>
 
   <ItemGroup>
