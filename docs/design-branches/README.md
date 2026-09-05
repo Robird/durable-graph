@@ -42,4 +42,5 @@
 | [DB-018](0018-generated-graph-codec-shape.md) | 统一引用身份、TypeCodec 与生成式 Serializer 形状 | Open | DB-019–021 落地祖先元数据、值槽位/数组元素及静态标量 body；生成式图 codec 尚未实施 |
 | [DB-019](0019-schema-ancestry-implementation-slice.md) | 祖先 Schema/history 产品分片 | Chosen | SchemaOnly 元数据闭环；继承 serializer 与 binary codec 另片推进 |
 | [DB-020](0020-typed-slot-array-binding-slice.md) | typed 值槽位与数组元素 binding 分片 | Chosen | primitive/ref 槽位及 SZ/rank-2 元素循环；DB-021 接 SG 标量 class body，完整数组对象 codec 另片推进 |
-| [DB-021](0021-generated-primitive-body-slice.md) | 实际生成的 primitive class body | Chosen | 当前 bool/int/long 与继承段静态读写；更多 Schema kinds、引用上下文与历史 decoder 另片推进 |
+| [DB-021](0021-generated-primitive-body-slice.md) | 实际生成的 primitive class body | Superseded | 直接领域 Read/Write 接口由 DB-022 的 Versioned DTO/Capture 取代；保留原片证据 |
+| [DB-022](0022-versioned-state-dto-capture.md) | Versioned DTO、Capture 与 DTO binary body | Chosen | readonly scalar Vn/历史积累/current Capture；引用 Capture、比较/估算、DTO 升级与 StateStore 管线另片推进 |

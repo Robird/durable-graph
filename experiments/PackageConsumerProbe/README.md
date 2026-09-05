@@ -17,6 +17,7 @@ twice through the packaged generated serializer without writeback, explicitly sa
 confirms the current-version path no longer invokes the upgrade handler.
 
 The feed also contains the runtime's Serialization dependency. A final SchemaOnly consumer opts
-into `GenerateBinaryBody`, exercises private base/derived fields with direct static byte calls,
-and checks golden bytes and transient preservation. It still has just one PackageReference;
+into `GenerateBinaryBody`, captures private base/derived fields into a readonly versioned DTO,
+then mutates the domain instance. Static DTO byte calls verify the original golden bytes,
+DTO/Schema pairing and domain isolation. It still has just one PackageReference;
 Serialization is supplied transitively, with no friend access or manual analyzer wiring.

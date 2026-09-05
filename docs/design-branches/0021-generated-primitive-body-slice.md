@@ -1,8 +1,12 @@
 # DB-021：实际生成的 primitive class body
 
-> 状态：Chosen / Implemented — 2026-09-05；基线 `f9cf2de`。
+> 状态：Superseded by DB-022 — 原片已于 2026-09-05 实现；基线 `f9cf2de`。
 >
 > 承接 [DB-018](0018-generated-graph-codec-shape.md) 和 [DB-020](0020-typed-slot-array-binding-slice.md)。
+
+后续校准：用户选择 Versioned DTO 作为保存输入，[DB-022](0022-versioned-state-dto-capture.md)
+已取代本文的直接领域 Read/Write 接口。GenerateBinaryBody 现生成 readonly Vn、current Capture 与 DTO body；
+下文保留本片当时的合同和验证证据，不作为当前 API 用法。
 
 ## 问题与选择
 

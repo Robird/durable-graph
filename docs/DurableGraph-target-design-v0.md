@@ -13,6 +13,10 @@ typed 值槽位与 SZ/rank-2 元素循环已由 [DB-020](design-branches/0020-ty
 [DB-021](design-branches/0021-generated-primitive-body-slice.md)已生成当前 bool/int/long class 的继承分段 body；
 历史 binary decoder、SG 泛型 body、完整数组对象 codec 与图恢复仍是后续目标。
 
+后续校准：[DB-022](design-branches/0022-versioned-state-dto-capture.md)选择领域图先捕获 Versioned DTO，
+后续比较、估算与编码消费捕获状态；已实现 scalar readonly Vn、current Capture、各版本 typed DTO Read/Write，
+取代 DB-021 直接领域 body。运行时历史 Schema 分派、DTO 升级、领域恢复与 StateStore 基线管线尚未实现。
+
 ---
 
 ## 1. 背景与动机

@@ -34,9 +34,10 @@ public sealed class DurableTypeAttribute : Attribute {
     public bool SchemaOnly { get; set; }
 
     /// <summary>
-    /// Also generates a static binary body for the current schema's Boolean, Int32,
-    /// and Int64 fields. Requires SchemaOnly and the same opt-in on every domain ancestor.
-    /// This provisional body reads into an existing object; it does not decode historical layouts.
+    /// Also generates versioned readonly state DTOs, current-instance Capture, and typed
+    /// binary bodies for Boolean, Int32, and Int64 layouts, including accepted history.
+    /// Requires SchemaOnly and the same opt-in on every current domain ancestor.
+    /// It does not upgrade historical DTOs or restore domain instances.
     /// </summary>
     public bool GenerateBinaryBody { get; set; }
 }

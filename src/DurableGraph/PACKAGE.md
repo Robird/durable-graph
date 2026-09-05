@@ -30,21 +30,40 @@ metadata for versions 1 through the current version, including the historical ba
 versions throw `ArgumentOutOfRangeException`. It does not generate a `Serializer`, payload snapshots,
 or upgrade handlers. The supported field kinds remain bool, int, long, and string.
 
-For a current-layout binary body, additionally set `GenerateBinaryBody = true` on every class
-in a SchemaOnly domain chain. This provisional slice accepts only bool, int, and long durable
-fields; string is rejected until reference-identity encoding is available. It generates the
-assembly-internal nested `__DurableBinaryBody` with static `Write(ref BinaryPayloadWriter, T)`
-and `Read(ref BinaryPayloadReader, T)` methods. These call the byte primitives directly, handling
-base declarations first and each declaration's fields in FieldId order. Transient fields are untouched.
+For versioned state DTOs and binary bodies, additionally set `GenerateBinaryBody = true` on every
+class in a SchemaOnly domain chain. This provisional slice accepts only bool, int, and long in
+the current and all historical layouts, including ancestor fields. String is rejected until
+reference-identity encoding is available. The assembly-internal nested `__DurableBinaryBody`
+contains readonly structs `V1` through the current version, each paired with `GetSchema(n)` by
+its static `Schema` property. DTOs are regenerated from accepted `.dgsnapshot` history and the
+current definition; there is no separate DTO source history to maintain.
+
+Each DTO physically flattens the exact ancestor chain into fields such as `Segment0Field1`:
+base declarations first, then each declaration's fields in FieldId order. Schema metadata remains
+segmented. Historical DTOs do not depend on old CLR base definitions remaining in source.
+`Capture(T value)` copies current domain fields into the current DTO, using the base class's
+Capture for its private fields. Transient fields are omitted. The caller supplies a stable view
+during Capture; later domain mutations cannot change the captured scalar values.
+
+`Write(ref BinaryPayloadWriter writer, in Vn state)` overloads encode DTO values directly;
+`ReadVn(ref BinaryPayloadReader reader)` returns a completed DTO. For example, in the consumer assembly:
+
+```csharp
+var state = Character.__DurableBinaryBody.Capture(character);
+Character.__DurableBinaryBody.Write(ref writer, in state);
+var restoredState = Character.__DurableBinaryBody.ReadV1(ref reader);
+reader.EnsureFullyConsumed();
+```
+
+Select the ReadVn matching the stored layout. There are no domain-object Read/Write overloads.
 
 The Serialization library is a transitive package dependency. Its Reader/Writer constructors,
 bool/int/long operations, and Reader boundary checks are public for generated-code consumers.
-The body reads into a caller-provided instance and covers the current declared layout and ancestors;
-it does not allocate objects, dispatch on runtime types or stored schemas, or encode a type/version header.
-`GetSchema(oldVersion)` still returns metadata only: it does not select a historical binary body.
-Callers must supply the matching layout, a stable source or unpublished target, and check the final
-payload boundary with `EnsureFullyConsumed()`. Read/write failure may leave earlier fields/bytes changed;
-null targets/sources are rejected before I/O. This is not yet the graph Save/Load API.
+Bodies do not restore domain instances, dispatch on runtime types/stored schemas, upgrade DTOs,
+or encode a type/version header. GetSchema remains a metadata query; callers explicitly choose
+the typed body. Failed ReadVn may leave the Reader advanced, but returns no partial DTO; a failed
+Write does not roll back prior output. Capture rejects null before reading fields. The final payload
+boundary is caller-owned. This is not yet the graph Save/Load API or StateStore baseline cache.
 
 Changing an exact base binding requires an explicit version increase in its derived class and then
 in each affected descendant. Accepted `.dgsnapshot` history retains the old base binding. Generator

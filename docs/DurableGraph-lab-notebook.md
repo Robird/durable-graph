@@ -780,6 +780,20 @@
 
 ## 6. 船长日志
 
+### 2026-09-05：Versioned DTO 取代直接领域 binary body
+
+- 用户选择捕获后的版本化状态作为保存比较/估算/编码输入。[DB-022](design-branches/0022-versioned-state-dto-capture.md)
+  已实现 readonly V1..Vcurrent DTO、current Capture、Write(in Vn)/ReadVn；DB-021 直接领域 Read/Write 已移除。
+- 各版 DTO 静态配对 GetSchema(n)，从已有 accepted history + current 定义再生成；字段按 exact 祖先声明链
+  物理展平为 SegmentNFieldId，Schema 仍分段，不增加第二套历史 authority。
+- Capture 仅当前 private 字段，基类负责自己的 private 访问；捕获后领域修改不影响 scalar DTO。
+  ReadVn 成功才返回完整 DTO，失败可推进 Reader；DTO 升级、领域恢复、图和基线安装未实施。
+- 真实 publisher 集成验证旧 CLR 祖先改名/删除和替换祖先链后的历史字节往返；所有历史 DTO 独立于旧 CLR。
+  历史曾含 string 的布局明确拒绝，包括当前 Capture 间接依赖的基类历史，等待引用上下文。
+- 根 build 0 warnings/errors，全产品测试 456/456（原 17 body case 迁移、新增 8 case），无跳过；
+  单一 PackageReference 完整消费流程通过，Capture 后改变领域对象仍编码原 golden `012154`。
+  独立审查无阻塞，工作集及设计/包说明已更新。
+
 ### 2026-09-05：实际 SG 静态标量 body 闭环
 
 - [DB-021](design-branches/0021-generated-primitive-body-slice.md)选用已有 SchemaOnly class 字段模型，

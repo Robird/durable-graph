@@ -42,44 +42,41 @@ public sealed partial class DurableSchemaGeneratorTests {
             public static byte[] Write(bool flag, int number, long wide, int last) {
                 var buffer = new ArrayBufferWriter<byte>();
                 var writer = new BinaryPayloadWriter(buffer);
-                Leaf.__DurableBinaryBody.Write(ref writer, new Leaf(flag, number, wide, last));
+                var state = Leaf.__DurableBinaryBody.Capture(new Leaf(flag, number, wide, last));
+                Leaf.__DurableBinaryBody.Write(ref writer, in state);
                 return buffer.WrittenSpan.ToArray();
             }
             public static long[] Read(byte[] bytes, bool requireEnd) {
-                var value = new Leaf(false, 101, 102, 103);
+                var domain = new Leaf(false, 101, 102, 103);
+                var value = Leaf.__DurableBinaryBody.Capture(domain);
                 var reader = new BinaryPayloadReader(bytes);
                 int error = 0;
                 try {
-                    Leaf.__DurableBinaryBody.Read(ref reader, value);
+                    value = Leaf.__DurableBinaryBody.ReadV1(ref reader);
                     if (requireEnd) { reader.EnsureFullyConsumed(); }
                 }
                 catch (EndOfStreamException) { error = 1; }
                 catch (InvalidDataException) { error = 2; }
                 return [error, reader.ConsumedCount, reader.RemainingCount,
-                    value.Flag ? 1 : 0, value.Number, value.Wide, value.Last, value.Cache];
+                    value.Segment0Field2 ? 1 : 0, value.Segment0Field9, value.Segment1Field2, value.Segment3Field2, domain.Cache];
             }
-            public static int[] NullBeforeIO() {
-                var buffer = new ArrayBufferWriter<byte>();
-                var writer = new BinaryPayloadWriter(buffer);
-                var reader = new BinaryPayloadReader(new byte[] { 1, 2 });
-                int writeError = 0;
-                int readError = 0;
-                try { Leaf.__DurableBinaryBody.Write(ref writer, null!); }
-                catch (ArgumentNullException) { writeError = 1; }
-                try { Leaf.__DurableBinaryBody.Read(ref reader, null!); }
-                catch (ArgumentNullException) { readError = 1; }
-                return [writeError, readError, buffer.WrittenCount, reader.ConsumedCount];
+            public static int NullCapture() {
+                try { Leaf.__DurableBinaryBody.Capture(null!); }
+                catch (ArgumentNullException) { return 1; }
+                return 0;
             }
             public static byte[] WriteBaseOfDerived() {
                 var buffer = new ArrayBufferWriter<byte>();
                 var writer = new BinaryPayloadWriter(buffer);
-                Base.__DurableBinaryBody.Write(ref writer, new Leaf(true, -1, 999, 888));
+                var state = Base.__DurableBinaryBody.Capture(new Leaf(true, -1, 999, 888));
+                Base.__DurableBinaryBody.Write(ref writer, in state);
                 return buffer.WrittenSpan.ToArray();
             }
             public static byte[] FailedWrite() {
                 var buffer = new FailAfterFirstAdvance();
                 var writer = new BinaryPayloadWriter(buffer);
-                try { Leaf.__DurableBinaryBody.Write(ref writer, new Leaf(true, int.MinValue, 999, 888)); }
+                var state = Leaf.__DurableBinaryBody.Capture(new Leaf(true, int.MinValue, 999, 888));
+                try { Leaf.__DurableBinaryBody.Write(ref writer, in state); }
                 catch (IOException) { return buffer.Buffer.WrittenSpan.ToArray(); }
                 throw new Exception("Expected downstream failure.");
             }
@@ -119,34 +116,34 @@ public sealed partial class DurableSchemaGeneratorTests {
         foreach (string forbidden in new[] { "ValueSlotCodec", "PrimitiveSlotCodecs", "typeof(", "DynamicInvoke", "delegate", "(object)", "System.Reflection" }) {
             Assert.DoesNotContain(forbidden, generated);
         }
-        Assert.Contains("global::BinaryBodies.Base.__DurableBinaryBody.Write(ref writer, value)", generated);
-        Assert.Contains("global::BinaryBodies.Empty.__DurableBinaryBody.Read(ref reader, value)", generated);
-        Assert.Contains("writer.WriteBoolean(value._flag)", generated);
-        Assert.Contains("writer.WriteInt32(value._number)", generated);
-        Assert.Contains("writer.WriteInt64(value._wide)", generated);
+        Assert.Contains("global::BinaryBodies.Base.__DurableBinaryBody.Capture(value)", generated);
+        Assert.Contains("global::BinaryBodies.Empty.__DurableBinaryBody.Capture(value)", generated);
+        Assert.Contains("writer.WriteBoolean(value.Segment0Field2)", generated);
+        Assert.Contains("writer.WriteInt32(value.Segment0Field9)", generated);
+        Assert.Contains("writer.WriteInt64(value.Segment1Field2)", generated);
         Assert.DoesNotContain("value._cache", generated);
         Assert.DoesNotContain("Serializer", generated);
     }
 
     [Fact]
-    public void BinaryBodyNullAndReadFailuresPreserveDocumentedPartialStateAndOuterBoundary() {
+    public void BinaryBodyNullCaptureAndReadFailuresKeepOriginalDtoWhileReaderCanAdvance() {
         GeneratorTestRun run = RunGenerator(BinaryBodyChain);
         AssertSchemaOnlyCompiles(run);
         Assembly assembly = EmitAndLoad(run.OutputCompilation);
-        Assert.Equal<int>([1, 1, 0, 0], BinaryBodyDelegate<Func<int[]>>(assembly, "NullBeforeIO")());
+        Assert.Equal(1, BinaryBodyDelegate<Func<int>>(assembly, "NullCapture")());
         Assert.Equal<byte>([1], BinaryBodyDelegate<Func<byte[]>>(assembly, "FailedWrite")());
         var read = BinaryBodyDelegate<Func<byte[], bool, long[]>>(assembly, "Read");
         Assert.Equal<long>([2, 0, 1, 0, 101, 102, 103, 73], read([2], true));
-        // The Boolean succeeded; a truncated Int32 does not consume its first byte or assign its field.
-        Assert.Equal<long>([1, 1, 1, 1, 101, 102, 103, 73], read([1, 0x80], true));
-        // Base and middle succeeded; leaf failure preserves both earlier declaration layers.
-        Assert.Equal<long>([1, 3, 1, 1, -1, -2, 103, 73], read([1, 1, 3, 0x80], true));
+        // A completed Boolean advances the reader; no partial DTO is assigned.
+        Assert.Equal<long>([1, 1, 1, 0, 101, 102, 103, 73], read([1, 0x80], true));
+        // Earlier declaration layers were read, but leaf failure still preserves the entire caller DTO.
+        Assert.Equal<long>([1, 3, 1, 0, 101, 102, 103, 73], read([1, 1, 3, 0x80], true));
         Assert.Equal<long>([0, 4, 1, 1, -1, -2, -3, 73], read([1, 1, 3, 5, 99], false));
         Assert.Equal<long>([2, 4, 1, 1, -1, -2, -3, 73], read([1, 1, 3, 5, 99], true));
     }
 
     [Fact]
-    public void BinaryBodyInvalidBooleanDoesNotUndoAnEarlierField() {
+    public void BinaryBodyInvalidBooleanDoesNotExposeEarlierReadField() {
         GeneratorTestRun run = RunGenerator("""
             using System;
             using System.IO;
@@ -163,17 +160,18 @@ public sealed partial class DurableSchemaGeneratorTests {
             public static class Host {
                 public static int[] Read() {
                     var reader = new BinaryPayloadReader(new byte[] { 1, 2 });
-                    var value = new Item();
-                    try { Item.__DurableBinaryBody.Read(ref reader, value); }
+                    var domain = new Item();
+                    var value = Item.__DurableBinaryBody.Capture(domain);
+                    try { value = Item.__DurableBinaryBody.ReadV1(ref reader); }
                     catch (InvalidDataException) {
-                        return [value.Number, value.Flag ? 1 : 0, reader.ConsumedCount, reader.RemainingCount];
+                        return [value.Segment0Field1, value.Segment0Field2 ? 1 : 0, reader.ConsumedCount, reader.RemainingCount, domain.Number];
                     }
                     throw new Exception("Expected invalid Boolean failure.");
                 }
             }
             """);
         AssertSchemaOnlyCompiles(run);
-        Assert.Equal<int>([-1, 1, 1, 1], BinaryBodyDelegate<Func<int[]>>(EmitAndLoad(run.OutputCompilation), "Read")());
+        Assert.Equal<int>([73, 1, 1, 1, 73], BinaryBodyDelegate<Func<int[]>>(EmitAndLoad(run.OutputCompilation), "Read")());
     }
 
     [Theory]
@@ -278,7 +276,7 @@ public sealed partial class DurableSchemaGeneratorTests {
     }
 
     [Fact]
-    public void BinaryBodyWritesCurrentVersionWhileHistoricalSchemaRemainsMetadataOnly() {
+    public void BinaryBodyGeneratesDistinctTypedBodiesForCurrentAndHistoricalVersions() {
         GeneratorTestRun run = RunGenerator("""
             using System;
             using System.Buffers;
@@ -293,7 +291,8 @@ public sealed partial class DurableSchemaGeneratorTests {
                 public static byte[] Write() {
                     var buffer = new ArrayBufferWriter<byte>();
                     var writer = new BinaryPayloadWriter(buffer);
-                    Versioned.__DurableBinaryBody.Write(ref writer, new Versioned());
+                    var state = Versioned.__DurableBinaryBody.Capture(new Versioned());
+                    Versioned.__DurableBinaryBody.Write(ref writer, in state);
                     return buffer.WrittenSpan.ToArray();
                 }
             }
@@ -306,7 +305,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         Assert.Equal<byte>([0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 1],
             BinaryBodyDelegate<Func<byte[]>>(assembly, "Write")());
         Type body = type.GetNestedType("__DurableBinaryBody", BindingFlags.NonPublic)!;
-        Assert.Equal(new[] { "Read", "Write" }, body.GetMethods(BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.DeclaredOnly)
+        Assert.Equal(new[] { "Capture", "ReadV1", "ReadV2", "Write", "Write" }, body.GetMethods(BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.DeclaredOnly)
             .Select(method => method.Name).OrderBy(name => name).ToArray());
         Assert.DoesNotContain("Upgrade", BinaryBodyGeneratedText(run));
         Assert.DoesNotContain("__DurableSnapshot", BinaryBodyGeneratedText(run));

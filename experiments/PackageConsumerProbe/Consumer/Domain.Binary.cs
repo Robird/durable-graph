@@ -29,18 +29,21 @@ public sealed partial class Character : BinaryBase {
 
     public static string ExerciseGeneratedSnapshots() {
         Character source = new(true, -17, 42, 8);
+        var captured = __DurableBinaryBody.Capture(source);
+        source._total = 999;
         ArrayBufferWriter<byte> buffer = new();
         BinaryPayloadWriter writer = new(buffer);
-        __DurableBinaryBody.Write(ref writer, source);
+        __DurableBinaryBody.Write(ref writer, in captured);
         if (!buffer.WrittenSpan.SequenceEqual(new byte[] { 0x01, 0x21, 0x54 })) {
             throw new InvalidOperationException("Unexpected base-first binary body.");
         }
 
-        Character target = new(false, 0, 0, 91);
         BinaryPayloadReader reader = new(buffer.WrittenSpan);
-        __DurableBinaryBody.Read(ref reader, target);
+        var restored = __DurableBinaryBody.ReadV1(ref reader);
         reader.EnsureFullyConsumed();
-        bool restored = target.HasExpectedBase && target._total == 42 && target._sentinel == 91;
-        return $"BinaryBody:{Convert.ToHexString(buffer.WrittenSpan)}:{restored}";
+        bool valid = restored.Segment0Field1 && restored.Segment0Field7 == -17 &&
+            restored.Segment1Field1 == 42 && source._total == 999 && source._sentinel == 8 &&
+            source.HasExpectedBase && ReferenceEquals(__DurableBinaryBody.V1.Schema, Schema);
+        return $"BinaryBody:{Convert.ToHexString(buffer.WrittenSpan)}:{valid}";
     }
 }

@@ -9,6 +9,12 @@
 > 随后 [DB-020](0020-typed-slot-array-binding-slice.md)落地 internal 值槽位和 SZ/rank-2 元素循环；
 > [DB-021](0021-generated-primitive-body-slice.md)落地实际 SG bool/int/long class body 与继承分段；本文引用上下文/struct/泛型 body 仍为草图。
 
+2026-09-05 后续方向：用户已选择领域图 → Versioned DTO 捕获 → 比较/估算/编码。
+[DB-022](0022-versioned-state-dto-capture.md)已把 GenerateBinaryBody 改为 readonly Vn + current Capture + DTO body，
+含历史 exact 声明链；下文直接领域 Read/Write 的示例保留为早期机制草图，不能作为当前接口。
+引用发现与 Capture 可合并；Capture 期间需要稳定视图，完成后后续步骤应只消费捕获状态。
+未来引用 DTO 槽位使用 ObjectId，不能保留可变领域引用；string 对象内容可复用不可变数据而不合并身份。
+
 本轮重点已收窄：祖先 Schema 不变性/版本传播、nominal 引用声明与 exact 对象类型、
 开放泛型/数组 codec 的运行时组合。用户已同意 nominal/exact 的区分，并要求基类变化时派生版本递增；
 BCL 集合内容支持明确暂缓，下面相关类型表达只保留为后续设计位置。
@@ -473,11 +479,11 @@ DB-021 已由实际 SG 生成当前 bool/int/long class body，直接 primitive 
 
 当前产品保留 primitive byte leaf、membership Storage、估算策略和 scalar boxed schema/history 路径，
 并新增 DB-019 的 SchemaOnly 继承元数据：声明层字段、精确祖先、历史查询与发布闭包校验。
-默认 serializer 路径仍限制 sealed/direct DurableBase；DB-021 的额外 GenerateBinaryBody 只支持当前标量 class/继承 body；
+默认 serializer 路径仍限制 sealed/direct DurableBase；DB-022 的额外 GenerateBinaryBody 已支持当前 Capture 与各版 scalar DTO body；
 本篇 struct/泛型及带引用 SG body 尚未实现。
 DB-020 的内部值槽位和数组元素循环不处理对象头、shape、分配或图身份，也没有扩大 Schema kind。
 
-用户先后授权的实现范围见 DB-019、DB-020 与 DB-021。完整 Deserialize、图身份恢复、
+用户先后授权的实现范围见 DB-019–022。完整领域 Deserialize、图身份恢复、
 开放泛型生成器与旧 IL 后端翻新仍待后续工作；BCL 集合继续暂缓。
 
 材料：[产品工作集](../../src/PROJECT-STATE.md)、

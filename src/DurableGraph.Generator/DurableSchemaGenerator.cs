@@ -244,7 +244,7 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
                 ValidateAndCreateSnapshotTypes(context, legacyTypes, history);
 
             List<DurableTypeModel> schemaOnlyTypes = GenerateSchemaOnly(context, validTypes, history);
-            GenerateBinaryBodies(context, validTypes, schemaOnlyTypes, historyParsedSuccessfully);
+            GenerateBinaryBodies(context, validTypes, schemaOnlyTypes, history, historyParsedSuccessfully);
 
             if (snapshotTypes.Count > 0) {
                 string generatedSource = RenderSource(snapshotTypes)
