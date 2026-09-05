@@ -29,7 +29,7 @@ typed 值槽位与 SZ/rank-2 元素循环已落地，范围见 [DB-020](../docs/
 | [Generator](DurableGraph.Generator/DurableGraph.Generator.csproj) / [Build](DurableGraph.Build/DurableGraph.Build.csproj) | 默认路径保留 typed Snapshot/相邻 Upgrade；显式 SchemaOnly 支持同编译领域继承的 Schema/GetSchema 历史元数据，history/publisher 验证祖先闭包与版本传播 |
 | [StateStore](DurableGraph.StateStore/DurableGraph.StateStore.csproj) | 固定 ReadAmplificationBaseBudgetPolicy：全部 post-live 估算 → 稀疏只读 Base/Delta 写计划；无内容执行/完整 Save |
 | [Storage](DurableGraph.StateStore.Storage/DurableGraph.StateStore.Storage.csproj) | immutable membership StateRevision、canonical provisional wire、真实 RBF/Segment append/read/reopen、exact-head shallow live map；无 ObjectVersion payload |
-| [Serialization](DurableGraph.StateStore.Serialization/DurableGraph.StateStore.Serialization.csproj) | BCL-only 字节原语/string 内容 codec、13 种 primitive typed slot、SZ/rank-2 元素 ref 循环；尚无数组对象 envelope 或对象级 Base/Delta |
+| [Serialization](DurableGraph.StateStore.Serialization/DurableGraph.StateStore.Serialization.csproj) | BCL-only 字节原语/string 内容 codec、显式 body 的 typed slot、SZ/rank-2 元素 ref 循环；primitive slot 查表仅为测试共享工具，尚无数组对象 envelope 或对象级 Base/Delta |
 
 当前产品依赖为 StateStore → Storage → Serialization，Storage 另用 RbfSegmentStore/Rbf 与地址基础类型。
 DurableGraph runtime/package 尚未接入 Serialization；实际 generated-code 消费者出现时才建立必要引用与可见性。
@@ -49,6 +49,8 @@ DurableGraph runtime/package 尚未接入 Serialization；实际 generated-code 
 - 引用成员使用稳定 nominal 类型约束、对象头使用 exact 类型/Schema 的区别已获用户同意。
 - 用户澄清 ref 的重点是 struct codec 共用字段/元素等真实槽位，读写可以分开；
   Robird 旧实现只作机制证据，不要求移植 DynamicMethod 或统一 mode visitor。
+- 已知成员类型的 SG body 应直接调用字节原语或静态值 body，不要求经过 Type 查表或 slot 委托。
+  PrimitiveSlotCodecs 已移入 Serialization 测试项目的 TestHelpers，保留现有组合测试；开放泛型绑定另行裁决。
 - 真实 parent、保存视图、变更分类与 Removes 属于调用方；估算计划不能自行证明 live 集合完整。
 
 ## 近期依赖顺序
@@ -69,7 +71,7 @@ DurableGraph runtime/package 尚未接入 Serialization；实际 generated-code 
 
 ## 当前待定项
 
-- Schema 层基础类型扩充、boxed 值、空字符串独立实例分配。slot 层已选择 13 种：
+- Schema 层基础类型扩充、boxed 值、空字符串独立实例分配。测试共享 slot 工具覆盖 13 种：
   bool、byte/sbyte、short/ushort、int/uint、long/ulong、char（UInt16 code unit）、Half、float、double；浮点位保持。
 - SG 定义的 body 生成/注册与 exact historical binding；slot 组合不能代替 Schema 校验。
 - 继承 payload/升级与跨程序集 helper 可见性；声明层 FieldId、祖先闭包/history 校验已由 DB-019 落地。

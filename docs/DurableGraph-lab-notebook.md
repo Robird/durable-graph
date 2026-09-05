@@ -780,6 +780,14 @@
 
 ## 6. 船长日志
 
+### 2026-09-05：primitive slot 查表回归测试工具
+
+- **Decided / Observed**：按用户建议把仅供测试消费的 PrimitiveSlotCodecs 移入 Serialization.Tests/TestHelpers，
+  保留读写 body 与现有测试调用；产品不再携带该 Type 字典。ValueSlotCodec/ArrayElementCodec 本次保留。
+- **Decided**：已知成员类型的 SG body 直接调用字节原语或静态值 body；ref 槽位复用不要求委托包装。
+  开放泛型中的 T 如何绑定仍需单独决定，运行时组合见证不构成产品逐成员分派的必要性。
+- **Observed**：移动后根构建 0 warnings / 0 errors，Serialization.Tests 94/94；测试用例源码无需修改。
+
 ### 2026-09-05：落地 typed slot 与数组元素 binding
 
 - **Decided**：按下一分片实施授权选择 [DB-020](design-branches/0020-typed-slot-array-binding-slice.md)，

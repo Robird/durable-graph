@@ -4,6 +4,10 @@
 >
 > 基线：`29a4704`；承接 [DB-018](0018-generated-graph-codec-shape.md)。属于 P1 的执行机制子片。
 
+后续校准：用户指出已知成员类型应由 SG 直接静态绑定。PrimitiveSlotCodecs 已移入
+[测试共享工具](../../tests/DurableGraph.StateStore.Serialization.Tests/TestHelpers/PrimitiveSlotCodecs.cs)，
+保留原调用与测试；它不是产品 SG 的必经接口。ValueSlotCodec/ArrayElementCodec 本次保留。
+
 ## 问题与选择
 
 同一强类型值 body 能否配合现有 BinaryPayload Reader/Writer，直接操作局部变量、字段、
@@ -22,7 +26,7 @@ string 引用表、历史 decoder 和 SchemaOnly 能力边界，本片先不承�
   body 是受信任代码：写出应保持源值，ref 签名不强制其只读；带引用的 struct 仍需未来的图上下文。
 - 非泛型 `ValueSlotCodec` 提供 ValueType、BindVector、BindArray2；typed 实现直接创建含 T 的数组模板。
   已闭合 slot 不再反射一次。每次返回独立 binding，调用方复用；没有 Type-only 全局 body cache。
-- `PrimitiveSlotCodecs.Get(Type)` / `Get<T>()` 仅查固定清单：bool、byte/sbyte、short/ushort、int/uint、
+- 测试工具 `PrimitiveSlotCodecs.Get(Type)` / `Get<T>()` 仅查固定清单：bool、byte/sbyte、short/ushort、int/uint、
   long/ulong、char、Half、float、double。复用既有原语，char 按 UInt16 code unit，允许代理项。
   未知类型抛 NotSupportedException；null Type 抛 ArgumentNullException。
   不因此扩大 DurableSchema/历史生成器当前四种 kind 的支持范围。
@@ -50,8 +54,8 @@ string 引用表、历史 decoder 和 SchemaOnly 能力边界，本片先不承�
 
 ## 完成证据
 
-- Runtime 位于现有 Serialization 项目的 ValueSlotCodec、PrimitiveSlotCodecs、ArrayElementCodec 三个文件，
-  未修改原语算法或新增程序集/项目依赖；上表要求均已验证。
+- 最初实现位于 Serialization 项目的三个文件；PrimitiveSlotCodecs 随后移至测试项目，runtime 保留
+  ValueSlotCodec/ArrayElementCodec。未修改原语算法或新增程序集/项目依赖；上表要求均已验证。
 - 独立 golden 覆盖 13 种 primitive、char 代理项与浮点负零/NaN 位；同 CLR Type 的两个 body 不会混用。
   数组循环验证非零下界、空维度、int.MinValue 下界/int.MaxValue 上界、精确类型预检与部分失败。
 - RuntimeGenericSlotBindingTests 使用真实 Reader/Writer、运行时 MakeGenericMethod/CreateDelegate 工厂，

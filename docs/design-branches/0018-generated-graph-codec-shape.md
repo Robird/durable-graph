@@ -376,7 +376,8 @@ Registry 登记的是有限的**受支持类型定义/构造符**，不是预先
 
 DB-020 已选择更小的底层接缝：ValueSlotCodec<T> 显式持有 typed Read/Write，直接创建绑定它的
 SZ/rank-2 元素模板。已有闭合 T 的地方不再反射；没有全局按 CLR Type 缓存可变 body，调用方复用 binding。
-primitive lookup 为固定 13 类型；开放 Cell<T> factory 的按需闭合是使用真实叶子原语的手写测试见证，
+primitive lookup 为测试共享工具中的固定 13 类型，已移出产品程序集；已知成员类型的 SG body 直接静态调用，
+不要求经过该查表或 slot 委托。开放 Cell<T> factory 的按需闭合是使用真实叶子原语的手写测试见证，
 尚无产品通用定义 registry、SG 泛型 body 或引用槽位。上面的含上下文 SlotCodec<T> 仍是后续形状。
 
 当前类型的 Write/Visit binding 可以按 CLR Type 缓存；存储历史读取则必须按 exact stored type/schema

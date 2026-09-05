@@ -1,6 +1,8 @@
-namespace Atelia.DurableGraph.StateStore.Serialization;
+using Atelia.DurableGraph.StateStore.Serialization;
 
-/// <summary>The fixed primitive bodies supported by the binary payload layer.</summary>
+namespace Atelia.DurableGraph.StateStore.Serialization.Tests;
+
+/// <summary>Shared primitive bodies for slot and array binding tests.</summary>
 internal static class PrimitiveSlotCodecs {
     private static readonly Dictionary<Type, ValueSlotCodec> Codecs = new() {
         [typeof(bool)] = new ValueSlotCodec<bool>(
