@@ -224,15 +224,16 @@ Storage 层不遍历对象图，也不判断调用方是否漏报 Remove；它�
 
 以上是后续真实 Save 的概念边界，不是当前纯策略切片的输入要求。用户已选择先以全部 post-live 对象的
 估算 DTO 产生稀疏 Base/Delta 写计划；G 从估算集合求和，真实 parent、变更分类和 Removes 仍由调用方
-拥有。具体契约建议见 [DB-015](../../docs/design-branches/0015-statestore-object-representation-policy.md)，
-尚未实现，不要求先生成 Base/Delta payload，也不预先定义 Estimate/Write 接口。
+拥有。纯策略已在现有 StateStore 中实现，参数为整数倍数与整数百分比；
+具体契约和测试入口见 [DB-015](../../docs/design-branches/0015-statestore-object-representation-policy.md)，
+不要求先生成 Base/Delta payload，也不预先定义 Estimate/Write 接口。
 
 未来实际接入的 payload 对 StateStore 是 opaque bytes，至少需要长度和 codec/schema fence。具体 fence
 是 SchemaKey、SchemaHash、codec identity 还是外层 record metadata，留给真实内容 vertical slice 裁决。
 
 ### 4.1 SameStateRebase 边界
 
-产品策略方向已包含 NoChange 的 `SameStateRebase` 选择；本轮纯 selector 设计只使用 B/H 估算并输出 Base
+产品策略已包含 NoChange 的 `SameStateRebase` 选择；本轮纯 selector 只使用 B/H 估算并输出 Base
 决策，无需真实 payload。后续执行被选 plan 时才需要完整 current Base，获取机制仍待真实 consumer：
 
 1. 上层为全部 live objects 预先准备 Base payload；

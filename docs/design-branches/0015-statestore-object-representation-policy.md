@@ -1,11 +1,11 @@
 # DB-015：StateStore 对象表示策略的估算 DTO 与保存计划
 
-> 状态：Open — 用户已选择 DTO 输入/输出方向；本文具体契约是经独立审查后的设计建议，尚未实现。
+> 状态：Chosen — 用户已批准 DTO → plan 首切片，并将两个参数简化为整数倍数和整数百分比。
 >
 > 创建日期：2026-09-05
 >
 > 范围：既有 `DurableGraph.StateStore` 中的固定 `ReadAmplificationBaseBudgetPolicy`。
-> 本文不授权产品实现，不冻结 public API、序列化接口或持久格式。
+> 本文记录本轮实现契约；不冻结 public API、序列化接口或持久格式。
 
 ## 1. 需求与证据
 
@@ -15,7 +15,8 @@
 | 用户：序列化尚未开始，只需大致估算 | 先设计数值输入与表示选择；真实 payload、估算算法和 Write 接口不是前置条件 |
 | 用户接受的上一轮建议 | 输入覆盖保存后全部 live 对象；G 从其 Base 估算求和；输出稀疏写决策；Removes 属于调用方 |
 | 用户接受的两参数职责 | 读放大阈值产生 Base 动机，图大小比例控制可选 Base 写入；预算为软限制 |
-| 当前源码 `19167d1` | StateStore 只有项目骨架；Storage 只有 membership 记录、wire、append/read 和 live-head map，没有对象 payload 或策略 |
+| 用户本轮修订 | 两个参数只接受整数“X 倍、Y%”；删除 decimal 参数和相应精度处理 |
+| 设计前源码 `19167d1` | StateStore 只有项目骨架；Storage 只有 membership 记录、wire、append/read 和 live-head map，没有对象 payload 或策略 |
 | Probe 源码和测试 | 严格阈值、完整 B 计费、放大率排序、前缀选择、首候选超预算已有可执行参照 |
 | 根 AGENTS.md | 原型 API 未冻结；优先小纵切；当前源码和测试优先于相邻设计文档 |
 
@@ -41,8 +42,7 @@ TwoLeg 只提供设计储备，不建立项目依赖，不继承 Stay/Rotate、A
 
 前四步可以用人工估算值独立验证。最后一步留给真实消费者；plan 不是可直接 Append 的 StateRevision。
 产品首切片中的类型均为 `internal`，放在既有 `src/DurableGraph.StateStore`；不新增程序集。
-后续真实跨程序集消费者出现时再开放所需类型。以下为声明草图，省略方法体及 plan 的内部构造器，
-不是已存在或可直接编译的实现：
+后续真实跨程序集消费者出现时再开放所需类型。以下为声明摘要，省略方法体及 plan 的内部构造器：
 
 ```csharp
 internal enum ObjectSaveChangeKind {
@@ -59,8 +59,8 @@ internal readonly record struct ObjectSaveEstimate(
     long? CurrentReconstructionBytes);
 
 internal readonly record struct ReadAmplificationBaseBudgetParameters(
-    decimal ReadAmplificationLimit,
-    decimal BaseBudgetFraction);
+    int ReadAmplificationLimit,
+    int BaseBudgetPercent);
 
 internal enum ObjectRepresentationMode {
     Base,
@@ -125,7 +125,8 @@ DTO/plan 不携带 FrameAddress、SnapshotId、PlanId 或对象实例。同步�
 ### 3.3 数值和失败
 
 - B/D/H 使用非负 `long`；这不承诺能够存储该大小，也不引入 RBF admission 检查。
-- `ReadAmplificationLimit >= 1`；`0 < BaseBudgetFraction <= 1`；本轮不设产品默认值。
+- `ReadAmplificationLimit` 为 int 且至少 1；`BaseBudgetPercent` 为 int 且在 1–100 之间（含端点）。
+  例如 `(3, 5)` 表示 3 倍、5%；本轮不设产品默认值。
 - `G=ΣB`、每个 Update 的 `N=H+D` 必须可表示为非负 long，使用 checked；溢出拒绝，不截断或饱和。
   所有行先验证，包括稍后会直接选择 Base 的 Update。
 - null 集合抛 `ArgumentNullException`；负数、未知枚举及参数越界抛 `ArgumentOutOfRangeException`；
@@ -153,7 +154,7 @@ Removes 和 ObjectHeadMap 模式仍由外层处理。不能仅用 Writes 生成�
 
 ## 5. 固定策略规则
 
-令 `α=ReadAmplificationLimit`、`f=BaseBudgetFraction`、`Q=floor(G*f)`。
+令 `α=ReadAmplificationLimit`、`p=BaseBudgetPercent`、`Q=floor(G*p/100)`。
 
 1. 所有 Insert 选择 Base。所有 `B<=D` 的 Update 选择 Base；这一判断使用估算口径，表示 Base
    预计不比 Delta 更大，不是对真实编码结果的保证。两类 Base 均不消耗 Q。
@@ -174,31 +175,24 @@ Remove 不参与 G；低放大的 NoChange 参与 G，但没有因此获得写�
 有限预算可能推迟处理，所以 α 不是所有对象的放大率硬上限；持续高优先级输入也可能使低优先级对象
 长期等待。本轮不新增硬峰值保证、自动拆对象或无饥饿保证。
 
-### 5.1 精确解释 decimal 参数
+### 5.1 整数参数与精确中间乘积
 
-严格比较和 floor 采用输入 decimal 值的精确十进制数学语义，而非先执行可能舍入的 decimal 乘法。
-将参数一次性取为整数系数 `c` 与尺度 `s`，值为 `c/10^s`：
+按用户修订，参数只表达整数倍数与整数百分比。无需 decimal 分解、BigInteger 或公开算术抽象：
 
-- 阈值比较：对非零 B 检查 `N*10^s > B*c`。
-- 预算：非负整数除法 `Q=(G*c)/10^s`。
-- 比率排序：处理零分母后，比较整数交叉积 `Nx*By` 与 `Ny*Bx`。
+- 阈值比较：对非零 B 检查 `N > (Int128)B * α`；零分母按第 5 节处理。
+- 预算：非负整数除法 `Q = (long)((Int128)G * p / 100)`。
+- 比率排序：处理零分母后，比较 `(Int128)Nx * By` 与 `(Int128)Ny * Bx`。
 
-未来实现直接使用 BCL `BigInteger` 完成这些局部运算，不公开 Rational 类型或算术接口，不先增加
-Int128 快路径。字节 DTO、总量及结果域仍为 long；BigInteger 只避免中间乘法溢出及 decimal 舍入。
+非负 long 的交叉积小于 `2^126`，long 与正 int 的乘积小于 `2^94`，均可由有符号 Int128 精确容纳。
+因此 Int128 是唯一需要的中间数值类型；字节 DTO、G、H+D 与预算仍为 long。
+G 与 H+D 的 checked 验证保留，不能用更宽的中间类型悄悄扩大其输入合同。
 
-本轮在本机 .NET decimal 与 BigInteger 对照中观察到两个反例：
-
-| 输入 | 精确结果 | 直接 decimal 乘法的结果 |
-|---|---|---|
-| B=7，H=9，D=1，α=1.4285714285714285714285714285 | 7α=9.9999999999999999999999999995，因此 N=10 有动机 | 7α 舍入为 10，错误地得到无动机 |
-| G=19，f=0.8947368421052631578947368421 | Gf=16.9999999999999999999999999999，因此 Q=16 | Gf 舍入为 17，floor 得到 17 |
-
-这两项是新设计需要保留的数值见证；现有 Probe 未在本轮修改，不能把其直接 decimal 运算当成
-这些边界的正确 oracle。上述算术规则不要求现在实现产品 selector。
+上一轮 decimal 舍入反例促成精确参数算术提案；用户明确不需要小数参数后，该提案被本节取代。
+原 Probe 参数与实现保持原样，不承担新产品整数 API 的兼容职责。
 
 ## 6. 一组完整例子与验证条件
 
-设 `α=3`、`f=0.25`：
+设 `α=3`、`p=25`：
 
 | ObjectId | Kind | B | D | H | 结果 |
 |---|---|---:|---:|---:|---|
@@ -212,7 +206,7 @@ G=400，Q=100。候选次序为 30、20；选择 30 后费用 80，20 会使费�
 Writes 为 `[(10,Base),(20,Delta),(30,Base),(40,Base)]`，对象 50 沿用旧 head。
 本次对象 payload 预计写入 140，大于 Q，但可选 Base 费用只有 80。
 
-未来最小 selector 切片须用独立预期值验证：
+最小 selector 切片用独立预期值验证：
 
 | 见证 | 必须观察到的结果 |
 |---|---|
@@ -222,13 +216,13 @@ Writes 为 `[(10,Base),(20,Delta),(30,Base),(40,Base)]`，对象 50 沿用旧 he
 | 预算取整、恰好放入、完整 B 费用 | floor 不四舍五入；恰好 Q 可以选；不用 B-D 计费 |
 | 首候选大于 Q；Q=0；首项 B=0 后接超预算对象 | 仅真正排序首项可单独超预算；零费用不重新获得例外 |
 | 中间候选装不下、后面有小对象 | 在中间项停止，不进行 backfill |
-| G=19 的精度见证 | NoChange(1,B=16,H=64)、NoChange(2,B=1,H=3)、Insert(3,B=2)，α=2；精确 Q=16，Writes 仅含 1 和 3 |
-| B=7 的精度见证及相等十进制值不同 scale | 前述 Update 必须选 Base；数值相等参数产生相同决策 |
-| long 级交叉积及参数最大值 | 比率排序不因中间乘法溢出；极大 α 不抛 decimal 乘法溢出 |
+| G=19、p=89 的 floor 见证 | NoChange(1,B=16,H=64)、NoChange(2,B=1,H=3)、Insert(3,B=2)，α=2；Q=16，Writes 仅含 1 和 3 |
+| 整数参数边界 | 倍数 1 和 int.MaxValue、百分比 1 和 100 可用；倍数 0、百分比 0/101 均拒绝 |
+| long 级交叉积及相近比率 | 比率排序不因中间乘法溢出或浮点近似而错误；大 G 的百分比预算也不溢出 |
 | 形状、重复/零 ID、负数、累计溢出 | 在返回 plan 前拒绝，不改输入；合法空集合返回空 Writes |
 | 重复规划与结果所有权 | 不消耗后续调用预算；结果集合不可写，调用后修改输入集合不改变已有 plan |
 
-这些是待实现的验收条件，不是当前产品测试覆盖声明；不需真实 serializer、payload buffer 或 RBF fixture。
+验收使用人工估算，不需真实 serializer、payload buffer 或 RBF fixture。
 
 ## 7. 设计分支裁决与暂缓项
 
@@ -243,7 +237,7 @@ Writes 为 `[(10,Base),(20,Delta),(30,Base),(40,Base)]`，对象 50 沿用旧 he
 | 输入 parent/token/plan ID | simplify 为调用方冻结视图 | 地址不能检测同 head 下对象改变；真实跨 Save、异步或导出计划消费者出现时重访 |
 | 按种类类型家族与工厂 | simplify 为一个值 DTO，Plan 统一验证 | 三种字段形状足够；不保留多入口的重复验证 |
 | int B/D + long H vs 全部 long | 主审选择 long | 审查有不同偏好；int 与现有单 Frame 长度一致，long 使估算层保持统一数值域。精确乘法本已需要，无须新增机制；不代表扩大存储能力 |
-| 普通 decimal 乘法 vs 精确参数数学语义 | keep 精确语义，使用私有整数运算 | 小数值反例已经改变阈值与 floor；不引入公开算术抽象 |
+| decimal 参数及 BigInteger vs 整数倍数/百分比 | 用户选择整数；删除 decimal 路径 | 实际调参精度只需 X 倍、Y%；Int128 足够容纳全部中间乘积 |
 | D>0 vs D>=0 | simplify 为允许已知零估算 | 不把 Probe 的 synthetic payload 约束带入估算 DTO；Update 写入义务保留 |
 | B-D 计费、backfill、硬预算、跨调用余额 | defer | 均改变已选择的策略；需新的产品行为要求和 workload 证据 |
 
@@ -251,12 +245,21 @@ Writes 为 `[(10,Base),(20,Delta),(30,Base),(40,Base)]`，对象 50 沿用旧 he
 ObjectHeadMap checkpoint 等映射冷读纵切；物理 Frame 成本等真实读测量；不可 Delta 的 Update 等具体 codec
 限制；public API 与程序集开放等真实外部调用方。均不作为本轮纯 selector 的前置条件。
 
-## 8. 最小后续施工边界
+## 8. 实施边界与证据入口
 
-获准实施后，先在现有 StateStore 项目加入本文 DTO、固定纯 selector 和本地参数算术，在现有
-[StateStore.Tests](../../tests/DurableGraph.StateStore.Tests/DurableGraph.StateStore.Tests.csproj)中验证第 6 节；
-按需增加测试 friend assembly。只以人工估算数据验证选择，不同时实现序列化或 Storage 内容格式。
-验证通过后再由真实 Save 消费者提供估算并消费 Writes；那一切片才确定估算生产、payload 写入和状态更新。
+本轮在现有 StateStore 项目加入
+[估算 DTO](../../src/DurableGraph.StateStore/ObjectSaveEstimate.cs)、
+[整数参数](../../src/DurableGraph.StateStore/ReadAmplificationBaseBudgetParameters.cs)、
+[只读计划](../../src/DurableGraph.StateStore/ObjectRepresentationPlan.cs)和
+[固定纯 selector](../../src/DurableGraph.StateStore/ReadAmplificationBaseBudgetPolicy.cs)，
+只为现有 StateStore.Tests 增加 friend assembly。
+[产品验收测试](../../tests/DurableGraph.StateStore.Tests/ReadAmplificationBaseBudgetPolicyTests.cs)使用独立预期值验证第 6 节。
+
+2026-09-05 集成验证：`dotnet build DurableGraph.slnx --no-restore` 成功（0 警告、0 错误）；
+StateStore、Storage、Serialization 三个测试项目分别通过 40、73、65 项，无失败或跳过。
+独立只读审查未发现阻断问题；验证范围是纯数值选择及既有底层回归。
+
+后续由真实 Save 消费者提供估算并消费 Writes；那一切片才确定估算生产、payload 写入和状态更新。
 
 当前 Storage wire、StateRevision 及其 API 均不因本设计改变；没有必要为运行纯 selector 先改 Storage。
 相邻总览见 [阶段 B 设计](../../experiments/MultiSegmentStateStoreProbe/STATESTORE-SUBSYSTEM-DESIGN.md)。

@@ -36,4 +36,4 @@
 | [DB-012](0012-two-leg-strategy-benchmark-arena.md) | TwoLeg 多策略 Benchmark Arena 的最小边界 | Deferred | TwoLeg 研究明确恢复并出现真实多策略或 hand-built artifact consumer |
 | [DB-013](0013-tiered-state-segments.md) | 按写入温度分片的双层 State segments | Deferred | TwoLeg 重启，或出现必须原子共存的独立 Hot/Cold placement consumer |
 | [DB-014](0014-multi-segment-backward-file-distance.md) | 多历史 Segment 与 BackwardFileDistance 地址 | Chosen | MultiSegment probe 的跨四文件恢复、reopen/fail-close 与 recovery-closure evidence |
-| [DB-015](0015-statestore-object-representation-policy.md) | StateStore 对象表示策略的估算 DTO 与保存计划 | Open | 用户已选 DTO 方向；具体契约待用户评审与纯 selector 验证，序列化接口等真实消费者 |
+| [DB-015](0015-statestore-object-representation-policy.md) | StateStore 对象表示策略的估算 DTO 与保存计划 | Chosen | 整数倍数/百分比的纯 selector 已落地；估算生产、序列化接口及 Save 接入等真实消费者 |

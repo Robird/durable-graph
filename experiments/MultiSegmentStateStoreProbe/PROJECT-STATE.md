@@ -1,6 +1,6 @@
 # MultiSegmentStateStoreProbe 活跃工作集
 
-> 状态：G0-G4 complete / Stage B membership head map and shared serialization leaf implemented
+> 状态：G0-G4 complete / Stage B membership head map, serialization leaf and estimate policy implemented
 >
 > 最近校准：2026-09-05
 
@@ -68,7 +68,7 @@ threshold 的 overshoot 上界依赖 one-Revision/one-Frame discipline，严格�
 ## 当前焦点
 
 阶段 A 已闭合并停止实现。用户已按
-[`STATESTORE-SUBSYSTEM-DESIGN.md`](STATESTORE-SUBSYSTEM-DESIGN.md) 启动阶段 B；产品侧现有空壳
+[`STATESTORE-SUBSYSTEM-DESIGN.md`](STATESTORE-SUBSYSTEM-DESIGN.md) 启动阶段 B；产品侧现有估算策略的
 `src/DurableGraph.StateStore`、已有首个纵切的 `src/DurableGraph.StateStore.Storage`，以及 BCL-only
 `src/DurableGraph.StateStore.Serialization`；三者均有配套 xUnit 项目，Serialization.Tests 当前有 65 个 cases。
 `DurableGraph.StateStore` 单向引用 `DurableGraph.StateStore.Storage`；Storage 再引用 BCL-only
@@ -98,10 +98,10 @@ payload record、自动 checkpoint policy、skip、published head/durability 或
 ## 近期 roadmap
 
 无阶段 A 后续实现项。Probe 保留为 executable specification；阶段 B 的 exact
-`{ObjectId -> FrameAddress}` enumeration 已闭合。用户已选择先设计估算 DTO → 稀疏写计划的固定
-ReadAmplificationBaseBudgetPolicy，具体契约建议见
-[DB-015](../../docs/design-branches/0015-statestore-object-representation-policy.md)，尚未实现。
-近期先用人工估算验证纯 selector，再由真实 ObjectVersion/Save consumer 接入估算、内容编码和提交；
+`{ObjectId -> FrameAddress}` enumeration 已闭合。估算 DTO → 稀疏写计划的固定
+ReadAmplificationBaseBudgetPolicy 已在现有 StateStore 中实现，采用整数 X 倍、Y% 参数，契约与测试入口见
+[DB-015](../../docs/design-branches/0015-statestore-object-representation-policy.md)。
+后续由真实 ObjectVersion/Save consumer 接入估算、内容编码和提交；
 序列化算法不再是策略验证的前置条件。只在真实内容 consumer 出现时决定是否加入
 `StateStore -> Serialization` 引用；不把 Probe 项目或 benchmark infrastructure 搬入产品程序集。
 
