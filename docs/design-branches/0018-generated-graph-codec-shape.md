@@ -6,6 +6,7 @@
 >
 > 当前阅读入口。取代 DB-017 中“string 字段 inline 值”和“容器身份尚未选择”的提案；
 > 图 codec 仍是设计草图；祖先 Schema/history 的元数据分片已进入产品实现，边界见 [DB-019](0019-schema-ancestry-implementation-slice.md)。
+> 随后 [DB-020](0020-typed-slot-array-binding-slice.md)落地 internal 值槽位和 SZ/rank-2 元素循环；本文引用上下文/SG body 仍为草图。
 
 本轮重点已收窄：祖先 Schema 不变性/版本传播、nominal 引用声明与 exact 对象类型、
 开放泛型/数组 codec 的运行时组合。用户已同意 nominal/exact 的区分，并要求基类变化时派生版本递增；
@@ -373,6 +374,11 @@ Write/VisitReferences 可采用相同 typed 签名原则；不因此强制统一
 元素循环不使用反射 GetValue/SetValue，也不逐元素装箱。这种组合不需要 DynamicMethod。
 Registry 登记的是有限的**受支持类型定义/构造符**，不是预先登记所有闭合组合。
 
+DB-020 已选择更小的底层接缝：ValueSlotCodec<T> 显式持有 typed Read/Write，直接创建绑定它的
+SZ/rank-2 元素模板。已有闭合 T 的地方不再反射；没有全局按 CLR Type 缓存可变 body，调用方复用 binding。
+primitive lookup 为固定 13 类型；开放 Cell<T> factory 的按需闭合是使用真实叶子原语的手写测试见证，
+尚无产品通用定义 registry、SG 泛型 body 或引用槽位。上面的含上下文 SlotCodec<T> 仍是后续形状。
+
 当前类型的 Write/Visit binding 可以按 CLR Type 缓存；存储历史读取则必须按 exact stored type/schema
 查对应 decoder，不能只按今天的 CLR Type 命中当前 codec。运行时 binding 不自动创造历史字段定义或升级器。
 注册集合先固定，成功构造后才发布 cache 项；不增加热注册、可变 placeholder 或失败后修补框架。
@@ -453,8 +459,8 @@ object/interface 槽位里的 boxed primitive/struct 具有引用身份，不能
 - 写出不新增身份；失配引用/损坏 payload 不返回半成品图；保存视图约束明确。
 
 Base/Middle/Leaf 三层 Schema/history 版本传播由 DB-019 分片实施，
-下一候选验证开放泛型 body + runtime binding + SZ/MD ref 元素路径；
-随后用**含 string 引用的小对象图**验证统一身份和实际字节。BCL 集合明确暂缓。
+DB-020 又验证显式提供的泛型值 body + runtime binding + SZ/rank-2 ref 元素路径；
+下一候选让实际 SG body 消费该机制，并用**含 string 引用的小对象图**验证统一身份和实际字节。BCL 集合明确暂缓。
 这样首个 string 消费者就不会走已被取代的字段 inline 路径。
 与 ObjectVersion 存取、增量策略、SchemaStore 的产品接入顺序仍按下一份明确施工边界裁决，
 不在本次讨论中实现完整 framework 或长期 wire。
@@ -463,10 +469,11 @@ Base/Middle/Leaf 三层 Schema/history 版本传播由 DB-019 分片实施，
 
 当前产品保留 primitive byte leaf、membership Storage、估算策略和 scalar boxed schema/history 路径，
 并新增 DB-019 的 SchemaOnly 继承元数据：声明层字段、精确祖先、历史查询与发布闭包校验。
-默认 serializer 路径仍限制 sealed/direct DurableBase；本篇 struct/继承/泛型/数组 codec 草图尚未实现。
+默认 serializer 路径仍限制 sealed/direct DurableBase；本篇 struct/继承/泛型 SG body 尚未实现。
+DB-020 的内部值槽位和数组元素循环不处理对象头、shape、分配或图身份，也没有扩大 Schema kind。
 
-本轮用户已授权规划并实施下一个分片，落实范围为 DB-019。完整 Deserialize、图身份恢复、
-开放泛型 codec 与旧 IL 后端翻新仍待后续工作；BCL 集合继续暂缓。
+用户先后授权的实现范围见 DB-019 与 DB-020。完整 Deserialize、图身份恢复、
+开放泛型生成器与旧 IL 后端翻新仍待后续工作；BCL 集合继续暂缓。
 
 材料：[产品工作集](../../src/PROJECT-STATE.md)、
 [目标设计](../DurableGraph-target-design-v0.md)、

@@ -39,5 +39,6 @@
 | [DB-015](0015-statestore-object-representation-policy.md) | StateStore 对象表示策略的估算 DTO 与保存计划 | Chosen | 整数倍数/百分比的纯 selector 已落地；估算生产、序列化接口及 Save 接入等真实消费者 |
 | [DB-016](0016-next-product-object-content-slice.md) | 策略之后的下一块对象内容纵切 | Chosen | 用户选择 codec-first；整体引用图与生成器形状见 DB-018 |
 | [DB-017](0017-object-codec-design-points.md) | 对象 codec 设计要点与逐项决策草稿 | Superseded | 整体模型转 DB-018；保留 scalar 要点和 Robird 证据，旧 string 字段 inline 方案已取代 |
-| [DB-018](0018-generated-graph-codec-shape.md) | 统一引用身份、TypeCodec 与生成式 Serializer 形状 | Open | DB-019 已落地祖先元数据；类型绑定、具体 codec/静态设施仍待后续分片 |
+| [DB-018](0018-generated-graph-codec-shape.md) | 统一引用身份、TypeCodec 与生成式 Serializer 形状 | Open | DB-019/020 落地祖先元数据及值槽位/数组元素机制；生成式图 codec 尚未实施 |
 | [DB-019](0019-schema-ancestry-implementation-slice.md) | 祖先 Schema/history 产品分片 | Chosen | SchemaOnly 元数据闭环；继承 serializer 与 binary codec 另片推进 |
+| [DB-020](0020-typed-slot-array-binding-slice.md) | typed 值槽位与数组元素 binding 分片 | Chosen | primitive/ref 槽位及 SZ/rank-2 元素循环；SG body 与完整数组对象 codec 另片推进 |

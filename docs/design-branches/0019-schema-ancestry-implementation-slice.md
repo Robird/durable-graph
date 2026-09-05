@@ -56,4 +56,4 @@ FieldId 在声明层内唯一；`Fields` 只描述本层，祖先通过 `BaseSch
 - `git diff --check` 通过；产品工作集、DB-018、分叉索引、package 说明与笔记已校准。
 
 本片未修改 Storage/Serialization，也未将 SchemaOnly 元数据误记为继承序列化能力。
-保留开工前未提交文档；本次未执行 Git 提交。
+保留开工前未提交文档；本片与前序设计工作集随后一起提交为 `29a4704`。

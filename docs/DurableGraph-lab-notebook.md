@@ -70,7 +70,8 @@
 - **Decided**：Generator 生成一个线性 read-time coordinator：入口只有一次 version switch，各 case decode 对应 Snapshot 后以 `goto SnapshotVnReady` 进入共享的顺序相邻边；ordinary struct 与 required partial `void UpgradeV1ToV2(in old, out next)` 契约不变。runtime historical binding/upgrade registry 继续暂缓。
 - **Tentative**：快速原型的 local real build 自动 append checked-in Snapshot History；CI/design-time 只读，单 writer/单 TargetFramework/串行发布。显式 Accept target 记录为竞争分支。
 - **Observed**：上述 local publish/CI verify 快速原型已由包内 `build/*.props/targets` 和 `DurableGraph.Build` 落地；其工作流已实现，但 snapshot 格式和发布模型仍是可替换的原型边界。
-- **Decided**：继续关闭 durable 领域继承；FieldId 展平、base private field access 和 leaf version coupling 独立记录在 DB-005。
+- **Observed**：DB-019 已为显式 SchemaOnly 开放同编译领域继承的元数据/history；默认 boxed serializer 仍关闭领域继承。
+  声明层 FieldId 与 exact base 传播已选定，继承 payload/private body/升级仍待后续分片。
 - **Observed**：EXP-011 已跑通 fixture-only 单类型 Graph Delta 语义探针；逻辑 baseline 是带 RootId 的 flat ID table，每项保存 current Snapshot 与 `RequiresRewrite`，未引入 bytes、持久 head 或正式 DurableId。
 - **Observed**：EXP-012 已跑通 isolated generated graph operations；caller-provided `TIdentity : struct` 只是一条 test seam，未引入正式 DurableId、Reference TypeTag 或产品 Generator 支持。
 - **Decided**：当前不把 self-reference 半接入 scalar-only Schema History/boxed Serializer；默认 `DurableSchemaGenerator` 继续 DG0007 fail closed，R3a/R3b 均留在 test-only logical graph。
@@ -779,6 +780,20 @@
 
 ## 6. 船长日志
 
+### 2026-09-05：落地 typed slot 与数组元素 binding
+
+- **Decided**：按下一分片实施授权选择 [DB-020](design-branches/0020-typed-slot-array-binding-slice.md)，
+  在现有 Serialization leaf 闭合值槽位/数组元素机制；先不同时引入 string 引用表与 SG 历史 body。
+- **Observed**：internal ValueSlotCodec<T> 持 typed ref 读写委托，13 种 primitive 复用字节原语；char 保留 UInt16 code unit。
+  已闭合 slot 直接创建 SZ/rank-2 模板，实际数组只在入口精确验证/强转，元素循环直接传 ref。
+  每个 binding 保留调用方指定的 body，无 Type-only 全局缓存，无额外反射或逐元素装箱。
+- **Observed**：真实字节见证在运行时闭合手写 Cell<T> 工厂：Cell<Cell<int>> 的同一 body 操作 local、字段、
+  SZ 和非零下界二维元素，保留未触碰的嵌套成员；另测 Cell<double> NaN 位保持。
+  数组 extreme bounds 覆盖 int.MinValue 下界与 int.MaxValue 上界；坏输入保持约定的部分修改边界。
+- **Boundary**：只写已有数组的元素，未编码 shape/ID/类型头或分配对象；SG body、泛型 Schema、
+  引用上下文与历史 binary decoder 尚未实现。下一候选是让实际生成代码消费此 byte/slot 机制。
+- 上一批祖先实现和设计工作集已提交为 `29a4704`；本片的最终构建、测试与审查证据见 DB-020。
+
 ### 2026-09-05：完成祖先 Schema/history 产品分片
 
 - 按用户规划并实施下一分片的授权，选择 [DB-019](design-branches/0019-schema-ancestry-implementation-slice.md)：
@@ -790,7 +805,7 @@
 - 主代理最终根 build 0 warnings / 0 errors；DurableGraph.Tests 224/224（基线 147/147），无跳过；
   diff check 与文档链接检查通过。独立审查无阻塞项，两个无效祖先过滤反例已补齐。
 - 下一候选为基础 typed body 与 runtime 泛型/数组 binding。完整图 codec、继承 payload/升级、跨程序集继承与 BCL 集合未进入本片。
-  代码与原先文档修改均未提交；产品工作集仍为 src/PROJECT-STATE.md。
+  代码与原先文档修改随后提交为 `29a4704`；产品工作集仍为 src/PROJECT-STATE.md。
 
 ### 2026-09-05：祖先 Schema 校验与泛型 codec 按需组合
 
