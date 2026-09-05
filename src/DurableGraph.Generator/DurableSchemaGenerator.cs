@@ -12,7 +12,7 @@ using Microsoft.CodeAnalysis.Text;
 namespace Atelia.DurableGraph.Generator;
 
 [Generator(LanguageNames.CSharp)]
-public sealed class DurableSchemaGenerator : IIncrementalGenerator {
+public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
     private const string DurableTypeAttributeMetadataName =
         "Atelia.DurableGraph.DurableTypeAttribute";
     private const string DurableFieldAttributeMetadataName =
@@ -34,7 +34,7 @@ public sealed class DurableSchemaGenerator : IIncrementalGenerator {
     internal static readonly DiagnosticDescriptor InvalidTypeShape = new(
         id: "DG0001",
         title: "Invalid durable type shape",
-        messageFormat: "Type '{0}' must be a sealed, top-level, non-generic, non-record partial class that directly inherits Atelia.DurableGraph.DurableBase",
+        messageFormat: "Type '{0}' must be a top-level, non-generic, non-record partial class; legacy serializer types must also be sealed and directly inherit Atelia.DurableGraph.DurableBase",
         category: "DurableGraph.Generator",
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true);
@@ -223,6 +223,11 @@ public sealed class DurableSchemaGenerator : IIncrementalGenerator {
         }
 
         validTypes = RemoveDuplicateSchemaIds(context, validTypes);
+        validTypes = ValidateSchemaOnlyChains(context, validTypes);
+
+        if (!ValidateHistoryClosure(context, history)) {
+            return;
+        }
 
         if (validTypes.Count > 0 || types.Count == 0) {
             string manifestSource = RenderSnapshotManifest(validTypes)
@@ -233,8 +238,11 @@ public sealed class DurableSchemaGenerator : IIncrementalGenerator {
         }
 
         if (validTypes.Count > 0) {
+            List<DurableTypeModel> legacyTypes = validTypes.FindAll(static type => !IsSchemaOnly(type.Symbol));
             List<DurableSnapshotTypeModel> snapshotTypes =
-                ValidateAndCreateSnapshotTypes(context, validTypes, history);
+                ValidateAndCreateSnapshotTypes(context, legacyTypes, history);
+
+            GenerateSchemaOnly(context, validTypes, history);
 
             if (snapshotTypes.Count > 0) {
                 string generatedSource = RenderSource(snapshotTypes)
@@ -353,7 +361,7 @@ public sealed class DurableSchemaGenerator : IIncrementalGenerator {
 
             if (StringComparer.Ordinal.Equals(previous.SchemaId, current.SchemaId) &&
                 previous.Version == current.Version &&
-                !HaveSameFields(previous.Fields, current.Fields)) {
+                !HaveSameShape(previous, current)) {
                 context.ReportDiagnostic(Diagnostic.Create(
                     ConflictingSnapshotHistory,
                     CreateAdditionalFileLocation(current.Path),
@@ -413,8 +421,23 @@ public sealed class DurableSchemaGenerator : IIncrementalGenerator {
 
         List<SnapshotFieldModel> fields = new(lines.Length - 5);
         int previousFieldId = 0;
+        SchemaReference? baseSchema = null;
+        int firstFieldLine = 4;
+        if (lines[4].StartsWith("// base:", StringComparison.Ordinal)) {
+            string record = lines[4].Substring("// base:".Length);
+            int separator = record.IndexOf('|');
+            if (separator <= 0 || separator != record.LastIndexOf('|') ||
+                !TryDecodeSchemaId(record.Substring(0, separator), out string? baseId) ||
+                !TryParsePositiveCanonicalInt(record.Substring(separator + 1), out int baseVersion)) {
+                error = "the base must contain a canonical UTF-8 base64 schema ID and positive canonical version";
+                return false;
+            }
 
-        for (int index = 4; index < lines.Length - 1; index++) {
+            baseSchema = new SchemaReference(baseId!, baseVersion);
+            firstFieldLine++;
+        }
+
+        for (int index = firstFieldLine; index < lines.Length - 1; index++) {
             const string FieldPrefix = "// field:";
             string line = lines[index];
 
@@ -447,7 +470,8 @@ public sealed class DurableSchemaGenerator : IIncrementalGenerator {
             file.Path,
             schemaId!,
             version,
-            fields);
+            fields,
+            baseSchema);
         error = null;
         return true;
     }
@@ -515,6 +539,17 @@ public sealed class DurableSchemaGenerator : IIncrementalGenerator {
             bool hasErrors = false;
             List<SnapshotVersionModel> versions = new();
 
+            foreach (SnapshotHistoryModel entry in history) {
+                if (StringComparer.Ordinal.Equals(entry.SchemaId, currentType.SchemaId) && entry.BaseSchema.HasValue) {
+                    context.ReportDiagnostic(Diagnostic.Create(
+                        InvalidSchemaAncestry, GetSourceLocation(currentType.Symbol),
+                        currentType.Symbol.ToDisplayString(QualifiedNameFormat),
+                        "the legacy serializer cannot consume history with a base schema; use SchemaOnly"));
+                    hasErrors = true;
+                    break;
+                }
+            }
+
             for (int version = 1; version < currentType.Version; version++) {
                 List<SnapshotHistoryModel> matches = FindHistory(
                     history,
@@ -532,7 +567,7 @@ public sealed class DurableSchemaGenerator : IIncrementalGenerator {
                     break;
                 }
 
-                if (!AllHaveSameFields(matches)) {
+                if (!AllHaveSameShape(matches)) {
                     hasErrors = true;
                     break;
                 }
@@ -550,8 +585,9 @@ public sealed class DurableSchemaGenerator : IIncrementalGenerator {
                 currentType.Fields);
 
             if (currentHistory.Count > 0 &&
-                (!AllHaveSameFields(currentHistory) ||
-                    !HaveSameFields(currentHistory[0].Fields, currentFields))) {
+                (!AllHaveSameShape(currentHistory) ||
+                    !HaveSameFields(currentHistory[0].Fields, currentFields) ||
+                    currentHistory[0].BaseSchema.HasValue)) {
                 context.ReportDiagnostic(Diagnostic.Create(
                     CurrentSnapshotMismatch,
                     GetSourceLocation(currentType.Symbol),
@@ -606,9 +642,9 @@ public sealed class DurableSchemaGenerator : IIncrementalGenerator {
         return result;
     }
 
-    private static bool AllHaveSameFields(List<SnapshotHistoryModel> history) {
+    private static bool AllHaveSameShape(List<SnapshotHistoryModel> history) {
         for (int index = 1; index < history.Count; index++) {
-            if (!HaveSameFields(history[0].Fields, history[index].Fields)) {
+            if (!HaveSameShape(history[0], history[index])) {
                 return false;
             }
         }
@@ -695,10 +731,9 @@ public sealed class DurableSchemaGenerator : IIncrementalGenerator {
             hasErrors = true;
         }
 
-        hasErrors |= ReportReservedSerializerNameCollisions(
-            context,
-            type,
-            typeName);
+        hasErrors |= IsSchemaOnly(type)
+            ? ReportSchemaOnlyNameCollisions(context, type)
+            : ReportReservedSerializerNameCollisions(context, type, typeName);
 
         List<IFieldSymbol> fields = GetDirectFields(type);
         List<DurableFieldModel> durableFields = new();
@@ -803,6 +838,10 @@ public sealed class DurableSchemaGenerator : IIncrementalGenerator {
     private static bool HasSupportedTypeShape(
         INamedTypeSymbol type,
         System.Threading.CancellationToken cancellationToken) {
+        if (IsSchemaOnly(type)) {
+            return HasSchemaOnlyTypeShape(type, cancellationToken);
+        }
+
         if (type.TypeKind != TypeKind.Class ||
             type.IsRecord ||
             type.IsAbstract ||
@@ -1027,6 +1066,13 @@ public sealed class DurableSchemaGenerator : IIncrementalGenerator {
                 .AppendLine(Convert.ToBase64String(StrictUtf8.GetBytes(type.SchemaId)));
             source.Append("// version:")
                 .AppendLine(type.Version.ToString(CultureInfo.InvariantCulture));
+            SchemaReference? baseSchema = GetCurrentBaseReference(type.Symbol);
+            if (baseSchema.HasValue) {
+                source.Append("// base:")
+                    .Append(Convert.ToBase64String(StrictUtf8.GetBytes(baseSchema.Value.SchemaId)))
+                    .Append('|')
+                    .AppendLine(baseSchema.Value.Version.ToString(CultureInfo.InvariantCulture));
+            }
 
             foreach (DurableFieldModel field in type.Fields) {
                 source.Append("// field:")
@@ -1683,11 +1729,13 @@ public sealed class DurableSchemaGenerator : IIncrementalGenerator {
             string path,
             string schemaId,
             int version,
-            List<SnapshotFieldModel> fields) {
+            List<SnapshotFieldModel> fields,
+            SchemaReference? baseSchema = null) {
             Path = path;
             SchemaId = schemaId;
             Version = version;
             Fields = fields;
+            BaseSchema = baseSchema;
         }
 
         public string Path { get; }
@@ -1697,6 +1745,8 @@ public sealed class DurableSchemaGenerator : IIncrementalGenerator {
         public int Version { get; }
 
         public List<SnapshotFieldModel> Fields { get; }
+
+        public SchemaReference? BaseSchema { get; }
     }
 
     private readonly struct SnapshotVersionModel {

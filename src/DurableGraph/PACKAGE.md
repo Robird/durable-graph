@@ -14,7 +14,25 @@ and `DurableGraphHistoryMode` (`Publish`, `Verify`, or `Off`). Keep generated `.
 under source control. `Off` is intended only for diagnostics and isolated experiments because it
 removes the automatic history gate.
 
-When a durable type advances beyond version 1, the Generator emits required private partial
+In the default serializer mode, when a durable type advances beyond version 1, the Generator emits required private partial
 adjacent handlers such as `UpgradeV1ToV2(in oldValue, out newValue)`. Generated deserialization
 can read a known historical version, validate its exact Schema, run the static adjacent chain, and
 return the current object. Loading does not rewrite stored state; only a later explicit Save does.
+
+For schema metadata without a serializer, opt in with `[DurableType("example.base", 1, SchemaOnly = true)]`.
+This mode supports a same-compilation inheritance chain of top-level, non-generic partial classes,
+including abstract classes. Every domain class in the chain must opt in, with the root deriving
+directly from `DurableBase`. Each declaration owns its own FieldId space. `Schema.Fields` describes
+that declaration; `Schema.BaseSchema` binds its exact immutable ancestor layout.
+
+The Generator supplies `Schema` and `GetSchema(int version)` in this mode. The latter returns cached
+metadata for versions 1 through the current version, including the historical base chain; other
+versions throw `ArgumentOutOfRangeException`. It does not generate a `Serializer`, payload snapshots,
+or upgrade handlers. The supported field kinds remain bool, int, long, and string.
+
+Changing an exact base binding requires an explicit version increase in its derived class and then
+in each affected descendant. Accepted `.dgsnapshot` history retains the old base binding. Generator
+and publisher both validate that history has a complete, conflict-free ancestor chain. History v1
+records may include a canonical `// base:<base64-schema-id>|<version>` line after the version line;
+records without a base retain their existing representation. This is a provisional metadata format,
+not the object graph payload format.

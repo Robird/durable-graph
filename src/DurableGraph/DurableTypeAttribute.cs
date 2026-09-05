@@ -26,4 +26,10 @@ public sealed class DurableTypeAttribute : Attribute {
     public string SchemaId { get; }
 
     public int Version { get; }
+
+    /// <summary>
+    /// Generates schema metadata and exact version history without the prototype boxed serializer.
+    /// All durable types in an inheritance chain must explicitly select this mode.
+    /// </summary>
+    public bool SchemaOnly { get; set; }
 }

@@ -8,7 +8,7 @@ public sealed class InMemorySchemaStore {
     private readonly Dictionary<SchemaKey, DurableSchema> _schemas = new();
 
     /// <summary>
-    /// Registers a schema or returns the previously registered equivalent instance.
+    /// Registers a schema and its ancestors, or returns the previously registered equivalent instance.
     /// </summary>
     /// <exception cref="SchemaConflictException">
     /// The same schema identity and version is already registered with a different shape.
@@ -16,18 +16,24 @@ public sealed class InMemorySchemaStore {
     public DurableSchema Register(DurableSchema schema) {
         ArgumentNullException.ThrowIfNull(schema);
 
-        SchemaKey key = new(schema.SchemaId, schema.Version);
-
-        if (_schemas.TryGetValue(key, out DurableSchema? registeredSchema)) {
-            if (registeredSchema.Equals(schema)) {
-                return registeredSchema;
+        List<DurableSchema> chain = new();
+        for (DurableSchema? candidate = schema; candidate is not null; candidate = candidate.BaseSchema) {
+            SchemaKey key = new(candidate.SchemaId, candidate.Version);
+            if (_schemas.TryGetValue(key, out DurableSchema? registeredSchema) &&
+                !registeredSchema.Equals(candidate)) {
+                throw new SchemaConflictException(registeredSchema, candidate);
             }
 
-            throw new SchemaConflictException(registeredSchema, schema);
+            chain.Add(candidate);
         }
 
-        _schemas.Add(key, schema);
-        return schema;
+        // Validate the complete chain before publishing any new schema.
+        for (int index = chain.Count - 1; index >= 0; index--) {
+            DurableSchema candidate = chain[index];
+            _schemas.TryAdd(new SchemaKey(candidate.SchemaId, candidate.Version), candidate);
+        }
+
+        return _schemas[new SchemaKey(schema.SchemaId, schema.Version)];
     }
 
     /// <summary>

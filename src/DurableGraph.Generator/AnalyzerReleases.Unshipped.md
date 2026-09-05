@@ -21,3 +21,4 @@ DG0014 | DurableGraph.Generator | Error | Missing snapshot history
 DG0015 | DurableGraph.Generator | Error | Current snapshot history mismatch
 DG0016 | DurableGraph.Generator | Error | Reserved snapshot member collision
 DG0017 | DurableGraph.Generator | Error | Duplicate durable schema ID
+DG0019 | DurableGraph.Generator | Error | Invalid durable schema ancestry

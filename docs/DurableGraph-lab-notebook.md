@@ -779,6 +779,79 @@
 
 ## 6. 船长日志
 
+### 2026-09-05：完成祖先 Schema/history 产品分片
+
+- 按用户规划并实施下一分片的授权，选择 [DB-019](design-branches/0019-schema-ancestry-implementation-slice.md)：
+  `SchemaOnly=true` 显式生成同编译继承链的 Schema/GetSchema 元数据，不生成 boxed Serializer、payload Snapshot 或 Upgrade。
+- DurableSchema 的 Fields 按声明层编号，BaseSchema 携带 immutable exact 祖先；内存 Store 先整链校验再登记。
+  Generator/history/publisher 将 exact base 纳入 shape，并要求 accepted history 自身闭合，不能由当前候选补缺。
+- SG → 发布 → 历史 → 再生成 → runtime 的三层见证验证：基类升级逐层拒绝未升版的派生类，全部升版后通过；
+  旧 Leaf 仍绑定旧 Middle/Base，旧 CLR 基类移出当前源码也不改变旧链。默认 serializer/upgrade 回归保持通过。
+- 主代理最终根 build 0 warnings / 0 errors；DurableGraph.Tests 224/224（基线 147/147），无跳过；
+  diff check 与文档链接检查通过。独立审查无阻塞项，两个无效祖先过滤反例已补齐。
+- 下一候选为基础 typed body 与 runtime 泛型/数组 binding。完整图 codec、继承 payload/升级、跨程序集继承与 BCL 集合未进入本片。
+  代码与原先文档修改均未提交；产品工作集仍为 src/PROJECT-STATE.md。
+
+### 2026-09-05：祖先 Schema 校验与泛型 codec 按需组合
+
+- **Decided**：用户认可祖先布局属于 exact Schema，基类变化要求派生版本递增；
+  同意 nominal 引用声明与 exact 对象头的区分，明确暂缓 BCL 集合支持。
+- **Observed**：当前 Schema/equality/history/publisher 都只包含本层 fields；生成器禁止领域继承。
+  增强需同时覆盖直接 exact base、历史保存与跨层校验，不只是修改 DurableSchema。
+- **Draft**：[DB-018](design-branches/0018-generated-graph-codec-shape.md)新增三层版本传播见证及
+  SG 开放泛型 body + runtime typed binding 方案；局部 DynamicMethod 用于数组形状仍可选，完整 IL 后端未选定。
+- **Observed**：主审复跑内存 C# 见证，.NET 10.0.9 下 runtime 闭合 generic struct array，
+  typed delegate 经 ref Reader/ref 元素读入 [17,29]、消费 8 bytes，无 Reflection.Emit。
+  仅证明组合机制，没有新增产品实现或修改旧项目；
+  [完整复跑代码](design-branches/0018-runtime-binding-witness.md)已保存。
+
+### 2026-09-05：统一引用图与生成器形状
+
+- **Decided**：用户明确所有受支持引用对象按引用相等统一编号，包含 string、数组和 BCL 容器；
+  string 成员写 ID、字符串对象 body 写内容，保留图内 ReferenceEquals 关系，取代旧字段 inline 值方案。
+  struct 值嵌套、class base-first；引用对象头用可组合 TypeCodec 表达实际类型。
+- **Draft**：[DB-018](design-branches/0018-generated-graph-codec-shape.md)起草 typed
+  VisitReferences/Write/Read、引用收集/封闭表、对象边界分派、allocation prefix/填充及类型绑定；
+  三路独立审查未发现阻断问题。继承分段及版本传播、泛型执行闭包、boxed 值等仍待定。
+- **Observed**：参考 StateJournal TypeCodec 当前只有有限类型的 postfix 解码，不包含新稿的
+  arrays/custom SchemaRef，也不自动生成 codec。当前产品仍不具备上述新图能力，本轮仅修订文档。
+
+### 2026-09-05：产品开发工作集迁入 src
+
+- **Decided**：采纳用户指出的上下文归属问题，把产品跨程序集进展集中到
+  [src/PROJECT-STATE.md](../src/PROJECT-STATE.md)，根 AGENTS.md 提供导航；
+  使用 src 共同父目录覆盖 core/Generator/StateStore/Storage/Serialization 及对应测试。
+- **Changed**：MultiSegment Probe 的工作集收缩为自身完成状态、边界和证据入口，
+  README 转链产品工作集。设计分支保存讨论，笔记保存历史，不再在旧 Probe 重复维护产品 roadmap。
+
+### 2026-09-05：选择 primitive-first codec 并建立设计讨论稿
+
+- **Decided / Updated**：用户接受 codec-first；从支持的 CLR 基础类型开始。最初 string 字段 inline
+  的提案随后由 DB-018 的统一引用身份取代，仍不做内容相等的 symbol 合并。
+  Durable 相互/循环引用、SG 循环逐元素 ref accessor 的数组、按内容重建的 BCL 容器列为后续能力。
+- **Tentative**：[DB-017](design-branches/0017-object-codec-design-points.md)给出可逐项确认的草稿：
+  类型名单、位/字符串语义、Base 布局、accessor、冻结/读失败，以及未来 identity、数组形状和 comparer。
+  用户随后澄清 ref 主要用于 struct codec 共用字段/数组元素槽位；K4 改为分离 Write/Read 的 typed
+  值 codec，共享遍历降为实现选项。inline 容器与独立 identity 不能从“按内容保存”自动推导。
+- **Observed**：现有 byte primitives 已覆盖更多标量，但 Schema 与 history parser 仍只支持四种 tag；
+  扩大类型范围必须同步接线。本轮仅更新文档，未实现 codec 或未来容器支持。
+- **Observed**：两路只读审查用户提供的 Robird 旧实现，确认字段取地址与数组 ref/out 元素复用
+  struct body handler，读写协议分开。吸纳槽位/内容职责划分、外层 shape 与原地填充机制；
+  不移植 DynamicMethod、旧 wire 或默认 equality 的实例表。备份有注释草稿和未实现入口，未构建/运行。
+- **Tentative**：底层 byref 读入不自动保证槽位回滚；建议由外层未发布 Snapshot/对象/数组
+  承担失败隔离，不要求每层 struct 都复制暂存。具体签名和其他设计项继续等待用户逐项反馈。
+
+### 2026-09-05：比较策略之后的对象内容纵切
+
+- **Observed**：策略已提交 `c8a98dc`；重新核对源码，历史 Snapshot 积累、partial Upgrade 声明与
+  运行时升级链已进入主项目，业务转换函数体仍手写。现有 serializer 只产出 boxed 字段字典，
+  Storage 仍为 membership-only；DurableGraph.Tests 本轮 147/147 通过。
+- **Decided**：三路独立分析及交叉质询后，[DB-016](design-branches/0016-next-product-object-content-slice.md)
+  的 codec-first 方向随后获用户接受，类型范围转 DB-017 具体讨论。raw Base-only 存储是可交换次序的
+  备选，审查保留 storage-first 偏好；ObjectVersion 内容仍是后续接入目标。
+- **Open**：生成代码的 Serialization 原语可见性和 consumer/package 引用是实际接线点；
+  首片不预设引用/继承展平、Delta、binary history、SchemaHash 或完整 Save。本轮未新增产品实现。
+
 ### 2026-09-05：落地估算驱动的固定对象表示策略
 
 - **Decided**：采用用户选定的 DTO → plan 边界，MVP 不预设可替换策略或 Estimate/Write 序列化接口。

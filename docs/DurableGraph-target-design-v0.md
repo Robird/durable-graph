@@ -5,6 +5,12 @@
 > 工作名：`Atelia.DurableGraph`  
 > 本文性质：记录目标、核心不变量、原型切片与待验证问题；不是当前实现事实，也不意味着所有 API 已冻结。
 
+2026-09-05 校准：用户选择所有受支持引用对象（含 string、数组、BCL 容器）统一引用身份，
+值成员嵌套布局、class base-first、对象头 TypeCodec。生成器/静态设施的当前草图见
+[DB-018](design-branches/0018-generated-graph-codec-shape.md)，产品进度见 [src/PROJECT-STATE.md](../src/PROJECT-STATE.md)。
+祖先 Schema/history 的 metadata 分片已由 [DB-019](design-branches/0019-schema-ancestry-implementation-slice.md)落地；
+继承 payload、泛型/数组 codec 与图恢复仍是后续目标。
+
 ---
 
 ## 1. 背景与动机
@@ -151,6 +157,9 @@ DurableGraph 更接近：
 - 可以被多个对象共享引用，也可以参与循环图。
 - 修改后只产生自己的新 object version；引用它的父对象若引用身份未变，不必重写。
 
+统一 identity 的范围还包括受支持 string/数组/BCL 容器；这些对象不必继承有 ID 字段的基类，
+外层映射可以保存其身份。string 内容相等不合并实例，引用成员只保存 ID，字符串记录自己保存内容。
+
 ### 6.2 Durable Value
 
 - 没有独立持久身份，按值嵌入 owner payload。
@@ -240,6 +249,7 @@ internal static CharacterState Upgrade(CharacterStateV1 old, UpgradeContext cont
 - `TypeId`
 - `SchemaVersion`
 - CLR binding hint（仅用于诊断或当前实现绑定，不作为长期身份）
+- 直接基类的 exact Schema 绑定（递归闭合祖先布局）
 - durable member 列表
 - 每个 member 的稳定 `MemberId`
 - value/reference/artifact/transient 分类
@@ -260,7 +270,8 @@ SchemaHash 不能依赖：
 - AssemblyVersion、MVID 等构建偶然值；
 - 当前进程随机化 hash。
 
-成员应按稳定 `MemberId` 规范排序。字符串编码、整数编码、TypeId 表达和空值规则必须固定。
+成员应在声明 Schema 段内按稳定 `MemberId` 规范排序；基类按 exact 绑定组合，不能取当前 latest 定义。
+基类 exact 绑定改变要求受影响的派生类显式递增版本。字符串编码、整数编码、TypeId 表达和空值规则必须固定。
 
 ### 8.3 Source Generator 的职责
 
@@ -362,15 +373,12 @@ Source Generator 为每个 durable type 生成：
 
 ### 10.3 集合语义
 
-首个原型不要声称支持任意 CLR collection 的所有 identity 语义。应先明确：
+用户已选择受支持引用类型统一 identity，包含普通 BCL 容器、数组和 string；
+相同实例的共享关系及循环属于恢复目标，不因“按内容保存”变成字段内嵌副本。
+BCL adapter 保存和重建内容，不能序列化 bucket/capacity 等内部实现来替代内容合同。
 
-- 哪些集合按 durable value 内嵌；
-- 哪些集合本身是有身份的 durable node；
-- 是否允许两个字段共享同一个普通 `List<T>` 实例；
-- 通过 collection 形成循环引用时如何处理；
-- 字典 comparer 和元素顺序是否属于 durable semantics。
-
-可优先支持简单、无 ChangeTracker 的 `DurableList<T>` / `DurableDictionary<TKey,TValue>`，或为一组受控 BCL collection 生成 adapter。重点是验证保存时比较，而不是第一版覆盖所有容器。
+具体支持哪些容器、comparer、元素顺序以及依赖尚未恢复字段的 key，仍须按类型裁决，
+不能因此声称已支持任意 CLR collection。分配壳、引用登记、内容填充和索引重建的形状见 DB-018。
 
 ## 11. 保存时对象图比较
 
@@ -440,6 +448,7 @@ StateStore 当前选定的多历史 Segment 地址、rollover、OVD/ObjectVersio
 [`MultiSegmentStateStoreProbe/TARGET-DESIGN.md`](../experiments/MultiSegmentStateStoreProbe/TARGET-DESIGN.md)。
 正式子系统分层和产品化入口见
 [`STATESTORE-SUBSYSTEM-DESIGN.md`](../experiments/MultiSegmentStateStoreProbe/STATESTORE-SUBSYSTEM-DESIGN.md)。
+产品当前进展统一维护在 [src/PROJECT-STATE.md](../src/PROJECT-STATE.md)。
 本节只保留 DurableGraph 全局职责，不重复冻结该探针的 provisional 类型与 wire。
 
 保存：
@@ -837,7 +846,7 @@ Source Generator、DynamicMethod、不同 .NET 版本或不同构建配置产生
 
 1. `DurableId` 的物理编码与跨 Repository 语义。
 2. 强制 `DurableObject` 基类，还是允许 attribute + generated interface。
-3. 普通 BCL collections 的 identity/inline 规则。
+3. 受支持 BCL collections 的内容/comparer/重建合同（统一 identity 方向已选）。
 4. State 历史版本默认立即升级，还是允许活对象共存。
 5. ArtifactAddress 采用 content address、append address 或二者组合。
 6. SchemaStore 与 StateStore 是否共享底层 segment/frame。

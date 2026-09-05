@@ -37,11 +37,8 @@ adaptive-r3-b5pct: W=2436 P=424 F=692 R/L=11044/2418 DeltaRef=1139 BaseRef=1796 
 
 canonical runner 的 rollover threshold 是 512 bytes；`F > 512` 是 crossing append 被允许后留下的预期
 观测，不是 hard-bound violation。这些是原始观测，不是 score、rank 或 winner 声明。阶段 A 到 G4 已完成并
-冻结；阶段 B 已建立 `DurableGraph.StateStore -> DurableGraph.StateStore.Storage`，并让 Storage 同时引用
-BCL-only `DurableGraph.StateStore.Serialization` 与 `RbfSegmentStore`。`FrameAddress`、membership-only
-`StateRevision`、provisional canonical wire 与真实 RBF/Segment append/read/reopen 已落地；Storage wire 已共用
-Serialization 的 internal primitive/adaptive-string substrate，既有 v1 golden bytes 保持不变。StateStore 尚无
-ObjectVersion consumer，因而暂不直接引用 Serialization；自动 checkpoint 与正式 wire compatibility 也未实现。
+冻结。阶段 B 产品项目的当前能力、待定设计与下一步统一维护在
+[src/PROJECT-STATE.md](../../src/PROJECT-STATE.md)。
 
 运行：
 
@@ -49,8 +46,8 @@ ObjectVersion consumer，因而暂不直接引用 Serialization；自动 checkpo
 dotnet test experiments\MultiSegmentStateStoreProbe\MultiSegmentStateStoreProbe.slnx
 ```
 
-当前决策、roadmap 和未闭合事项见 [`PROJECT-STATE.md`](PROJECT-STATE.md)，地址路线见
+本 Probe 的完成状态与证据导航见 [`PROJECT-STATE.md`](PROJECT-STATE.md)，地址路线见
 [`DB-014`](../../docs/design-branches/0014-multi-segment-backward-file-distance.md)。阶段 A（In-Memory
 Probe，G0-G4）的目标与关键不变量以 [`TARGET-DESIGN.md`](TARGET-DESIGN.md) 为主入口；真实
-filesystem/RBF 与产品化只记录在 [`STATESTORE-SUBSYSTEM-DESIGN.md`](STATESTORE-SUBSYSTEM-DESIGN.md)。
+filesystem/RBF 与产品化的早期分层讨论保留在 [`STATESTORE-SUBSYSTEM-DESIGN.md`](STATESTORE-SUBSYSTEM-DESIGN.md)。
 已完成的阶段 A 施工边界与验证要求保留在 [`GOAL-G0-G4.md`](GOAL-G0-G4.md)。

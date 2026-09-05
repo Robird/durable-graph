@@ -17,20 +17,30 @@ internal sealed class SnapshotHistoryTool {
                 "published 0 snapshot(s); 0 already exact");
         }
 
-        Directory.CreateDirectory(historyDirectory);
-        Dictionary<SnapshotKey, ExistingSnapshot> existing = LoadHistory(historyDirectory);
+        Dictionary<SnapshotKey, ExistingSnapshot> existing = Directory.Exists(historyDirectory)
+            ? LoadHistory(historyDirectory)
+            : new Dictionary<SnapshotKey, ExistingSnapshot>();
+        Dictionary<SnapshotKey, SnapshotRecord> available = existing.ToDictionary(
+            pair => pair.Key, pair => pair.Value.Snapshot);
+
+        foreach (SnapshotRecord candidate in candidates) {
+            if (available.TryGetValue(candidate.Key, out SnapshotRecord? historical) &&
+                !candidate.ShapeEquals(historical)) {
+                throw new SnapshotHistoryException(
+                    $"history conflicts with manifest for schema '{candidate.SchemaId}' version {candidate.Version}");
+            }
+
+            available[candidate.Key] = candidate;
+        }
+
+        ValidateClosure(available);
         List<PendingSnapshot> pending = new();
         int unchangedCount = 0;
 
         foreach (SnapshotRecord candidate in candidates) {
             SnapshotKey key = candidate.Key;
 
-            if (existing.TryGetValue(key, out ExistingSnapshot? historical)) {
-                if (!candidate.ShapeEquals(historical.Snapshot)) {
-                    throw new SnapshotHistoryException(
-                        $"history conflicts with manifest for schema '{candidate.SchemaId}' version {candidate.Version}");
-                }
-
+            if (existing.ContainsKey(key)) {
                 unchangedCount++;
                 continue;
             }
@@ -46,6 +56,8 @@ internal sealed class SnapshotHistoryTool {
 
             pending.Add(new PendingSnapshot(destinationPath, canonicalContent));
         }
+
+        Directory.CreateDirectory(historyDirectory);
 
         foreach (PendingSnapshot snapshot in pending) {
             PublishCreateOnly(snapshot);
@@ -112,7 +124,30 @@ internal sealed class SnapshotHistoryTool {
                 new ExistingSnapshot(actualFileName, snapshot));
         }
 
+        // Accepted history must close by itself. A current candidate cannot repair it.
+        ValidateClosure(snapshots.ToDictionary(pair => pair.Key, pair => pair.Value.Snapshot));
         return snapshots;
+    }
+
+    private static void ValidateClosure(IReadOnlyDictionary<SnapshotKey, SnapshotRecord> snapshots) {
+        foreach (SnapshotRecord snapshot in snapshots.Values) {
+            HashSet<string> ancestors = new(StringComparer.Ordinal) { snapshot.SchemaId };
+            SnapshotRecord current = snapshot;
+
+            while (current.BaseSchema is SnapshotKey baseKey) {
+                if (!ancestors.Add(baseKey.SchemaId)) {
+                    throw new SnapshotHistoryException(
+                        $"schema '{snapshot.SchemaId}' version {snapshot.Version} repeats ancestor schema '{baseKey.SchemaId}'");
+                }
+
+                if (!snapshots.TryGetValue(baseKey, out SnapshotRecord? baseSchema)) {
+                    throw new SnapshotHistoryException(
+                        $"schema '{current.SchemaId}' version {current.Version} is missing base schema '{baseKey.SchemaId}' version {baseKey.Version}");
+                }
+
+                current = baseSchema;
+            }
+        }
     }
 
     private static void PublishCreateOnly(PendingSnapshot snapshot) {
@@ -155,6 +190,7 @@ internal static class SnapshotDocument {
     private const string SnapshotEnd = "// snapshot-end";
     private const string SchemaIdPrefix = "// schema-id-base64:";
     private const string VersionPrefix = "// version:";
+    private const string BasePrefix = "// base:";
     private const string FieldPrefix = "// field:";
 
     internal static readonly UTF8Encoding Utf8NoBom = new(
@@ -258,6 +294,22 @@ internal static class SnapshotDocument {
                 ref index,
                 VersionPrefix);
             int version = ParsePositiveCanonicalInt(path, versionText, "version");
+            SnapshotKey? baseSchema = null;
+
+            if (index < lines.Length && lines[index].StartsWith(BasePrefix, StringComparison.Ordinal)) {
+                string baseText = lines[index].Substring(BasePrefix.Length);
+                int separator = baseText.IndexOf('|');
+
+                if (separator <= 0 || separator != baseText.LastIndexOf('|')) {
+                    throw Invalid(path, $"line {index + 1} has an invalid base entry");
+                }
+
+                baseSchema = new SnapshotKey(
+                    DecodeSchemaId(path, baseText.Substring(0, separator)),
+                    ParsePositiveCanonicalInt(path, baseText.Substring(separator + 1), "base version"));
+                index++;
+            }
+
             List<SnapshotField> fields = new();
             int previousFieldId = 0;
 
@@ -299,7 +351,7 @@ internal static class SnapshotDocument {
             }
 
             index++;
-            snapshots.Add(new SnapshotRecord(schemaId, schemaIdBase64, version, fields));
+            snapshots.Add(new SnapshotRecord(schemaId, schemaIdBase64, version, fields, baseSchema));
         }
 
         if (requireExactlyOneSnapshot && snapshots.Count != 1) {
@@ -437,6 +489,13 @@ internal static class SnapshotDocument {
         builder.Append(VersionPrefix)
             .AppendLine(snapshot.Version.ToString(CultureInfo.InvariantCulture));
 
+        if (snapshot.BaseSchema is SnapshotKey baseSchema) {
+            builder.Append(BasePrefix)
+                .Append(Convert.ToBase64String(Utf8NoBom.GetBytes(baseSchema.SchemaId)))
+                .Append('|')
+                .AppendLine(baseSchema.Version.ToString(CultureInfo.InvariantCulture));
+        }
+
         foreach (SnapshotField field in snapshot.Fields) {
             builder.Append(FieldPrefix)
                 .Append(field.FieldId.ToString(CultureInfo.InvariantCulture))
@@ -462,11 +521,13 @@ internal sealed class SnapshotRecord {
         string schemaId,
         string schemaIdBase64,
         int version,
-        IReadOnlyList<SnapshotField> fields) {
+        IReadOnlyList<SnapshotField> fields,
+        SnapshotKey? baseSchema = null) {
         SchemaId = schemaId;
         SchemaIdBase64 = schemaIdBase64;
         Version = version;
         Fields = fields;
+        BaseSchema = baseSchema;
     }
 
     public string SchemaId { get; }
@@ -477,10 +538,12 @@ internal sealed class SnapshotRecord {
 
     public IReadOnlyList<SnapshotField> Fields { get; }
 
+    public SnapshotKey? BaseSchema { get; }
+
     public SnapshotKey Key => new(SchemaId, Version);
 
     public bool ShapeEquals(SnapshotRecord other) {
-        return Fields.SequenceEqual(other.Fields);
+        return BaseSchema == other.BaseSchema && Fields.SequenceEqual(other.Fields);
     }
 }
 

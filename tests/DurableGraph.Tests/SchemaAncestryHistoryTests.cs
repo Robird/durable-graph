@@ -1,0 +1,218 @@
+using System.Text;
+using Atelia.DurableGraph.Build;
+
+namespace Atelia.DurableGraph.Tests;
+
+public sealed class SchemaAncestryHistoryTests {
+    [Fact]
+    public void BaseRecordHasCanonicalGoldenBytesAndRoundTrips() {
+        using Fixture fixture = new();
+        SnapshotRecord snapshot = Record("Leaf", 2, new("基类", 3));
+        string expected = "// durable-graph-snapshot:1\n// snapshot-begin\n" +
+            "// schema-id-base64:TGVhZg==\n// version:2\n// base:5Z+657G7|3\n" +
+            "// field:1|2\n// snapshot-end\n";
+
+        Assert.Equal(expected, SnapshotDocument.RenderHistory(snapshot));
+        SnapshotRecord parsed = SnapshotDocument.ParseHistory(fixture.Write("record.dgsnapshot", expected));
+        Assert.Equal(snapshot.Key, parsed.Key);
+        Assert.True(snapshot.ShapeEquals(parsed));
+        Assert.Equal(new SnapshotKey("基类", 3), parsed.BaseSchema);
+    }
+
+    [Fact]
+    public void NoBaseRecordRetainsOriginalBytes() {
+        Assert.Equal(
+            "// durable-graph-snapshot:1\n// snapshot-begin\n// schema-id-base64:QmFzZQ==\n" +
+            "// version:1\n// field:1|2\n// snapshot-end\n",
+            SnapshotDocument.RenderHistory(Record("Base", 1)));
+    }
+
+    [Fact]
+    public void ThreeLevelsRequireExplicitVersionPropagationAndKeepHistoricalBindings() {
+        using Fixture fixture = new();
+        SnapshotRecord base1 = Record("Base", 1);
+        SnapshotRecord middle1 = Record("Middle", 1, base1.Key);
+        SnapshotRecord leaf1 = Record("Leaf", 1, middle1.Key);
+        fixture.Publish(leaf1, middle1, base1);
+        string[] initial = fixture.HistoryContents();
+        SnapshotRecord base2 = Record("Base", 2, fieldType: 3);
+        SnapshotRecord middle2 = Record("Middle", 2, base2.Key);
+        SnapshotRecord leaf2 = Record("Leaf", 2, middle2.Key);
+
+        Assert.Throws<SnapshotHistoryException>(() => fixture.Publish(
+            base2, Record("Middle", 1, base2.Key), leaf1));
+        Assert.Equal(initial, fixture.HistoryContents());
+        Assert.Throws<SnapshotHistoryException>(() => fixture.Publish(
+            base2, middle2, Record("Leaf", 1, middle2.Key)));
+        Assert.Equal(initial, fixture.HistoryContents());
+
+        Assert.Equal("published 3 snapshot(s); 0 already exact", fixture.Publish(leaf2, middle2, base2).Message);
+        Assert.Equal("published 0 snapshot(s); 3 already exact", fixture.Publish(base2, middle2, leaf2).Message);
+        Assert.Equal("verified 3 current snapshot(s) against 6 history snapshot(s)",
+            fixture.Verify(leaf2, base2, middle2).Message);
+        SnapshotRecord[] accepted = Directory.GetFiles(fixture.History).Select(SnapshotDocument.ParseHistory).ToArray();
+        Assert.Equal(base1.Key, Assert.Single(accepted, row => row.Key == middle1.Key).BaseSchema);
+        Assert.Equal(middle1.Key, Assert.Single(accepted, row => row.Key == leaf1.Key).BaseSchema);
+    }
+
+    [Fact]
+    public void CandidateCanReferenceAcceptedBaseWithoutRepeatingItInManifest() {
+        using Fixture fixture = new();
+        SnapshotRecord base1 = Record("Base", 1);
+        fixture.Publish(base1);
+        SnapshotRecord leaf = Record("Leaf", 1, base1.Key);
+
+        Assert.Equal("published 1 snapshot(s); 0 already exact", fixture.Publish(leaf).Message);
+        Assert.Equal("verified 1 current snapshot(s) against 2 history snapshot(s)", fixture.Verify(leaf).Message);
+    }
+
+    [Theory]
+    [InlineData(null, 1)]
+    [InlineData(1, null)]
+    [InlineData(1, 2)]
+    public void SameVersionCannotAddRemoveOrChangeBaseBinding(int? oldBaseVersion, int? newBaseVersion) {
+        using Fixture fixture = new();
+        fixture.Publish(Record("Base", 1), Record("Base", 2), Record("Leaf", 1,
+            oldBaseVersion is int oldVersion ? new SnapshotKey("Base", oldVersion) : null));
+        SnapshotRecord changed = Record("Leaf", 1,
+            newBaseVersion is int newVersion ? new SnapshotKey("Base", newVersion) : null);
+        string[] before = fixture.HistoryContents();
+
+        Assert.Throws<SnapshotHistoryException>(() => fixture.Publish(Record("Independent", 1), changed));
+        Assert.Throws<SnapshotHistoryException>(() => fixture.Verify(changed));
+        Assert.Equal(before, fixture.HistoryContents());
+    }
+
+    [Fact]
+    public void MissingCandidateAncestorFailsBeforeAnyFilesAreCreated() {
+        using Fixture fixture = new();
+        SnapshotHistoryException exception = Assert.Throws<SnapshotHistoryException>(() => fixture.Publish(
+            Record("Independent", 1), Record("Leaf", 1, new("Missing", 7))));
+
+        Assert.Contains("missing base schema 'Missing' version 7", exception.Message);
+        Assert.False(Directory.Exists(fixture.History));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void CandidateCannotRepairIncompleteAcceptedHistory(bool verify) {
+        using Fixture fixture = new();
+        SnapshotRecord missingBase = Record("Base", 1);
+        SnapshotRecord leaf = Record("Leaf", 1, missingBase.Key);
+        fixture.WriteAccepted(leaf);
+        string[] before = fixture.HistoryContents();
+
+        SnapshotHistoryException exception = Assert.Throws<SnapshotHistoryException>(() => {
+            if (verify) {
+                fixture.Verify(missingBase, leaf);
+            } else {
+                fixture.Publish(missingBase, leaf);
+            }
+        });
+
+        Assert.Contains("missing base schema 'Base' version 1", exception.Message);
+        Assert.Equal(before, fixture.HistoryContents());
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public void RepeatedAncestorIdentityIsRejectedEvenAcrossVersions(bool accepted, bool differentVersions) {
+        using Fixture fixture = new();
+        SnapshotRecord first = Record("First", 1, new("Second", 1));
+        SnapshotRecord second = Record("Second", 1, new("First", differentVersions ? 2 : 1));
+        SnapshotRecord[] records = differentVersions ? [first, second, Record("First", 2)] : [first, second];
+
+        if (accepted) {
+            foreach (SnapshotRecord record in records) {
+                fixture.WriteAccepted(record);
+            }
+        }
+
+        string[] before = fixture.HistoryContents();
+        SnapshotHistoryException exception = Assert.Throws<SnapshotHistoryException>(() => fixture.Publish(records));
+        Assert.Contains("repeats ancestor schema", exception.Message);
+        Assert.Equal(before, fixture.HistoryContents());
+
+        if (accepted) {
+            Assert.Throws<SnapshotHistoryException>(() => fixture.Verify(records));
+        }
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("QmFzZQ==")]
+    [InlineData("QmFzZQ==|1|2")]
+    [InlineData("|1")]
+    [InlineData("QmFzZQ==|0")]
+    [InlineData("QmFzZQ==|01")]
+    [InlineData("QmFzZQ==|+1")]
+    [InlineData("QmFzZQ==|2147483648")]
+    [InlineData("QmFzZQ==|")]
+    [InlineData("QmFzZQ== |1")]
+    [InlineData("QmFzZR==|1")]
+    [InlineData("/w==|1")]
+    [InlineData("IA==|1")]
+    public void MalformedBaseEntryIsRejected(string entry) {
+        using Fixture fixture = new();
+        string text = Manifest(Record("Leaf", 1)).Replace(
+            "// version:1\n", $"// version:1\n// base:{entry}\n", StringComparison.Ordinal);
+        string path = fixture.Write("invalid.g.cs", text);
+
+        Assert.Throws<SnapshotHistoryException>(() => SnapshotDocument.ParseManifest(path));
+    }
+
+    [Theory]
+    [InlineData("// base:QmFzZQ==|1\n// base:QmFzZQ==|1\n// field:1|2\n")]
+    [InlineData("// field:1|2\n// base:QmFzZQ==|1\n")]
+    public void DuplicateOrMisplacedBaseEntryIsRejected(string body) {
+        using Fixture fixture = new();
+        string text = Manifest(Record("Leaf", 1)).Replace("// field:1|2\n", body, StringComparison.Ordinal);
+
+        Assert.Throws<SnapshotHistoryException>(() => SnapshotDocument.ParseManifest(fixture.Write("invalid.g.cs", text)));
+    }
+
+    private static SnapshotRecord Record(string id, int version, SnapshotKey? baseSchema = null, int fieldType = 2) {
+        return new SnapshotRecord(id, Convert.ToBase64String(Encoding.UTF8.GetBytes(id)), version,
+            [new SnapshotField(1, fieldType)], baseSchema);
+    }
+
+    private static string Manifest(params SnapshotRecord[] records) {
+        return "// durable-graph-snapshot-manifest:1\n" + string.Concat(records.Select(record =>
+            SnapshotDocument.RenderHistory(record).Replace("// durable-graph-snapshot:1\n", "", StringComparison.Ordinal)));
+    }
+
+    private sealed class Fixture : IDisposable {
+        private readonly string _root = Path.Combine(Path.GetTempPath(), "Atelia.DurableGraph.Tests", Guid.NewGuid().ToString("N"));
+        private readonly SnapshotHistoryTool _tool = new();
+
+        public Fixture() => Directory.CreateDirectory(_root);
+
+        public string History => Path.Combine(_root, "history");
+
+        public string Write(string name, string text) {
+            string path = Path.Combine(_root, name);
+            File.WriteAllText(path, text, SnapshotDocument.Utf8NoBom);
+            return path;
+        }
+
+        public SnapshotHistoryResult Publish(params SnapshotRecord[] records) => _tool.Publish(Write("manifest.g.cs", Manifest(records)), History);
+
+        public SnapshotHistoryResult Verify(params SnapshotRecord[] records) => _tool.Verify(Write("manifest.g.cs", Manifest(records)), History);
+
+        public void WriteAccepted(SnapshotRecord record) {
+            Directory.CreateDirectory(History);
+            string content = SnapshotDocument.RenderHistory(record);
+            File.WriteAllText(Path.Combine(History, SnapshotDocument.GetHistoryFileName(record, content)), content, SnapshotDocument.Utf8NoBom);
+        }
+
+        public string[] HistoryContents() => Directory.Exists(History)
+            ? Directory.GetFiles(History).Order(StringComparer.Ordinal).Select(path => Path.GetFileName(path) + "\n" + File.ReadAllText(path)).ToArray()
+            : [];
+
+        public void Dispose() => Directory.Delete(_root, recursive: true);
+    }
+}
