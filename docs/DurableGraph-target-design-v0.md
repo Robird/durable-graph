@@ -10,7 +10,8 @@
 [DB-018](design-branches/0018-generated-graph-codec-shape.md)，产品进度见 [src/PROJECT-STATE.md](../src/PROJECT-STATE.md)。
 祖先 Schema/history 的 metadata 分片已由 [DB-019](design-branches/0019-schema-ancestry-implementation-slice.md)落地；
 typed 值槽位与 SZ/rank-2 元素循环已由 [DB-020](design-branches/0020-typed-slot-array-binding-slice.md)落地；
-继承 payload、SG 泛型 body、完整数组对象 codec 与图恢复仍是后续目标。
+[DB-021](design-branches/0021-generated-primitive-body-slice.md)已生成当前 bool/int/long class 的继承分段 body；
+历史 binary decoder、SG 泛型 body、完整数组对象 codec 与图恢复仍是后续目标。
 
 ---
 

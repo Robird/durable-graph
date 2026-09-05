@@ -2,20 +2,24 @@ using System.Buffers.Binary;
 
 namespace Atelia.DurableGraph.StateStore.Serialization;
 
-internal ref struct BinaryPayloadReader {
+/// <summary>
+/// Reads canonical payload primitives. Generated bodies share this cursor by reference;
+/// callers own the payload boundary and any partially populated target after a failure.
+/// </summary>
+public ref struct BinaryPayloadReader {
     private ReadOnlySpan<byte> _remaining;
     private readonly int _initialLength;
 
-    internal BinaryPayloadReader(ReadOnlySpan<byte> source) {
+    public BinaryPayloadReader(ReadOnlySpan<byte> source) {
         _remaining = source;
         _initialLength = source.Length;
     }
 
-    internal int ConsumedCount => _initialLength - _remaining.Length;
-    internal int RemainingCount => _remaining.Length;
-    internal bool End => _remaining.IsEmpty;
+    public int ConsumedCount => _initialLength - _remaining.Length;
+    public int RemainingCount => _remaining.Length;
+    public bool End => _remaining.IsEmpty;
 
-    internal void EnsureFullyConsumed() {
+    public void EnsureFullyConsumed() {
         if (!End) {
             throw new InvalidDataException(
                 $"Expected end of payload, but {RemainingCount} trailing byte(s) remain.");
@@ -35,7 +39,7 @@ internal ref struct BinaryPayloadReader {
 
     internal sbyte ReadSByte() => unchecked((sbyte)ReadByte());
 
-    internal bool ReadBoolean() {
+    public bool ReadBoolean() {
         if (_remaining.IsEmpty) {
             throw new EndOfStreamException(
                 "Binary payload is truncated while reading a Boolean.");
@@ -75,13 +79,13 @@ internal ref struct BinaryPayloadReader {
         return value;
     }
 
-    internal int ReadInt32() {
+    public int ReadInt32() {
         int value = CanonicalVarInt.ReadInt32(_remaining, out int consumed);
         _remaining = _remaining[consumed..];
         return value;
     }
 
-    internal long ReadInt64() {
+    public long ReadInt64() {
         long value = CanonicalVarInt.ReadInt64(_remaining, out int consumed);
         _remaining = _remaining[consumed..];
         return value;

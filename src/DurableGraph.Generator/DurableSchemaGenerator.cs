@@ -211,7 +211,8 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
         List<DurableTypeModel> validTypes = new(types.Count);
         List<SnapshotHistoryModel> history = ParseSnapshotHistory(
             context,
-            snapshotHistoryFiles);
+            snapshotHistoryFiles,
+            out bool historyParsedSuccessfully);
 
         foreach (INamedTypeSymbol type in types) {
             context.CancellationToken.ThrowIfCancellationRequested();
@@ -242,7 +243,8 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
             List<DurableSnapshotTypeModel> snapshotTypes =
                 ValidateAndCreateSnapshotTypes(context, legacyTypes, history);
 
-            GenerateSchemaOnly(context, validTypes, history);
+            List<DurableTypeModel> schemaOnlyTypes = GenerateSchemaOnly(context, validTypes, history);
+            GenerateBinaryBodies(context, validTypes, schemaOnlyTypes, historyParsedSuccessfully);
 
             if (snapshotTypes.Count > 0) {
                 string generatedSource = RenderSource(snapshotTypes)
@@ -323,7 +325,9 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
 
     private static List<SnapshotHistoryModel> ParseSnapshotHistory(
         SourceProductionContext context,
-        ImmutableArray<SnapshotText> files) {
+        ImmutableArray<SnapshotText> files,
+        out bool valid) {
+        valid = true;
         List<SnapshotHistoryModel> history = new(files.Length);
 
         foreach (SnapshotText file in files) {
@@ -332,6 +336,7 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
             if (TryParseSnapshotHistory(file, out SnapshotHistoryModel model, out string? error)) {
                 history.Add(model);
             } else {
+                valid = false;
                 context.ReportDiagnostic(Diagnostic.Create(
                     MalformedSnapshotHistory,
                     CreateAdditionalFileLocation(file.Path),
@@ -362,6 +367,7 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
             if (StringComparer.Ordinal.Equals(previous.SchemaId, current.SchemaId) &&
                 previous.Version == current.Version &&
                 !HaveSameShape(previous, current)) {
+                valid = false;
                 context.ReportDiagnostic(Diagnostic.Create(
                     ConflictingSnapshotHistory,
                     CreateAdditionalFileLocation(current.Path),

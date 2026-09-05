@@ -2,7 +2,7 @@
 
 > 最近校准：2026-09-05
 >
-> 状态：StateStore 基础切片、估算策略、SchemaOnly 祖先元数据及 typed slot/数组元素分片已实现；生成式图 codec 尚未实施。
+> 状态：StateStore 基础切片、估算策略、祖先元数据、typed slot/数组元素及 SG 标量 class body 已实现；图 codec 尚未实施。
 >
 > 范围：src 中的产品项目及对应 tests。本文是共享上下文与导航，不是实现授权或功能规格。
 
@@ -16,7 +16,9 @@
 当前形状草图见 [DB-018](../docs/design-branches/0018-generated-graph-codec-shape.md)，
 祖先 Schema/history 分片已按本轮实现授权落地，范围见 [DB-019](../docs/design-branches/0019-schema-ancestry-implementation-slice.md)。
 typed 值槽位与 SZ/rank-2 元素循环已落地，范围见 [DB-020](../docs/design-branches/0020-typed-slot-array-binding-slice.md)。
-下一候选是让真实 SG body 消费字节/槽位边界；用户明确暂缓 BCL 集合内容支持。
+实际 SG body 已按 [DB-021](../docs/design-branches/0021-generated-primitive-body-slice.md)接入字节边界：
+显式启用的 SchemaOnly class 支持 bool/int/long，直接静态调用并组合祖先段。
+下一候选是扩展 Schema 基础类型，或接 string 引用上下文；用户明确暂缓 BCL 集合内容支持。
 完整图和旧运行时序列化器翻新仍未实施。
 [DB-017](../docs/design-branches/0017-object-codec-design-points.md)保留早期要点/旧实现证据；
 其 string 字段 inline 方案已被取代。codec-first 排序依据见 DB-016。
@@ -26,13 +28,14 @@ typed 值槽位与 SZ/rank-2 元素循环已落地，范围见 [DB-020](../docs/
 | 项目 | 已有能力及边界 |
 |---|---|
 | [DurableGraph](DurableGraph/DurableGraph.csproj) | immutable DurableSchema 含 exact BaseSchema 链；内存 SchemaStore 整链预检再登记；保留 boxed serializer/state demo，非持久图 Store |
-| [Generator](DurableGraph.Generator/DurableGraph.Generator.csproj) / [Build](DurableGraph.Build/DurableGraph.Build.csproj) | 默认路径保留 typed Snapshot/相邻 Upgrade；显式 SchemaOnly 支持同编译领域继承的 Schema/GetSchema 历史元数据，history/publisher 验证祖先闭包与版本传播 |
+| [Generator](DurableGraph.Generator/DurableGraph.Generator.csproj) / [Build](DurableGraph.Build/DurableGraph.Build.csproj) | 默认路径保留 typed Snapshot/相邻 Upgrade；SchemaOnly 支持祖先元数据/history；额外 GenerateBinaryBody 生成当前 bool/int/long class body，直接 primitive/base-first，无历史 binary decoder |
 | [StateStore](DurableGraph.StateStore/DurableGraph.StateStore.csproj) | 固定 ReadAmplificationBaseBudgetPolicy：全部 post-live 估算 → 稀疏只读 Base/Delta 写计划；无内容执行/完整 Save |
 | [Storage](DurableGraph.StateStore.Storage/DurableGraph.StateStore.Storage.csproj) | immutable membership StateRevision、canonical provisional wire、真实 RBF/Segment append/read/reopen、exact-head shallow live map；无 ObjectVersion payload |
 | [Serialization](DurableGraph.StateStore.Serialization/DurableGraph.StateStore.Serialization.csproj) | BCL-only 字节原语/string 内容 codec、显式 body 的 typed slot、SZ/rank-2 元素 ref 循环；primitive slot 查表仅为测试共享工具，尚无数组对象 envelope 或对象级 Base/Delta |
 
 当前产品依赖为 StateStore → Storage → Serialization，Storage 另用 RbfSegmentStore/Rbf 与地址基础类型。
-DurableGraph runtime/package 尚未接入 Serialization；实际 generated-code 消费者出现时才建立必要引用与可见性。
+DurableGraph runtime/package 已引用 Serialization；Reader/Writer 类型、构造、bool/int/long 和 reader 边界 API
+对下游公开，其余原语与 typed slot/数组模板仍 internal。单一 runtime PackageReference 能取得传递依赖。
 默认 Schema/历史工具目前只支持 bool/int/long/string 四种 kind，不能把新增 slot 类型清单视为 Schema 支持。
 位于 Generator 源码中的 graph operations generator 仍是未注册 probe，不能当成产品图能力。
 
@@ -60,8 +63,10 @@ DurableGraph runtime/package 尚未接入 Serialization；实际 generated-code 
 2. 已闭合 internal ValueSlotCodec<T> 的 primitive 与调用方显式复合 body；绑定对象直接创建 SZ/rank-2 typed 模板，
    无需数组层反射或全局 Type cache。运行时闭合 Cell<T>/Cell<Cell<int>> 的工厂目前是手写测试见证。
    rank-2 元素循环支持已有数组的非零下界；shape 编码/分配、其他 rank/非 SZ rank-1 尚未实现。
-3. 下一候选接真实 SG primitive body 与含 string 引用的小对象图，扩展必要 Schema/生成器能力；
-   首个 string 消费者采用统一身份，不能继续实现旧字段 inline 路径。
+3. 已闭合真实 SG primitive class body：SchemaOnly + GenerateBinaryBody 整链显式启用；
+   当前只支持 bool/int/long，private 字段按声明层 base-first/FieldId 排序，读取已有对象。
+   下一候选扩充 Schema primitive kinds，或为首个 string 消费者接统一引用上下文及小图；
+   struct 还需 inline exact Schema 表达。不能继续实现旧 string 字段 inline 路径。
 4. 接入真实 ObjectVersion 内容存取；raw Base-only 是小范围候选。codecs 与 raw storage 没有硬性先后依赖，
    当前按用户已选择的 codec-first 推进。
 5. 根据真实消费者收敛 Delta、原始版本链、B/D/H 的来源与提交更新，再接策略和 Save。
@@ -73,9 +78,9 @@ DurableGraph runtime/package 尚未接入 Serialization；实际 generated-code 
 
 - Schema 层基础类型扩充、boxed 值、空字符串独立实例分配。测试共享 slot 工具覆盖 13 种：
   bool、byte/sbyte、short/ushort、int/uint、long/ulong、char（UInt16 code unit）、Half、float、double；浮点位保持。
-- SG 定义的 body 生成/注册与 exact historical binding；slot 组合不能代替 Schema 校验。
-- 继承 payload/升级与跨程序集 helper 可见性；声明层 FieldId、祖先闭包/history 校验已由 DB-019 落地。
-- 带引用上下文的 codec 签名、编码 revision 归属、计数策略和 generated-code 原语公开边界。
+- SG 当前标量 class body 已实现；body 注册与 exact historical binding 尚未实现，历史 metadata 不是 decoder。
+- 带引用的继承 payload/历史升级与跨程序集继承 helper 可见性；当前标量继承 body 仅支持同编译领域链。
+- 带引用上下文的 codec 签名、编码 revision 归属和计数策略；当前消费者所需的 primitive 公开边界已落地。
 - 底层原地读入与外层未发布结果的失败隔离；一般 struct 支持不能从 byref 机制自动推导。
 - 多态引用、数组 shape/wire/分配；容器统一 identity 原则保留，comparer/key 恢复暂缓讨论。
 - ObjectVersion record/codec 绑定、H 恢复及 baseline 更新、ObjectHeadMap checkpoint。
@@ -99,11 +104,13 @@ DurableGraph runtime/package 尚未接入 Serialization；实际 generated-code 
 - 恢复时先读根 AGENTS.md 和本文，再读 DB-018；DB-017 是 superseded 的探索记录，不恢复其旧 string 字段 inline 方案。
 - 用户已授权自主按需提交；上一批工作集迁移、DB-016–019 与祖先实现已提交为 `29a4704`。
   DB-020 是其后的实现分片；准确提交与工作区状态以 git log/status 为准。
-- Schema/history 增强已完成；新增 Deserialize 目前仅为值槽位/已有数组元素原地读入。
-  SchemaOnly 是当前可用的 metadata 入口，不生成 Serializer、typed payload Snapshot 或 Upgrade。
+- Schema/history 增强已完成；新增读取包括值槽位/已有数组元素及生成的当前标量 class body 原地读入。
+  SchemaOnly 默认仍是 metadata 入口；额外 GenerateBinaryBody 只生成 internal 静态 helper，
+  不生成 Serializer、typed payload Snapshot 或 Upgrade。
   history v1 的可选 base 行与运行时 BaseSchema 都是原型形状；GetHashCode 不是持久 SchemaHash。
-- 下一推荐闭环是实际 SG body 消费已有 byte/slot 机制。原语/slot 仍为 internal；跨程序集开放需随消费者实施。
-  DB-020 不提供成员发现、引用上下文、通用泛型注册或历史 decoder；不能声称已生成 struct serializer。
+- 实际 SG body 消费 byte 机制已由 DB-021 完成，已知成员不经过 slot 委托/Type 查表。
+  body 不含对象头、分配或 exact runtime 类型分派；失败可留下已填字段，外层负责布局匹配和发布隔离。
+  引用上下文、通用泛型注册及历史 decoder 尚未实现；不能声称已生成 struct serializer。
   SG body + runtime 按需闭合仍是推荐路线，不是整体翻新旧 IL 后端的决定。BCL 集合继续暂缓。
 - 代码验证结果保存在实验笔记；generic ref 机制的
   [完整复跑附件](../docs/design-branches/0018-runtime-binding-witness.md)不依赖会话工具输出。

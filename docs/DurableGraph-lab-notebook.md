@@ -780,6 +780,20 @@
 
 ## 6. 船长日志
 
+### 2026-09-05：实际 SG 静态标量 body 闭环
+
+- [DB-021](design-branches/0021-generated-primitive-body-slice.md)选用已有 SchemaOnly class 字段模型，
+  额外 GenerateBinaryBody 整链启用，生成当前 bool/int/long 的 private 成员读写及 base-first 组合。
+  显式启用保留 metadata-only 边界；已知成员直接调用 byte primitive，无 Type 查表或 slot 委托。
+- 同层按 FieldId 排序、跨层允许重复 ID，body 生成要求自身与所有祖先通过 metadata/history 校验。
+  string 明确拒绝，等待统一身份上下文；body 不解释历史 Schema，也不承担对象头、分配或图发布。
+- Runtime 首次引用 Serialization 并开放实际所需 Reader/Writer API。PackageConsumerProbe 继续只有
+  一个 runtime PackageReference；完整旧流程与新增 private 继承 body 消费均通过，golden `012154`。
+- 根构建 0 warnings/errors，全部产品测试 448/448（新增 17），无跳过。
+  独立审查无阻塞，损坏/冲突 history 与祖先 string 的补测已通过；读写部分失败边界得到实测。
+- 后续可扩充 Schema primitive kinds 或接引用上下文；struct exact 内嵌表达、历史 binary decoder、
+  泛型组合与完整图仍需独立分片，BCL 集合继续暂缓。
+
 ### 2026-09-05：primitive slot 查表回归测试工具
 
 - **Decided / Observed**：按用户建议把仅供测试消费的 PrimitiveSlotCodecs 移入 Serialization.Tests/TestHelpers，

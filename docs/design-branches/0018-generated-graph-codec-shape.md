@@ -6,7 +6,8 @@
 >
 > 当前阅读入口。取代 DB-017 中“string 字段 inline 值”和“容器身份尚未选择”的提案；
 > 图 codec 仍是设计草图；祖先 Schema/history 的元数据分片已进入产品实现，边界见 [DB-019](0019-schema-ancestry-implementation-slice.md)。
-> 随后 [DB-020](0020-typed-slot-array-binding-slice.md)落地 internal 值槽位和 SZ/rank-2 元素循环；本文引用上下文/SG body 仍为草图。
+> 随后 [DB-020](0020-typed-slot-array-binding-slice.md)落地 internal 值槽位和 SZ/rank-2 元素循环；
+> [DB-021](0021-generated-primitive-body-slice.md)落地实际 SG bool/int/long class body 与继承分段；本文引用上下文/struct/泛型 body 仍为草图。
 
 本轮重点已收窄：祖先 Schema 不变性/版本传播、nominal 引用声明与 exact 对象类型、
 开放泛型/数组 codec 的运行时组合。用户已同意 nominal/exact 的区分，并要求基类变化时派生版本递增；
@@ -30,7 +31,7 @@ Transient、BCL 内部 bucket/backing array、框架服务引用等不因“所�
 
 | 分支 | 推荐起点 | 需要说明的代价 |
 |---|---|---|
-| 继承字段身份 | DB-019 选择声明 Schema 分段、祖先 exact 依赖及派生版本递增 | metadata 分片先闭合；继承 payload/升级尚未实现 |
+| 继承字段身份 | DB-019 选择声明 Schema 分段、祖先 exact 依赖及派生版本递增 | DB-021 已接当前标量继承 body；历史 binary decoder/升级尚未实现 |
 | 类型复合与执行 | 推荐 SG 开放泛型 body + 运行时按需闭合；必要处局部 DynamicMethod | 已知定义与任意 CLR 类型支持分开，运行时后端不能另建 Schema authority |
 | 保存一致性 | 首版由调用方保证 discover 到 write 完成期间图不变 | 封闭 ID 表不是内容快照 |
 | 非常规 string/boxed 值 | 保留精确身份目标，分配与支持范围单独验证 | 不能悄悄折叠空字符串或把 boxed 值当 inline 值 |
@@ -336,7 +337,8 @@ abstract class ReferenceObjectCodec {
 ReferenceObjectCodec 是**对象记录边界**的异构分派；每次只把 object 转成实际 T，再调用上面的 typed body。
 不通过它逐字段装箱。SchemaResolver 只解释已知 schema/binding，不拥有对象图或文件发布 authority。
 primitive 字节方法继续放在现有 Serialization leaf；图与 Schema 设施放上层既有项目，不反向耦合 Storage。
-现有字节 Reader/Writer 仍是 internal；落地需开放实际下游生成代码需要的访问边界并验证引用传递。
+DB-021 已公开 Reader/Writer 类型、构造、bool/int/long 操作及 reader 边界检查，并验证 runtime 包引用传递。
+其余原语继续 internal，随实际消费者开放。
 本节 internal 仅示意同程序集协作，不解决任意下游程序集的可见性。
 
 可组合 TypeExpr 与 executable codec 是两件事，但不要求 SG 枚举所有闭合类型。
@@ -461,7 +463,8 @@ object/interface 槽位里的 boxed primitive/struct 具有引用身份，不能
 
 Base/Middle/Leaf 三层 Schema/history 版本传播由 DB-019 分片实施，
 DB-020 又验证显式提供的泛型值 body + runtime binding + SZ/rank-2 ref 元素路径；
-下一候选让实际 SG body 消费该机制，并用**含 string 引用的小对象图**验证统一身份和实际字节。BCL 集合明确暂缓。
+DB-021 已由实际 SG 生成当前 bool/int/long class body，直接 primitive 调用与继承段组合得到验证。
+后续扩充 Schema kinds，或用**含 string 引用的小对象图**验证引用上下文、统一身份和实际字节。BCL 集合明确暂缓。
 这样首个 string 消费者就不会走已被取代的字段 inline 路径。
 与 ObjectVersion 存取、增量策略、SchemaStore 的产品接入顺序仍按下一份明确施工边界裁决，
 不在本次讨论中实现完整 framework 或长期 wire。
@@ -470,10 +473,11 @@ DB-020 又验证显式提供的泛型值 body + runtime binding + SZ/rank-2 ref 
 
 当前产品保留 primitive byte leaf、membership Storage、估算策略和 scalar boxed schema/history 路径，
 并新增 DB-019 的 SchemaOnly 继承元数据：声明层字段、精确祖先、历史查询与发布闭包校验。
-默认 serializer 路径仍限制 sealed/direct DurableBase；本篇 struct/继承/泛型 SG body 尚未实现。
+默认 serializer 路径仍限制 sealed/direct DurableBase；DB-021 的额外 GenerateBinaryBody 只支持当前标量 class/继承 body；
+本篇 struct/泛型及带引用 SG body 尚未实现。
 DB-020 的内部值槽位和数组元素循环不处理对象头、shape、分配或图身份，也没有扩大 Schema kind。
 
-用户先后授权的实现范围见 DB-019 与 DB-020。完整 Deserialize、图身份恢复、
+用户先后授权的实现范围见 DB-019、DB-020 与 DB-021。完整 Deserialize、图身份恢复、
 开放泛型生成器与旧 IL 后端翻新仍待后续工作；BCL 集合继续暂缓。
 
 材料：[产品工作集](../../src/PROJECT-STATE.md)、

@@ -13,6 +13,7 @@
     <Compile Include="Domain.None.cs" Condition="'$(ProbeVersion)' == '0'" />
     <Compile Include="Domain.V1.cs" Condition="'$(ProbeVersion)' == '1'" />
     <Compile Include="Domain.V2.cs" Condition="'$(ProbeVersion)' == '2'" />
+    <Compile Include="Domain.Binary.cs" Condition="'$(ProbeVersion)' == '3'" />
   </ItemGroup>
 
   <ItemGroup>

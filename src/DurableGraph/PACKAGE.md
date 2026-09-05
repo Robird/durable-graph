@@ -30,6 +30,22 @@ metadata for versions 1 through the current version, including the historical ba
 versions throw `ArgumentOutOfRangeException`. It does not generate a `Serializer`, payload snapshots,
 or upgrade handlers. The supported field kinds remain bool, int, long, and string.
 
+For a current-layout binary body, additionally set `GenerateBinaryBody = true` on every class
+in a SchemaOnly domain chain. This provisional slice accepts only bool, int, and long durable
+fields; string is rejected until reference-identity encoding is available. It generates the
+assembly-internal nested `__DurableBinaryBody` with static `Write(ref BinaryPayloadWriter, T)`
+and `Read(ref BinaryPayloadReader, T)` methods. These call the byte primitives directly, handling
+base declarations first and each declaration's fields in FieldId order. Transient fields are untouched.
+
+The Serialization library is a transitive package dependency. Its Reader/Writer constructors,
+bool/int/long operations, and Reader boundary checks are public for generated-code consumers.
+The body reads into a caller-provided instance and covers the current declared layout and ancestors;
+it does not allocate objects, dispatch on runtime types or stored schemas, or encode a type/version header.
+`GetSchema(oldVersion)` still returns metadata only: it does not select a historical binary body.
+Callers must supply the matching layout, a stable source or unpublished target, and check the final
+payload boundary with `EnsureFullyConsumed()`. Read/write failure may leave earlier fields/bytes changed;
+null targets/sources are rejected before I/O. This is not yet the graph Save/Load API.
+
 Changing an exact base binding requires an explicit version increase in its derived class and then
 in each affected descendant. Accepted `.dgsnapshot` history retains the old base binding. Generator
 and publisher both validate that history has a complete, conflict-free ancestor chain. History v1

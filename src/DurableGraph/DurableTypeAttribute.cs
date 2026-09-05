@@ -32,4 +32,11 @@ public sealed class DurableTypeAttribute : Attribute {
     /// All durable types in an inheritance chain must explicitly select this mode.
     /// </summary>
     public bool SchemaOnly { get; set; }
+
+    /// <summary>
+    /// Also generates a static binary body for the current schema's Boolean, Int32,
+    /// and Int64 fields. Requires SchemaOnly and the same opt-in on every domain ancestor.
+    /// This provisional body reads into an existing object; it does not decode historical layouts.
+    /// </summary>
+    public bool GenerateBinaryBody { get; set; }
 }

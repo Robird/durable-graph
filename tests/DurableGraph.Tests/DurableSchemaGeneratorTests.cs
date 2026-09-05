@@ -1069,7 +1069,8 @@ public sealed partial class DurableSchemaGeneratorTests {
             assemblyName: $"GeneratorTests_{Guid.NewGuid():N}",
             syntaxTrees: [syntaxTree],
             references: PlatformReferences().Append(
-                MetadataReference.CreateFromFile(typeof(DurableBase).Assembly.Location)),
+                MetadataReference.CreateFromFile(typeof(DurableBase).Assembly.Location)).Append(
+                MetadataReference.CreateFromFile(typeof(Atelia.DurableGraph.StateStore.Serialization.BinaryPayloadReader).Assembly.Location)),
             options: new CSharpCompilationOptions(
                 OutputKind.DynamicallyLinkedLibrary,
                 nullableContextOptions: NullableContextOptions.Enable));

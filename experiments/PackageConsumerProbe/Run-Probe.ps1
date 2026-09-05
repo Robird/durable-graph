@@ -99,6 +99,13 @@ Push-Location $repositoryRoot
 
 try {
     Invoke-DotNet @(
+        "pack", "src/DurableGraph.StateStore.Serialization/DurableGraph.StateStore.Serialization.csproj",
+        "--configuration", "Release",
+        "--output", $feed,
+        "-p:PackageVersion=$packageVersion"
+    )
+
+    Invoke-DotNet @(
         "pack", "src/DurableGraph/DurableGraph.csproj",
         "--configuration", "Release",
         "--output", $feed,
@@ -107,11 +114,11 @@ try {
 
     $packages = @(Get-ChildItem -LiteralPath $feed -Filter *.nupkg -File -ErrorAction Stop)
 
-    if ($packages.Count -ne 1) {
-        throw "Expected exactly one package, found $($packages.Count)."
+    if ($packages.Count -ne 2) {
+        throw "Expected runtime and serialization packages, found $($packages.Count)."
     }
 
-    $package = $packages[0]
+    $package = Get-Item -LiteralPath (Join-Path $feed "Atelia.DurableGraph.$packageVersion.nupkg")
     Add-Type -AssemblyName System.IO.Compression.FileSystem
     $archive = [System.IO.Compression.ZipFile]::OpenRead($package.FullName)
 
@@ -268,6 +275,20 @@ try {
         if ($hashesBeforeVerify[$file.Name] -ne $publishedHash) {
             throw "Repeated local publication changed '$($file.Name)'."
         }
+    }
+
+    $bodyHistory = Join-Path $workRoot "body-history"
+    Invoke-ConsumerClean $consumerProject $packageVersion $bodyHistory 3
+    Invoke-DotNet @(
+        "build", $consumerProject, "--no-restore",
+        "-p:DurableGraphPackageVersion=$packageVersion",
+        "-p:DurableGraphSnapshotHistoryDirectory=$bodyHistory",
+        "-p:ProbeVersion=3"
+    )
+    Assert-HistoryCount $bodyHistory 2
+    $bodyOutput = (& dotnet $consumerAssembly | Out-String).Trim()
+    if ($LASTEXITCODE -ne 0 -or $bodyOutput -ne "BinaryBody:012154:True") {
+        throw "Packaged static binary body failed; output was '$bodyOutput'."
     }
 
     Write-Host "Package consumer probe passed. Artifacts: $workRoot"

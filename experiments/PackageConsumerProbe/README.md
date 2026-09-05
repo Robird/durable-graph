@@ -15,3 +15,8 @@ directory under this experiment's ignored `obj` directory, and exercises local p
 CI-style read-only verification. Its V2 executable also saves a manual V1 boxed record, loads it
 twice through the packaged generated serializer without writeback, explicitly saves V2, and then
 confirms the current-version path no longer invokes the upgrade handler.
+
+The feed also contains the runtime's Serialization dependency. A final SchemaOnly consumer opts
+into `GenerateBinaryBody`, exercises private base/derived fields with direct static byte calls,
+and checks golden bytes and transient preservation. It still has just one PackageReference;
+Serialization is supplied transitively, with no friend access or manual analyzer wiring.

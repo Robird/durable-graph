@@ -3,10 +3,14 @@ using System.Buffers.Binary;
 
 namespace Atelia.DurableGraph.StateStore.Serialization;
 
-internal ref struct BinaryPayloadWriter {
+/// <summary>
+/// Writes canonical payload primitives to a caller-owned buffer. Generated bodies
+/// share this writer by reference; a failed write does not roll back prior output.
+/// </summary>
+public ref struct BinaryPayloadWriter {
     private readonly IBufferWriter<byte> _downstream;
 
-    internal BinaryPayloadWriter(IBufferWriter<byte> downstream) {
+    public BinaryPayloadWriter(IBufferWriter<byte> downstream) {
         ArgumentNullException.ThrowIfNull(downstream);
         _downstream = downstream;
     }
@@ -18,7 +22,7 @@ internal ref struct BinaryPayloadWriter {
 
     internal void WriteSByte(sbyte value) => WriteByte(unchecked((byte)value));
 
-    internal void WriteBoolean(bool value) => WriteByte(value ? (byte)1 : (byte)0);
+    public void WriteBoolean(bool value) => WriteByte(value ? (byte)1 : (byte)0);
 
     internal void WriteUInt16(ushort value) =>
         CanonicalVarInt.WriteUInt16(_downstream, value);
@@ -32,10 +36,10 @@ internal ref struct BinaryPayloadWriter {
     internal void WriteInt16(short value) =>
         CanonicalVarInt.WriteInt16(_downstream, value);
 
-    internal void WriteInt32(int value) =>
+    public void WriteInt32(int value) =>
         CanonicalVarInt.WriteInt32(_downstream, value);
 
-    internal void WriteInt64(long value) =>
+    public void WriteInt64(long value) =>
         CanonicalVarInt.WriteInt64(_downstream, value);
 
     internal void WriteHalf(Half value) {
