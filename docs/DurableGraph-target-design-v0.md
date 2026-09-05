@@ -11,11 +11,13 @@
 祖先 Schema/history 的 metadata 分片已由 [DB-019](design-branches/0019-schema-ancestry-implementation-slice.md)落地；
 typed 值槽位与 SZ/rank-2 元素循环已由 [DB-020](design-branches/0020-typed-slot-array-binding-slice.md)落地；
 [DB-021](design-branches/0021-generated-primitive-body-slice.md)已生成当前 bool/int/long class 的继承分段 body；
-历史 binary decoder、SG 泛型 body、完整数组对象 codec 与图恢复仍是后续目标。
+按 stored Schema 的运行时 decoder 分派、SG 泛型 body、完整数组对象 codec 与图恢复仍是后续目标。
 
 后续校准：[DB-022](design-branches/0022-versioned-state-dto-capture.md)选择领域图先捕获 Versioned DTO，
 后续比较、估算与编码消费捕获状态；已实现 scalar readonly Vn、current Capture、各版本 typed DTO Read/Write，
 取代 DB-021 直接领域 body。运行时历史 Schema 分派、DTO 升级、领域恢复与 StateStore 基线管线尚未实现。
+[DB-023](design-branches/0023-scalar-schema-dto-slice.md)进一步将 Schema/历史/DTO 贯通到 13 种标量，
+下一候选是 string 引用 Capture；string 仍不能作为 DTO 内联字段编码。
 
 ---
 

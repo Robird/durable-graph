@@ -21,3 +21,7 @@ into `GenerateBinaryBody`, captures private base/derived fields into a readonly 
 then mutates the domain instance. Static DTO byte calls verify the original golden bytes,
 DTO/Schema pairing and domain isolation. It still has just one PackageReference;
 Serialization is supplied transitively, with no friend access or manual analyzer wiring.
+
+The same consumer also exercises every added scalar kind through generated Capture/DTO bodies,
+including an isolated surrogate, negative zero and NaN payloads against fixed golden bytes.
+This validates the public primitive API and publication of the extended Schema tags.

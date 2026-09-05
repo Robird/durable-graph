@@ -19,8 +19,9 @@ typed 值槽位与 SZ/rank-2 元素循环已落地，范围见 [DB-020](../docs/
 用户已选择先捕获版本化状态，再比较/估算/编码。
 [DB-022](../docs/design-branches/0022-versioned-state-dto-capture.md)已取代 DB-021 直接领域 body：
 SchemaOnly + GenerateBinaryBody 生成 readonly V1..Vcurrent DTO、current Capture 及 typed DTO binary body。
-首片支持 bool/int/long，历史 DTO 依 exact 祖先闭包生成，不需要旧 CLR 祖先保留。
-下一候选是扩展 Schema 基础类型，或接 Capture 的 string 引用上下文；用户明确暂缓 BCL 集合内容支持。
+[DB-023](../docs/design-branches/0023-scalar-schema-dto-slice.md)将 Schema/history/DTO 贯通到 13 种标量；
+历史 DTO 依 exact 祖先闭包生成，不需要旧 CLR 祖先保留。
+下一候选是接 Capture 的 string 引用上下文与最小对象列表；用户明确暂缓 BCL 集合内容支持。
 完整图和旧运行时序列化器翻新仍未实施。
 [DB-017](../docs/design-branches/0017-object-codec-design-points.md)保留早期要点/旧实现证据；
 其 string 字段 inline 方案已被取代。codec-first 排序依据见 DB-016。
@@ -36,9 +37,10 @@ SchemaOnly + GenerateBinaryBody 生成 readonly V1..Vcurrent DTO、current Captu
 | [Serialization](DurableGraph.StateStore.Serialization/DurableGraph.StateStore.Serialization.csproj) | BCL-only 字节原语/string 内容 codec、显式 body 的 typed slot、SZ/rank-2 元素 ref 循环；primitive slot 查表仅为测试共享工具，尚无数组对象 envelope 或对象级 Base/Delta |
 
 当前产品依赖为 StateStore → Storage → Serialization，Storage 另用 RbfSegmentStore/Rbf 与地址基础类型。
-DurableGraph runtime/package 已引用 Serialization；Reader/Writer 类型、构造、bool/int/long 和 reader 边界 API
-对下游公开，其余原语与 typed slot/数组模板仍 internal。单一 runtime PackageReference 能取得传递依赖。
-默认 Schema/历史工具目前只支持 bool/int/long/string 四种 kind，不能把新增 slot 类型清单视为 Schema 支持。
+DurableGraph runtime/package 已引用 Serialization；Reader/Writer 类型、构造、13 种标量和 reader 边界 API
+对下游公开，string 内容/块操作与 typed slot/数组模板仍 internal。单一 runtime PackageReference 能取得传递依赖。
+Schema/历史工具支持 bool、byte/sbyte、short/ushort、int/uint、long/ulong、char、Half、float、double 及 string。
+DTO body 支持其中 13 种标量，string 仍须等待统一引用上下文；metadata 支持不代表图支持。
 位于 Generator 源码中的 graph operations generator 仍是未注册 probe，不能当成产品图能力。
 
 ## 已选方向
@@ -65,13 +67,13 @@ DurableGraph runtime/package 已引用 Serialization；Reader/Writer 类型、�
 ## 近期依赖顺序
 
 1. 已闭合 Base/Middle/Leaf 的 Schema/history 版本传播；保持 SchemaOnly 与旧 boxed serializer 的明确边界。
-   SchemaOnly 整条领域链同编译、顶层、非泛型、非 record、partial，可 abstract；当前字段 kind 仍为四种。
+   SchemaOnly 整条领域链同编译、顶层、非泛型、非 record、partial，可 abstract；字段 kind 见上述支持清单。
 2. 已闭合 internal ValueSlotCodec<T> 的 primitive 与调用方显式复合 body；绑定对象直接创建 SZ/rank-2 typed 模板，
    无需数组层反射或全局 Type cache。运行时闭合 Cell<T>/Cell<Cell<int>> 的工厂目前是手写测试见证。
    rank-2 元素循环支持已有数组的非零下界；shape 编码/分配、其他 rank/非 SZ rank-1 尚未实现。
-3. 已闭合 SG Versioned DTO：SchemaOnly + GenerateBinaryBody 整链启用，所有 current/history closure 仅 bool/int/long。
+3. 已闭合 SG Versioned DTO：SchemaOnly + GenerateBinaryBody 整链启用，所有 current/history closure 支持 13 种标量。
    current Capture 复制 private/base-first/FieldId 字段；readonly Vn 配对 GetSchema(n)，Write(in Vn)/ReadVn 操作 DTO。
-   下一候选扩充 Schema primitive kinds，或为 Capture 的首个 string 消费者接统一引用上下文及小图；
+   下一候选为 Capture 的首个 string 消费者接统一引用上下文及最小对象列表；
    struct 还需 inline exact Schema 表达。不能继续实现旧 string 字段 inline 路径。
 4. 接入真实 ObjectVersion 内容存取；raw Base-only 是小范围候选。codecs 与 raw storage 没有硬性先后依赖，
    当前按用户已选择的 codec-first 推进。
@@ -82,8 +84,9 @@ DurableGraph runtime/package 已引用 Serialization；Reader/Writer 类型、�
 
 ## 当前待定项
 
-- Schema 层基础类型扩充、boxed 值、空字符串独立实例分配。测试共享 slot 工具覆盖 13 种：
-  bool、byte/sbyte、short/ushort、int/uint、long/ulong、char（UInt16 code unit）、Half、float、double；浮点位保持。
+- boxed 值身份、空字符串独立实例分配。13 种标量已贯通 Schema/DTO；
+  char 按 UInt16 code unit（允许孤立代理项），Half/float/double 保持负零及 NaN payload 位。
+  decimal、enum、nullable value、native int、Int128 和一般 struct 仍未支持。
 - SG 已生成当前及历史标量 DTO typed body；按 stored Schema 的运行时注册/分派、DTO 升级及领域恢复尚未实现。
 - 带引用的继承 payload/历史升级与跨程序集继承 helper 可见性；当前标量继承 body 仅支持同编译领域链。
 - 带引用上下文的 codec 签名、编码 revision 归属和计数策略；当前消费者所需的 primitive 公开边界已落地。
@@ -115,7 +118,9 @@ DurableGraph runtime/package 已引用 Serialization；Reader/Writer 类型、�
   额外 GenerateBinaryBody 已改成 internal readonly Vn + current Capture + DTO Write/ReadVn，
   不保留直接领域 Read/Write，不生成 Serializer 或 Upgrade。legacy Snapshot 路径仍独立保留。
   history v1 的可选 base 行与运行时 BaseSchema 都是原型形状；GetHashCode 不是持久 SchemaHash。
-- 当前接口以 DB-022 为准；DB-021 是被取代的直接领域 body 历史。已知成员仍直接静态调用 byte 原语。
+- 当前接口以 DB-022 为准，DB-023 扩充 13 种标量；DB-021 是被取代的直接领域 body 历史。
+  Schema TypeTag 1–4 不变，新增 5–14；旧工具拒绝新 tag，需要同步更新包。不是未来 TypeCodec 编号。
+  已知成员仍直接静态调用 byte 原语。
   body 不含对象头、分配或 exact runtime 类型分派；ReadVn 成功才返回 DTO，外层负责布局匹配和发布隔离。
   引用上下文、通用泛型注册及 DTO 升级尚未实现；不能声称已生成一般 struct serializer。
   SG body + runtime 按需闭合仍是推荐路线，不是整体翻新旧 IL 后端的决定。BCL 集合继续暂缓。

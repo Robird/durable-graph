@@ -66,9 +66,9 @@ public sealed partial class DurableSchemaGenerator {
             }
 
             foreach (DurableFieldModel field in type.Fields) {
-                if (field.TypeTagValue != 1 && field.TypeTagValue != 2 && field.TypeTagValue != 3) {
+                if (!IsBinaryScalar(field.TypeTagValue)) {
                     ReportInvalidBinaryBody(context, type.Symbol,
-                        "field '" + field.Symbol.Name + "' requires reference identity support; this body supports only bool, int and long",
+                        "field '" + field.Symbol.Name + "' requires reference identity support; this body supports only scalar value types",
                         GetSourceLocation(field.Symbol));
                     valid = false;
                 }
@@ -90,11 +90,11 @@ public sealed partial class DurableSchemaGenerator {
                     List<BinaryFieldModel> fields = new();
                     AppendBinaryFields(shape, isCurrent ? available : history, fields, 0);
                     foreach (BinaryFieldModel field in fields) {
-                        if (field.TypeTagValue < 1 || field.TypeTagValue > 3) {
+                        if (!IsBinaryScalar(field.TypeTagValue)) {
                             ReportInvalidBinaryBody(context, type.Symbol,
                                 "version " + version.ToString(CultureInfo.InvariantCulture) +
                                 " field '" + field.Name +
-                                "' requires reference identity support; this body supports only bool, int and long");
+                                "' requires reference identity support; this body supports only scalar value types");
                             valid = false;
                         }
                     }
@@ -148,6 +148,9 @@ public sealed partial class DurableSchemaGenerator {
                 SourceText.From(source.ToString().Replace("\r\n", "\n"), Encoding.UTF8));
         }
     }
+
+    private static bool IsBinaryScalar(int typeTagValue) =>
+        typeTagValue >= 1 && typeTagValue <= 14 && typeTagValue != 4;
 
     private static void ReportInvalidBinaryBody(
         SourceProductionContext context, INamedTypeSymbol type, string message, Location? location = null) {

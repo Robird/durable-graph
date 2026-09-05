@@ -35,7 +35,8 @@ public sealed class DurableTypeAttribute : Attribute {
 
     /// <summary>
     /// Also generates versioned readonly state DTOs, current-instance Capture, and typed
-    /// binary bodies for Boolean, Int32, and Int64 layouts, including accepted history.
+    /// binary bodies for supported scalar layouts, including accepted history.
+    /// String fields require reference identity support and are not yet supported by these bodies.
     /// Requires SchemaOnly and the same opt-in on every current domain ancestor.
     /// It does not upgrade historical DTOs or restore domain instances.
     /// </summary>

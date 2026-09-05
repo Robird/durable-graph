@@ -28,11 +28,12 @@ that declaration; `Schema.BaseSchema` binds its exact immutable ancestor layout.
 The Generator supplies `Schema` and `GetSchema(int version)` in this mode. The latter returns cached
 metadata for versions 1 through the current version, including the historical base chain; other
 versions throw `ArgumentOutOfRangeException`. It does not generate a `Serializer`, payload snapshots,
-or upgrade handlers. The supported field kinds remain bool, int, long, and string.
+or upgrade handlers. Supported field kinds are bool, byte/sbyte, short/ushort, int/uint,
+long/ulong, char, Half, float, double, and string.
 
 For versioned state DTOs and binary bodies, additionally set `GenerateBinaryBody = true` on every
-class in a SchemaOnly domain chain. This provisional slice accepts only bool, int, and long in
-the current and all historical layouts, including ancestor fields. String is rejected until
+class in a SchemaOnly domain chain. This provisional slice accepts the 13 scalar kinds listed
+above in current and historical layouts, including ancestor fields. String is rejected until
 reference-identity encoding is available. The assembly-internal nested `__DurableBinaryBody`
 contains readonly structs `V1` through the current version, each paired with `GetSchema(n)` by
 its static `Schema` property. DTOs are regenerated from accepted `.dgsnapshot` history and the
@@ -58,7 +59,9 @@ reader.EnsureFullyConsumed();
 Select the ReadVn matching the stored layout. There are no domain-object Read/Write overloads.
 
 The Serialization library is a transitive package dependency. Its Reader/Writer constructors,
-bool/int/long operations, and Reader boundary checks are public for generated-code consumers.
+all 13 scalar operations, and Reader boundary checks are public for generated-code consumers.
+Char uses canonical UInt16 encoding of a UTF-16 code unit, including isolated surrogates.
+Half/float/double use fixed-width little-endian bytes preserving negative zero and NaN payload bits.
 Bodies do not restore domain instances, dispatch on runtime types/stored schemas, upgrade DTOs,
 or encode a type/version header. GetSchema remains a metadata query; callers explicitly choose
 the typed body. Failed ReadVn may leave the Reader advanced, but returns no partial DTO; a failed
@@ -71,3 +74,7 @@ and publisher both validate that history has a complete, conflict-free ancestor 
 records may include a canonical `// base:<base64-schema-id>|<version>` line after the version line;
 records without a base retain their existing representation. This is a provisional metadata format,
 not the object graph payload format.
+
+Schema TypeTags 1–4 retain their meanings; the new scalar tags occupy 5–14. History text syntax
+is unchanged, but older tools reject new tags: update the runtime, Generator and bundled history
+tool together by updating the package. These tags do not define the future graph TypeCodec.

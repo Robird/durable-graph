@@ -195,18 +195,23 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
                     file.GetText(cancellationToken)?.ToString()));
 
         context.RegisterSourceOutput(
-            durableTypes.Collect().Combine(snapshotHistoryFiles.Collect()),
+            durableTypes.Collect().Combine(snapshotHistoryFiles.Collect()).Combine(context.CompilationProvider),
             static (productionContext, input) =>
                 GenerateSchemas(
                     productionContext,
-                    input.Left,
+                    input.Left.Left,
+                    input.Left.Right,
                     input.Right));
     }
 
     private static void GenerateSchemas(
         SourceProductionContext context,
         ImmutableArray<INamedTypeSymbol> candidateTypes,
-        ImmutableArray<SnapshotText> snapshotHistoryFiles) {
+        ImmutableArray<SnapshotText> snapshotHistoryFiles,
+        Compilation compilation) {
+        // Resolve from the actual core library, not a source-defined System.Half lookalike.
+        INamedTypeSymbol? halfType = compilation.GetSpecialType(SpecialType.System_Object)
+            .ContainingAssembly.GetTypeByMetadataName("System.Half");
         List<INamedTypeSymbol> types = GetDistinctSortedTypes(candidateTypes);
         List<DurableTypeModel> validTypes = new(types.Count);
         List<SnapshotHistoryModel> history = ParseSnapshotHistory(
@@ -216,7 +221,7 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
 
         foreach (INamedTypeSymbol type in types) {
             context.CancellationToken.ThrowIfCancellationRequested();
-            DurableTypeModel? model = CreateTypeModel(context, type);
+            DurableTypeModel? model = CreateTypeModel(context, type, halfType);
 
             if (model.HasValue) {
                 validTypes.Add(model.Value);
@@ -690,7 +695,8 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
 
     private static DurableTypeModel? CreateTypeModel(
         SourceProductionContext context,
-        INamedTypeSymbol type) {
+        INamedTypeSymbol type,
+        INamedTypeSymbol? halfType) {
         string typeName = type.ToDisplayString(QualifiedNameFormat);
 
         if (!HasSupportedTypeShape(type, context.CancellationToken)) {
@@ -811,6 +817,7 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
 
             if (!TryGetTypeTag(
                 field.Type,
+                halfType,
                 out string? typeTag,
                 out int typeTagValue,
                 out string? fieldTypeName)) {
@@ -973,58 +980,45 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
 
     private static bool TryGetTypeTag(
         ITypeSymbol type,
+        INamedTypeSymbol? halfType,
         out string? typeTag,
         out int typeTagValue,
         out string? fieldTypeName) {
-        switch (type.SpecialType) {
-            case SpecialType.System_Boolean:
-                typeTag = "Boolean";
-                typeTagValue = 1;
-                fieldTypeName = "global::System.Boolean";
-                return true;
-            case SpecialType.System_Int32:
-                typeTag = "Int32";
-                typeTagValue = 2;
-                fieldTypeName = "global::System.Int32";
-                return true;
-            case SpecialType.System_Int64:
-                typeTag = "Int64";
-                typeTagValue = 3;
-                fieldTypeName = "global::System.Int64";
-                return true;
-            case SpecialType.System_String:
-                typeTag = "String";
-                typeTagValue = 4;
-                fieldTypeName = "global::System.String";
-                return true;
-            default:
-                typeTag = null;
-                typeTagValue = 0;
-                fieldTypeName = null;
-                return false;
+        typeTagValue = type.SpecialType switch {
+            SpecialType.System_Boolean => 1,
+            SpecialType.System_Int32 => 2,
+            SpecialType.System_Int64 => 3,
+            SpecialType.System_String => 4,
+            SpecialType.System_Byte => 5,
+            SpecialType.System_SByte => 6,
+            SpecialType.System_Int16 => 7,
+            SpecialType.System_UInt16 => 8,
+            SpecialType.System_UInt32 => 9,
+            SpecialType.System_UInt64 => 10,
+            SpecialType.System_Char => 11,
+            SpecialType.System_Single => 13,
+            SpecialType.System_Double => 14,
+            _ => halfType is not null && SymbolEqualityComparer.Default.Equals(type, halfType) ? 12 : 0,
+        };
+        if (TryGetFieldTypeName(typeTagValue, out fieldTypeName)) {
+            typeTag = GetTypeTagName(typeTagValue);
+            return true;
         }
+
+        typeTag = null;
+        return false;
     }
 
     private static bool TryGetFieldTypeName(
         int typeTagValue,
         out string? fieldTypeName) {
-        switch (typeTagValue) {
-            case 1:
-                fieldTypeName = "global::System.Boolean";
-                return true;
-            case 2:
-                fieldTypeName = "global::System.Int32";
-                return true;
-            case 3:
-                fieldTypeName = "global::System.Int64";
-                return true;
-            case 4:
-                fieldTypeName = "global::System.String";
-                return true;
-            default:
-                fieldTypeName = null;
-                return false;
+        if (typeTagValue >= 1 && typeTagValue <= 14) {
+            fieldTypeName = "global::System." + GetTypeTagName(typeTagValue);
+            return true;
         }
+
+        fieldTypeName = null;
+        return false;
     }
 
     private static string RenderSource(List<DurableSnapshotTypeModel> types) {
@@ -1597,6 +1591,26 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
                 return "Int64";
             case 4:
                 return "String";
+            case 5:
+                return "Byte";
+            case 6:
+                return "SByte";
+            case 7:
+                return "Int16";
+            case 8:
+                return "UInt16";
+            case 9:
+                return "UInt32";
+            case 10:
+                return "UInt64";
+            case 11:
+                return "Char";
+            case 12:
+                return "Half";
+            case 13:
+                return "Single";
+            case 14:
+                return "Double";
             default:
                 throw new InvalidOperationException("Unsupported snapshot type tag.");
         }

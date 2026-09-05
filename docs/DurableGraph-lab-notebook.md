@@ -780,6 +780,22 @@
 
 ## 6. 船长日志
 
+### 2026-09-05：13 种标量贯通 Schema、历史与 DTO
+
+- **Decided**：在 DB-022 的 DTO 管线之后，先补齐已存在的标量字节原语消费者；
+  string 引用 Capture 的身份生命周期、上下文与对象列表保留为下一候选。
+  合同见 [DB-023](design-branches/0023-scalar-schema-dto-slice.md)。
+- **Observed**：TypeTag 保持原有 1–4，追加 5–14；Schema、两端 history 工具、legacy Snapshot、
+  当前/历史 DTO 支持 byte/sbyte、short/ushort、uint/ulong、char、Half/float/double。
+  新旧标量共 13 种，string DTO body 继续明确拒绝。历史语法未改，旧工具拒绝新 tag。
+- **Observed**：生成 body 继续直接静态调用原语。char 使用 UInt16 canonical 编码，允许孤立代理项；
+  浮点保持位模式。Half 识别使用实际 BCL 符号，而非类型显示名。
+- **Observed**：独立 golden 与真实 publisher→history→再生成验证数值边界、负零/NaN、
+  旧 CLR 祖先消失、同版本改型拒绝及 legacy 路径；包消费者验证全部新增方法的公开接线。
+- 主代理根 build 零警告/错误，全部产品 tests 471/471，无跳过；PackageConsumerProbe 全流程通过，
+  独立只读审查无阻塞，diff 与文档链接检查通过。未实现 string 图 Capture、DTO 比较/升级或 Save。
+
+
 ### 2026-09-05：Versioned DTO 取代直接领域 binary body
 
 - 用户选择捕获后的版本化状态作为保存比较/估算/编码输入。[DB-022](design-branches/0022-versioned-state-dto-capture.md)

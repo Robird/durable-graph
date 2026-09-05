@@ -44,3 +44,4 @@
 | [DB-020](0020-typed-slot-array-binding-slice.md) | typed 值槽位与数组元素 binding 分片 | Chosen | primitive/ref 槽位及 SZ/rank-2 元素循环；DB-021 接 SG 标量 class body，完整数组对象 codec 另片推进 |
 | [DB-021](0021-generated-primitive-body-slice.md) | 实际生成的 primitive class body | Superseded | 直接领域 Read/Write 接口由 DB-022 的 Versioned DTO/Capture 取代；保留原片证据 |
 | [DB-022](0022-versioned-state-dto-capture.md) | Versioned DTO、Capture 与 DTO binary body | Chosen | readonly scalar Vn/历史积累/current Capture；引用 Capture、比较/估算、DTO 升级与 StateStore 管线另片推进 |
+| [DB-023](0023-scalar-schema-dto-slice.md) | 标量 Schema、历史与 DTO 编码贯通 | Chosen | 13 种标量贯通；string 引用 Capture 与最小对象列表为下一候选 |

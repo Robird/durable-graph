@@ -26,7 +26,7 @@ public ref struct BinaryPayloadReader {
         }
     }
 
-    internal byte ReadByte() {
+    public byte ReadByte() {
         if (_remaining.IsEmpty) {
             throw new EndOfStreamException(
                 "Binary payload is truncated while reading a byte.");
@@ -37,7 +37,7 @@ public ref struct BinaryPayloadReader {
         return value;
     }
 
-    internal sbyte ReadSByte() => unchecked((sbyte)ReadByte());
+    public sbyte ReadSByte() => unchecked((sbyte)ReadByte());
 
     public bool ReadBoolean() {
         if (_remaining.IsEmpty) {
@@ -55,25 +55,28 @@ public ref struct BinaryPayloadReader {
         return value;
     }
 
-    internal ushort ReadUInt16() {
+    public ushort ReadUInt16() {
         ushort value = CanonicalVarInt.ReadUInt16(_remaining, out int consumed);
         _remaining = _remaining[consumed..];
         return value;
     }
 
-    internal uint ReadUInt32() {
+    /// <summary>Reads one UTF-16 code unit using canonical UInt16 encoding, including surrogates.</summary>
+    public char ReadChar() => (char)ReadUInt16();
+
+    public uint ReadUInt32() {
         uint value = CanonicalVarInt.ReadUInt32(_remaining, out int consumed);
         _remaining = _remaining[consumed..];
         return value;
     }
 
-    internal ulong ReadUInt64() {
+    public ulong ReadUInt64() {
         ulong value = CanonicalVarInt.ReadUInt64(_remaining, out int consumed);
         _remaining = _remaining[consumed..];
         return value;
     }
 
-    internal short ReadInt16() {
+    public short ReadInt16() {
         short value = CanonicalVarInt.ReadInt16(_remaining, out int consumed);
         _remaining = _remaining[consumed..];
         return value;
@@ -91,13 +94,13 @@ public ref struct BinaryPayloadReader {
         return value;
     }
 
-    internal Half ReadHalf() =>
+    public Half ReadHalf() =>
         BinaryPrimitives.ReadHalfLittleEndian(ReadSpan(sizeof(ushort)));
 
-    internal float ReadSingle() =>
+    public float ReadSingle() =>
         BinaryPrimitives.ReadSingleLittleEndian(ReadSpan(sizeof(float)));
 
-    internal double ReadDouble() =>
+    public double ReadDouble() =>
         BinaryPrimitives.ReadDoubleLittleEndian(ReadSpan(sizeof(double)));
 
     internal ReadOnlySpan<byte> ReadSpan(int length) {

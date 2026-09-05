@@ -5,6 +5,9 @@
 > 用户已选择捕获后的版本化状态作为保存管线输入，并授权本片设计实施。
 > 取代 [DB-021](0021-generated-primitive-body-slice.md)直接读写领域实例的 body 接口。
 
+后续范围扩充见 [DB-023](0023-scalar-schema-dto-slice.md)：13 种标量贯通 Schema/history/DTO，
+本文的 bool/int/long 清单记录首片范围；DTO 所有权及接口合同保持。
+
 ## 选择与范围
 
 领域对象负责运行中的行为；捕获的状态负责后续比较、估算和编码。

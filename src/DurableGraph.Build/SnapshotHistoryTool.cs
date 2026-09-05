@@ -337,7 +337,7 @@ internal static class SnapshotDocument {
                         $"field IDs must be unique and sorted; line {index + 1} has {fieldId} after {previousFieldId}");
                 }
 
-                if (typeTag is < 1 or > 4) {
+                if (typeTag is < 1 or > 14) {
                     throw Invalid(path, $"line {index + 1} has unsupported TypeTag {typeTag}");
                 }
 

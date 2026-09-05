@@ -1007,7 +1007,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             },
             {
                 "DG0007",
-                DurableTypeSource("[DurableField(1)] private double _value;")
+                DurableTypeSource("[DurableField(1)] private decimal _value;")
             },
             {
                 "DG0008",

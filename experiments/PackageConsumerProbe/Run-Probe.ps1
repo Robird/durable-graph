@@ -285,7 +285,7 @@ try {
         "-p:DurableGraphSnapshotHistoryDirectory=$bodyHistory",
         "-p:ProbeVersion=3"
     )
-    Assert-HistoryCount $bodyHistory 2
+    Assert-HistoryCount $bodyHistory 3
     $bodyOutput = (& dotnet $consumerAssembly | Out-String).Trim()
     if ($LASTEXITCODE -ne 0 -or $bodyOutput -ne "BinaryBody:012154:True") {
         throw "Packaged static binary body failed; output was '$bodyOutput'."
