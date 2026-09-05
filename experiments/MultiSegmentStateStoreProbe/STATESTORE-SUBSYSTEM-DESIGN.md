@@ -2,7 +2,7 @@
 
 > 状态：Stage B Started / Membership Head Map and Shared Serialization Leaf
 >
-> 最近校准：2026-09-04
+> 最近校准：2026-09-05
 >
 > 启动条件：阶段 A G0-G4 全部闭合，并由用户明确启动产品化
 
@@ -222,20 +222,24 @@ lower layer 产生第二套 membership interpretation。
 Storage 层不遍历对象图，也不判断调用方是否漏报 Remove；它只把上层已经冻结的 local ObjectIds、Removes
 与显式 ObjectHeadMap Base/Delta 忠实写入并重放。
 
-payload 对 StateStore 是 opaque bytes，但至少携带策略所需的长度和 codec/schema fence。具体 fence 是
-SchemaKey、SchemaHash、codec identity 还是外层 record metadata，必须在产品 vertical slice 中裁决。
+以上是后续真实 Save 的概念边界，不是当前纯策略切片的输入要求。用户已选择先以全部 post-live 对象的
+估算 DTO 产生稀疏 Base/Delta 写计划；G 从估算集合求和，真实 parent、变更分类和 Removes 仍由调用方
+拥有。具体契约建议见 [DB-015](../../docs/design-branches/0015-statestore-object-representation-policy.md)，
+尚未实现，不要求先生成 Base/Delta payload，也不预先定义 Estimate/Write 接口。
+
+未来实际接入的 payload 对 StateStore 是 opaque bytes，至少需要长度和 codec/schema fence。具体 fence
+是 SchemaKey、SchemaHash、codec identity 还是外层 record metadata，留给真实内容 vertical slice 裁决。
 
 ### 4.1 SameStateRebase 边界
 
-NoChange 被 policy 选为 `SameStateRebase` 时，需要完整 current Base payload。Probe 可以直接拿到 size/value
-stand-in，产品中则必须选择一种真实机制：
+产品策略方向已包含 NoChange 的 `SameStateRebase` 选择；本轮纯 selector 设计只使用 B/H 估算并输出 Base
+决策，无需真实 payload。后续执行被选 plan 时才需要完整 current Base，获取机制仍待真实 consumer：
 
 1. 上层为全部 live objects 预先准备 Base payload；
 2. StateStore 先选择 motive，再通过窄 callback/second pass 向上层请求被选对象的 Base payload；
-3. 首个产品版本禁用 NoChange SameStateRebase，只允许 Update Base/Delta。
 
-这是真实的分层选择，不能在阶段 A 用 size-only 便利性替产品暗中裁决。优先依据序列化成本、对象数量与
-实际 R 收益选最小方案。
+此前“首版禁用 NoChange SameStateRebase”的候选不再是当前策略方向。payload 获取优先依据序列化成本、
+对象数量与实际 R 收益选择；它不阻塞 DB-015 的纯数值策略验证，也不要求现在创建 callback 接口。
 
 ## 5. Read contract
 

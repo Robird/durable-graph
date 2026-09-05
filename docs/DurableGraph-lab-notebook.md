@@ -18,7 +18,7 @@
 
 ## 2. 当前基线
 
-记录日期：2026-09-04
+记录日期：2026-09-05
 
 - **Observed**：仓库已跑通 boxed-value 的内存 Save/Load 与 read-time upgrade demo，并以隔离探针跑通单类型 Flat Graph Delta R1、generated graph operations R2、StoredGraphImage normalization R3a 与 two-pass CLR materialization R3b；production runtime/default Generator 仍无对象身份、reference graph、wire format 或持久化实现。
 - **Observed**：`DurableGraph.slnx` 当前包含原 runtime、Generator、Build tool、CLI 和 Tests，以及三个
@@ -103,6 +103,9 @@
 - **Decided**：按阶段 B 文档把已证明语义晋升为正式 StateStore Sub-System；先建立独立
   `Atelia.DurableGraph.StateStore` 与 `Atelia.DurableGraph.StateStore.Storage` 空壳；前者单向引用后者，只有
   Storage 直接引用当前 `RbfSegmentStore` source，正式 reopen 仍待后续切片。
+- **Decided**：MVP 固定使用 ReadAmplificationBaseBudgetPolicy；先以全部 post-live 对象的估算 DTO 输入，
+  输出稀疏 Base/Delta 写计划，不以前置实现序列化为条件。[DB-015](design-branches/0015-statestore-object-representation-policy.md)
+  给出具体契约建议，尚无产品 selector；真实 codec、对象内容与提交接入保持后续切片。
 - **Open**：Schema runtime representation 与 canonical authority 的候选分叉记录在 `DB-001`，等待 exact codec/persistent format 实验裁决。
 - **Open**：哪些类型和 API 最终属于核心程序集，等待真实代码形状出现后再判断。
 
@@ -775,6 +778,18 @@
 ```
 
 ## 6. 船长日志
+
+### 2026-09-05：设计估算驱动的固定对象表示策略
+
+- **Decided**：采用用户选定的 DTO → plan 边界，MVP 不预设可替换策略或 Estimate/Write 序列化接口。
+  输入覆盖全部 post-live 对象；Removes、真实 parent 和保存视图由调用方负责。
+- **Tentative**：[DB-015](design-branches/0015-statestore-object-representation-policy.md)经三路独立审查与
+  交叉核对，建议既有 StateStore 内一个纯 Plan、统一 long 估算和唯一只读 Writes；具体契约未实现。
+- **Observed**：本机算术对照证实普通 decimal 乘法会改变严格阈值和 floor；例如 G=19、
+  f=0.8947368421052631578947368421 时得到 17，而精确 floor 为 16。新设计采用私有整数运算保留参数
+  的精确数学语义；没有修改现有 Probe。
+- **Open**：序列化估算生产、NoChange Base 获取、H 的恢复与提交更新、映射 checkpoint 等待真实
+  consumer；本轮没有实现产品算法、payload、wire 或持久化行为。
 
 ### 2026-09-04：建立共享 StateStore payload serialization leaf
 

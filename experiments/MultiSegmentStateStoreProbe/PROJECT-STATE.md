@@ -2,7 +2,7 @@
 
 > 状态：G0-G4 complete / Stage B membership head map and shared serialization leaf implemented
 >
-> 最近校准：2026-09-04
+> 最近校准：2026-09-05
 
 ## 目标
 
@@ -98,14 +98,17 @@ payload record、自动 checkpoint policy、skip、published head/durability 或
 ## 近期 roadmap
 
 无阶段 A 后续实现项。Probe 保留为 executable specification；阶段 B 的 exact
-`{ObjectId -> FrameAddress}` enumeration 已闭合，下一步可基于它与共享 payload primitives 建立第一个
-ObjectVersion 内容纵切，并在出现该真实 consumer 时决定是否加入 `StateStore -> Serialization` 引用；不把
-Probe 项目、size-only payload 或 benchmark infrastructure 直接搬入产品程序集。
+`{ObjectId -> FrameAddress}` enumeration 已闭合。用户已选择先设计估算 DTO → 稀疏写计划的固定
+ReadAmplificationBaseBudgetPolicy，具体契约建议见
+[DB-015](../../docs/design-branches/0015-statestore-object-representation-policy.md)，尚未实现。
+近期先用人工估算验证纯 selector，再由真实 ObjectVersion/Save consumer 接入估算、内容编码和提交；
+序列化算法不再是策略验证的前置条件。只在真实内容 consumer 出现时决定是否加入
+`StateStore -> Serialization` 引用；不把 Probe 项目或 benchmark infrastructure 搬入产品程序集。
 
 ## 未闭合事项
 
-阶段 A 无未闭合事项。自动 OVD policy、产品阈值与 SameStateRebase 是否进入产品默认策略都保持阶段 B/未来
-证据问题，不影响本 Probe 完成。
+阶段 A 无未闭合事项。产品策略方向已包含 NoChange 的 SameStateRebase 选择；其真实 Base 获取机制、
+估算/H 的来源和提交更新、自动 OVD policy 与参数默认值仍待阶段 B 后续证据，不影响本 Probe 完成。
 
 ## 明确暂缓
 
