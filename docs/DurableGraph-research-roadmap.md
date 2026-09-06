@@ -7,9 +7,10 @@
 
 ## 1. 下一个分片如何选择
 
-下一候选是以 [DB-027 的实际 Delta codec](design-branches/0027-generated-same-schema-delta-body-slice.md)
-收敛持久 ObjectVersion Delta/prior 链与 H，再连接对象列表比较、策略和完整 Save。
-需要先确定最小记录/重建消费者及来源校验；不能把已完成的 body codec 当作已完成持久版本链。
+下一片推荐已整理为 [DB-028：持久对象 Delta/prior/H](design-branches/0028-persisted-object-delta-chain-slice.md)，
+状态 Proposed，待用户评审。以 DB-027 的实际 codec 作 typed 冷重开消费者，
+产品范围限原始版本链、exact Parent/prior 检查及对象 payload 成本；之后再选对象列表/策略或持久类型目录。
+不能把已完成的 body codec 或本次规划当作已完成持久版本链。
 
 current 领域 Restore、自定义 struct 和一般 durable 引用可以独立成片。
 它们与存储推进的穿插顺序尚未冻结；不要恢复旧 R4 → R5 → R6 或 P0–P7 为强制流水线。
@@ -22,7 +23,7 @@ B/D/H 分别指 Base 写入字节、Delta 写入字节、当前对象重建字�
 
 | 工作项 | 最小应回答的问题 | 设计或证据入口 |
 |---|---|---|
-| 持久对象 Delta 与版本链 | 将实际 body codec 接到 exact prior locator，重开重建内容并统计 H；移除/ID 新占用者不得误接旧链 | [DB-026](design-branches/0026-raw-base-object-content-slice.md)、[DB-027](design-branches/0027-generated-same-schema-delta-body-slice.md)、[StateRevision TODO](../src/DurableGraph.StateStore.Storage/StateRevision.cs) |
+| 持久对象 Delta 与版本链 | 将实际 body codec 接到 exact prior locator，重开重建内容并统计 H；移除/ID 新占用者不得误接旧链 | [DB-028 提案](design-branches/0028-persisted-object-delta-chain-slice.md)、[StateRevision TODO](../src/DurableGraph.StateStore.Storage/StateRevision.cs) |
 | 比较、估算与策略接入 | frozen 候选与 exact Parent 如何得到变化分类和 B/D/H；如何生成并执行计划、保持失败时基线不变 | [DB-015](design-branches/0015-statestore-object-representation-policy.md)、[DB-022](design-branches/0022-versioned-state-dto-capture.md) |
 | TypeCodec 与 exact Schema 绑定 | 类型组合如何编码；引用约束如何检查；未知类型/版本和错误对象头如何拒绝 | [DB-018](design-branches/0018-generated-graph-codec-shape.md)、[DB-001](design-branches/0001-schema-authority-and-runtime-representation.md) |
 | DTO 升级与领域 Restore | stored exact 版本如何分派、升级为 current DTO，再构造领域对象；失败时不交付半成品 | [DB-022](design-branches/0022-versioned-state-dto-capture.md)、[DB-002](design-branches/0002-read-time-version-upgrade-pipeline.md) |
@@ -35,7 +36,7 @@ B/D/H 分别指 Base 写入字节、Delta 写入字节、当前对象重建字�
 
 | 问题 | 现有依据与裁决边界 |
 |---|---|
-| 对象版本 envelope、prior 与 H 来源 | 同版 DTO body 已有固定字段位图；持久记录的 exact prior、codec 解释绑定、链检查和 H 尚未决定。不能只恢复只有 ID 的旧占位 |
+| 对象版本 envelope、prior 与 H 来源 | [DB-028 §3](design-branches/0028-persisted-object-delta-chain-slice.md#3-推荐合同)集中记录推荐与边界，尚未批准实施；持久 exact Schema/codec 绑定和完整 head map 的保存来源合同仍留待后续 |
 | 保存相等性与真实估算 | 同版标量 DTO 的浮点按位、引用槽按 ID 已随 DB-027 采纳；未来复合值/容器相等性另定。B/D/H 如何在对象头与 prior 链加入后保持 DB-015 的对象 payload 口径，不纳入共享 Frame、membership 或对齐开销 |
 | 历史升级后的比较和重写 | DB-006/R3 研究采用 normalized baseline 与 RequiresRewrite，可作证据；新 DTO 路径是否跨 Schema 必须 Base、如何恢复义务及升级删边后清理，尚待专片裁决，读取不得隐式回写 |
 | 完整 source 目录与 current 可达集合 | 升级可能删边。研究见证保留 source rows，再由 Save 移除不可达项；产品保存视图怎样表达需与候选/Parent 衔接 |

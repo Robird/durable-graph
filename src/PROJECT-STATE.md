@@ -15,8 +15,9 @@
 ## 当前焦点
 
 同版 DTO 的融合 PrepareDelta 与 Apply 已完成，当前没有正在施工的产品分片。
-下一候选是以真实 Delta codec 收敛持久对象版本/prior 链和累计 H，再接对象列表比较与策略执行；
-详细依赖与未决项见后续路线，尚不代表已批准完整 Save 施工。
+下一片规划见 [DB-028](../docs/design-branches/0028-persisted-object-delta-chain-slice.md)：
+持久 raw Delta、exact Parent/prior 校验、原始重建链与 H，加真实 SG codec 冷重开见证。
+状态为 Proposed，待用户评审；未开始实施，不含完整 Save 或持久类型目录。
 struct、一般引用 Capture、DTO 升级/Restore 可独立穿插，选择与待定点集中在后续路线。
 
 ## 当前能力与实际边界
