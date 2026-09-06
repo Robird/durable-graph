@@ -780,6 +780,20 @@
 
 ## 6. 船长日志
 
+### 2026-09-06：string 引用 Capture、ID DTO 与内存候选闭环
+
+- **Decided**：用户采纳 SG 根登记适配器与 Runtime 统一会话/候选管理，G0 冻结后完成 DB-024 首片。
+- **Observed**：concrete AddRoot 自动配对 exact 类型/Schema/current DTO；string 经引用身份表转 uint，
+  当前和历史 DTO/body 均支持 ID 槽，Schema tag 仍为 String；纯标量和基类段级 Capture 保留原合同。
+- **Observed**：CaptureSession 单在途、Seal 冻结、accept/discard、失败烧号、存活 ID 延续、退役映射清理与耗尽拒绝有执行见证。
+  图不持有领域实例；WeakReference 测试验证旧候选/旧 context 留存时仍可释放退役源对象与回调闭包。
+- **Observed**：自审发现 Array.AsReadOnly 可经 ICollection.SyncRoot 暴露可写数组，实际复现后改为私有 IReadOnlyList 包装，
+  独立审查复核修复；历史非法 Leaf 的负面测试按类型判断拒绝，保留合法 Base body，并验证 publisher 双端拒绝。
+- **Observed**：根 build 0 warnings/errors，聚焦 37/37，全套 503/503、零跳过；单 PackageReference 消费者通过，
+  包产物 `experiments/PackageConsumerProbe/obj/run-20260906024101-5228`；独立源码/测试/包审查无剩余阻塞。
+- **Deferred**：只闭合内存 Capture；字符串对象内容解码/独立空串分配、领域 Restore、Durable 互引/循环、
+  struct/数组/BCL、ID 回收和持久 Save 继续分别排期。下一候选为 string 对象编码与引用恢复，尚未授权实施。
+
 ### 2026-09-06：引用 Capture 的 G0 接缝具体化，待用户裁决
 
 - **Observed**：从干净的 `8816f0c` 开工，完整读取工作单与工作集，并与独立只读子代理核对 generator/DTO/包消费者。

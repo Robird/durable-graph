@@ -29,6 +29,7 @@ public sealed partial class Character : BinaryBase {
 
     public static string ExerciseGeneratedSnapshots() {
         ScalarValues.Exercise();
+        ReferenceCaptureExercise.Run();
         Character source = new(true, -17, 42, 8);
         var captured = __DurableBinaryBody.Capture(source);
         source._total = 999;
@@ -45,7 +46,7 @@ public sealed partial class Character : BinaryBase {
         bool valid = restored.Segment0Field1 && restored.Segment0Field7 == -17 &&
             restored.Segment1Field1 == 42 && source._total == 999 && source._sentinel == 8 &&
             source.HasExpectedBase && ReferenceEquals(__DurableBinaryBody.V1.Schema, Schema);
-        return $"BinaryBody:{Convert.ToHexString(buffer.WrittenSpan)}:{valid}";
+        return $"BinaryBody:{Convert.ToHexString(buffer.WrittenSpan)}:{valid}:ReferenceCapture:True";
     }
 }
 

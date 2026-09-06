@@ -55,7 +55,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         Assert.True(stateParameter.IsIn);
         Assert.Null(body.GetMethod("Read", BindingFlags.Static | BindingFlags.NonPublic));
         Assert.Equal(dto, body.GetMethod("ReadV1", BindingFlags.Static | BindingFlags.NonPublic)!.ReturnType);
-        Assert.Equal(new[] { "Capture", "ReadV1", "Write" },
+        Assert.Equal(new[] { "AddRoot", "Capture", "ReadV1", "Write" },
             body.GetMethods(BindingFlags.Static | BindingFlags.NonPublic).Select(method => method.Name).Order().ToArray());
     }
 
@@ -116,7 +116,7 @@ public sealed partial class DurableSchemaGeneratorTests {
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void StateDtoRejectsUnsupportedHistoricalFieldIncludingRemovedAncestor(bool inAncestor) {
+    public void ReferenceCaptureStateDtoSupportsHistoricalStringIncludingRemovedAncestor(bool inAncestor) {
         AdditionalText historical = SnapshotHistory("old.dgsnapshot", inAncestor ? "state.old-base" : "state.item", 1, (1, 4));
         AdditionalText[] history = inAncestor ? [
             historical,
@@ -127,13 +127,16 @@ public sealed partial class DurableSchemaGeneratorTests {
             [DurableType("state.item", 2, SchemaOnly = true, GenerateBinaryBody = true)]
             public sealed partial class Item : DurableBase { [DurableField(1)] private int _current; }
             """, history);
-        Assert.Contains(run.GeneratorDiagnostics, diagnostic => diagnostic.Id == "DG0020");
-        Assert.DoesNotContain(run.GeneratorDiagnostics, diagnostic => diagnostic.Id == "CS8785");
-        Assert.DoesNotContain(run.GeneratedSources, source => source.HintName == "DurableBinaryBodies.g.cs");
+        AssertSchemaOnlyCompiles(run);
+        Type body = EmitAndLoad(run.OutputCompilation).GetType("Item")!
+            .GetNestedType("__DurableBinaryBody", BindingFlags.NonPublic)!;
+        Assert.Equal(typeof(uint), body.GetNestedType("V1", BindingFlags.NonPublic)!
+            .GetField("Segment0Field1", BindingFlags.Instance | BindingFlags.NonPublic)!.FieldType);
+        Assert.Single(body.GetMethod("Capture", BindingFlags.Static | BindingFlags.NonPublic)!.GetParameters());
     }
 
     [Fact]
-    public void StateDtoRejectsLeafCaptureWhenCurrentBaseHelperIsBlockedByItsOlderVersion() {
+    public void ReferenceCaptureStateDtoScalarLeafKeepsContextFreeCaptureWithHistoricalBaseString() {
         GeneratorTestRun run = RunGenerator("""
             using Atelia.DurableGraph;
             [DurableType("state.base", 2, SchemaOnly = true, GenerateBinaryBody = true)]
@@ -141,15 +144,13 @@ public sealed partial class DurableSchemaGeneratorTests {
             [DurableType("state.leaf", 1, SchemaOnly = true, GenerateBinaryBody = true)]
             public sealed partial class Leaf : Base { [DurableField(2)] private bool _flag; }
             """, SnapshotHistory("base-v1.dgsnapshot", "state.base", 1, (1, 4)));
-        // Leaf V1 contains only scalar fields and binds Base V2, but Capture still needs
-        // Base's helper, whose own V1 string layout cannot be generated in this slice.
-        Assert.Contains(run.GeneratorDiagnostics, diagnostic =>
-            diagnostic.Id == "DG0020" && diagnostic.GetMessage().Contains("Base"));
-        Assert.Contains(run.GeneratorDiagnostics, diagnostic =>
-            diagnostic.Id == "DG0020" && diagnostic.GetMessage().Contains("Leaf"));
-        Assert.DoesNotContain(run.GeneratorDiagnostics, diagnostic => diagnostic.Id == "CS8785");
-        Assert.DoesNotContain(run.GeneratedSources, source => source.HintName == "DurableBinaryBodies.g.cs");
-        Assert.DoesNotContain(run.OutputCompilation.GetDiagnostics(), IsError);
+        AssertSchemaOnlyCompiles(run);
+        Assembly assembly = EmitAndLoad(run.OutputCompilation);
+        Type baseBody = assembly.GetType("Base")!.GetNestedType("__DurableBinaryBody", BindingFlags.NonPublic)!;
+        Assert.Equal(typeof(uint), baseBody.GetNestedType("V1", BindingFlags.NonPublic)!
+            .GetField("Segment0Field1", BindingFlags.Instance | BindingFlags.NonPublic)!.FieldType);
+        Type leafBody = assembly.GetType("Leaf")!.GetNestedType("__DurableBinaryBody", BindingFlags.NonPublic)!;
+        Assert.Single(leafBody.GetMethod("Capture", BindingFlags.Static | BindingFlags.NonPublic)!.GetParameters());
     }
 
     [Fact]

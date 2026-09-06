@@ -175,7 +175,6 @@ public sealed partial class DurableSchemaGeneratorTests {
     }
 
     [Theory]
-    [InlineData("SchemaOnly = true", "[DurableField(1)] private string _text = string.Empty;")]
     [InlineData("", "[DurableField(1)] private int _number;")]
     [InlineData("SchemaOnly = true", "private static class __DurableBinaryBody { }")]
     public void BinaryBodyRejectsUnsupportedOptInWithoutPublishingBody(string flags, string members) {
@@ -242,7 +241,7 @@ public sealed partial class DurableSchemaGeneratorTests {
     }
 
     [Fact]
-    public void BinaryBodyRejectsPrimitiveLeafWhenOptedInAncestorContainsString() {
+    public void ReferenceCaptureBinaryBodySupportsPrimitiveLeafWhenOptedInAncestorContainsString() {
         GeneratorTestRun run = RunGenerator("""
             using Atelia.DurableGraph;
             [DurableType("body.base", 1, SchemaOnly = true, GenerateBinaryBody = true)]
@@ -250,9 +249,14 @@ public sealed partial class DurableSchemaGeneratorTests {
             [DurableType("body.leaf", 1, SchemaOnly = true, GenerateBinaryBody = true)]
             public sealed partial class Leaf : Base { [DurableField(1)] private int _leaf; }
             """);
-        Assert.Contains(run.GeneratorDiagnostics, diagnostic => diagnostic.Id == "DG0020");
-        Assert.DoesNotContain(run.GeneratedSources, source => source.HintName == "DurableBinaryBodies.g.cs");
-        Assert.DoesNotContain("static void Write(", BinaryBodyGeneratedText(run));
+        AssertSchemaOnlyCompiles(run);
+        string generated = BinaryBodyGeneratedText(run);
+        Assert.Contains("CaptureString(value._text)", generated);
+        Type body = EmitAndLoad(run.OutputCompilation).GetType("Leaf")!
+            .GetNestedType("__DurableBinaryBody", BindingFlags.NonPublic)!;
+        Assert.Equal(typeof(uint), body.GetNestedType("V1", BindingFlags.NonPublic)!
+            .GetField("Segment0Field1", BindingFlags.Instance | BindingFlags.NonPublic)!.FieldType);
+        Assert.Equal(2, body.GetMethod("Capture", BindingFlags.Static | BindingFlags.NonPublic)!.GetParameters().Length);
     }
 
     [Theory]
@@ -305,7 +309,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         Assert.Equal<byte>([0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 1],
             BinaryBodyDelegate<Func<byte[]>>(assembly, "Write")());
         Type body = type.GetNestedType("__DurableBinaryBody", BindingFlags.NonPublic)!;
-        Assert.Equal(new[] { "Capture", "ReadV1", "ReadV2", "Write", "Write" }, body.GetMethods(BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.DeclaredOnly)
+        Assert.Equal(new[] { "AddRoot", "Capture", "ReadV1", "ReadV2", "Write", "Write" }, body.GetMethods(BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.DeclaredOnly)
             .Select(method => method.Name).OrderBy(name => name).ToArray());
         Assert.DoesNotContain("Upgrade", BinaryBodyGeneratedText(run));
         Assert.DoesNotContain("__DurableSnapshot", BinaryBodyGeneratedText(run));

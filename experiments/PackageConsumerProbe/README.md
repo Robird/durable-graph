@@ -25,3 +25,10 @@ Serialization is supplied transitively, with no friend access or manual analyzer
 The same consumer also exercises every added scalar kind through generated Capture/DTO bodies,
 including an isolated surrogate, negative zero and NaN payloads against fixed golden bytes.
 This validates the public primitive API and publication of the extended Schema tags.
+
+The final consumer also captures two concrete roots with shared strings, distinct equal strings,
+null/empty/surrogate content, and private base fields through generated AddRoot adapters. It checks
+the closed ID DTO list, static ID-body golden bytes, mutation isolation, accept/discard, stable live
+IDs, discarded-number consumption, and fresh IDs after retirement. These use public runtime seams
+from the single package reference; generated helpers and DTOs stay internal to the consumer.
+This is an in-memory candidate witness, not string reconstruction or StateStore Save.

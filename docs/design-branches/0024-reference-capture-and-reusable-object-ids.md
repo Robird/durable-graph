@@ -1,8 +1,8 @@
 # DB-024：引用 Capture、revision 内身份与可复用 ObjectId
 
-> 状态：首片方向已确认 / 实施接缝待评审 — 2026-09-06；产品代码基线 `0b9652c`。
+> 状态：string 引用 Capture 与单调 ID 首片已实现 / 回收及恢复延期 — 2026-09-06。
 >
-> 用户已启动实施 Goal，要求先呈现 G0 根入口/公开类型，收到尚未裁决分支的决定后再实施。
+> 用户已启动实施 Goal，并明确采纳 SG 生成根登记适配器、Runtime 统一会话与候选管理方案。
 > 承接 DB-018/022/023；本文区分用户已明确的语义与尚待讨论的实施建议。
 
 ## 1. 已明确与本轮建议
@@ -10,15 +10,15 @@
 - 用户明确 ObjectId 的解释经过 StateRevision，允许回收后复用。不能继续把“全仓库永不复用”当作必要不变量。
 - 已接受的统一引用身份与 DTO 捕获方向保持：string 也按 ReferenceEquals 区分；引用字段存 ID，
   对象内容进入独立条目；完成 Capture 后，比较/估算/编码消费同一个冻结候选。
-- 本文建议先做内存中 string 引用 Capture 与对象列表，然后单独闭合加载引用保真，
-  最后接真实 StateStore 发布。首片不用回收池；具体 API 与后续 string 独立分配仍需核验。
+- 已按本文顺序先实现内存 string 引用 Capture 与对象列表；后续单独闭合加载引用保真，
+  最后接真实 StateStore 发布。首片不用回收池；API 已验证，string 独立分配仍需后续核验。
 
 ## 1.1 首片初始目标（本次用户确认后的收窄）
 
 范围是“标量 + string 的领域 roots → ID 化 Versioned DTO → 封闭候选”，
 以及单会话、单在途候选的 accept/discard 内存见证。string 作为独立内容条目，引用槽不 inline 内容。
 不在首片实现字符串对象解码/领域 Restore、Durable 对象互引/循环、ID 回收池或完整 Save。
-实施交接见 [工作单](../WORK-ORDER-REFERENCE-CAPTURE.md)；[Goal 文本](../GOAL-REFERENCE-CAPTURE.md)已启动，当前停在 G0 设计评审。
+实施交接见 [工作单](../WORK-ORDER-REFERENCE-CAPTURE.md)；[Goal 文本](../GOAL-REFERENCE-CAPTURE.md)已启动，G0 已获用户裁决。
 
 - 一个 CaptureSession 从非零 uint 域单调分配；0 表示 null。分配过的号在该 session 内不再发放。
   实施建议：失败/discard 允许消耗号码，高水位不回退；这免去首片的号段回滚与回收状态。
@@ -88,7 +88,7 @@ Vn 的物理 uint 字段不改变声明 Schema 中 String 的类型约束。
 ReadVn 先还原 ID 值；对象存在性/声明类型相容性由外层图验证与 Restore 处理。
 继承的 Capture 共享上下文；以后自定义 struct 的 Capture 递归接收相同上下文，输出嵌套 DTO。
 成员级仍静态绑定；混合类型的对象列表可在对象边界暂存 boxed readonly DTO，不因此引入逐字段动态分派。
-具体条目容器待首个消费者收敛，不先冻结通用 registry/interface。
+首片条目容器已按消费者收敛到 §3.1/3.2，不冻结通用 registry/interface。
 
 例如两字段引用同一个 `s1`，第三字段引用内容相等但不同实例的 `s2`：
 
@@ -102,11 +102,11 @@ roots: [1]
 条目至少携带明确的内存 kind（String 或 Durable + exact Schema）和内容。
 它对应未来对象头 TypeCodec 的职责，但首片不冻结数组/泛型 TypeCodec，也不假造完整磁盘图格式。
 
-## 3.1 G0 具体接缝提案：生成 root 适配器（待用户裁决）
+## 3.1 G0 接缝：生成 root 适配器（用户已采纳）
 
 2026-09-06 核验基线 `8816f0c`，开工工作树干净。主代理与独立只读子代理检查了
 `DurableSchemaGenerator.BinaryBody.cs`、`DurableBase.cs`、现有 DTO 测试与真实包消费者。
-以下是源码支持的设计建议，尚无新增产品代码或编译运行证据。
+以下方案随后获用户明确采纳；实施中的代码与验收状态另见工作单，不把方案确认当作运行证据。
 
 两种入口可以共用同一个 Runtime 泛型登记方法，差别不需要上升为两套 capture 框架：
 
@@ -189,9 +189,25 @@ SG 负责 Schema/DTO/字段内容配对，Runtime 负责会话、身份与生命
   已 accept/discard 后 Dispose 幂等。任何构建失败终止本次候选，允许下一次 Begin；烧号但 parent 不变。
   构建器/会话私下持有实例绑定；终止候选应清理回调闭包和临时实例引用，保留旧候选数据不应保留其领域实例。
 
-**G0 待裁决内容**：是否采用“internal SG root 适配器 + 上述最小 public Runtime 会话/候选接缝”。
+**G0 裁决**：用户明确采纳“SG 生成根登记适配器，Runtime 提供统一会话与候选管理方案”。
 命名和内部集合实现可按验证结果调整，不另外冻结新程序集、通用 codec 接口或未来多态入口。
-收到决定后，G1–G3 再以真实 SG 编译、错误路径、包消费者及独立审查证明该提案成立。
+G1–G3 以真实 SG 编译、错误路径、包消费者及独立审查证明该方案成立。
+
+## 3.2 首片实施结果（2026-09-06）
+
+G0 推荐方案按用户决定落地：Runtime 的 CaptureSession/Context/CapturedGraph/CapturedObject，
+以及 SG 的 concrete AddRoot、current string Capture、current/history UInt32 ID DTO/body 已实现。
+上下文采用先登记根、Seal 顺序调用根 Capture 的最小流程；未实现一般 Durable 引用遍历队列或循环。
+相同 root 重复登记会核对 exact Schema、DTO 类型和委托相等性；不要求委托实例 ReferenceEquals。
+已封闭候选上的非法写入会拒绝但不破坏既有候选；构建中的非法操作/异常终止候选并保留 parent。
+
+对象条目私下装箱 unmanaged DTO、按值取出；图仅保存冻结内容与根 ID，管理实例表留在会话当前/未决上下文。
+已修复审查时实际发现的只读集合漏洞：Array.AsReadOnly 可经 ICollection.SyncRoot 暴露底层数组，
+当前使用私有只实现 IReadOnlyList/IEnumerable 的数组包装，两种集合都有反旁路测试。
+
+根 build 0 warnings/errors；ReferenceCapture 聚焦 37/37；全套 503/503、零跳过；真实单包消费者通过。
+独立只读审查覆盖身份/隔离/历史/包边界，无剩余阻塞。完整验收及包产物入口见[工作单 §5](../WORK-ORDER-REFERENCE-CAPTURE.md)。
+这些结果不证明字符串对象解码、领域恢复、ID 回收或持久 Save；后续边界仍按第 7/8 节分别排期。
 
 ## 4. 回收与复用时机：延期素材，首片不实施
 
@@ -257,12 +273,12 @@ SG 负责 Schema/DTO/字段内容配对，Runtime 负责会话、身份与生命
 
 ## 7. 实施候选与验收问题
 
-建议分成有依赖的两个小片，而非在 string 首片同时实现所有 Save/Load：
+分片顺序与当前状态：
 
-1. **引用 Capture 与候选生命周期**：已支持标量的领域 roots + string 字段、继承 Capture 共享上下文；
+1. **引用 Capture 与候选生命周期（已实现）**：已支持标量的领域 roots + string 字段、继承 Capture 共享上下文；
    产出闭合的混合对象列表与 ID DTO。内存 parent/accept/discard 见证稳定 ID、移除、单调分配和失败隔离。
-   首片尚无 Durable 相互引用；分配后入队的骨架将来可扩展到自环/互环，不宣称已支持。
-2. **字符串对象编码和引用恢复**：引用槽写非零 uint/0，字符串记录写内容；
+   首片尚无 Durable 相互引用；只登记根并顺序 Capture，不宣称已支持自环/互环。
+2. **字符串对象编码和引用恢复（待排期）**：引用槽的 uint/0 body 已实现，下一片才接字符串记录内容；
    为各条目建立加载表再解析 owner DTO，验证存在性/类型/共享。随后才接 Durable 对象壳与循环恢复。
    先明确恢复到 resolved witness 还是完整领域 Restore；不偷偷把 DTO Upgrade/构造规则并入本片。
 
@@ -276,7 +292,7 @@ string 恢复有一个已有缺口：StringPayloadCodec 的空内容路径直接
 应选能独立分配的机制或明确拒绝该输入，不能无声合并。Capture 自身可精确保留这些引用关系。
 
 首片不提供 pin：accept 后离开 durable roots 的实例绑定结束，数字不回收。恢复完整领域对象另片推进。
-隔发布/同候选复用与独立空串分配仍留待后续；当前需评审的公开生成代码接缝见工作单 G0。
+隔发布/同候选复用与独立空串分配仍留待后续；已选择并实现的公开生成代码接缝见 §3.1/3.2。
 
 ## 8. 自定义 struct TODO：可独立排期，共享 Capture 接缝
 

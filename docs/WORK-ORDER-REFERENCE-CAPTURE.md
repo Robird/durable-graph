@@ -1,7 +1,7 @@
 # 工作单：string 引用 Capture 与单调 ID 候选生命周期
 
-> 状态：Draft / Ready for review。目标范围已获用户确认；G0 的跨程序集生成代码接缝仍是初始提案。
-> 本文写于 2026-09-06；用户已启动 Goal，当前 G0 待裁决，G1–G3 尚未实施。
+> 状态：G0 已获用户裁决 / G1–G3 已实现并通过验收。仅闭合 string 引用 Capture 与内存候选分片。
+> 本文写于 2026-09-06；用户已启动 Goal 并明确采纳 G0 推荐方案。
 > P1 生成器到 P2 对象列表的内存子片；Goal 开工提交 `8816f0c`，最近产品提交 `0b9652c`。
 > 详细设计：[DB-024](design-branches/0024-reference-capture-and-reusable-object-ids.md)。
 
@@ -21,8 +21,8 @@
 | R4 | 本轮认可的候选生命周期建议 | parent 隔离；显式 accept/discard；只安装实际捕获状态 |
 | R5 | 既有用户静态绑定、继承/历史决定 | 已知成员直接调用；current/base Capture 共享上下文；历史 DTO 使用 exact 布局 |
 | R6 | 用户批准分片、根 AGENTS.md 的最小实现/验证要求 | 保持现有层次，以真实 SG 和包消费者证明交接；不进入完整 Save/Restore |
-| N1 | R3/R4 所需的实施提案，非既有行为 | 失败/discard 消耗号码，高水位不回退；退役映射释放但数字不回收 |
-| N2 | 源码消费者所需、尚待 G0 核验的接缝提案 | Runtime 放在 DurableGraph；最小公开 Capture 类型供下游生成代码调用，helper/DTO 仍 internal |
+| N1 | 用户 Goal 明确的 R3/R4 实施合同 | 失败/discard 消耗号码，高水位不回退；退役映射释放但数字不回收 |
+| N2 | 用户 G0 裁决，真实下游已验证 | Runtime 放在 DurableGraph；最小公开 Capture 类型供下游生成代码调用，helper/DTO 仍 internal |
 
 单一完成目标：下游程序集的真实 SG 将标量/string 领域 roots 捕获成显式 ID 对象列表，
 保持引用身份和冻结值，并通过同一内存会话的多次 accept/discard 验证基线隔离及单调分配。
@@ -33,7 +33,7 @@
 开工前必须读根 [AGENTS.md](../AGENTS.md)、完整 [src/PROJECT-STATE.md](../src/PROJECT-STATE.md)、DB-024，
 并记录当时 git status。本文准备时工作区干净；后续不能假定仍然如此。
 
-本次通过源码核对的事实：
+交接时核对的开工前事实（保留用于比较，当前实现见 §5）：
 
 - `src/DurableGraph.Generator/DurableSchemaGenerator.BinaryBody.cs`：生成 internal readonly Vn、current Capture、
   typed Write/ReadVn；IsBinaryScalar 当前排除 String。当前/历史 DTO 依 exact 祖先闭包生成。
@@ -50,7 +50,7 @@
 G0 等待裁决期间已在 `1c4f2e9` 重新验证基线（2026-09-06）：根 build 0 warnings/errors；
 根 `dotnet test --no-build` 全部 471/471，通过数为 DurableGraph 264、Serialization 94、Storage 73、StateStore 40，零跳过；
 真实 PackageConsumerProbe 通过，产物位于 `experiments/PackageConsumerProbe/obj/run-20260906022525-33812`。
-这只证明现有产品基线；G1–G3 尚未实施，不能用这些结果声称引用 Capture 验收已通过。
+这只证明改动前产品基线；本片实现与验收结果单独见 §5，不能用这些旧结果声称引用 Capture 验收已通过。
 
 ## 3. 首片合同与 G0 需冻结的形状
 
@@ -91,10 +91,10 @@ G0 等待裁决期间已在 `1c4f2e9` 重新验证基线（2026-09-06）：根 b
 
 根入口有两种局部实现候选：调用方显式提供强类型 capture binding，或 SG 生成每类的 root 登记适配器。
 两者都必须检验 exact concrete root、保存其 Schema 与 typed DTO，不生成全局 registry、运行时反射扫描或持久类型号。
-这是当前唯一必须在大规模并行实现前冻结的跨程序集接缝；形状尚未由用户逐签名确认。
+这是实施前必须冻结的跨程序集接缝；用户随后采纳了具体推荐方案。
 2026-09-06 的具体签名、调用示例和独立只读评估已写入 DB-024 §3.1：推荐 SG root 适配器，
 两方案共用一个 Runtime 泛型入口，DTO 保持 internal/unmanaged，封闭条目按值返回 DTO。
-这仍是待用户裁决的建议，不是已实现或已冻结合同。
+用户随后明确采纳该推荐方案；G0 已冻结，尚须实施和验证。
 
 String 槽位生成目标为 `uint SegmentNFieldM`；Schema/history tag 仍为 String。
 current Capture 通过共享 context 取得 ID，Write/ReadVn 直接 UInt32，不接图解析器。
@@ -148,10 +148,28 @@ Schema-only metadata、legacy boxed、13 标量及其原字节回归保持。
 
 | 要求/关口 | 当前状态 | 责任与下一证据 |
 |---|---|---|
-| G0 / N2 | 源码核验及独立只读评估完成；提案待裁决 | 主代理：DB-024 §3.1；用户决定后再用真实 SG/包编译证明 |
-| R2/R3/R4/N1 / G1 | 未实施 | Runtime 会话/候选；身份、隔离、烧号、退役、耗尽测试 |
-| R1/R5 / G2 | 未实施 | Generator 当前/历史 ID DTO；真实生成编译、golden、publisher/history 见证 |
-| R6 / G3 | 未实施 | 主代理最终串行验证、独立代码审查、文档/本地提交闭合 |
+| G0 / N2 | 用户已采纳推荐方案，真实下游验证通过 | DB-024 §3.1；真实 SG emit/执行及单 PackageReference 消费者，无 friend 或手工 analyzer 接线 |
+| R2/R3/R4/N1 / G1 | 已实现，聚焦测试通过 | `src/DurableGraph/Capture*.cs`；`ReferenceCaptureSessionTests.cs` 的 23 cases：身份/隔离/烧号/退役/耗尽/WeakReference 释放 |
+| R1/R5 / G2 | 已实现，聚焦测试通过 | `DurableSchemaGenerator.BinaryBody.cs`；`ReferenceCaptureGeneratorTests.cs` 及旧 String 拒绝转正，真实生成/ID golden/publisher/history |
+| R6 / G3 | 根构建、全套测试、真实包及独立审查通过 | 根 build 0 warnings/errors，tests 503/503，ReferenceCapture 聚焦 37/37；PackageConsumerProbe passed；工作集/DB-024/package/实验簿已同步 |
+
+最终执行证据（2026-09-06）：
+
+- `dotnet build DurableGraph.slnx --verbosity quiet`：0 warnings/errors。
+- 聚焦项目测试 `--no-build --filter FullyQualifiedName~ReferenceCapture`：37/37，零跳过。
+- `dotnet test DurableGraph.slnx --no-build --verbosity quiet`：503/503，零跳过；
+  DurableGraph 296、Serialization 94、Storage 73、StateStore 40。
+- `./experiments/PackageConsumerProbe/Run-Probe.ps1`：通过，产物目录
+  `experiments/PackageConsumerProbe/obj/run-20260906024101-5228`；新增三个 Schema 与原标量三个一起发布，
+  消费者精确输出 `BinaryBody:012154:True:ReferenceCapture:True`，先执行断言再输出成功标记。
+- 主代理检查实际 diff；独立只读审查覆盖 Runtime/SG/测试/包入口，未发现剩余阻塞问题。
+  Runtime 自审发现并复现的 `Array.AsReadOnly` → `ICollection.SyncRoot` 数组写入旁路已改为私有读取接口包装，
+  有两种集合均不可取得该旁路的回归测试。`git diff --check` 通过。
+
+错误路径证据：注册/Seal 失败、非法重入、错误 phase、跨 session/重复/过期候选、uint 最后值与耗尽、
+保留旧候选时退役领域实例/回调闭包释放，均在 Runtime 测试执行；历史拒绝精确检查坏 Leaf 不生成 body，
+合法 Base 可保留 body，并由 publisher Publish/Verify 双端拒绝同版 String→UInt32 Schema 变动。
+Schema/history 原 String tag、legacy boxed 和 13 标量原字节的回归包含在上述全套测试与包验证中。
 
 下列路径已在当前树核对；当前基线执行结果见 §2，最终实施验收仍须重新运行：
 
