@@ -88,9 +88,16 @@ Revision/加载能力足以表示元数据集合；建设联合 Commit/Ref 时�
 
 届时需闭合：
 
-- 自举：以固定、带版本的内建 codec/类型编码表示 Schema 目录，不能为了读取 SchemaStore
-  先查询它自身尚未加载的用户 Schema。禁止用户类型还不够，需验证 Dictionary 的 key/value
-  及嵌套内容也全部落在该内建闭包内；元数据表示本身的版本演化仍要有规则。
+- 自举：2026-09-07 用户补充“员工通道”思路，推荐由框架显式内建的类型码及 Schema/codec
+  解释基元、受支持 BCL 构造和 DurableGraph 元数据类型，仅用户定义类型通过 SchemaStore
+  取得定义；不能以程序集/namespace 归属自动豁免所有类型。内建复合类型不必退化为字典树，
+  可以用内建 SchemaDefinition/FieldDefinition 等强类型数据表示（名称为示意，尚未实现）。
+  若 Dictionary 的 key/value 和实际内容均属于内建类型闭包，即可在没有已加载 SchemaStore
+  的情况下读回目录；Dictionary<string, UserClass> 则仍需解析 UserClass 的 Schema。
+  目录中的用户 Schema 引用首先是元数据值，不能在解码这些描述数据时递归启动用户对象加载。
+- 内建合同：豁免的是 SchemaStore 查询，不是持久布局的版本管理。内建类型身份及其 codec
+  版本仍须由明确格式规则确定，不能直接依赖当前 CLR fields 布局；版本可由外层格式约定，
+  不预先要求每个对象增加版本字段。引用类型继续共用对象身份、Capture 和 Base/Delta 流程。
 - 逻辑职责：复用 StateStore 保存集合，不取消 Schema 的规范定义、exact 依赖与同 key 冲突检查；
   不让一般字典写入绕过 SchemaStore 语义。
 - 联合视图：Commit/Ref 绑定各 Store 的 exact roots/Revision，加载与整体回滚使用同一组引用。
