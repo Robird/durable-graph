@@ -23,7 +23,7 @@ The manifest format is strict:
 
 It may contain zero or more snapshot blocks. Field IDs must be positive,
 unique, and sorted. Type tags use the numeric DurableGraph values `1` through
-`4`.
+`14`; the original values `1` through `4` retain their meanings.
 
 Each checked-in `*.dgsnapshot` uses the same single block with the header
 `// durable-graph-snapshot:1`. History is canonical UTF-8 without a byte-order

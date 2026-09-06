@@ -130,8 +130,7 @@ DTO body 支持 13 种标量及 string 引用的 UInt32 ID；String 内容独立
 ## 会话接续入口（2026-09-06）
 
 - 恢复时先读根 AGENTS.md 和本文，再读 DB-018；DB-017 是 superseded 的探索记录，不恢复其旧 string 字段 inline 方案。
-- 用户已授权自主按需提交；上一批工作集迁移、DB-016–019 与祖先实现已提交为 `29a4704`。
-  DB-020 是其后的实现分片；准确提交与工作区状态以 git log/status 为准。
+- 用户已授权自主按需提交；准确提交与工作区状态以 git log/status 为准。
 - Schema/history 增强已完成；默认 SchemaOnly 仍是 metadata 入口。
   额外 GenerateBinaryBody 已改成 internal readonly Vn + current Capture + DTO Write/ReadVn，
   不保留直接领域 Read/Write，不生成 Serializer 或 Upgrade。legacy Snapshot 路径仍独立保留。
