@@ -21,8 +21,8 @@
 记录日期：2026-09-06
 
 - **Observed**：仓库已跑通 boxed-value 内存 Save/Load/upgrade 与隔离探针 R1–R3b；产品已实现
-  SG Versioned DTO/body、string 引用 Capture/读取及 membership 文件存取，仍无完整领域图恢复、
-  持久 ObjectVersion 内容或 Save/发布闭环。精确产品边界见 [共享工作集](../src/PROJECT-STATE.md)。
+  SG Versioned DTO/body、string 引用 Capture/读取及同 Frame raw Base 文件存取，仍无完整领域图恢复、
+  对象 Delta/prior 链或 Save/发布闭环。精确产品边界见 [共享工作集](../src/PROJECT-STATE.md)。
 - **Observed**：`DurableGraph.slnx` 当前包含原 runtime、Generator、Build tool、CLI 和 Tests，以及三个
   StateStore 产品项目和三个配套测试项目；Build tool 仍是随 NuGet 包部署的私有 snapshot-history
   publisher/verifier，不承载运行时持久化语义。
@@ -782,6 +782,21 @@
 
 ## 6. 船长日志
 
+### 2026-09-06：完成 DB-026 raw Base 内容与 exact-head 重开读取
+
+- **Decided/Observed**：用户采纳整体迁移，StateRevision 现在从不可变 BaseObjectRecord 统一取得 IDs/bytes；
+  v2 同 Frame 记录按 ID 排序，拒绝旧 membership-only v1。Map Base/Delta、external checkpoint、removes 均保留。
+  无内容的 DeltaObjectIds 已移除，StateRevision 的 TODO(DB-026) 记录真实 Delta/prior 链与新 ID 占用者从 Base 开始。
+- **Observed**：ReadObjectBase 从 exact Revision 找 live locator，仅接受目标 Frame 本地记录。
+  输入/输出/pooled-frame 内容隔离、旧新 Revision、删除后 ID 复用、坏 locator 与损坏 wire 均有见证。
+  真实 SG Capture/DTO/string bytes 写入文件并关闭重开；测试的显式 kind/Schema/roots 不是持久类型头。
+- **Observed**：根 build 零警告/错误，全套 559/559，零跳过；初始基线 536/536。
+  独立最终代码审查无阻断，建议的 100 KiB body 缓冲后编码失败/lease 复用测试已补齐，覆盖轮转。
+  详细命令、分工与边界见 [DB-026 §8](design-branches/0026-raw-base-object-content-slice.md#8-实施合同与验收账本)。
+- **Decided**：沿用 RBF 268,435,428-byte payload 上限及 EndAppend 检查，接受缓冲后超限失败，
+  不新增第二套 wire 尺寸算法。未修改上游框架，不承诺真实 I/O fault 物理截断或 crash 恢复。
+  policy、Generator/runtime 及包接线未改；仅测试项目新增 Storage 依赖，未重跑 package probe。
+
 ### 2026-09-06：规划 DB-026 同 Frame raw Base 内容存取
 
 - **Observed**：在 `171581e` 只读核验，SG DTO/string 已有独立 bytes 闭环，Storage 仍是
@@ -789,7 +804,7 @@
 - **Tentative**：下一片推荐 [DB-026](design-branches/0026-raw-base-object-content-slice.md)，
   由完整 local Base records 统一产生 IDs 与内容，跨 Revision/Segment 重开后按 exact head 读取。
   保留 ObjectHeadMap Base/Delta；推荐收回仅 ID 的 ObjectVersion Delta 占位并升级 provisional wire，
-  不兼容旧 v1。此为显式原型迁移建议，尚未实施，也不取消后续对象 Delta/policy 方向。
+  不兼容旧 v1。此为当时的显式原型迁移建议，后已由用户采纳并实施，见上条完成记录；对象 Delta/policy 方向保留。
 - **Observed**：独立候选比较、Storage 事实调查和反方审查已完成；草稿无阻断。
   核心边界包括输入/pooled bytes 所有权、错误 external locator 拒绝、删除后同 ID 新 Base 的视图隔离。
   本轮仅文档，不复跑历史测试，不新增产品能力。

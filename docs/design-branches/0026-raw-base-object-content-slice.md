@@ -1,9 +1,10 @@
 # DB-026：同 Revision Frame 的 raw Base 对象内容存取
 
-> 状态：Open / 推荐的下一工作分片，尚未实施 — 2026-09-06。
+> 状态：Chosen / 已实现并通过验收 — 2026-09-06。
 >
-> 审查基线：`171581e`，开始规划时工作区干净。本轮仅核验源码、讨论方案与记录规划，未重跑代码测试。
-> 用户本轮要求规划；本文不以自身授予实现授权。下述接口与 wire 均是待实施的原型建议。
+> 规划审查基线：`171581e`；实施起点 `c8e331d`。规划轮仅核验源码，实施证据见 §8。
+> 用户已采纳方案并明确授权实施；移除 DeltaObjectIds 时须在代码保留后续 Delta 工作的 TODO。
+> 初始规划与取舍保留如下，具体施工合同与证据在 §8 维护。
 
 ## 1. 下一片回答什么
 
@@ -17,7 +18,7 @@
 
 | 候选 | 当前收益和新增问题 | 本轮排序 |
 |---|---|---|
-| raw Base 内容存取 | 首次连接真实内容、membership、文件轮转和重开；需要升级现有 Frame 模型 | 推荐下一片 |
+| raw Base 内容存取 | 首次连接真实内容、membership、文件轮转和重开；需要升级现有 Frame 模型 | 已选并实施 |
 | current DTO → 领域 Restore | 补齐领域实例往返；需要选择构造、Transient、base-private 填充及失败暴露合同 | 独立后续候选 |
 | 自定义 struct | 增加实用值布局；需要 exact inline Schema/history 与 nested DTO | 保留 DB-024 TODO |
 | Durable 互引/循环 Capture | 开始真正递归图捕获；需要 nominal 引用约束、concrete binding 和队列扩展 | 独立后续候选 |
@@ -26,7 +27,7 @@ Restore 技术上可做：当前 Generator 的 DG0011 仍拒绝 readonly durable
 `AppendMaterialization` 也已有无构造分配路径。但旧实现不自动决定新 DTO Restore 的语义；
 本轮推荐存储接线，依据是当前收益与依赖，而不是声称 Restore 被语言能力阻塞。
 
-## 2. 已核验的接缝
+## 2. 实施前已核验的接缝（`171581e`）
 
 - [StateRevision](../../src/DurableGraph.StateStore.Storage/StateRevision.cs) 只持有 membership。
   `BaseObjectIds`/`DeltaObjectIds` 声明的是 **同 Frame** 的对象版本，目前均无内容。
@@ -43,7 +44,7 @@ Restore 技术上可做：当前 Generator 的 DG0011 仍拒绝 readonly durable
 - [DB-025 typed 消费者](../../experiments/PackageConsumerProbe/Consumer/Domain.StringDecoding.cs)
   已能由冻结候选产生独立 owner/string bytes，再验证 exact Schema 与引用关系；仍无持久类型头。
 
-## 3. 推荐的模型与关键取舍
+## 3. 已选模型与关键取舍
 
 ### 3.1 一个完整 Revision，local records 是唯一内容事实
 
@@ -60,18 +61,18 @@ ID 仍须非零、唯一，local/external/removed 的集合关系沿用现有 ma
 复用已有 containing-frame head 语义；首次读取可解码整个 Frame 并查找 local record，
 暂不做按对象偏移随机读取、缓存或跨 Frame 分块。
 
-### 3.2 两种 Delta 必须分清；建议收回无内容的占位接口
+### 3.2 两种 Delta 必须分清；已收回无内容的占位接口
 
 | 概念 | 本片处理 |
 |---|---|
 | ObjectHeadMap Base | 保留：local records 加 external heads 构成完整 live map |
 | ObjectHeadMap Delta | 保留：相对 parent 更新 local heads、应用 removes |
 | ObjectVersion Base | 新增实际内容：完整 bytes，不依赖旧对象内容重建 |
-| ObjectVersion Delta | 本片不实现；建议移除当前仅有 `DeltaObjectIds` 的可构造占位输入 |
+| ObjectVersion Delta | 本片不实现；已移除仅有 `DeltaObjectIds` 的占位输入，代码保留 TODO |
 
 **这是对已有原型 API/测试的有意调整，不是无行为影响的加法。** 当前 wire/store tests
 确实写过非空 `DeltaObjectIds`，但只验证 membership，没有保存或重建 Delta 内容。
-建议把这些更新场景迁为真实 Base 内容，保留原来的 map、删除、继承、checkpoint 与地址断言。
+这些更新场景已迁为真实 Base 内容，保留原来的 map、删除、继承、checkpoint 与地址断言。
 StateStore 的已选 Base/Delta policy 不依赖这些构造接口，保持原语义与测试。
 
 替代方案是保留 metadata-only 模型，并让新的内容入口拒绝 Delta 声明；这样可少改部分测试，
@@ -92,7 +93,8 @@ typed 集成见证由测试代码显式持有 roots 与 ID → kind/exact Schema
 
 ### 3.4 所有权先用复制闭合
 
-构造 Revision 时复制输入 bytes；调用方之后修改数组不影响待写内容。
+构造 BaseObjectRecord 时复制输入 bytes，Revision 冻结不可变 records 的外层集合；
+调用方之后修改输入数组不影响待写内容。
 调用方在复制期间保持输入稳定，构造不承诺对并发修改取得原子快照。
 read 必须在 `RbfPooledFrame` 释放前取得自有副本，不把 pool 内存泄漏到返回值。
 读取入口返回调用方拥有的副本，或提供不暴露 backing array 的复制方法；签名在实施时收敛。
@@ -105,7 +107,7 @@ read 必须在 `RbfPooledFrame` 释放前取得自有副本，不把 pool 内存
 
 ## 4. provisional wire 与读取路径
 
-建议保留 DGSR Frame tag、无 TailMeta、当前相对地址编码；升级 wire version，仅读取新版，
+已保留 DGSR Frame tag、无 TailMeta、当前相对地址编码；wire version 升至 2，仅读取新版，
 旧 membership-only v1 明确拒绝。不增加旧格式迁移器或双格式兼容路径。
 
 概念布局：
@@ -118,13 +120,14 @@ MapBase: ExternalHeads
 MapDelta: RemovedIds
 ```
 
-这是 framing 候选，不是已冻结的字节合同。实现时以 golden 固定具体编码，并覆盖
+这是本片已实现的 provisional framing，不是长期兼容承诺。golden 已固定具体编码，并覆盖
 count、canonical length、剩余 buffer 边界、重复/乱序 ID、集合冲突、截断和尾随数据。
-沿用已有 collection 限制；body length 必须在复制前验证可表示性与剩余长度，长度累加检查溢出。
-单 Revision 仍须适配一个 RBF Frame；具体 substrate 上限与超限错误是实施前核验项，
+沿用已有 collection 限制；body length 必须在复制前验证可表示性与剩余长度，
+总长由 RBF 以 long 记录，并在提交前检查单 Frame 上限。
+单 Revision 仍须适配一个 RBF Frame；实施时已核验 substrate 上限与超限路径，见 §8。
 不拿 Segment soft threshold 当单 Frame 容量上限，不在本片做分块或大对象协议。
 
-概念读取入口为 `ReadObjectBase(exactRevisionHead, objectId)`（名字未冻结）：
+读取入口为 `StateRevisionStore.ReadObjectBase(revisionHead, objectId)`：
 
 1. 从指定 Revision materialize live map；ID 不 live 则拒绝，不找“最近的旧值”。
 2. 得到 containing Revision address 后，读取并验证该 Frame。
@@ -179,7 +182,73 @@ append 仍只返回 candidate address，调用方持有 authority；不因文件
 
 本轮三路只读工作：独立比较候选、限定 Storage 源码事实调查、反方审查整体迁移。
 主要分歧是是否保留无 body 的 ObjectVersion Delta 占位；选择依据与替代方案见 §3.2。
-没有运行新的 executable witness；新增能力全部保持 Open，后续实现证据再更新状态。
+规划轮没有运行新的 executable witness，当时新增能力保持 Open；后续实施记录见 §8。
 
 如果出现实际需要读取 v1 文件的用户数据、现有外部调用者依赖 metadata-only API，或本片必须
 同时解决自描述重开，则重访迁移/范围决定；目前未发现这样的产品消费者。
+
+## 8. 实施合同与验收账本
+
+实施起点为 `c8e331d`，工作区干净。用户已采纳整体迁移、暂收回 Delta ID 占位，并要求代码 TODO。
+本片沿用 Storage → Serialization/RBF 依赖，SG/runtime/policy 不增加产品依赖或改变生成合同。
+改动前根 build 零警告/错误，全套基线测试 536/536 通过，无跳过。
+
+首波接缝：
+
+- 新 `BaseObjectRecord(uint objectId, ReadOnlySpan<byte> body)` 拷贝输入，sealed 不可变；
+  `ObjectId` 和 `ReadOnlySpan<byte> Body` 只读公开。Revision 持有不可变 records 并冻结外层列表。
+- `StateRevision.CreateBase(parentRevisionAddress, baseObjects, externalObjectHeads)` 与
+  `CreateDelta(parentRevisionAddress, baseObjects, removedObjectIds)`；`baseObjects` 为
+  `IEnumerable<BaseObjectRecord>`。`BaseObjects` 按 ID 排序，`BaseObjectIds` 是派生只读视图。
+- 删除旧 ID-only 构造入口和 `DeltaObjectIds`；`StateRevision` 中留 TODO(DB-026)，记录
+  实际 Delta payload、exact prior 定位、重建链验证与 ID 新占用者从 Base 开始的后续工作。
+- wire v2 采用 §4 次序，old v1 拒绝。非法 public 模型参数用 ArgumentException 家族；
+  非法 wire 用 InvalidDataException/截断 EndOfStreamException，沿用已有 reader 错误边界。
+- `StateRevisionStore.ReadObjectBase(FrameAddress revisionHead, uint objectId)` 返回独立 byte[]；
+  ID 0 参数拒绝，非 live 或 locator 对应 Frame 无 local record 时 InvalidDataException。
+  不增加隐式 head、parent 内容兜底、policy 调用或 candidate Accept。
+
+| 要求 | 代码/负责人 | 状态与验证 |
+|---|---|---|
+| immutable records、派生 IDs、TODO、v2 framing | [BaseObjectRecord](../../src/DurableGraph.StateStore.Storage/BaseObjectRecord.cs)、[StateRevision](../../src/DurableGraph.StateStore.Storage/StateRevision.cs)、wire Reader/Writer；model/wire agent | 已实现；模型/record/wire 测试已通过 |
+| exact-head raw 读取、membership 迁移、真实文件失败/重开 | [StateRevisionStore](../../src/DurableGraph.StateStore.Storage/StateRevisionStore.cs)、Store/Materializer tests；storage agent | 已实现；Storage 95/95，包括 body 缓冲后失败的普通/轮转两种用例 |
+| SG DTO/string → 实际 Storage → typed decode | [RawBaseStorageGeneratorTests](../../tests/DurableGraph.Tests/RawBaseStorageGeneratorTests.cs)；integration agent | 已通过独立聚焦测试；仅测试项目加 Storage 引用 |
+| substrate 上限核验、集成审查、build/tests、文档/提交 | 主代理 + 只读事实/独立审查 agent | 根 build 零警告/错误，全套 559/559；独立最终代码审查无阻断 |
+
+原型无兼容读取、无对象 Delta/prior 链、无 TypeCodec/SchemaStore/领域 Restore/Save/发布。
+主代理已实际检查 diff、运行集成验证；独立审查提出的 late-body failure 见证已补齐并通过。
+
+### 容量与失败边界
+
+当前相邻 Atelia 源码的 `RbfFile.MaxPayloadAndMetaLength` 为 **268,435,428 bytes**，
+由 `SizedPtr.MaxLength`（268,435,452）减去 24-byte Frame 固定开销得到。
+本片没有 TailMeta，因此上限约束的是整个 v2 Revision payload，包含目录与 bodies，不是单个 body 的独立额度。
+`RbfFileImpl.CommitFromBuilder`（相邻 Rbf/Internal/RbfFileImpl.cs）使用 long writer 长度，
+在超过上限时返回 RbfArgumentError，之后才将合规长度转为 int；Storage 沿用 EndAppend/Unwrap 与 using 释放。
+writer 不另做第二套完整 wire 长度算法，可能先缓冲再拒绝；单条 length 由既有 codec 约束为 int，
+有限 collection 数量乘以单条上限不可能溢出 long。这是当前资源成本，不宣称超大输入零分配拒绝。
+
+正常编码失败发生在最终提交前时，builder Dispose 放弃缓冲内容，lease 可再次取得。
+新增 100 KiB body 后置坏 external locator 的测试确认此路径；轮转后可留 header-only Segment。
+真实底层 I/O 异常后不保证物理截断已写 prefix，本片没有扩大到故障发布、crash/power-loss 恢复合同，
+也没有为该路径修改上游 RBF。
+
+### 最终验证
+
+```powershell
+dotnet build DurableGraph.slnx --verbosity quiet
+dotnet test tests/DurableGraph.StateStore.Storage.Tests/DurableGraph.StateStore.Storage.Tests.csproj --no-build --verbosity quiet
+dotnet test tests/DurableGraph.Tests/DurableGraph.Tests.csproj --no-build --verbosity quiet --filter FullyQualifiedName~RawBaseStorage
+dotnet test DurableGraph.slnx --no-build --verbosity quiet
+git diff --check
+```
+
+根最终 build 为 0 warnings / 0 errors。初次 Storage 聚焦 93/93、真实 SG 集成 1/1 通过；
+补入两条 body 缓冲后失败用例并重建后，全套 **559/559**，零跳过：
+Storage 95、DurableGraph 330、Serialization 94、StateStore 40。
+真实 SG 见证写入两个正常 Revision 与两条损坏引用候选；清空捕获返回的 body 数组、关闭并
+只读重开文件，再按 exact Revision 读取与解码。重复 root、独立 string 身份、空串与 null 均保留所选语义。
+
+本片未修改 Generator/runtime/policy、NuGet 打包或现有单包消费接线；仅测试程序集增加 Storage 引用，
+因此没有再次运行 PackageConsumerProbe，也没有把 Storage 加入 runtime 包。
+所有持久化证据仅针对上述显式 metadata fixture 和正常关闭重开，不扩称自描述加载或持久发布。

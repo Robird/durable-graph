@@ -4,8 +4,7 @@ using Atelia.DurableGraph.StateStore.Serialization;
 namespace Atelia.DurableGraph.StateStore.Storage;
 
 /// <summary>
-/// Encodes the provisional v1 State Revision membership payload. Object contents are
-/// intentionally outside this format slice.
+/// Encodes the provisional v2 State Revision with complete local opaque Base bodies.
 /// </summary>
 internal static class StateRevisionWireWriter {
     internal static void Write(
@@ -30,8 +29,11 @@ internal static class StateRevisionWireWriter {
             writer.WriteByte(0);
         }
 
-        WriteObjectIds(ref writer, revision.BaseObjectIds);
-        WriteObjectIds(ref writer, revision.DeltaObjectIds);
+        WriteCount(ref writer, revision.BaseObjects.Count);
+        foreach (BaseObjectRecord record in revision.BaseObjects) {
+            writer.WriteUInt32(record.ObjectId);
+            writer.WriteBytes(record.Body);
+        }
         switch (revision.ObjectHeadMapKind) {
             case ObjectHeadMapKind.Base:
                 WriteCount(ref writer, revision.ExternalObjectHeads.Count);
@@ -69,8 +71,7 @@ internal static class StateRevisionWireWriter {
     }
 
     private static void ValidateCollectionCounts(StateRevision revision) {
-        ValidateCount(revision.BaseObjectIds.Count, nameof(revision.BaseObjectIds));
-        ValidateCount(revision.DeltaObjectIds.Count, nameof(revision.DeltaObjectIds));
+        ValidateCount(revision.BaseObjects.Count, nameof(revision.BaseObjects));
         if (revision.ObjectHeadMapKind == ObjectHeadMapKind.Base) {
             ValidateCount(
                 revision.ExternalObjectHeads.Count,

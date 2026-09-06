@@ -2,7 +2,7 @@
 
 > 最近校准：2026-09-06
 >
-> 状态：基础存储/策略、祖先 Schema、typed slot/数组元素、SG DTO/body 及 string 引用 Capture/读取分片已实现并验收；完整图恢复与持久 Save 尚未实施。
+> 状态：基础存储/策略、祖先 Schema、typed slot/数组元素、SG DTO/body、string 引用 Capture/读取与同 Frame raw Base 内容片已通过验收。完整图恢复与持久 Save 尚未实施。
 >
 > 范围：src 中的产品项目及对应 tests。本文是共享上下文与导航，不是实现授权或功能规格。
 
@@ -32,10 +32,10 @@ AddRoot 登记根，Seal 捕获字段；exact 类型检查只在根入口，保�
 DB-025 增加 string 内容读取表与 SG 各版引用校验；用户选择空串在 Capture/读取两端统一 string.Empty，
 非空 string 保留引用身份。自定义 struct 的嵌套布局、exact 版本传播已记入 DB-024 TODO，独立排期；BCL 集合继续暂缓。
 完整图和旧运行时序列化器翻新仍未实施。
-下一工作分片推荐 [DB-026](../docs/design-branches/0026-raw-base-object-content-slice.md)：
-同 Revision Frame 的 raw Base 内容存取与 exact-head 重开读取。本轮仅完成规划，状态 Open；
-建议把 membership-only 模型推进为完整 local Base records，保留 ObjectHeadMap Base/Delta，
-暂收回无内容的 ObjectVersion Delta ID 占位；具体迁移取舍见该文，尚未改产品代码。
+[DB-026](../docs/design-branches/0026-raw-base-object-content-slice.md) 已实现同 Revision Frame 的
+raw Base 内容存取与 exact-head 重开读取，已通过验收。ObjectHeadMap Base/Delta 均保留；
+无内容的 ObjectVersion Delta ID 占位已移除，StateRevision 中保留用户要求的 Delta/prior 链 TODO。
+施工合同、provisional v2 格式与验收账本见 DB-026 §8。
 [DB-017](../docs/design-branches/0017-object-codec-design-points.md)保留早期要点/旧实现证据；
 其 string 字段 inline 方案已被取代。codec-first 排序依据见 DB-016。
 
@@ -46,7 +46,7 @@ DB-025 增加 string 内容读取表与 SG 各版引用校验；用户选择空�
 | [DurableGraph](DurableGraph/DurableGraph.csproj) | immutable DurableSchema 与 exact BaseSchema；内存 SchemaStore；CaptureSession/Context 维护 string 身份、单调 ID、封闭候选；StringReadTable 从独立 bodies 解码并解析 string，空串两端统一；非持久图 Store |
 | [Generator](DurableGraph.Generator/DurableGraph.Generator.csproj) / [Build](DurableGraph.Build/DurableGraph.Build.csproj) | legacy Snapshot/Upgrade 保留；SchemaOnly 祖先/history；生成 readonly Vn、current Capture、concrete AddRoot、各版 Write/ReadVn/ValidateStringReferences；String schema 槽为 uint |
 | [StateStore](DurableGraph.StateStore/DurableGraph.StateStore.csproj) | 固定 ReadAmplificationBaseBudgetPolicy：全部 post-live 估算 → 稀疏只读 Base/Delta 写计划；无内容执行/完整 Save |
-| [Storage](DurableGraph.StateStore.Storage/DurableGraph.StateStore.Storage.csproj) | immutable membership StateRevision、canonical provisional wire、真实 RBF/Segment append/read/reopen、exact-head shallow live map；无 ObjectVersion payload |
+| [Storage](DurableGraph.StateStore.Storage/DurableGraph.StateStore.Storage.csproj) | immutable BaseObjectRecord + 完整 local StateRevision、provisional v2 wire、真实 RBF/Segment append/read/reopen、exact-head shallow live map 与 raw Base 内容读取；无对象 Delta/prior 链 |
 | [Serialization](DurableGraph.StateStore.Serialization/DurableGraph.StateStore.Serialization.csproj) | BCL-only 字节原语/string 内容 codec、显式 body 的 typed slot、SZ/rank-2 元素 ref 循环；primitive slot 查表仅为测试共享工具，尚无数组对象 envelope 或对象级 Base/Delta |
 
 当前产品依赖为 StateStore → Storage → Serialization，Storage 另用 RbfSegmentStore/Rbf 与地址基础类型。
@@ -61,6 +61,9 @@ DTO body 支持 13 种标量及 string 引用的 UInt32 ID；String 内容独立
 
 - 产品地址采用多历史 Segment 与 BackwardFileDistance；文件轮转是 soft threshold，不强制冷对象 Base。
 - Storage 不理解 CLR 字段、Schema 升级或图 reachability；append 返回 candidate address，外层拥有发布 head。
+- 本地 BaseObjectRecord 是 ID/内容唯一来源；构造复制 body，公开只读 span，Revision 冻结列表与派生 IDs。
+  ReadObjectBase 从 exact Revision 找 live head，只读该 Frame 的 local record，返回独立 byte[]。
+  raw 内容读取不验证 Schema 或全图引用；wire v2 明确拒绝旧 v1，无额外零复制/容量估算层。
 - MVP 固定一个对象表示策略：整数 X 倍产生严格读动机，整数 Y% 控制可选 Base 软预算；
   规则与实现入口见 [DB-015](../docs/design-branches/0015-statestore-object-representation-policy.md)。
 - 所有受支持引用对象统一身份：自定义对象、string、数组、BCL 容器均进引用表。
@@ -103,9 +106,9 @@ DTO body 支持 13 种标量及 string 引用的 UInt32 ID；String 内容独立
    用户已裁决所有空串统一 Empty，非空维持身份；产品不采用非公开入口或公开 API 的独立空串分配技巧。
    不提前建立通用图加载/TypeCodec registry；精确进度见 DB-025 §7。
    struct 仍需 inline exact Schema 表达，独立排期。
-4. 下一片推荐 DB-026：把真实 DTO/string bytes 接入同 Frame 的 raw Base records，
-   跨 Revision/Segment 并关闭重开后按 exact head 读取；不做持久类型头、领域 Restore 或 Save。
-   codec-first 已提供本片需要的真实内容；两个方向没有硬性先后依赖，这次排序尚为规划建议。
+4. DB-026 已把真实 DTO/string bytes 接入同 Frame 的 raw Base records，
+   跨 Revision/Segment 并关闭重开后按 exact head 读取；已通过验收。
+   typed 见证显式持有 kind/exact Schema/roots 元数据，不是持久自描述图格式或领域 Restore。
 5. 根据真实消费者收敛 Delta、原始版本链、B/D/H 的来源与提交更新，再接策略和 Save。
 
 引用、数组的支持和存储接入具体穿插顺序尚未冻结；BCL 集合/comparer/索引问题已明确暂缓。
@@ -122,9 +125,9 @@ DTO body 支持 13 种标量及 string 引用的 UInt32 ID；String 内容独立
 - DTO ReadVn 失败不返回半成品，只可能推进 Reader；底层 slot/数组仍是原地读入。
   一般 struct/含引用 DTO 的所有权与不可变内容不能从 scalar readonly DTO 自动推导。
 - 多态引用、数组 shape/wire/分配；容器统一 identity 原则保留，comparer/key 恢复暂缓讨论。
-- ObjectVersion record/codec 绑定、H 恢复及 baseline 更新、ObjectHeadMap checkpoint；DTO 容器和比较/估算另片推进。
-  DB-026 推荐整体迁移 provisional wire、仅保留有真实 body 的 local Base records；
-  旧 v1 拒绝而不兼容，ObjectVersion Delta 占位回收是显式 API 调整，等待实施采纳。
+- TypeCodec/Schema 绑定、对象 Delta/prior 链、H 恢复与 baseline 更新；比较/估算另片推进。
+  DB-026 已整体迁移 provisional wire v2，仅保留有真实 body 的 local Base records，旧 v1 明确拒绝。
+  ObjectHeadMap checkpoint 可用，但仍由调用方提供完整 membership，不由 Storage 推断可达性。
 
 ## 明确暂缓与证据入口
 

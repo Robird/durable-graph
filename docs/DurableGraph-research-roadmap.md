@@ -15,28 +15,29 @@
   共 13 种 CLR primitive 贯通 DTO 与历史通道；string 则按引用 ID 进入同一布局。
 - DB-024：引用 capture 进入闭合候选图，`CaptureSession`/`CaptureContext`/`CapturedGraph` 已成形；
   root 通过 typed 适配器登记，string 字段写 `uint` 引用 ID，string 本体作为独立内存对象条目捕获，候选可 `Accept`/`Discard`。
+- DB-025/026：string 解码/引用校验，以及同 Revision Frame raw Base 内容、wire v2 与 exact-head 文件重开读取已通过验收。
 
 当前仍未实现：
 
-- 对象 payload 的持久 wire/framing 与 commit/publication/recovery 闭环；
+- 对象 Delta/prior 链、TypeCodec/Schema 的持久绑定与 commit/publication/recovery 闭环；
 - 通用自定义 durable 引用的递归 Capture、共享/循环/reachability，以及完整领域 Restore；
-- reopen 后的 ObjectId 重新绑定、复杂值类型、集合、回收策略与生产级对象版本持久化。
+- reopen 后的 ObjectId 重新绑定、复杂值类型、集合与回收策略。
 
 因此，后续路线不能把 target design 中的完整系统描述成已经存在，也不应让尚无消费者的格式、缓存或兼容层先塑造核心语义。
 
 ## 2. 当前研究方向
 
-### 2.1 下一分片建议：DB-026 raw Base 内容接入
+### 2.1 当前产品进展：DB-026 raw Base 内容已接入
 
 DB-024 的 string 引用 capture 与内存候选已封闭，下一步保持切片独立：
 
 - [DB-025](design-branches/0025-string-object-decoding-slice.md) 已实现并通过验收：
   保留 ID DTO，以 string 解码表 + SG 各版引用校验形成 typed 字节见证，领域 Restore 另片；
 - 用户已选择空串两端统一 string.Empty，非空保留身份；不再要求独立空串分配，不顺带实现通用循环图；
-- [DB-026](design-branches/0026-raw-base-object-content-slice.md) 已完成下一片规划，尚未实施：
+- [DB-026](design-branches/0026-raw-base-object-content-slice.md) 已实现并通过验收：
   同 Revision Frame 保存完整 local Base records，再由 exact Revision/ObjectId 跨文件重开读取。
-  推荐整体迁移 membership-only 模型与 provisional wire，保留 ObjectHeadMap Base/Delta，
-  暂时收回只有 ID 的 ObjectVersion Delta 占位；取舍详见该文。
+  membership-only 模型已迁至完整内容与 wire v2，保留 ObjectHeadMap Base/Delta，
+  只有 ID 的 ObjectVersion Delta 占位已移除，后续真实 Delta/prior 链以代码 TODO 保留。
 - 之后由真实内容消费者收敛对象 Delta/prior 链、比较估算与保存视图，再连接策略；
   current 领域 Restore、Durable 互引和 struct 保持独立候选，不提前冻结全部先后次序。
 
@@ -53,8 +54,8 @@ MultiSegment probe 已完成其文件级 address/rollover 风险验证，产品 
 R1/R2 已回答 current graph capture/delta，R3a/R3b 已闭合 historical records → normalized baseline → current CLR root。
 R4 的 logical StateMap、record reuse 与 repeated delta apply 仍是未完成的历史研究项；它没有被否定，也不是当前 string 小片的前置条件。
 
-产品已有 `BinaryPayloadReader` / `BinaryPayloadWriter` primitive 与 DTO body；对象 envelope、引用目标解析、
-canonical graph order 和 malformed object-payload contract 仍在相应状态律闭合后再固定。
+产品已有 primitive、DTO body、string 引用校验及 raw Base Revision framing；
+持久对象类型头、一般引用目标解析、canonical graph order 和类型相关的 malformed payload 合同仍待后续收敛。
 
 ### 2.3 历史版本在读取边界归一化
 

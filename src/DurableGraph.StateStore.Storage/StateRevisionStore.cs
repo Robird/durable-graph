@@ -73,4 +73,40 @@ public sealed class StateRevisionStore {
     public IReadOnlyDictionary<uint, FrameAddress> ReadLiveObjectHeads(
         FrameAddress revisionHead) =>
         LiveObjectHeadMapMaterializer.Materialize(revisionHead, Read);
+
+    /// <summary>
+    /// Reads the complete Base body of an Object live in the specified Revision.
+    /// The returned array is an independent copy owned by the caller.
+    /// </summary>
+    /// <remarks>
+    /// Resolves membership from the exact Revision, then requires its declared
+    /// containing Frame to hold a local Base record. An absent local record is
+    /// invalid even if the containing Frame inherits that Object from its parent.
+    /// This validates only the requested Object's locator and raw body; it does
+    /// not validate types, other external heads, or graph references.
+    /// </remarks>
+    public byte[] ReadObjectBase(FrameAddress revisionHead, uint objectId) {
+        FrameAddressValidator.ValidateRequired(revisionHead, nameof(revisionHead));
+        if (objectId == 0) {
+            throw new ArgumentOutOfRangeException(
+                nameof(objectId), objectId, "ObjectId must be nonzero.");
+        }
+
+        IReadOnlyDictionary<uint, FrameAddress> heads = ReadLiveObjectHeads(
+            revisionHead);
+        if (!heads.TryGetValue(objectId, out FrameAddress containingFrame)) {
+            throw new InvalidDataException(
+                $"ObjectId {objectId} is not live in Revision {revisionHead}.");
+        }
+
+        StateRevision containingRevision = Read(containingFrame);
+        foreach (BaseObjectRecord record in containingRevision.BaseObjects) {
+            if (record.ObjectId == objectId) {
+                return record.Body.ToArray();
+            }
+        }
+
+        throw new InvalidDataException(
+            $"Frame {containingFrame} has no local Base record for ObjectId {objectId}.");
+    }
 }

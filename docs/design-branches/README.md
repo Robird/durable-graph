@@ -47,7 +47,7 @@
 | [DB-023](0023-scalar-schema-dto-slice.md) | 标量 Schema、历史与 DTO 编码贯通 | Chosen | 13 种标量贯通；DB-024/025 已补 string Capture/内容读取，struct 与一般图另片 |
 | [DB-024](0024-reference-capture-and-reusable-object-ids.md) | 引用 Capture、revision 内身份与可复用 ObjectId | Chosen | SG root 适配器、封闭 ID DTO 图及内存 accept/discard；回收/恢复/struct 延期 |
 | [DB-025](0025-string-object-decoding-slice.md) | string 对象内容解码与引用槽校验分片 | Chosen | string-only 解码表、SG 各版引用校验、空串两端统一已验证；完整图目录/Restore/Storage 内容接入另片 |
-| [DB-026](0026-raw-base-object-content-slice.md) | 同 Revision Frame 的 raw Base 对象内容存取 | Open | 推荐下一片；完整 local Base records、exact-head 重开读取及 provisional wire 迁移尚未实施 |
+| [DB-026](0026-raw-base-object-content-slice.md) | 同 Revision Frame 的 raw Base 对象内容存取 | Chosen | 完整 local Base records、wire v2、exact-head 重开读取已验证；真实 Delta/prior 链在代码 TODO 保留，TypeCodec/Save 另片 |
 
 ## 附录文件
 

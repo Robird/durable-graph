@@ -3,7 +3,7 @@ using Atelia.DurableGraph.StateStore.Serialization;
 namespace Atelia.DurableGraph.StateStore.Storage;
 
 /// <summary>
-/// Decodes the provisional v1 State Revision membership payload and immediately
+/// Decodes the provisional v2 State Revision Base contents and membership, and immediately
 /// normalizes every persisted reference to an absolute <see cref="FrameAddress"/>.
 /// </summary>
 internal static class StateRevisionWireReader {
@@ -37,23 +37,20 @@ internal static class StateRevisionWireReader {
                 "An ObjectHeadMap Delta has no parent Revision address.");
         }
 
-        uint[] baseObjectIds = ReadObjectIds(ref reader);
-        uint[] deltaObjectIds = ReadObjectIds(ref reader);
+        BaseObjectRecord[] baseObjects = ReadBaseObjects(ref reader);
         StateRevision revision;
         try {
             revision = kind switch {
                 ObjectHeadMapKind.Base => StateRevision.CreateBase(
                     parent,
-                    baseObjectIds,
-                    deltaObjectIds,
+                    baseObjects,
                     ReadExternalObjectHeads(
                         ref reader,
                         scope)),
                 ObjectHeadMapKind.Delta when parent is { } parentAddress =>
                     StateRevision.CreateDelta(
                         parentAddress,
-                        baseObjectIds,
-                        deltaObjectIds,
+                        baseObjects,
                         ReadObjectIds(ref reader)),
                 _ => throw new InvalidDataException(
                     $"Unknown ObjectHeadMap kind {kind}."),
@@ -72,7 +69,7 @@ internal static class StateRevisionWireReader {
     private static KeyValuePair<uint, FrameAddress>[] ReadExternalObjectHeads(
         ref BinaryPayloadReader reader,
         FileScope scope) {
-        int count = ReadCount(ref reader);
+        int count = ReadCount(ref reader, minimumEntryBytes: 3);
         KeyValuePair<uint, FrameAddress>[] entries = new KeyValuePair<uint, FrameAddress>[count];
         uint previous = 0;
         for (int index = 0; index < count; index++) {
@@ -88,7 +85,7 @@ internal static class StateRevisionWireReader {
     }
 
     private static uint[] ReadObjectIds(ref BinaryPayloadReader reader) {
-        int count = ReadCount(ref reader);
+        int count = ReadCount(ref reader, minimumEntryBytes: 1);
         uint[] objectIds = new uint[count];
         uint previous = 0;
         for (int index = 0; index < count; index++) {
@@ -100,7 +97,21 @@ internal static class StateRevisionWireReader {
         return objectIds;
     }
 
-    private static int ReadCount(ref BinaryPayloadReader reader) {
+    private static BaseObjectRecord[] ReadBaseObjects(ref BinaryPayloadReader reader) {
+        int count = ReadCount(ref reader, minimumEntryBytes: 2);
+        BaseObjectRecord[] records = new BaseObjectRecord[count];
+        uint previous = 0;
+        for (int index = 0; index < count; index++) {
+            uint objectId = ReadNextObjectId(ref reader, previous);
+            // ReadBytes validates canonical Int32 length and remaining bounds before copying.
+            records[index] = new BaseObjectRecord(objectId, reader.ReadBytes());
+            previous = objectId;
+        }
+
+        return records;
+    }
+
+    private static int ReadCount(ref BinaryPayloadReader reader, int minimumEntryBytes) {
         uint encoded = reader.ReadUInt32();
         if (encoded > StateRevisionWireFormat.MaxCollectionCount) {
             throw new InvalidDataException(
@@ -108,7 +119,7 @@ internal static class StateRevisionWireReader {
                 $"{StateRevisionWireFormat.MaxCollectionCount}.");
         }
 
-        if (encoded > (uint)reader.RemainingCount) {
+        if (encoded > (uint)(reader.RemainingCount / minimumEntryBytes)) {
             throw new InvalidDataException(
                 $"Collection count {encoded} exceeds the remaining payload bounds.");
         }

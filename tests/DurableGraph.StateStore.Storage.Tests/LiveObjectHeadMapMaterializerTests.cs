@@ -4,14 +4,13 @@ namespace Atelia.DurableGraph.StateStore.Storage.Tests;
 
 public sealed class LiveObjectHeadMapMaterializerTests {
     [Fact]
-    public void Base_binds_local_Base_and_Delta_heads_to_self_and_preserves_external_heads() {
+    public void Base_binds_local_records_to_self_and_preserves_external_heads() {
         FrameAddress parent = Address(1, 32);
         FrameAddress externalHead = Address(1, 96);
         FrameAddress checkpoint = Address(2, 32);
         StateRevision revision = StateRevision.CreateBase(
             parent,
-            baseObjectIds: [3],
-            deltaObjectIds: [1],
+            baseObjects: Records(3, 1),
             externalObjectHeads: [
                 new KeyValuePair<uint, FrameAddress>(2, externalHead),
             ]);
@@ -37,13 +36,11 @@ public sealed class LiveObjectHeadMapMaterializerTests {
         Dictionary<FrameAddress, StateRevision> revisions = new() {
             [f1] = StateRevision.CreateBase(
                 null,
-                baseObjectIds: [1, 2, 3],
-                deltaObjectIds: [],
+                baseObjects: Records(1, 2, 3),
                 externalObjectHeads: []),
             [f2] = StateRevision.CreateDelta(
                 f1,
-                baseObjectIds: [4],
-                deltaObjectIds: [1],
+                baseObjects: Records(4, 1),
                 removedObjectIds: [2]),
         };
 
@@ -63,15 +60,13 @@ public sealed class LiveObjectHeadMapMaterializerTests {
         Dictionary<FrameAddress, StateRevision> revisions = new() {
             [checkpoint] = StateRevision.CreateBase(
                 externalHead,
-                baseObjectIds: [2],
-                deltaObjectIds: [],
+                baseObjects: Records(2),
                 externalObjectHeads: [
                     new KeyValuePair<uint, FrameAddress>(1, externalHead),
                 ]),
             [noChange] = StateRevision.CreateDelta(
                 checkpoint,
-                baseObjectIds: [],
-                deltaObjectIds: [],
+                baseObjects: Records(),
                 removedObjectIds: []),
         };
 
@@ -89,9 +84,9 @@ public sealed class LiveObjectHeadMapMaterializerTests {
         FrameAddress f2 = Address(1, 96);
         FrameAddress f3 = Address(1, 160);
         Dictionary<FrameAddress, StateRevision> revisions = new() {
-            [f1] = StateRevision.CreateBase(null, [1, 2], [], []),
-            [f2] = StateRevision.CreateDelta(f1, [], [1], []),
-            [f3] = StateRevision.CreateDelta(f2, [1], [], []),
+            [f1] = StateRevision.CreateBase(null, Records(1, 2), []),
+            [f2] = StateRevision.CreateDelta(f1, Records(1), []),
+            [f3] = StateRevision.CreateDelta(f2, Records(1), []),
         };
 
         IReadOnlyDictionary<uint, FrameAddress> heads =
@@ -108,9 +103,9 @@ public sealed class LiveObjectHeadMapMaterializerTests {
         FrameAddress f2 = Address(1, 96);
         FrameAddress f3 = Address(1, 160);
         Dictionary<FrameAddress, StateRevision> revisions = new() {
-            [f1] = StateRevision.CreateBase(null, [1, 2], [], []),
-            [f2] = StateRevision.CreateDelta(f1, [], [], [1]),
-            [f3] = StateRevision.CreateDelta(f2, [1], [], []),
+            [f1] = StateRevision.CreateBase(null, Records(1, 2), []),
+            [f2] = StateRevision.CreateDelta(f1, Records(), [1]),
+            [f3] = StateRevision.CreateDelta(f2, Records(1), []),
         };
 
         IReadOnlyDictionary<uint, FrameAddress> heads =
@@ -127,8 +122,7 @@ public sealed class LiveObjectHeadMapMaterializerTests {
         FrameAddress checkpoint = Address(2, 32);
         StateRevision revision = StateRevision.CreateBase(
             missingParent,
-            baseObjectIds: [3],
-            deltaObjectIds: [1],
+            baseObjects: Records(3, 1),
             externalObjectHeads: [
                 new KeyValuePair<uint, FrameAddress>(2, Address(1, 96)),
             ]);
@@ -157,8 +151,7 @@ public sealed class LiveObjectHeadMapMaterializerTests {
         FrameAddress head = Address(1, 32);
         StateRevision revision = StateRevision.CreateBase(
             null,
-            baseObjectIds: [3, 1, 2],
-            deltaObjectIds: [],
+            baseObjects: Records(3, 1, 2),
             externalObjectHeads: []);
 
         IReadOnlyDictionary<uint, FrameAddress> heads =
@@ -180,8 +173,8 @@ public sealed class LiveObjectHeadMapMaterializerTests {
         FrameAddress f1 = Address(1, 32);
         FrameAddress f2 = Address(1, 96);
         Dictionary<FrameAddress, StateRevision> revisions = new() {
-            [f1] = StateRevision.CreateDelta(f2, [], [], []),
-            [f2] = StateRevision.CreateBase(null, [1], [], []),
+            [f1] = StateRevision.CreateDelta(f2, Records(), []),
+            [f2] = StateRevision.CreateBase(null, Records(1), []),
         };
 
         Assert.Throws<InvalidDataException>(() =>
@@ -195,8 +188,7 @@ public sealed class LiveObjectHeadMapMaterializerTests {
         FrameAddress checkpoint = Address(1, 32);
         StateRevision revision = StateRevision.CreateBase(
             null,
-            baseObjectIds: [],
-            deltaObjectIds: [],
+            baseObjects: Records(),
             externalObjectHeads: [
                 new KeyValuePair<uint, FrameAddress>(1, Address(1, 96)),
             ]);
@@ -214,8 +206,8 @@ public sealed class LiveObjectHeadMapMaterializerTests {
         FrameAddress f1 = Address(1, 32);
         FrameAddress f2 = Address(1, 96);
         Dictionary<FrameAddress, StateRevision> revisions = new() {
-            [f1] = StateRevision.CreateDelta(f2, [], [], []),
-            [f2] = StateRevision.CreateDelta(f1, [], [], []),
+            [f1] = StateRevision.CreateDelta(f2, Records(), []),
+            [f2] = StateRevision.CreateDelta(f1, Records(), []),
         };
 
         Assert.Throws<InvalidDataException>(() =>
@@ -231,6 +223,9 @@ public sealed class LiveObjectHeadMapMaterializerTests {
             expected,
             actual.Select(pair => (pair.Key, pair.Value)).ToArray());
     }
+
+    private static BaseObjectRecord[] Records(params uint[] ids) =>
+        ids.Select(id => new BaseObjectRecord(id, [(byte)id])).ToArray();
 
     private static FrameAddress Address(uint fileNumber, long offset) =>
         new(fileNumber, SizedPtr.Create(offset, 32));
