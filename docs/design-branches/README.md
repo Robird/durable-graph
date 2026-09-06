@@ -45,3 +45,4 @@
 | [DB-021](0021-generated-primitive-body-slice.md) | 实际生成的 primitive class body | Superseded | 直接领域 Read/Write 接口由 DB-022 的 Versioned DTO/Capture 取代；保留原片证据 |
 | [DB-022](0022-versioned-state-dto-capture.md) | Versioned DTO、Capture 与 DTO binary body | Chosen | readonly scalar Vn/历史积累/current Capture；引用 Capture、比较/估算、DTO 升级与 StateStore 管线另片推进 |
 | [DB-023](0023-scalar-schema-dto-slice.md) | 标量 Schema、历史与 DTO 编码贯通 | Chosen | 13 种标量贯通；string 引用 Capture 与最小对象列表为下一候选 |
+| [DB-024](0024-reference-capture-and-reusable-object-ids.md) | 引用 Capture、revision 内身份与可复用 ObjectId | Open | 用户明确允许 ID 回收复用；时机/候选隔离/string 恢复待讨论，struct exact 嵌套 TODO 已记录 |

@@ -72,10 +72,12 @@ VisitReferences；同一实例再次出现只取已有 ID。这样不需要用 C
 
 全量单次 snapshot 可以按首次发现次序分配 `1..N`，正如用户所述。
 增量保存则要复用加载/会话中已知的 `object -> ObjectId` 映射，只给新实例分配新 ID，
-不能每次遍历重新从 1 编号。列表位置只是枚举位置；每条记录的显式 ID 才是跨次身份。
+不能每次遍历重新从 1 编号。列表位置只是枚举位置；显式 ID 在相邻保存的持续存活区间内保持；跨回收边界不代表同一对象。
 
 统一身份不要求所有对象都继承可写入 ID 的基类：string、数组、BCL 容器可由外层 side table 管理。
-具体 ID 分配/不复用与 session 生命周期留给 StateStore 接入；此处继续兼容现有非零 uint ObjectId 域。
+2026-09-06 校准：用户明确 ObjectId 经过 StateRevision 解释，允许回收复用；继续使用现有非零 uint 域。
+分配/回收/候选生命周期与 string Capture 的当前讨论见 [DB-024](0024-reference-capture-and-reusable-object-ids.md)。
+引用解析使用目标 revision，即使 owner payload 来自更早的 record；不按 payload 出生 revision 解析引用。
 同一字符串实例不会原地改变内容；替换为内容相同的新实例仍是不同对象引用。
 
 保真范围是保存图内部两两 ReferenceEquals 关系，不包括与新进程已有对象/intern pool 的关系。

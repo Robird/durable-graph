@@ -135,11 +135,11 @@ DurableGraph 更接近：
 
 ### 5.3 Identity 不变量
 
-- 一个 logical durable object 在后续 commit 中保持同一 `DurableId`。
-- clone/fork 默认产生新 `DurableId`。
-- 已分配 ID 永不复用；失败或放弃的 candidate 消耗 ID 是允许的。
-- 同一 commit materialization 中，一个 `DurableId` 只能对应一个 CLR 对象实例。
-- CLR reference identity 不是持久身份；`DurableId` 才是。
+- 一个在相邻提交中持续存活的对象保留同一 ObjectId；ObjectId 的查找语义属于指定 StateRevision。
+- 同一图内 clone 产生独立对象身份；fork 的视图作用域及是否保留数字编号另行定义。
+- 回收后的数字 ID 可以复用；旧 revision 仍按自己的 ObjectHeadMap 解释。复用后的新占用者不能继承旧对象的 Delta 链。
+- 同一 commit materialization 中，一个 ObjectId 只能对应一个 CLR 对象实例。
+- CLR reference identity 用于当前视图的实例登记；持久查找需要 Store、exact StateRevision 和 ObjectId，裸 ID 不是全历史实体键。
 
 ### 5.4 Commit 不变量
 
@@ -261,6 +261,7 @@ internal static CharacterState Upgrade(CharacterStateV1 old, UpgradeContext cont
 - durable member 列表
 - 每个 member 的稳定 `MemberId`
 - value/reference/artifact/transient 分类
+- 内嵌 struct 的 exact Schema 依赖（其版本变化要求 owner 及 inline/base 依赖者递增版本）
 - nullability 与必要约束
 - collection/value codec kind
 - 允许的 polymorphic type set 或 type family
@@ -369,7 +370,9 @@ Source Generator 为每个 durable type 生成：
 - 跨 Repository copy 默认重新分配还是保留 origin identity；
 - fork/clone 的明确行为。
 
-无论最终编码如何，逻辑语义必须稳定：ID 不复用，引用通过 ID 解析，加载同一 graph 时恢复共享引用和循环引用。
+2026-09-06 用户澄清：ObjectId 经 StateRevision 解释，允许回收复用，取代早稿“ID 永不复用”。
+同图共享/循环引用必须保持；不同 revision 中的相同数字不必表示同一对象。具体复用时机、
+候选隔离与内存/物理 GC 分离见 [DB-024](design-branches/0024-reference-capture-and-reusable-object-ids.md)，尚未实施。
 
 ### 10.2 Reachability
 

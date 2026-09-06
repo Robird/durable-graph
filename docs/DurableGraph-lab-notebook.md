@@ -780,6 +780,19 @@
 
 ## 6. 船长日志
 
+### 2026-09-06：引用 Capture 与可复用 ObjectId 设计讨论
+
+- **Decided**：用户明确 ObjectId 经 StateRevision 解释，允许回收后复用；修订目标文档中“永不复用”的过强约束。
+  用户补充 struct 采用嵌套值布局，exact struct 版本变化沿 inline/base 依赖传播并要求 owner 升版。
+- **Draft**：[DB-024](design-branches/0024-reference-capture-and-reusable-object-ids.md)记录 string Capture → ID DTO → 对象列表、
+  目标 revision 解析引用、候选隔离、隔成功发布复用与同候选复用的取舍；尚待讨论，不是实现成果。
+- **Observed**：只读检查 StateJournal SlabBitmap/SlotPool/SlotHandle，并查看 GcPool 组合合同。
+  位图/低号分配可借鉴；24+8 handle、generation 回绕、mark 期间不得分配及 slot 移动不能原样当成持久 ID 语义。
+  未移植代码或运行相邻仓库测试；也未增加产品依赖。
+- **Deferred**：struct 的 exact 字段类型表达、历史闭包及 nested DTO 已列 TODO，可与引用 Capture 分开排期。
+  string 空内容 codec 当前返回 string.Empty，独立空串实例保真要在恢复分片用分配见证裁决。
+- 本轮仅保存设计文档和校准工作集；未实现 ID 池、GC、图 Capture/Restore 或 StateStore Save。
+
 ### 2026-09-05：13 种标量贯通 Schema、历史与 DTO
 
 - **Decided**：在 DB-022 的 DTO 管线之后，先补齐已存在的标量字节原语消费者；

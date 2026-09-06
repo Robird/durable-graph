@@ -1,6 +1,6 @@
 # DurableGraph 产品开发工作集
 
-> 最近校准：2026-09-05
+> 最近校准：2026-09-06
 >
 > 状态：StateStore 基础切片、估算策略、祖先元数据、typed slot/数组元素及 SG Versioned DTO/Capture/body 已实现；图管线尚未实施。
 >
@@ -21,7 +21,10 @@ typed 值槽位与 SZ/rank-2 元素循环已落地，范围见 [DB-020](../docs/
 SchemaOnly + GenerateBinaryBody 生成 readonly V1..Vcurrent DTO、current Capture 及 typed DTO binary body。
 [DB-023](../docs/design-branches/0023-scalar-schema-dto-slice.md)将 Schema/history/DTO 贯通到 13 种标量；
 历史 DTO 依 exact 祖先闭包生成，不需要旧 CLR 祖先保留。
-下一候选是接 Capture 的 string 引用上下文与最小对象列表；用户明确暂缓 BCL 集合内容支持。
+下一候选是接 Capture 的 string 引用上下文与最小对象列表；设计讨论见
+[DB-024](../docs/design-branches/0024-reference-capture-and-reusable-object-ids.md)。
+用户明确 ObjectId 经过 StateRevision 解释，可回收复用；复用时机/候选生命周期尚待敲定，未实施。
+自定义 struct 的嵌套布局、exact 版本传播已记入 DB-024 TODO，独立排期；BCL 集合继续暂缓。
 完整图和旧运行时序列化器翻新仍未实施。
 [DB-017](../docs/design-branches/0017-object-codec-design-points.md)保留早期要点/旧实现证据；
 其 string 字段 inline 方案已被取代。codec-first 排序依据见 DB-016。
@@ -62,6 +65,11 @@ DTO body 支持其中 13 种标量，string 仍须等待统一引用上下文；
   候选只在实际提交发布成功后成为基线，不能重新捕获领域对象代替已提交结果；完整基线管线尚未实现。
 - DTO 的物理字段不决定 Schema。当前以 Segment0Field1 等名字展开 exact 声明链，Schema 仍分段；
   历史 Vn 来自 accepted history，每次再生成，不另存 DTO 源码历史。
+- ObjectId 是指定 StateRevision 内的查找编号；相邻保存中持续存活的对象保留 ID，可回收后重新分配。
+  不再要求全历史永不复用；跨 revision 裸 ID 相等不代表同一对象，新占用者应从 Base 开始。
+  DB-024 推荐隔一次成功发布后复用、候选预留/基线隔离，仍为待讨论设计。
+- 自定义 struct 使用嵌套值布局；字段 exact struct 版本改变要求 owner 及其 inline/base 依赖者升版。
+  引用边仍用 nominal 约束，不因引用目标升版而递归传播。类型描述/history 与 nested DTO 尚待实现。
 - 真实 parent、保存视图、变更分类与 Removes 属于调用方；估算计划不能自行证明 live 集合完整。
 
 ## 近期依赖顺序
