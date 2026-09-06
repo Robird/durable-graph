@@ -7,9 +7,10 @@
 
 ## 1. 下一个分片如何选择
 
-优先让真实 DTO/string 内容消费者收敛对象版本与保存准备：对象 Delta/prior 链，
-或候选与 Parent 状态比较并提供策略所需估算。先回答最小问题，再连接完整 Save。
-这仍是候选方向，本次文档治理不替产品确定 Delta 格式、比较合同或下一轮施工范围。
+当前推荐 [DB-027：同 exact Schema DTO 比较与字段 Delta body](design-branches/0027-generated-same-schema-delta-body-slice.md)，
+先从冻结 DTO 产生并重建真实差异，取得实际 body B/D，再让真实消费者收敛对象 Delta/prior 链与 H。
+DB-027 的浮点比较、位图格式、范围和验收仍是待用户裁决的提案，尚未实施。
+后续再连接对象列表比较、策略和完整 Save；详细候选取舍只在 DB-027 维护。
 
 current 领域 Restore、自定义 struct 和一般 durable 引用可以独立成片。
 它们与存储推进的穿插顺序尚未冻结；不要恢复旧 R4 → R5 → R6 或 P0–P7 为强制流水线。

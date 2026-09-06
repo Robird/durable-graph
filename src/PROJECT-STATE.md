@@ -15,8 +15,8 @@
 ## 当前焦点
 
 同 Revision Frame 的 raw Base 内容存取已闭合；当前没有正在施工的产品分片。
-下一片优先候选是让真实内容支撑对象 Delta/prior 链、比较估算与策略接入，
-先明确最小消费者和验收合同；这仍是候选排序，不是已授权的完整 Save 开发计划。
+下一片推荐为 [DB-027：同 exact Schema DTO 比较与字段 Delta body](../docs/design-branches/0027-generated-same-schema-delta-body-slice.md)，
+已完成规划，等待用户裁决；以真实差异 codec 为后续 Delta/prior 链提供消费者，尚未实施。
 struct、一般引用 Capture、DTO 升级/Restore 可独立穿插，选择与待定点集中在后续路线。
 
 ## 当前能力与实际边界

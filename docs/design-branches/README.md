@@ -15,6 +15,12 @@
 - **Rejected / Superseded**：保留否决原因或后继链接，不继续作为施工输入。
 - 本索引的“实施/适用范围”与原状态分开。源码和可执行证据决定实现事实，历史测试数字只属于当时基线。
 
+## 当前规划
+
+| 文档 | 状态 | 范围 |
+|---|---|---|
+| [DB-027 同版 DTO 比较与字段 Delta body](0027-generated-same-schema-delta-body-slice.md) | Proposed，待用户裁决 | SG 静态 comparer/Delta 编解码，真实 body B/D；尚未实施，不含持久 prior 链或 Save |
+
 ## 按任务查阅的混合决策
 
 这些文档跨越已实施、已接受未实施和未决问题；仅在路线图指向相关主题时阅读对应章节。
