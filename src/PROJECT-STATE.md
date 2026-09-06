@@ -26,7 +26,9 @@ SchemaOnly + GenerateBinaryBody 生成 readonly V1..Vcurrent DTO、current Captu
 用户明确 ObjectId 经过 StateRevision 解释，可回收复用；但首片已选择 session 内单调递增分配，回收延期。
 首片只做 string 引用 Capture、封闭对象列表与内存 accept/discard；尚未实施。
 实施前交接见 [工作单](../docs/WORK-ORDER-REFERENCE-CAPTURE.md)和 [Goal 草稿](../docs/GOAL-REFERENCE-CAPTURE.md)，
-状态为待评审，G0 根入口/公开生成代码接缝需冻结；未创建或启动 Goal。
+用户已启动实施 Goal；当前 G0 具体方案见 DB-024 §3.1，待用户裁决后推进 G1–G3。
+推荐 SG 在 internal helper 生成 AddRoot，配对领域类型/Schema/DTO/Capture；Runtime 公开最小 session/context/候选接缝。
+AddRoot 登记根，Seal 捕获字段；exact 类型检查只在根入口，保留基类 Capture 可接收派生实例。
 自定义 struct 的嵌套布局、exact 版本传播已记入 DB-024 TODO，独立排期；BCL 集合继续暂缓。
 完整图和旧运行时序列化器翻新仍未实施。
 [DB-017](../docs/design-branches/0017-object-codec-design-points.md)保留早期要点/旧实现证据；

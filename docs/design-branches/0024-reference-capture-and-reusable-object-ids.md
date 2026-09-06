@@ -2,7 +2,7 @@
 
 > 状态：首片方向已确认 / 实施接缝待评审 — 2026-09-06；产品代码基线 `0b9652c`。
 >
-> 用户已认可分析，并明确首片改用单调递增 ID、延期回收；本轮要求先形成文档，不启动实施。
+> 用户已启动实施 Goal，要求先呈现 G0 根入口/公开类型，收到尚未裁决分支的决定后再实施。
 > 承接 DB-018/022/023；本文区分用户已明确的语义与尚待讨论的实施建议。
 
 ## 1. 已明确与本轮建议
@@ -18,7 +18,7 @@
 范围是“标量 + string 的领域 roots → ID 化 Versioned DTO → 封闭候选”，
 以及单会话、单在途候选的 accept/discard 内存见证。string 作为独立内容条目，引用槽不 inline 内容。
 不在首片实现字符串对象解码/领域 Restore、Durable 对象互引/循环、ID 回收池或完整 Save。
-实施交接见 [工作单](../WORK-ORDER-REFERENCE-CAPTURE.md)；[Goal 草稿](../GOAL-REFERENCE-CAPTURE.md)尚未启动。
+实施交接见 [工作单](../WORK-ORDER-REFERENCE-CAPTURE.md)；[Goal 文本](../GOAL-REFERENCE-CAPTURE.md)已启动，当前停在 G0 设计评审。
 
 - 一个 CaptureSession 从非零 uint 域单调分配；0 表示 null。分配过的号在该 session 内不再发放。
   实施建议：失败/discard 允许消耗号码，高水位不回退；这免去首片的号段回滚与回收状态。
@@ -101,6 +101,97 @@ roots: [1]
 
 条目至少携带明确的内存 kind（String 或 Durable + exact Schema）和内容。
 它对应未来对象头 TypeCodec 的职责，但首片不冻结数组/泛型 TypeCodec，也不假造完整磁盘图格式。
+
+## 3.1 G0 具体接缝提案：生成 root 适配器（待用户裁决）
+
+2026-09-06 核验基线 `8816f0c`，开工工作树干净。主代理与独立只读子代理检查了
+`DurableSchemaGenerator.BinaryBody.cs`、`DurableBase.cs`、现有 DTO 测试与真实包消费者。
+以下是源码支持的设计建议，尚无新增产品代码或编译运行证据。
+
+两种入口可以共用同一个 Runtime 泛型登记方法，差别不需要上升为两套 capture 框架：
+
+| 方案 | 调用方责任 | 取舍 |
+|---|---|---|
+| 调用方显式 binding | 每处传入领域值、Schema、typed Capture 函数 | SG 改动略少，但三者配对依赖调用方；容易把错误版本的 Schema 交给正确 DTO |
+| **推荐：SG 生成 root 适配器** | 调用每个 concrete 类型的 `AddRoot(context, value)` | 生成器配对当前 Schema、DTO 和 Capture；仅多一个 internal 静态包装方法，无全局 registry |
+
+推荐的用户侧调用形状（位于领域类型所在的下游程序集）：
+
+```csharp
+var session = new CaptureSession();
+using var capture = session.BeginCapture();
+uint characterId = Character.__DurableBinaryBody.AddRoot(capture, character);
+uint itemId = Item.__DurableBinaryBody.AddRoot(capture, item);
+var candidate = capture.Seal();
+// 检查或消费 candidate；此后领域对象变化不影响它。
+session.Accept(candidate); // 或 session.Discard(candidate)
+```
+
+`__DurableBinaryBody` 和 Vn 继续 internal；首片无需给领域类增加 public/virtual/interface 成员。
+领域库之外的调用方如有需要，可由领域库提供普通 public 包装方法；不在首片自动公开 DTO 或建立跨库类型发现。
+本片多 concrete roots 指同一消费程序集中的显式 typed 调用，不是 `IEnumerable<DurableBase>` 的自动多态分派。
+
+建议的 Runtime public 边界均放在现有 `Atelia.DurableGraph`，构造权尽量留在 Runtime：
+
+| 类型 | 必要成员（签名提案） |
+|---|---|
+| `CaptureSession` | public 构造；`CapturedGraph? Current { get; }`；`CaptureContext BeginCapture()`；`void Accept(CapturedGraph candidate)`；`void Discard(CapturedGraph candidate)` |
+| `CaptureContext : IDisposable` | internal 构造；下述泛型 `AddRoot`；`uint CaptureString(string? value)`；`CapturedGraph Seal()`；`void Dispose()` |
+| `CapturedGraph` | internal 构造；`IReadOnlyList<uint> RootIds`；`IReadOnlyList<CapturedObject> Objects`，公开视图无可写集合旁路 |
+| `CapturedObject` | internal 构造；`uint Id`；`CapturedObjectKind Kind`；`DurableSchema? Schema`；`TState GetState<TState>() where TState : unmanaged`；`string StringContent` |
+| `CapturedObjectKind` | 内存枚举 `Durable`、`String`；不是持久 TypeCodec 编号 |
+
+Durable 条目携带 exact Schema，私下装箱 DTO；`GetState<TState>()` 只按准确 DTO 类型返回副本，
+不用 public `object Payload` 暴露装箱存储。String 条目 Schema 为 null，StringContent 返回不可变内容。
+访问错误 kind 或错误 DTO 类型明确抛错，不返回默认值。Objects 按 ID 升序，RootIds 保留输入顺序及重复/null。
+条目集合本身即 live 集合，不再公开第二份可独立变动的 membership；按 ID 查找可先由消费者枚举完成。
+
+生成代码调用的底层方法建议为：
+
+```csharp
+public uint AddRoot<TDomain, TState>(
+    TDomain? value,
+    DurableSchema schema,
+    Func<TDomain, CaptureContext, TState> capture)
+    where TDomain : DurableBase
+    where TState : unmanaged;
+
+// 下面位于 Character.__DurableBinaryBody，假设当前版本为 V1。
+internal static uint AddRoot(CaptureContext context, Character? value) =>
+    context.AddRoot<Character, V1>(value, V1.Schema,
+        static (source, shared) => Capture(source, shared));
+```
+
+`unmanaged` 是本片 DTO 不含托管引用的编译期边界：当前 13 标量和 string 转成的 uint 槽均满足它。
+它不把领域对象改为值类型，也不是一般自定义 struct 支持；以后布局确实需要托管内容时再重审。
+这一泛型方法因下游生成代码调用而必须 public，但不是对任意手写 codec 的格式/Schema 正确性证明；
+SG 负责 Schema/DTO/字段内容配对，Runtime 负责会话、身份与生命周期。只写 `where TState : struct`
+不足以阻止 DTO 间接保留可变领域引用；首片无需为任意 DTO 建深拷贝或逐字段反射验证器。
+
+本次核验出的行为边界：
+
+- 非 null root 在登记前检查 `value.GetType() == typeof(TDomain)`，包括重复 root；
+  `Base` binding 接收 `Derived` 必须失败。该检查不枚举成员，不作 Type 哈希查找。
+  **不能把 exact 检查塞进现有 Capture**：现有基类 Capture 的测试明确传入派生实例。
+  abstract 类型只生成段级 Capture，不生成独立 root 适配器。
+- 泛型登记由 Runtime 在回调前分配/登记 ID，重复 root 只追加根引用，不重复捕获 body。
+  建议 Begin/AddRoot 阶段只登记根，Seal 按首次登记次序调用各根 Capture；string 在该次 Capture 内登记。
+  这样 roots 先占号，字段仍 base-first/FieldId 顺序。稳定领域视图必须覆盖整个 Begin 至 Seal 阶段。
+  相同实例的重复 binding 必须一致；不能采用“第一次决定，其余错误 Schema/DTO 静默忽略”。
+- 对象边界每对象一次 typed 委托可接受；字段仍是静态原语和 `CaptureString` 调用。
+  Context 不公开原始 ID 分配、占位后任意 Complete 或可写字典，避免让调用方拼装未封闭的对象列表。
+- `CaptureString` 是生成代码的引用槽入口，在 Seal 执行 Capture 回调期间有效；
+  不提供独立 string root，null root 经 typed root 适配器登记为 0。
+  回调期间拒绝 AddRoot/Seal 的重入；本片没有 Durable 字段互引，不需提前实现通用遍历队列。
+- 有 string 的 Capture 显式接收共享 context，基类需要它时逐层传递；纯标量 `Capture(value)` 保留。
+  历史 String Schema 仍生成 uint DTO/UInt32 body；历史领域 Capture 不生成。
+- Seal 后 Context 不再可写。Accept/Discard 由所属 session 消费候选；Dispose 放弃仍在构建或尚未裁决的候选，
+  已 accept/discard 后 Dispose 幂等。任何构建失败终止本次候选，允许下一次 Begin；烧号但 parent 不变。
+  构建器/会话私下持有实例绑定；终止候选应清理回调闭包和临时实例引用，保留旧候选数据不应保留其领域实例。
+
+**G0 待裁决内容**：是否采用“internal SG root 适配器 + 上述最小 public Runtime 会话/候选接缝”。
+命名和内部集合实现可按验证结果调整，不另外冻结新程序集、通用 codec 接口或未来多态入口。
+收到决定后，G1–G3 再以真实 SG 编译、错误路径、包消费者及独立审查证明该提案成立。
 
 ## 4. 回收与复用时机：延期素材，首片不实施
 

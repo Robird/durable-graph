@@ -780,6 +780,15 @@
 
 ## 6. 船长日志
 
+### 2026-09-06：引用 Capture 的 G0 接缝具体化，待用户裁决
+
+- **Observed**：从干净的 `8816f0c` 开工，完整读取工作单与工作集，并与独立只读子代理核对 generator/DTO/包消费者。
+  当前基类 Capture 接收派生实例，exact root 检查必须留在新根登记边界。
+- **Tentative**：DB-024 §3.1 推荐 SG 生成 internal AddRoot 适配器，Runtime 公开泛型登记、session/context 与封闭候选；
+  DTO 保持 internal/unmanaged，条目私下装箱、按值取出。AddRoot 登记根，Seal 才捕获字段。
+- **Open**：用户启动 Goal 时要求 G0 尚未裁决的 public API 分支先呈现再继续；当前等待该决定，G1–G3 未实施。
+  本轮只有设计/进度文档修改，未重跑 build/tests，不把源码可行性评估当作编译证据。
+
 ### 2026-09-06：引用 Capture 首片采用单调 ID，形成实施前交接
 
 - **Decided**：用户认可前轮分析，明确将 ID 回收延期，先使用单调分配；要求先写目标与思路，不启动实施。
