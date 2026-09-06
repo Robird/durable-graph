@@ -788,6 +788,9 @@
   DTO 保持 internal/unmanaged，条目私下装箱、按值取出。AddRoot 登记根，Seal 才捕获字段。
 - **Open**：用户启动 Goal 时要求 G0 尚未裁决的 public API 分支先呈现再继续；当前等待该决定，G1–G3 未实施。
   本轮只有设计/进度文档修改，未重跑 build/tests，不把源码可行性评估当作编译证据。
+- **Observed（后续基线复核）**：在 `1c4f2e9` 串行运行根 build（0 warnings/errors）、根 test --no-build
+  （471/471，零跳过）和 PackageConsumerProbe，全部通过。包产物目录为 `obj/run-20260906022525-33812`。
+  G0 尚未收到用户裁决；这些是原有标量/历史/存储能力的基线证据，不是新引用 Capture 的验收结果。
 
 ### 2026-09-06：引用 Capture 首片采用单调 ID，形成实施前交接
 

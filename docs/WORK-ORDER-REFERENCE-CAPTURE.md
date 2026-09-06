@@ -47,8 +47,10 @@
 - `experiments/PackageConsumerProbe/Run-Probe.ps1` 验证单 runtime PackageReference；consumer 中
   `Domain.Binary.cs` 是现有 DTO 下游。无须修改旧 MultiSegment/TwoLeg Probe。
 
-已有测试证据（上轮记录，本次文档工作未重跑）：根 build 0 warnings/errors，产品 tests 471/471，
-真实 PackageConsumerProbe 通过。实施开始后重新建立相应基线，不能引用旧数字代替新验证。
+G0 等待裁决期间已在 `1c4f2e9` 重新验证基线（2026-09-06）：根 build 0 warnings/errors；
+根 `dotnet test --no-build` 全部 471/471，通过数为 DurableGraph 264、Serialization 94、Storage 73、StateStore 40，零跳过；
+真实 PackageConsumerProbe 通过，产物位于 `experiments/PackageConsumerProbe/obj/run-20260906022525-33812`。
+这只证明现有产品基线；G1–G3 尚未实施，不能用这些结果声称引用 Capture 验收已通过。
 
 ## 3. 首片合同与 G0 需冻结的形状
 
@@ -151,7 +153,7 @@ Schema-only metadata、legacy boxed、13 标量及其原字节回归保持。
 | R1/R5 / G2 | 未实施 | Generator 当前/历史 ID DTO；真实生成编译、golden、publisher/history 见证 |
 | R6 / G3 | 未实施 | 主代理最终串行验证、独立代码审查、文档/本地提交闭合 |
 
-下列路径已在当前树核对；本次文档交接没有执行构建/测试：
+下列路径已在当前树核对；当前基线执行结果见 §2，最终实施验收仍须重新运行：
 
 ```powershell
 dotnet build DurableGraph.slnx --verbosity quiet
