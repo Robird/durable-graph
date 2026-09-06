@@ -11,6 +11,7 @@
 | sharing/cycles、logical diff、升级断边、两阶段物化 | 归档实验簿 EXP-011–014；[DB-006](design-branches/0006-flat-graph-delta-prototype.md)。这些是 fixture/probe 证据，不是产品通用图 API |
 | DTO Capture、string 身份与读取 | [DB-022](design-branches/0022-versioned-state-dto-capture.md)、[DB-024](design-branches/0024-reference-capture-and-reusable-object-ids.md)、[DB-025](design-branches/0025-string-object-decoding-slice.md)的验收部分 |
 | raw Base、wire v2 与 exact Revision 文件重开 | [DB-026 §8](design-branches/0026-raw-base-object-content-slice.md#8-实施合同与验收账本) |
+| 同版 DTO 融合 Delta 准备、历史/引用校验与包交付 | [DB-027 §6](design-branches/0027-generated-same-schema-delta-body-slice.md#6-本轮实施账本)；body codec，不含持久 prior 链 |
 | 地址/策略选择史及可重跑技术储备 | [DB 索引](design-branches/README.md)、[Probe 导航](../experiments/README.md)；TwoLeg 与合成 payload 结果不构成产品恢复或性能保证 |
 
 ## 历史卷

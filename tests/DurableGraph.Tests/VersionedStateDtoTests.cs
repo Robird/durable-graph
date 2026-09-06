@@ -55,7 +55,13 @@ public sealed partial class DurableSchemaGeneratorTests {
         Assert.True(stateParameter.IsIn);
         Assert.Null(body.GetMethod("Read", BindingFlags.Static | BindingFlags.NonPublic));
         Assert.Equal(dto, body.GetMethod("ReadV1", BindingFlags.Static | BindingFlags.NonPublic)!.ReturnType);
-        Assert.Equal(new[] { "AddRoot", "Capture", "ReadV1", "ValidateStringReferences", "Write" },
+        MethodInfo prepare = body.GetMethod("PrepareDelta", BindingFlags.Static | BindingFlags.NonPublic)!;
+        Assert.Equal(typeof(Atelia.DurableGraph.StateStore.Serialization.PreparedDelta), prepare.ReturnType);
+        Assert.All(prepare.GetParameters(), parameter => {
+            Assert.Equal(dto.MakeByRefType(), parameter.ParameterType);
+            Assert.True(parameter.IsIn);
+        });
+        Assert.Equal(new[] { "AddRoot", "ApplyDeltaV1", "Capture", "PrepareDelta", "ReadV1", "ValidateStringReferences", "Write" },
             body.GetMethods(BindingFlags.Static | BindingFlags.NonPublic).Select(method => method.Name).Order().ToArray());
     }
 

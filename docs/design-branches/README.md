@@ -15,12 +15,6 @@
 - **Rejected / Superseded**：保留否决原因或后继链接，不继续作为施工输入。
 - 本索引的“实施/适用范围”与原状态分开。源码和可执行证据决定实现事实，历史测试数字只属于当时基线。
 
-## 当前规划
-
-| 文档 | 状态 | 范围 |
-|---|---|---|
-| [DB-027 同版 DTO 比较与字段 Delta body](0027-generated-same-schema-delta-body-slice.md) | Proposed，待用户裁决 | SG 静态 comparer/Delta 编解码，真实 body B/D；尚未实施，不含持久 prior 链或 Save |
-
 ## 按任务查阅的混合决策
 
 这些文档跨越已实施、已接受未实施和未决问题；仅在路线图指向相关主题时阅读对应章节。
@@ -52,6 +46,7 @@
 | [DB-023 13 种标量贯通](0023-scalar-schema-dto-slice.md) | Chosen / Implemented | Schema/history/DTO 编码的标量扩充 |
 | [DB-025 string 解码与引用校验](0025-string-object-decoding-slice.md) | Chosen / Implemented | string 表、各版 DTO 引用校验、Empty 规范化；未完成领域 Restore |
 | [DB-026 raw Base 内容存取](0026-raw-base-object-content-slice.md) | Chosen / Implemented | 同 Frame local Base、wire v2、指定 Revision 内容重开读取；不是完整 Save/发布 |
+| [DB-027 同版 DTO 比较与字段 Delta body](0027-generated-same-schema-delta-body-slice.md) | Chosen / Implemented | SG 融合 PrepareDelta、owned payload 与独立 Apply；不含持久 prior 链或 Save |
 
 ## 隔离研究与技术储备
 

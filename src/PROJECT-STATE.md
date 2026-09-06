@@ -1,6 +1,6 @@
 # DurableGraph 产品开发工作集
 
-> 校准：2026-09-06，产品证据基线 `54a33df`。本文只维护当前能力、边界与续工入口。
+> 校准：2026-09-06，最新产品验证见 [DB-027 §6](../docs/design-branches/0027-generated-same-schema-delta-body-slice.md#6-本轮实施账本)。本文只维护当前能力、边界与续工入口。
 > 文档不是实现授权；事实以当前源码、测试和工具输出为准。
 
 ## 从这里继续
@@ -14,9 +14,9 @@
 
 ## 当前焦点
 
-同 Revision Frame 的 raw Base 内容存取已闭合；当前没有正在施工的产品分片。
-下一片推荐为 [DB-027：同 exact Schema DTO 比较与字段 Delta body](../docs/design-branches/0027-generated-same-schema-delta-body-slice.md)，
-已完成规划，等待用户裁决；以真实差异 codec 为后续 Delta/prior 链提供消费者，尚未实施。
+同版 DTO 的融合 PrepareDelta 与 Apply 已完成，当前没有正在施工的产品分片。
+下一候选是以真实 Delta codec 收敛持久对象版本/prior 链和累计 H，再接对象列表比较与策略执行；
+详细依赖与未决项见后续路线，尚不代表已批准完整 Save 施工。
 struct、一般引用 Capture、DTO 升级/Restore 可独立穿插，选择与待定点集中在后续路线。
 
 ## 当前能力与实际边界
@@ -24,10 +24,10 @@ struct、一般引用 Capture、DTO 升级/Restore 可独立穿插，选择与�
 | 层 | 已验证能力 | 尚未闭合的边界 |
 |---|---|---|
 | [DurableGraph](DurableGraph/DurableGraph.csproj) | immutable Schema、exact BaseSchema、内存 SchemaStore；CaptureSession 的封闭候选与 string 身份；StringReadTable | 非持久图 Store；无一般领域图恢复 |
-| [Generator](DurableGraph.Generator/DurableGraph.Generator.csproj) / [Build](DurableGraph.Build/DurableGraph.Build.csproj) | SchemaOnly 的祖先/history；生成各版 readonly DTO、current Capture、typed AddRoot、DTO Write/Read 与 string 引用校验；包内 history 发布/验证 | 新 DTO 路径无升级/Restore/runtime 类型分派；legacy boxed Snapshot/Upgrade 路径独立保留 |
+| [Generator](DurableGraph.Generator/DurableGraph.Generator.csproj) / [Build](DurableGraph.Build/DurableGraph.Build.csproj) | SchemaOnly 的祖先/history；生成各版 readonly DTO、current Capture/AddRoot、Base Write/Read、同版融合 PrepareDelta/Apply 及 string 引用校验；包内 history 发布/验证 | 新 DTO 路径无升级/Restore/runtime 类型分派；legacy boxed Snapshot/Upgrade 路径独立保留 |
 | [StateStore](DurableGraph.StateStore/DurableGraph.StateStore.csproj) | 固定 ReadAmplificationBaseBudgetPolicy：完整 post-live 估算输入 → 稀疏 Base/Delta 计划 | 无估算生产、内容执行或完整 Save |
 | [Storage](DurableGraph.StateStore.Storage/DurableGraph.StateStore.Storage.csproj) | 完整 local Base records、wire v2、真实 Segment/RBF append/read/reopen、exact Revision live map 和 raw Base 读取 | 无对象 Delta/prior 链；不拥有持久 roots、类型目录或发布 head |
-| [Serialization](DurableGraph.StateStore.Serialization/DurableGraph.StateStore.Serialization.csproj) | 字节原语、string 内容 codec、显式 body 的 typed slot、SZ/rank-2 元素 ref 循环 | 无数组对象 envelope、一般 struct 生成器或通用泛型 codec |
+| [Serialization](DurableGraph.StateStore.Serialization/DurableGraph.StateStore.Serialization.csproj) | 字节原语、string 内容 codec、拥有自有 bytes 的 PreparedDelta、显式 body 的 typed slot、SZ/rank-2 元素 ref 循环 | 无数组对象 envelope、一般 struct 生成器或通用泛型 codec |
 
 容易混淆的限制：
 
@@ -37,6 +37,8 @@ struct、一般引用 Capture、DTO 升级/Restore 可独立穿插，选择与�
   空串 Capture/读取两端统一 Empty，非空 string 保留引用身份。
 - ReadVn 只产生 ID DTO；StringReadTable 和生成的引用校验分别负责 string 解码与槽位验证。
   typed 集成测试显式提供 kind/exact Schema/roots 元数据，尚非持久自描述图。
+- PrepareDelta 每槽比较一次形成位图，再静态写变化值；结果含 HasChanges 和可复用 payload，D 可直接取长度。
+  ApplyDeltaVn 只处理同 Vn；不证明 prior 身份，之后仍须对完整 DTO 验证引用。暂无对象链 H 或策略执行。
 - Storage 的 ObjectHeadMap Base/Delta 都可用，但本地对象内容只有 Base；真实对象 Delta 留有 [代码 TODO](DurableGraph.StateStore.Storage/StateRevision.cs)。
   ReadObjectBase 按指定 Revision 找 live head，只接受目标 Frame 的 local record；不回退 parent 补内容。wire v2 拒绝旧 v1。
 - 数组循环可操作已有 rank-2 非零下界数组，但尚无 shape 编码/分配、其他 rank 或非 SZ rank-1 支持。
@@ -51,6 +53,7 @@ DurableGraph runtime 也引用 Serialization，单一 runtime PackageReference �
 | 准备修改 | 先查源码/测试，再按需读合同 |
 |---|---|
 | Schema、DTO、静态 body | [Generator tests](../tests/DurableGraph.Tests)、[DB-019](../docs/design-branches/0019-schema-ancestry-implementation-slice.md)、[DB-022](../docs/design-branches/0022-versioned-state-dto-capture.md)、[DB-023](../docs/design-branches/0023-scalar-schema-dto-slice.md) |
+| 同版 DTO Delta 准备与应用 | [DB-027](../docs/design-branches/0027-generated-same-schema-delta-body-slice.md)、[body tests](../tests/DurableGraph.Tests/FusedDeltaBodyTests.cs)、[history/Capture tests](../tests/DurableGraph.Tests/FusedDeltaHistoryTests.cs) |
 | Capture 与 string 读取 | [DB-024](../docs/design-branches/0024-reference-capture-and-reusable-object-ids.md)、[DB-025](../docs/design-branches/0025-string-object-decoding-slice.md) |
 | 对象内容、地址与重开读取 | [Storage tests](../tests/DurableGraph.StateStore.Storage.Tests)、[DB-026](../docs/design-branches/0026-raw-base-object-content-slice.md)、[typed 文件见证](../tests/DurableGraph.Tests/RawBaseStorageGeneratorTests.cs) |
 | Base/Delta 策略 | [策略实现](DurableGraph.StateStore/ReadAmplificationBaseBudgetPolicy.cs)、[策略 tests](../tests/DurableGraph.StateStore.Tests)、[DB-015](../docs/design-branches/0015-statestore-object-representation-policy.md) |

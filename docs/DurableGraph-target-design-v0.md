@@ -36,9 +36,12 @@ Source Generator 负责可在编译期确定的类型知识与机械代码，框
   基线是可丢弃、可从权威状态重建的比较投影，不是第二个持久权威来源。
 - DTO 的 CLR 字段命名或物理展开方式不决定 Schema。历史 DTO 从已接受的 Schema/history
   再生成，不要求永久保留所有旧领域 CLR 类，也不另存一套 DTO 源码历史。
+- 同版 DTO 的 Delta 准备融合变化判断与编码，结果持有变化判定和可复用 bytes，D 从实际长度取得；
+  选择 Delta 后复用该结果，避免再次比较和编码。临时缓冲所有权独立于可变领域对象。
 
 设计来源：[DB-022](design-branches/0022-versioned-state-dto-capture.md)、
-[DB-024](design-branches/0024-reference-capture-and-reusable-object-ids.md)。
+[DB-024](design-branches/0024-reference-capture-and-reusable-object-ids.md)、
+[DB-027](design-branches/0027-generated-same-schema-delta-body-slice.md)。
 
 ### 统一引用身份，值类型嵌套
 
@@ -118,8 +121,8 @@ Source Generator 负责可在编译期确定的类型知识与机械代码，框
 不再可达的对象退出新视图，不能因此改写历史 Revision；编号复用仍按各自 Revision 解释。
 
 比较忽略 transient，引用按身份比较，Artifact 引用按 exact address 比较；值和集合的 durable
-equality 必须明确，不能仅凭非密码学 hash 判相等。浮点编码保留位信息不自动决定未来 comparer
-对 NaN、负零的 equality；具体比较合同应单独验证。
+equality 必须明确，不能仅凭非密码学 hash 判相等。同版 DTO 的 Half/float/double 持久状态比较采用按位相等：
+相同 NaN 位无变化，不同 NaN payload 和正负零保留为变化；这不替领域对象定义业务 Equals。
 
 ### 四类 Store 的逻辑职责
 

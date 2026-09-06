@@ -179,6 +179,8 @@ public sealed partial class DurableSchemaGenerator {
             AppendBinaryDto(source, type, version, bodyIndent);
             AppendBinaryDtoWrite(source, version, bodyIndent);
             AppendBinaryDtoRead(source, version, bodyIndent);
+            AppendBinaryPrepareDelta(source, version, bodyIndent);
+            AppendBinaryApplyDelta(source, version, bodyIndent);
             AppendBinaryStringReferenceValidation(source, version, bodyIndent);
         }
 
@@ -334,6 +336,136 @@ public sealed partial class DurableSchemaGenerator {
 
         source.AppendLine(");");
         source.Append(indent).AppendLine("}");
+    }
+
+    private static void AppendBinaryPrepareDelta(StringBuilder source, BinaryVersionModel version, string indent) {
+        source.Append(indent).Append("internal static ").Append(PayloadNamespace)
+            .Append("PreparedDelta PrepareDelta(in ").Append(version.Name).Append(" prior, in ")
+            .Append(version.Name).AppendLine(" current) {");
+        if (version.Fields.Count == 0) {
+            source.Append(indent).Append("    return new ").Append(PayloadNamespace)
+                .AppendLine("PreparedDelta(false, global::System.ReadOnlySpan<byte>.Empty);");
+            source.Append(indent).AppendLine("}");
+            return;
+        }
+
+        source.Append(indent).AppendLine("    bool hasChanges = false;");
+        int maskCount = version.Fields.Count / 8 + (version.Fields.Count % 8 == 0 ? 0 : 1);
+        for (int maskIndex = 0; maskIndex < maskCount; maskIndex++) {
+            source.Append(indent).Append("    byte mask").Append(maskIndex.ToString(CultureInfo.InvariantCulture))
+                .AppendLine(" = 0;");
+        }
+
+        // Compare every slot once. The resulting masks are the sole authority for
+        // both HasChanges and which current values are subsequently written.
+        for (int index = 0; index < version.Fields.Count; index++) {
+            BinaryFieldModel field = version.Fields[index];
+            source.Append(indent).Append("    if (!(");
+            AppendBinarySlotEquality(source, field, "prior." + field.Name, "current." + field.Name);
+            source.AppendLine(")) {");
+            source.Append(indent).Append("        mask").Append((index / 8).ToString(CultureInfo.InvariantCulture))
+                .Append(" |= ").Append((1 << (index % 8)).ToString(CultureInfo.InvariantCulture)).AppendLine(";");
+            source.Append(indent).AppendLine("    }");
+        }
+
+        source.Append(indent).AppendLine("    var buffer = new global::System.Buffers.ArrayBufferWriter<byte>();");
+        source.Append(indent).Append("    var writer = new ").Append(PayloadNamespace)
+            .AppendLine("BinaryPayloadWriter(buffer);");
+        for (int maskIndex = 0; maskIndex < maskCount; maskIndex++) {
+            string maskName = "mask" + maskIndex.ToString(CultureInfo.InvariantCulture);
+            source.Append(indent).Append("    hasChanges |= ").Append(maskName).AppendLine(" != 0;");
+            source.Append(indent).Append("    writer.WriteByte(").Append(maskName).AppendLine(");");
+        }
+
+        for (int index = 0; index < version.Fields.Count; index++) {
+            BinaryFieldModel field = version.Fields[index];
+            source.Append(indent).Append("    if (");
+            AppendBinaryDeltaBitTest(source, index);
+            source.AppendLine(") {");
+            source.Append(indent).Append("        writer.Write")
+                .Append(GetTypeTagName(GetBinarySlotTypeTag(field.TypeTagValue)))
+                .Append("(current.").Append(field.Name).AppendLine(");");
+            source.Append(indent).AppendLine("    }");
+        }
+
+        source.Append(indent).Append("    return new ").Append(PayloadNamespace)
+            .AppendLine("PreparedDelta(hasChanges, buffer.WrittenSpan);");
+        source.Append(indent).AppendLine("}");
+    }
+
+    private static void AppendBinaryApplyDelta(StringBuilder source, BinaryVersionModel version, string indent) {
+        source.Append(indent).Append("internal static ").Append(version.Name).Append(" ApplyDelta")
+            .Append(version.Name).Append("(ref ").Append(PayloadNamespace)
+            .Append("BinaryPayloadReader reader, in ").Append(version.Name).AppendLine(" prior) {");
+        int maskCount = version.Fields.Count / 8 + (version.Fields.Count % 8 == 0 ? 0 : 1);
+        for (int maskIndex = 0; maskIndex < maskCount; maskIndex++) {
+            source.Append(indent).Append("    byte mask").Append(maskIndex.ToString(CultureInfo.InvariantCulture))
+                .AppendLine(" = reader.ReadByte();");
+        }
+
+        int remainingBits = version.Fields.Count % 8;
+        if (remainingBits != 0) {
+            source.Append(indent).Append("    if ((mask").Append((maskCount - 1).ToString(CultureInfo.InvariantCulture))
+                .Append(" & ").Append((255 ^ ((1 << remainingBits) - 1)).ToString(CultureInfo.InvariantCulture))
+                .AppendLine(") != 0) {");
+            source.Append(indent).AppendLine("        throw new global::System.IO.InvalidDataException(\"Delta bitmap contains bits outside the exact DTO layout.\");");
+            source.Append(indent).AppendLine("    }");
+        }
+
+        foreach (BinaryFieldModel field in version.Fields) {
+            source.Append(indent).Append("    var ").Append(field.ParameterName).Append(" = prior.")
+                .Append(field.Name).AppendLine(";");
+        }
+
+        for (int index = 0; index < version.Fields.Count; index++) {
+            BinaryFieldModel field = version.Fields[index];
+            source.Append(indent).Append("    if (");
+            AppendBinaryDeltaBitTest(source, index);
+            source.AppendLine(") {");
+            source.Append(indent).Append("        ").Append(field.ParameterName).Append(" = reader.Read")
+                .Append(GetTypeTagName(GetBinarySlotTypeTag(field.TypeTagValue))).AppendLine("();");
+            source.Append(indent).Append("        if (");
+            AppendBinarySlotEquality(source, field, "prior." + field.Name, field.ParameterName);
+            source.AppendLine(") {");
+            source.Append(indent).Append("            throw new global::System.IO.InvalidDataException(\"Delta redundantly changes slot ")
+                .Append(index.ToString(CultureInfo.InvariantCulture)).AppendLine(" to its prior value.\");");
+            source.Append(indent).AppendLine("        }");
+            source.Append(indent).AppendLine("    }");
+        }
+
+        source.Append(indent).Append("    return new ").Append(version.Name).Append('(');
+        for (int index = 0; index < version.Fields.Count; index++) {
+            if (index > 0) {
+                source.Append(", ");
+            }
+
+            source.Append(version.Fields[index].ParameterName);
+        }
+
+        source.AppendLine(");");
+        source.Append(indent).AppendLine("}");
+    }
+
+    private static void AppendBinaryDeltaBitTest(StringBuilder source, int index) {
+        source.Append("(mask").Append((index / 8).ToString(CultureInfo.InvariantCulture))
+            .Append(" & ").Append((1 << (index % 8)).ToString(CultureInfo.InvariantCulture)).Append(") != 0");
+    }
+
+    private static void AppendBinarySlotEquality(
+        StringBuilder source, BinaryFieldModel field, string left, string right) {
+        // Match Base encoding's preserved bits, including signed zero and NaN payloads.
+        string? bitConversion = field.TypeTagValue switch {
+            12 => "HalfToUInt16Bits",
+            13 => "SingleToUInt32Bits",
+            14 => "DoubleToUInt64Bits",
+            _ => null,
+        };
+        if (bitConversion is not null) {
+            source.Append("global::System.BitConverter.").Append(bitConversion).Append('(').Append(left)
+                .Append(") == global::System.BitConverter.").Append(bitConversion).Append('(').Append(right).Append(')');
+        } else {
+            source.Append(left).Append(" == ").Append(right);
+        }
     }
 
     private static void AppendBinaryStringReferenceValidation(

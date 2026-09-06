@@ -30,6 +30,14 @@ The same consumer also exercises every added scalar kind through generated Captu
 including an isolated surrogate, negative zero and NaN payloads against fixed golden bytes.
 This validates the public primitive API and publication of the extended Schema tags.
 
+The same SchemaOnly consumer prepares a Delta between frozen base/derived DTOs after mutating
+their source objects. It checks independent bitmap/value golden bytes, the actual Delta length,
+and a no-change result whose zero bitmap is nonempty. The public `PreparedDelta` comes from the
+transitive Serialization package; its owned payload is reused directly for repeated generated
+Apply calls, with complete body consumption and golden Base reconstruction. An invalid padding
+bit must fail. The script requires the `PreparedDelta:True` marker in addition to the existing
+markers. This covers the same-Schema body API, not persisted Delta records or prior-chain validation.
+
 The final consumer also captures two concrete roots with shared strings, distinct equal strings,
 null/empty/surrogate content, and private base fields through generated AddRoot adapters. It checks
 the closed ID DTO list, static ID-body golden bytes, mutation isolation, accept/discard, stable live
