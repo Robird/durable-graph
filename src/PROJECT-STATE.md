@@ -14,11 +14,11 @@
 
 ## 当前焦点
 
-DB-028 的持久 raw Delta、exact Parent/prior 校验、原始重建链与 H 已完成，当前没有正在施工的产品分片。
-下一候选是对象列表比较/估算/策略执行，或先收敛持久类型头与目录；前者仍需 exact Parent 基线、
-不可 Delta 的 Update 分类与候选 B/D 口径，后者补上 typed 见证当前显式提供的解释元数据。
-详细待定项集中在后续路线，不据此启动完整 Save 或发布施工。
-struct、一般引用 Capture、DTO 升级/Restore 可独立穿插，选择与待定点集中在后续路线。
+DB-028 的持久 raw Delta、exact Parent/prior 校验、原始重建链与 H 已完成。
+下一片推荐 [DB-029：已准备对象内容到可追加 Revision](../docs/design-branches/0029-prepared-object-revision-planning-slice.md)，
+状态 Proposed，待用户采纳，尚未施工。它先接真实内容、B/D/H、固定策略与 membership 差分，
+显式 typed 适配仍放在集成见证；建议以 Delta 文件距离的 5-byte 上界避免规划与 writer scope 耦合。
+详细合同和取舍只在 DB-029 维护。类型目录、通用比较/基线、struct 与 Restore 等仍见后续路线。
 
 ## 当前能力与实际边界
 

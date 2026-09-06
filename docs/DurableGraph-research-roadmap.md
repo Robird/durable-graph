@@ -8,9 +8,10 @@
 ## 1. 下一个分片如何选择
 
 以 [DB-028 已验证的 raw 版本链与 H](design-branches/0028-persisted-object-delta-chain-slice.md) 为基础，
-下一轮可选对象列表比较/策略执行，或持久类型头与目录。
-前者先收敛 exact Parent 比较基线、不可 Delta 的 Update 与目标 Frame scope 下 B/D；
-后者补上目前 typed 见证显式提供的解释元数据。两者均不自动包含发布与恢复。
+推荐下一片 [DB-029：已准备对象内容到可追加 Revision](design-branches/0029-prepared-object-revision-planning-slice.md)
+（Proposed，未实施）。它将完整 prepared 内容接入 B/D/H、policy 和 raw Revision，
+候选 Delta 采用有界保守估算；通用 typed 比较/基线管理和持久类型头/目录仍保留为后续候选。
+不包含发布与恢复；具体输入、估算取舍和验收集中在 DB-029。
 
 current 领域 Restore、自定义 struct 和一般 durable 引用可以独立成片。
 它们与存储推进的穿插顺序尚未冻结；不要恢复旧 R4 → R5 → R6 或 P0–P7 为强制流水线。
@@ -23,7 +24,7 @@ B/D/H 分别指 Base 写入字节、Delta 写入字节、当前对象重建字�
 
 | 工作项 | 最小应回答的问题 | 设计或证据入口 |
 |---|---|---|
-| 比较、估算与策略接入 | frozen 候选与 exact Parent 如何得到变化分类和 B/D/H；如何生成并执行计划、保持失败时基线不变 | [DB-015](design-branches/0015-statestore-object-representation-policy.md)、[DB-022](design-branches/0022-versioned-state-dto-capture.md) |
+| 比较、估算与策略接入 | 先由 prepared 内容生成可追加 Revision；通用 typed 比较与 exact baseline 生命周期仍待后续闭合 | [DB-029 推荐分片](design-branches/0029-prepared-object-revision-planning-slice.md)、[DB-022](design-branches/0022-versioned-state-dto-capture.md) |
 | TypeCodec 与 exact Schema 绑定 | 类型组合如何编码；引用约束如何检查；未知类型/版本和错误对象头如何拒绝 | [DB-018](design-branches/0018-generated-graph-codec-shape.md)、[DB-001](design-branches/0001-schema-authority-and-runtime-representation.md) |
 | DTO 升级与领域 Restore | stored exact 版本如何分派、升级为 current DTO，再构造领域对象；失败时不交付半成品 | [DB-022](design-branches/0022-versioned-state-dto-capture.md)、[DB-002](design-branches/0002-read-time-version-upgrade-pipeline.md) |
 | 一般 durable 引用图 | 递归登记、共享/循环、nominal 约束、多态实际类型、完整目录及 roots 可达闭包如何共同成立 | [DB-018](design-branches/0018-generated-graph-codec-shape.md)、[DB-024](design-branches/0024-reference-capture-and-reusable-object-ids.md) |
@@ -36,7 +37,7 @@ B/D/H 分别指 Base 写入字节、Delta 写入字节、当前对象重建字�
 | 问题 | 现有依据与裁决边界 |
 |---|---|
 | 对象版本解释与保存来源 | raw prior/H 已由 DB-028 闭合；持久 exact Schema/codec 绑定、完整 head map 的 external heads 来源、候选对象身份连续性仍需产品 Save 合同，不能由 Parent 声明一致推导全局身份认证 |
-| 保存相等性与真实估算 | 同版标量 DTO 的浮点按位、引用槽按 ID 已采纳；未来复合值/容器相等性另定。候选 B/D 需包含对象 kind/prior/length/body，目标 Frame scope 未定时如何估算；将来加类型头后统一计入 B/D/H，不纳入共享 Frame、membership 或对齐开销 |
+| 保存相等性与真实估算 | 同版标量 DTO 的浮点按位、引用槽按 ID 已采纳；未来复合值/容器相等性另定。候选 B/D 需包含对象 kind/prior/length/body；scope 未定时的推荐估算及误差见 [DB-029](design-branches/0029-prepared-object-revision-planning-slice.md)，待采纳；将来加类型头后统一计入 B/D/H，不纳入共享 Frame、membership 或对齐开销 |
 | 历史升级后的比较和重写 | DB-006/R3 研究采用 normalized baseline 与 RequiresRewrite，可作证据；新 DTO 路径是否跨 Schema 必须 Base、如何恢复义务及升级删边后清理，尚待专片裁决，读取不得隐式回写 |
 | 完整 source 目录与 current 可达集合 | 升级可能删边。研究见证保留 source rows，再由 Save 移除不可达项；产品保存视图怎样表达需与候选/Parent 衔接 |
 | Schema 规范表示和持久引用 | canonical bytes、SchemaHash/完整 descriptor 校验、类型家族约束和 SchemaStore 引用形式；不能把现有 GetHashCode 或 history TypeTag 当成最终 wire |
