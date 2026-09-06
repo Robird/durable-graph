@@ -1,5 +1,8 @@
 # MultiSegmentStateStoreProbe
 
+> 已完成的可执行机制储备。本页保留阶段 A 的实现模型与证据，恢复研究前先读
+> [冻结边界](PROJECT-STATE.md)；产品后续工作见 [src/PROJECT-STATE.md](../../src/PROJECT-STATE.md)。
+
 本探针验证 DurableGraph 的产品候选地址路线：Revision 和 ObjectVersion 可以引用同一 Store 目录内任意
 更早的 Segment 文件；文件只在下一次 Save 前按 existing tail 与 soft rollover threshold 切换，不再要求
 TwoLeg evacuation，也不把 threshold 冒充严格文件上限。

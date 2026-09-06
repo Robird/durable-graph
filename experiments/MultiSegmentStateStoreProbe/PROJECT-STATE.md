@@ -1,8 +1,11 @@
-# MultiSegmentStateStoreProbe 活跃工作集
+# MultiSegmentStateStoreProbe 冻结快照
 
 > 状态：G0-G4 complete — 阶段 A 已完成，保留为可执行机制储备。
 >
 > 最近校准：2026-09-05
+
+本页是已完成 Probe 的恢复入口。产品进展见 [src/PROJECT-STATE.md](../../src/PROJECT-STATE.md)，
+其他实验按问题从 [实验导航](../README.md) 进入；不从本目录历史 Goal 接续产品开发。
 
 ## 目标与范围
 

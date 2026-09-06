@@ -1,5 +1,9 @@
 # DB-009：Base lineage parent 是 direct ObjectVersion 还是 Revision locator
 
+> 历史研究范围（2026-09-06 治理）：本文 Chosen 与实现事实属于所述 Probe，不是产品 lineage 完成声明。
+> 下文“Remove 后不复用 ID”的约束已不适用于产品；产品允许 revision-local ObjectId 复用，新的占用者须从 Base 开始并截断旧 lineage。
+> shared prior anchor 若进入产品仍须验证该边界；后续工作统一见[路线图](../DurableGraph-research-roadmap.md)，旧研究正文保留。
+
 > 状态：Chosen
 >
 > 创建日期：2026-08-29

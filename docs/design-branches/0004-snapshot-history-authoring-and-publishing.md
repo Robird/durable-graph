@@ -1,5 +1,8 @@
 # DB-004：Snapshot History 的创作与发布工作流
 
+> 历史材料（2026-09-06 治理）：原 Open 标签保留；单项目 local Publish / CI Verify 已落地，
+> 不能把长期工作流未冻结读成“publisher 尚未实现”。当前事实见[PROJECT](../../src/PROJECT-STATE.md)，后续问题见[路线图](../DurableGraph-research-roadmap.md)。
+
 > 状态：Open
 >
 > 创建日期：2026-08-27

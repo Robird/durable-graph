@@ -1,5 +1,12 @@
 # Source Generator history feedback probe
 
+> Completed mechanism witness; rerun when investigating compiler output/history feedback
+> or changing the assumptions behind the post-compile hook. Product integration now lives in
+> [build targets](../../src/DurableGraph/build/Atelia.DurableGraph.targets) and
+> [SnapshotHistoryTool](../../src/DurableGraph.Build/SnapshotHistoryTool.cs), with delivery
+> regression in [PackageConsumerProbe](../PackageConsumerProbe/README.md).
+> This isolated negative control remains useful; its local protocol is not a product backlog.
+
 This isolated experiment distinguishes two mechanisms:
 
 1. `Generator.AddSource` adds source only to the current compilation. Even when

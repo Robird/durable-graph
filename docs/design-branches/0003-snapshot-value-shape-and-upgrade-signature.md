@@ -1,5 +1,8 @@
 # DB-003：Snapshot 值形状与 Upgrade 签名
 
+> 历史材料（2026-09-06 治理）：原 Open 标签保留；本文的 legacy mutable Snapshot/in-out 已用于产品，
+> 不代表新 readonly DTO 路径已有 Upgrade。未来问题统一见[路线图](../DurableGraph-research-roadmap.md)，正文保留当时取舍与证据。
+
 > 状态：Open
 >
 > 创建日期：2026-08-27

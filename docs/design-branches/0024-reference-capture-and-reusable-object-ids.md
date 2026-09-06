@@ -1,5 +1,9 @@
 # DB-024：引用 Capture、revision 内身份与可复用 ObjectId
 
+> 历史混合材料（2026-09-06 治理）：首片施工、后续回收候选和 struct TODO 保留原始上下文，正文不再同步进度。
+> 当前事实见[PROJECT](../../src/PROJECT-STATE.md)，未完成事项统一见[路线图](../DurableGraph-research-roadmap.md)。
+> 下文“string 独立分配仍需核验”等早期陈述已被 DB-025 的 Empty 规范化裁决取代，不能重新当作实施前置条件。
+
 > 状态：string 引用 Capture 与单调 ID 首片已实现 / 回收及恢复延期 — 2026-09-06。
 >
 > 用户已启动实施 Goal，并明确采纳 SG 生成根登记适配器、Runtime 统一会话与候选管理方案。

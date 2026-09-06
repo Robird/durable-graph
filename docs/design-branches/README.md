@@ -1,56 +1,74 @@
-# DurableGraph 候选设计分叉
+# DurableGraph 设计决策与历史证据索引
 
-本目录保存已经值得记住、但证据尚不足以裁决的架构分叉。它们是后续实验的输入，不是实现指令、当前事实或已接受设计。
+本目录保存设计讨论、已实施工作单与技术储备。**不按编号顺序通读，也不把旧文档中的“当前”当作今日事实。**
+产品续接从 [PROJECT-STATE](../../src/PROJECT-STATE.md) 开始；长期方向见[目标设计](../DurableGraph-target-design-v0.md)，
+未完成事项及重访触发条件统一在[路线图](../DurableGraph-research-roadmap.md)维护。下面仅按任务定位依据，不另维护一份 backlog。
 
-## 状态
+截至 2026-09-06，DB-001–026 保留原路径作为历史材料。混合文档中的有效决策与未完成问题已提取到上述活跃文档，
+正文不再随每片进度回填；需要重开问题时，在路线图登记并按需写新的分片，链接旧依据。
+这是阅读与维护职责的归档，不等于将未决方案否决或将建议批准。
 
-- **Open**：正在收集证据，可以安排近期实验。
-- **Deferred**：问题真实，但当前缺少消费者、格式或测量；等待明确触发条件。
-- **Chosen**：已有证据选择某一方案；应链接对应 ADR、实验或实现。
-- **Rejected**：已有证据否定，并保留具体失败或代价。
-- **Superseded**：问题被新的分叉或更精确的模型取代。
+## 如何读状态
 
-## 维护规则
+- **Open / Deferred**：原讨论尚未全部裁决或等待触发；不意味着其中没有已采用、已实现的部分。
+- **Chosen**：在文档所述范围内选择了方案；不自动代表完整产品已实现、长期 API 已冻结或所有附带建议已批准。
+- **Rejected / Superseded**：保留否决原因或后继链接，不继续作为施工输入。
+- 本索引的“实施/适用范围”与原状态分开。源码和可执行证据决定实现事实，历史测试数字只属于当时基线。
 
-- 一个文件只承载一个核心分叉，并使用稳定编号 `DB-NNN`。
-- 写明当前事实、候选方案、不可约约束、尚缺证据和重访触发条件。
-- 不以“也许以后”作为保留复杂度的充分理由。
-- 同一语义只能有一个 authority；其他表示必须说明如何从 authority 验证派生。
-- 裁决后更新状态和索引；不要静默改写成仿佛从未存在过分歧。
+## 按任务查阅的混合决策
 
-## 索引
+这些文档跨越已实施、已接受未实施和未决问题；仅在路线图指向相关主题时阅读对应章节。
 
-| ID | 标题 | 状态 | 重访触发条件 |
-|---|---|---|---|
-| [DB-001](0001-schema-authority-and-runtime-representation.md) | Schema authority 与运行时表示 | Deferred | 首个 canonical format、canonical-blob-bound generated codec 或持久化 SchemaStore 实验 |
-| [DB-002](0002-read-time-version-upgrade-pipeline.md) | 读取阶段的版本升级管线 | Chosen | 首个一般图、runtime plugin/registry、persistent payload 或 generated coordinator 伸缩性问题 |
-| [DB-003](0003-snapshot-value-shape-and-upgrade-signature.md) | Snapshot 值形状与 Upgrade 签名 | Open | struct/in-out probe 后的真实 pipeline、性能或 expected rejection 消费者 |
-| [DB-004](0004-snapshot-history-authoring-and-publishing.md) | Snapshot History 的创作与发布工作流 | Open | 正式 Generator publisher、团队/CI 摩擦或 persistent Schema authority 实验 |
-| [DB-005](0005-durable-inheritance-flattening.md) | Durable 继承展平 | Chosen | DB-019/022/023 落地声明段、祖先版本及各版 DTO body；DTO 升级/领域恢复另片推进 |
-| [DB-006](0006-flat-graph-delta-prototype.md) | Flat Graph Delta 原型 | Chosen | R4 logical StateMap/apply、production reference adapter、persistent head 或 measured baseline cost |
-| [DB-007](0007-adaptive-two-leg-rotation-policy.md) | 自适应双腿轮转与 Rebase/Deltify 策略 | Deferred | DB-014 无法满足有界 dependency/retention SLO，TwoLeg 被明确重启 |
-| [DB-008](0008-revision-contextual-self-address.md) | Revision 内的 contextual self address | Chosen | multi-frame Revision、脱离 containing ticket 的裸 OVD 消费者或真实 codec 对照数据 |
-| [DB-009](0009-base-lineage-parent-locator.md) | Base lineage parent 是 direct ObjectVersion 还是 Revision locator | Chosen | 真实 lineage consumer 出现且 OVD/TailMeta lookup 成为稳定瓶颈 |
-| [DB-010](0010-base-lineage-anchor-scope.md) | Base lineage anchor 是 per-record 还是 Revision prior snapshot | Chosen | mixed-provenance Revision、import/rescue/stale Save 或 DurableId reuse/epoch |
-| [DB-011](0011-two-phase-save-planning-and-capacity.md) | Save 策略规划与容量可行性是否分成两阶段 | Superseded | TwoLeg 重新成为产品候选且出现普通 workload capacity false-negative |
-| [DB-012](0012-two-leg-strategy-benchmark-arena.md) | TwoLeg 多策略 Benchmark Arena 的最小边界 | Deferred | TwoLeg 研究明确恢复并出现真实多策略或 hand-built artifact consumer |
-| [DB-013](0013-tiered-state-segments.md) | 按写入温度分片的双层 State segments | Deferred | TwoLeg 重启，或出现必须原子共存的独立 Hot/Cold placement consumer |
-| [DB-014](0014-multi-segment-backward-file-distance.md) | 多历史 Segment 与 BackwardFileDistance 地址 | Chosen | 出现有界 dependency/retention SLO、published 文件删除/GC、multi-writer 或 FileNumber exhaustion 消费者 |
-| [DB-015](0015-statestore-object-representation-policy.md) | StateStore 对象表示策略的估算 DTO 与保存计划 | Chosen | 整数倍数/百分比的纯 selector 已落地；估算生产、序列化接口及 Save 接入等真实消费者 |
-| [DB-016](0016-next-product-object-content-slice.md) | 策略之后的下一块对象内容纵切 | Chosen | 用户选择 codec-first；整体引用图与生成器形状见 DB-018 |
-| [DB-017](0017-object-codec-design-points.md) | 对象 codec 设计要点与逐项决策草稿 | Superseded | 整体模型转 DB-018；保留 scalar 要点和 Robird 证据，旧 string 字段 inline 方案已取代 |
-| [DB-018](0018-generated-graph-codec-shape.md) | 统一引用身份、TypeCodec 与生成式 Serializer 形状 | Open | DB-019–024 已落地祖先、typed slot、DTO body 与 string 引用 Capture 首片；通用图 codec/Restore 尚未实施 |
-| [DB-019](0019-schema-ancestry-implementation-slice.md) | 祖先 Schema/history 产品分片 | Chosen | SchemaOnly 元数据闭环；各版 DTO body 已接入，DTO 升级与领域恢复另片推进 |
-| [DB-020](0020-typed-slot-array-binding-slice.md) | typed 值槽位与数组元素 binding 分片 | Chosen | primitive/ref 槽位及 SZ/rank-2 元素循环；DB-022 接 SG DTO body，完整数组对象 codec 另片推进 |
-| [DB-021](0021-generated-primitive-body-slice.md) | 实际生成的 primitive class body | Superseded | 直接领域 Read/Write 接口由 DB-022 的 Versioned DTO/Capture 取代；保留原片证据 |
-| [DB-022](0022-versioned-state-dto-capture.md) | Versioned DTO、Capture 与 DTO binary body | Chosen | readonly scalar Vn/历史积累/current Capture；string 引用 Capture 已由 DB-024 接入，比较/估算、DTO 升级与 StateStore 管线另片推进 |
-| [DB-023](0023-scalar-schema-dto-slice.md) | 标量 Schema、历史与 DTO 编码贯通 | Chosen | 13 种标量贯通；DB-024/025 已补 string Capture/内容读取，struct 与一般图另片 |
-| [DB-024](0024-reference-capture-and-reusable-object-ids.md) | 引用 Capture、revision 内身份与可复用 ObjectId | Chosen | SG root 适配器、封闭 ID DTO 图及内存 accept/discard；回收/恢复/struct 延期 |
-| [DB-025](0025-string-object-decoding-slice.md) | string 对象内容解码与引用槽校验分片 | Chosen | string-only 解码表、SG 各版引用校验、空串两端统一已验证；完整图目录/Restore/Storage 内容接入另片 |
-| [DB-026](0026-raw-base-object-content-slice.md) | 同 Revision Frame 的 raw Base 对象内容存取 | Chosen | 完整 local Base records、wire v2、exact-head 重开读取已验证；真实 Delta/prior 链在代码 TODO 保留，TypeCodec/Save 另片 |
+| 文档 | 原状态 | 适用范围与阅读提示 |
+|---|---|---|
+| [DB-001 Schema authority 与运行时表示](0001-schema-authority-and-runtime-representation.md) | Deferred | canonical authority、typed projection 的候选依据；未裁决持久 Schema 格式 |
+| [DB-014 多历史 Segment 与 BackwardFileDistance](0014-multi-segment-backward-file-distance.md) | Chosen | 文件地址/轮转方向已采用；文中未来发布、恢复和 GC 保证不是 Storage 完成声明 |
+| [DB-018 统一引用身份、TypeCodec 与 Serializer 形状](0018-generated-graph-codec-shape.md) | Open，混合 | 统一身份与 Schema 依赖原则；直接领域 body 示例已由 DTO 路线取代，泛型 binding/Restore 等仍含候选 |
+| [DB-024 引用 Capture 与可复用 ObjectId](0024-reference-capture-and-reusable-object-ids.md) | 首片实现，回收/恢复延期 | §2 身份作用域、§4–6 回收素材、§8 struct 设计；不把推荐的复用时机当作已选算法 |
 
-## 附录文件
+## 已实现分片与被取代的施工证据
 
-- [0025-empty-string-allocation-witness.md](0025-empty-string-allocation-witness.md)（DB-025 附件）：.NET 10.0.5 独立空串分配与压缩 GC 的可复跑证据，不是跨运行时保证。
+查接口缘由、诊断或验收证据时使用。表中“实现”限于所列分片；后续工作由路线图管理。
 
-- [0018-runtime-binding-witness.md](0018-runtime-binding-witness.md)（DB-018 附件）：运行时闭合泛型与 typed ref 读入见证。该文件未声明统一分支状态标签（仅机制见证）。
+| 文档 | 原状态 | 实施/历史范围 |
+|---|---|---|
+| [DB-002 读取阶段版本升级](0002-read-time-version-upgrade-pipeline.md) | Chosen | legacy boxed 相邻升级 coordinator；不是新 DTO 图 Restore |
+| [DB-003 Snapshot 值形状与 Upgrade 签名](0003-snapshot-value-shape-and-upgrade-signature.md) | Open | legacy mutable struct / in-out 已采用；性能、长期 ABI 与新 DTO 升级仍需另议 |
+| [DB-004 Snapshot History 创作与发布](0004-snapshot-history-authoring-and-publishing.md) | Open | 单项目 local Publish / CI Verify 已落地；不是持久 SchemaStore 或多 writer 事务 |
+| [DB-005 Durable 继承展平](0005-durable-inheritance-flattening.md) | Chosen | 早期分段取舍；落地证据接 DB-019/022/023 |
+| [DB-015 对象表示策略](0015-statestore-object-representation-policy.md) | Chosen | 整数参数、估算 DTO → 稀疏 Base/Delta plan；未执行 Save |
+| [DB-016 codec-first 纵切选择](0016-next-product-object-content-slice.md) | Chosen | 历史排期理由；不再作为下一工作单 |
+| [DB-017 对象 codec 初始草稿](0017-object-codec-design-points.md) | Superseded | Robird 经验与早期选项；string 字段 inline 已被取代 |
+| [DB-019 祖先 Schema/history](0019-schema-ancestry-implementation-slice.md) | Chosen / Implemented | 声明段、exact 祖先与版本传播 |
+| [DB-020 typed 槽位与数组元素](0020-typed-slot-array-binding-slice.md) | Chosen / Implemented | SZ/rank-2 ref 元素循环；不是完整数组对象 codec |
+| [DB-021 primitive class body](0021-generated-primitive-body-slice.md) | Superseded | 曾直接读写领域对象，后改用 DB-022 DTO |
+| [DB-022 Versioned DTO 与 Capture](0022-versioned-state-dto-capture.md) | Chosen / Implemented | readonly Vn、current Capture、DTO body；跨 Schema Delta 仍是后续问题 |
+| [DB-023 13 种标量贯通](0023-scalar-schema-dto-slice.md) | Chosen / Implemented | Schema/history/DTO 编码的标量扩充 |
+| [DB-025 string 解码与引用校验](0025-string-object-decoding-slice.md) | Chosen / Implemented | string 表、各版 DTO 引用校验、Empty 规范化；未完成领域 Restore |
+| [DB-026 raw Base 内容存取](0026-raw-base-object-content-slice.md) | Chosen / Implemented | 同 Frame local Base、wire v2、指定 Revision 内容重开读取；不是完整 Save/发布 |
+
+## 隔离研究与技术储备
+
+研究结论的适用边界不能随 Chosen 标签跨到产品。先读[实验目录入口](../../experiments/README.md)，按真实问题再取素材。
+
+| 文档 | 原状态 | 使用限制 |
+|---|---|---|
+| [DB-006 Flat Graph Delta](0006-flat-graph-delta-prototype.md) | Chosen，R1–R3b 完成 | test-only normalization/materialization；RequiresRewrite 与 normalized baseline 不自动成为新 DTO Save 合同 |
+| [DB-007 自适应双腿轮转](0007-adaptive-two-leg-rotation-policy.md) | Deferred | 冻结 TwoLeg 控制与评价研究 |
+| [DB-008 contextual self address](0008-revision-contextual-self-address.md) | Chosen | 字段局部 self 思想可复用；旧 same/previous wire 属于 TwoLeg |
+| [DB-009 Base lineage parent locator](0009-base-lineage-parent-locator.md) | Chosen | relay-free lineage 证据；旧不复用 ID 假设不适用产品 |
+| [DB-010 Base shared prior anchor](0010-base-lineage-anchor-scope.md) | Chosen | shared anchor 研究；产品复用 ID 时须重新验证新占用者边界 |
+| [DB-011 两阶段规划与容量](0011-two-phase-save-planning-and-capacity.md) | Superseded | 旧 TwoLeg planning/admission；不加入正常产品 Save |
+| [DB-012 多策略 Benchmark Arena](0012-two-leg-strategy-benchmark-arena.md) | Deferred | 仅 TwoLeg 多策略研究，不是 MVP 插件机制 |
+| [DB-013 Hot/Cold 双层 segments](0013-tiered-state-segments.md) | Deferred | 旧 two-file placement 储备 |
+
+## 机制见证附件
+
+- [DB-018 运行时泛型 binding 见证](0018-runtime-binding-witness.md)：typed ref + 闭合泛型的独立机制，不能证明通用 codec registry 已实现。
+- [DB-025 独立空字符串分配见证](0025-empty-string-allocation-witness.md)：未采用机制的历史证据；产品明确统一为 string.Empty。
+
+## 新增与结束文档
+
+新的设计文档继续使用稳定 DB 编号，写清问题、当前证据、决定或候选、范围及验收边界。
+完成后把能力变化写入 PROJECT，长期决定放目标设计，剩余问题放路线图；本文只增加分类和证据链接。
+不靠批量重标 Chosen 消除歧义，也不向历史文档追加每轮测试账本。历史矛盾在入口说明适用时点与后继，保留原始证据。

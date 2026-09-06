@@ -1,5 +1,11 @@
 # Snapshot upgrade shape probe
 
+> Completed language witness; rerun when revisiting struct upgrade signatures or their
+> compiler assumptions. Product generator behavior is covered by
+> [DurableSchemaGeneratorTests](../../tests/DurableGraph.Tests/DurableSchemaGeneratorTests.cs);
+> this probe retains isolated language counterexamples. Its Snapshot terminology does not
+> describe the entire current DTO path; see [product context](../../src/PROJECT-STATE.md).
+
 This experiment fixes the C# facts behind the provisional Snapshot and upgrade
 handler design. It verifies that:
 

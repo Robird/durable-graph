@@ -45,12 +45,15 @@
 
 - Product development across `src/` and the corresponding `tests/` uses [src/PROJECT-STATE.md](src/PROJECT-STATE.md) as its shared active context. Read it before non-trivial product work and update it when the current focus, decisions, or next steps change.
 - Keep product progress in that shared file; completed Probe worksets retain their own status and links to product context.
-- Maintain `docs/DurableGraph-lab-notebook.md` when an experiment produces a material result, changes direction, or leaves an important unresolved question.
-- Record unresolved architectural alternatives in `docs/design-branches/`, keep its index current, and label each branch so it cannot be mistaken for an accepted design.
-- Keep the notebook concise and evidence-oriented. It is not a transcript and must not contain private reasoning, credentials, or incidental command output.
-- Update an earlier tentative statement when it becomes decided or rejected; preserve enough context to explain why.
-- Promote a branch to an ADR only after evidence selects it; rejected or superseded branches should retain the reason and pointer to the succeeding decision.
-- Split the notebook into `docs/experiments/` only when the single file becomes difficult to navigate.
+- Keep one active maintenance home per kind of knowledge: `src/PROJECT-STATE.md` for current capabilities and focus; `docs/DurableGraph-target-design-v0.md` for enduring goals and selected constraints; `docs/DurableGraph-research-roadmap.md` for accepted-but-unimplemented work, unresolved choices, and deferred work with revisit triggers. Link instead of repeating the same status or backlog.
+- Start continuation with PROJECT-STATE, then read only the target/roadmap section or slice contract relevant to the task. Historical DBs, work orders, Goal drafts, and the lab notebook are not a mandatory reading sequence.
+- For a non-trivial product slice, record its question, scope, and smallest observable acceptance criterion once and link it from the active context; a short entry in PROJECT-STATE is sufficient for a small slice. Record substantial alternatives in `docs/design-branches/`; keep its index accurate about decision status, implementation scope, and historical applicability. A historical `Chosen` label does not mean the whole document applies to current product code.
+- At slice completion, replace the current-focus entry, compress the capability summary, promote enduring decisions to the target, and move remaining work to the roadmap. Retain validation evidence in the slice record or a dated experiment note, not in every active document.
+- Use `docs/DurableGraph-lab-notebook.md` as an evidence index and concise dated results, not another current baseline or roadmap. Add a result only when it contributes evidence not already recorded in a linked slice. Keep private reasoning, credentials, and incidental output out of repository documents.
+- Archive superseded long drafts under `docs/archive/` with source revision/date and successor links. Extract still-valid decisions and unfinished questions before retiring a mixed document. Frozen snapshots retain their historical meaning; do not continuously retrofit them with current progress. Correct factual errors or broken references when needed.
+- Preserve rejected/superseded reasons and a successor pointer. Update the active conclusion when evidence changes. Use an ADR only after evidence selects a design; it is optional and should not duplicate an already sufficient decision record.
+- Keep Probe lifecycle separate from executable usefulness. Product regression probes remain active; completed mechanism witnesses and paused reserves retain run instructions, limits, and revisit triggers. Use `experiments/README.md` for navigation; do not move or retire executable projects merely to archive their documentation.
+- For documentation-only governance, inspect the integrated diff and check affected local links and any changed anchors. Code/build/package changes still require the validation described above.
 
 ### Subproject active context
 

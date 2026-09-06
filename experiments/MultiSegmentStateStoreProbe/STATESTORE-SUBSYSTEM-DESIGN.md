@@ -1,5 +1,10 @@
 # 阶段 B：正式 StateStore Sub-System 晋升设计
 
+> 历史晋升材料，保留截至 2026-09-05 的分层调查与候选边界；下文的进展和未决状态不再维护。
+> 产品当前能力与后续任务见 [src/PROJECT-STATE.md](../../src/PROJECT-STATE.md)，
+> 持续有效的方向与待办分别维护于 [目标设计](../../docs/DurableGraph-target-design-v0.md)
+> 和 [roadmap](../../docs/DurableGraph-research-roadmap.md)。
+
 > 状态：Stage B Started / Membership Head Map and Shared Serialization Leaf
 >
 > 最近校准：2026-09-05

@@ -7,6 +7,9 @@
 > 产品路线 successor：[`DB-014`](../../docs/design-branches/0014-multi-segment-backward-file-distance.md)
 > 与 [`MultiSegmentStateStoreProbe`](../MultiSegmentStateStoreProbe/PROJECT-STATE.md)
 
+产品当前路线与下一步统一见 [src/PROJECT-STATE.md](../../src/PROJECT-STATE.md)；
+本页保留冻结时的研究边界与恢复条件，不随产品切片更新。
+
 本子项目已阶段性收尾，不再维护活跃 roadmap、下一编码切片或策略竞赛计划。源码、测试、独立 solution、
 evaluator、workloads 与研究文档完整保留，作为可执行技术储备。当前产品候选采用多历史 Segment 与
 `BackwardFileDistance`，不继承 TwoLeg 的相邻两文件 topology、轮转策略或债务机制。

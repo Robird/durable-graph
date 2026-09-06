@@ -1,5 +1,9 @@
 # Package consumer probe
 
+> Active product regression. Run when changing generated output, runtime public APIs,
+> history/build integration, or package wiring. Root-solution tests do not exercise this
+> delivery boundary. Product progress lives in [src/PROJECT-STATE.md](../../src/PROJECT-STATE.md).
+
 This experiment verifies the reusable delivery boundary rather than project-to-project wiring.
 The consumer project has one `PackageReference` to `Atelia.DurableGraph`; it contains no manual
 analyzer reference, `AdditionalFiles`, build hook, or `Import`.

@@ -1,5 +1,9 @@
 # DB-018：统一引用身份、TypeCodec 与生成式 Serializer 形状
 
+> 历史混合草稿（2026-09-06 治理）：本文保留讨论当时的已接受原则、候选与代码示意，正文不再同步产品进度。
+> 延续的原则已提取到[目标设计](../DurableGraph-target-design-v0.md)，未完成问题统一在[路线图](../DurableGraph-research-roadmap.md)维护。
+> 下文“当前阅读入口”仅属历史措辞；现在从[PROJECT](../../src/PROJECT-STATE.md)续接。直接领域 Read/Write 示例不是现行 DTO 接口，推荐的 binding/Restore 形状也不等于已批准实现。
+
 > 状态：Open — 用户已说明整体语义；本文保留历史形状草稿，签名、格式和实施切片未全部冻结。
 > 其中 DB-024 已落地首片 reference/context 实现（session、root Capture/Seal 与 string 引用条目）。
 > Restore、stored Schema 到 generated codec 的运行时绑定与一般 durable 循环仍未实现。

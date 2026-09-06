@@ -1,5 +1,9 @@
 # DB-010：Base lineage anchor 是 per-record 还是 Revision prior snapshot
 
+> 历史研究范围（2026-09-06 治理）：下文 Removed → fail closed 与禁止 ID 复用是旧 Probe 的前提。
+> 产品已选择 revision-local ObjectId、允许回收复用；不能直接照搬本页 lineage 判定。
+> shared anchor 与新占用者 Base/旧链终止如何组合仍待产品分片验证，统一见[路线图](../DurableGraph-research-roadmap.md)。
+
 > 状态：Chosen
 >
 > 创建日期：2026-08-29

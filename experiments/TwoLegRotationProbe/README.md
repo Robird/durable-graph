@@ -8,6 +8,9 @@ two-leg StateStore file rotation and Base-or-Deltify policies.
 > [`DB-014`](../../docs/design-branches/0014-multi-segment-backward-file-distance.md)
 > and [`MultiSegmentStateStoreProbe`](../MultiSegmentStateStoreProbe/README.md).
 
+Product progress lives in [`src/PROJECT-STATE.md`](../../src/PROJECT-STATE.md).
+Choose other witnesses by question through the [experiment index](../README.md).
+
 The compact freeze boundary, known limitations, reusable assets, and reactivation
 conditions live in [`PROJECT-STATE.md`](PROJECT-STATE.md). This README describes the
 implemented model and executable evidence; it is neither an active backlog nor the

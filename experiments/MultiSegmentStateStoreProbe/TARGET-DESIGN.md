@@ -1,5 +1,9 @@
 # 阶段 A：MultiSegment In-Memory StateStore Probe 目标设计
 
+> 历史阶段 A 合同：G0-G4 已完成。下文的“当前”“下一切片”“未闭合”保留当时研究语境，
+> 不作为新工作单。恢复边界见 [PROJECT-STATE](PROJECT-STATE.md)，产品进展见
+> [src/PROJECT-STATE.md](../../src/PROJECT-STATE.md)；实现事实仍以当前源码和测试为准。
+
 > 状态：Selected Target Design / G0-G4 Implementation Guide
 >
 > 最近校准：2026-09-02
