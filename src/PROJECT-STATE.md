@@ -14,9 +14,11 @@
 
 ## 当前焦点
 
-DB-029 的 SG/string PrepareBase 与 prepared 内容到可追加 Revision 已完成，当前没有正在施工的分片。
-下一候选是持久类型/Schema 解释，或 Capture 到 prepared rows 的产品 typed 适配与 exact baseline 管理。
-当前集成仍显式提供类型/roots 元数据及 typed 适配，不据此启动完整 Save/发布。
+DB-029 已完成，当前没有正在施工的分片。下一片推荐
+[DB-030：异构 Capture 图统一准备内容](../docs/design-branches/0030-captured-object-preparation-slice.md)（Proposed）。
+SG 登记对象级 preparation binding，Runtime 从 candidate / Current 统一生成完整 prepared 内容；
+最小验收是在保存桥接中去掉手写 DTO 类型分派，复用 DB-029 完成真实追加和冷重开见证。
+exact Parent baseline 的来源/安装与持久类型解释继续分片；当前 fixture 仍显式保证图/Parent 对应及提供读取元数据。
 struct、一般引用和 Restore 可独立穿插；详细待定项见后续路线。
 
 ## 当前能力与实际边界
