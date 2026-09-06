@@ -3,7 +3,7 @@ using Atelia.DurableGraph.StateStore.Serialization;
 namespace Atelia.DurableGraph.StateStore.Storage;
 
 /// <summary>
-/// Decodes the provisional v2 State Revision Base contents and membership, and immediately
+/// Decodes the provisional v3 State Revision object contents and membership, and immediately
 /// normalizes every persisted reference to an absolute <see cref="FrameAddress"/>.
 /// </summary>
 internal static class StateRevisionWireReader {
@@ -37,20 +37,20 @@ internal static class StateRevisionWireReader {
                 "An ObjectHeadMap Delta has no parent Revision address.");
         }
 
-        BaseObjectRecord[] baseObjects = ReadBaseObjects(ref reader);
+        ObjectVersionRecord[] localObjects = ReadLocalObjects(ref reader, scope);
         StateRevision revision;
         try {
             revision = kind switch {
                 ObjectHeadMapKind.Base => StateRevision.CreateBase(
                     parent,
-                    baseObjects,
+                    localObjects,
                     ReadExternalObjectHeads(
                         ref reader,
                         scope)),
                 ObjectHeadMapKind.Delta when parent is { } parentAddress =>
                     StateRevision.CreateDelta(
                         parentAddress,
-                        baseObjects,
+                        localObjects,
                         ReadObjectIds(ref reader)),
                 _ => throw new InvalidDataException(
                     $"Unknown ObjectHeadMap kind {kind}."),
@@ -97,14 +97,25 @@ internal static class StateRevisionWireReader {
         return objectIds;
     }
 
-    private static BaseObjectRecord[] ReadBaseObjects(ref BinaryPayloadReader reader) {
-        int count = ReadCount(ref reader, minimumEntryBytes: 2);
-        BaseObjectRecord[] records = new BaseObjectRecord[count];
+    private static ObjectVersionRecord[] ReadLocalObjects(ref BinaryPayloadReader reader, FileScope scope) {
+        int count = ReadCount(ref reader, minimumEntryBytes: 3);
+        ObjectVersionRecord[] records = new ObjectVersionRecord[count];
         uint previous = 0;
         for (int index = 0; index < count; index++) {
             uint objectId = ReadNextObjectId(ref reader, previous);
+            int payloadStart = reader.ConsumedCount;
+            ObjectVersionKind kind = reader.ReadByte() switch {
+                (byte)ObjectVersionKind.Base => ObjectVersionKind.Base,
+                (byte)ObjectVersionKind.Delta => ObjectVersionKind.Delta,
+                byte value => throw new InvalidDataException($"Unknown ObjectVersion kind {value}."),
+            };
+            FrameAddress? prior = kind == ObjectVersionKind.Delta
+                ? FrameAddressWireCodec.Read(ref reader, scope)
+                : null;
             // ReadBytes validates canonical Int32 length and remaining bounds before copying.
-            records[index] = new BaseObjectRecord(objectId, reader.ReadBytes());
+            ReadOnlySpan<byte> body = reader.ReadBytes();
+            int encodedPayloadBytes = reader.ConsumedCount - payloadStart;
+            records[index] = ObjectVersionRecord.FromDecoded(objectId, kind, prior, body, encodedPayloadBytes);
             previous = objectId;
         }
 

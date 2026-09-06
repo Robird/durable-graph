@@ -1,0 +1,27 @@
+namespace Atelia.DurableGraph.StateStore.Storage;
+
+/// <summary>One owned raw ObjectVersion and its exact containing Frame.</summary>
+public sealed class ObjectVersionChainEntry {
+    internal ObjectVersionChainEntry(FrameAddress address, ObjectVersionRecord record) {
+        FrameAddressValidator.ValidateRequired(address, nameof(address));
+        ArgumentNullException.ThrowIfNull(record);
+        int payloadBytes = record.EncodedPayloadBytes
+            ?? throw new InvalidOperationException("A chain entry requires a record read from its containing Frame.");
+        if (payloadBytes <= 0) {
+            throw new InvalidOperationException("An encoded ObjectVersion payload includes a nonempty envelope.");
+        }
+
+        Address = address;
+        Record = record;
+        PayloadBytes = payloadBytes;
+    }
+
+    public FrameAddress Address { get; }
+    public ObjectVersionRecord Record { get; }
+
+    /// <summary>
+    /// Observed encoded bytes from representation kind through body, including a
+    /// Delta's prior locator. Excludes ObjectId, shared Frame and membership costs.
+    /// </summary>
+    public int PayloadBytes { get; }
+}

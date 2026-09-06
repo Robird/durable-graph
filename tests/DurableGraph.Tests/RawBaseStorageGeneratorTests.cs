@@ -40,9 +40,9 @@ public sealed partial class DurableSchemaGeneratorTests {
         using (SegmentStore segments = SegmentStore.CreateNew(directory.Path, options)) {
             StateRevisionStore store = new(segments);
             first = store.Append(StateRevision.CreateBase(null,
-                input.First.Reverse().Select(record => new BaseObjectRecord(record.Id, record.Body)), []));
+                input.First.Reverse().Select(record => ObjectVersionRecord.CreateBase(record.Id, record.Body)), []));
             second = store.Append(StateRevision.CreateDelta(first,
-                [new BaseObjectRecord(firstOwner, input.Second.Single(record => record.Id == firstOwner).Body)], []));
+                [ObjectVersionRecord.CreateBase(firstOwner, input.Second.Single(record => record.Id == firstOwner).Body)], []));
 
             // Storage deliberately accepts opaque bytes. Typed validation must reject these
             // persisted corrupt references, including a failure after the first owner was valid.
@@ -50,11 +50,11 @@ public sealed partial class DurableSchemaGeneratorTests {
             Assert.InRange(missing[0], (byte)1, (byte)127); // The fixture's first reference is one byte.
             missing[0] = 127;
             missingString = store.Append(StateRevision.CreateDelta(second,
-                [new BaseObjectRecord(secondOwner, missing)], []));
+                [ObjectVersionRecord.CreateBase(secondOwner, missing)], []));
             byte[] nonString = input.Second.Single(record => record.Id == firstOwner).Body.ToArray();
             nonString[0] = checked((byte)secondOwner);
             wrongKind = store.Append(StateRevision.CreateDelta(second,
-                [new BaseObjectRecord(firstOwner, nonString)], []));
+                [ObjectVersionRecord.CreateBase(firstOwner, nonString)], []));
         }
         Assert.NotEqual(first.FileNumber, second.FileNumber);
 

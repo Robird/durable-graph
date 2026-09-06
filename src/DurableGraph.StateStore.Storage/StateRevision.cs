@@ -1,39 +1,40 @@
 namespace Atelia.DurableGraph.StateStore.Storage;
 
 /// <summary>
-/// Immutable local Base contents and live-object metadata of one StateStore Revision.
+/// Immutable local object contents and live-object metadata of one StateStore Revision.
 /// </summary>
 public sealed class StateRevision {
-    private readonly FrozenList<BaseObjectRecord> _baseObjects;
-    private readonly FrozenList<uint> _baseObjectIds;
+    private readonly FrozenList<ObjectVersionRecord> _localObjects;
+    private readonly FrozenList<uint> _localObjectIds;
     private readonly FrozenDictionary<uint, FrameAddress> _externalObjectHeads;
     private readonly FrozenList<uint> _removedObjectIds;
 
-    // TODO(DB-026): Add actual ObjectVersion Delta payloads with exact prior locators
-    // and reconstruction-chain validation. A reused ObjectId's new occupant must start
-    // from Base. ObjectHeadMap Delta below only changes membership and current heads.
     private StateRevision(
         FrameAddress? parentRevisionAddress,
         ObjectHeadMapKind objectHeadMapKind,
-        IEnumerable<BaseObjectRecord> baseObjects,
+        IEnumerable<ObjectVersionRecord> localObjects,
         IEnumerable<KeyValuePair<uint, FrameAddress>> externalObjectHeads,
         IEnumerable<uint> removedObjectIds) {
-        ArgumentNullException.ThrowIfNull(baseObjects);
+        ArgumentNullException.ThrowIfNull(localObjects);
         ArgumentNullException.ThrowIfNull(externalObjectHeads);
         ArgumentNullException.ThrowIfNull(removedObjectIds);
         if (parentRevisionAddress is { } parent) {
             FrameAddressValidator.ValidateRequired(parent, nameof(parentRevisionAddress));
         }
 
-        BaseObjectRecord[] frozenObjects = baseObjects.ToArray();
-        foreach (BaseObjectRecord record in frozenObjects) {
+        ObjectVersionRecord[] frozenObjects = localObjects.ToArray();
+        foreach (ObjectVersionRecord record in frozenObjects) {
             if (record is null) {
-                throw new ArgumentException("A local Base record cannot be null.", nameof(baseObjects));
+                throw new ArgumentException("A local object record cannot be null.", nameof(localObjects));
             }
         }
 
+        if (parentRevisionAddress is null && frozenObjects.Any(static record => record.Kind == ObjectVersionKind.Delta)) {
+            throw new ArgumentException("A local object Delta requires an exact parent Revision address.", nameof(parentRevisionAddress));
+        }
+
         Array.Sort(frozenObjects, static (left, right) => left.ObjectId.CompareTo(right.ObjectId));
-        uint[] frozenBaseIds = FreezeObjectIds(frozenObjects.Select(static item => item.ObjectId), nameof(baseObjects));
+        uint[] frozenLocalIds = FreezeObjectIds(frozenObjects.Select(static item => item.ObjectId), nameof(localObjects));
         SortedDictionary<uint, FrameAddress> frozenExternalHeads = FreezeExternalHeads(externalObjectHeads);
         uint[] frozenRemovedIds = FreezeObjectIds(removedObjectIds, nameof(removedObjectIds));
 
@@ -43,7 +44,7 @@ public sealed class StateRevision {
                     throw new ArgumentException("An ObjectHeadMap Base cannot contain removed ObjectIds.", nameof(removedObjectIds));
                 }
 
-                EnsureDisjoint(frozenBaseIds, frozenExternalHeads.Keys, "Local and external ObjectIds");
+                EnsureDisjoint(frozenLocalIds, frozenExternalHeads.Keys, "Local and external ObjectIds");
                 break;
             case ObjectHeadMapKind.Delta:
                 if (parentRevisionAddress is null) {
@@ -54,7 +55,7 @@ public sealed class StateRevision {
                     throw new ArgumentException("An ObjectHeadMap Delta cannot contain external Object heads.", nameof(externalObjectHeads));
                 }
 
-                EnsureDisjoint(frozenBaseIds, frozenRemovedIds, "Local and removed ObjectIds");
+                EnsureDisjoint(frozenLocalIds, frozenRemovedIds, "Local and removed ObjectIds");
                 break;
             default:
                 throw new ArgumentOutOfRangeException(nameof(objectHeadMapKind), objectHeadMapKind, "Unknown ObjectHeadMap kind.");
@@ -62,8 +63,8 @@ public sealed class StateRevision {
 
         ParentRevisionAddress = parentRevisionAddress;
         ObjectHeadMapKind = objectHeadMapKind;
-        _baseObjects = new(frozenObjects);
-        _baseObjectIds = new(frozenBaseIds);
+        _localObjects = new(frozenObjects);
+        _localObjectIds = new(frozenLocalIds);
         _externalObjectHeads = new(frozenExternalHeads);
         _removedObjectIds = new(frozenRemovedIds);
     }
@@ -71,11 +72,11 @@ public sealed class StateRevision {
     public FrameAddress? ParentRevisionAddress { get; }
     public ObjectHeadMapKind ObjectHeadMapKind { get; }
 
-    /// <summary>Complete same-Frame Base records in ascending ObjectId order.</summary>
-    public IReadOnlyList<BaseObjectRecord> BaseObjects => _baseObjects;
+    /// <summary>Complete same-Frame object records in ascending ObjectId order.</summary>
+    public IReadOnlyList<ObjectVersionRecord> LocalObjects => _localObjects;
 
-    /// <summary>IDs derived from the local Base records. Each head is its containing Revision Frame.</summary>
-    public IReadOnlyList<uint> BaseObjectIds => _baseObjectIds;
+    /// <summary>IDs derived from the local object records. Each head is its containing Revision Frame.</summary>
+    public IReadOnlyList<uint> LocalObjectIds => _localObjectIds;
 
     /// <summary>Earlier current heads completing an ObjectHeadMap Base; empty for a map Delta.</summary>
     public IReadOnlyDictionary<uint, FrameAddress> ExternalObjectHeads => _externalObjectHeads;
@@ -85,17 +86,15 @@ public sealed class StateRevision {
 
     public static StateRevision CreateBase(
         FrameAddress? parentRevisionAddress,
-        IEnumerable<BaseObjectRecord> baseObjects,
+        IEnumerable<ObjectVersionRecord> localObjects,
         IEnumerable<KeyValuePair<uint, FrameAddress>> externalObjectHeads) =>
-        new(parentRevisionAddress, ObjectHeadMapKind.Base, baseObjects, externalObjectHeads, []);
+        new(parentRevisionAddress, ObjectHeadMapKind.Base, localObjects, externalObjectHeads, []);
 
     public static StateRevision CreateDelta(
         FrameAddress parentRevisionAddress,
-        IEnumerable<BaseObjectRecord> baseObjects,
+        IEnumerable<ObjectVersionRecord> localObjects,
         IEnumerable<uint> removedObjectIds) =>
-        new(parentRevisionAddress, ObjectHeadMapKind.Delta, baseObjects, [], removedObjectIds);
-
-    internal IEnumerable<uint> LocalObjectIds => _baseObjectIds;
+        new(parentRevisionAddress, ObjectHeadMapKind.Delta, localObjects, [], removedObjectIds);
 
     private static uint[] FreezeObjectIds(IEnumerable<uint> objectIds, string parameterName) {
         uint[] frozen = objectIds.Order().ToArray();

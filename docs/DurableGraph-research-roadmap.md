@@ -7,10 +7,10 @@
 
 ## 1. 下一个分片如何选择
 
-下一片推荐已整理为 [DB-028：持久对象 Delta/prior/H](design-branches/0028-persisted-object-delta-chain-slice.md)，
-状态 Proposed，待用户评审。以 DB-027 的实际 codec 作 typed 冷重开消费者，
-产品范围限原始版本链、exact Parent/prior 检查及对象 payload 成本；之后再选对象列表/策略或持久类型目录。
-不能把已完成的 body codec 或本次规划当作已完成持久版本链。
+以 [DB-028 已验证的 raw 版本链与 H](design-branches/0028-persisted-object-delta-chain-slice.md) 为基础，
+下一轮可选对象列表比较/策略执行，或持久类型头与目录。
+前者先收敛 exact Parent 比较基线、不可 Delta 的 Update 与目标 Frame scope 下 B/D；
+后者补上目前 typed 见证显式提供的解释元数据。两者均不自动包含发布与恢复。
 
 current 领域 Restore、自定义 struct 和一般 durable 引用可以独立成片。
 它们与存储推进的穿插顺序尚未冻结；不要恢复旧 R4 → R5 → R6 或 P0–P7 为强制流水线。
@@ -23,7 +23,6 @@ B/D/H 分别指 Base 写入字节、Delta 写入字节、当前对象重建字�
 
 | 工作项 | 最小应回答的问题 | 设计或证据入口 |
 |---|---|---|
-| 持久对象 Delta 与版本链 | 将实际 body codec 接到 exact prior locator，重开重建内容并统计 H；移除/ID 新占用者不得误接旧链 | [DB-028 提案](design-branches/0028-persisted-object-delta-chain-slice.md)、[StateRevision TODO](../src/DurableGraph.StateStore.Storage/StateRevision.cs) |
 | 比较、估算与策略接入 | frozen 候选与 exact Parent 如何得到变化分类和 B/D/H；如何生成并执行计划、保持失败时基线不变 | [DB-015](design-branches/0015-statestore-object-representation-policy.md)、[DB-022](design-branches/0022-versioned-state-dto-capture.md) |
 | TypeCodec 与 exact Schema 绑定 | 类型组合如何编码；引用约束如何检查；未知类型/版本和错误对象头如何拒绝 | [DB-018](design-branches/0018-generated-graph-codec-shape.md)、[DB-001](design-branches/0001-schema-authority-and-runtime-representation.md) |
 | DTO 升级与领域 Restore | stored exact 版本如何分派、升级为 current DTO，再构造领域对象；失败时不交付半成品 | [DB-022](design-branches/0022-versioned-state-dto-capture.md)、[DB-002](design-branches/0002-read-time-version-upgrade-pipeline.md) |
@@ -36,8 +35,8 @@ B/D/H 分别指 Base 写入字节、Delta 写入字节、当前对象重建字�
 
 | 问题 | 现有依据与裁决边界 |
 |---|---|
-| 对象版本 envelope、prior 与 H 来源 | [DB-028 §3](design-branches/0028-persisted-object-delta-chain-slice.md#3-推荐合同)集中记录推荐与边界，尚未批准实施；持久 exact Schema/codec 绑定和完整 head map 的保存来源合同仍留待后续 |
-| 保存相等性与真实估算 | 同版标量 DTO 的浮点按位、引用槽按 ID 已随 DB-027 采纳；未来复合值/容器相等性另定。B/D/H 如何在对象头与 prior 链加入后保持 DB-015 的对象 payload 口径，不纳入共享 Frame、membership 或对齐开销 |
+| 对象版本解释与保存来源 | raw prior/H 已由 DB-028 闭合；持久 exact Schema/codec 绑定、完整 head map 的 external heads 来源、候选对象身份连续性仍需产品 Save 合同，不能由 Parent 声明一致推导全局身份认证 |
+| 保存相等性与真实估算 | 同版标量 DTO 的浮点按位、引用槽按 ID 已采纳；未来复合值/容器相等性另定。候选 B/D 需包含对象 kind/prior/length/body，目标 Frame scope 未定时如何估算；将来加类型头后统一计入 B/D/H，不纳入共享 Frame、membership 或对齐开销 |
 | 历史升级后的比较和重写 | DB-006/R3 研究采用 normalized baseline 与 RequiresRewrite，可作证据；新 DTO 路径是否跨 Schema 必须 Base、如何恢复义务及升级删边后清理，尚待专片裁决，读取不得隐式回写 |
 | 完整 source 目录与 current 可达集合 | 升级可能删边。研究见证保留 source rows，再由 Save 移除不可达项；产品保存视图怎样表达需与候选/Parent 衔接 |
 | Schema 规范表示和持久引用 | canonical bytes、SchemaHash/完整 descriptor 校验、类型家族约束和 SchemaStore 引用形式；不能把现有 GetHashCode 或 history TypeTag 当成最终 wire |
@@ -69,7 +68,7 @@ DB-009/010 的旧 no-reuse 前提不能沿用；借用 Base 共享 prior 等结�
 | Transient 重建 | 首个领域 Restore 消费者需要索引/缓存时；比较单对象 hook、全局 registry、两阶段或依赖调度，失败不交付 roots |
 | 物理 GC、compaction、历史保留 | 出现真实空间或 recovery-closure 问题后；与 CLR 映射清理和数字 ID 回收分开裁决 |
 | TwoLeg / incremental cleaner | 多历史 Segment 无法满足实际有界 dependency file count、在线退休、backup/rescue 或 compaction SLO 时重访，见其 [技术储备](../experiments/TwoLegRotationProbe/PROJECT-STATE.md) |
-| 性能优化 | 有具体扫描、分配、baseline I/O 或写入峰值测量后；再选择 cache、typed buckets、指纹、稀疏字段 patch、paged index 或 frozen subgraph |
+| 性能优化 | 有具体测量后再选择 cache、typed buckets、指纹等；DB-028 先 object-first 直读 RBF，Frame cache 只减少重复 I/O/解码，重复完整 map 物化需另评估 map cache/单 ID 查询，必要时再按 Frame 合并批量读取 |
 | 并发、分支与跨 Repository | 宿主提出真实 consumer 后；分别定义 concurrent Capture、snapshot isolation、branch/fork/multi-writer 和跨 Store/Repository identity，不扩大当前单 writer 假设 |
 | 升级创建新对象或外部副作用 | 当前升级/图恢复闭合之后，有具体需求再讨论新 ID、source table 外引用与失败隔离，不借普通升级默认授权 |
 | 历史工具/升级调用优化 | 有 package/history 或升级调用的真实限制后，再重访 DB-003 的 Try/result/ABI 和 DB-004 的多 writer/多 TFM 与批次原子性，不顺带做兼容框架 |

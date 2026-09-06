@@ -1,8 +1,8 @@
 # DB-028：持久对象 Delta、exact prior 与原始重建链
 
-> 状态：Proposed / 待用户评审，尚未实施。
+> 状态：Chosen / Implemented — 用户已采纳对象优先遍历并授权实施，结果见 §6。
 > 日期：2026-09-06；规划源码基线 `0201c9a`，工作区起点干净。
-> 本轮授权为规划。本文是推荐的下一工作分片，不是已完成能力或自动施工授权。
+> 实施授权来自用户本轮请求；本文记录范围与验收，不宣称尚未验证的能力。
 
 ## 1. 问题与最小成功判据
 
@@ -19,7 +19,7 @@
 
 ## 2. 证据与候选比较
 
-当前源码事实：
+规划起点 `0201c9a` 的源码事实（不是本片完成后的能力表）：
 
 - [生成器](../../src/DurableGraph.Generator/DurableSchemaGenerator.BinaryBody.cs)已有各历史 Vn 的
   PrepareDelta/ApplyDelta；[PreparedDelta](../../src/DurableGraph.StateStore.Serialization/Serialization/PreparedDelta.cs)
@@ -115,6 +115,28 @@ Storage 不调用 SG、不解释 CLR/Schema，也不接收“任意 bytes → by
 同 Schema 的错误 prior 内容仍可能被 Apply 接受；链地址校验不验证 payload 的生成过程。
 不为填补这一边界添加测试专用的产品 Schema ID 注册器。
 
+#### 遍历顺序与缓存边界
+
+推荐采用 object-first：单对象入口内迭代追溯该对象的 explicit prior，遇 Base 停止；
+需要多个对象时，由调用方在外层遍历 ObjectId。收集顺序为 head → Base，返回/应用顺序
+为 Base → head，使用局部 list 反转或 stack，不递归调用 Apply，也不建立全图待完成对象调度器。
+
+每条 Delta 的 Parent/head 检查仍会调用 membership 查询。这是对象循环内的来源验证，
+不是沿 StateRevision 父链批量重建所有对象；初版复用现有完整 map materializer 即可。
+首版允许重复直读 RBF：不仅不同对象可能读到同一 Frame，同一对象链的多次 Parent 校验
+也可能重读重叠的 membership 历史。不能将总成本描述为只与对象内容链长度成正比。
+
+实施时在统一的内部 Revision 读取路径留 TODO：测量后评估一次读取操作/批次共享的
+`FrameAddress → 已解码 StateRevision` 缓存，不缓存仍依赖 pooled frame lease 的视图。
+只加 Frame cache 能减少重复 I/O/解码，不能消除重复物化完整 head map 的 CPU/分配；
+若后者成为瓶颈，再评估 exact Revision 的 map 缓存或单 ID head 查询。
+本片不新增公开 cache 接口、全局无界缓存或完整批量读取 API；验收不要求每帧只读一次。
+
+revision-first 批处理可能适合未来大批量加载，但要同时管理不同对象的停止点、pending Delta、
+显式 prior 跳跃和 map checkpoint；不能假定扫描到一个 StateRevision Base 就完成所有对象内容。
+本片先保留独立对象链算法；若实测批量加载仍受随机 I/O 影响，再考虑按下一待取 Frame 合并读取，
+其调度优化不应改变每个对象的 prior 校验、Base 停止点与 Apply 顺序。
+
 ### 3.4 wire 与 H 的计数
 
 推荐将当前原型 wire v2 替换为 v3，旧版本明确拒绝，不写兼容读取器。
@@ -184,7 +206,52 @@ Base 截断的是对象内容链：它不沿 prior 追溯更旧内容，但定�
 后者处理本片显式留在 fixture 的解释权威。完整发布/恢复必须另定故障模型。
 struct、一般引用、数组/BCL、Restore、ID 回收继续按[路线图](../DurableGraph-research-roadmap.md)保留。
 
-本轮只读源码与既有测试并讨论，未运行新的产品 build/tests，不把 DB-027 的 570/570 当成本轮重验结果。
+规划阶段只读源码与既有测试并讨论，未运行产品 build/tests，当时状态为 Proposed。
 独立审查收紧了 Append 仅检查直接 edge，以及 Base 截断不保证免读同 Frame 旧字节的表述；
-主代理已核对 integrated diff、98 个本地文件链接及新增 §3 链接锚点，状态均为 Proposed。
-实施后在本文补实际证据，不覆盖规划时事实。
+当时核对了 integrated diff、98 个本地文件链接及新增 §3 链接锚点。随后用户采纳并授权实施，证据见下节。
+
+## 6. 实施账本
+
+实施起点 `e7ff65d`；工作区已有上一轮批准的遍历/缓存说明，保留并纳入本片。
+使用 spec-driven-implementation，主代理负责稳定接缝、整合、最终证据与提交。
+实施前根 solution tests 通过 570/570（339 + 96 + 95 + 40），无跳过。
+
+稳定接缝：`ObjectVersionKind` Base=1 / Delta=2；`ObjectVersionRecord.CreateBase/CreateDelta`
+拥有 bytes，`StateRevision.LocalObjects/LocalObjectIds` 取代旧 Base-only 集合。
+wire reader 在记录内保留 internal 的实际编码长度，普通构造记录无该观测值；它不写回 wire。
+`ObjectVersionChain` 暴露 ObjectId、HeadAddress、Base-first Records 与 ReconstructionBytes；
+entry 暴露 Address、Record、PayloadBytes。结果由完整链检查后构造，无公开任意链构造器。
+
+| 要求 | 负责人/路径 | 验收入口 | 状态 |
+|---|---|---|---|
+| owned record、local model、wire v3/实编码计数 | 子任务 A / [ObjectVersionRecord](../../src/DurableGraph.StateStore.Storage/ObjectVersionRecord.cs)、model/wire | 模型、wire golden/恶意字节、原有 membership tests | 已验证 |
+| Append 直接预检、object-first 链读取、缓存 TODO | 子任务 B / [StateRevisionStore](../../src/DurableGraph.StateStore.Storage/StateRevisionStore.cs) | [文件链测试](../../tests/DurableGraph.StateStore.Storage.Tests/ObjectVersionChainStoreTests.cs) | 已验证 |
+| 不可变链结果、checked H 汇总 | 主代理 / [ObjectVersionChain](../../src/DurableGraph.StateStore.Storage/ObjectVersionChain.cs)、Entry | 自有结果、原 scope 成本与 H 独立字节期望 | 已验证 |
+| 真实 SG DTO/历史/引用 typed 冷重开 | 子任务 C / [typed 文件见证](../../tests/DurableGraph.Tests/PersistedDeltaChainGeneratorTests.cs) | 两个真实 SG 执行案例、旧 raw Base 回归 | 已验证 |
+| 整合、独立审查、文档与提交 | 主代理 + 独立 reviewer | 根 build/tests 与 actual diff | 已验证 |
+
+实现与验证范围：
+
+- 旧 Base-only record/API 由统一模型替换，wire v3 明确拒绝 v1/v2；所有现有调用与 golden 已迁移。
+- 新链测试验证跨 Segment 冷重开、跳过未改 Revision、两种 map 中的对象 Delta、wrong branch/stale/full ticket、
+  绕过 Append 的坏链、删除再用、Base 截断、完整 map 浅声明、所有权和 H 原 scope 计量。
+- 预检失败的多对象测试验证：第二条 Delta 过时，不触发待进行的 rollover；修正后正常追加。
+- 两个 SG 文件见证使用真实 Prepare/Read/Apply；包含冻结 Capture、复用同份 PreparedDelta、
+  string 未改槽验证、历史 V1 的旧 CLR 祖先已移除、全链 fixture descriptor 预检与失败不交付结果。
+- 独立审查核对实际产品代码、新测试和旧测试迁移，无阻塞性发现。
+- 产品依赖、Generator/Serialization API 及包构建配置未变；本片未重跑 PackageConsumerProbe，
+  不把上一片包证据作为本片重验。Storage API 变更通过根 solution 及真实生成代码集成测试验证。
+
+2026-09-06 最终集中验证：
+
+- `dotnet build DurableGraph.slnx --verbosity quiet`：0 警告、0 错误。
+- `dotnet test DurableGraph.slnx --no-build --verbosity quiet`：607/607，无跳过；
+  DurableGraph 341、Serialization 96、Storage 130、StateStore 40。
+- Storage tests 另单独通过 130/130。相较基线增加 37 个执行案例；第一次整合通过 606/606，
+  最后补入多对象预检不触发 rollover 的测试后，重新 build 并验证了上述完整 607 项。
+- 独立 reviewer 两次检查产品、测试与最终文档，无剩余阻塞项；147 个本地文件链接与新增 §6 锚点有效，
+  integrated diff 检查通过。旧 DB-026 仅修正被删除 BaseObjectRecord 的后继源码链接。
+- 最后产品代码之后的修改仅为测试补充/临时目录清理边界及文档；最终全套包含这些测试改动。
+
+本片只构造原始链；历史 typed fixture 中逐次 Read/Apply/Write 不构成产品通用 typed loader。
+没有 Frame cache、性能 benchmark、持久类型目录、完整 Save、policy 执行或发布/恢复承诺。

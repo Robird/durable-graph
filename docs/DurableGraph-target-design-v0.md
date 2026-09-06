@@ -95,9 +95,14 @@ Source Generator 负责可在编译期确定的类型知识与机械代码，框
   不因此强制冷对象 Base。对象内容 Delta 与 ObjectHeadMap 的 membership Delta 是不同层次。
 - Storage 不解释 CLR 字段、Schema 升级或可达性。Append 产生 candidate address，
   外层拥有最终发布 head；raw body 读取不等价于类型或完整图验证。
+- 对象 Delta 显式引用同 ObjectId 的 prior record，并与其 containing Revision 的 exact Parent 当前 head 对照。
+  新 Base 截断对象内容重建链；这不等于截断 membership 读取、历史查询或允许删除旧文件。
+- B/D/H 采用统一对象 payload 口径，包含对象独有 kind/prior/length/body，未来类型头亦应计入；
+  排除 ObjectId key、共享 membership/Frame/对齐。H 从原 Frame 实编码累计，是成本代理而非总物理 I/O。
 
 地址方向来源：[DB-014](design-branches/0014-multi-segment-backward-file-distance.md)；
-内容边界来源：[DB-026](design-branches/0026-raw-base-object-content-slice.md)。
+内容边界来源：[DB-026](design-branches/0026-raw-base-object-content-slice.md)、
+[DB-028](design-branches/0028-persisted-object-delta-chain-slice.md)。
 
 ## 3. 保留的长期产品目标
 

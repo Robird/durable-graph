@@ -22,6 +22,8 @@ public sealed class StateRevisionStore {
     public FrameAddress Append(StateRevision revision) {
         ArgumentNullException.ThrowIfNull(revision);
 
+        ValidateDirectPriors(revision);
+
         using RbfSegmentWriterLease writer = _segmentStore.OpenActiveWriter();
         using RbfFrameBuilder builder = writer.File.BeginAppend();
         StateRevisionWireWriter.Write(
@@ -34,6 +36,9 @@ public sealed class StateRevisionStore {
     }
 
     public StateRevision Read(FrameAddress address) {
+        // TODO(DB-028): Measure repeated reads, then consider operation/batch-scoped
+        // decoded Frame caching. Cache owned revisions, never pooled Frame views.
+        // This alone does not remove repeated full head-map materialization costs.
         FrameAddressValidator.ValidateRequired(address, nameof(address));
         using RbfSegmentReaderLease reader = _segmentStore.OpenReader(
             address.FileNumber);
@@ -86,27 +91,113 @@ public sealed class StateRevisionStore {
     /// not validate types, other external heads, or graph references.
     /// </remarks>
     public byte[] ReadObjectBase(FrameAddress revisionHead, uint objectId) {
+        FrameAddress head = ResolveObjectHead(revisionHead, objectId);
+        ObjectVersionRecord record = FindLocalRecord(Read(head), head, objectId);
+        if (record.Kind != ObjectVersionKind.Base) {
+            throw new InvalidDataException(
+                $"ObjectId {objectId} at {head} has a Delta head, not a complete Base body.");
+        }
+
+        return record.Body.ToArray();
+    }
+
+    /// <summary>
+    /// Reads one live Object's complete raw reconstruction chain, ordered from
+    /// its most recent Base through its current Delta head.
+    /// </summary>
+    /// <remarks>
+    /// Each Delta must name the exact current head declared by its own Parent.
+    /// Records own their bytes and no pooled Frame lease escapes this operation.
+    /// This does not interpret bodies or authenticate their Schema or producer.
+    /// Complete maps retain their shallow external-head declaration contract.
+    /// </remarks>
+    public ObjectVersionChain ReadObjectVersionChain(
+        FrameAddress revisionHead,
+        uint objectId) {
+        FrameAddress head = ResolveObjectHead(revisionHead, objectId);
+        FrameAddress address = head;
+        StateRevision revision = Read(address);
+        ObjectVersionRecord record = FindLocalRecord(revision, address, objectId);
+        List<ObjectVersionChainEntry> records = [];
+        while (true) {
+            records.Add(new ObjectVersionChainEntry(address, record));
+            if (record.Kind == ObjectVersionKind.Base) {
+                break;
+            }
+
+            FrameAddress parent = revision.ParentRevisionAddress
+                ?? throw new InvalidDataException(
+                    $"Delta ObjectId {objectId} at {address} has no Parent Revision.");
+            FrameAddress prior = record.PriorAddress
+                ?? throw new InvalidDataException(
+                    $"Delta ObjectId {objectId} at {address} has no prior address.");
+            FrameAddressValidator.EnsureStrictlyEarlier(address, parent);
+            FrameAddressValidator.EnsureStrictlyEarlier(address, prior);
+            RequireParentHead(ReadLiveObjectHeads(parent), objectId, prior);
+            revision = Read(prior);
+            record = FindLocalRecord(revision, prior, objectId);
+            address = prior;
+        }
+
+        records.Reverse();
+        return new ObjectVersionChain(objectId, head, records);
+    }
+
+    private void ValidateDirectPriors(StateRevision revision) {
+        IReadOnlyDictionary<uint, FrameAddress>? parentHeads = null;
+        foreach (ObjectVersionRecord record in revision.LocalObjects) {
+            if (record.Kind != ObjectVersionKind.Delta) {
+                continue;
+            }
+
+            FrameAddress parent = revision.ParentRevisionAddress
+                ?? throw new InvalidDataException(
+                    $"Delta ObjectId {record.ObjectId} requires a Parent Revision.");
+            FrameAddress prior = record.PriorAddress
+                ?? throw new InvalidDataException(
+                    $"Delta ObjectId {record.ObjectId} requires a prior address.");
+            parentHeads ??= ReadLiveObjectHeads(parent);
+            RequireParentHead(parentHeads, record.ObjectId, prior);
+            _ = FindLocalRecord(Read(prior), prior, record.ObjectId);
+        }
+    }
+
+    private FrameAddress ResolveObjectHead(FrameAddress revisionHead, uint objectId) {
         FrameAddressValidator.ValidateRequired(revisionHead, nameof(revisionHead));
         if (objectId == 0) {
             throw new ArgumentOutOfRangeException(
                 nameof(objectId), objectId, "ObjectId must be nonzero.");
         }
 
-        IReadOnlyDictionary<uint, FrameAddress> heads = ReadLiveObjectHeads(
-            revisionHead);
-        if (!heads.TryGetValue(objectId, out FrameAddress containingFrame)) {
+        if (!ReadLiveObjectHeads(revisionHead).TryGetValue(objectId, out FrameAddress head)) {
             throw new InvalidDataException(
                 $"ObjectId {objectId} is not live in Revision {revisionHead}.");
         }
 
-        StateRevision containingRevision = Read(containingFrame);
-        foreach (BaseObjectRecord record in containingRevision.BaseObjects) {
+        return head;
+    }
+
+    private static void RequireParentHead(
+        IReadOnlyDictionary<uint, FrameAddress> parentHeads,
+        uint objectId,
+        FrameAddress prior) {
+        if (!parentHeads.TryGetValue(objectId, out FrameAddress expected) || expected != prior) {
+            throw new InvalidDataException(
+                $"Delta ObjectId {objectId} prior {prior} is not its exact Parent's current head.");
+        }
+    }
+
+    private static ObjectVersionRecord FindLocalRecord(
+        StateRevision revision,
+        FrameAddress address,
+        uint objectId) {
+        foreach (ObjectVersionRecord record in revision.LocalObjects) {
             if (record.ObjectId == objectId) {
-                return record.Body.ToArray();
+                return record;
             }
         }
 
         throw new InvalidDataException(
-            $"Frame {containingFrame} has no local Base record for ObjectId {objectId}.");
+            $"Frame {address} has no local ObjectVersion record for ObjectId {objectId}.");
     }
 }

@@ -210,7 +210,7 @@ append 仍只返回 candidate address，调用方持有 authority；不因文件
 
 | 要求 | 代码/负责人 | 状态与验证 |
 |---|---|---|
-| immutable records、派生 IDs、TODO、v2 framing | [BaseObjectRecord](../../src/DurableGraph.StateStore.Storage/BaseObjectRecord.cs)、[StateRevision](../../src/DurableGraph.StateStore.Storage/StateRevision.cs)、wire Reader/Writer；model/wire agent | 已实现；模型/record/wire 测试已通过 |
+| immutable records、派生 IDs、TODO、v2 framing | BaseObjectRecord（后由 DB-028 的 [ObjectVersionRecord](../../src/DurableGraph.StateStore.Storage/ObjectVersionRecord.cs) 取代）、[StateRevision](../../src/DurableGraph.StateStore.Storage/StateRevision.cs)、wire Reader/Writer；model/wire agent | 已实现；模型/record/wire 测试已通过 |
 | exact-head raw 读取、membership 迁移、真实文件失败/重开 | [StateRevisionStore](../../src/DurableGraph.StateStore.Storage/StateRevisionStore.cs)、Store/Materializer tests；storage agent | 已实现；Storage 95/95，包括 body 缓冲后失败的普通/轮转两种用例 |
 | SG DTO/string → 实际 Storage → typed decode | [RawBaseStorageGeneratorTests](../../tests/DurableGraph.Tests/RawBaseStorageGeneratorTests.cs)；integration agent | 已通过独立聚焦测试；仅测试项目加 Storage 引用 |
 | substrate 上限核验、集成审查、build/tests、文档/提交 | 主代理 + 只读事实/独立审查 agent | 根 build 零警告/错误，全套 559/559；独立最终代码审查无阻断 |

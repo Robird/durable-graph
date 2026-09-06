@@ -10,7 +10,7 @@ public sealed class LiveObjectHeadMapMaterializerTests {
         FrameAddress checkpoint = Address(2, 32);
         StateRevision revision = StateRevision.CreateBase(
             parent,
-            baseObjects: Records(3, 1),
+            localObjects: Records(3, 1),
             externalObjectHeads: [
                 new KeyValuePair<uint, FrameAddress>(2, externalHead),
             ]);
@@ -36,11 +36,11 @@ public sealed class LiveObjectHeadMapMaterializerTests {
         Dictionary<FrameAddress, StateRevision> revisions = new() {
             [f1] = StateRevision.CreateBase(
                 null,
-                baseObjects: Records(1, 2, 3),
+                localObjects: Records(1, 2, 3),
                 externalObjectHeads: []),
             [f2] = StateRevision.CreateDelta(
                 f1,
-                baseObjects: Records(4, 1),
+                localObjects: Records(4, 1),
                 removedObjectIds: [2]),
         };
 
@@ -60,13 +60,13 @@ public sealed class LiveObjectHeadMapMaterializerTests {
         Dictionary<FrameAddress, StateRevision> revisions = new() {
             [checkpoint] = StateRevision.CreateBase(
                 externalHead,
-                baseObjects: Records(2),
+                localObjects: Records(2),
                 externalObjectHeads: [
                     new KeyValuePair<uint, FrameAddress>(1, externalHead),
                 ]),
             [noChange] = StateRevision.CreateDelta(
                 checkpoint,
-                baseObjects: Records(),
+                localObjects: Records(),
                 removedObjectIds: []),
         };
 
@@ -122,7 +122,7 @@ public sealed class LiveObjectHeadMapMaterializerTests {
         FrameAddress checkpoint = Address(2, 32);
         StateRevision revision = StateRevision.CreateBase(
             missingParent,
-            baseObjects: Records(3, 1),
+            localObjects: Records(3, 1),
             externalObjectHeads: [
                 new KeyValuePair<uint, FrameAddress>(2, Address(1, 96)),
             ]);
@@ -151,7 +151,7 @@ public sealed class LiveObjectHeadMapMaterializerTests {
         FrameAddress head = Address(1, 32);
         StateRevision revision = StateRevision.CreateBase(
             null,
-            baseObjects: Records(3, 1, 2),
+            localObjects: Records(3, 1, 2),
             externalObjectHeads: []);
 
         IReadOnlyDictionary<uint, FrameAddress> heads =
@@ -188,7 +188,7 @@ public sealed class LiveObjectHeadMapMaterializerTests {
         FrameAddress checkpoint = Address(1, 32);
         StateRevision revision = StateRevision.CreateBase(
             null,
-            baseObjects: Records(),
+            localObjects: Records(),
             externalObjectHeads: [
                 new KeyValuePair<uint, FrameAddress>(1, Address(1, 96)),
             ]);
@@ -224,8 +224,8 @@ public sealed class LiveObjectHeadMapMaterializerTests {
             actual.Select(pair => (pair.Key, pair.Value)).ToArray());
     }
 
-    private static BaseObjectRecord[] Records(params uint[] ids) =>
-        ids.Select(id => new BaseObjectRecord(id, [(byte)id])).ToArray();
+    private static ObjectVersionRecord[] Records(params uint[] ids) =>
+        ids.Select(id => ObjectVersionRecord.CreateBase(id, [(byte)id])).ToArray();
 
     private static FrameAddress Address(uint fileNumber, long offset) =>
         new(fileNumber, SizedPtr.Create(offset, 32));

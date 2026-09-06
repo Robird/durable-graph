@@ -8,9 +8,9 @@ public sealed class StateRevisionTests {
 
     [Fact]
     public void Base_freezes_canonical_records_and_external_collections() {
-        BaseObjectRecord nine = new(9, [90]);
-        BaseObjectRecord one = new(1, [10]);
-        List<BaseObjectRecord> records = [nine, one];
+        ObjectVersionRecord nine = ObjectVersionRecord.CreateBase(9, [90]);
+        ObjectVersionRecord one = ObjectVersionRecord.CreateBase(1, [10]);
+        List<ObjectVersionRecord> records = [nine, one];
         Dictionary<uint, FrameAddress> external = new() {
             [8] = Address(1, 64),
             [2] = Address(1, 96),
@@ -21,9 +21,9 @@ public sealed class StateRevisionTests {
         external.Clear();
 
         Assert.Equal(ObjectHeadMapKind.Base, revision.ObjectHeadMapKind);
-        Assert.Equal([1u, 9u], revision.BaseObjectIds);
-        Assert.Equal([one, nine], revision.BaseObjects);
-        Assert.Same(one, revision.BaseObjects[0]);
+        Assert.Equal([1u, 9u], revision.LocalObjectIds);
+        Assert.Equal([one, nine], revision.LocalObjects);
+        Assert.Same(one, revision.LocalObjects[0]);
         Assert.Equal([2u, 8u], revision.ExternalObjectHeads.Keys);
         Assert.Equal([Address(1, 96), Address(1, 64)], revision.ExternalObjectHeads.Values);
         Assert.Empty(revision.RemovedObjectIds);
@@ -32,12 +32,12 @@ public sealed class StateRevisionTests {
     [Fact]
     public void Delta_freezes_canonical_removed_ids_and_requires_parent() {
         List<uint> removed = [9, 2];
-        StateRevision revision = StateRevision.CreateDelta(Parent, [new(3, [30]), new(7, [])], removed);
+        StateRevision revision = StateRevision.CreateDelta(Parent, [ObjectVersionRecord.CreateBase(3, [30]), ObjectVersionRecord.CreateBase(7, [])], removed);
         removed.Clear();
 
         Assert.Equal(ObjectHeadMapKind.Delta, revision.ObjectHeadMapKind);
         Assert.Equal(Parent, revision.ParentRevisionAddress);
-        Assert.Equal([3u, 7u], revision.BaseObjectIds);
+        Assert.Equal([3u, 7u], revision.LocalObjectIds);
         Assert.Equal([2u, 9u], revision.RemovedObjectIds);
         Assert.Empty(revision.ExternalObjectHeads);
         Assert.Throws<ArgumentOutOfRangeException>(() => StateRevision.CreateDelta(default, [], []));
@@ -45,10 +45,10 @@ public sealed class StateRevisionTests {
 
     [Fact]
     public void Collections_do_not_expose_mutable_interfaces_or_SyncRoot_backing() {
-        StateRevision revision = StateRevision.CreateBase(Parent, [new(3, [30])], [new(4, Parent)]);
+        StateRevision revision = StateRevision.CreateBase(Parent, [ObjectVersionRecord.CreateBase(3, [30])], [new(4, Parent)]);
         StateRevision delta = StateRevision.CreateDelta(Parent, [], [3]);
         object[] collections = [
-            revision.BaseObjects, revision.BaseObjectIds, revision.ExternalObjectHeads,
+            revision.LocalObjects, revision.LocalObjectIds, revision.ExternalObjectHeads,
             revision.ExternalObjectHeads.Keys, revision.ExternalObjectHeads.Values,
             delta.RemovedObjectIds,
         ];
@@ -58,14 +58,14 @@ public sealed class StateRevisionTests {
             Assert.False(collection is IDictionary);
         }
 
-        Assert.False(revision.BaseObjects is ICollection<BaseObjectRecord>);
-        Assert.False(revision.BaseObjectIds is ICollection<uint>);
+        Assert.False(revision.LocalObjects is ICollection<ObjectVersionRecord>);
+        Assert.False(revision.LocalObjectIds is ICollection<uint>);
         Assert.False(revision.ExternalObjectHeads is IDictionary<uint, FrameAddress>);
         Assert.False(delta.RemovedObjectIds is ICollection<uint>);
-        BaseObjectRecord[] returnedCopy = revision.BaseObjects.ToArray();
-        returnedCopy[0] = new(99, [99]);
-        Assert.Equal(3u, revision.BaseObjects[0].ObjectId);
-        Assert.Equal([3u], revision.BaseObjectIds);
+        ObjectVersionRecord[] returnedCopy = revision.LocalObjects.ToArray();
+        returnedCopy[0] = ObjectVersionRecord.CreateBase(99, [99]);
+        Assert.Equal(3u, revision.LocalObjects[0].ObjectId);
+        Assert.Equal([3u], revision.LocalObjectIds);
     }
 
     [Fact]
@@ -75,7 +75,7 @@ public sealed class StateRevisionTests {
         Assert.Throws<ArgumentNullException>(() => StateRevision.CreateDelta(Parent, null!, []));
         Assert.Throws<ArgumentNullException>(() => StateRevision.CreateDelta(Parent, [], null!));
         Assert.Throws<ArgumentException>(() => StateRevision.CreateBase(null, [null!], []));
-        Assert.Throws<ArgumentException>(() => StateRevision.CreateDelta(Parent, [new(1, []), null!], []));
+        Assert.Throws<ArgumentException>(() => StateRevision.CreateDelta(Parent, [ObjectVersionRecord.CreateBase(1, []), null!], []));
     }
 
     [Theory]
@@ -85,7 +85,7 @@ public sealed class StateRevisionTests {
     }
 
     public static TheoryData<Func<StateRevision>> InvalidObjectIdCollections => new() {
-        () => StateRevision.CreateBase(null, [new(1, []), new(1, [2])], []),
+        () => StateRevision.CreateBase(null, [ObjectVersionRecord.CreateBase(1, []), ObjectVersionRecord.CreateBase(1, [2])], []),
         () => StateRevision.CreateDelta(Parent, [], [0]),
         () => StateRevision.CreateDelta(Parent, [], [1, 1]),
         () => StateRevision.CreateBase(null, [], [new(0, Address(1, 32))]),
@@ -94,8 +94,8 @@ public sealed class StateRevisionTests {
     [Fact]
     public void Local_ids_must_not_overlap_membership_entries() {
         Assert.Throws<ArgumentException>(() =>
-            StateRevision.CreateBase(null, [new(1, [])], [new(1, Address(1, 32))]));
-        Assert.Throws<ArgumentException>(() => StateRevision.CreateDelta(Parent, [new(1, [])], [1]));
+            StateRevision.CreateBase(null, [ObjectVersionRecord.CreateBase(1, [])], [new(1, Address(1, 32))]));
+        Assert.Throws<ArgumentException>(() => StateRevision.CreateDelta(Parent, [ObjectVersionRecord.CreateBase(1, [])], [1]));
     }
 
     [Fact]
@@ -104,6 +104,35 @@ public sealed class StateRevisionTests {
             StateRevision.CreateBase(null, [], [new(1, Address(1, 32)), new(1, Address(1, 64))]));
         Assert.Throws<ArgumentOutOfRangeException>(() => StateRevision.CreateBase(null, [], [new(1, default)]));
         Assert.Throws<ArgumentOutOfRangeException>(() => StateRevision.CreateBase(default(FrameAddress), [], []));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Both_map_kinds_accept_mixed_object_representations_and_reject_conflicts(bool mapDelta) {
+        ObjectVersionRecord full = ObjectVersionRecord.CreateBase(9, [90]);
+        ObjectVersionRecord delta = ObjectVersionRecord.CreateDelta(1, Parent, [10]);
+        List<ObjectVersionRecord> records = [full, delta];
+        StateRevision revision = mapDelta
+            ? StateRevision.CreateDelta(Parent, records, [])
+            : StateRevision.CreateBase(Parent, records, []);
+        records.Clear();
+        Assert.Equal([1u, 9u], revision.LocalObjectIds);
+        Assert.Equal([delta, full], revision.LocalObjects);
+        Assert.Equal(ObjectVersionKind.Delta, revision.LocalObjects[0].Kind);
+        Assert.Equal(Parent, revision.LocalObjects[0].PriorAddress);
+        Assert.Throws<ArgumentException>(() => mapDelta
+            ? StateRevision.CreateDelta(Parent, [delta, ObjectVersionRecord.CreateBase(1, [])], [])
+            : StateRevision.CreateBase(Parent, [delta, ObjectVersionRecord.CreateBase(1, [])], []));
+        Assert.Throws<ArgumentException>(() => mapDelta
+            ? StateRevision.CreateDelta(Parent, [delta], [1])
+            : StateRevision.CreateBase(Parent, [delta], [new(1, Parent)]));
+    }
+
+    [Fact]
+    public void Local_Delta_requires_parent_even_in_complete_head_map() {
+        Assert.Throws<ArgumentException>(() => StateRevision.CreateBase(
+            null, [ObjectVersionRecord.CreateDelta(1, Parent, [])], []));
     }
 
     private static FrameAddress Address(uint fileNumber, long offset) => new(fileNumber, SizedPtr.Create(offset, 32));

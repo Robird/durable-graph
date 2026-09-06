@@ -12,6 +12,7 @@
 | DTO Capture、string 身份与读取 | [DB-022](design-branches/0022-versioned-state-dto-capture.md)、[DB-024](design-branches/0024-reference-capture-and-reusable-object-ids.md)、[DB-025](design-branches/0025-string-object-decoding-slice.md)的验收部分 |
 | raw Base、wire v2 与 exact Revision 文件重开 | [DB-026 §8](design-branches/0026-raw-base-object-content-slice.md#8-实施合同与验收账本) |
 | 同版 DTO 融合 Delta 准备、历史/引用校验与包交付 | [DB-027 §6](design-branches/0027-generated-same-schema-delta-body-slice.md#6-本轮实施账本)；body codec，不含持久 prior 链 |
+| 持久 raw Delta、exact prior 与原始重建成本 H | [DB-028 §6](design-branches/0028-persisted-object-delta-chain-slice.md#6-实施账本)；object-first 冷重开，typed 解释元数据仍由 fixture 提供 |
 | 地址/策略选择史及可重跑技术储备 | [DB 索引](design-branches/README.md)、[Probe 导航](../experiments/README.md)；TwoLeg 与合成 payload 结果不构成产品恢复或性能保证 |
 
 ## 历史卷
