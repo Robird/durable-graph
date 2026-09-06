@@ -36,7 +36,10 @@ public sealed class DurableTypeAttribute : Attribute {
     /// <summary>
     /// Also generates versioned readonly state DTOs, current-instance Capture, and typed
     /// binary bodies for supported scalar layouts, including accepted history.
-    /// String fields require reference identity support and are not yet supported by these bodies.
+    /// String members are supported as durable references: generated bodies store
+    /// reference IDs (UInt32) while string content is captured separately as a string
+    /// object entry. The binary body reader/writer does not perform full object-graph
+    /// restoration; it reads and writes only the DTO-bytes and reference IDs.
     /// Requires SchemaOnly and the same opt-in on every current domain ancestor.
     /// It does not upgrade historical DTOs or restore domain instances.
     /// </summary>
