@@ -1,13 +1,16 @@
 # DB-018：统一引用身份、TypeCodec 与生成式 Serializer 形状
 
-> 状态：Open — 用户已说明整体语义；本文把它落实为可评审的形状草稿，签名、格式和实施切片未冻结。
+> 状态：Open — 用户已说明整体语义；本文保留历史形状草稿，签名、格式和实施切片未全部冻结。
+> 其中 DB-024 已落地首片 reference/context 实现（session、root Capture/Seal 与 string 引用条目）。
+> Restore、stored Schema 到 generated codec 的运行时绑定与一般 durable 循环仍未实现。
 >
-> 日期：2026-09-05；产品代码基线：`c8a98dc`。
+> 日期：2026-09-05；初始产品代码基线：`c8a98dc`。
 >
 > 当前阅读入口。取代 DB-017 中“string 字段 inline 值”和“容器身份尚未选择”的提案；
-> 图 codec 仍是设计草图；祖先 Schema/history 的元数据分片已进入产品实现，边界见 [DB-019](0019-schema-ancestry-implementation-slice.md)。
+> 历史上图 codec 为设计草图；祖先 Schema/history 的元数据分片已进入产品实现，边界见 [DB-019](0019-schema-ancestry-implementation-slice.md)。
 > 随后 [DB-020](0020-typed-slot-array-binding-slice.md)落地 internal 值槽位和 SZ/rank-2 元素循环；
-> [DB-021](0021-generated-primitive-body-slice.md)落地实际 SG bool/int/long class body 与继承分段；本文引用上下文/struct/泛型 body 仍为草图。
+> [DB-021](0021-generated-primitive-body-slice.md)落地实际 SG bool/int/long class body 与继承分段；本文的 struct/泛型 body 仍为草图；
+> 字符串引用 context 与 root-capture 详见 [DB-024](0024-reference-capture-and-reusable-object-ids.md)。
 
 2026-09-05 后续方向：用户已选择领域图 → Versioned DTO 捕获 → 比较/估算/编码。
 [DB-022](0022-versioned-state-dto-capture.md)已把 GenerateBinaryBody 改为 readonly Vn + current Capture + DTO body，
@@ -20,7 +23,8 @@
 BCL 集合内容支持明确暂缓，下面相关类型表达只保留为后续设计位置。
 
 后续标量范围见 [DB-023](0023-scalar-schema-dto-slice.md)：13 种标量贯通 Schema/history/DTO，
-对应 Reader/Writer 标量操作已公开。下文未实施的引用上下文/图 codec 仍为设计草图。
+对应 Reader/Writer 标量操作已公开。下文未实施的 restore/runtime binding 与一般图 codec 仍为设计草图；
+字符串/引用根 capture 已在 DB-024 首片实装。
 
 ## 1. 本轮收敛与仍需讨论的点
 
@@ -40,14 +44,14 @@ Transient、BCL 内部 bucket/backing array、框架服务引用等不因“所�
 
 | 分支 | 推荐起点 | 需要说明的代价 |
 |---|---|---|
-| 继承字段身份 | DB-019 选择声明 Schema 分段、祖先 exact 依赖及派生版本递增 | DB-021 已接当前标量继承 body；历史 binary decoder/升级尚未实现 |
+| 继承字段身份 | DB-019 选择声明 Schema 分段、祖先 exact 依赖及派生版本递增 | DB-022/023 已接当前与历史 DTO body；DTO 升级/领域恢复尚未实现 |
 | 类型复合与执行 | 推荐 SG 开放泛型 body + 运行时按需闭合；必要处局部 DynamicMethod | 已知定义与任意 CLR 类型支持分开，运行时后端不能另建 Schema authority |
-| 保存一致性 | 首版由调用方保证 discover 到 write 完成期间图不变 | 封闭 ID 表不是内容快照 |
+| 保存一致性 | Capture 期间由调用方保证视图稳定；Seal 后只消费冻结候选 | 当前 DTO/string 候选是内容快照；通用递归图尚未覆盖 |
 | 非常规 string/boxed 值 | 保留精确身份目标，分配与支持范围单独验证 | 不能悄悄折叠空字符串或把 boxed 值当 inline 值 |
 
 ## 2. 引用身份与保存阶段
 
-最小机制可以用：
+历史草图（未落地）：最小机制可以用：
 
 ```csharp
 Dictionary<object, uint> ids = new(ReferenceEqualityComparer.Instance);
@@ -59,14 +63,15 @@ VisitReferences；同一实例再次出现只取已有 ID。这样不需要用 C
 [ReferenceEqualityComparer](https://learn.microsoft.com/en-us/dotnet/api/system.collections.generic.referenceequalitycomparer?view=net-10.0)
 正是引用比较，不依赖领域 Equals/GetHashCode。
 
-保存的三个阶段：
+保存的三个阶段（历史草图）：
 
 1. **Discover**：构建引用闭包。嵌套 struct 的 VisitReferences 递归访问值成员，但对引用只登记目标。
 2. **Close**：不再接受新对象；确定本次条目集合与 roots。确定所需 runtime 类型/Schema/codec 绑定。
 3. **Write**：引用编码只查询 ID，不在这里新增对象、重排或重新分配 ID；每个对象写自己的 body。
 
 写出遇到未发现引用应失败；它仅能发现一部分视图变化，不能检测标量改变、已登记引用之间的替换等。
-首版推荐调用方提供同步、排他的保存视图；以后再决定是否捕获真实图快照。
+首版推荐调用方提供同步、排他的 Capture 视图。DB-024 首片实现收敛为 root 注册 + Capture 回调 + Seal 冻结候选；
+它已覆盖 root DTO 与 string 引用条目，尚未覆盖自定义 durable 对象之间的通用递归闭包。
 
 ### 单次列表序号与增量 ObjectId
 
@@ -85,7 +90,7 @@ VisitReferences；同一实例再次出现只取已有 ID。这样不需要用 C
 
 ## 3. 记录与 TypeCodec
 
-概念上的 full snapshot 包含 roots 和带 ID 的对象条目：
+概念上的 full snapshot 包含 roots 和带 ID 的对象条目（设计草图）：
 
 ```text
 Snapshot
@@ -464,6 +469,8 @@ object/interface 槽位里的 boxed primitive/struct 具有引用身份，不能
 
 整体形状的关键验收：
 
+- Restore/runtime binding、循环解析和通用对象闭包的条目仍是验收草图；已实现的 root-seal capture 与 string slot identity 见 DB-024。
+
 - 两个 Equals 相等的不同 class 实例仍是两个 ID；同一个实例的多个路径仍指向一个 ID。
 - 两个内容相同的不同非空 string、一个被多处引用的 string、null 与空串分别验证引用关系与内容；
   非常规独立空实例单列分配见证。
@@ -476,7 +483,7 @@ object/interface 槽位里的 boxed primitive/struct 具有引用身份，不能
 Base/Middle/Leaf 三层 Schema/history 版本传播由 DB-019 分片实施，
 DB-020 又验证显式提供的泛型值 body + runtime binding + SZ/rank-2 ref 元素路径；
 DB-021 已由实际 SG 生成当前 bool/int/long class body，直接 primitive 调用与继承段组合得到验证。
-后续扩充 Schema kinds，或用**含 string 引用的小对象图**验证引用上下文、统一身份和实际字节。BCL 集合明确暂缓。
+后续扩充复合 Schema kinds；含 string 引用的小对象图继续用于恢复/runtime binding、对象重建与同一 ID 重定位，不是本篇的既定事实。
 这样首个 string 消费者就不会走已被取代的字段 inline 路径。
 与 ObjectVersion 存取、增量策略、SchemaStore 的产品接入顺序仍按下一份明确施工边界裁决，
 不在本次讨论中实现完整 framework 或长期 wire。
@@ -486,11 +493,12 @@ DB-021 已由实际 SG 生成当前 bool/int/long class body，直接 primitive 
 当前产品保留 primitive byte leaf、membership Storage、估算策略和 scalar boxed schema/history 路径，
 并新增 DB-019 的 SchemaOnly 继承元数据：声明层字段、精确祖先、历史查询与发布闭包校验。
 默认 serializer 路径仍限制 sealed/direct DurableBase；DB-022 的额外 GenerateBinaryBody 已支持当前 Capture 与各版 scalar DTO body；
-本篇 struct/泛型及带引用 SG body 尚未实现。
+DB-024 补齐首片 string 引用槽位（`string` 对应 `uint` slot）与 root-level Capture/Seal；
+本篇 struct、开放泛型及非 string durable 引用的 SG body 尚未实现。
 DB-020 的内部值槽位和数组元素循环不处理对象头、shape、分配或图身份，也没有扩大 Schema kind。
 
-用户先后授权的实现范围见 DB-019–022。完整领域 Deserialize、图身份恢复、
-开放泛型生成器与旧 IL 后端翻新仍待后续工作；BCL 集合继续暂缓。
+用户先后授权的实现范围见 DB-019–024。完整领域 Deserialize、图身份恢复、stored-Schema runtime binding、
+一般 durable 循环与对象重建、开放泛型生成器与旧 IL 后端翻新仍待后续工作；BCL 集合继续暂缓。
 
 材料：[产品工作集](../../src/PROJECT-STATE.md)、
 [目标设计](../DurableGraph-target-design-v0.md)、

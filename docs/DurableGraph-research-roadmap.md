@@ -1,54 +1,54 @@
 # DurableGraph 后续研究与实现路线
 
 > 状态：Living Roadmap  
-> 更新日期：2026-09-02
+> 更新日期：2026-09-06
 > 用途：记录当前证据支持的研究顺序、每个切片的问题和可执行闸门。  
 > 边界：本文不是当前实现事实、冻结 API 或持久格式规格；源码、测试和可复现输出优先，已完成实验的事实记录在 `DurableGraph-lab-notebook.md`。
 
 ## 1. 当前出发点
 
-截至 EXP-014，仓库已经证明：
+历史验证仍成立，但部分已升级为当前产品切片：
 
-- 四种 scalar field 可以通过 generated boxed serializer 保存和加载；
-- stored exact Schema 在 payload decode 前 fail closed；
-- checked-in Snapshot History 可以重建历史 ordinary struct Snapshot；
-- generated coordinator 可以用唯一一次 version switch 和静态相邻链把历史 Snapshot 升级到 current；
-- Load 只在内存中升级，只有后续显式 Save 才推进 Store 中的版本。
-- fixture-only EXP-011 已证明单类型 flat baseline、identity-aware traversal、whole-object delta、`RequiresRewrite` 与 success-only clean baseline 的逻辑状态律。
-- isolated EXP-012 已证明 Source Generator 可以为单个 direct-self-reference 类型产生强类型 current Snapshot capture、durable equality 与同次字段读取得到的 reference visitation，并与 EXP-011 oracle 对齐。
-- fixture-only EXP-013 已证明 mixed-version StoredGraphImage 可以在全表 exact preflight 后，通过强类型 decode/upgrade 归一化为保留完整 SourceRecordIds 的 current-Snapshot baseline；decode、upgrade 或 reference failure 不返回 partial baseline。
-- fixture-only EXP-014 已证明 normalized current-Snapshot baseline 可以按 current root closure allocate-all/hydrate-all，恢复 scalar、sharing 与 cycles；disconnected source rows 不物化，allocation/hydration failure 不返回 root 且可重试。
+- EXP-011/012/013/014 仍作为历史 fixture-only 证据，持续支撑后续状态律与重建思路。
+- DB-022：保存输入切到版本化 DTO（readonly Vn + current Capture + typed Write/ReadVn），并移除旧 direct read/write 字段体路径。
+- DB-023：将 bool、byte、sbyte、short、ushort、int、uint、long、ulong、char、Half、float、double
+  共 13 种 CLR primitive 贯通 DTO 与历史通道；string 则按引用 ID 进入同一布局。
+- DB-024：引用 capture 进入闭合候选图，`CaptureSession`/`CaptureContext`/`CapturedGraph` 已成形；
+  root 通过 typed 适配器登记，string 字段写 `uint` 引用 ID，string 本体作为独立内存对象条目捕获，候选可 `Accept`/`Discard`。
 
-当前尚未实现：
+当前仍未实现：
 
-- `DurableId` 与对象身份分配；
-- production Generator/runtime 中的 durable reference、共享引用、循环图和 reachability；
-- production 对象图 baseline、Graph Delta 或 object version；
-- binary wire format、持久 StateStore 或 SchemaStore；
-- commit publication、并发、crash recovery 或 durability；
-- durable value struct、collection、领域继承和 `RebuildTransient`。
+- 对象 payload 的持久 wire/framing 与 commit/publication/recovery 闭环；
+- 通用自定义 durable 引用的递归 Capture、共享/循环/reachability，以及完整领域 Restore；
+- reopen 后的 ObjectId 重新绑定、复杂值类型、集合、回收策略与生产级对象版本持久化。
 
 因此，后续路线不能把 target design 中的完整系统描述成已经存在，也不应让尚无消费者的格式、缓存或兼容层先塑造核心语义。
 
 ## 2. 当前研究方向
 
-### 2.1 当前优先验证多历史 Segment StateStore
+### 2.1 当前优先方向：DB-024 之后的 string 对象编码与恢复边界
 
-产品候选已放弃 latest reconstruction 仅限相邻两文件的 hard law。当前优先探针使用 1-based FileNumber、
-canonical filename 与 `BackwardFileDistance` 引用任意 earlier Segment；soft file rollover 不改变
-Base/Deltify 或 OVD membership。当前 authority 与活跃 roadmap 分别位于：
+DB-024 的 string 引用 capture 与内存候选已封闭，下一步保持切片独立：
 
-- [`DB-014`](design-branches/0014-multi-segment-backward-file-distance.md)
-- [`MultiSegmentStateStoreProbe/PROJECT-STATE.md`](../experiments/MultiSegmentStateStoreProbe/PROJECT-STATE.md)
+- 先裁决 resolved-reference witness 与领域 Restore 的边界，并验证独立空串的引用身份；
+- 为 string 对象条目补内容编码/解码和最小引用解析，不顺带实现通用循环图；
+- 再以 raw Base-only 小片接入 `ObjectVersion` 内容存取，之后才让策略消费真实估算与保存视图。
 
-`state-store-base-design.md`、`state-store-base-derived.md`、`state-store-addressing-design.md` 与 DB-007/011
-保留 TwoLeg 技术储备和可复用局部结论，但不再描述产品当前地址或轮转方向。
+MultiSegment probe 已完成其文件级 address/rollover 风险验证，产品 Storage 已吸收相应机制；它继续作为证据来源，
+不再充当当前产品路线图。
 
-### 2.2 继续闭合 logical graph 语义，再固定产品 bytes
+[`DB-014`](design-branches/0014-multi-segment-backward-file-distance.md) 与
+[`MultiSegmentStateStoreProbe/PROJECT-STATE.md`](../experiments/MultiSegmentStateStoreProbe/PROJECT-STATE.md) 记录文件层证据边界；
+`state-store-base-design.md`、`state-store-base-derived.md`、`state-store-addressing-design.md`
+与 DB-007/011 仅保留 TwoLeg 技术储备和可复用局部结论，不作为当前 API 形状先行事实。
 
-R1/R2 已回答 current graph capture/delta，R3a/R3b 已闭合 historical records → normalized baseline → current CLR root。R4 仍将验证 logical StateMap、record reuse 与 repeated delta apply；它没有被否定。当前持久化地址与 rollover 风险由独立 MultiSegment probe 自底向上验证，两条路线在产品整合前保持分离。
+### 2.2 保留的 logical graph 研究线
 
-继续使用 test-only 内存逻辑值。`BinaryReader` / `BinaryWriter` 只在 logical Load/materialize/delta 状态律闭合后介入，避免过早冻结 framing、引用编码、canonical order 和 malformed-input contract。
+R1/R2 已回答 current graph capture/delta，R3a/R3b 已闭合 historical records → normalized baseline → current CLR root。
+R4 的 logical StateMap、record reuse 与 repeated delta apply 仍是未完成的历史研究项；它没有被否定，也不是当前 string 小片的前置条件。
+
+产品已有 `BinaryPayloadReader` / `BinaryPayloadWriter` primitive 与 DTO body；对象 envelope、引用目标解析、
+canonical graph order 和 malformed object-payload contract 仍在相应状态律闭合后再固定。
 
 ### 2.3 历史版本在读取边界归一化
 

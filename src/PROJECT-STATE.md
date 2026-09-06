@@ -127,7 +127,7 @@ DTO body 支持 13 种标量及 string 引用的 UInt32 ID；String 内容独立
 和 [TwoLeg 技术储备](../experiments/TwoLegRotationProbe/PROJECT-STATE.md)分别维护自身上下文；
 只复用可验证机制，不建立产品到 Probe 的依赖。
 
-## 会话接续入口（2026-09-05）
+## 会话接续入口（2026-09-06）
 
 - 恢复时先读根 AGENTS.md 和本文，再读 DB-018；DB-017 是 superseded 的探索记录，不恢复其旧 string 字段 inline 方案。
 - 用户已授权自主按需提交；上一批工作集迁移、DB-016–019 与祖先实现已提交为 `29a4704`。
