@@ -1,0 +1,72 @@
+using Atelia.DurableGraph.StateStore.Storage;
+
+namespace Atelia.DurableGraph.StateStore;
+
+/// <summary>
+/// Turns the caller's complete frozen post-live contents into one appendable
+/// Revision. Does not infer reachability, authenticate typed bodies, or publish.
+/// </summary>
+internal static class ObjectRevisionPlanner {
+    internal static PreparedObjectRevision PrepareRevision(
+        StateRevisionStore store,
+        FrameAddress? parentRevisionAddress,
+        IEnumerable<PreparedObject> objects,
+        ReadAmplificationBaseBudgetParameters parameters) {
+        ArgumentNullException.ThrowIfNull(store);
+        ArgumentNullException.ThrowIfNull(objects);
+        PreparedObject[] rows = objects.ToArray();
+        Dictionary<uint, PreparedObject> byId = [];
+        foreach (PreparedObject row in rows) {
+            if (row is null) {
+                throw new ArgumentException("Prepared objects cannot contain null rows.", nameof(objects));
+            }
+            if (!byId.TryAdd(row.ObjectId, row)) {
+                throw new ArgumentException("ObjectIds must be unique.", nameof(objects));
+            }
+        }
+        Array.Sort(rows, static (left, right) => left.ObjectId.CompareTo(right.ObjectId));
+
+        IReadOnlyDictionary<uint, FrameAddress> parentHeads = parentRevisionAddress is { } parent
+            ? store.ReadLiveObjectHeads(parent)
+            : new Dictionary<uint, FrameAddress>();
+        foreach (PreparedObject row in rows) {
+            bool exists = parentHeads.TryGetValue(row.ObjectId, out FrameAddress head);
+            if (row.ChangeKind == ObjectSaveChangeKind.Insert) {
+                if (exists) {
+                    throw new ArgumentException($"New object {row.ObjectId} already exists in Parent.", nameof(objects));
+                }
+            }
+            else if (!exists || row.PriorAddress != head) {
+                throw new ArgumentException($"Object {row.ObjectId} must claim the exact Parent's current head.", nameof(objects));
+            }
+        }
+
+        ObjectSaveEstimate[] estimates = new ObjectSaveEstimate[rows.Length];
+        for (int index = 0; index < rows.Length; index++) {
+            PreparedObject row = rows[index];
+            long? deltaBytes = row.ChangeKind == ObjectSaveChangeKind.Update
+                ? ObjectVersionPayloadSize.EstimateDeltaBytes(row.DeltaContent!.Payload.Length, row.PriorAddress!.Value)
+                : null;
+            // TODO(DB-029): Measure repeated object-chain reads before adding batch/cache support.
+            long? reconstructionBytes = row.ChangeKind is ObjectSaveChangeKind.Update or ObjectSaveChangeKind.NoChange
+                ? store.ReadObjectVersionChain(parentRevisionAddress!.Value, row.ObjectId).ReconstructionBytes
+                : null;
+            estimates[index] = new(row.ObjectId, row.ChangeKind,
+                ObjectVersionPayloadSize.GetBaseBytes(row.BaseContent.Payload.Length), deltaBytes, reconstructionBytes);
+        }
+
+        ObjectRepresentationPlan plan = ReadAmplificationBaseBudgetPolicy.Plan(estimates, parameters);
+        List<ObjectVersionRecord> records = [];
+        foreach (ObjectWriteDecision decision in plan.Writes) {
+            PreparedObject row = byId[decision.ObjectId];
+            records.Add(decision.Mode == ObjectRepresentationMode.Base
+                ? ObjectVersionRecord.CreateBase(row.ObjectId, row.BaseContent.Payload)
+                : ObjectVersionRecord.CreateDelta(row.ObjectId, row.PriorAddress!.Value, row.DeltaContent!.Payload));
+        }
+
+        StateRevision revision = parentRevisionAddress is { } exactParent
+            ? StateRevision.CreateDelta(exactParent, records, parentHeads.Keys.Where(id => !byId.ContainsKey(id)))
+            : StateRevision.CreateBase(null, records, []);
+        return new(revision, estimates, plan);
+    }
+}

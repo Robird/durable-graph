@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
@@ -23,6 +23,7 @@
     <ProjectReference Include="..\..\src\DurableGraph.Build\DurableGraph.Build.csproj" />
     <ProjectReference Include="..\..\src\DurableGraph\DurableGraph.csproj" />
     <ProjectReference Include="..\..\src\DurableGraph.StateStore.Storage\DurableGraph.StateStore.Storage.csproj" />
+    <ProjectReference Include="..\..\src\DurableGraph.StateStore\DurableGraph.StateStore.csproj" />
     <ProjectReference Include="..\..\src\DurableGraph.Generator\DurableGraph.Generator.csproj" />
   </ItemGroup>
 

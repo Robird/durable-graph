@@ -42,6 +42,18 @@ public sealed class ReadAmplificationBaseBudgetPolicyTests {
     }
 
     [Fact]
+    public void Base_only_updates_contribute_budget_without_spending_it_or_needing_history() {
+        AssertWrites(Plan([
+            new(1, ObjectSaveChangeKind.BaseOnlyUpdate, 180, null, null),
+            Cold(2, 10, 50), Cold(3, 10, 40),
+        ], 3, 10), Base(1), Base(2), Base(3));
+        AssertWrites(Plan([new(1, ObjectSaveChangeKind.BaseOnlyUpdate, 0, null, null)]), Base(1));
+        Assert.Throws<OverflowException>(() => Plan([
+            new(1, ObjectSaveChangeKind.BaseOnlyUpdate, long.MaxValue, null, null), Insert(2, 1),
+        ]));
+    }
+
+    [Fact]
     public void Full_base_cost_is_charged_for_Update_not_base_minus_delta() {
         // G=44, Q=11. Charging B-D=1 would incorrectly admit the second candidate too.
         AssertWrites(Plan([
@@ -198,6 +210,7 @@ public sealed class ReadAmplificationBaseBudgetPolicyTests {
         ObjectSaveEstimate[] invalid = [
             Insert(1, -1), Update(1, -1, 0, 0), Cold(1, -1, 0),
             Update(1, 1, -1, 0), Update(1, 1, 0, -1), Cold(1, 1, -1),
+            new(1, ObjectSaveChangeKind.BaseOnlyUpdate, -1, null, null),
         ];
         foreach (ObjectSaveEstimate row in invalid) {
             Assert.Throws<ArgumentOutOfRangeException>(() => Plan([row]));
@@ -216,6 +229,9 @@ public sealed class ReadAmplificationBaseBudgetPolicyTests {
             new(1, ObjectSaveChangeKind.NoChange, 1, 0, 0),
             new(1, ObjectSaveChangeKind.NoChange, 1, null, null),
             new(1, ObjectSaveChangeKind.NoChange, 1, 0, null),
+            new(1, ObjectSaveChangeKind.BaseOnlyUpdate, 1, 0, null),
+            new(1, ObjectSaveChangeKind.BaseOnlyUpdate, 1, null, 0),
+            new(1, ObjectSaveChangeKind.BaseOnlyUpdate, 1, 0, 0),
         ];
         foreach (ObjectSaveEstimate row in invalid) {
             Assert.Throws<ArgumentException>(() => Plan([row]));
@@ -242,10 +258,9 @@ public sealed class ReadAmplificationBaseBudgetPolicyTests {
         AssertWrites(Plan(objects), Base(99));
 
         // A direct array exposed as IReadOnlyList would allow the following cast and mutation.
-        IList<ObjectWriteDecision> writableView = Assert.IsAssignableFrom<IList<ObjectWriteDecision>>(first.Writes);
-        Assert.True(writableView.IsReadOnly);
-        Assert.Throws<NotSupportedException>(() => writableView[0] = Delta(99));
-        Assert.Throws<NotSupportedException>(() => writableView.Clear());
+        Assert.False(first.Writes is IList<ObjectWriteDecision>);
+        Assert.False(first.Writes is System.Collections.IList);
+        Assert.False(first.Writes is System.Collections.ICollection);
         AssertWrites(first, Base(1));
     }
 

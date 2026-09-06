@@ -309,7 +309,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         Assert.Equal<byte>([0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 1],
             BinaryBodyDelegate<Func<byte[]>>(assembly, "Write")());
         Type body = type.GetNestedType("__DurableBinaryBody", BindingFlags.NonPublic)!;
-        Assert.Equal(new[] { "AddRoot", "ApplyDeltaV1", "ApplyDeltaV2", "Capture", "PrepareDelta", "PrepareDelta", "ReadV1", "ReadV2", "ValidateStringReferences", "ValidateStringReferences", "Write", "Write" }, body.GetMethods(BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.DeclaredOnly)
+        Assert.Equal(new[] { "AddRoot", "ApplyDeltaV1", "ApplyDeltaV2", "Capture", "PrepareBase", "PrepareBase", "PrepareDelta", "PrepareDelta", "ReadV1", "ReadV2", "ValidateStringReferences", "ValidateStringReferences", "Write", "Write" }, body.GetMethods(BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.DeclaredOnly)
             .Select(method => method.Name).OrderBy(name => name).ToArray());
         Assert.DoesNotContain("Upgrade", BinaryBodyGeneratedText(run));
         Assert.DoesNotContain("__DurableSnapshot", BinaryBodyGeneratedText(run));

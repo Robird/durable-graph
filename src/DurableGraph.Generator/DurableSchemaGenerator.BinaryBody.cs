@@ -178,6 +178,7 @@ public sealed partial class DurableSchemaGenerator {
         foreach (BinaryVersionModel version in versions) {
             AppendBinaryDto(source, type, version, bodyIndent);
             AppendBinaryDtoWrite(source, version, bodyIndent);
+            AppendBinaryPrepareBase(source, version, bodyIndent);
             AppendBinaryDtoRead(source, version, bodyIndent);
             AppendBinaryPrepareDelta(source, version, bodyIndent);
             AppendBinaryApplyDelta(source, version, bodyIndent);
@@ -314,6 +315,19 @@ public sealed partial class DurableSchemaGenerator {
                 .Append("(value.").Append(field.Name).AppendLine(");");
         }
 
+        source.Append(indent).AppendLine("}");
+    }
+
+    private static void AppendBinaryPrepareBase(StringBuilder source, BinaryVersionModel version, string indent) {
+        source.Append(indent).Append("internal static ").Append(PayloadNamespace)
+            .Append("PreparedBase PrepareBase(in ").Append(version.Name).AppendLine(" current) {");
+        // TODO(DB-029): Measure temporary buffers and owned-copy costs after MVP before adding pooling.
+        source.Append(indent).AppendLine("    var buffer = new global::System.Buffers.ArrayBufferWriter<byte>();");
+        source.Append(indent).Append("    var writer = new ").Append(PayloadNamespace)
+            .AppendLine("BinaryPayloadWriter(buffer);");
+        source.Append(indent).AppendLine("    Write(ref writer, in current);");
+        source.Append(indent).Append("    return new ").Append(PayloadNamespace)
+            .AppendLine("PreparedBase(buffer.WrittenSpan);");
         source.Append(indent).AppendLine("}");
     }
 

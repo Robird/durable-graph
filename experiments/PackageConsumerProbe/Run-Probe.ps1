@@ -287,7 +287,7 @@ try {
     )
     Assert-HistoryCount $bodyHistory 6
     $bodyOutput = (& dotnet $consumerAssembly | Out-String).Trim()
-    if ($LASTEXITCODE -ne 0 -or $bodyOutput -ne "BinaryBody:012154:True:ReferenceCapture:True:StringDecoding:True:PreparedDelta:True") {
+    if ($LASTEXITCODE -ne 0 -or $bodyOutput -ne "BinaryBody:012154:True:ReferenceCapture:True:StringDecoding:True:PreparedDelta:True:PreparedBase:True") {
         throw "Packaged static binary body failed; output was '$bodyOutput'."
     }
 

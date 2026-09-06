@@ -38,6 +38,13 @@ Apply calls, with complete body consumption and golden Base reconstruction. An i
 bit must fail. The script requires the `PreparedDelta:True` marker in addition to the existing
 markers. This covers the same-Schema body API, not persisted Delta records or prior-chain validation.
 
+The consumer also calls generated `PrepareBase(in V1)` on the frozen inherited DTO and the prebuilt
+`StringPayloadCodec.PrepareBase(string)` for nonempty and empty string content. The public
+`PreparedBase` and string helper arrive through the same transitive Serialization package.
+Golden bytes, later domain mutation and changes to external payload copies verify reusable owned
+body content. The script additionally requires `PreparedBase:True`; this is body preparation,
+not Storage envelope sizing or a complete Save operation.
+
 The final consumer also captures two concrete roots with shared strings, distinct equal strings,
 null/empty/surrogate content, and private base fields through generated AddRoot adapters. It checks
 the closed ID DTO list, static ID-body golden bytes, mutation isolation, accept/discard, stable live

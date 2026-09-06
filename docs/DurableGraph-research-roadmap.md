@@ -7,11 +7,10 @@
 
 ## 1. 下一个分片如何选择
 
-以 [DB-028 已验证的 raw 版本链与 H](design-branches/0028-persisted-object-delta-chain-slice.md) 为基础，
-推荐下一片 [DB-029：已准备对象内容到可追加 Revision](design-branches/0029-prepared-object-revision-planning-slice.md)
-（Proposed，未实施）。它将完整 prepared 内容接入 B/D/H、policy 和 raw Revision，
-候选 Delta 采用有界保守估算；通用 typed 比较/基线管理和持久类型头/目录仍保留为后续候选。
-不包含发布与恢复；具体输入、估算取舍和验收集中在 DB-029。
+[DB-029](design-branches/0029-prepared-object-revision-planning-slice.md) 已将 prepared 内容接入策略与可追加 Revision。
+下一轮在持久类型/Schema 解释，与 Capture 到 prepared rows 的产品 typed 适配 / exact baseline 管理之间选择。
+前者补足当前 fixture 提供的解释元数据；后者消除显式 typed 测试适配并定义基线对应关系。
+两者均不自动包含完整 Save、发布与恢复；下一具体分片尚未冻结。
 
 current 领域 Restore、自定义 struct 和一般 durable 引用可以独立成片。
 它们与存储推进的穿插顺序尚未冻结；不要恢复旧 R4 → R5 → R6 或 P0–P7 为强制流水线。
@@ -24,7 +23,7 @@ B/D/H 分别指 Base 写入字节、Delta 写入字节、当前对象重建字�
 
 | 工作项 | 最小应回答的问题 | 设计或证据入口 |
 |---|---|---|
-| 比较、估算与策略接入 | 先由 prepared 内容生成可追加 Revision；通用 typed 比较与 exact baseline 生命周期仍待后续闭合 | [DB-029 推荐分片](design-branches/0029-prepared-object-revision-planning-slice.md)、[DB-022](design-branches/0022-versioned-state-dto-capture.md) |
+| typed 比较与 exact baseline | Capture 如何产品化地产生 prepared rows；exact Parent 的 DTO/Schema 投影怎样验证、重建和安装 | [DB-029 已完成接缝](design-branches/0029-prepared-object-revision-planning-slice.md)、[DB-022](design-branches/0022-versioned-state-dto-capture.md) |
 | TypeCodec 与 exact Schema 绑定 | 类型组合如何编码；引用约束如何检查；未知类型/版本和错误对象头如何拒绝 | [DB-018](design-branches/0018-generated-graph-codec-shape.md)、[DB-001](design-branches/0001-schema-authority-and-runtime-representation.md) |
 | DTO 升级与领域 Restore | stored exact 版本如何分派、升级为 current DTO，再构造领域对象；失败时不交付半成品 | [DB-022](design-branches/0022-versioned-state-dto-capture.md)、[DB-002](design-branches/0002-read-time-version-upgrade-pipeline.md) |
 | 一般 durable 引用图 | 递归登记、共享/循环、nominal 约束、多态实际类型、完整目录及 roots 可达闭包如何共同成立 | [DB-018](design-branches/0018-generated-graph-codec-shape.md)、[DB-024](design-branches/0024-reference-capture-and-reusable-object-ids.md) |
@@ -37,8 +36,8 @@ B/D/H 分别指 Base 写入字节、Delta 写入字节、当前对象重建字�
 | 问题 | 现有依据与裁决边界 |
 |---|---|
 | 对象版本解释与保存来源 | raw prior/H 已由 DB-028 闭合；持久 exact Schema/codec 绑定、完整 head map 的 external heads 来源、候选对象身份连续性仍需产品 Save 合同，不能由 Parent 声明一致推导全局身份认证 |
-| 保存相等性与真实估算 | 同版标量 DTO 的浮点按位、引用槽按 ID 已采纳；未来复合值/容器相等性另定。候选 B/D 需包含对象 kind/prior/length/body；scope 未定时的推荐估算及误差见 [DB-029](design-branches/0029-prepared-object-revision-planning-slice.md)，待采纳；将来加类型头后统一计入 B/D/H，不纳入共享 Frame、membership 或对齐开销 |
-| 历史升级后的比较和重写 | DB-006/R3 研究采用 normalized baseline 与 RequiresRewrite，可作证据；新 DTO 路径是否跨 Schema 必须 Base、如何恢复义务及升级删边后清理，尚待专片裁决，读取不得隐式回写 |
+| 保存相等性与真实估算 | 同版标量 DTO 的浮点按位、引用槽按 ID 已采纳；未来复合值/容器相等性另定。已准备 body 与当前 v3 envelope 计量见 [DB-029](design-branches/0029-prepared-object-revision-planning-slice.md)；将来加类型头后需同步更新 B/D/H，不能继续沿用旧成本公式 |
+| 历史升级后的比较和重写 | DB-006/R3 研究采用 normalized baseline 与 RequiresRewrite，可作证据；raw planner 已能接收无合法 Delta 的 BaseOnlyUpdate；何时产生跨 Schema 重写义务、如何恢复该义务及升级删边后清理仍待专片裁决，读取不得隐式回写 |
 | 完整 source 目录与 current 可达集合 | 升级可能删边。研究见证保留 source rows，再由 Save 移除不可达项；产品保存视图怎样表达需与候选/Parent 衔接 |
 | Schema 规范表示和持久引用 | canonical bytes、SchemaHash/完整 descriptor 校验、类型家族约束和 SchemaStore 引用形式；不能把现有 GetHashCode 或 history TypeTag 当成最终 wire |
 | Restore 的分配和阶段边界 | allocate-all / hydrate-all 有循环见证；构造器、readonly 字段、升级引用重绑定、验证/transient hook 的具体可见性和顺序待选 |
@@ -69,7 +68,7 @@ DB-009/010 的旧 no-reuse 前提不能沿用；借用 Base 共享 prior 等结�
 | Transient 重建 | 首个领域 Restore 消费者需要索引/缓存时；比较单对象 hook、全局 registry、两阶段或依赖调度，失败不交付 roots |
 | 物理 GC、compaction、历史保留 | 出现真实空间或 recovery-closure 问题后；与 CLR 映射清理和数字 ID 回收分开裁决 |
 | TwoLeg / incremental cleaner | 多历史 Segment 无法满足实际有界 dependency file count、在线退休、backup/rescue 或 compaction SLO 时重访，见其 [技术储备](../experiments/TwoLegRotationProbe/PROJECT-STATE.md) |
-| 性能优化 | 有具体测量后再选择 cache、typed buckets、指纹等；DB-028 先 object-first 直读 RBF，Frame cache 只减少重复 I/O/解码，重复完整 map 物化需另评估 map cache/单 ID 查询，必要时再按 Frame 合并批量读取 |
+| 性能优化 | MVP 后有具体测量再优化全量 Base 准备、缓冲复制、cache、typed buckets 或指纹；DB-028 先 object-first 直读 RBF，Frame cache 只减少重复 I/O/解码，重复完整 map 物化需另评估 map cache/单 ID 查询，必要时再按 Frame 合并批量读取 |
 | 并发、分支与跨 Repository | 宿主提出真实 consumer 后；分别定义 concurrent Capture、snapshot isolation、branch/fork/multi-writer 和跨 Store/Repository identity，不扩大当前单 writer 假设 |
 | 升级创建新对象或外部副作用 | 当前升级/图恢复闭合之后，有具体需求再讨论新 ID、source table 外引用与失败隔离，不借普通升级默认授权 |
 | 历史工具/升级调用优化 | 有 package/history 或升级调用的真实限制后，再重访 DB-003 的 Try/result/ABI 和 DB-004 的多 writer/多 TFM 与批次原子性，不顺带做兼容框架 |

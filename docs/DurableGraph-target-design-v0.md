@@ -36,12 +36,16 @@ Source Generator 负责可在编译期确定的类型知识与机械代码，框
   基线是可丢弃、可从权威状态重建的比较投影，不是第二个持久权威来源。
 - DTO 的 CLR 字段命名或物理展开方式不决定 Schema。历史 DTO 从已接受的 Schema/history
   再生成，不要求永久保留所有旧领域 CLR 类，也不另存一套 DTO 源码历史。
-- 同版 DTO 的 Delta 准备融合变化判断与编码，结果持有变化判定和可复用 bytes，D 从实际长度取得；
+- 同版 DTO 的 Delta 准备融合变化判断与编码，结果持有变化判定和可复用 bytes，Delta body 大小从实际长度取得；
   选择 Delta 后复用该结果，避免再次比较和编码。临时缓冲所有权独立于可变领域对象。
+- MVP 同样提前 PrepareBase：复用强类型 Write 生成独立拥有的 Base body，以实际 body 长度计量，
+  决策后直接复用选定 bytes。先接受全部 live Base 准备的 CPU/内存成本，优化留待 MVP 后测量；
+  Frame 大小上限不代表候选集合的内存上限。Storage envelope 开销另按其格式计入。
 
 设计来源：[DB-022](design-branches/0022-versioned-state-dto-capture.md)、
 [DB-024](design-branches/0024-reference-capture-and-reusable-object-ids.md)、
-[DB-027](design-branches/0027-generated-same-schema-delta-body-slice.md)。
+[DB-027](design-branches/0027-generated-same-schema-delta-body-slice.md)、
+[DB-029](design-branches/0029-prepared-object-revision-planning-slice.md)。
 
 ### 统一引用身份，值类型嵌套
 
@@ -88,7 +92,8 @@ Source Generator 负责可在编译期确定的类型知识与机械代码，框
 - MVP 固定 ReadAmplificationBaseBudgetPolicy。整数 X 倍通过对象级冷读放大产生 Base 动机，
   整数 Y% 控制可选 Base 的软预算；它不是所有写入的硬峰值保证。
   精确比较、预算和强制/可选分类以 [DB-015](design-branches/0015-statestore-object-representation-policy.md)
-  与对应代码为准，后续执行层不能自行改变策略语义。
+  与对应代码为准，后续执行层不能自行改变策略语义。没有合法 Delta 的更新显式强制 Base，
+  不伪造 Delta 估算；它与 Insert 一样属于必需写入，不消耗可选 Base 预算。
 - 策略消费完整保存后 live 集合的估算，产生稀疏表示计划。真实 parent、对象变化分类、
   reachability 和 Removes 由保存调用方提供，策略不能证明这些输入完整。
 - Storage 使用多历史 Segment 地址与 BackwardFileDistance；rollover 是 soft threshold，

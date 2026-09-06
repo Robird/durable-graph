@@ -42,13 +42,25 @@ public sealed partial class Character : BinaryBase {
             throw new InvalidOperationException("Unexpected base-first binary body.");
         }
 
+        // The result and prebuilt string helper arrive through the single runtime package reference.
+        PreparedBase prepared = __DurableBinaryBody.PrepareBase(in captured);
+        byte[] externalCopy = prepared.Payload.ToArray();
+        Array.Clear(externalCopy);
+        source._total = 1001;
+        _ = __DurableBinaryBody.PrepareBase(in captured);
+        if (!prepared.Payload.SequenceEqual(new byte[] { 0x01, 0x21, 0x54 }) ||
+            !StringPayloadCodec.PrepareBase("A").Payload.SequenceEqual(new byte[] { 0x03, 0x41 }) ||
+            !StringPayloadCodec.PrepareBase(string.Empty).Payload.SequenceEqual(new byte[] { 0x00 })) {
+            throw new InvalidOperationException("Packaged Base preparation lost canonical bytes or frozen content.");
+        }
+
         BinaryPayloadReader reader = new(buffer.WrittenSpan);
         var restored = __DurableBinaryBody.ReadV1(ref reader);
         reader.EnsureFullyConsumed();
         bool valid = restored.Segment0Field1 && restored.Segment0Field7 == -17 &&
-            restored.Segment1Field1 == 42 && source._total == 999 && source._sentinel == 8 &&
+            restored.Segment1Field1 == 42 && source._total == 1001 && source._sentinel == 8 &&
             source.HasExpectedBase && ReferenceEquals(__DurableBinaryBody.V1.Schema, Schema);
-        return $"BinaryBody:{Convert.ToHexString(buffer.WrittenSpan)}:{valid}:ReferenceCapture:True:StringDecoding:True:PreparedDelta:True";
+        return $"BinaryBody:{Convert.ToHexString(buffer.WrittenSpan)}:{valid}:ReferenceCapture:True:StringDecoding:True:PreparedDelta:True:PreparedBase:True";
     }
 }
 

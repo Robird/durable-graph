@@ -1,8 +1,8 @@
 # DB-029：已准备对象内容到可追加 Revision
 
-> 状态：Proposed — 主代理与独立设计 subagent 的推荐方案，待用户采纳；未实施。
+> 状态：Chosen / Implemented — 用户已采纳 PrepareBase/PrepareDelta，实施与验证见 §9。
 > 日期：2026-09-06；核对源码基线 `b2d0e09`，规划起点工作区干净。
-> 本轮请求是规划；本文不构成实施授权，也不承诺完整 Save 或发布。
+> 实施授权来自本轮用户请求；本片不包含完整 Save 或发布。
 
 ## 1. 问题与最小成功判据
 
@@ -26,7 +26,7 @@ Capture 到 prepared rows 的强类型适配在集成测试中显式编写，不
 | 先持久 TypeCodec / Schema 目录 | 补足冷读解释元数据，但同时要裁决 Schema canonical 格式与持久引用 | 保留紧邻候选，不作为本片前置 |
 | struct / 一般引用 / Restore | 扩充类型或恢复能力，但不接通现有策略消费者 | 可独立穿插，不改既有 TODO |
 
-源码核对：
+规划起点 `b2d0e09` 的源码事实（完成能力见 §9）：
 
 - [CapturedObject](../../src/DurableGraph/CapturedObject.cs) 用 GetState<TState> 取得 exact DTO；
   尚无通用 Write/PrepareDelta 分派。StateStore 目前只引用 Storage，不引用 DurableGraph runtime。
@@ -40,11 +40,11 @@ Capture 到 prepared rows 的强类型适配在集成测试中显式编写，不
 主代理与设计 subagent 一致推荐较小边界；独立事实调查另核对了 rollover 和 wire 计量接缝。
 不新增程序集、通用 codec registry 或 CLR 反射遍历。
 
-## 3. 推荐数据流与职责
+## 3. 已采纳的数据流与职责
 
 ```text
 测试中的显式 typed 适配
-  frozen current/prior DTO → SG Write + PrepareDelta → 完整 prepared rows
+  frozen current/prior DTO → SG PrepareBase + PrepareDelta → 完整 prepared rows
                                                        ↓
 StateStore: exact Parent 校验 → H / B / D → 固定 policy → StateRevision
                                                        ↓
@@ -62,7 +62,7 @@ StateStore: exact Parent 校验 → H / B / D → 固定 policy → StateRevisio
 
 ### 3.1 内容输入及所有权
 
-每行至少有非零 ObjectId、owned current Base bytes；existing 行还声明 exact prior FrameAddress。
+每行至少有非零 ObjectId、拥有 current Base bytes 的 PreparedBase；existing 行还声明 exact prior FrameAddress。
 推荐工厂表达以下逻辑形状，避免零长度 payload 被误判为无变化：
 
 | 输入形状 | 内容与含义 |
@@ -76,9 +76,18 @@ Compared 的 HasChanges=false 归入 NoChange，不执行其零位图 payload；
 不增加独立 StateEquals 或 EstimateDelta，也不让调用方再提供一份可矛盾的变化布尔值。
 Unchanged 工厂供 immutable string 等无需生成 Delta 的来源使用，不能用 payload.Length==0 推断。
 
-先允许对所有 live 对象各生成一次 Base bytes，保证可选 Base 随时能执行；即使最后只写 Delta，
-也不重做 DTO 比较或 Delta 编码。接受这一片的分配/全量 Base 编码成本，后续有测量再改为
-精确 Base 估算加延迟编码。输入 bytes 和集合需真正冻结；读取视图不能泄漏可写 backing array。
+本片新增公开 sealed PreparedBase，构造时复制输入，暴露只读 Payload；不含 HasChanges。
+SG 对每个已支持 current/history Vn 生成 PrepareBase(in Vn)，创建缓冲并调用已有 Write，
+不生成第二份字段遍历/EstimateBase。string 内容 codec 提供预制 PrepareBase。
+
+对所有 live 对象各准备一次 Base body，保证可选 Base 随时能执行；即使最后只写 Delta，
+也不重做 DTO 比较或 Delta 编码。先接受全量 Base 编码及临时内存成本，性能优化留到 MVP 后。
+单 Frame 约 256 MB 的限制不约束全部候选 Base/Delta、DTO 与缓冲副本的内存总量。
+输入 bytes 和集合需真正冻结；读取视图不能泄漏可写 backing array。
+仅在缓冲复制、全量 Base 准备或 H 读取等实际位置留少量性能 TODO；不实现池/租约/缓存。
+
+Base/Delta **body** 的长度都来自准备结果。§4 只计量 Storage envelope，
+Delta 地址尚未确定的 distance 仍采用最多高估 4 字节的既定上界，不另加业务字段估算器。
 
 string 仍是同一列表中的对象。持续存活的同一 string ID 为 Unchanged；内容相等的不同非空实例
 仍是不同 ID，新 string 写 Base。零长度 string 遵守既有 Empty 规则。本片不新增 string Delta。
@@ -108,7 +117,7 @@ ID 相同不自动证明跨会话/跨 Revision 的实体连续性；本片仍使
 
 ## 4. B/D/H 与目标 Segment 的分歧
 
-### 4.1 推荐：scope-independent 的小幅保守 D
+### 4.1 已采纳：scope-independent 的小幅保守 D
 
 当前 v3 对象 payload 排除 ObjectId key，包含 kind、Delta prior、body 长度和 body。
 令 V32/V64 为现有 canonical unsigned varint 编码长度，n 为对应 body 字节数：
@@ -148,7 +157,7 @@ B 是精确对象 Base payload 成本，H 是盘上实际对象链成本；D 是
 | 预留 scope / 预测 rollover / 两遍重新规划 | 多一套位置承诺或调度状态；没有当前收益支撑 |
 | 直接把 Delta body.Length 当 D | 漏算 envelope；拒绝 |
 
-此处是推荐待采纳的设计取舍，不把近似值伪称“真实编码 D”。若后续实测门槛误差重要，
+此处沿用已采纳的 envelope 计量取舍，不把近似值伪称“真实编码 D”。若后续实测门槛误差重要，
 再改为读取预检完成后、同 writer scope 内精确计量和规划；不修改持久 wire 来消除估算问题。
 
 ## 5. 最小策略扩展与 Revision 构造
@@ -192,7 +201,7 @@ Append 之后仍只得到 candidate address；调用方仍负责发布和之后�
 5. 主代理整合，独立 reviewer 检查成本口径、Parent 责任、只读集合与失败边界；完成根 build 和相关/全套测试。
 
 若实现改变 Generator/runtime 包交付边界，按 PackageConsumerProbe 验证；仅测试项目接 StateStore
-不能当作已经验证新的公开包消费者。当前为规划，以上测试尚未运行；DB-028 的 607 项仅是此前证据。
+不能当作已经验证新的公开 StateStore 包消费者。实际验证见 §9；DB-028 的 607 项仅是此前证据。
 
 ## 7. 停止条件与后续接缝
 
@@ -201,9 +210,69 @@ Append 之后仍只得到 candidate address；调用方仍负责发布和之后�
 之间选择。roots 持久化、DTO upgrade/Restore、一般引用、struct、BCL、ID 回收、Frame cache、
 publication/reconcile 均保持各自路线，不为本片预制接口。
 
-## 8. 本轮规划核对
+## 8. 规划阶段核对
 
 当前源码与 wire/Segment lease 路径已核对；独立设计讨论与另一位 reviewer 审查无阻塞意见。
 审查补入清空 live 集合、全量 NoChange，以及估算偏差改变 required Base 选择的明确验收。
-本轮只改四份规划/导航文档，检查本地文件链接与 Git diff；未修改产品代码、未重跑 build/tests。
+规划提交 `6b1c82e` 只改四份规划/导航文档，检查本地文件链接与 Git diff；当时未修改产品代码、未重跑 build/tests。
 此前 DB-028 的测试结果不视为本片实现或验证结果。
+
+## 9. 实施合同与账本
+
+实施起点 `6b1c82e`，worktree 干净。保留 v3 wire 和现有 Append；不修改上游 RBF。
+本片固定以下接缝，内部细节可随证据收敛：
+
+- Serialization: public PreparedBase(ReadOnlySpan<byte>) / Payload；SG PrepareBase 与 StringPayloadCodec.PrepareBase(string) 返回它。
+- Storage: public ObjectVersionPayloadSize.GetBaseBytes(int bodyLength)、EstimateDeltaBytes(int bodyLength, FrameAddress prior)。
+- StateStore: internal PreparedObject.New/Unchanged/Compared/BaseOnlyUpdate，现有对象参数顺序 id、prior、PreparedBase、可选 PreparedDelta。
+- internal ObjectRevisionPlanner.PrepareRevision(store, parentRevisionAddress, objects, parameters)
+  返回 PreparedObjectRevision，含 Revision、Estimates、RepresentationPlan；输出集合真正只读。
+- 只向集成测试开放 StateStore friend access；不增加 DurableGraph runtime 依赖或通用 typed registry。
+
+| 要求 | 负责人 / 路径 | 验证 | 状态 |
+|---|---|---|---|
+| PreparedBase、SG 各版 helper、string helper | 子任务 A / Serialization + Generator | owned bytes、真实生成各版 DTO、包消费者 | 已验证 |
+| v3 payload 计量 | 子任务 B / Storage | 独立 wire 和 varint 边界 | 已验证 |
+| BaseOnly policy、prepared rows、Revision planner | 子任务 C / StateStore | 输入/Parent/H/预算/membership/失败/冻结 | 已验证 |
+| 真实 SG 内容到策略再到冷重开 | 集成子任务 / DurableGraph.Tests | frozen DTO、字符串、正常 Append、Read/Apply | 已验证 |
+| 整合、独立审查、文档、最终验证 | 主代理 + reviewer | 根 build/tests、PackageConsumerProbe、diff | 已验证 |
+
+实施前基线验证：`dotnet build DurableGraph.slnx --verbosity quiet` 为 0 警告/错误；
+`dotnet test DurableGraph.slnx --no-build --verbosity quiet` 为 607/607（341+96+130+40），无跳过。
+此项是基线，完成后的整合结果另记。
+
+最终实现入口：
+
+- [PreparedBase](../../src/DurableGraph.StateStore.Serialization/Serialization/PreparedBase.cs) 与
+  [StringPayloadCodec.PrepareBase](../../src/DurableGraph.StateStore.Serialization/Serialization/StringPayloadCodec.cs)；
+  [SG helper](../../src/DurableGraph.Generator/DurableSchemaGenerator.BinaryBody.cs) 对每个 Vn 复用 Write。
+- [ObjectVersionPayloadSize](../../src/DurableGraph.StateStore.Storage/ObjectVersionPayloadSize.cs) 集中 v3 envelope 计量；
+  [独立 wire 测试](../../tests/DurableGraph.StateStore.Storage.Tests/ObjectVersionPayloadSizeTests.cs) 验证 B 精确、D 超额 0..4。
+- [PreparedObject](../../src/DurableGraph.StateStore/PreparedObject.cs)、
+  [ObjectRevisionPlanner](../../src/DurableGraph.StateStore/ObjectRevisionPlanner.cs)、
+  [结果](../../src/DurableGraph.StateStore/PreparedObjectRevision.cs) 连接固定 policy 与可追加 Revision。
+  Estimates 与 RepresentationPlan 使用真正只读集合，同时修复旧计划经 ICollection.SyncRoot 泄漏数组的问题。
+- [规划器文件测试](../../tests/DurableGraph.StateStore.Tests/ObjectRevisionPlannerTests.cs) 覆盖完整集合、
+  两参数、实际 H、prior/失败、BaseOnly 截断坏链、保守 D 改变选择与已准备分支。
+- [真实 SG 集成](../../tests/DurableGraph.Tests/PreparedRevisionGeneratorTests.cs) 用五轮保存验证 Base → Delta →
+  Delta → 主动 Base → NoChange；包含 string 退出、共享/相等但不同实例/Empty、冻结后 mutation、
+  历史可读与全 DTO 引用校验。typed 解释元数据仍由 fixture 提供。
+- [生成 Base 测试](../../tests/DurableGraph.Tests/PreparedBaseBodyTests.cs) 包含全部当前标量、string ID、
+  空布局与旧 CLR 祖先已移除的历史 overload。原两处生成方法完整 whitelist 增加 PrepareBase，仍保持严格断言。
+
+2026-09-06 最终集中验证：
+
+- `dotnet build DurableGraph.slnx --verbosity quiet`：0 警告、0 错误。
+- `dotnet test DurableGraph.slnx --no-build --verbosity quiet`：657/657，无跳过；
+  DurableGraph 346、Serialization 103、Storage 155、StateStore 53，比基线增加 50 项。
+- `./experiments/PackageConsumerProbe/Run-Probe.ps1`：通过；单一 Runtime PackageReference 的实际输出
+  通过脚本严格检查 `BinaryBody:012154:True:ReferenceCapture:True:StringDecoding:True:PreparedDelta:True:PreparedBase:True`。
+  产物在 `experiments/PackageConsumerProbe/obj/run-20260906141521-39608`；不将该包见证解释为 StateStore 发布能力。
+- 独立 reviewer 检查完整产品与测试，无未解决阻塞项。审查发现的两处 whitelist 已修复并纳入全套验证。
+- 7 份修改文档的 145 个本地文件链接和新增 §9 锚点有效；修改文件 UTF-8/LF、Git diff 检查通过。
+- 并行构建一度遇到 DLL 占用；集中串行构建消除争用。新 fixture 的内部 Writer 调用及 offset 断言
+  在最终集中验证前修正，不增加 Serialization friend 或放松验收。
+
+保留两处 DB-029 性能 TODO：SG 临时缓冲/owned-copy，planner 重复对象链读取。
+未实现池、租约、缓存或基准测试；wire v3、Storage.Append、上游 RBF 及领域 Capture 协议保持既有职责。
+完整 Save、类型目录、通用 typed baseline/分派和 publication/reconcile 均未纳入本片。

@@ -15,12 +15,6 @@
 - **Rejected / Superseded**：保留否决原因或后继链接，不继续作为施工输入。
 - 本索引的“实施/适用范围”与原状态分开。源码和可执行证据决定实现事实，历史测试数字只属于当时基线。
 
-## 当前规划
-
-| 文档 | 状态 | 推荐范围 |
-|---|---|---|
-| [DB-029 已准备对象内容到可追加 Revision](0029-prepared-object-revision-planning-slice.md) | Proposed / 未实施 | prepared rows、B/D/H、固定 policy、raw Revision；typed 适配仍为集成见证，不含完整 Save/发布 |
-
 ## 按任务查阅的混合决策
 
 这些文档跨越已实施、已接受未实施和未决问题；仅在路线图指向相关主题时阅读对应章节。
@@ -54,6 +48,7 @@
 | [DB-026 raw Base 内容存取](0026-raw-base-object-content-slice.md) | Chosen / Implemented | 同 Frame local Base、wire v2、指定 Revision 内容重开读取；不是完整 Save/发布 |
 | [DB-027 同版 DTO 比较与字段 Delta body](0027-generated-same-schema-delta-body-slice.md) | Chosen / Implemented | SG 融合 PrepareDelta、owned payload 与独立 Apply；不含持久 prior 链或 Save |
 | [DB-028 持久对象 Delta、exact prior 与重建链](0028-persisted-object-delta-chain-slice.md) | Chosen / Implemented | raw Base/Delta、wire v3、Parent/prior 校验、object-first 链与 H、真实 SG 冷重开；不含持久类型目录或 Save/发布 |
+| [DB-029 已准备对象内容到可追加 Revision](0029-prepared-object-revision-planning-slice.md) | Chosen / Implemented | SG/string PrepareBase、prepared rows、B/D/H、固定 policy、raw Revision；typed 适配仍为集成见证，不含完整 Save/发布 |
 
 ## 隔离研究与技术储备
 

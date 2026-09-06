@@ -9,12 +9,20 @@ namespace Atelia.DurableGraph.StateStore.Serialization;
 /// Encodes value-semantic strings using the shorter of strict UTF-8 and UTF-16LE.
 /// UTF-16LE wins ties and preserves unpaired UTF-16 surrogates.
 /// </summary>
-internal static class StringPayloadCodec {
+public static class StringPayloadCodec {
     private const uint Utf8FlagMask = 1;
     private static readonly Encoding StrictUtf8 = new UTF8Encoding(
         encoderShouldEmitUTF8Identifier: false,
         throwOnInvalidBytes: true
     );
+
+    /// <summary>Prepares owned canonical non-null string content; reference slots encode ObjectId separately.</summary>
+    public static PreparedBase PrepareBase(string value) {
+        ArgumentNullException.ThrowIfNull(value);
+        ArrayBufferWriter<byte> buffer = new();
+        Write(buffer, value);
+        return new PreparedBase(buffer.WrittenSpan);
+    }
 
     /// <summary>
     /// Writes a canonical raw header followed by the selected string payload.

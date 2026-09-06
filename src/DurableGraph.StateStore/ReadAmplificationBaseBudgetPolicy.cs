@@ -35,7 +35,7 @@ internal static class ReadAmplificationBaseBudgetPolicy {
                 ? checked(estimate.CurrentReconstructionBytes!.Value + estimate.EstimatedDeltaWriteBytes!.Value)
                 : estimate.CurrentReconstructionBytes.GetValueOrDefault();
 
-            if (estimate.ChangeKind == ObjectSaveChangeKind.Insert ||
+            if (estimate.ChangeKind is ObjectSaveChangeKind.Insert or ObjectSaveChangeKind.BaseOnlyUpdate ||
                 (estimate.ChangeKind == ObjectSaveChangeKind.Update &&
                     estimate.EstimatedBaseWriteBytes <= estimate.EstimatedDeltaWriteBytes!.Value)) {
                 writes.Add(new(estimate.ObjectId, ObjectRepresentationMode.Base));
@@ -100,6 +100,7 @@ internal static class ReadAmplificationBaseBudgetPolicy {
         bool validShape;
         switch (estimate.ChangeKind) {
             case ObjectSaveChangeKind.Insert:
+            case ObjectSaveChangeKind.BaseOnlyUpdate:
                 validShape = estimate.EstimatedDeltaWriteBytes is null && estimate.CurrentReconstructionBytes is null;
                 break;
             case ObjectSaveChangeKind.Update:
