@@ -31,6 +31,16 @@
 - Follow the K&R C# brace style configured in `.editorconfig`.
 - Keep the CLI as a thin development, inspection, rescue, and end-to-end experiment host. Do not move authority or core persistence semantics into it.
 
+## Subagent model trial
+
+- Default when delegating: omit `model` and `reasoning_effort`, and use `fork_turns: "all"` to inherit the main agent's model and context. Do not assume a particular cache hit or cost saving.
+- Trial one exception: for a bounded, factual, read-only investigation that can be completed from a short task description and specified source files, prefer `model: "gpt-5.6-terra"` with `fork_turns: "none"`. For example, locate existing array traversal entry points and report their supported shapes and limitations.
+- Prefer `"none"` so the handoff is explicit. Use a finite `fork_turns` value (a positive integer string, such as `"3"`) only when those recent turns supply useful context. Under the current tool contract, model overrides cannot be combined with `fork_turns: "all"`.
+- Give the investigator a self-contained packet: the concrete question, repository/source paths, relevant accepted constraints, read-only scope, and expected output. Require file/symbol locations, supporting evidence, and explicit unknowns. Do not make it reconstruct the design discussion or read unrelated history.
+- Keep design decisions, correctness proofs, critical invariant reviews, and work requiring substantial conversation history on the default strategy. Read-only access alone does not make a task suitable for this trial. If the investigation exposes such a question, have the subagent return the evidence and unresolved issue to the main agent.
+- Delegate only when there is enough independent work to justify the handoff; a few searches can stay in the main thread. The main agent checks the returned evidence before using it in a decision.
+- Evaluate the trial informally: was the result usable, did it need repeated context clarification, and did the main agent have to redo the investigation? Revert to the default when handoff or rework dominates. Do not introduce a broader model mapping or a cost-scoring system without further evidence and user agreement.
+
 ## Working memory
 
 - Product development across `src/` and the corresponding `tests/` uses [src/PROJECT-STATE.md](src/PROJECT-STATE.md) as its shared active context. Read it before non-trivial product work and update it when the current focus, decisions, or next steps change.
