@@ -12,8 +12,15 @@
 
 - **Open / Deferred**：原讨论尚未全部裁决或等待触发；不意味着其中没有已采用、已实现的部分。
 - **Chosen**：在文档所述范围内选择了方案；不自动代表完整产品已实现、长期 API 已冻结或所有附带建议已批准。
+- **Proposed**：推荐的下一分片，等待采纳；不是已选持久格式或实施授权。
 - **Rejected / Superseded**：保留否决原因或后继链接，不继续作为施工输入。
 - 本索引的“实施/适用范围”与原状态分开。源码和可执行证据决定实现事实，历史测试数字只属于当时基线。
+
+## 当前规划
+
+| 文档 | 状态 | 推荐范围 |
+|---|---|---|
+| [DB-031 持久对象类型头与 exact Schema 校验](0031-persisted-object-type-envelope-slice.md) | Proposed | 每条 Base/Delta 内联类型描述，canonical Schema 与冷读全链预检；暂不含 roots、SchemaStore、自动分派或 Commit |
 
 ## 按任务查阅的混合决策
 

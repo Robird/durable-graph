@@ -16,7 +16,9 @@
 
 DB-030 已完成异构图的统一内容准备，当前没有正在施工的分片，验证见分片账本。
 外层 WorkingTree/GraphSession 已采纳为目标：统一持有 Parent、DTO 基线与实例身份；当前 Prepare 是其内部组件。
-下一候选为持久类型/Schema 解释，或工作会话的受控基线与提交闭环；尚未冻结下一具体范围。
+下一分片推荐 [DB-031：持久对象类型头与 exact Schema 校验](../docs/design-branches/0031-persisted-object-type-envelope-slice.md)，
+处于 Proposed，待采纳后实施：每条对象内容携带类型解释，替换冷读 fixture 的外带类型元数据。
+建议首版内联完整 Schema；尚未采纳为产品格式，也不包含 roots、SchemaStore 寻址或工作会话提交。
 现有 fixture 仍显式保证图/Parent 对应并提供读取元数据，不据此宣称完整 Commit/Load。
 struct、一般引用和 Restore 可独立穿插；详细待定项见后续路线。
 
