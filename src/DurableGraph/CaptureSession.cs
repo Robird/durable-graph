@@ -1,3 +1,5 @@
+using Atelia.DurableGraph.StateStore.Serialization;
+
 namespace Atelia.DurableGraph;
 
 /// <summary>
@@ -8,6 +10,7 @@ public sealed class CaptureSession {
     private ulong _nextObjectId;
     private Dictionary<object, uint> _bindings = new(ReferenceEqualityComparer.Instance);
     private CaptureContext? _pending;
+    private bool _preparing;
 
     public CaptureSession() : this(1) { }
 
@@ -18,6 +21,41 @@ public sealed class CaptureSession {
     }
 
     public CapturedGraph? Current { get; private set; }
+
+    /// <summary>
+    /// Prepares all candidate bodies against Current without resolving the candidate or allocating IDs.
+    /// The result identifies in-memory sources only; it does not certify a persistent Parent Revision.
+    /// </summary>
+    public PreparedCapturedGraph Prepare(CapturedGraph candidate) {
+        RequireCandidate(candidate);
+        _preparing = true;
+        try {
+            CapturedGraph? previous = Current;
+            Dictionary<uint, CapturedObject> priorObjects = previous?.Objects.ToDictionary(static item => item.Id) ?? [];
+
+            // Validate the entire comparison set before invoking any user body operation.
+            foreach (CapturedObject current in candidate.Objects) {
+                priorObjects.TryGetValue(current.Id, out CapturedObject? prior);
+                ValidatePreparation(current, prior);
+            }
+
+            List<PreparedCapturedObject> objects = new(candidate.Objects.Count);
+            foreach (CapturedObject current in candidate.Objects) {
+                priorObjects.TryGetValue(current.Id, out CapturedObject? prior);
+                PreparedBase body = current.Kind == CapturedObjectKind.String
+                    ? StringPayloadCodec.PrepareBase(current.StringContent)
+                    : current.Preparation!.PrepareBase(current);
+                PreparedDelta? delta = prior is not null && current.Kind == CapturedObjectKind.Durable
+                    ? current.Preparation!.PrepareDelta(prior, current)
+                    : null;
+                objects.Add(new PreparedCapturedObject(current, prior, body, delta));
+            }
+            return new PreparedCapturedGraph(previous, candidate, objects);
+        }
+        finally {
+            _preparing = false;
+        }
+    }
 
     public CaptureContext BeginCapture() {
         if (_pending is not null) {
@@ -57,7 +95,35 @@ public sealed class CaptureSession {
         }
     }
 
+    internal void RequireNotPreparing() {
+        if (_preparing) {
+            throw new InvalidOperationException("The capture session cannot be changed or prepared recursively during preparation.");
+        }
+    }
+
+    private static void ValidatePreparation(CapturedObject current, CapturedObject? prior) {
+        if (prior is not null && current.Kind != prior.Kind) {
+            throw new InvalidOperationException("An existing captured ID changed content kind.");
+        }
+        if (current.Kind == CapturedObjectKind.String) {
+            if (prior is not null && !ReferenceEquals(current.StringContent, prior.StringContent)) {
+                throw new InvalidOperationException("An existing string ID changed reference identity.");
+            }
+            return;
+        }
+        ICapturedStatePreparation preparation = current.Preparation
+            ?? throw new InvalidOperationException("The captured durable object has no preparation binding.");
+        preparation.Validate(current);
+        if (prior is not null) {
+            if (!ReferenceEquals(preparation, prior.Preparation)) {
+                throw new InvalidOperationException("An existing durable object changed preparation binding.");
+            }
+            preparation.Validate(prior);
+        }
+    }
+
     private CaptureContext RequireCandidate(CapturedGraph candidate) {
+        RequireNotPreparing();
         ArgumentNullException.ThrowIfNull(candidate);
         if (_pending is null || !ReferenceEquals(_pending.Candidate, candidate)) {
             throw new InvalidOperationException("The candidate is not the session's current unresolved capture.");

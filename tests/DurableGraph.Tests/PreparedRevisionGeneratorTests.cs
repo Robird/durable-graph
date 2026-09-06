@@ -8,7 +8,7 @@ namespace Atelia.DurableGraph.Tests;
 
 public sealed partial class DurableSchemaGeneratorTests {
     [Fact]
-    public void PreparedRevisionPlannerPersistsFrozenGeneratedBodiesAndRebasesUnchangedObjects() {
+    public void CapturedGraphPreparationPersistsHeterogeneousFrozenBodiesAndRebasesUnchangedObjects() {
         GeneratorTestRun run = RunGenerator(PreparedRevisionSource);
         AssertSchemaOnlyCompiles(run);
         Type host = EmitAndLoad(run.OutputCompilation).GetType("PreparedRevisionWitness.Host")!;
@@ -22,7 +22,8 @@ public sealed partial class DurableSchemaGeneratorTests {
         byte[][] expected = new byte[5][];
         uint[][] roots = new uint[5][];
         DurableSchema? schema = null;
-        uint ownerId = 0, originalStringId = 0, equalStringId = 0, emptyId = 0;
+        uint ownerId = 0, tagId = 0, originalStringId = 0, equalStringId = 0, emptyId = 0;
+        DurableSchema? tagSchema = null;
         long initialH = 0, accumulatedH = 0;
         using RawBaseDirectory directory = new();
         RbfSegmentStoreOptions options = new() { NewStoreLayout = RbfSegmentStoreLayout.Flat, SegmentSizeThresholdBytes = 8 };
@@ -30,24 +31,45 @@ public sealed partial class DurableSchemaGeneratorTests {
             StateRevisionStore store = new(segments);
             for (int stage = 0; stage < revisions.Length; stage++) {
                 CapturedGraph? accepted = session.Current;
-                var input = capture(stage);
+                CapturedGraph graph = capture(stage);
+                PreparedCapturedGraph input = session.Prepare(graph);
+                PreparedCapturedGraph repeated = session.Prepare(graph);
+                Assert.Same(accepted, input.Previous);
+                Assert.Same(graph, input.Candidate);
+                Assert.Equal(input.Objects.Select(row => row.Current.Id), repeated.Objects.Select(row => row.Current.Id));
+                foreach (var row in input.Objects) {
+                    var again = repeated.Objects.Single(item => item.Current.Id == row.Current.Id);
+                    Assert.Equal(row.BaseContent.Payload.ToArray(), again.BaseContent.Payload.ToArray());
+                    Assert.Equal(row.DeltaContent?.HasChanges, again.DeltaContent?.HasChanges);
+                    CapturedObject? previous = accepted?.Objects.SingleOrDefault(item => item.Id == row.Current.Id);
+                    Assert.Same(previous, row.Previous);
+                    if (previous is null || row.Current.Kind == CapturedObjectKind.String)
+                        Assert.Null(row.DeltaContent);
+                    else Assert.NotNull(row.DeltaContent);
+                    if (row.DeltaContent is not null)
+                        Assert.Equal(row.DeltaContent.Payload.ToArray(), again.DeltaContent!.Payload.ToArray());
+                }
                 Assert.Same(accepted, session.Current);
                 Assert.Throws<InvalidOperationException>(() => session.BeginCapture());
-                roots[stage] = input.Graph.RootIds.ToArray();
-                Assert.Equal(new[] { input.Graph.RootIds[0], input.Graph.RootIds[0], 0u }, roots[stage]);
-                var owner = Assert.Single(input.Rows, row => !row.IsString);
+                roots[stage] = graph.RootIds.ToArray();
+                if (stage is 1 or 2) {
+                    tagId = graph.RootIds[3];
+                    Assert.Equal(new[] { graph.RootIds[0], graph.RootIds[0], 0u, tagId, tagId, 0u }, roots[stage]);
+                }
+                else Assert.Equal(new[] { graph.RootIds[0], graph.RootIds[0], 0u }, roots[stage]);
+                var owner = Assert.Single(input.Objects, row => row.Current.Id == graph.RootIds[0]);
                 if (stage == 0) {
-                    ownerId = owner.Id;
-                    schema = owner.Schema!;
-                    originalStringId = Assert.Single(input.Graph.Objects,
+                    ownerId = owner.Current.Id;
+                    schema = owner.Current.Schema!;
+                    originalStringId = Assert.Single(graph.Objects,
                         item => item.Kind == CapturedObjectKind.String && item.StringContent == "x").Id;
-                    emptyId = Assert.Single(input.Graph.Objects,
+                    emptyId = Assert.Single(graph.Objects,
                         item => item.Kind == CapturedObjectKind.String && item.StringContent == string.Empty).Id;
                     Assert.NotEqual(0u, originalStringId);
                     Assert.NotEqual(0u, emptyId);
                 }
                 if (stage == 1) {
-                    equalStringId = Assert.Single(input.Graph.Objects,
+                    equalStringId = Assert.Single(graph.Objects,
                         item => item.Kind == CapturedObjectKind.String && item.StringContent == "x" && item.Id != originalStringId).Id;
                     Assert.NotEqual(originalStringId, equalStringId);
                 }
@@ -60,38 +82,62 @@ public sealed partial class DurableSchemaGeneratorTests {
                 expected[stage][1] = checked((byte)alias);
                 expected[stage][2] = checked((byte)emptyId);
                 expected[stage][3] = score;
-                Assert.Equal(expected[stage], owner.Base.Payload.ToArray());
+                Assert.Equal(expected[stage], owner.BaseContent.Payload.ToArray());
                 if (stage is 1 or 2) {
-                    Assert.True(owner.Delta!.HasChanges);
+                    Assert.True(owner.DeltaContent!.HasChanges);
                     Assert.Equal<byte>([stage == 1 ? (byte)0x0A : (byte)0x09, 0, checked((byte)equalStringId), score],
-                        owner.Delta.Payload.ToArray());
+                        owner.DeltaContent.Payload.ToArray());
                 }
                 if (stage >= 3) {
-                    Assert.False(owner.Delta!.HasChanges);
-                    Assert.Equal<byte>([0, 0], owner.Delta.Payload.ToArray());
+                    Assert.False(owner.DeltaContent!.HasChanges);
+                    Assert.Equal<byte>([0, 0], owner.DeltaContent.Payload.ToArray());
                 }
 
+                if (stage is 1 or 2) {
+                    var tag = Assert.Single(input.Objects, row => row.Current.Id == tagId);
+                    tagSchema = tag.Current.Schema;
+                    Assert.NotNull(tagSchema!.BaseSchema);
+                    Assert.Equal<byte>([checked((byte)equalStringId), 7], tag.BaseContent.Payload.ToArray());
+                    if (stage == 1) Assert.Null(tag.Previous);
+                    else {
+                        Assert.False(tag.DeltaContent!.HasChanges);
+                        Assert.Equal<byte>([0], tag.DeltaContent.Payload.ToArray());
+                    }
+                }
+
+                // This fixture owns the correspondence between accepted graph and exact Parent.
+                // Neither Prepare nor the raw Storage planner certifies that correspondence.
                 FrameAddress? parent = stage == 0 ? null : revisions[stage - 1];
                 IReadOnlyDictionary<uint, FrameAddress> priorHeads = parent is null
                     ? new Dictionary<uint, FrameAddress>() : store.ReadLiveObjectHeads(parent.Value);
-                PreparedObject[] rows = input.Rows.Reverse().Select(row => {
-                    if (!priorHeads.TryGetValue(row.Id, out FrameAddress prior)) return PreparedObject.New(row.Id, row.Base);
-                    return row.IsString ? PreparedObject.Unchanged(row.Id, prior, row.Base)
-                        : PreparedObject.Compared(row.Id, prior, row.Base, row.Delta!);
+                PreparedObject[] rows = input.Objects.Reverse().Select(row => {
+                    uint id = row.Current.Id;
+                    if (row.Previous is null) {
+                        Assert.False(priorHeads.ContainsKey(id));
+                        return PreparedObject.New(id, row.BaseContent);
+                    }
+                    FrameAddress prior = priorHeads[id];
+                    return row.DeltaContent is null ? PreparedObject.Unchanged(id, prior, row.BaseContent)
+                        : PreparedObject.Compared(id, prior, row.BaseContent, row.DeltaContent);
                 }).ToArray();
                 var parameters = new ReadAmplificationBaseBudgetParameters(stage < 3 ? 100 : 1, 100);
                 var prepared = ObjectRevisionPlanner.PrepareRevision(store, parent, rows, parameters);
                 Assert.Same(accepted, session.Current); // Planning never installs a candidate or baseline.
                 Assert.Equal(parent, prepared.Revision.ParentRevisionAddress);
                 if (stage == 0) {
-                    Assert.Equal(input.Rows.Length, prepared.Revision.LocalObjects.Count);
+                    Assert.Equal(input.Objects.Count, prepared.Revision.LocalObjects.Count);
                     Assert.All(prepared.Revision.LocalObjects, record => Assert.Equal(ObjectVersionKind.Base, record.Kind));
                 }
                 else if (stage is 1 or 2) {
                     ObjectVersionRecord record = Assert.Single(prepared.Revision.LocalObjects, item => item.ObjectId == ownerId);
                     Assert.Equal(ObjectVersionKind.Delta, record.Kind);
-                    Assert.Equal(owner.Delta!.Payload.ToArray(), record.Body.ToArray());
+                    Assert.Equal(owner.DeltaContent!.Payload.ToArray(), record.Body.ToArray());
                     Assert.Equal(priorHeads[ownerId], record.PriorAddress);
+                    Assert.Equal(stage == 1 ? 3 : 1, prepared.Revision.LocalObjects.Count);
+                    if (stage == 1) {
+                        Assert.All(prepared.Revision.LocalObjects.Where(item => item.ObjectId != ownerId),
+                            item => Assert.Equal(ObjectVersionKind.Base, item.Kind));
+                    }
                     Assert.Equal(stage == 1 ? Array.Empty<uint>() : new[] { originalStringId }, prepared.Revision.RemovedObjectIds);
                 }
                 else if (stage == 3) {
@@ -99,6 +145,7 @@ public sealed partial class DurableSchemaGeneratorTests {
                     Assert.Equal(ownerId, record.ObjectId);
                     Assert.Equal(ObjectVersionKind.Base, record.Kind);
                     Assert.Equal(expected[stage], record.Body.ToArray());
+                    Assert.Equal(new[] { tagId }, prepared.Revision.RemovedObjectIds);
                 }
                 else {
                     Assert.Empty(prepared.Revision.LocalObjects);
@@ -107,16 +154,19 @@ public sealed partial class DurableSchemaGeneratorTests {
                 revisions[stage] = store.Append(prepared.Revision);
                 Assert.Same(accepted, session.Current); // Append produces an address, not a publication or Capture.Accept.
                 foreach (var record in prepared.Revision.LocalObjects) {
-                    var row = input.Rows.Single(item => item.Id == record.ObjectId);
-                    metadata.Add((revisions[stage], record.ObjectId), new(row.IsString, row.Schema,
-                        row.IsString ? "string-v1" : "generated-v1"));
+                    var row = input.Objects.Single(item => item.Current.Id == record.ObjectId);
+                    bool isString = row.Current.Kind == CapturedObjectKind.String;
+                    metadata.Add((revisions[stage], record.ObjectId), new(isString, row.Current.Schema,
+                        isString ? "string-v1" : "generated-v1"));
                 }
                 var heads = store.ReadLiveObjectHeads(revisions[stage]);
-                Assert.Equal(input.Rows.Select(row => row.Id).Order(), heads.Keys.Order());
+                Assert.Equal(input.Objects.Select(row => row.Current.Id).Order(), heads.Keys.Order());
                 Assert.Equal(stage == 0 ? revisions[0] : priorHeads[emptyId], heads[emptyId]);
                 if (stage == 1) Assert.Equal(revisions[0], heads[originalStringId]);
                 if (stage >= 2) Assert.False(heads.ContainsKey(originalStringId));
                 if (stage >= 2) Assert.Equal(revisions[1], heads[equalStringId]);
+                if (stage is 1 or 2) Assert.Equal(revisions[1], heads[tagId]);
+                if (stage >= 3) Assert.False(heads.ContainsKey(tagId));
                 ObjectVersionChain chain = store.ReadObjectVersionChain(revisions[stage], ownerId);
                 if (stage == 0) initialH = chain.ReconstructionBytes;
                 if (stage == 2) {
@@ -129,8 +179,8 @@ public sealed partial class DurableSchemaGeneratorTests {
                     Assert.Equal(initialH, chain.ReconstructionBytes);
                     Assert.Equal(revisions[3], chain.HeadAddress);
                 }
-                if (stage < revisions.Length - 1) session.Accept(input.Graph); // Explicit fixture baseline choice only.
-                else session.Discard(input.Graph);
+                if (stage < revisions.Length - 1) session.Accept(graph); // Explicit fixture baseline choice only.
+                else session.Discard(graph);
             }
         }
         Assert.Equal(70, initialH);
@@ -143,9 +193,17 @@ public sealed partial class DurableSchemaGeneratorTests {
             var heads = cold.ReadLiveObjectHeads(revisions[stage]);
             ObjectVersionChain chain = cold.ReadObjectVersionChain(revisions[stage], ownerId);
             PreflightTypedChain(chain, metadata, schema!, "generated-v1");
-            Assert.All(roots[stage].Where(id => id != 0), id => Assert.Equal(ownerId, id));
+            Assert.All(roots[stage].Where(id => id != 0), id => Assert.True(id == ownerId || id == tagId));
+            byte[]? tagBody = null;
+            if (stage is 1 or 2) {
+                var tagChain = cold.ReadObjectVersionChain(revisions[stage], tagId);
+                PreflightTypedChain(tagChain, metadata, tagSchema!, "generated-v1");
+                Assert.Single(tagChain.Records);
+                tagBody = cold.ReadObjectBase(revisions[stage], tagId);
+                Assert.Equal<byte>([checked((byte)equalStringId), 7], tagBody);
+            }
             Dictionary<uint, byte[]> strings = [];
-            foreach ((uint id, FrameAddress address) in heads.Where(item => item.Key != ownerId)) {
+            foreach ((uint id, FrameAddress address) in heads.Where(item => item.Key != ownerId && item.Key != tagId)) {
                 DeltaFixtureDescriptor descriptor = metadata[(address, id)];
                 Assert.True(descriptor.IsString);
                 Assert.Null(descriptor.Schema);
@@ -153,20 +211,18 @@ public sealed partial class DurableSchemaGeneratorTests {
                 strings.Add(id, cold.ReadObjectBase(revisions[stage], id));
             }
             byte[][] bodies = chain.Records.Select(entry => entry.Record.Body.ToArray()).ToArray();
-            Assert.Equal(expected[stage], decode(bodies, strings, stage == 1));
+            Assert.Equal(expected[stage], decode(bodies, strings, stage == 1, tagBody));
             // Even references unchanged by Delta must be validated against the target view.
             strings.Remove(emptyId);
-            Assert.Throws<InvalidDataException>(() => decode(bodies, strings, stage == 1));
+            Assert.Throws<InvalidDataException>(() => decode(bodies, strings, stage == 1, tagBody));
         }
         Assert.True(cold.ReadLiveObjectHeads(revisions[0]).ContainsKey(originalStringId));
         Assert.False(cold.ReadLiveObjectHeads(revisions[2]).ContainsKey(originalStringId));
         Assert.Equal<byte>([3, (byte)'x'], cold.ReadObjectBase(revisions[0], originalStringId));
     }
 
-    private delegate (CapturedGraph Graph,
-        (uint Id, bool IsString, DurableSchema? Schema, PreparedBase Base, PreparedDelta? Delta)[] Rows)
-        PreparedRevisionCapture(int stage);
-    private delegate byte[] PreparedRevisionDecode(byte[][] bodies, Dictionary<uint, byte[]> strings, bool expectDistinct);
+    private delegate CapturedGraph PreparedRevisionCapture(int stage);
+    private delegate byte[] PreparedRevisionDecode(byte[][] bodies, Dictionary<uint, byte[]> strings, bool expectDistinct, byte[]? tagBody);
 
     private const string PreparedRevisionSource = """
         using System;
@@ -193,35 +249,43 @@ public sealed partial class DurableSchemaGeneratorTests {
             public Owner(string value) { _name = value; _alias = value; }
             public void Change(string name, string alias, uint score) { _name = name; _alias = alias; _score = score; }
         }
+        [DurableType("prepared-revision.tag-base", 1, SchemaOnly = true, GenerateBinaryBody = true)]
+        public abstract partial class TagBase : DurableBase {
+            [DurableField(1)] private string _label;
+            protected TagBase(string value) { _label = value; }
+            protected void ChangeLabel(string value) { _label = value; }
+        }
+        [DurableType("prepared-revision.tag", 1, SchemaOnly = true, GenerateBinaryBody = true)]
+        public sealed partial class Tag : TagBase {
+            [DurableField(1)] private byte _marker;
+            public Tag(string value) : base(value) { }
+            public void Change(string label, byte marker) { ChangeLabel(label); _marker = marker; }
+        }
         public static class Host {
             public static readonly CaptureSession Session = new();
             private static readonly string Shared = new string(new[] { 'x' });
             private static readonly string Equal = new string(new[] { 'x' });
             private static readonly Owner Domain = new(Shared);
-            public static (CapturedGraph Graph,
-                (uint Id, bool IsString, DurableSchema? Schema, PreparedBase Base, PreparedDelta? Delta)[] Rows) Capture(int stage) {
+            private static readonly Tag Secondary = new(Equal);
+            public static CapturedGraph Capture(int stage) {
                 if (ReferenceEquals(Shared, Equal)) throw new Exception("Fixture requires distinct equal strings.");
                 Domain.Change(stage < 2 ? Shared : Equal, stage == 0 ? Shared : Equal, (uint)(Math.Min(stage, 2) + 1));
+                Secondary.Change(Equal, 7);
                 var context = Session.BeginCapture();
                 Owner.__DurableBinaryBody.AddRoot(context, Domain);
                 Owner.__DurableBinaryBody.AddRoot(context, Domain);
                 Owner.__DurableBinaryBody.AddRoot(context, null);
+                if (stage is 1 or 2) {
+                    Tag.__DurableBinaryBody.AddRoot(context, Secondary);
+                    Tag.__DurableBinaryBody.AddRoot(context, Secondary);
+                    Tag.__DurableBinaryBody.AddRoot(context, null);
+                }
                 var graph = context.Seal();
                 Domain.Change("mutated after Seal", "never captured", 99);
-                var rows = graph.Objects.Select(item => {
-                    if (item.Kind == CapturedObjectKind.String)
-                        return (item.Id, true, (DurableSchema?)null, StringPayloadCodec.PrepareBase(item.StringContent!), (PreparedDelta?)null);
-                    var current = item.GetState<Owner.__DurableBinaryBody.V1>();
-                    PreparedDelta? delta = null;
-                    if (Session.Current is not null) {
-                        var prior = Session.Current.Objects.Single(old => old.Id == item.Id).GetState<Owner.__DurableBinaryBody.V1>();
-                        delta = Owner.__DurableBinaryBody.PrepareDelta(in prior, in current);
-                    }
-                    return (item.Id, false, item.Schema, Owner.__DurableBinaryBody.PrepareBase(in current), delta);
-                }).ToArray();
-                return (graph, rows);
+                Secondary.Change("mutated inherited field", 99);
+                return graph;
             }
-            public static byte[] Decode(byte[][] bodies, Dictionary<uint, byte[]> stringBodies, bool expectDistinct) {
+            public static byte[] Decode(byte[][] bodies, Dictionary<uint, byte[]> stringBodies, bool expectDistinct, byte[]? tagBody) {
                 var reader = new BinaryPayloadReader(bodies[0]);
                 var state = Owner.__DurableBinaryBody.ReadV1(ref reader);
                 reader.EnsureFullyConsumed();
@@ -237,6 +301,14 @@ public sealed partial class DurableSchemaGeneratorTests {
                 if (name != "x" || alias != "x" || ReferenceEquals(name, alias) == expectDistinct ||
                     !ReferenceEquals(strings.ResolveString(state.Segment0Field3), string.Empty))
                     throw new InvalidDataException("String content, sharing or Empty identity failed.");
+                if (tagBody is not null) {
+                    var tagReader = new BinaryPayloadReader(tagBody);
+                    var tag = Tag.__DurableBinaryBody.ReadV1(ref tagReader);
+                    tagReader.EnsureFullyConsumed();
+                    Tag.__DurableBinaryBody.ValidateStringReferences(in tag, strings);
+                    if (!ReferenceEquals(strings.ResolveString(tag.Segment0Field1), alias) || tag.Segment1Field1 != 7)
+                        throw new InvalidDataException("Inherited frozen fields or cross-object string sharing failed.");
+                }
                 return Owner.__DurableBinaryBody.PrepareBase(in state).Payload.ToArray();
             }
         }

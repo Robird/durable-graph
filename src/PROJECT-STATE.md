@@ -1,6 +1,6 @@
 # DurableGraph 产品开发工作集
 
-> 校准：2026-09-06，最新产品验证见 [DB-029 §9](../docs/design-branches/0029-prepared-object-revision-planning-slice.md#9-实施合同与账本)。本文只维护当前能力、边界与续工入口。
+> 校准：2026-09-06，最新产品验证见 [DB-030 §7](../docs/design-branches/0030-captured-object-preparation-slice.md#7-实施合同与账本)。本文只维护当前能力、边界与续工入口。
 > 文档不是实现授权；事实以当前源码、测试和工具输出为准。
 
 ## 从这里继续
@@ -14,20 +14,19 @@
 
 ## 当前焦点
 
-DB-029 已完成，当前没有正在施工的分片。下一片推荐
-[DB-030：异构 Capture 图统一准备内容](../docs/design-branches/0030-captured-object-preparation-slice.md)（Proposed）。
-SG 登记对象级 preparation binding，Runtime 从 candidate / Current 统一生成完整 prepared 内容；
-最小验收是在保存桥接中去掉手写 DTO 类型分派，复用 DB-029 完成真实追加和冷重开见证。
-exact Parent baseline 的来源/安装与持久类型解释继续分片；当前 fixture 仍显式保证图/Parent 对应及提供读取元数据。
+DB-030 已完成异构图的统一内容准备，当前没有正在施工的分片，验证见分片账本。
+外层 WorkingTree/GraphSession 已采纳为目标：统一持有 Parent、DTO 基线与实例身份；当前 Prepare 是其内部组件。
+下一候选为持久类型/Schema 解释，或工作会话的受控基线与提交闭环；尚未冻结下一具体范围。
+现有 fixture 仍显式保证图/Parent 对应并提供读取元数据，不据此宣称完整 Commit/Load。
 struct、一般引用和 Restore 可独立穿插；详细待定项见后续路线。
 
 ## 当前能力与实际边界
 
 | 层 | 已验证能力 | 尚未闭合的边界 |
 |---|---|---|
-| [DurableGraph](DurableGraph/DurableGraph.csproj) | immutable Schema、exact BaseSchema、内存 SchemaStore；CaptureSession 的封闭候选与 string 身份；StringReadTable | 非持久图 Store；无一般领域图恢复 |
-| [Generator](DurableGraph.Generator/DurableGraph.Generator.csproj) / [Build](DurableGraph.Build/DurableGraph.Build.csproj) | SchemaOnly 的祖先/history；生成各版 readonly DTO、current Capture/AddRoot、Base Prepare/Write/Read、同版融合 PrepareDelta/Apply 及 string 引用校验；包内 history 发布/验证 | 新 DTO 路径无升级/Restore/runtime 类型分派；legacy boxed Snapshot/Upgrade 路径独立保留 |
-| [StateStore](DurableGraph.StateStore/DurableGraph.StateStore.csproj) | 完整 prepared rows + exact Parent → B/D/H → 固定 policy → owned records / membership 差分 / 可追加 Revision；显式 BaseOnlyUpdate | 无通用 typed 比较/基线管理、完整 Save 或发布 |
+| [DurableGraph](DurableGraph/DurableGraph.csproj) | immutable Schema、exact BaseSchema、内存 SchemaStore；Capture/string 身份、StringReadTable；统一 Prepare 从 candidate/Current 生成完整 owned 内容 | 无持久基线对应、工作会话 Commit 或一般领域图恢复 |
+| [Generator](DurableGraph.Generator/DurableGraph.Generator.csproj) / [Build](DurableGraph.Build/DurableGraph.Build.csproj) | SchemaOnly 的祖先/history；生成各版 readonly DTO、current Capture/AddRoot 与稳定 preparation binding、Base Prepare/Write/Read、同版融合 PrepareDelta/Apply 及 string 引用校验；包内 history 发布/验证 | 新 DTO 路径无升级/Restore/加载类型分派；legacy boxed Snapshot/Upgrade 路径独立保留 |
+| [StateStore](DurableGraph.StateStore/DurableGraph.StateStore.csproj) | 完整 prepared rows + exact Parent → B/D/H → 固定 policy → owned records / membership 差分 / 可追加 Revision；显式 BaseOnlyUpdate | 无工作会话基线管理、完整 Save 或发布 |
 | [Storage](DurableGraph.StateStore.Storage/DurableGraph.StateStore.Storage.csproj) | local Base/Delta records、wire v3、exact Revision live map、Parent/prior 校验、object-first 原始重建链及实际 payload H；v3 Base 精确/Delta 上界计量；真实 Segment/RBF 冷重开 | 不解码 typed body；不拥有持久 roots、类型目录或发布 head；重复读取暂未缓存 |
 | [Serialization](DurableGraph.StateStore.Serialization/DurableGraph.StateStore.Serialization.csproj) | 字节原语、string 内容 codec、拥有自有 bytes 的 PreparedBase/PreparedDelta、预制 string PrepareBase、显式 body 的 typed slot、SZ/rank-2 元素 ref 循环 | 无数组对象 envelope、一般 struct 生成器或通用泛型 codec |
 
@@ -37,6 +36,10 @@ struct、一般引用和 Restore 可独立穿插；详细待定项见后续路�
   SchemaOnly + GenerateBinaryBody 仍限同编译、顶层、非泛型、非 record 的 partial class 链；readonly durable 字段仍拒绝。
 - AddRoot 登记根，Seal 捕获字段；Accept/Discard 只是内存候选协议。ID 单调分配、失败可烧号；退役实例映射清理不回收数字。
   空串 Capture/读取两端统一 Empty，非空 string 保留引用身份。
+- CaptureSession.Prepare 自动使用 Current，完整预检 exact Schema/DTO/稳定 binding 后编码；全部 live Base 提前生成，
+  existing durable 调用融合 Delta、existing string 为 unchanged。结果只标识内存 Previous/Candidate，不带磁盘地址。
+  重复准备与失败不安装或放弃候选、不烧号；临时 guard 拒绝会话重入。capture-only 登记仍有效，缺 binding 仅 Prepare 拒绝。
+  跨 Schema/DTO/binding 不匹配拒绝，不自动降级 BaseOnly；保存 fixture 只机械映射结果至 DB-029，仍负责 exact Parent 对应。
 - ReadVn 只产生 ID DTO；StringReadTable 和生成的引用校验分别负责 string 解码与槽位验证。
   typed 集成测试显式提供 kind/exact Schema/roots 元数据，尚非持久自描述图。
 - PrepareDelta 每槽比较一次形成位图，再静态写变化值；结果含 HasChanges 和可复用 payload，裸 Delta body 大小可直接取长度。
@@ -67,6 +70,7 @@ DurableGraph runtime 也引用 Serialization，单一 runtime PackageReference �
 | Schema、DTO、静态 body | [Generator tests](../tests/DurableGraph.Tests)、[DB-019](../docs/design-branches/0019-schema-ancestry-implementation-slice.md)、[DB-022](../docs/design-branches/0022-versioned-state-dto-capture.md)、[DB-023](../docs/design-branches/0023-scalar-schema-dto-slice.md) |
 | 同版 DTO Delta 准备与应用 | [DB-027](../docs/design-branches/0027-generated-same-schema-delta-body-slice.md)、[body tests](../tests/DurableGraph.Tests/FusedDeltaBodyTests.cs)、[history/Capture tests](../tests/DurableGraph.Tests/FusedDeltaHistoryTests.cs) |
 | Capture 与 string 读取 | [DB-024](../docs/design-branches/0024-reference-capture-and-reusable-object-ids.md)、[DB-025](../docs/design-branches/0025-string-object-decoding-slice.md) |
+| 异构图统一准备内容 | [DB-030](../docs/design-branches/0030-captured-object-preparation-slice.md)、[runtime tests](../tests/DurableGraph.Tests/CapturedGraphPreparationTests.cs)、[生成 tests](../tests/DurableGraph.Tests/GeneratedCapturePreparationTests.cs) |
 | 对象内容、地址与重开读取 | [Storage tests](../tests/DurableGraph.StateStore.Storage.Tests)、[DB-026](../docs/design-branches/0026-raw-base-object-content-slice.md)、[typed 文件见证](../tests/DurableGraph.Tests/RawBaseStorageGeneratorTests.cs) |
 | 持久 Delta、prior 链与 H | [DB-028](../docs/design-branches/0028-persisted-object-delta-chain-slice.md)、[链测试](../tests/DurableGraph.StateStore.Storage.Tests/ObjectVersionChainStoreTests.cs)、[真实 SG 冷重开](../tests/DurableGraph.Tests/PersistedDeltaChainGeneratorTests.cs) |
 | 已准备内容、Base/Delta 策略与 Revision | [DB-029](../docs/design-branches/0029-prepared-object-revision-planning-slice.md)、[规划器](DurableGraph.StateStore/ObjectRevisionPlanner.cs)、[策略实现](DurableGraph.StateStore/ReadAmplificationBaseBudgetPolicy.cs)、[策略 tests](../tests/DurableGraph.StateStore.Tests)、[DB-015](../docs/design-branches/0015-statestore-object-representation-policy.md) |

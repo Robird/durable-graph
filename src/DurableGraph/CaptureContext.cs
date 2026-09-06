@@ -27,11 +27,40 @@ public sealed class CaptureContext : IDisposable {
         DurableSchema schema,
         Func<TDomain, CaptureContext, TState> capture)
         where TDomain : DurableBase
+        where TState : unmanaged => AddRootCore(value, schema, capture, preparation: null);
+
+    /// <summary>Registers an exact root together with stable frozen-state preparation operations.</summary>
+    public uint AddRoot<TDomain, TState>(
+        TDomain? value,
+        DurableSchema schema,
+        Func<TDomain, CaptureContext, TState> capture,
+        CapturedStatePreparation<TState> preparation)
+        where TDomain : DurableBase
+        where TState : unmanaged {
+        try {
+            ArgumentNullException.ThrowIfNull(preparation);
+            return AddRootCore(value, schema, capture, preparation);
+        }
+        catch {
+            AbortBuild();
+            throw;
+        }
+    }
+
+    private uint AddRootCore<TDomain, TState>(
+        TDomain? value,
+        DurableSchema schema,
+        Func<TDomain, CaptureContext, TState> capture,
+        CapturedStatePreparation<TState>? preparation)
+        where TDomain : DurableBase
         where TState : unmanaged {
         try {
             RequirePhase(Phase.Registering);
             ArgumentNullException.ThrowIfNull(schema);
             ArgumentNullException.ThrowIfNull(capture);
+            if (preparation is not null && !schema.Equals(preparation.Schema)) {
+                throw new ArgumentException("Preparation requires the registered root's exact Schema.", nameof(preparation));
+            }
             if (value is null) {
                 _rootIds.Add(0);
                 return 0;
@@ -41,14 +70,15 @@ public sealed class CaptureContext : IDisposable {
             }
             if (_roots.TryGetValue(value, out RootCapture? existing)) {
                 if (existing is not RootCapture<TDomain, TState> typed ||
-                    !typed.Schema.Equals(schema) || !typed.Capture.Equals(capture)) {
-                    throw new ArgumentException("A repeated root must use the same schema, DTO and capture binding.", nameof(capture));
+                    !typed.Schema.Equals(schema) || !typed.Capture.Equals(capture) ||
+                    !ReferenceEquals(typed.Preparation, preparation)) {
+                    throw new ArgumentException("A repeated root must use the same schema, DTO, capture and preparation binding.", nameof(capture));
                 }
                 _rootIds.Add(existing.Id);
                 return existing.Id;
             }
             uint id = _session!.GetOrAllocateId(value);
-            RootCapture<TDomain, TState> root = new(id, value, schema, capture);
+            RootCapture<TDomain, TState> root = new(id, value, schema, capture, preparation);
             _bindings.Add(value, id);
             _roots.Add(value, root);
             _queue.Add(root);
@@ -117,6 +147,7 @@ public sealed class CaptureContext : IDisposable {
     }
 
     internal void Resolve() {
+        _session?.RequireNotPreparing();
         _phase = Phase.Resolved;
         _bindings.Clear();
         ClearBuildData();
@@ -151,14 +182,16 @@ public sealed class CaptureContext : IDisposable {
     }
 
     private sealed class RootCapture<TDomain, TState>(
-        uint id, TDomain source, DurableSchema schema, Func<TDomain, CaptureContext, TState> capture)
+        uint id, TDomain source, DurableSchema schema, Func<TDomain, CaptureContext, TState> capture,
+        CapturedStatePreparation<TState>? preparation)
         : RootCapture(id)
         where TDomain : DurableBase
         where TState : unmanaged {
         public DurableSchema Schema { get; } = schema;
         public Func<TDomain, CaptureContext, TState> Capture { get; } = capture;
+        public CapturedStatePreparation<TState>? Preparation { get; } = preparation;
 
         public override CapturedObject Invoke(CaptureContext context) =>
-            new(Id, Schema, Capture(source, context));
+            new(Id, Schema, Capture(source, context), Preparation);
     }
 }

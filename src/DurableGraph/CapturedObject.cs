@@ -10,11 +10,12 @@ public enum CapturedObjectKind {
 public sealed class CapturedObject {
     private readonly object _content;
 
-    internal CapturedObject(uint id, DurableSchema schema, object state) {
+    internal CapturedObject(uint id, DurableSchema schema, object state, ICapturedStatePreparation? preparation = null) {
         Id = id;
         Kind = CapturedObjectKind.Durable;
         Schema = schema;
         _content = state;
+        Preparation = preparation;
     }
 
     internal CapturedObject(uint id, string content) {
@@ -26,6 +27,7 @@ public sealed class CapturedObject {
     public uint Id { get; }
     public CapturedObjectKind Kind { get; }
     public DurableSchema? Schema { get; }
+    internal ICapturedStatePreparation? Preparation { get; }
 
     /// <summary>Returns a copy of the exact captured DTO, never the stored box.</summary>
     public TState GetState<TState>() where TState : unmanaged {

@@ -256,6 +256,9 @@ public sealed partial class DurableSchemaGenerator {
     private static void AppendBinaryAddRoot(
         StringBuilder source, DurableTypeModel type, BinaryVersionModel version, string indent) {
         string domainType = type.Symbol.ToDisplayString(FullyQualifiedNameFormat);
+        source.Append(indent).Append("private static readonly global::Atelia.DurableGraph.CapturedStatePreparation<")
+            .Append(version.Name).Append("> Preparation = new(").Append(version.Name)
+            .AppendLine(".Schema, PrepareBase, PrepareDelta);");
         source.Append(indent).Append("internal static uint AddRoot(global::Atelia.DurableGraph.CaptureContext context, ")
             .Append(domainType).AppendLine("? value) {");
         source.Append(indent).AppendLine("    global::System.ArgumentNullException.ThrowIfNull(context);");
@@ -266,7 +269,7 @@ public sealed partial class DurableSchemaGenerator {
             source.Append(", shared");
         }
 
-        source.AppendLine("));");
+        source.AppendLine("), Preparation);");
         source.Append(indent).AppendLine("}");
     }
 

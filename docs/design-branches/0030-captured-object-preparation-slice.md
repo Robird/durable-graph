@@ -1,8 +1,8 @@
 # DB-030：从异构 Capture 图统一准备对象内容
 
-> 状态：Proposed — 下一分片推荐，尚未实施。
+> 状态：Chosen / Implemented — 用户已采纳，实施与验证见 §7。
 > 日期：2026-09-06；源码核对基线 `0755a56`，规划开始时工作区干净。
-> 本轮只规划；本文不构成产品代码实施授权。
+> 实施授权来自用户本轮请求；新增工作会话方向只记录目标，不扩大本片为完整 Commit。
 
 ## 1. 问题与最小成功判据
 
@@ -31,7 +31,7 @@ Base → Delta → 策略主动 Base → NoChange、new/remove 和冷重开验�
 两位独立设计 subagent 与主代理收敛到第一项。讨论中特别收窄了“typed 适配 / exact baseline”
 这一混合候选：前者可以独立完成，后者不是加一个 `(graph, revisionAddress)` 包装就能认证。
 
-当前证据：
+规划起点 `0755a56` 的源码事实（实现后的接缝见 §7）：
 
 - [CaptureContext](../../src/DurableGraph/CaptureContext.cs) 的 RootCapture 已配对 domain、Schema、
   DTO 和 Capture；[SG AddRoot](../../src/DurableGraph.Generator/DurableSchemaGenerator.BinaryBody.cs)
@@ -136,9 +136,14 @@ Previous/Candidate 引用仅说明内存来源，不是持久 receipt；Discard 
 本片不宣称消除所有保存适配：fixture 仍显式保证 Previous 对应传入 DB-029 的 exact Parent，
 再由 planner 检查实际 membership/prior。结果中不出现 FrameAddress，不以 Current 命名已提交基线。
 
-后续有两个可以评估的来源：持久类型/Schema 后从 exact Revision 重建；或同进程受控 Append
-所铸造的 graph/地址 receipt。后者只能证明追加，不能证明发布。本片不提前选择 receipt 生命周期。
-在没有这些来源之前，不能提供任意 `(graph, address)` 安装接口并声称已经核验。
+用户在规划后已采纳外层 WorkingTree/GraphSession 方向：由 Repository 的受控加载与成功提交
+流程同时建立、推进 Parent、冻结 DTO 与实例身份绑定，普通消费者只使用 checkout/create 与 Commit。
+其封装本身就能维护正确来源，不需要另造独立 receipt 框架。持久类型解释仍是冷加载的后续依赖。
+长期约束见 [目标设计](../DurableGraph-target-design-v0.md#单一发布权威与明确故障结果)。
+
+因此本片的 CaptureSession.Prepare 明确是未来工作会话的内部准备组件。现有基础设施公开表面
+供生成代码与机制消费者使用，不等于最终用户要手工协调 Capture/Prepare/Accept。
+本片不实现 WorkingTree、Commit、加载导入或任意 `(graph, address)` 基线安装接口。
 
 ## 5. 验收与施工顺序
 
@@ -171,3 +176,61 @@ DTO upgrade/Restore、一般引用、struct、数组对象、BCL 或性能设施
 不更改目标设计中已选约束，不修改产品代码或重跑 build/tests。
 独立 reviewer 核对规划无阻塞项，补清自定义回调合同、重入拒绝后的行为及 prior/current DTO 来源。
 四份 Markdown 的 102 个本地文件链接及引用锚点检查通过，文件为 UTF-8/LF；Git diff 检查通过。
+
+## 7. 实施合同与账本
+
+实施起点 `e62ec7f`，工作区干净。根 build 基线 0 警告/错误、全套 tests 657/657；完成结果另记如下。
+本轮新增 WorkingTree 方向的目标约束，DB-030 范围仍为统一内容准备；没有 Storage wire、程序集
+依赖或上游 RBF 变化。主代理集中运行 dotnet 验证，各实施子任务不并行构建共享 obj。
+
+冻结跨模块接缝：
+
+- public `StateBasePreparer<TState>(in TState)` / `StateDeltaPreparer<TState>(in TState prior, in TState current)`，
+  TState : unmanaged，分别返回 PreparedBase / PreparedDelta。
+- public sealed `CapturedStatePreparation<TState>(schema, prepareBase, prepareDelta)`；Schema 只读，binding 实例身份稳定。
+- `CaptureContext.AddRoot(value, schema, capture, preparation)` 新四参数路径；原三参数 capture-only 路径保留。
+- `CaptureSession.Prepare(candidate)` 返回 `PreparedCapturedGraph`：Previous、Candidate、只读 Objects。
+- `PreparedCapturedObject`：Current、可 null 的 Previous、BaseContent、可 null 的 DeltaContent；构造由内部控制。
+  Previous=null 映射 New；existing + DeltaContent=null 映射 string Unchanged；其余映射 Compared。
+
+| 合同 | 负责人 / 路径 | 验证 | 状态 |
+|---|---|---|---|
+| typed holder、完整预检/准备、候选 guard 与所有权 | runtime 子任务 / DurableGraph | CapturedGraphPreparationTests | 已验证 |
+| SG 稳定 binding、静态 body 调用、异构/历史支持 | generator 子任务 / Generator + tests | GeneratedCapturePreparationTests | 已验证 |
+| 实际包消费 | generator 子任务 / PackageConsumerProbe | 单 Runtime PackageReference | 已验证 |
+| 无 DTO 知识的保存桥接与真实冷重开 | integration 子任务 / PreparedRevisionGeneratorTests | 异构根、new/remove、Base/Delta/H | 已验证 |
+| 独立审查、集中验证、文档 | 主代理 + reviewer | 根 build/tests、包、链接/diff | 已验证 |
+
+最终入口与证据：
+
+- [CapturedStatePreparation](../../src/DurableGraph/CapturedStatePreparation.cs) 实现对象级 typed 桥接，
+  [CaptureSession.Prepare](../../src/DurableGraph/CaptureSession.cs) 完整预检后准备内容，
+  [PreparedCapturedGraph](../../src/DurableGraph/PreparedCapturedGraph.cs) 保存来源及只读 rows。
+- [CaptureContext](../../src/DurableGraph/CaptureContext.cs) 保留 capture-only overload，检查重复根 binding，
+  并在 Resolve 前检查临时 guard；无效的新 overload 登记仍遵循原 AbortBuild/烧号规则。
+- [生成器](../../src/DurableGraph.Generator/DurableSchemaGenerator.BinaryBody.cs) 仅为 concrete current DTO
+  生成 private static readonly Preparation 字段，绑定已有方法组并传给 AddRoot；未增加字段遍历或历史 binding。
+- [runtime tests](../../tests/DurableGraph.Tests/CapturedGraphPreparationTests.cs) 的 26 项覆盖完整分类、
+  后置预检失败零回调、Schema/祖先/DTO/binding 错配、Base/Delta late failure、null 返回、
+  重试与不烧 ID、caught/propagated 重入和 Dispose 幂等、不可变结果。
+- [SG tests](../../tests/DurableGraph.Tests/GeneratedCapturePreparationTests.cs) 的 2 项覆盖异构继承/string、
+  冻结与重复、current V2 绑定及独立 V1 body。原严格方法 whitelist 无需修改。
+- [真实集成](../../tests/DurableGraph.Tests/PreparedRevisionGeneratorTests.cs) 改为统一 Prepare，保存桥接
+  不再调用 GetState<T>/PrepareDelta 或分派领域 DTO；五轮真实文件验证 owner Delta、Tag 根加入/移除、
+  string 保留/替换、主动 Base、NoChange、H 重置及冷重开。读取仍显式持有类型和 roots 元数据。
+
+2026-09-06 主代理集中验证：
+
+- `dotnet build DurableGraph.slnx --verbosity quiet`：0 警告、0 错误。
+- `dotnet test tests/DurableGraph.Tests/DurableGraph.Tests.csproj --no-build --filter "FullyQualifiedName~CapturedGraphPreparation|FullyQualifiedName~GeneratedCapturePreparation" --verbosity quiet`：29/29。
+- `dotnet test DurableGraph.slnx --no-build --verbosity quiet`：685/685，无跳过；DurableGraph 374、
+  Serialization 103、Storage 155、StateStore 53；比基线净增加 28 项。
+- `./experiments/PackageConsumerProbe/Run-Probe.ps1`：通过。实际单 Runtime PackageReference 的
+  [统一 Prepare 消费](../../experiments/PackageConsumerProbe/Consumer/Domain.Preparation.cs) 核对独立 goldens，
+  脚本严格验证输出后缀 `PreparedBase:True:CapturePreparation:True`，history count 为 7。
+  产物：`experiments/PackageConsumerProbe/obj/run-20260906152511-32412`。
+- 独立 reviewer 审查最终产品、测试、包和目标文档，无未解决阻塞项。主代理复查实际 diff 与执行结果。
+- 19 个修改文件为 UTF-8/LF；6 份 Markdown 的 132 个本地文件链接和引用锚点有效，Git diff 检查通过。
+
+本片未改 StateStore/Storage 产品代码、wire、项目依赖或上游框架；未实现 WorkingTree、Commit、
+持久 baseline、TypeCodec/Schema 目录或加载导入。自定义 callback 的确定性由合同保证，guard 不认证其纯度。

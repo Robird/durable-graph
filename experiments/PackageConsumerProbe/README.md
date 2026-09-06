@@ -45,6 +45,14 @@ Golden bytes, later domain mutation and changes to external payload copies verif
 body content. The script additionally requires `PreparedBase:True`; this is body preparation,
 not Storage envelope sizing or a complete Save operation.
 
+Generated AddRoot also supplies a stable preparation binding. The same single-package consumer
+uses `CaptureSession.Prepare(candidate)` for heterogeneous roots, private inheritance segments and
+string objects without selecting DTO types or calling their body helpers. Independent Base and Delta
+goldens verify frozen content, repeated preparation, a nonempty no-change bitmap, equal-but-distinct
+string replacement, retirement, and content surviving Discard. The script requires the additional
+`CapturePreparation:True` marker. This prepares in-memory candidates; it does not establish a
+persistent Parent baseline, append a StateRevision, or publish a branch head.
+
 The final consumer also captures two concrete roots with shared strings, distinct equal strings,
 null/empty/surrogate content, and private base fields through generated AddRoot adapters. It checks
 the closed ID DTO list, static ID-body golden bytes, mutation isolation, accept/discard, stable live

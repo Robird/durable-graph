@@ -26,12 +26,6 @@
 | [DB-018 统一引用身份、TypeCodec 与 Serializer 形状](0018-generated-graph-codec-shape.md) | Open，混合 | 统一身份与 Schema 依赖原则；直接领域 body 示例已由 DTO 路线取代，泛型 binding/Restore 等仍含候选 |
 | [DB-024 引用 Capture 与可复用 ObjectId](0024-reference-capture-and-reusable-object-ids.md) | 首片实现，回收/恢复延期 | §2 身份作用域、§4–6 回收素材、§8 struct 设计；不把推荐的复用时机当作已选算法 |
 
-## 当前规划
-
-| 文档 | 状态 | 推荐范围 |
-|---|---|---|
-| [DB-030 异构 Capture 图统一准备内容](0030-captured-object-preparation-slice.md) | Proposed | SG 对象级 binding、Runtime 完整 prepared 内容；不含 exact Parent baseline、持久类型或 Save/发布 |
-
 ## 已实现分片与被取代的施工证据
 
 查接口缘由、诊断或验收证据时使用。表中“实现”限于所列分片；后续工作由路线图管理。
@@ -55,6 +49,7 @@
 | [DB-027 同版 DTO 比较与字段 Delta body](0027-generated-same-schema-delta-body-slice.md) | Chosen / Implemented | SG 融合 PrepareDelta、owned payload 与独立 Apply；不含持久 prior 链或 Save |
 | [DB-028 持久对象 Delta、exact prior 与重建链](0028-persisted-object-delta-chain-slice.md) | Chosen / Implemented | raw Base/Delta、wire v3、Parent/prior 校验、object-first 链与 H、真实 SG 冷重开；不含持久类型目录或 Save/发布 |
 | [DB-029 已准备对象内容到可追加 Revision](0029-prepared-object-revision-planning-slice.md) | Chosen / Implemented | SG/string PrepareBase、prepared rows、B/D/H、固定 policy、raw Revision；typed 适配仍为集成见证，不含完整 Save/发布 |
+| [DB-030 异构 Capture 图统一准备内容](0030-captured-object-preparation-slice.md) | Chosen / Implemented | SG 对象级 binding、Runtime 完整 prepared 内容；作为未来工作会话内部组件，不含 exact Parent baseline、持久类型或 Save/发布 |
 
 ## 隔离研究与技术储备
 

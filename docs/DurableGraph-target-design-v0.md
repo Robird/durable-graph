@@ -153,6 +153,21 @@ State/Artifact/Schema 输入及 recipe/builder 版本；围栏不匹配应为 mi
 
 ### 单一发布权威与明确故障结果
 
+上层 API 采用由 Repository 创建/加载的工作会话（暂称 WorkingTree / GraphSession），对外提供
+checkout/create、访问领域 roots 和 Commit。它同时拥有所选持久 Parent、对应的冻结 DTO 基线、
+领域实例到 ObjectId 的绑定及分配状态；普通调用方不分别传入或设置这几份状态。
+仅由受控加载和成功提交流程建立、推进其对应关系，不为此另造独立的认证或 receipt 框架。
+Capture/Prepare/Accept 是会话内部组件；其单独可调用不意味着完成持久 Commit。
+
+提交以这次冻结候选完成追加、规定的持久化屏障和 head 发布后，再推进基线与身份绑定；
+不重新 Capture 冒充已提交结果。发布还须保证 branch head 未偏离所选 Parent；MVP 可用单 branch
+单活动工作会话和受控修改保证，不提前承诺多 checkout / 多 writer。branch 的持久引用与内存工作
+会话是不同概念，但不要求为命名立即拆类或程序集。
+
+无历史的新分支建立空会话；重置到历史 Revision 则从目标重建对应状态，推荐使旧会话失效并返回
+新会话。提交空 roots 表示沿原 Parent 清空新视图，不等于创建无历史分支。
+具体公开名称、返回凭据和 Repository API 由消费分片冻结。
+
 长期目标是让 Schema、State、Artifact 的共同引用有一个可裁决的发布点，而不是各自发布
 无法协调的 head；Derived 不充当权威提交的参与者。CommitManifest 是候选表达形状，
 不预先冻结字段表或原子发布实现。

@@ -7,12 +7,11 @@
 
 ## 1. 下一个分片如何选择
 
-[DB-029](design-branches/0029-prepared-object-revision-planning-slice.md) 已将 prepared 内容接入策略与可追加 Revision。
-下一片推荐 [DB-030：异构 Capture 图统一准备内容](design-branches/0030-captured-object-preparation-slice.md)
-（Proposed）：消除保存适配中手写 DTO 分派，SG 提供对象级 binding，Runtime 统一 Prepare。
-将此前混合的 typed 适配 / exact baseline 拆开：本片只建立内存 previous/candidate 来源，
-不把 Current 贴上 Revision 地址当作已验证基线。具体范围和验收只维护在 DB-030。
-持久类型/Schema 与 exact baseline 来源、安装、冷重建仍是后续候选；不自动包含完整 Save、发布与恢复。
+[DB-030](design-branches/0030-captured-object-preparation-slice.md) 已实现统一 typed 内容准备，接续
+[DB-029](design-branches/0029-prepared-object-revision-planning-slice.md) 的策略与可追加 Revision。
+下一轮在持久类型/Schema 解释，和外层工作会话的受控基线/提交闭环之间选择。
+WorkingTree/GraphSession 的职责方向已采纳；exact Parent 来源、加载/安装、发布与故障处理尚未实现。
+选择时明确最小可运行范围及缺失的冷读元数据；不要把内存 Current 直接当作已发布基线。
 
 current 领域 Restore、自定义 struct 和一般 durable 引用可以独立成片。
 它们与存储推进的穿插顺序尚未冻结；不要恢复旧 R4 → R5 → R6 或 P0–P7 为强制流水线。
@@ -25,8 +24,7 @@ B/D/H 分别指 Base 写入字节、Delta 写入字节、当前对象重建字�
 
 | 工作项 | 最小应回答的问题 | 设计或证据入口 |
 |---|---|---|
-| typed 内容准备 | SG binding 和 Runtime 如何从异构 frozen 图统一产生 prepared 内容 | [DB-030 推荐分片](design-branches/0030-captured-object-preparation-slice.md) |
-| exact Parent baseline | 如何证明内存图对应指定 Revision；DTO/Schema 投影怎样重建、安装；追加与发布来源怎样区分 | [DB-030 接缝](design-branches/0030-captured-object-preparation-slice.md#4-exact-parent-接缝明确留到后片)、[DB-022](design-branches/0022-versioned-state-dto-capture.md) |
+| 工作会话与 exact Parent baseline | 已选 Repository 受控创建/加载的 WorkingTree/GraphSession；如何建立、安装、冷重建 Parent / DTO / 实例身份绑定，收敛 Commit API 与失败行为 | [目标约束](DurableGraph-target-design-v0.md#单一发布权威与明确故障结果)、[DB-030 接缝](design-branches/0030-captured-object-preparation-slice.md#4-exact-parent-接缝明确留到后片) |
 | TypeCodec 与 exact Schema 绑定 | 类型组合如何编码；引用约束如何检查；未知类型/版本和错误对象头如何拒绝 | [DB-018](design-branches/0018-generated-graph-codec-shape.md)、[DB-001](design-branches/0001-schema-authority-and-runtime-representation.md) |
 | DTO 升级与领域 Restore | stored exact 版本如何分派、升级为 current DTO，再构造领域对象；失败时不交付半成品 | [DB-022](design-branches/0022-versioned-state-dto-capture.md)、[DB-002](design-branches/0002-read-time-version-upgrade-pipeline.md) |
 | 一般 durable 引用图 | 递归登记、共享/循环、nominal 约束、多态实际类型、完整目录及 roots 可达闭包如何共同成立 | [DB-018](design-branches/0018-generated-graph-codec-shape.md)、[DB-024](design-branches/0024-reference-capture-and-reusable-object-ids.md) |
