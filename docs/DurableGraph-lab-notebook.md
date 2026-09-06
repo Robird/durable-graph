@@ -780,6 +780,15 @@
 
 ## 6. 船长日志
 
+### 2026-09-06：引用 Capture 首片采用单调 ID，形成实施前交接
+
+- **Decided**：用户认可前轮分析，明确将 ID 回收延期，先使用单调分配；要求先写目标与思路，不启动实施。
+- **Draft**：[工作单](WORK-ORDER-REFERENCE-CAPTURE.md)收窄到 roots/string → ID DTO/封闭候选及内存 accept/discard。
+  [Goal 草稿](GOAL-REFERENCE-CAPTURE.md)按 G0–G3 交接，未创建 Goal；G0 根入口与必要公开类型接缝仍待评审。
+- **Proposed implementation detail**：失败/discard 可消耗号码但不改变 parent；accept 清理退役绑定，数字不回收。
+  只保证当前会话单调，持久 high-water mark、字符串恢复、循环/struct/数组/BCL 均延期。
+- 本轮核对当前生成器、测试、包依赖与路径，仅编辑文档；未重跑产品构建/测试，历史 471/471 不当作新验证。
+
 ### 2026-09-06：引用 Capture 与可复用 ObjectId 设计讨论
 
 - **Decided**：用户明确 ObjectId 经 StateRevision 解释，允许回收后复用；修订目标文档中“永不复用”的过强约束。

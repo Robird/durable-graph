@@ -373,6 +373,7 @@ Source Generator 为每个 durable type 生成：
 2026-09-06 用户澄清：ObjectId 经 StateRevision 解释，允许回收复用，取代早稿“ID 永不复用”。
 同图共享/循环引用必须保持；不同 revision 中的相同数字不必表示同一对象。具体复用时机、
 候选隔离与内存/物理 GC 分离见 [DB-024](design-branches/0024-reference-capture-and-reusable-object-ids.md)，尚未实施。
+用户随后选择首片采用 session 内单调分配，ID 回收与持久计数器另片推进；不恢复全历史永不复用约束。
 
 ### 10.2 Reachability
 

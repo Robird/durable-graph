@@ -23,7 +23,10 @@ SchemaOnly + GenerateBinaryBody 生成 readonly V1..Vcurrent DTO、current Captu
 历史 DTO 依 exact 祖先闭包生成，不需要旧 CLR 祖先保留。
 下一候选是接 Capture 的 string 引用上下文与最小对象列表；设计讨论见
 [DB-024](../docs/design-branches/0024-reference-capture-and-reusable-object-ids.md)。
-用户明确 ObjectId 经过 StateRevision 解释，可回收复用；复用时机/候选生命周期尚待敲定，未实施。
+用户明确 ObjectId 经过 StateRevision 解释，可回收复用；但首片已选择 session 内单调递增分配，回收延期。
+首片只做 string 引用 Capture、封闭对象列表与内存 accept/discard；尚未实施。
+实施前交接见 [工作单](../docs/WORK-ORDER-REFERENCE-CAPTURE.md)和 [Goal 草稿](../docs/GOAL-REFERENCE-CAPTURE.md)，
+状态为待评审，G0 根入口/公开生成代码接缝需冻结；未创建或启动 Goal。
 自定义 struct 的嵌套布局、exact 版本传播已记入 DB-024 TODO，独立排期；BCL 集合继续暂缓。
 完整图和旧运行时序列化器翻新仍未实施。
 [DB-017](../docs/design-branches/0017-object-codec-design-points.md)保留早期要点/旧实现证据；
@@ -67,7 +70,8 @@ DTO body 支持其中 13 种标量，string 仍须等待统一引用上下文；
   历史 Vn 来自 accepted history，每次再生成，不另存 DTO 源码历史。
 - ObjectId 是指定 StateRevision 内的查找编号；相邻保存中持续存活的对象保留 ID，可回收后重新分配。
   不再要求全历史永不复用；跨 revision 裸 ID 相等不代表同一对象，新占用者应从 Base 开始。
-  DB-024 推荐隔一次成功发布后复用、候选预留/基线隔离，仍为待讨论设计。
+  首片改用单调分配；失败/discard 可烧号，高水位不退回，parent 隔离。
+  Accept 清理退役实例映射但不回收数字；恢复计数器/SlabBitmap/SlotPool/回收时机均延期。
 - 自定义 struct 使用嵌套值布局；字段 exact struct 版本改变要求 owner 及其 inline/base 依赖者升版。
   引用边仍用 nominal 约束，不因引用目标升版而递归传播。类型描述/history 与 nested DTO 尚待实现。
 - 真实 parent、保存视图、变更分类与 Removes 属于调用方；估算计划不能自行证明 live 集合完整。
@@ -81,7 +85,8 @@ DTO body 支持其中 13 种标量，string 仍须等待统一引用上下文；
    rank-2 元素循环支持已有数组的非零下界；shape 编码/分配、其他 rank/非 SZ rank-1 尚未实现。
 3. 已闭合 SG Versioned DTO：SchemaOnly + GenerateBinaryBody 整链启用，所有 current/history closure 支持 13 种标量。
    current Capture 复制 private/base-first/FieldId 字段；readonly Vn 配对 GetSchema(n)，Write(in Vn)/ReadVn 操作 DTO。
-   下一候选为 Capture 的首个 string 消费者接统一引用上下文及最小对象列表；
+   下一片为 string 消费者接统一引用上下文及最小对象列表，采用单调 ID 和内存候选生命周期；
+   字符串对象解码/领域 Restore 留在后续，不在本片尝试绕过独立空串实例分配问题。
    struct 还需 inline exact Schema 表达。不能继续实现旧 string 字段 inline 路径。
 4. 接入真实 ObjectVersion 内容存取；raw Base-only 是小范围候选。codecs 与 raw storage 没有硬性先后依赖，
    当前按用户已选择的 codec-first 推进。

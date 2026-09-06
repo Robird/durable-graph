@@ -1,8 +1,8 @@
 # DB-024：引用 Capture、revision 内身份与可复用 ObjectId
 
-> 状态：Open / Design discussion — 2026-09-06；代码基线 `0b9652c`。
+> 状态：首片方向已确认 / 实施接缝待评审 — 2026-09-06；产品代码基线 `0b9652c`。
 >
-> 用户要求先分析设计；本轮只修改文档，不授权实施完整图、ID 池或 GC。
+> 用户已认可分析，并明确首片改用单调递增 ID、延期回收；本轮要求先形成文档，不启动实施。
 > 承接 DB-018/022/023；本文区分用户已明确的语义与尚待讨论的实施建议。
 
 ## 1. 已明确与本轮建议
@@ -11,7 +11,28 @@
 - 已接受的统一引用身份与 DTO 捕获方向保持：string 也按 ReferenceEquals 区分；引用字段存 ID，
   对象内容进入独立条目；完成 Capture 后，比较/估算/编码消费同一个冻结候选。
 - 本文建议先做内存中 string 引用 Capture 与对象列表，然后单独闭合加载引用保真，
-  最后接真实 StateStore 发布。具体 API、ID 复用时机、string 独立分配尚未冻结。
+  最后接真实 StateStore 发布。首片不用回收池；具体 API 与后续 string 独立分配仍需核验。
+
+## 1.1 首片初始目标（本次用户确认后的收窄）
+
+范围是“标量 + string 的领域 roots → ID 化 Versioned DTO → 封闭候选”，
+以及单会话、单在途候选的 accept/discard 内存见证。string 作为独立内容条目，引用槽不 inline 内容。
+不在首片实现字符串对象解码/领域 Restore、Durable 对象互引/循环、ID 回收池或完整 Save。
+实施交接见 [工作单](../WORK-ORDER-REFERENCE-CAPTURE.md)；[Goal 草稿](../GOAL-REFERENCE-CAPTURE.md)尚未启动。
+
+- 一个 CaptureSession 从非零 uint 域单调分配；0 表示 null。分配过的号在该 session 内不再发放。
+  实施建议：失败/discard 允许消耗号码，高水位不回退；这免去首片的号段回滚与回收状态。
+- parent 的有效实例绑定只用于保持相邻已接受图中持续存活对象的 ID；新绑定由候选持有。
+  Capture 出错或 discard 不改变 parent；accept 安装原候选 DTO，不能重新读取已经变化的领域对象。
+- 仍计算完整 live 集合及 `parentLive - candidateLive`，accept 后去掉退役实例映射，避免会话无限持有领域对象。
+  清理映射不等于回收数字：对象重新入图会取得更大的新号。
+- 首片从空会话开始，不承诺跨进程/跨 session 单调，不增加持久 high-water mark；
+  不用 `max(live IDs)+1` 冒充全历史分配器。恢复计数器属于后续存储接入。
+- 在 uint 域耗尽时明确失败，不回绕为 0 或旧号；用 near-limit 测试接缝验证，不分配数十亿对象。
+- string Capture 可保留原不可变实例，null/空串/孤立代理项都不需要内容解码。
+  多个独立空串的恢复问题因此不会阻塞本片，但不宣布它已经解决。
+
+下文第 4 节及第 5 节的数字回收/预留解除策略均为延期素材，不是本片实现要求。
 
 ## 2. ObjectId 的作用域
 
@@ -81,9 +102,9 @@ roots: [1]
 条目至少携带明确的内存 kind（String 或 Durable + exact Schema）和内容。
 它对应未来对象头 TypeCodec 的职责，但首片不冻结数组/泛型 TypeCodec，也不假造完整磁盘图格式。
 
-## 4. 回收与复用时机：建议先隔一次成功发布
+## 4. 回收与复用时机：延期素材，首片不实施
 
-建议首片把 parent 的所有 live IDs 暂时保留；新对象只从 parent 已空闲且未被本候选预留的 ID 中分配。
+以下是用户决定延期回收之前的候选方案，待重新排期时复审。若实施回收，可把 parent 的所有 live IDs 暂时保留；新对象只从 parent 已空闲且未被本候选预留的 ID 中分配。
 本轮发现的 Removes 在发布成功后才释放，下一个候选可以立即复用；不会等待全部历史 revision 被删除。
 首个内存分片只显式模拟 accept/discard，不将其称为实际 durable commit。
 
@@ -148,22 +169,23 @@ roots: [1]
 建议分成有依赖的两个小片，而非在 string 首片同时实现所有 Save/Load：
 
 1. **引用 Capture 与候选生命周期**：已支持标量的领域 roots + string 字段、继承 Capture 共享上下文；
-   产出闭合的混合对象列表与 ID DTO。内存 parent/accept/discard 见证稳定 ID、移除、隔发布复用和失败隔离。
+   产出闭合的混合对象列表与 ID DTO。内存 parent/accept/discard 见证稳定 ID、移除、单调分配和失败隔离。
    首片尚无 Durable 相互引用；分配后入队的骨架将来可扩展到自环/互环，不宣称已支持。
 2. **字符串对象编码和引用恢复**：引用槽写非零 uint/0，字符串记录写内容；
    为各条目建立加载表再解析 owner DTO，验证存在性/类型/共享。随后才接 Durable 对象壳与循环恢复。
    先明确恢复到 resolved witness 还是完整领域 Restore；不偷偷把 DTO Upgrade/构造规则并入本片。
 
 必需见证：同实例多引用、相等内容不同实例、null/空串/代理项、Capture 后领域引用变更不影响候选；
-跨 Capture 存活对象保持 ID；R10→移除→R12 复用且旧 R10 可读；旧实例重新挂入、discard 重试不串号；
-missing ID/重复 ID/错误类型不返回半成品。完整磁盘保存不在这些内存见证的结论范围内。
+跨 Capture 存活对象保持 ID；旧实例重新挂入、discard 重试取得新号且不串号；uint 耗尽明确失败。
+R10→移除→R12 复用且旧 R10 可读属于回收分片；missing ID/错误引用类型的载入拒绝属于恢复分片。
+完整磁盘保存不在这些内存见证的结论范围内。
 
 string 恢复有一个已有缺口：StringPayloadCodec 的空内容路径直接返回 string.Empty，属于内容 codec，
 不能直接证明多个独立空串对象的引用保真。实施恢复前应做实际分配见证；若输入存在不同空串实例，
 应选能独立分配的机制或明确拒绝该输入，不能无声合并。Capture 自身可精确保留这些引用关系。
 
-尚待与用户敲定：隔发布复用还是同候选复用；离开 durable roots 后身份结束/是否需要 pin；
-首片恢复边界，以及独立空串分配的处理。以上建议尚不是已实施功能。
+首片不提供 pin：accept 后离开 durable roots 的实例绑定结束，数字不回收。恢复完整领域对象另片推进。
+隔发布/同候选复用与独立空串分配仍留待后续；当前需评审的公开生成代码接缝见工作单 G0。
 
 ## 8. 自定义 struct TODO：可独立排期，共享 Capture 接缝
 
