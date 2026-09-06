@@ -44,9 +44,10 @@
 | [DB-020](0020-typed-slot-array-binding-slice.md) | typed 值槽位与数组元素 binding 分片 | Chosen | primitive/ref 槽位及 SZ/rank-2 元素循环；DB-022 接 SG DTO body，完整数组对象 codec 另片推进 |
 | [DB-021](0021-generated-primitive-body-slice.md) | 实际生成的 primitive class body | Superseded | 直接领域 Read/Write 接口由 DB-022 的 Versioned DTO/Capture 取代；保留原片证据 |
 | [DB-022](0022-versioned-state-dto-capture.md) | Versioned DTO、Capture 与 DTO binary body | Chosen | readonly scalar Vn/历史积累/current Capture；string 引用 Capture 已由 DB-024 接入，比较/估算、DTO 升级与 StateStore 管线另片推进 |
-| [DB-023](0023-scalar-schema-dto-slice.md) | 标量 Schema、历史与 DTO 编码贯通 | Chosen | 13 种标量贯通；string 引用 Capture 已落地，内容编码/引用恢复为下一候选 |
+| [DB-023](0023-scalar-schema-dto-slice.md) | 标量 Schema、历史与 DTO 编码贯通 | Chosen | 13 种标量贯通；DB-024/025 已补 string Capture/内容读取，struct 与一般图另片 |
 | [DB-024](0024-reference-capture-and-reusable-object-ids.md) | 引用 Capture、revision 内身份与可复用 ObjectId | Chosen | SG root 适配器、封闭 ID DTO 图及内存 accept/discard；回收/恢复/struct 延期 |
 | [DB-025](0025-string-object-decoding-slice.md) | string 对象内容解码与引用槽校验分片 | Chosen | string-only 解码表、SG 各版引用校验、空串两端统一已验证；完整图目录/Restore/Storage 内容接入另片 |
+| [DB-026](0026-raw-base-object-content-slice.md) | 同 Revision Frame 的 raw Base 对象内容存取 | Open | 推荐下一片；完整 local Base records、exact-head 重开读取及 provisional wire 迁移尚未实施 |
 
 ## 附录文件
 

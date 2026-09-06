@@ -18,9 +18,11 @@
 
 ## 2. 当前基线
 
-记录日期：2026-09-05
+记录日期：2026-09-06
 
-- **Observed**：仓库已跑通 boxed-value 的内存 Save/Load 与 read-time upgrade demo，并以隔离探针跑通单类型 Flat Graph Delta R1、generated graph operations R2、StoredGraphImage normalization R3a 与 two-pass CLR materialization R3b；production runtime/default Generator 仍无对象身份、reference graph、wire format 或持久化实现。
+- **Observed**：仓库已跑通 boxed-value 内存 Save/Load/upgrade 与隔离探针 R1–R3b；产品已实现
+  SG Versioned DTO/body、string 引用 Capture/读取及 membership 文件存取，仍无完整领域图恢复、
+  持久 ObjectVersion 内容或 Save/发布闭环。精确产品边界见 [共享工作集](../src/PROJECT-STATE.md)。
 - **Observed**：`DurableGraph.slnx` 当前包含原 runtime、Generator、Build tool、CLI 和 Tests，以及三个
   StateStore 产品项目和三个配套测试项目；Build tool 仍是随 NuGet 包部署的私有 snapshot-history
   publisher/verifier，不承载运行时持久化语义。
@@ -779,6 +781,18 @@
 ```
 
 ## 6. 船长日志
+
+### 2026-09-06：规划 DB-026 同 Frame raw Base 内容存取
+
+- **Observed**：在 `171581e` 只读核验，SG DTO/string 已有独立 bytes 闭环，Storage 仍是
+  membership-only；local heads 指向 containing Revision Frame，不能用独立 blob store 无缝替代。
+- **Tentative**：下一片推荐 [DB-026](design-branches/0026-raw-base-object-content-slice.md)，
+  由完整 local Base records 统一产生 IDs 与内容，跨 Revision/Segment 重开后按 exact head 读取。
+  保留 ObjectHeadMap Base/Delta；推荐收回仅 ID 的 ObjectVersion Delta 占位并升级 provisional wire，
+  不兼容旧 v1。此为显式原型迁移建议，尚未实施，也不取消后续对象 Delta/policy 方向。
+- **Observed**：独立候选比较、Storage 事实调查和反方审查已完成；草稿无阻断。
+  核心边界包括输入/pooled bytes 所有权、错误 external locator 拒绝、删除后同 ID 新 Base 的视图隔离。
+  本轮仅文档，不复跑历史测试，不新增产品能力。
 
 ### 2026-09-06：完成 DB-025 string 内容读取与引用校验，空串明确规范化
 

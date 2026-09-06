@@ -26,14 +26,19 @@
 
 ## 2. 当前研究方向
 
-### 2.1 当前优先方向：DB-025 string 读取分片与后续内容接入
+### 2.1 下一分片建议：DB-026 raw Base 内容接入
 
 DB-024 的 string 引用 capture 与内存候选已封闭，下一步保持切片独立：
 
 - [DB-025](design-branches/0025-string-object-decoding-slice.md) 已实现并通过验收：
   保留 ID DTO，以 string 解码表 + SG 各版引用校验形成 typed 字节见证，领域 Restore 另片；
 - 用户已选择空串两端统一 string.Empty，非空保留身份；不再要求独立空串分配，不顺带实现通用循环图；
-- 再以 raw Base-only 小片接入 `ObjectVersion` 内容存取，之后才让策略消费真实估算与保存视图。
+- [DB-026](design-branches/0026-raw-base-object-content-slice.md) 已完成下一片规划，尚未实施：
+  同 Revision Frame 保存完整 local Base records，再由 exact Revision/ObjectId 跨文件重开读取。
+  推荐整体迁移 membership-only 模型与 provisional wire，保留 ObjectHeadMap Base/Delta，
+  暂时收回只有 ID 的 ObjectVersion Delta 占位；取舍详见该文。
+- 之后由真实内容消费者收敛对象 Delta/prior 链、比较估算与保存视图，再连接策略；
+  current 领域 Restore、Durable 互引和 struct 保持独立候选，不提前冻结全部先后次序。
 
 MultiSegment probe 已完成其文件级 address/rollover 风险验证，产品 Storage 已吸收相应机制；它继续作为证据来源，
 不再充当当前产品路线图。
