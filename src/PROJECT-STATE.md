@@ -91,8 +91,10 @@ DTO body 支持 13 种标量及 string 引用的 UInt32 ID；String 内容独立
    rank-2 元素循环支持已有数组的非零下界；shape 编码/分配、其他 rank/非 SZ rank-1 尚未实现。
 3. 已闭合 SG 标量/string ID Versioned DTO 与内存候选；root 登记、Seal 捕获、Accept/Discard、失败烧号、退役映射清理均有见证。
    历史 String/旧 CLR 祖先消失后仍按 exact 布局生成 ID DTO；ReadVn 只读数字，不验证/解析引用目标。
-   下一候选是独立的 string 对象编码与引用恢复，先裁决 resolved witness/领域 Restore 边界，
-   并验证独立空串分配，不自动并入本 Goal。struct 仍需 inline exact Schema 表达，独立排期。
+   下一分片推荐见 [DB-025](../docs/design-branches/0025-string-object-decoding-slice.md)（Open，尚未实施）：
+   string 内容解码表 + SG 各版引用槽校验，保留 ID DTO，以 typed 字节见证闭合引用保真；领域 Restore 另片。
+   首先验证独立空串分配，再裁决必要接缝；不提前建立通用图加载/TypeCodec registry。
+   struct 仍需 inline exact Schema 表达，独立排期。
 4. 接入真实 ObjectVersion 内容存取；raw Base-only 是小范围候选。codecs 与 raw storage 没有硬性先后依赖，
    当前按用户已选择的 codec-first 推进。
 5. 根据真实消费者收敛 Delta、原始版本链、B/D/H 的来源与提交更新，再接策略和 Save。

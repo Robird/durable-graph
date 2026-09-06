@@ -30,8 +30,9 @@
 
 DB-024 的 string 引用 capture 与内存候选已封闭，下一步保持切片独立：
 
-- 先裁决 resolved-reference witness 与领域 Restore 的边界，并验证独立空串的引用身份；
-- 为 string 对象条目补内容编码/解码和最小引用解析，不顺带实现通用循环图；
+- [DB-025](design-branches/0025-string-object-decoding-slice.md) 已记录下一片推荐（Open，尚未实施）：
+  保留 ID DTO，以 string 解码表 + SG 各版引用校验形成 typed 字节见证，领域 Restore 另片；
+- 先验证独立空串分配，再为 string 对象条目补内容编码/解码和最小引用解析，不顺带实现通用循环图；
 - 再以 raw Base-only 小片接入 `ObjectVersion` 内容存取，之后才让策略消费真实估算与保存视图。
 
 MultiSegment probe 已完成其文件级 address/rollover 风险验证，产品 Storage 已吸收相应机制；它继续作为证据来源，

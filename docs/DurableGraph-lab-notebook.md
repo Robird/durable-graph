@@ -780,6 +780,16 @@
 
 ## 6. 船长日志
 
+### 2026-09-06：规划 string 对象解码与引用槽校验分片
+
+- **Observed**：在 `327a425` 核验现有 Capture/ID DTO 与 string 内容 codec；ReadVn 尚不解析引用，
+  string 读写入口为 internal，空内容解码明确返回 string.Empty；本轮未重新运行历史测试。
+- **Proposed**：主代理与独立设计子代理推荐 [DB-025](design-branches/0025-string-object-decoding-slice.md)：
+  保留 uint DTO，增加 string-only 解码表与 SG 各版引用槽校验，真实 typed 消费者从 bytes 验证引用保真。
+  该表不证明完整异构目录唯一性；不提前引入 resolved DTO、领域 Restore 或通用 registry。
+- **Open**：独立空串分配是首个执行检查点；若机制需要 private runtime 依赖或缩小支持合同，应另行裁决。
+  本轮只规划/更新文档，没有产品代码改动或下一片实现结果。
+
 ### 2026-09-06：string 引用 Capture、ID DTO 与内存候选闭环
 
 - **Decided**：用户采纳 SG 根登记适配器与 Runtime 统一会话/候选管理，G0 冻结后完成 DB-024 首片。

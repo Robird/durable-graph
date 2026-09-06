@@ -278,7 +278,9 @@ G0 推荐方案按用户决定落地：Runtime 的 CaptureSession/Context/Captur
 1. **引用 Capture 与候选生命周期（已实现）**：已支持标量的领域 roots + string 字段、继承 Capture 共享上下文；
    产出闭合的混合对象列表与 ID DTO。内存 parent/accept/discard 见证稳定 ID、移除、单调分配和失败隔离。
    首片尚无 Durable 相互引用；只登记根并顺序 Capture，不宣称已支持自环/互环。
-2. **字符串对象编码和引用恢复（待排期）**：引用槽的 uint/0 body 已实现，下一片才接字符串记录内容；
+2. **字符串对象编码和引用恢复（推荐方案已记录，尚未实施）**：见 [DB-025](0025-string-object-decoding-slice.md)。
+   推荐保留 ID DTO，以 string 解码表和 SG 各版引用校验完成 typed 字节见证，领域 Restore 另片；
+   独立空串分配及必要公开接缝仍需先取得证据/裁决。引用槽的 uint/0 body 已实现，下一片才接字符串记录内容；
    为各条目建立加载表再解析 owner DTO，验证存在性/类型/共享。随后才接 Durable 对象壳与循环恢复。
    先明确恢复到 resolved witness 还是完整领域 Restore；不偷偷把 DTO Upgrade/构造规则并入本片。
 
