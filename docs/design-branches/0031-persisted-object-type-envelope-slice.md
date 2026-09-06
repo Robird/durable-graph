@@ -1,8 +1,8 @@
 # DB-031：持久 Schema 注册与 Base 类型引用
 
-> 状态：Revised proposal — 2026-09-07 用户已采纳 MVP 单调注册方式，其余施工合同尚待细化。
-> 用户本轮提出设计建议并允许修订文档，没有要求开始实施。
-> 当前产品仍为 `6439ee5` 的 DB-030；上一版提案提交为 `5fdc371`。
+> 状态：Chosen / Implemented — 2026-09-07 用户已授权按讨论结果实施，施工合同见 §8。
+> §1–7 保留设计讨论的理由与边界；接口、恢复和本片实施事实以 §8 为准。
+> 提案修订时的产品基线为 `6439ee5`（DB-030）；上一版提案提交为 `5fdc371`。
 
 ## 1. 本次修正与目标
 
@@ -192,8 +192,129 @@ Schema 定义记录属于共享元数据写入，不重复计入每个对象 B/D
 
 ## 7. 本轮讨论核对
 
+本节记录进入实施前的文档修订轮，实施结果见 §8。
+
 主代理核对了现有 InMemory 两类 Store、逻辑图 normalization/save 见证、产品 BaseOnlyUpdate
 与 planner；两位 subagent 再次评估并交叉讨论，撤回逐 Delta 重复头与临时对象内联 Schema 的推荐。
 也讨论了 catalog head 与单调注册表；选择后者作为修订建议，保留其确认/恢复边界待施工细化。
 本轮仅文档修订，没有运行或修改产品代码，不把旧测试结果算作本片的新验证。
 修订稿经过独立复审；五份 Markdown 的 123 个本地链接及引用锚点有效，UTF-8/LF 与 Git diff 检查通过。
+
+## 8. 实施合同与账本
+
+实施起点 `34606ca`，工作区干净。主代理按 spec-driven-implementation 分派子任务，集中串行运行
+dotnet。基线 build 0 警告/错误，全套 tests 685/685，无跳过；这不是本片最终验证结果。
+
+### 8.1 本片冻结的接缝
+
+- 既有 StateStore 项目增加 Runtime 引用；Runtime/SG/Storage 不增加反向依赖，不新增程序集。
+  复用既有 SchemaNotFoundException（公开其构造器）和 SchemaConflictException。
+- public `SchemaKey(string schemaId, int version)`：ordinal key，非空白 ID、正 Int32 version。
+  wire key 复用 canonical WriteString + VarUInt32 version，不使用进程 hash。
+- public `SchemaStore(IRbfFile file, bool readOnly = false)` 借用一份专用 Schema RBF 日志，
+  构造时严格恢复；文件由调用方创建/打开及释放，SchemaStore 使用期间须独占其读写。
+  `RegisterBatch(IEnumerable<DurableSchema>)`、`Register(schema)`、`GetRequired(key)` / `(id,version)`、
+  `Count`、`IsFaulted`；readonly 禁注册。一个 Schema 文件先不轮转，与 State 的 SegmentStore 分开。
+- public `BaseObjectPayloadCodec.EncodeString(rawBase)` / `EncodeDurable(schema,rawBase)` 产生 owned
+  PreparedBase；`Decode(payload)` 返回 owned `BaseObjectPayload` 的 Kind、SchemaKey? 和 raw Body。
+  编码不自行注册，保存协调器保证先注册。只有 Base 有头；Delta 和 Runtime Capture/Prepare 继续 raw。
+- public `TypedObjectVersionReader.ReadDurable<TState>(chain,schemas,expectedSchema,readBase,applyDelta)`
+  核对 Base 完整定义后，调用 typed delegates 并逐 body 检查全消费；ReadString(chain) 不查 SchemaStore，
+  只接受单 Base，保留现有 string 编码与 Empty 规则。不生成 CLR codec registry、Upgrade 或领域实例。
+- internal `CapturedRevisionPlanner.PrepareRevision(store,schemas,parent,input,parameters)` 检查
+  Previous/Parent 存在性、完整 prior ID 集合、每个 survivor 的 Base kind/完整 Schema，再批量注册全部
+  current Schema，包 Base 并调用原 planner。NoChange 也检查，跨 Schema 拒绝，迁移不自动回退 Base。
+  仍由上层保证 DTO 内容与 Parent 对应；本片不制造持久 baseline 认证或执行 Accept/State 发布。
+
+### 8.2 Schema 注册格式与恢复
+
+采用一批次一完整 RBF 帧，tag `0x31424753`（little-endian `SGB1`），无 TailMeta；payload：
+
+```text
+formatVersion : byte 1
+definitionCount : canonical VarUInt32，至少 1
+按 SchemaId ordinal、Version 升序的各声明：
+    key : canonical string + positive VarUInt32 version
+    hasBase : byte 0 | 1
+    optional baseKey
+    fieldCount : canonical VarUInt32
+    各字段 : ascending positive VarUInt32 FieldId + byte fieldType
+```
+
+fieldType v1 显式固定为 TypeTag 现有 1..14 的对应类型，不因 enum 增长自动支持新 wire tag。
+依赖允许指向已注册定义或本批次声明；解析完整批次后验证闭包、循环和最大 256 段继承深度。
+字段严格递增，长度/count 受输入边界约束，未知版本、tag、重复定义、尾随 bytes 等拒绝。
+完整输入闭包预检并预建替换索引、编码/容量检查后，才 Append → DurableFlush → 安装索引。
+输入为空或全部等价时不追加、不 flush；同 key 不同 shape 在任何写入前失败。
+
+专用日志严格使用 ScanForward(showTombstone:true)，检查 TerminationError，并逐帧 ReadPooledFrame
+验证 payload CRC。未知 tag、TailMeta、tombstone 或非法批次均拒绝；本路径不使用 builder 取消帧。
+不使用 SegmentStore 默认的自动尾部恢复，也不调用跳过坏帧的 recovery scanner。
+
+**故障边界选择：不自动修复坏尾。** 没有额外持久确认水位时，无法可靠区分尚未完成的追加与
+已确认的末帧后来损坏；因此 torn/损坏日志打开失败且保持原样，不能承诺自动丢尾又绝不丢已确认帧。
+完整但追加/flush 返回未知的批次可在重新打开后确认。进入追加后的异常使实例 faulted，重开前拒绝
+继续读写注册状态；预检错误不使实例失效。文件新建目录项/power-loss 保证不超出底层 FlushToDisk
+合同，不据本片宣称整个 Repository crash recovery。自动尾修复不是此片验收项。
+
+可写打开恢复了非空注册表后，还须完成一次 DurableFlush 才返回实例；这为此前结果未知的完整
+批次重新建立确认屏障，不能仅因 OS cache 可读而将其用于后续 State 保存。只读打开不 flush、
+不提供新持久确认且禁止 Register。正常幂等注册依旧零追加/flush。
+
+Base body 格式：`byte version=1 + byte kind(1=String,2=Durable) + optional SchemaKey + raw body`。
+该版本约定当前 Base/Delta body 解释；Schema 版本不代替 codec 格式版本。Storage v3 不变。
+B 含 Base 头，D 无类型头，H 从原记录实编码计算；共享 Schema 注册帧不摊入对象 B/D/H。
+
+### 8.3 责任与验收
+
+| 合同 | 负责人 / 路径 | 验证 | 状态 |
+|---|---|---|---|
+| key、canonical 批次、持久注册、严格恢复及故障状态 | SchemaStore 子任务 / StateStore | SchemaStore / batch tests | 已验证 |
+| Base 头、owned bytes、exact typed 读取 | Base codec 子任务 / StateStore | Base payload / typed reader tests | 已验证 |
+| Schema 预检与 raw planner 桥接 | 主代理 / CapturedRevisionPlanner | 集成反例及保存链 | 已验证 |
+| 真实 SG 历史与异构冷读，删除外带类型字典 | integration 子任务 / DurableGraph.Tests | PreparedRevision / PersistedDeltaChain | 已验证 |
+| 实际 StateStore + Runtime 包消费 | package 子任务 / PackageConsumerProbe | 独立 feed、真实 RBF 冷重开 | 已验证 |
+| 独立审查、集中验证、文档收尾 | 主代理 + reviewer | 根 build/tests、原/新 package probes、diff/链接 | 已验证 |
+
+满足 §6 收窄后的验收与上述故障合同即停止；新 DTO Upgrade、工作会话/联合 Commit、roots、
+SchemaStore 自托管、Dictionary/内建复合类型以及 ID/物理回收只保留后续方向。
+
+### 8.4 实施结果与验证
+
+实际入口：
+
+- [SchemaStore](../../src/DurableGraph.StateStore/SchemaStore.cs)、[SchemaKey](../../src/DurableGraph.StateStore/SchemaKey.cs)、
+  [SchemaBatchWireCodec](../../src/DurableGraph.StateStore/SchemaBatchWireCodec.cs) 实现借用文件、批次预检/规范编码、
+  严格恢复、可写重开确认及 faulted 状态；tail 检查拒绝过期 facade 或回调期间的外部追加。
+- [BaseObjectPayloadCodec](../../src/DurableGraph.StateStore/BaseObjectPayloadCodec.cs) 与
+  [TypedObjectVersionReader](../../src/DurableGraph.StateStore/TypedObjectVersionReader.cs) 实现 Base-only 类型头、
+  owned raw body、callback 前完整 Schema 匹配，以及每段 body 全消费；string 无 Schema 查询且拒绝 Delta。
+- [CapturedRevisionPlanner](../../src/DurableGraph.StateStore/CapturedRevisionPlanner.cs) 统一完成保存适配，
+  同版/Parent/完整 prior membership 校验先于任何注册写入。Schema 注册持久成功不等于 State 发布。
+- [真实 SG 保存集成](../../tests/DurableGraph.Tests/PreparedRevisionGeneratorTests.cs) 保留五轮异构根和
+  string 共享，删除 per-record 类型字典；独立 H golden 从旧 70 更新为 97（68 raw + 27 type header + 2 envelope），
+  实际 Delta 字节不加头，策略主动 Base 重置 H。
+- [持久历史链](../../tests/DurableGraph.Tests/PersistedDeltaChainGeneratorTests.cs) 验证旧祖先 CLR 定义删除
+  后仍由持久 exact Schema 匹配旧版静态 reader；缺失 Schema、同 key 不同祖先与错误版本在 body callback 前拒绝。
+- [保存失败集成](../../tests/DurableGraph.Tests/GeneratedSchemaPersistenceTests.cs) 覆盖全批冲突零追加、
+  NoChange 的错误 Parent/type 拒绝及有效重试；合法 Schema 注册后 State readonly Append 确定失败，
+  Schema 仍能冷重开，候选未安装。
+
+2026-09-07 主代理集中执行（subagents 未并行构建）：
+
+- `dotnet build DurableGraph.slnx --verbosity quiet`：最终 0 警告、0 错误。
+- StateStore 新机制 focused tests：76/76（SchemaStore、SchemaBatchWireCodec、BaseObjectPayload、TypedObjectVersionReader）。
+- DurableGraph 持久生成 focused tests：5/5；其余 5 个 Parent 拒绝 theory cases 随完整 suite 执行。
+- `dotnet test DurableGraph.slnx --no-build --verbosity quiet`：768/768，无跳过；DurableGraph 381、
+  StateStore 129、Storage 155、Serialization 103，比基线净增加 83 项。
+- `./experiments/PackageConsumerProbe/Run-StateStoreProbe.ps1`：通过。独立本地 feed 中 8 个依赖包，
+  显式 Runtime + StateStore PackageReference，无手工 Analyzer/ProjectReference；2 份 generated history，
+  六项输出标记全部通过。产物 `experiments/PackageConsumerProbe/obj/state-store-run-20260906164520-41228-9d7c068f`。
+- `./experiments/PackageConsumerProbe/Run-Probe.ps1`：原单 Runtime 包回归通过，history count 7；
+  产物 `experiments/PackageConsumerProbe/obj/run-20260906164627-4776`。
+- 独立 reviewer 检查最终产品、测试和新包消费者，无未解决阻塞项；主代理复查实际 diff 与执行结果。
+  27 个修改文件为 UTF-8/LF；6 份 Markdown 的 144 个本地文件链接及引用锚点有效，Git diff 检查通过。
+
+产品变更仅为 StateStore 新机制及依赖、Runtime 异常构造器可见性；Storage wire、SG raw body、
+策略算法和上游源码未变。故障验证是进程内文件及 close/reopen 的定向注入，不是断电模拟。
+严格坏尾拒绝、显式 reader/roots、未实现新 DTO Upgrade/Restore/WorkingTree 等边界均按合同保留。

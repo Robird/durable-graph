@@ -1070,7 +1070,9 @@ public sealed partial class DurableSchemaGeneratorTests {
             syntaxTrees: [syntaxTree],
             references: PlatformReferences().Append(
                 MetadataReference.CreateFromFile(typeof(DurableBase).Assembly.Location)).Append(
-                MetadataReference.CreateFromFile(typeof(Atelia.DurableGraph.StateStore.Serialization.BinaryPayloadReader).Assembly.Location)),
+                MetadataReference.CreateFromFile(typeof(Atelia.DurableGraph.StateStore.Serialization.BinaryPayloadReader).Assembly.Location)).Append(
+                MetadataReference.CreateFromFile(typeof(Atelia.DurableGraph.StateStore.SchemaStore).Assembly.Location)).Append(
+                MetadataReference.CreateFromFile(typeof(Atelia.DurableGraph.StateStore.Storage.ObjectVersionChain).Assembly.Location)),
             options: new CSharpCompilationOptions(
                 OutputKind.DynamicallyLinkedLibrary,
                 nullableContextOptions: NullableContextOptions.Enable));

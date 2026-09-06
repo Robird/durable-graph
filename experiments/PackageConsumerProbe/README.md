@@ -77,3 +77,23 @@ returns that same singleton, while duplicate IDs remain invalid and ID zero rema
 consumer proves this through generated Capture with independently allocated empty test inputs and
 then byte-only loading. Public `Replace` calls supply those test inputs with explicit identity
 assertions; product behavior has no dependency on that allocation behavior or private runtime hooks.
+
+An additional public StateStore package consumer exercises persistent Schema registration and
+Base-only type references through actual packages:
+
+```powershell
+./experiments/PackageConsumerProbe/Run-StateStoreProbe.ps1
+```
+
+This independent script packs the eight local dependency packages into an isolated feed/cache,
+including the unmodified sibling `atelia` substrate projects. Its consumer explicitly references
+`Atelia.DurableGraph` for generator/build assets and `Atelia.DurableGraph.StateStore` for storage
+operations, with no manual analyzer, import or project-reference wiring. Generated capture freezes
+two inherited owners sharing a string. Schema registration persists the ancestor closure, is
+idempotent, and rejects a conflicting batch before append. Manually selected Base then raw Delta
+records are written to real segments; read-only reopening recovers exact Schema definitions and
+uses public typed readers plus static generated bodies to reconstruct both revisions and validate
+shared string references. Only Base carries a type header; string has no SchemaStore dependency.
+The script requires all six output markers and retains artifacts under its unique ignored `obj`
+directory. It does not test the internal representation policy, publish a head, upgrade DTOs,
+discover CLR types, or restore domain instances.

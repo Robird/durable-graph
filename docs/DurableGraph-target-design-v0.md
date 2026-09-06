@@ -76,7 +76,9 @@ Source Generator 负责可在编译期确定的类型知识与机械代码，框
   祖先 exact 依赖改变时，受影响的派生版本也必须递增。
 - inline struct 也是 exact 布局依赖，其版本变化沿 inline/base 依赖传播到 owner。
   引用成员使用稳定 nominal 类型约束，不因引用目标升版而递归升版整个引用图。
-- 引用对象头表达实际 exact 类型/Schema。TypeCodec 表达受支持类型经数组或泛型构造的组合；
+- 引用对象的 Base 头表达实际 exact 类型/Schema，后续 Delta 沿同一 Schema 解释；版本变化从新 Base 开始。
+  读取先在 stored Schema 下完整重建，再升级；仍存活的升级对象下次显式保存必须 Base，即使业务值未变。
+  TypeCodec 表达受支持类型经数组或泛型构造的组合；
   类型表达能力与是否存在相应 codec 是两个条件，可表达不等于可读写任意 CLR 类型。
 - SG 已知字段/元素类型时直接绑定字节原语或静态值 body，不为每个已知槽位增加 Type 查表、
   委托或虚调用。运行时开放组合的绑定接缝不能反过来支配静态成员的生成形状。
@@ -102,7 +104,7 @@ Source Generator 负责可在编译期确定的类型知识与机械代码，框
   外层拥有最终发布 head；raw body 读取不等价于类型或完整图验证。
 - 对象 Delta 显式引用同 ObjectId 的 prior record，并与其 containing Revision 的 exact Parent 当前 head 对照。
   新 Base 截断对象内容重建链；这不等于截断 membership 读取、历史查询或允许删除旧文件。
-- B/D/H 采用统一对象 payload 口径，包含对象独有 kind/prior/length/body，未来类型头亦应计入；
+- B/D/H 采用统一对象 payload 口径，包含对象独有 kind/prior/length/body 及 Base 的类型引用；
   排除 ObjectId key、共享 membership/Frame/对齐。H 从原 Frame 实编码累计，是成本代理而非总物理 I/O。
 
 地址方向来源：[DB-014](design-branches/0014-multi-segment-backward-file-distance.md)；

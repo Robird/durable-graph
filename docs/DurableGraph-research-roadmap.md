@@ -7,13 +7,11 @@
 
 ## 1. 下一个分片如何选择
 
-[DB-030](design-branches/0030-captured-object-preparation-slice.md) 已实现统一 typed 内容准备，接续
-[DB-029](design-branches/0029-prepared-object-revision-planning-slice.md) 的策略与可追加 Revision。
-下一分片为 [DB-031 修订提案：持久 Schema 注册与 Base 类型引用](design-branches/0031-persisted-object-type-envelope-slice.md)，
-未实施。2026-09-07 讨论改荐直接持久化 Schema 注册与冲突检查，仅 Base 保存类型引用；
-撤回临时内联方案。注册确认/恢复、引用与 API 合同仍待冻结，不据此宣称已有 SchemaStore。
-WorkingTree/GraphSession 的职责方向已采纳；exact Parent 来源、roots、加载/安装、发布与故障处理
-尚未实现。不要把内存 Current 直接当作已发布基线。
+[DB-031](design-branches/0031-persisted-object-type-envelope-slice.md) 已闭合持久 Schema 注册、Base 类型引用
+及显式 reader 的同版冷重建，接续现有统一准备和策略。下一轮从 roots/自动读取分派、新 DTO
+升级及加载身份/基线导入，或受控工作会话中选择一个可观察闭环，不预定扩大为完整 Commit。
+WorkingTree/GraphSession 的职责方向已采纳；发布/故障裁决尚未实现。不要把内存 Current、Schema
+注册成功或 State Append 返回地址直接当作已发布基线。Schema 严格坏尾拒绝合同见 DB-031 §8。
 
 current 领域 Restore、自定义 struct 和一般 durable 引用可以独立成片。
 它们与存储推进的穿插顺序尚未冻结；不要恢复旧 R4 → R5 → R6 或 P0–P7 为强制流水线。
@@ -27,7 +25,7 @@ B/D/H 分别指 Base 写入字节、Delta 写入字节、当前对象重建字�
 | 工作项 | 最小应回答的问题 | 设计或证据入口 |
 |---|---|---|
 | 工作会话与 exact Parent baseline | 已选 Repository 受控创建/加载的 WorkingTree/GraphSession；如何建立、安装、冷重建 Parent / DTO / 实例身份绑定，收敛 Commit API 与失败行为 | [目标约束](DurableGraph-target-design-v0.md#单一发布权威与明确故障结果)、[DB-030 接缝](design-branches/0030-captured-object-preparation-slice.md#4-exact-parent-接缝明确留到后片) |
-| TypeCodec 与 exact Schema 绑定 | 首片拟闭合持久 Schema 注册、string/durable Base 类型引用；一般类型组合、nominal 引用约束与自动 reader 分派仍待后续 | [DB-031 提案](design-branches/0031-persisted-object-type-envelope-slice.md)、[DB-018](design-branches/0018-generated-graph-codec-shape.md)、[DB-001](design-branches/0001-schema-authority-and-runtime-representation.md) |
+| TypeCodec 与 exact Schema 绑定 | 一般类型组合、nominal 引用约束、内建复合类型与自动 reader 分派；现有 string/durable Base 引用及显式 typed reader 不等于完整 TypeCodec | [DB-031 接缝](design-branches/0031-persisted-object-type-envelope-slice.md)、[DB-018](design-branches/0018-generated-graph-codec-shape.md)、[DB-001](design-branches/0001-schema-authority-and-runtime-representation.md) |
 | DTO 升级与领域 Restore | stored exact 版本如何分派、升级为 current DTO，再构造领域对象；失败时不交付半成品 | [DB-022](design-branches/0022-versioned-state-dto-capture.md)、[DB-002](design-branches/0002-read-time-version-upgrade-pipeline.md) |
 | 一般 durable 引用图 | 递归登记、共享/循环、nominal 约束、多态实际类型、完整目录及 roots 可达闭包如何共同成立 | [DB-018](design-branches/0018-generated-graph-codec-shape.md)、[DB-024](design-branches/0024-reference-capture-and-reusable-object-ids.md) |
 | 自定义 struct | exact inline Schema/history 与 owner 升版，嵌套 DTO/布局及字段和数组元素的 ref body 复用 | [DB-024 struct TODO](design-branches/0024-reference-capture-and-reusable-object-ids.md)、[DB-020](design-branches/0020-typed-slot-array-binding-slice.md) |
@@ -38,18 +36,18 @@ B/D/H 分别指 Base 写入字节、Delta 写入字节、当前对象重建字�
 
 | 问题 | 现有依据与裁决边界 |
 |---|---|
-| 对象版本解释与保存来源 | raw prior/H 已由 DB-028 闭合；持久 exact Schema/codec 绑定、完整 head map 的 external heads 来源、候选对象身份连续性仍需产品 Save 合同，不能由 Parent 声明一致推导全局身份认证 |
-| 保存相等性与真实估算 | 同版标量 DTO 的浮点按位、引用槽按 ID 已采纳；未来复合值/容器相等性另定。已准备 body 与当前 v3 envelope 计量见 [DB-029](design-branches/0029-prepared-object-revision-planning-slice.md)；加入对象类型头后 B/D/H 必须涵盖这些 bytes，不能仍用裸 DTO body 长度 |
-| 历史升级后的比较和重写 | DB-006/R3 已见证 normalized baseline 与 RequiresRewrite；DB-031 修订建议先按 Base Schema 完整还原旧链再升级，仍 live 的升级对象即使值未变也必须 BaseOnlyUpdate。新 DTO 自动升级、义务导入/发布后清除与删边清理尚未接通，读取不回写 |
+| 对象版本解释与保存来源 | Base exact Schema 已可持久解析；自动 reader 绑定、完整 head map 的 external heads 来源、候选对象身份连续性仍需产品 Save/Load 合同，不能由 Parent 声明一致推导全局身份认证 |
+| 保存相等性与真实估算 | 同版标量 DTO 的浮点按位、引用槽按 ID 已采纳；未来复合值/容器相等性另定。已准备 body 与当前 v3 envelope 计量见 [DB-029](design-branches/0029-prepared-object-revision-planning-slice.md)；Base 类型头已计入 B/H。未来新增类型头/容器布局时继续按实际对象 payload 计量 |
+| 历史升级后的比较和重写 | DB-006/R3 已见证 normalized baseline 与 RequiresRewrite；产品同版重建接缝已就绪；升级须先按 Base Schema 完整还原旧链再进行，仍 live 的升级对象即使值未变也必须 BaseOnlyUpdate。新 DTO 自动升级、义务导入/发布后清除与删边清理尚未接通，读取不回写 |
 | 完整 source 目录与 current 可达集合 | 升级可能删边。研究见证保留 source rows，再由 Save 移除不可达项；产品保存视图怎样表达需与候选/Parent 衔接 |
-| Schema 规范表示和持久引用 | DB-031 改荐直接持久注册，Base 暂荐逻辑 SchemaKey；物理/数字引用的取舍、canonical 批次格式与恢复合同待冻结。SchemaHash 与一般类型家族约束另定，GetHashCode 不作持久身份 |
+| Schema 规范表示和持久引用 | canonical 注册批次与逻辑 SchemaKey 已闭合；未来 SchemaHash、紧凑引用及一般类型家族约束随消费者裁决，不用 GetHashCode 作持久身份 |
 | Restore 的分配和阶段边界 | allocate-all / hydrate-all 有循环见证；构造器、readonly 字段、升级引用重绑定、验证/transient hook 的具体可见性和顺序待选 |
 | 开放泛型/数组组合绑定 | SG 静态 body + runtime 按需闭合是推荐路线；具体 generic factories、局部 DynamicMethod 或其他后端尚待消费场景裁决，不据此扩建通用 registry |
 | 跨程序集与一般类型形状 | 继承 helper 可见性、外部历史祖先、generic durable 类型、boxed value identity、enum/nullable/decimal/native int 等支持范围 |
 | 多态与运行时注册 | exact runtime 类型到 Schema/DTO/codec 的绑定、nominal assignability、未知实现 fail closed；不为尚无消费者的插件体系预制完整注册框架 |
 | 捕获复合值的所有权 | 含引用 struct/数组/容器如何真正冻结候选，不能从 scalar readonly DTO 推导浅复制足够 |
 | 数组完整形状与分配 | 明确非零下界、非 SZ rank-1、一般 rank 的类型/shape 编码与分配，保留元素按 ref 读写 |
-| 根与持久目录 | roots、kind/exact Schema 元数据由谁持久保存、怎样和 Revision 绑定；测试显式夹带元数据不是持久 manifest |
+| 根与持久目录 | roots 如何与 Revision 持久绑定、加载完整对象目录并自动分派 reader；Base 类型引用不能替代根目录或联合 manifest |
 | 多个空串 ID 的会话导入 | 读取允许多个 ID 解析到同一个 Empty；reopen 后如何绑定/合并别名及接续保存尚待裁决，不重开独立空串实例分配 |
 
 设计证据：[DB-006](design-branches/0006-flat-graph-delta-prototype.md)、
@@ -64,7 +62,8 @@ DB-009/010 的旧 no-reuse 前提不能沿用；借用 Base 共享 prior 等结�
 |---|---|
 | ObjectId 数字回收 | 单调分配配合其他机制开发后，再定义候选隔离、retire/reuse 时机与恢复；可评估 StateJournal SlabBitmap/SlotPool，不能复用旧对象 Delta 链 |
 | BCL 集合 | 基础引用/值和对象恢复形成消费者后；逐类型定义内容、顺序、comparer、共享和 key/index 建立时机 |
-| SchemaStore 后续能力 | MVP 已采纳单调注册；联合 Commit/Ref 及复用 StateStore 的演进候选见下节，Dictionary 与内建类型 codec 完整后重访。多 writer、压缩/GC 另待真实需求 |
+| SchemaStore 后续能力 | MVP 单调注册已实现；联合 Commit/Ref 及复用 StateStore 的演进候选见下节，Dictionary 与内建类型 codec 完整后重访。多 writer、压缩/GC 另待真实需求 |
+| Schema 日志自动修复/分段 | 遇到真实坏尾恢复或容量需求时；无额外确认水位不能自动区分未完成尾部和已确认末帧损坏，当前严格拒绝。重访时先冻结故障模型，不绕过完整注册一致性 |
 | 完整 Save、发布与恢复 | 内容链和保存输入闭合后；确定 expected parent、durability barrier、publication 不确定结果、reopen/reconcile、基线安装及故障模型 |
 | ArtifactStore | 真实 HistoryLog/消息/附件消费者出现；比较地址方案、chunk、历史 view、嵌套引用与 Schema 复用，不强迫 State 常驻完整历史 |
 | DerivedStore | 真实昂贵派生消费者出现；定义 exact 输入围栏、recipe/builder/model 身份、stale/missing 及可删重建 |
