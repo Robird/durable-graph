@@ -1,6 +1,6 @@
 # DB-031：持久 Schema 注册与 Base 类型引用
 
-> 状态：Revised proposal — 2026-09-07 根据用户反馈及再次讨论修订，尚未冻结实施合同。
+> 状态：Revised proposal — 2026-09-07 用户已采纳 MVP 单调注册方式，其余施工合同尚待细化。
 > 用户本轮提出设计建议并允许修订文档，没有要求开始实施。
 > 当前产品仍为 `6439ee5` 的 DB-030；上一版提案提交为 `5fdc371`。
 
@@ -100,16 +100,17 @@ SchemaStore 保存的是定义事实，不负责制造升级函数。新增版�
 
 ### 4.2 注册是否随 State 保存回滚
 
-推荐采用 repository-wide、单 writer、单调积累的不可变注册表，而非每个 branch 一份 Schema 目录：
+用户已采纳 MVP 采用 repository-wide、单 writer、单调积累的不可变注册表；以下限于该阶段：
 
 - 已完成的 Schema 注册可以在后续 State 保存失败时保留，继续占用该 key。
 - branch reset 不撤销 Schema 定义，同 key 一致性也不只针对某个 branch 的可达历史。
 - Schema 的注册确认与 State 业务 head 发布不同；注册定义不会使任何对象成为 live。
 - State 发布前必须保证引用的 Schema 已满足规定的持久化屏障；不要求两类记录回滚为同一个事务。
 
-这是对长期“单一业务发布点”目标的建议细化，尚待采纳；本轮不悄悄改写目标文档。
-讨论曾提出显式 catalog head，但当前没有 schema 分支/撤销需求，因此不推荐额外引入版本化
-Schema 可见性。若未来需要草案隔离或多 writer，再重访。
+MVP 不增加版本化 catalog head；这不否定联合 State/Schema/Artifact Commit/Ref 下的整体回滚
+和分叉。未来将重新定义 Schema 视图的可见性，不能把上述阶段性全局注册方式变成永久限制。
+使用无用户类型的 StateStore 保存 Schema 集合的候选、自举及冲突作用域问题，集中在
+[路线图](../DurableGraph-research-roadmap.md#41-schemastore-复用-statestore-与联合版本视图)；不扩大本片施工范围。
 
 首片应以现有 RBF framing 为底座，定义完整 Schema 注册批次的追加与恢复边界。
 不能把“任何物理文件/残留 bytes”当作注册：仅合法格式、完整且符合恢复规则的批次有效；

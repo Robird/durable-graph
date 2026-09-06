@@ -19,6 +19,8 @@ DB-030 已完成异构图的统一内容准备，当前没有正在施工的分�
 下一分片推荐已修订为 [DB-031：持久 Schema 注册与 Base 类型引用](../docs/design-branches/0031-persisted-object-type-envelope-slice.md)。
 2026-09-07 讨论稿撤回逐 Delta 类型头和临时内联 Schema，改荐持久注册表、同 key 冲突检查与 Base exact 引用。
 Delta 继承 Base 的同版解释；新 DTO 升级和强制 Base 重写的接续仍是后片。注册恢复/API 尚待冻结，未进入施工。
+用户已采纳 MVP 单调 Schema 注册；未来联合 Commit/Ref 及 SchemaStore 复用 StateStore 的候选见
+[路线图](../docs/DurableGraph-research-roadmap.md#41-schemastore-复用-statestore-与联合版本视图)，不作为本片前置。
 现有 fixture 仍显式保证图/Parent 对应并提供读取元数据，不据此宣称完整 Commit/Load。
 struct、一般引用和 Restore 可独立穿插；详细待定项见后续路线。
 

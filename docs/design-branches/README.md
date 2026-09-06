@@ -20,7 +20,7 @@
 
 | 文档 | 状态 | 推荐范围 |
 |---|---|---|
-| [DB-031 持久 Schema 注册与 Base 类型引用](0031-persisted-object-type-envelope-slice.md) | Revised proposal | 持久注册及冲突检查、Base 引用；Delta 继承 Base 类型。旧内联草稿已归档，注册恢复/API 尚待冻结 |
+| [DB-031 持久 Schema 注册与 Base 类型引用](0031-persisted-object-type-envelope-slice.md) | Revised proposal；MVP 注册方式已采纳 | 持久注册及冲突检查、Base 引用；Delta 继承 Base 类型。旧内联草稿已归档，注册恢复/API 尚待冻结 |
 
 ## 按任务查阅的混合决策
 

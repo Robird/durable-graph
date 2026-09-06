@@ -64,7 +64,7 @@ DB-009/010 的旧 no-reuse 前提不能沿用；借用 Base 共享 prior 等结�
 |---|---|
 | ObjectId 数字回收 | 单调分配配合其他机制开发后，再定义候选隔离、retire/reuse 时机与恢复；可评估 StateJournal SlabBitmap/SlotPool，不能复用旧对象 Delta 链 |
 | BCL 集合 | 基础引用/值和对象恢复形成消费者后；逐类型定义内容、顺序、comparer、共享和 key/index 建立时机 |
-| SchemaStore 后续能力 | 持久注册已提到 DB-031 推荐范围；先明确单调注册、恢复与 State 发布的关系。分支化 Schema、撤销、多 writer、压缩/GC 等等到真实需求再讨论 |
+| SchemaStore 后续能力 | MVP 已采纳单调注册；联合 Commit/Ref 及复用 StateStore 的演进候选见下节，Dictionary 与内建类型 codec 完整后重访。多 writer、压缩/GC 另待真实需求 |
 | 完整 Save、发布与恢复 | 内容链和保存输入闭合后；确定 expected parent、durability barrier、publication 不确定结果、reopen/reconcile、基线安装及故障模型 |
 | ArtifactStore | 真实 HistoryLog/消息/附件消费者出现；比较地址方案、chunk、历史 view、嵌套引用与 Schema 复用，不强迫 State 常驻完整历史 |
 | DerivedStore | 真实昂贵派生消费者出现；定义 exact 输入围栏、recipe/builder/model 身份、stale/missing 及可删重建 |
@@ -75,6 +75,31 @@ DB-009/010 的旧 no-reuse 前提不能沿用；借用 Base 共享 prior 等结�
 | 并发、分支与跨 Repository | 宿主提出真实 consumer 后；分别定义 concurrent Capture、snapshot isolation、branch/fork/multi-writer 和跨 Store/Repository identity，不扩大当前单 writer 假设 |
 | 升级创建新对象或外部副作用 | 当前升级/图恢复闭合之后，有具体需求再讨论新 ID、source table 外引用与失败隔离，不借普通升级默认授权 |
 | 历史工具/升级调用优化 | 有 package/history 或升级调用的真实限制后，再重访 DB-003 的 Try/result/ABI 和 DB-004 的多 writer/多 TFM 与批次原子性，不顺带做兼容框架 |
+
+### 4.1 SchemaStore 复用 StateStore 与联合版本视图
+
+2026-09-07 用户提出的未来技术路线：StateStore 作为基础，在 Dictionary 等 BCL 内容 codec
+可用后，评估用一个不含用户自定义类型的 StateStore 实例保存 Schema 定义集合，复用增量保存、
+历史视图、回滚与分叉。该路线合理且值得保留，尚未选择具体数据表示或替换当前 MVP 实现。
+联合 Commit/Ref 的长期约束见[目标设计](DurableGraph-target-design-v0.md#单一发布权威与明确故障结果)。
+
+重访触发：受支持的 Dictionary 内容保存/重建、所需内建类型组合编码，以及 StateStore 的
+Revision/加载能力足以表示元数据集合；建设联合 Commit/Ref 时也应重新检查本条。
+
+届时需闭合：
+
+- 自举：以固定、带版本的内建 codec/类型编码表示 Schema 目录，不能为了读取 SchemaStore
+  先查询它自身尚未加载的用户 Schema。禁止用户类型还不够，需验证 Dictionary 的 key/value
+  及嵌套内容也全部落在该内建闭包内；元数据表示本身的版本演化仍要有规则。
+- 逻辑职责：复用 StateStore 保存集合，不取消 Schema 的规范定义、exact 依赖与同 key 冲突检查；
+  不让一般字典写入绕过 SchemaStore 语义。
+- 联合视图：Commit/Ref 绑定各 Store 的 exact roots/Revision，加载与整体回滚使用同一组引用。
+  Schema 记录物理保留不等于在所有 Commit 中可见；不要将 MVP 的全局注册索引直接当作未来视图。
+- 冲突作用域：回滚/分叉后，同 `(SchemaId, Version)` 的一致性是仓库全局约束还是视图约束，
+  须单独裁决。不能隐式允许同 key 不同定义而仍以无视图的 key 查找；任何选择都要保证历史 State
+  永远解析到原 exact 定义。本条不授权 MVP 放宽冲突检查。
+- 迁移与恢复：从 MVP 注册日志转入版本化目录时，定义旧 Schema 引用的解析、联合发布顺序和
+  故障恢复；届时再实施，不现在预建迁移或双写框架。
 
 ## 5. 后续切片验收素材
 

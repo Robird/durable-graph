@@ -172,6 +172,11 @@ Capture/Prepare/Accept 是会话内部组件；其单独可调用不意味着完
 无法协调的 head；Derived 不充当权威提交的参与者。CommitManifest 是候选表达形状，
 不预先冻结字段表或原子发布实现。
 
+统一 Commit/Ref 应共同选择 StateStore、SchemaStore、ArtifactStore 的 exact 视图，支持整体推进、
+回滚与分叉；不能让旧 State 视图意外配上最新 Schema/Artifact 视图。整体回滚不要求删除已追加的
+物理记录。MVP 的 Repository 内单调 Schema 注册表是阶段性简化，不将其全局可见性冻结为长期合同。
+SchemaStore 未来复用 StateStore 的候选路径和自举问题见[后续路线](DurableGraph-research-roadmap.md#41-schemastore-复用-statestore-与联合版本视图)。
+
 只有已发布的 exact head/manifest 引用的 candidate 才取得权威。文件存在、时间戳或最新编号
 都不够。被引用数据应先完成规定的 durability barrier，再发布；具体 process/OS crash、
 power loss、torn write 和目录元数据保证必须用所选底层与故障注入说明。
