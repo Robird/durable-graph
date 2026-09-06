@@ -31,4 +31,22 @@ null/empty/surrogate content, and private base fields through generated AddRoot 
 the closed ID DTO list, static ID-body golden bytes, mutation isolation, accept/discard, stable live
 IDs, discarded-number consumption, and fresh IDs after retirement. These use public runtime seams
 from the single package reference; generated helpers and DTOs stay internal to the consumer.
-This is an in-memory candidate witness, not string reconstruction or StateStore Save.
+This remains an in-memory candidate witness, not StateStore Save.
+
+The string decoding witness then encodes the frozen DTOs and string objects into independent
+owned bytes. Its typed loader accepts only bytes, roots and explicit metadata, preflights the
+complete directory for unique nonzero IDs and exact Schema/body bindings, decodes all bodies with
+full consumption, and validates every owner's generated string reference slots before returning.
+It checks reference sharing across owners/base segments, equal but distinct strings, null/empty/
+surrogate content, mutation after Seal but before encoding, and reversed object ordering. Missing
+or wrong-kind references, cross-kind duplicate IDs, mismatched Schema, invalid roots and malformed
+bodies must fail. The generated helpers call the public string APIs through the same single
+PackageReference, with no friend access. This typed byte bundle is not a persistent format,
+StateRevision, generic loader, or restored domain object graph.
+
+Empty strings are the explicit exception to reference preservation: Capture normalizes all empty
+instances to `string.Empty` and one ID per capture view; loading different IDs with empty bodies
+returns that same singleton, while duplicate IDs remain invalid and ID zero remains null. The
+consumer proves this through generated Capture with independently allocated empty test inputs and
+then byte-only loading. Public `Replace` calls supply those test inputs with explicit identity
+assertions; product behavior has no dependency on that allocation behavior or private runtime hooks.

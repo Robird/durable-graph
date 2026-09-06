@@ -1,0 +1,221 @@
+using System.Buffers;
+using Atelia.DurableGraph;
+using Atelia.DurableGraph.StateStore.Serialization;
+
+namespace PackageConsumerProbe;
+
+// A deliberately typed byte witness, not a persistent graph format or runtime registry.
+internal static class StringDecodingExercise {
+    private enum BodyKind { Hero, Item, String }
+    private sealed record BodyRecord(uint Id, BodyKind Kind, DurableSchema? Schema, byte[] Body);
+    private sealed record BodyBundle(uint[] Roots, BodyRecord[] Records);
+    private sealed record Loaded(
+        uint[] Roots,
+        Dictionary<uint, CaptureHero.__DurableBinaryBody.V1> Heroes,
+        Dictionary<uint, CaptureItem.__DurableBinaryBody.V1> Items,
+        StringReadTable Strings);
+
+    internal static void Run() {
+        AssertEmptyNormalization();
+        BodyBundle bytes = CaptureAndEncode();
+        Loaded loaded = Load(bytes);
+        AssertTopology(loaded);
+        AssertTopology(Load(bytes with { Records = bytes.Records.Reverse().ToArray() }));
+
+        // The loader receives only owned bytes and explicit metadata, never a captured object.
+        BodyRecord hero = bytes.Records.Single(record => record.Kind == BodyKind.Hero);
+        BodyRecord item = bytes.Records.Single(record => record.Kind == BodyKind.Item);
+        BodyRecord text = bytes.Records.First(record => record.Kind == BodyKind.String);
+        Reject(bytes with { Records = Replace(bytes, hero with { Schema = CaptureItem.Schema }) });
+        Reject(bytes with { Records = bytes.Records.Append(text with { Id = hero.Id }).ToArray() });
+        Reject(bytes with { Records = bytes.Records.Append(text).ToArray() });
+        Reject(bytes with { Records = bytes.Records.Select(record =>
+            ReferenceEquals(record, text) ? text with { Id = 0 } : record).ToArray() });
+        Reject(bytes with { Roots = [127] });
+        Reject(bytes with { Roots = [text.Id] });
+        Reject(bytes with { Records = Replace(bytes, hero with { Body = [127, 3, 14] }) });
+        Reject(bytes with { Records = Replace(bytes, hero with { Body = [1, 3, 14] }) });
+        // The first owner is valid; failure in the second must still prevent a loaded result.
+        Reject(bytes with { Records = Replace(bytes, item with { Body = [3, 127, 0, 5, 6] }) });
+        Reject(bytes with { Records = Replace(bytes, hero with { Body = [3, 3, 14, 0] }) });
+        Reject(bytes with { Records = Replace(bytes, text with { Body = [0, 0] }) });
+        Reject(bytes with { Records = Replace(bytes, text with { Body = [] }) });
+
+        // Fresh tables interpret IDs independently; a failed witness cannot replace a prior result.
+        StringReadTable other = StringReadTable.Decode(new[] { (text.Id, (ReadOnlyMemory<byte>)EncodeString("other")) });
+        Require(other.ResolveString(text.Id) == "other" && loaded.Strings.ResolveString(text.Id) == "Ada",
+            "A later decode must not replace another view's binding.");
+        AssertTopology(loaded);
+    }
+
+    private static BodyBundle CaptureAndEncode() {
+        string shared = new(['A', 'd', 'a']);
+        string distinct = new(['A', 'd', 'a']);
+        Require(!ReferenceEquals(shared, distinct), "Distinct equal source strings.");
+        CaptureHero hero = new(shared);
+        CaptureItem item = new(shared, distinct);
+        CaptureSession session = new();
+        using CaptureContext capture = session.BeginCapture();
+        CaptureHero.__DurableBinaryBody.AddRoot(capture, hero);
+        CaptureItem.__DurableBinaryBody.AddRoot(capture, item);
+        CaptureHero.__DurableBinaryBody.AddRoot(capture, hero);
+        CaptureHero.__DurableBinaryBody.AddRoot(capture, null);
+        CapturedGraph candidate = capture.Seal();
+        hero.ChangeAlias("changed after Seal, before encoding");
+        return Encode(candidate);
+    }
+
+    private static BodyBundle Encode(CapturedGraph candidate) {
+        List<BodyRecord> records = [];
+        foreach (CapturedObject entry in candidate.Objects) {
+            ArrayBufferWriter<byte> buffer = new();
+            BinaryPayloadWriter writer = new(buffer);
+            BodyKind kind;
+            if (entry.Kind == CapturedObjectKind.String) {
+                kind = BodyKind.String;
+                writer.WriteString(entry.StringContent);
+            } else if (CaptureHero.Schema.Equals(entry.Schema)) {
+                kind = BodyKind.Hero;
+                var state = entry.GetState<CaptureHero.__DurableBinaryBody.V1>();
+                CaptureHero.__DurableBinaryBody.Write(ref writer, in state);
+            } else if (CaptureItem.Schema.Equals(entry.Schema)) {
+                kind = BodyKind.Item;
+                var state = entry.GetState<CaptureItem.__DurableBinaryBody.V1>();
+                CaptureItem.__DurableBinaryBody.Write(ref writer, in state);
+            } else {
+                throw new InvalidOperationException("Unexpected fixture schema.");
+            }
+            records.Add(new(entry.Id, kind, entry.Schema, buffer.WrittenSpan.ToArray()));
+        }
+        return new(candidate.RootIds.ToArray(), records.ToArray());
+    }
+
+    private static void AssertEmptyNormalization() {
+        // Public API behavior supplies distinct test inputs on the tested runtime. The product
+        // never depends on this allocation behavior: it canonicalizes every empty input.
+        string firstEmpty = "A".Replace("A", "");
+        string secondEmpty = "B".Replace("B", "");
+        Require(firstEmpty.Length == 0 && secondEmpty.Length == 0 &&
+            !ReferenceEquals(firstEmpty, secondEmpty) && !ReferenceEquals(firstEmpty, string.Empty) &&
+            !ReferenceEquals(secondEmpty, string.Empty), "Fixture must contain independent empty instances.");
+        BodyBundle bytes;
+        CaptureSession session = new();
+        using (CaptureContext capture = session.BeginCapture()) {
+            CaptureHero.__DurableBinaryBody.AddRoot(capture, new CaptureHero(firstEmpty));
+            CaptureItem.__DurableBinaryBody.AddRoot(capture, new CaptureItem(firstEmpty, secondEmpty));
+            CapturedGraph candidate = capture.Seal();
+            var hero = candidate.Objects.Single(record => record.Id == 1)
+                .GetState<CaptureHero.__DurableBinaryBody.V1>();
+            var item = candidate.Objects.Single(record => record.Id == 2)
+                .GetState<CaptureItem.__DurableBinaryBody.V1>();
+            uint emptyId = hero.Segment0Field1;
+            Require(emptyId != 0 && hero.Segment1Field1 == emptyId && item.Segment0Field1 == emptyId &&
+                item.Segment0Field2 == emptyId && item.Segment0Field5 == emptyId,
+                "Generated Capture must normalize distinct empty instances and string.Empty to one ID.");
+            Require(candidate.Objects.Count == 4 && ReferenceEquals(
+                candidate.Objects.Single(record => record.Id == emptyId).StringContent, string.Empty),
+                "Capture retains one canonical empty object plus the surrogate object.");
+            bytes = Encode(candidate);
+        }
+        Loaded loaded = Load(bytes);
+        Require(ReferenceEquals(loaded.Strings.ResolveString(loaded.Heroes[1].Segment0Field1), string.Empty) &&
+            ReferenceEquals(loaded.Strings.ResolveString(loaded.Items[2].Segment0Field2), string.Empty) &&
+            loaded.Strings.ResolveString(loaded.Items[2].Segment0Field3) is null,
+            "Byte-only loading preserves canonical empty and distinguishes null.");
+
+        byte[] body = EncodeString(string.Empty);
+        StringReadTable aliases = StringReadTable.Decode(new[] {
+            (10u, (ReadOnlyMemory<byte>)body), (11u, (ReadOnlyMemory<byte>)body),
+        });
+        Require(ReferenceEquals(aliases.ResolveString(10), string.Empty) &&
+            ReferenceEquals(aliases.ResolveString(11), string.Empty) && aliases.ResolveString(0) is null,
+            "Distinct IDs with empty bodies intentionally resolve to the same canonical empty instance.");
+        try {
+            _ = StringReadTable.Decode(new[] {
+                (10u, (ReadOnlyMemory<byte>)body), (10u, (ReadOnlyMemory<byte>)body),
+            });
+        }
+        catch (InvalidDataException) { return; }
+        throw new InvalidOperationException("Empty normalization must not permit duplicate object IDs.");
+    }
+
+    private static Loaded Load(BodyBundle bundle) {
+        // Preflight the complete heterogeneous directory before decoding or exposing any result.
+        Dictionary<uint, BodyKind> directory = [];
+        foreach (BodyRecord record in bundle.Records) {
+            if (record.Id == 0 || !directory.TryAdd(record.Id, record.Kind)) {
+                throw new InvalidDataException("Object IDs must be nonzero and unique across every kind.");
+            }
+            bool exactSchema = record.Kind switch {
+                BodyKind.Hero => CaptureHero.__DurableBinaryBody.V1.Schema.Equals(record.Schema),
+                BodyKind.Item => CaptureItem.__DurableBinaryBody.V1.Schema.Equals(record.Schema),
+                BodyKind.String => record.Schema is null,
+                _ => false,
+            };
+            if (!exactSchema) { throw new InvalidDataException("Body binding requires its exact schema."); }
+        }
+        foreach (uint root in bundle.Roots) {
+            if (root != 0 && (!directory.TryGetValue(root, out BodyKind kind) || kind == BodyKind.String)) {
+                throw new InvalidDataException("This typed witness requires a known durable root or null.");
+            }
+        }
+        StringReadTable strings = StringReadTable.Decode(bundle.Records
+            .Where(record => record.Kind == BodyKind.String)
+            .Select(record => (record.Id, (ReadOnlyMemory<byte>)record.Body)));
+        Dictionary<uint, CaptureHero.__DurableBinaryBody.V1> heroes = [];
+        Dictionary<uint, CaptureItem.__DurableBinaryBody.V1> items = [];
+        foreach (BodyRecord record in bundle.Records) {
+            BinaryPayloadReader reader = new(record.Body);
+            if (record.Kind == BodyKind.Hero) {
+                var state = CaptureHero.__DurableBinaryBody.ReadV1(ref reader);
+                reader.EnsureFullyConsumed();
+                CaptureHero.__DurableBinaryBody.ValidateStringReferences(in state, strings);
+                heroes.Add(record.Id, state);
+            } else if (record.Kind == BodyKind.Item) {
+                var state = CaptureItem.__DurableBinaryBody.ReadV1(ref reader);
+                reader.EnsureFullyConsumed();
+                CaptureItem.__DurableBinaryBody.ValidateStringReferences(in state, strings);
+                items.Add(record.Id, state);
+            }
+        }
+        return new(bundle.Roots.ToArray(), heroes, items, strings);
+    }
+
+    private static void AssertTopology(Loaded loaded) {
+        Require(loaded.Roots.SequenceEqual(new uint[] { 1, 2, 1, 0 }), "Decoded root ordering.");
+        var hero = loaded.Heroes[1];
+        var item = loaded.Items[2];
+        string? shared = loaded.Strings.ResolveString(hero.Segment0Field1);
+        string? distinct = loaded.Strings.ResolveString(item.Segment0Field2);
+        Require(shared == "Ada" && distinct == "Ada" && !ReferenceEquals(shared, distinct),
+            "Different string IDs must not merge by value.");
+        Require(ReferenceEquals(shared, loaded.Strings.ResolveString(hero.Segment1Field1)) &&
+            ReferenceEquals(shared, loaded.Strings.ResolveString(item.Segment0Field1)),
+            "Both owners and the base segment must share one resolved instance.");
+        Require(hero.Segment1Field2 == 7, "Encoding must consume the sealed DTO, not changed domain state.");
+        Require(loaded.Strings.ResolveString(item.Segment0Field3) is null &&
+            loaded.Strings.ResolveString(item.Segment0Field4) == "\uD800" &&
+            loaded.Strings.ResolveString(item.Segment0Field5) == "", "Null, surrogate and empty content.");
+    }
+
+    private static byte[] EncodeString(string value) {
+        ArrayBufferWriter<byte> buffer = new();
+        BinaryPayloadWriter writer = new(buffer);
+        writer.WriteString(value);
+        return buffer.WrittenSpan.ToArray();
+    }
+
+    private static BodyRecord[] Replace(BodyBundle bundle, BodyRecord replacement) =>
+        bundle.Records.Select(record => record.Id == replacement.Id ? replacement : record).ToArray();
+
+    private static void Reject(BodyBundle bundle) {
+        try { _ = Load(bundle); }
+        catch (InvalidDataException) { return; }
+        catch (EndOfStreamException) { return; }
+        throw new InvalidOperationException("An invalid byte bundle produced a loaded witness.");
+    }
+
+    private static void Require(bool condition, string message) {
+        if (!condition) { throw new InvalidOperationException(message); }
+    }
+}

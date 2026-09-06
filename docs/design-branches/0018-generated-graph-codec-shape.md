@@ -16,7 +16,8 @@
 [DB-022](0022-versioned-state-dto-capture.md)已把 GenerateBinaryBody 改为 readonly Vn + current Capture + DTO body，
 含历史 exact 声明链；下文直接领域 Read/Write 的示例保留为早期机制草图，不能作为当前接口。
 引用发现与 Capture 可合并；Capture 期间需要稳定视图，完成后后续步骤应只消费捕获状态。
-未来引用 DTO 槽位使用 ObjectId，不能保留可变领域引用；string 对象内容可复用不可变数据而不合并身份。
+未来引用 DTO 槽位使用 ObjectId，不能保留可变领域引用；非空 string 对象内容可复用不可变数据而不合并身份。
+DB-025 的后续用户裁决明确：空字符串在 Capture/读取两端统一为 string.Empty，不保留其不同实例身份。
 
 本轮重点已收窄：祖先 Schema 不变性/版本传播、nominal 引用声明与 exact 对象类型、
 开放泛型/数组 codec 的运行时组合。用户已同意 nominal/exact 的区分，并要求基类变化时派生版本递增；
@@ -36,7 +37,7 @@ BCL 集合内容支持明确暂缓，下面相关类型表达只保留为后续�
 - SG 产生强类型成员访问与值 codec；字段和数组元素可以传同一个 struct codec 的 ref 槽位。
 - class 每层先调用基类 body，再处理自己声明的字段；BCL 容器保存内容而非实现字段。
 
-这里的 intern 屏障是 **reference-identity interning**，不是按内容合并。
+这里的 intern 屏障是 **reference-identity interning**；已选择的唯一内容合并例外是零长度 string。
 Transient、BCL 内部 bucket/backing array、框架服务引用等不因“所有引用”而自动进入图；
 参加遍历的是该受支持类型的持久成员/内容合同。
 
@@ -47,7 +48,7 @@ Transient、BCL 内部 bucket/backing array、框架服务引用等不因“所�
 | 继承字段身份 | DB-019 选择声明 Schema 分段、祖先 exact 依赖及派生版本递增 | DB-022/023 已接当前与历史 DTO body；DTO 升级/领域恢复尚未实现 |
 | 类型复合与执行 | 推荐 SG 开放泛型 body + 运行时按需闭合；必要处局部 DynamicMethod | 已知定义与任意 CLR 类型支持分开，运行时后端不能另建 Schema authority |
 | 保存一致性 | Capture 期间由调用方保证视图稳定；Seal 后只消费冻结候选 | 当前 DTO/string 候选是内容快照；通用递归图尚未覆盖 |
-| 非常规 string/boxed 值 | 保留精确身份目标，分配与支持范围单独验证 | 不能悄悄折叠空字符串或把 boxed 值当 inline 值 |
+| 空 string/boxed 值 | 空串按 DB-025 显式统一 Empty；boxed 支持仍需验证 | 空串不保留实例区别；不能把 boxed 值当 inline 值 |
 
 ## 2. 引用身份与保存阶段
 
@@ -450,13 +451,12 @@ Allocate 消耗的 prefix 长度可以作为本次读取的游标偏移保留；
 
 `Node.Label` 等成员写的是 ObjectId；string 自己的记录以现有字符串原语写内容。
 非 null string 条目无需再用 nullable header；null 在引用 ID 层表达。
-同一源实例的多处引用恢复为同一实例，内容相同的不同实例恢复为不同实例；
+同一源实例的多处引用恢复为同一实例，内容相同的不同非空实例恢复为不同实例；
 解码不调用 String.Intern，也不使用按内容去重的实例缓存。
 
-建议加载端检查不同 ID 不得绑定同一 CLR 实例，防止空数组/字符串工厂等无意合并节点。
-**空字符串需要单独的分配见证**：独立审查在 .NET 10 本机观察到普通零长度 string 构造复用 Empty；
-私有 runtime 分配入口却能产生不同的空实例。该私有入口只用于证明边界，不是已选产品方案。
-专用分配机制或暂不支持这种输入必须明确裁决，不能默默把不同空串 ID 合并。
+建议加载端检查不同非空 string ID 不得绑定同一 CLR 实例，防止无意合并节点。
+**空字符串已由 DB-025 用户裁决为规范化例外**：Capture 登记前统一 Empty，解码也返回 Empty；
+多个输入空串 ID 可解析到该单例。无需独立空串分配机制。此规则不自动推广到空数组或其他类型。
 string 内容可以复用现有 UTF-8/UTF-16LE 规则，但内容 codec 的值正确不等于节点 identity 已正确。
 
 ### boxed 值
@@ -473,7 +473,7 @@ object/interface 槽位里的 boxed primitive/struct 具有引用身份，不能
 
 - 两个 Equals 相等的不同 class 实例仍是两个 ID；同一个实例的多个路径仍指向一个 ID。
 - 两个内容相同的不同非空 string、一个被多处引用的 string、null 与空串分别验证引用关系与内容；
-  非常规独立空实例单列分配见证。
+  不同空实例按已选规则规范化为 string.Empty。
 - class -> struct -> string、struct[] 中引用、class 自环/互环、共享/jagged 数组都能发现完整闭包。
 - 同一个 value codec 处理字段和 SZ/MD 元素；原地读入修改正确槽位。
 - base/derived 可重复局部 FieldId、private 字段、base-first 及 exact base 版本绑定得到验证。

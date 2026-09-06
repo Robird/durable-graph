@@ -61,12 +61,15 @@ public sealed class CaptureContext : IDisposable {
         }
     }
 
-    /// <summary>Captures a string reference during a root callback; equal content does not merge identities.</summary>
+    /// <summary>Captures a string reference. Empty strings share one identity; nonempty strings use reference identity.</summary>
     public uint CaptureString(string? value) {
         try {
             RequirePhase(Phase.Capturing);
             if (value is null) {
                 return 0;
+            }
+            if (value.Length == 0) {
+                value = string.Empty;
             }
             if (_bindings.TryGetValue(value, out uint id)) {
                 return id;

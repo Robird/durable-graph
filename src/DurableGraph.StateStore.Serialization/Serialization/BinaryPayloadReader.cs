@@ -138,7 +138,8 @@ public ref struct BinaryPayloadReader {
         return value;
     }
 
-    internal string ReadString() {
+    /// <summary>Reads canonical non-null string content. Object identity belongs to the caller's loading context.</summary>
+    public string ReadString() {
         BinaryPayloadReader candidate = this;
         string value = StringPayloadCodec.Read(ref candidate);
         this = candidate;

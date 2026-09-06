@@ -55,7 +55,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         Assert.True(stateParameter.IsIn);
         Assert.Null(body.GetMethod("Read", BindingFlags.Static | BindingFlags.NonPublic));
         Assert.Equal(dto, body.GetMethod("ReadV1", BindingFlags.Static | BindingFlags.NonPublic)!.ReturnType);
-        Assert.Equal(new[] { "AddRoot", "Capture", "ReadV1", "Write" },
+        Assert.Equal(new[] { "AddRoot", "Capture", "ReadV1", "ValidateStringReferences", "Write" },
             body.GetMethods(BindingFlags.Static | BindingFlags.NonPublic).Select(method => method.Name).Order().ToArray());
     }
 

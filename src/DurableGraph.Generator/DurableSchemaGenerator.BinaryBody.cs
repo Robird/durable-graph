@@ -179,6 +179,7 @@ public sealed partial class DurableSchemaGenerator {
             AppendBinaryDto(source, type, version, bodyIndent);
             AppendBinaryDtoWrite(source, version, bodyIndent);
             AppendBinaryDtoRead(source, version, bodyIndent);
+            AppendBinaryStringReferenceValidation(source, version, bodyIndent);
         }
 
         BinaryVersionModel current = versions[versions.Count - 1];
@@ -332,6 +333,20 @@ public sealed partial class DurableSchemaGenerator {
         }
 
         source.AppendLine(");");
+        source.Append(indent).AppendLine("}");
+    }
+
+    private static void AppendBinaryStringReferenceValidation(
+        StringBuilder source, BinaryVersionModel version, string indent) {
+        source.Append(indent).Append("internal static void ValidateStringReferences(in ").Append(version.Name)
+            .AppendLine(" state, global::Atelia.DurableGraph.StringReadTable table) {");
+        source.Append(indent).AppendLine("    global::System.ArgumentNullException.ThrowIfNull(table);");
+        foreach (BinaryFieldModel field in version.Fields) {
+            if (field.TypeTagValue == 4) {
+                source.Append(indent).Append("    table.ResolveString(state.").Append(field.Name).AppendLine(");");
+            }
+        }
+
         source.Append(indent).AppendLine("}");
     }
 

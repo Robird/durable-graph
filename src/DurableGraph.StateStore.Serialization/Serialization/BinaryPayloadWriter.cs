@@ -82,7 +82,8 @@ public ref struct BinaryPayloadWriter {
         WriteSpan(value);
     }
 
-    internal void WriteString(string value) {
+    /// <summary>Writes canonical non-null string content; reference slots encode their ObjectId separately.</summary>
+    public void WriteString(string value) {
         ArgumentNullException.ThrowIfNull(value);
         StringPayloadCodec.Write(_downstream, value);
     }

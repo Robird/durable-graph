@@ -4,6 +4,7 @@
 >
 > 用户已启动实施 Goal，并明确采纳 SG 生成根登记适配器、Runtime 统一会话与候选管理方案。
 > 承接 DB-018/022/023；本文区分用户已明确的语义与尚待讨论的实施建议。
+> 后续 DB-025 用户裁决：所有空字符串在 Capture/读取时统一为 string.Empty；本文身份规则中的 string 指非空情形，空串为显式例外。
 
 ## 1. 已明确与本轮建议
 
@@ -38,8 +39,10 @@
 
 持久查找的完整含义为 `(Store, exact StateRevision, ObjectId)`；候选阶段用所属 CapturedGraph 表示上下文。
 同一持续存活对象在相邻保存中保留数字 ID，以支持不变对象/引用的复用；这不意味着裸 uint 是全历史实体身份。
-同一 revision 内一个非零 ID 只有一个对象，一个 CLR 实例只有一个 ID；0 表示 null，无独立 null 条目。
-不同 ID 的条目不能在该图的恢复过程中合并成一个 CLR 实例，即使内容相等。
+同一 revision 内一个非零 ID 只有一个对象；正常 Capture 对规范化后的一个 CLR 实例只登记一个 ID。
+读取输入允许多个空串 ID 均解析为 string.Empty，是 DB-025 的显式例外。0 表示 null，无独立 null 条目。
+不同 ID 的非空 string/其他引用条目不能在该图的恢复过程中合并成一个 CLR 实例，即使内容相等。
+空串按 DB-025 的后续裁决统一 string.Empty；正常 Capture 先规范化再登记，只产生一个存活空串条目。
 
 例如 R10 的 7 号为旧字符串，R11 移除 7，R12 的 7 号为新字符串。
 R10 和 R12 的查询分别经自己的 ObjectHeadMap，保留 R10 不妨碍 R12 复用数字 7。
@@ -55,7 +58,8 @@ R10 和 R12 的查询分别经自己的 ObjectHeadMap，保留 R10 不妨碍 R12
 ## 3. Capture 的目标形状
 
 每个工作视图拥有 parent 基线，以及按 ReferenceEqualityComparer 建立的 `object -> uint` 映射。
-首次打开/加载时由同一 materialization 的 ID→实例表建立反向映射；不用对象自身字段承载 ID，
+首次打开/加载时拟由同一 materialization 的 ID→实例表建立反向映射；多个空串 ID 的规范化问题
+见 DB-025 §4，该导入路径尚未实施，不能直接反转含空串别名的字典。不用对象自身字段承载 ID，
 也不建立进程全局跨 Store、跨 revision 的字符串池。
 
 一次候选 Capture：
@@ -65,7 +69,7 @@ R10 和 R12 的查询分别经自己的 ObjectHeadMap，保留 R10 不妨碍 R12
 3. 处理对象时调用实际类型对应的生成 Capture，复制标量，并将引用成员交给同一上下文登记。
    发现与字段复制可以合并；不在 Write 阶段再次扫描领域对象。
 4. string 是无出边的叶对象：独立条目保存 string 内容，可以保留原 string 实例作为不可变内容，
-   不需要再复制其字符数组。相等内容的不同实例仍有不同条目，不作值 intern。
+   不需要再复制其字符数组。相等非空内容的不同实例仍有不同条目；空串按 DB-025 统一 Empty。
 5. 队列排空后封闭候选：roots、ID→条目、完整 live 集合、候选新增绑定与待移除集合。
    可按 ID 排序供下游消费，但列表下标不成为 ObjectId，分配顺序不声明图同构 canonicalization。
 6. 后续只读取候选。Write 直接编码 DTO 中的 ID；不需要 Type 查表或回头查询领域引用。
@@ -278,23 +282,22 @@ G0 推荐方案按用户决定落地：Runtime 的 CaptureSession/Context/Captur
 1. **引用 Capture 与候选生命周期（已实现）**：已支持标量的领域 roots + string 字段、继承 Capture 共享上下文；
    产出闭合的混合对象列表与 ID DTO。内存 parent/accept/discard 见证稳定 ID、移除、单调分配和失败隔离。
    首片尚无 Durable 相互引用；只登记根并顺序 Capture，不宣称已支持自环/互环。
-2. **字符串对象编码和引用恢复（推荐方案已记录，尚未实施）**：见 [DB-025](0025-string-object-decoding-slice.md)。
-   推荐保留 ID DTO，以 string 解码表和 SG 各版引用校验完成 typed 字节见证，领域 Restore 另片；
-   独立空串分配及必要公开接缝仍需先取得证据/裁决。引用槽的 uint/0 body 已实现，下一片才接字符串记录内容；
+2. **字符串对象编码和引用解析（DB-025 已实现并验收）**：见 [DB-025](0025-string-object-decoding-slice.md)。
+   保留 ID DTO，以 string 解码表和 SG 各版引用校验完成 typed 字节见证，领域 Restore 另片；
+   空串已裁决为两端统一 Empty，不再要求独立分配。引用槽的 uint/0 body 已实现，DB-025 接字符串记录内容；
    为各条目建立加载表再解析 owner DTO，验证存在性/类型/共享。随后才接 Durable 对象壳与循环恢复。
-   先明确恢复到 resolved witness 还是完整领域 Restore；不偷偷把 DTO Upgrade/构造规则并入本片。
+   当前只返回 typed 引用见证，不把 DTO Upgrade/构造规则并入本片。
 
 必需见证：同实例多引用、相等内容不同实例、null/空串/代理项、Capture 后领域引用变更不影响候选；
 跨 Capture 存活对象保持 ID；旧实例重新挂入、discard 重试取得新号且不串号；uint 耗尽明确失败。
 R10→移除→R12 复用且旧 R10 可读属于回收分片；missing ID/错误引用类型的载入拒绝属于恢复分片。
 完整磁盘保存不在这些内存见证的结论范围内。
 
-string 恢复有一个已有缺口：StringPayloadCodec 的空内容路径直接返回 string.Empty，属于内容 codec，
-不能直接证明多个独立空串对象的引用保真。实施恢复前应做实际分配见证；若输入存在不同空串实例，
-应选能独立分配的机制或明确拒绝该输入，不能无声合并。Capture 自身可精确保留这些引用关系。
+string 空内容路径返回 string.Empty 已与 DB-025 的后续用户裁决一致：两端显式规范化空串，
+无需保留不同零长度实例身份。此前独立分配研究已留作历史附件，不再是恢复前置条件。
 
 首片不提供 pin：accept 后离开 durable roots 的实例绑定结束，数字不回收。恢复完整领域对象另片推进。
-隔发布/同候选复用与独立空串分配仍留待后续；已选择并实现的公开生成代码接缝见 §3.1/3.2。
+隔发布/同候选 ID 复用仍留待后续；空串规范化见 DB-025，公开生成代码接缝见 §3.1/3.2。
 
 ## 8. 自定义 struct TODO：可独立排期，共享 Capture 接缝
 

@@ -2,7 +2,7 @@
 
 > 最近校准：2026-09-06
 >
-> 状态：基础存储/策略、祖先 Schema、typed slot/数组元素、SG DTO/body 及 string 引用 Capture/内存候选已实现；完整图恢复与持久 Save 尚未实施。
+> 状态：基础存储/策略、祖先 Schema、typed slot/数组元素、SG DTO/body 及 string 引用 Capture/读取分片已实现并验收；完整图恢复与持久 Save 尚未实施。
 >
 > 范围：src 中的产品项目及对应 tests。本文是共享上下文与导航，不是实现授权或功能规格。
 
@@ -29,7 +29,8 @@ string 引用上下文与最小对象列表已接入 Capture；设计与边界�
 用户已采纳 DB-024 §3.1 的 G0 方案；实现与验收证据见工作单。
 SG 在 internal helper 生成 AddRoot，配对领域类型/Schema/DTO/Capture；Runtime 公开最小 session/context/候选接缝。
 AddRoot 登记根，Seal 捕获字段；exact 类型检查只在根入口，保留基类 Capture 可接收派生实例。
-自定义 struct 的嵌套布局、exact 版本传播已记入 DB-024 TODO，独立排期；BCL 集合继续暂缓。
+DB-025 增加 string 内容读取表与 SG 各版引用校验；用户选择空串在 Capture/读取两端统一 string.Empty，
+非空 string 保留引用身份。自定义 struct 的嵌套布局、exact 版本传播已记入 DB-024 TODO，独立排期；BCL 集合继续暂缓。
 完整图和旧运行时序列化器翻新仍未实施。
 [DB-017](../docs/design-branches/0017-object-codec-design-points.md)保留早期要点/旧实现证据；
 其 string 字段 inline 方案已被取代。codec-first 排序依据见 DB-016。
@@ -38,17 +39,18 @@ AddRoot 登记根，Seal 捕获字段；exact 类型检查只在根入口，保�
 
 | 项目 | 已有能力及边界 |
 |---|---|
-| [DurableGraph](DurableGraph/DurableGraph.csproj) | immutable DurableSchema 与 exact BaseSchema；内存 SchemaStore；CaptureSession/Context 维护 string 引用身份、单调 ID、封闭 CapturedGraph 和内存 accept/discard；保留 boxed demo，非持久图 Store |
-| [Generator](DurableGraph.Generator/DurableGraph.Generator.csproj) / [Build](DurableGraph.Build/DurableGraph.Build.csproj) | legacy Snapshot/Upgrade 保留；SchemaOnly 祖先/history；GenerateBinaryBody 生成 readonly Vn、current Capture、concrete AddRoot、各版 Write/ReadVn；string 槽为 uint，publisher metadata 仍用 String |
+| [DurableGraph](DurableGraph/DurableGraph.csproj) | immutable DurableSchema 与 exact BaseSchema；内存 SchemaStore；CaptureSession/Context 维护 string 身份、单调 ID、封闭候选；StringReadTable 从独立 bodies 解码并解析 string，空串两端统一；非持久图 Store |
+| [Generator](DurableGraph.Generator/DurableGraph.Generator.csproj) / [Build](DurableGraph.Build/DurableGraph.Build.csproj) | legacy Snapshot/Upgrade 保留；SchemaOnly 祖先/history；生成 readonly Vn、current Capture、concrete AddRoot、各版 Write/ReadVn/ValidateStringReferences；String schema 槽为 uint |
 | [StateStore](DurableGraph.StateStore/DurableGraph.StateStore.csproj) | 固定 ReadAmplificationBaseBudgetPolicy：全部 post-live 估算 → 稀疏只读 Base/Delta 写计划；无内容执行/完整 Save |
 | [Storage](DurableGraph.StateStore.Storage/DurableGraph.StateStore.Storage.csproj) | immutable membership StateRevision、canonical provisional wire、真实 RBF/Segment append/read/reopen、exact-head shallow live map；无 ObjectVersion payload |
 | [Serialization](DurableGraph.StateStore.Serialization/DurableGraph.StateStore.Serialization.csproj) | BCL-only 字节原语/string 内容 codec、显式 body 的 typed slot、SZ/rank-2 元素 ref 循环；primitive slot 查表仅为测试共享工具，尚无数组对象 envelope 或对象级 Base/Delta |
 
 当前产品依赖为 StateStore → Storage → Serialization，Storage 另用 RbfSegmentStore/Rbf 与地址基础类型。
 DurableGraph runtime/package 已引用 Serialization；Reader/Writer 类型、构造、13 种标量和 reader 边界 API
-对下游公开，string 内容/块操作与 typed slot/数组模板仍 internal。单一 runtime PackageReference 能取得传递依赖。
+对下游公开；non-null string ReadString/WriteString 也公开，nullable string/块操作与 typed slot/数组模板仍 internal。
+单一 runtime PackageReference 能取得传递依赖。
 Schema/历史工具支持 bool、byte/sbyte、short/ushort、int/uint、long/ulong、char、Half、float、double 及 string。
-DTO body 支持 13 种标量及 string 引用的 UInt32 ID；String 内容独立保存在内存对象条目，未接内容解码/对象恢复。
+DTO body 支持 13 种标量及 string 引用的 UInt32 ID；String 内容独立编码/解码，引用槽由 SG 另行校验，尚无领域对象恢复。
 位于 Generator 源码中的 graph operations generator 仍是未注册 probe，不能当成产品图能力。
 
 ## 已选方向
@@ -58,7 +60,8 @@ DTO body 支持 13 种标量及 string 引用的 UInt32 ID；String 内容独立
 - MVP 固定一个对象表示策略：整数 X 倍产生严格读动机，整数 Y% 控制可选 Base 软预算；
   规则与实现入口见 [DB-015](../docs/design-branches/0015-statestore-object-representation-policy.md)。
 - 所有受支持引用对象统一身份：自定义对象、string、数组、BCL 容器均进引用表。
-  string 成员写引用号，其对象 body 写内容，不作值相等合并；增量 ObjectId 与本次列表位置区分。
+  string 成员写引用号，其对象 body 写内容；非空 string 不作值相等合并，空串显式统一 string.Empty。
+  增量 ObjectId 与本次列表位置区分；空串使用普通会话 ID，不预留全局特殊号。
 - SG 强类型遍历 struct/class 字段、数组元素和 BCL 内容；值嵌套，引用只写 ID；
   class 按 base-first 组合 body；祖先 exact 依赖变化要求派生版本递增，DB-019 已选择声明层 FieldId 分段。
 - 引用成员使用稳定 nominal 类型约束、对象头使用 exact 类型/Schema 的区别已获用户同意。
@@ -91,9 +94,10 @@ DTO body 支持 13 种标量及 string 引用的 UInt32 ID；String 内容独立
    rank-2 元素循环支持已有数组的非零下界；shape 编码/分配、其他 rank/非 SZ rank-1 尚未实现。
 3. 已闭合 SG 标量/string ID Versioned DTO 与内存候选；root 登记、Seal 捕获、Accept/Discard、失败烧号、退役映射清理均有见证。
    历史 String/旧 CLR 祖先消失后仍按 exact 布局生成 ID DTO；ReadVn 只读数字，不验证/解析引用目标。
-   下一分片推荐见 [DB-025](../docs/design-branches/0025-string-object-decoding-slice.md)（Open，尚未实施）：
-   string 内容解码表 + SG 各版引用槽校验，保留 ID DTO，以 typed 字节见证闭合引用保真；领域 Restore 另片。
-   首先验证独立空串分配，再裁决必要接缝；不提前建立通用图加载/TypeCodec registry。
+   [DB-025](../docs/design-branches/0025-string-object-decoding-slice.md) 的 string-only 内容解码表与 SG 各版引用槽校验已实现，
+   已通过验收；保留 ID DTO，typed 消费者负责完整目录和 exact Schema 预检，领域 Restore 另片。
+   用户已裁决所有空串统一 Empty，非空维持身份；产品不采用非公开入口或公开 API 的独立空串分配技巧。
+   不提前建立通用图加载/TypeCodec registry；精确进度见 DB-025 §7。
    struct 仍需 inline exact Schema 表达，独立排期。
 4. 接入真实 ObjectVersion 内容存取；raw Base-only 是小范围候选。codecs 与 raw storage 没有硬性先后依赖，
    当前按用户已选择的 codec-first 推进。
@@ -104,7 +108,7 @@ DTO body 支持 13 种标量及 string 引用的 UInt32 ID；String 内容独立
 
 ## 当前待定项
 
-- boxed 值身份、空字符串独立实例分配。13 种标量已贯通 Schema/DTO；
+- boxed 值身份；空串已裁决两端统一 Empty，不再研究独立分配。13 种标量已贯通 Schema/DTO；
   char 按 UInt16 code unit（允许孤立代理项），Half/float/double 保持负零及 NaN payload 位。
   decimal、enum、nullable value、native int、Int128 和一般 struct 仍未支持。
 - SG 已生成当前及历史标量/string ID DTO body；按 stored Schema 的运行时注册/分派、DTO 升级及领域恢复尚未实现。
@@ -141,7 +145,7 @@ DTO body 支持 13 种标量及 string 引用的 UInt32 ID；String 内容独立
   Schema TypeTag 1–4 不变，新增 5–14；旧工具拒绝新 tag，需要同步更新包。不是未来 TypeCodec 编号。
   已知成员仍直接静态调用 byte 原语。
   body 不含对象头或恢复分配；AddRoot 只检验所选 concrete binding，不是自动 runtime 类型分派。
-  ReadVn 成功才返回 DTO，外层负责布局匹配和持久发布隔离；内存引用上下文已实现。
+  ReadVn 成功才返回 DTO，外层负责布局匹配和持久发布隔离；StringReadTable 与单独的 SG 引用校验已实现。
   通用泛型注册及 DTO 升级尚未实现；不能声称已生成一般 struct serializer。
   SG body + runtime 按需闭合仍是推荐路线，不是整体翻新旧 IL 后端的决定。BCL 集合继续暂缓。
 - 代码验证结果保存在实验笔记；generic ref 机制的

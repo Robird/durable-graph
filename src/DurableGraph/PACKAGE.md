@@ -62,7 +62,8 @@ reader.EnsureFullyConsumed();
 Select the ReadVn matching the stored layout. There are no domain-object Read/Write overloads.
 
 The Serialization library is a transitive package dependency. Its Reader/Writer constructors,
-all 13 scalar operations, and Reader boundary checks are public for generated-code consumers.
+all 13 scalar operations, non-null string content ReadString/WriteString, and Reader boundary checks
+are public for generated-code consumers. Nullable string and raw block helpers remain internal.
 Char uses canonical UInt16 encoding of a UTF-16 code unit, including isolated surrogates.
 Half/float/double use fixed-width little-endian bytes preserving negative zero and NaN payload bits.
 Bodies do not restore domain instances, dispatch on runtime types/stored schemas, upgrade DTOs,
@@ -87,7 +88,10 @@ AddRoot registers identity; Seal reads the fields. Keep the domain view stable f
 through Seal. Multiple concrete roots share one context. Root IDs are allocated before strings are
 discovered, in root order and then base-first/FieldId order. Repeated/null roots remain in RootIds,
 with zero representing null; Objects is the complete immutable live list ordered by ID. Equal-content
-strings with different CLR identities remain separate string entries. A string entry exposes its
+nonempty strings with different CLR identities remain separate string entries. Empty strings are
+explicitly normalized to string.Empty before identity lookup and share one live ID. This normalization
+does not mutate domain fields or reserve a global ID; retirement and reentry use the usual lifecycle.
+A string entry exposes its
 immutable StringContent; a durable entry exposes its exact Schema and `GetState<TState>()` by value.
 The stored DTO box is private, and `TState : unmanaged` prevents managed references in DTO slots.
 
@@ -103,8 +107,23 @@ The public generic AddRoot method is a generated-code seam: hand-written callers
 DTO and callback correctly. Passing a derived instance to a base root binding is rejected; base
 segment Capture remains valid on derived instances. No global registry or automatic polymorphic
 root dispatch is provided. Reference bodies write/read UInt32 IDs only; ReadVn does not resolve or
-validate their targets. This slice does not decode string objects, restore domain objects, handle
-Durable reference fields/cycles, or perform StateStore Save.
+validate their targets. Each generated Vn now also has a separate internal
+`ValidateStringReferences(in Vn state, StringReadTable table)` method. It checks only Schema String
+fields, including historical ancestor fields; ordinary UInt32 fields remain numbers.
+
+Use public `StringReadTable.Decode(IEnumerable<(uint Id, ReadOnlyMemory<byte> Body)>)` to decode
+complete canonical non-null string bodies for one loading view. It consumes inputs synchronously,
+retains no input buffers and returns only after all records succeed. Zero or duplicate record IDs,
+malformed content and trailing bytes are rejected. `ResolveString(0)` returns null; any other ID
+absent from this table throws InvalidDataException. Different nonempty string IDs retain distinct
+instances; empty bodies at different IDs intentionally resolve to the same string.Empty singleton.
+No nonpublic runtime allocation hook or content interning of nonempty strings is used.
+
+The table validates string records only. Callers still pair exact schemas with typed DTO bodies,
+validate the complete heterogeneous object directory and roots, and check all DTO reference slots
+before exposing their result. The package probe demonstrates that organization with owned bytes;
+it is not a persistent graph format. Domain restoration, Durable reference fields/cycles, general
+stored-schema dispatch, DTO upgrades and StateStore Save remain outside this slice.
 
 Changing an exact base binding requires an explicit version increase in its derived class and then
 in each affected descendant. Accepted `.dgsnapshot` history retains the old base binding. Generator

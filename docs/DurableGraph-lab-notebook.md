@@ -780,6 +780,23 @@
 
 ## 6. 船长日志
 
+### 2026-09-06：完成 DB-025 string 内容读取与引用校验，空串明确规范化
+
+- **Decided**：用户选择 Capture/读取两端统一零长度 string 为 string.Empty，不保留其不同实例身份。
+  非空仍按引用区分；不采用任何独立空串分配机制。此前非公开及公开 API 的
+  [分配见证](design-branches/0025-empty-string-allocation-witness.md)仅保留为未采用方向的研究证据。
+- **Observed**：CaptureString 在候选/parent 身份查找前规范化；StringReadTable 同步解码完整独立 bodies，
+  保持非空身份、允许不同空串 ID → Empty、拒绝零/重复条目 ID/损坏内容/尾随字节，失败不暴露半张表。
+- **Observed**：SG 为各 Vn 生成独立 ValidateStringReferences，只检查 exact Schema 的 String 槽；
+  历史 String→UInt32 与旧 CLR 祖先消失仍有发布历史/真实执行见证。ReadVn 的 ID DTO body 保持不变。
+- **Observed**：根 build 零警告/错误，聚焦 70/70，全套 536/536、零跳过；真实单包消费者通过，
+  产物 `experiments/PackageConsumerProbe/obj/run-20260906055311-34904`。独立审查无代码/测试阻断，
+  并修正旧文档对空串 ID 反向映射的无条件描述。完整验收入口见 [DB-025 §7](design-branches/0025-string-object-decoding-slice.md)。
+- **Observed**：首轮发现测试框架将 MemberData 中孤立 D800 替换为 FFFD；改为 Fact 内部构造，
+  保留原 golden 与码元断言后通过，产品编码未因此改变。
+- **Deferred**：完整目录与 exact body 配对仍由 typed 消费者组织；领域 Restore、通用图加载、
+  导入 CaptureSession、DTO upgrade、ObjectVersion 持久内容/Save 继续独立排期。
+
 ### 2026-09-06：规划 string 对象解码与引用槽校验分片
 
 - **Observed**：在 `327a425` 核验现有 Capture/ID DTO 与 string 内容 codec；ReadVn 尚不解析引用，
@@ -787,8 +804,7 @@
 - **Proposed**：主代理与独立设计子代理推荐 [DB-025](design-branches/0025-string-object-decoding-slice.md)：
   保留 uint DTO，增加 string-only 解码表与 SG 各版引用槽校验，真实 typed 消费者从 bytes 验证引用保真。
   该表不证明完整异构目录唯一性；不提前引入 resolved DTO、领域 Restore 或通用 registry。
-- **Open**：独立空串分配是首个执行检查点；若机制需要 private runtime 依赖或缩小支持合同，应另行裁决。
-  本轮只规划/更新文档，没有产品代码改动或下一片实现结果。
+- **Resolved later**：本次仅规划；后续用户选择空串统一 Empty，并完成 DB-025（见上条）。
 
 ### 2026-09-06：string 引用 Capture、ID DTO 与内存候选闭环
 

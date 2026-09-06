@@ -166,7 +166,9 @@ DurableGraph 更接近：
 - 修改后只产生自己的新 object version；引用它的父对象若引用身份未变，不必重写。
 
 统一 identity 的范围还包括受支持 string/数组/BCL 容器；这些对象不必继承有 ID 字段的基类，
-外层映射可以保存其身份。string 内容相等不合并实例，引用成员只保存 ID，字符串记录自己保存内容。
+外层映射可以保存其身份。非空 string 内容相等不合并实例，引用成员只保存 ID，字符串记录自己保存内容。
+空字符串是明确例外：Capture 与读取均规范化为 string.Empty，不保留零长度实例之间的引用区别；
+null 仍与空串区分。规则见 [DB-025](design-branches/0025-string-object-decoding-slice.md)。
 
 ### 6.2 Durable Value
 

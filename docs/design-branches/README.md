@@ -46,8 +46,10 @@
 | [DB-022](0022-versioned-state-dto-capture.md) | Versioned DTO、Capture 与 DTO binary body | Chosen | readonly scalar Vn/历史积累/current Capture；string 引用 Capture 已由 DB-024 接入，比较/估算、DTO 升级与 StateStore 管线另片推进 |
 | [DB-023](0023-scalar-schema-dto-slice.md) | 标量 Schema、历史与 DTO 编码贯通 | Chosen | 13 种标量贯通；string 引用 Capture 已落地，内容编码/引用恢复为下一候选 |
 | [DB-024](0024-reference-capture-and-reusable-object-ids.md) | 引用 Capture、revision 内身份与可复用 ObjectId | Chosen | SG root 适配器、封闭 ID DTO 图及内存 accept/discard；回收/恢复/struct 延期 |
-| [DB-025](0025-string-object-decoding-slice.md) | string 对象内容解码与引用槽校验分片 | Open | 下一分片推荐；先核验独立空串分配与最小公开接缝，再决定实施 |
+| [DB-025](0025-string-object-decoding-slice.md) | string 对象内容解码与引用槽校验分片 | Chosen | string-only 解码表、SG 各版引用校验、空串两端统一已验证；完整图目录/Restore/Storage 内容接入另片 |
 
 ## 附录文件
+
+- [0025-empty-string-allocation-witness.md](0025-empty-string-allocation-witness.md)（DB-025 附件）：.NET 10.0.5 独立空串分配与压缩 GC 的可复跑证据，不是跨运行时保证。
 
 - [0018-runtime-binding-witness.md](0018-runtime-binding-witness.md)（DB-018 附件）：运行时闭合泛型与 typed ref 读入见证。该文件未声明统一分支状态标签（仅机制见证）。

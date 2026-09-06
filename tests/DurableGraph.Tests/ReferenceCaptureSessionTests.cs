@@ -87,6 +87,73 @@ public sealed class ReferenceCaptureSessionTests {
     }
 
     [Fact]
+    public void ReferenceCaptureNormalizesDistinctEmptySourcesToOneCanonicalObjectAndKeepsNullSeparate() {
+        var (firstEmpty, secondEmpty) = CreateDistinctEmptySources();
+        CaptureSession session = new();
+        CapturedGraph graph = CaptureGraph(session,
+            new Domain { First = firstEmpty, Second = secondEmpty },
+            new Domain { First = string.Empty, Second = null });
+
+        Assert.Equal<uint>([1, 2, 3], graph.Objects.Select(item => item.Id));
+        State first = graph.Objects[0].GetState<State>();
+        State second = graph.Objects[1].GetState<State>();
+        Assert.Equal(3u, first.First);
+        Assert.Equal(first.First, first.Second);
+        Assert.Equal(first.First, second.First);
+        Assert.Equal(0u, second.Second);
+        Assert.Same(string.Empty, graph.Objects[2].StringContent);
+        session.Accept(graph);
+    }
+
+    [Fact]
+    public void ReferenceCaptureEmptyReplacementKeepsLiveIdButRetirementRequiresANewMonotonicId() {
+        var (firstEmpty, secondEmpty) = CreateDistinctEmptySources();
+        CaptureSession session = new();
+        Domain source = new() { First = firstEmpty };
+        CapturedGraph first = CaptureGraph(session, source);
+        session.Accept(first);
+        Assert.Equal(2u, first.Objects[0].GetState<State>().First);
+
+        foreach (string replacement in new[] { secondEmpty, string.Empty, firstEmpty }) {
+            source.First = replacement;
+            CapturedGraph unchanged = CaptureGraph(session, source);
+            Assert.Equal<uint>([1, 2], unchanged.Objects.Select(item => item.Id));
+            Assert.Equal(2u, unchanged.Objects[0].GetState<State>().First);
+            Assert.Same(string.Empty, unchanged.Objects[1].StringContent);
+            session.Accept(unchanged);
+        }
+
+        source.First = null;
+        CapturedGraph retired = CaptureGraph(session, source);
+        Assert.Single(retired.Objects);
+        Assert.Equal(0u, retired.Objects[0].GetState<State>().First);
+        session.Accept(retired);
+
+        source.First = secondEmpty;
+        CapturedGraph reintroduced = CaptureGraph(session, source);
+        // No replacement consumed an ID; empty identities are still subject to ordinary retirement.
+        Assert.Equal<uint>([1, 3], reintroduced.Objects.Select(item => item.Id));
+        Assert.Equal(3u, reintroduced.Objects[0].GetState<State>().First);
+        Assert.Same(string.Empty, reintroduced.Objects[1].StringContent);
+        session.Accept(reintroduced);
+        Assert.Equal(2u, first.Objects[0].GetState<State>().First);
+        Assert.Same(string.Empty, first.Objects[1].StringContent);
+    }
+
+    private static (string First, string Second) CreateDistinctEmptySources() {
+        // Public Replace currently creates distinct empty instances on this runtime. This is only
+        // a fixture: fail visibly if that behavior changes, rather than weakening normalization coverage.
+        string first = "A".Replace("A", string.Empty);
+        string second = "A".Replace("A", string.Empty);
+        Assert.Equal(string.Empty, first);
+        Assert.Equal(string.Empty, second);
+        Assert.NotSame(string.Empty, first);
+        Assert.NotSame(string.Empty, second);
+        Assert.NotSame(first, second);
+        return (first, second);
+    }
+
+    [Fact]
     public void ReferenceCaptureSealsCopiesAndAcceptDoesNotRecapture() {
         CaptureSession session = new();
         Domain source = new() { Value = 1, First = new(['o', 'l', 'd']) };

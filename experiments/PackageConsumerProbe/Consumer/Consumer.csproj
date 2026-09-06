@@ -15,6 +15,7 @@
     <Compile Include="Domain.V2.cs" Condition="'$(ProbeVersion)' == '2'" />
     <Compile Include="Domain.Binary.cs" Condition="'$(ProbeVersion)' == '3'" />
     <Compile Include="Domain.ReferenceCapture.cs" Condition="'$(ProbeVersion)' == '3'" />
+    <Compile Include="Domain.StringDecoding.cs" Condition="'$(ProbeVersion)' == '3'" />
   </ItemGroup>
 
   <ItemGroup>
