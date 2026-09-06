@@ -20,7 +20,7 @@
 
 | 文档 | 状态 | 推荐范围 |
 |---|---|---|
-| [DB-031 持久对象类型头与 exact Schema 校验](0031-persisted-object-type-envelope-slice.md) | Proposed | 每条 Base/Delta 内联类型描述，canonical Schema 与冷读全链预检；暂不含 roots、SchemaStore、自动分派或 Commit |
+| [DB-031 持久 Schema 注册与 Base 类型引用](0031-persisted-object-type-envelope-slice.md) | Revised proposal | 持久注册及冲突检查、Base 引用；Delta 继承 Base 类型。旧内联草稿已归档，注册恢复/API 尚待冻结 |
 
 ## 按任务查阅的混合决策
 

@@ -1,249 +1,198 @@
-# DB-031：持久对象类型头与 exact Schema 校验
+# DB-031：持久 Schema 注册与 Base 类型引用
 
-> 状态：Proposed — 本轮只规划，等待用户采纳后实施。
-> 日期：2026-09-06；核对源码基线 `6439ee5`，规划开始时工作区干净。
-> DB-030 已完成；本文不改变已实现行为，不构成产品修改授权。
+> 状态：Revised proposal — 2026-09-07 根据用户反馈及再次讨论修订，尚未冻结实施合同。
+> 用户本轮提出设计建议并允许修订文档，没有要求开始实施。
+> 当前产品仍为 `6439ee5` 的 DB-030；上一版提案提交为 `5fdc371`。
 
-## 1. 问题与最小成功判据
+## 1. 本次修正与目标
 
-[DB-030](0030-captured-object-preparation-slice.md) 已统一从异构 frozen DTO 图准备内容，
-[DB-029](0029-prepared-object-revision-planning-slice.md) 接通策略与可追加 Revision。
-但真实冷读仍依赖测试的 `metadata[(FrameAddress, ObjectId)]`，其中保存 kind、exact Schema
-及 codec 标记。盘上字节即使能用某个 reader 解码，也不能据此知道它声明的类型和版本。
+推荐直接建设产品级持久 SchemaStore，并让对象 Base 引用其中的 exact Schema。
+Delta 不重复声明类型：整个 Base→Delta 内容链只能使用 Base 所确定的同一 Schema。
 
-本片回答：能否把对象的类型解释信息与每条对象内容一起持久保存，冷重开后先检查完整
-重建链的类型，再调用现有静态 body reader？
+上一版“每条 Base/Delta 内联完整 Schema”不再推荐。它局部减少了寻址工作，但引入重复类型
+声明、较大 payload 和一次预期会废弃的格式；持久 Schema 注册已有真实消费者，不应再绕开。
+[原提案及当时理由](../archive/2026-09-07/0031-inline-object-envelope-proposal.md) 已归档。
 
-最小成功判据：真实异构 Capture → Prepare → policy → Append → 冷重开见证删除上述
-per-record 元数据字典；仅从对象记录恢复 string/durable kind 和完整 exact Schema，
-并在调用任何 body decoder 前拒绝最后一条 Delta 的错误 Schema。
-继续覆盖继承、共享 string、Base/Delta/主动 Base/NoChange 和按目标 Revision 校验引用。
+本片要补的是：代码声明的 Schema 经持久注册后，同一个 `(SchemaId, Version)` 永远指向同一个
+完整定义；State Base 通过 exact 引用找到它，冷重开不依赖 writer 留下的描述字典。
 
-仍由 fixture 提供查询的 Revision/ObjectId、roots 与编译期 reader。reader 是可执行类型知识，
-不能从 Schema 描述自动制造；roots 尚未持久保存。本片是自描述对象记录，不是完整自描述图
-或通用 Load，也不建立 WorkingTree 的已提交基线。
+最小可观察结果：真实文件注册 Schema 及祖先、写入引用它的对象 Base 和同版 Delta，关闭后
+重开 SchemaStore/StateStore，解析 stored exact Schema 并用匹配的历史 reader 重建 DTO；
+再次提供同 key 不同定义时，在任何新注册或对象追加前拒绝。
 
-## 2. 候选与讨论结果
+## 2. 已有事实与可复用机制
 
-| 候选 | 收益与代价 | 推荐 |
-|---|---|---|
-| WorkingTree 完整 Commit | 直接收敛使用入口，但需发布点、屏障、故障裁决；冷加载还缺 roots、类型解释、Restore 和身份导入 | 后继消费者；不能以 Append + Accept 代替 Commit |
-| 单独 canonical Schema codec | 小而清楚，但只解决 descriptor 往返，仍保留现有冷读的外带元数据 | 合入本片，获得立即消费者 |
-| 对象类型头 + canonical exact Schema | 直接补上每条持久对象记录的解释信息，不改变领域类型范围或 raw Storage 职责 | 本轮推荐 |
-| 同时做 SchemaStore、roots、自动 reader 分派 | 可进一步缩小完整 Load 缺口，但额外引入寻址、追加顺序、Revision 元数据与运行时绑定 | 分片处理 |
-| struct、一般引用、领域 Restore | 各有独立价值，但不消除当前持久类型事实缺口 | 保留穿插机会 |
+- [InMemorySchemaStore](../../src/DurableGraph/InMemorySchemaStore.cs) 已具备 exact key、完整
+  Schema 相等、祖先闭包预检、等价注册幂等和冲突拒绝。缺的是持久记录、恢复与确认边界。
+- [InMemoryStateStore](../../src/DurableGraph/InMemoryStateStore.cs) 已表达“先注册 Schema，
+  状态保存其 key，读取解析 exact Schema”的职责关系；其 string slot 和 boxed 字段字典属于旧实验，
+  不适合作为新对象图产品 API 的骨架。
+- [StoredGraphNormalizationProbe](../../tests/DurableGraph.Tests/StoredGraphNormalizationProbe.cs)
+  把历史 Snapshot 升级为 current，并设 `RequiresRewrite`；
+  [GraphDeltaProbe](../../tests/DurableGraph.Tests/GraphDeltaProbe.cs) 对该标记产生完整 Upsert，
+  即使值没变也不能省略，变得不可达则只移除。
+- [GraphDeltaProbeTests](../../tests/DurableGraph.Tests/GraphDeltaProbeTests.cs) 与
+  [图恢复见证](../../tests/DurableGraph.Tests/NormalizedGraphMaterializationProbeTests.cs) 覆盖
+  重写义务、失败保留、恢复后保存、共享和循环。这是内存 logical graph 见证，不是物理 Delta 链升级
+  或持久发布故障已经完成的证据。
+- 用户提到的 [SnapshotUpgradeShapeProbe](../../experiments/SnapshotUpgradeShapeProbe/README.md)
+  主要是升级函数 `in/out` 等 C# 语言形状见证。
+- 产品 [PreparedObject.BaseOnlyUpdate](../../src/DurableGraph.StateStore/PreparedObject.cs) 与
+  [ObjectRevisionPlanner](../../src/DurableGraph.StateStore/ObjectRevisionPlanner.cs) 已接受
+  “旧对象无合法 Delta，必须 Base”；无需 D/H，不消耗可选 Base 预算。
+  新 DTO 的升级、加载基线导入及重写义务传递尚未接通，当前 CaptureSession 跨 Schema 仍拒绝。
 
-两位 subagent 独立评估后交叉商议。初始分歧是先单独 canonical descriptor，还是带上
-对象 envelope；最终认为后者能立即替换真实 fixture 的外带信息，范围仍可控制。
-主代理核对了消费者、Prepare 和计量接缝，采用这一推荐。
+## 3. Base 定义整条内容链
 
-### 2.1 内联描述还是 SchemaStore 引用
-
-推荐首版在 durable 对象的每条 Base/Delta 中内联完整 exact descriptor，包含整条祖先链。
-string 使用短类型编码，不带自定义 Schema。
-
-- 内联无需增加 Schema 地址、独立追加顺序或缺失 Schema 引用处理，容易独立验证。
-- 代价是真实元数据重复；小对象上尤其明显，可能使 Base 更常被选择，或增加 Delta 链的 H。
-  Frame 大小上限并不能消除这部分开销。
-- 每条 Delta 也带完整头，保留逐记录核对 exact Schema 的简单合同。仅 Base 带头的候选可省空间，
-  但需要另定 Delta 继承类型的解释规则，本片不采用。
-- 这是首版对象 envelope 的明确取舍；长期仍面向 SchemaStore exact 引用。后续需要时改版 envelope，
-  再决定地址或内容引用，不为原型预建双格式兼容、双写或迁移框架。
-
-这项持久表示选择尚待用户采纳。不能把“内联最省实施步骤”说成已证明具有最好运行性能。
-
-## 3. 当前源码接缝
-
-- [CaptureSession.Prepare](../../src/DurableGraph/CaptureSession.cs) 集中取得 current kind/Schema
-  与裸 PreparedBase/PreparedDelta，适合在对象边界统一包头。
-- [DurableSchema](../../src/DurableGraph/DurableSchema.cs) 已定义完整结构相等、exact BaseSchema
-  及声明段内字段排序；[InMemorySchemaStore](../../src/DurableGraph/InMemorySchemaStore.cs)
-  已检查同 key 不同 shape 和祖先冲突。
-- [ObjectRevisionPlanner](../../src/DurableGraph.StateStore/ObjectRevisionPlanner.cs) 按输入 payload
-  长度调用 [ObjectVersionPayloadSize](../../src/DurableGraph.StateStore.Storage/ObjectVersionPayloadSize.cs)；
-  [Storage 链读取](../../src/DurableGraph.StateStore.Storage/StateRevisionStore.cs) 的 H 来自实编码长度。
-  因而先包头、后规划即可把新开销纳入现有 B/D/H，不另改策略公式。
-- [统一保存集成](../../tests/DurableGraph.Tests/PreparedRevisionGeneratorTests.cs) 与
-  [持久 Delta 见证](../../tests/DurableGraph.Tests/PersistedDeltaChainGeneratorTests.cs) 仍手持
-  `DeltaFixtureDescriptor`、Schema 和 roots，是本片应实际修改的消费位置。
-
-## 4. 推荐数据流与模块边界
+推荐将以下规则定义为产品合同，而非依靠每条 Delta 再做一份类型声明：
 
 ```text
-SG / string 预制 codec：冻结 DTO → 裸 PreparedBase / PreparedDelta
-                                  ↓
-Runtime CaptureSession.Prepare：kind + exact Schema + 裸内容 → 带类型头的 owned 内容
-                                  ↓
-既有 prepared rows → DB-029 B/D/H / policy → Storage opaque body
-                                  ↓
-冷读：raw ObjectVersionChain → 全链类型头预检 → 静态 Read / ApplyDelta
-                                  ↓
-完整 DTO 的 string 引用验证（目标 Revision）
+Base(V1) → Delta(V1) → Delta(V1)
+           按 V1 完整重建
+                    ↓
+               完整 V1 DTO
+                    ↓ Upgrade
+         current V2 DTO + RequiresRewrite
+                    ↓ 下一次显式保存，若仍 live
+                 Base(V2) → 后续 Delta(V2)
 ```
 
-实现放在 DurableGraph runtime，复用其已有 Serialization 依赖；不新增程序集，Runtime 不引用
-StateStore/Storage，Storage 不引用 DurableSchema。底层 StateRevision wire v3 继续原样保存
-opaque body；本片新增的是 body 内部的对象格式，并非声称“没有持久格式变化”。
+关键顺序是先应用完旧版 Delta，再升级完整旧 DTO，不能升级 Base 后用新版 reader 应用旧 Delta。
+“内存统一 current DTO”指对外交付的可编辑基线；历史解码和升级过程仍会暂时存在旧 DTO。
 
-### 4.1 裸 body 与带头内容
+- 合法 Delta 必须延续 prior 内容链的 exact Schema；布局变化从新 Base 开始。
+- current DTO 与 normalized baseline 相等，也不能取消旧 Schema 带来的重写义务。
+- 义务属于加载/工作会话元数据，不进入领域字段或持久 DTO。新基线同时保存与持久 prior 的关系，
+  不能把 normalized DTO 误称为旧 bytes 的逐字投影。
+- 对仍 live 的对象映射到 BaseOnlyUpdate；不再 live 的对象移除，不因标记而保活。
+- 只有确认发布 exact candidate 后才清除义务；确定未发布失败保留，发布不确定时先 reconcile。
+  读取和 Upgrade 本身不回写。
+- string 的 Base 使用内建类型标记；不可变内容没有对象 Delta。ID 复用的新占用者同样从 Base 开始。
 
-SG 各版 `Write/Read/PrepareBase/PrepareDelta/ApplyDelta` 保持裸 body 合同，字段操作仍静态绑定。
-`StringPayloadCodec.PrepareBase` 同样保持裸 string body。
+不在 Delta 存 Schema 后，无法通过“Delta 自己声明的版本”检测伪造的跨版 body；它本就没有该
+独立声明。正确性来自受控 producer 的同版规则、Base exact reader 及 raw prior 校验。
+重复类型头也不能证明任意 callback 确实按声明 Schema 编码。
+上一版“最后一条 Delta 错 Schema 头、全部 reader 零调用”的验收因此撤回，改测跨版 producer
+不能生成 Delta、Base exact 匹配、旧链先还原后升级和强制 Base 的状态律。
 
-`CaptureSession.Prepare` 在这些结果外包头，再放入 `PreparedCapturedObject.BaseContent/DeltaContent`。
-这些属性实施后表示完整 typed object payload；必须同步 XML、PROJECT、测试和包消费说明，
-不能继续把它们当作直接传给 `ReadVn` 的裸 DTO bytes。
+新 DTO Upgrade/工作会话不是 SchemaStore 的前置实现要求：首片可以先用现有同版 Capture
+消费者验证类型引用，后续加载分片再把上图自动串起来；不得以 fixture 的人工 BaseOnly 分类
+宣称完整自动升级保存已实现。
 
-保留 PreparedBase/PreparedDelta 的 owned bytes 模型，不为本片增加一套池或缓存。
-包装 Delta 必须原样保留原 `HasChanges`；无变化的零位图即使加头后非空，也仍是 NoChange。
-全部 live Base 仍提前准备；每次 Prepare 中，每份 Base/Delta 结果各包一层头，规划和落盘复用最终 bytes。
-重复 Prepare 可重新生成等价内容，已有候选/异常/重入合同不变。
+## 4. SchemaStore 的产品职责
 
-自定义 preparation callback 同样必须生成与声明 Schema 和本格式匹配的裸 body。
-类型头是数据的声明及一致性校验材料，不能证明任意自定义 callback 的正确性或纯度。
+### 4.1 注册和冲突检查
 
-### 4.2 首版对象 envelope
+推荐提供批量注册操作，输入本次使用的 Schema 与完整 exact 祖先依赖闭包：
 
-建议形状如下，具体类型名与方法签名可在实施合同中收敛：
+1. 对已恢复的注册表及整个输入批次预检；同 key 相同定义幂等，不同字段、类型或 exact base 拒绝。
+2. 全部检查通过后才追加缺失定义。批次内自己的冲突也不能变成部分注册。
+3. 满足约定的注册确认边界后，安装内存 key→记录/descriptor 索引。
+4. 冷重开从持久注册事实重建索引，并重新检查重复 key 一致性和依赖完整性。
+5. reader 绑定时再核对 stored 完整 descriptor 与所选历史 reader；这不能代替写入时的注册冲突检查。
 
-```text
-envelopeFormatVersion : byte = 1
-objectTypeCode       : byte = 1 (String) | 2 (Durable)
-if Durable:
-    schemaByteCount   : canonical VarUInt32
-    schemaBytes      : 完整 canonical Schema descriptor
-rawBody              : 外层对象 body 边界内的剩余 bytes
-```
+即使本次所有对象 NoChange，也不能跳过代码声明与已注册 Schema 的一致性检查。
+正常处理冲突的方式是修正版本及需要的升级函数，或由开发者明确重建开发数据；库不覆盖旧定义，
+不自动推断字段迁移，也不自动删除历史来迁就新代码。
 
-不重复保存 ObjectId、Base/Delta kind、prior 或 outer body length，它们已有 Storage envelope。
-外层表示方式与内部对象类型是两种信息，不能混为一个 kind。
-String 不允许携带 Schema；Null 只用引用 ID 0，没有对象记录。
+SchemaStore 保存的是定义事实，不负责制造升级函数。新增版本的注册与是否有可执行升级路径
+是两项检查；打开旧数据进行编辑前必须找到需要的合法路径，否则明确失败。
 
-格式版本 1 同时约定现有标量/string Base 与 DB-027 Delta 的 body 编码规则；Schema 版本不代替
-编码格式版本。将来改变 body 解释规则须明确改版，不能只维持相同 Schema 就静默切换 codec。
-不新增程序集名、CLR Type 名、history 路径或自定义 codec 字符串作为持久类型身份。
+### 4.2 注册是否随 State 保存回滚
 
-底层 raw Storage 接口仍可保存其他 opaque bytes。typed 读取是显式选择的合同，不能以试读成功
-来自动探测类型，也不在失败后回退为旧裸 body。既有 raw tests 继续测试 raw 层。
+推荐采用 repository-wide、单 writer、单调积累的不可变注册表，而非每个 branch 一份 Schema 目录：
 
-### 4.3 Canonical Schema descriptor
+- 已完成的 Schema 注册可以在后续 State 保存失败时保留，继续占用该 key。
+- branch reset 不撤销 Schema 定义，同 key 一致性也不只针对某个 branch 的可达历史。
+- Schema 的注册确认与 State 业务 head 发布不同；注册定义不会使任何对象成为 live。
+- State 发布前必须保证引用的 Schema 已满足规定的持久化屏障；不要求两类记录回滚为同一个事务。
 
-推荐单一二进制编码器从 DurableSchema 生成 bytes，读回同一种逻辑 descriptor。
-保持当前 typed Schema；不要求 SG 同时维护第二份 blob 常量或改写 history 格式。
+这是对长期“单一业务发布点”目标的建议细化，尚待采纳；本轮不悄悄改写目标文档。
+讨论曾提出显式 catalog head，但当前没有 schema 分支/撤销需求，因此不推荐额外引入版本化
+Schema 可见性。若未来需要草案隔离或多 writer，再重访。
 
-```text
-schemaFormatVersion : byte = 1
-declarationCount    : canonical VarUInt32，至少 1
-按最远祖先到最终类型依次写每个声明段：
-    schemaId        : 现有 BinaryPayloadWriter.WriteString 的规范内容编码
-    schemaVersion   : canonical VarUInt32，1..Int32.MaxValue
-    fieldCount      : canonical VarUInt32
-    各声明字段，按 FieldId 严格升序：
-        fieldId     : canonical VarUInt32，1..Int32.MaxValue
-        fieldType   : byte，使用显式固定映射
-```
+首片应以现有 RBF framing 为底座，定义完整 Schema 注册批次的追加与恢复边界。
+不能把“任何物理文件/残留 bytes”当作注册：仅合法格式、完整且符合恢复规则的批次有效；
+未完成/torn 尾部按底层合同处理，已确认内容损坏不能随意跳过。
+Append/flush 结果不明确时暂停注册，重开裁决；恢复可能确认一个尚未来得及向调用方返回成功的批次。
+完整批次的格式、所用 durability barrier、扫描范围及故障模型必须在施工前具体核对底层 API，
+不能用 EndAppend 返回成功代替这些保证。
 
-每段的直接 base 是前一段；第一段无 base，最后一段是被描述类型。无需另写重复 base 指针。
-空字段段有效；整条链不能重复 SchemaId。FieldId 只在本声明段内唯一。
+### 4.3 身份、引用与规范表示
 
-fieldType 首版固定表（不直接依赖 enum 强转或枚举未来增长）：
+推荐先以逻辑 `SchemaKey = (SchemaId, Version)` 作为 Base 的 exact Schema 引用；
+从恢复后的注册索引定位其规范定义，物理地址可留作 SchemaStore 内部实现。
+这直接承接现有 exact key 语义，不是省略完整定义：定义及 exact 祖先必须真实持久保存和校验。
 
-| 代码 | 类型 | 代码 | 类型 |
-|---|---|---|---|
-| 1 | Boolean | 8 | UInt16 |
-| 2 | Int32 | 9 | UInt32 |
-| 3 | Int64 | 10 | UInt64 |
-| 4 | String 引用槽 | 11 | Char |
-| 5 | Byte | 12 | Half |
-| 6 | SByte | 13 | Single |
-| 7 | Int16 | 14 | Double |
-
-这恰好覆盖当前 schema 模型，不是一般 TypeCodec；未来 nominal 引用、inline struct、数组或泛型
-必须另定表达。本片不预留假实现 tag，不据此声称可表示任意 CLR Type。
-
-SchemaId 保持 ordinal、区分大小写；不修剪、不做 Unicode normalization，复用现有 string
-codec 以保留合法 CLR UTF-16 内容。它是描述中的值，不进入对象身份表。
-同逻辑 descriptor 必须唯一编码；相同 key 的不同字段或祖先不能具有同一份 canonical bytes。
-本片用完整 descriptor 比较，不引入 SchemaHash、GetHashCode 持久键或内容寻址。
-
-### 4.4 严格解析与 exact 校验
-
-解析器先验证格式与边界，之后才交付结果；不产生 registry 或会话副作用。
-须拒绝未知格式版本、未知类型码、非最短 VarInt、非法长度、截断、descriptor 尾随数据、
-零/溢出的版本及 FieldId、重复或乱序字段、非法 SchemaId 和重复祖先身份。
-不能先交给 DurableSchema 自动排序，再悄悄接受非规范 wire。
-声明数/字段数须受输入剩余字节约束，checked 转换，不能按未经检查的 count 巨额分配；
-采用迭代处理祖先链，避免直接按 wire 层次递归解析。
-
-当前 DurableSchema 的构造会扫描祖先，Equals 也递归比较 base；因此只限制输入 bytes 不足以
-约束深链成本。首版建议最多支持 256 个声明段（含最终类型），读写两端在构造/编码前拒绝超限，
-测试覆盖边界及超限。这是实现支持上限，不改变 count 的 wire 编码；本片不顺带重构 Schema 模型。
-descriptor 长度不得越过传入对象 payload 边界，各段/总字段数按剩余字节检查及累计校验。
-
-“合法 descriptor”与“存在可执行 reader”分开：格式已支持的 descriptor 可以声明任意正 Schema
-版本，但只有与所选历史 reader 的完整 Schema 匹配才可执行。未知业务版本不回退到 latest。
-不同 envelope 格式版本则在解析阶段直接拒绝。
-
-## 5. 冷读与全链预检
-
-Runtime 提供窄的解析及 exact 检查操作：输入一条已定边界的 payload，可取得 kind、可选
-完整 Schema 和独立拥有的 raw body；durable 可核对 expected exact Schema，string 可核对类型。
-具体 API 不需要接收 Storage 地址、委托注册表或构造领域实例。
-
-冷读集成按以下顺序消费：
-
-1. Storage 从指定 Revision/ObjectId 读取 object-first 原始链，继续负责 prior/Parent/地址校验。
-2. 先解析全链 envelope，再检查各记录与所选 reader 的 kind、完整 Schema 一致；Delta 不能跨 Schema。
-   string 只接受单条 Base。不得边解析一条头边解码一条 body，导致晚到错误前已执行 reader。
-3. 全部预检通过后，解码最早 Base，按序 ApplyDelta，并要求每段 raw body 全消费。
-4. 完整 DTO 的引用再按目标 Revision 验证；owner 沿用旧记录也不能改用旧视图的 string 表。
-
-全链迭代可留在现有 integration coordinator，因为 Runtime 不依赖 Storage。
-类型头解析与 exact 检查必须是产品操作；测试不能仍手写一份 header 解释器。
-此处消除外带 per-record 类型信息，不把 fixture 显式选择 reader 包装成已经实现的自动类型分派。
-
-## 6. 计量与可观察验收
-
-类型头属于对象自身 payload，完整计入 B、D、H。DB-029 的 Delta 文件距离仍按现有上界计量，
-不借本片改 policy、预算含义或 prior 遍历方式。
-集成测试应按含头后的实际成本重新选取对象规模与参数，使真实 Delta 和主动 Base 两种路径
-都仍被覆盖；不能硬保留旧 H 数字，或在估算中排除头以制造旧决策。
-
-| 验收 | 可观察证据 |
+| 引用候选 | 取舍 |
 |---|---|
-| 规范表示 | 独立手写 golden，所有现有字段类型、稀疏编号、空段、继承链、ordinal/UTF-16 SchemaId；不只 writer-reader 自洽 |
-| 拒绝非规范数据 | 未知版本/tag、重复/乱序、超长/截断/尾随；解析失败无对外部分结果或状态修改 |
-| exact 匹配 | 同 SchemaId/version 但不同字段/祖先，错误 kind、未知业务版本、跨版 Delta 在 body 调用前失败 |
-| 真实冷读 | 保存后丢弃 writer-side 描述字典，仅凭盘上头核对类型；Base→Delta→主动 Base→NoChange、new/remove、string 共享及目标视图校验 |
-| 历史生成 | 当前编译仍可按积累的旧 DTO Schema 读取；祖先旧 CLR 定义删除后，不借新 base 假装旧 exact descriptor |
-| 全链先检后读 | 最后一条 Delta 的错误头导致 Base/Delta reader 调用计数均为零；类型合法但 body 非法仍由 body reader 拒绝 |
-| 计量 | 持久 envelope golden 与实际链 H 相符；B/D 均包含头，原 HasChanges=false 经包装仍产生 NoChange |
-| 候选与所有权 | Seal 后领域 mutation 不影响包头内容；重复 Prepare 等价、包装异常不安装基线；输入/输出 bytes 隔离 |
-| 实际包消费 | 单 Runtime PackageReference 调用 SG AddRoot + Prepare，使用产品操作拆头并检查实际 raw goldens |
+| 逻辑 SchemaKey | 不绑定 Frame/文件重写，复用现有冲突索引；代价是 Base 重复 SchemaId，以及冷打开需建立索引 |
+| 物理 Schema 记录地址 | 引用可能更紧凑，可直接寻址；对象 wire 与 Schema 文件保留/重定位耦合，批次内还需记录定位规则 |
+| 仓库内数字 Schema 编号 | 紧凑但增加编号分配、映射及恢复状态；尚无消费者证据要求现在引入 |
 
-## 7. 实施拆分、停止条件与后续
+逻辑 key 是当前推荐，引用形式与批次格式尚未冻结。所有 key 均在所打开 Repository 的 SchemaStore
+中解析，不能拿另一个 Store 的相同裸 key 冒充来源。
 
-用户采纳后，建议主代理先冻结 envelope/schema wire 表及小型 runtime API，再安排：
+Schema 规范编码须独立于反射次序、CLR 名称、程序集版本和 GetHashCode；使用固定版本及字段
+类型映射，保留声明段 FieldId、exact base 依赖和严格解析。可以保存各段定义并以 exact base key
+表达依赖，避免在每个对象或每条 Schema 定义重复完整祖先内容。
+未知编码版本/tag、非规范字段顺序、截断、非法长度、依赖缺失/循环及深度超限均明确拒绝。
+规范表示的详细 wire 表需随真实注册记录设计一起冻结，不机械套用已归档的内联链格式。
 
-1. runtime 子任务：canonical descriptor、对象 envelope、严格读取/匹配及独立 goldens。
-2. Capture/包消费子任务：在 Prepare 包头、保留候选与 HasChanges 合同、更新 XML 与真实 PackageConsumer。
-3. 集成子任务：去掉真实冷读的外带类型字典，核对全链预检和新 B/D/H；不修改策略算法。
-4. 独立审查：规范化唯一性、晚到错误、payload 层次、历史 Schema、计量与范围。
-   主代理整合后集中串行 build/tests/package，避免共享 obj 争用。
+## 5. 与当前保存路径和分层衔接
 
-实施验证运行根 solution build、相关及整合 tests、PackageConsumerProbe。
-DB-030 的 685/685 与包结果是历史基线，本轮规划没有运行代码验证。
+DurableSchema 及 SG 的强类型 Schema/body 知识仍由 Runtime 持有。
+产品 SchemaStore 继承 InMemorySchemaStore 的不变式；产品 State 保存路径使用 DB-030/029 的
+冻结对象图、prepared 内容与 Revision，不把旧 InMemoryStateStore 的 slot/boxed API 扩成第二套产品。
+旧实验是否迁移或保留为见证，按实际消费者裁决，不为名称兼容冻结结构。
 
-上述判据满足即停止。本片不实现 roots 持久化、SchemaStore 寻址、通用 TypeCodec/registry、
-DTO 升级/领域 Restore、WorkingTree Commit/发布、身份导入/数字回收、struct/一般引用/数组/BCL，
-也不加入性能框架。余项只在[路线图](../DurableGraph-research-roadmap.md)维护。
+推荐由已有 StateStore 上层协调注册、Base 引用封装与 planner；必要时让该程序集引用 Runtime。
+Runtime 不反向依赖 Storage，也不让 SG 知道磁盘地址；无需为本片新增程序集。
 
-最接近的后续选择是 roots/类型读取分派，或在具备必要元数据后推进受控工作会话；
-这不是自动进入下一分片的承诺。
+```text
+CaptureSession.Prepare：继续产生 raw Base/Delta + current Schema
+                         ↓
+StateStore 保存准备：完整 Schema 批次预检/注册
+                    → 仅 Base 包类型/SchemaKey 头
+                    → 既有 planner 与 Append
+                         ↓
+cold：SchemaStore 恢复索引 + StateStore raw chain
+      → 解析 Base 类型/SchemaKey，取得 exact descriptor
+      → 匹配历史 reader，应用同版整链
+```
 
-## 8. 本轮规划核对
+上图是本片建议的新产品接缝，尚未实现；不沿用上一版“Runtime Prepare 内为每份 payload 包头”。
+B 含 Base 类型引用；D 不含重复 Schema 信息；H 计一次 Base 头及实际 Delta 内容。
+Schema 定义记录属于共享元数据写入，不重复计入每个对象 B/D/H；整体提交字节应另行统计。
+现有百分比策略仍不是全提交硬峰值上限。
 
-主代理核对当前 Runtime、Schema、Storage、规划器及真实生成集成源码；两位 subagent 交叉讨论
-选片后分别审阅本文。修订了深祖先链上限与重复 Prepare 的表述，无剩余阻塞意见。
-本轮仅修改本提案、PROJECT、路线图与设计索引；长期目标保持原样，未改产品代码或运行 build/tests。
-四份 Markdown 为 UTF-8/LF，112 个本地文件链接及引用锚点检查通过，Git diff 检查通过。
+## 6. 下一施工分片的建议边界
+
+建议 DB-031 分两步整合，先冻结真实注册记录及恢复合同，再接首个 Base 引用消费者：
+
+1. 持久 SchemaStore：规范定义、批量注册/冲突预检、索引、真实关闭重开及故障测试。
+2. Base 类型/SchemaKey 引用：接统一 prepared 内容与现有规划器，移除冷读 fixture 的外带类型定义；
+   Delta 使用 Base exact reader，保持 existing policy 与 raw prior 校验。
+
+验收应包括：
+
+- 等价注册不重复写、输入批次冲突零新写入；同 key 不同字段/祖先在重开后仍拒绝。
+- 真实 RBF 注册确认和恢复边界，完整批次可恢复，不完整尾部与已确认损坏有明确不同处理。
+- 在 State 追加前或期间注入确定失败，已确认 Schema 仍可重开，DTO 基线不安装；本片不调用业务发布。
+  不确定注册结果不能按 key 空闲重试，也不把发布后基线安装失败归入确定未发布失败。
+- generated 历史 Schema（含旧祖先）经持久化后仍 exact 匹配，不借当前 Schema 猜旧布局。
+- Base+Delta 冷重建只从 Base 获取类型及 Schema 定义，缺失 Schema、错误定义或 reader 不匹配明确失败。
+- 真实异构/string Base→Delta→主动 Base→NoChange，计量反映只在 Base 存类型的实际字节。
+- SchemaStore 与对象追加失败都不安装已提交 DTO 基线；不据此声称完整 Commit 已落地。
+
+完整新 DTO Upgrade、RequiresRewrite/加载身份导入、领域 Restore 与 WorkingTree 发布作为后继
+分片；本片先确定其同版链约束。roots、一般引用、struct、数组/BCL、GC 和性能设施仍不混入。
+具体 public API、RBF 恢复步骤、程序集变更和测试闸门在用户认可方向后补成施工合同。
+
+## 7. 本轮讨论核对
+
+主代理核对了现有 InMemory 两类 Store、逻辑图 normalization/save 见证、产品 BaseOnlyUpdate
+与 planner；两位 subagent 再次评估并交叉讨论，撤回逐 Delta 重复头与临时对象内联 Schema 的推荐。
+也讨论了 catalog head 与单调注册表；选择后者作为修订建议，保留其确认/恢复边界待施工细化。
+本轮仅文档修订，没有运行或修改产品代码，不把旧测试结果算作本片的新验证。
+修订稿经过独立复审；五份 Markdown 的 123 个本地链接及引用锚点有效，UTF-8/LF 与 Git diff 检查通过。
