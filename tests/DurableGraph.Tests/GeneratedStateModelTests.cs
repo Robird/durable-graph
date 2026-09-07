@@ -104,9 +104,9 @@ public sealed partial class DurableSchemaGeneratorTests {
         GeneratorTestRun initial = RunGenerator("""
             using Atelia.DurableGraph;
             namespace StateModels;
-            [DurableType("state.base", 1, SchemaOnly = true, GenerateBinaryBody = true)]
+            [DurableType("state.base", 1)]
             public abstract partial class OldBase : DurableBase { [DurableField(4)] private int _old; }
-            [DurableType("state.leaf", 1, SchemaOnly = true, GenerateBinaryBody = true)]
+            [DurableType("state.leaf", 1)]
             public sealed partial class Leaf : OldBase { [DurableField(1)] private string? _name; }
             """);
         AssertSchemaOnlyCompiles(initial);
@@ -114,13 +114,13 @@ public sealed partial class DurableSchemaGeneratorTests {
         GeneratorTestRun run = RunGenerator("""
             using Atelia.DurableGraph;
             namespace StateModels;
-            [DurableType("state.base", 2, SchemaOnly = true, GenerateBinaryBody = true)]
+            [DurableType("state.base", 2)]
             public abstract partial class NewBase : DurableBase {
                 [DurableField(9)] private readonly byte _small;
                 private static void UpgradeStateV1ToV2(in __DurableBinaryBody.V1 prior, out __DurableBinaryBody.V2 next)
                     => throw new System.Exception("Must not independently upgrade ancestor");
             }
-            [DurableType("state.leaf", 2, SchemaOnly = true, GenerateBinaryBody = true)]
+            [DurableType("state.leaf", 2)]
             public sealed partial class Leaf : NewBase {
                 [DurableField(1)] private readonly string? _name;
                 private static void UpgradeStateV1ToV2(in __DurableBinaryBody.V1 prior, out __DurableBinaryBody.V2 next)
@@ -152,7 +152,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         GeneratorTestRun run = RunGenerator("""
             using Atelia.DurableGraph;
             namespace StateModels;
-            [DurableType("readonly.base", 1, SchemaOnly = true, GenerateBinaryBody = true)]
+            [DurableType("readonly.base", 1)]
             public abstract partial class Base : DurableBase {
                 [DurableField(1)] private readonly int _number = 123;
                 [DurableField(2)] private readonly string _name;
@@ -160,7 +160,7 @@ public sealed partial class DurableSchemaGeneratorTests {
                 public static int Calls;
                 protected Base(string name) { Calls++; _name = name; }
             }
-            [DurableType("readonly.leaf", 1, SchemaOnly = true, GenerateBinaryBody = true)]
+            [DurableType("readonly.leaf", 1)]
             public sealed partial class Leaf : Base {
                 [DurableField(1)] private readonly string? _shared;
                 [DurableField(2)] private readonly string? _distinct;
@@ -291,7 +291,7 @@ public sealed partial class DurableSchemaGeneratorTests {
     private static string StateModelHistorySource(int version) => """
         using Atelia.DurableGraph;
         namespace StateModels;
-        """ + $"\n[DurableType(\"state.model\", {version}, SchemaOnly = true, GenerateBinaryBody = true)]\n" +
+        """ + $"\n[DurableType(\"state.model\", {version})]\n" +
         "public sealed partial class Item : DurableBase { [DurableField(1)] private int _number; " +
         (version >= 2 ? "[DurableField(2)] private byte _small; " : "") +
         (version >= 3 ? "[DurableField(3)] private bool _flag; " : "") + "}\n";

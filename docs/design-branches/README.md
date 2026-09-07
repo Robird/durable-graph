@@ -18,10 +18,11 @@
 
 ## 当前规划
 
-DB-034 已验收；后续类型与发布工作尚未选定新施工分片：
+DB-034 已验收；DB-035 正在迁移尚未发布的公开合同与 Schema-history 格式：
 
 | 文档 | 状态 | 实施范围 |
 |---|---|---|
+| [DB-035 公开合同与持久格式术语迁移](0035-public-contract-terminology-migration.md) | Chosen / Implementing | 删除 legacy、唯一 State model、`.dgschema`、生成/runtime/Storage 术语；State wire v3 不变 |
 | [DB-034 领域引用图与首次保存](0034-durable-reference-graph-batch.md) | Chosen / Implemented | G0–G6：nominal Schema/history、非泛型 class 共享/循环、队列 Capture、两阶段 Restore、PrepareNew 与独立增量续写；不含 Commit/发布 |
 
 ## 按任务查阅的混合决策

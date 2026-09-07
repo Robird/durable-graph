@@ -44,12 +44,6 @@ public sealed partial class DurableSchemaGeneratorTests {
         Assert.Same(oldLeaf, GetAncestrySchema(leaf, 1));
         Assert.Null(leaf.GetProperty("Serializer", BindingFlags.Public | BindingFlags.Static));
 
-        InMemorySchemaStore store = new();
-        store.Register(currentLeaf);
-        store.Register(oldLeaf);
-        Assert.Equal(oldLeaf.BaseSchema.BaseSchema, store.GetRequired("ancestry.base", 1));
-        Assert.Equal(currentLeaf.BaseSchema.BaseSchema, store.GetRequired("ancestry.base", 2));
-
         manifest = files.WriteManifest(upgraded);
         publisher.Publish(manifest, files.History);
         publisher.Verify(manifest, files.History);
@@ -77,11 +71,11 @@ public sealed partial class DurableSchemaGeneratorTests {
         const string changedBaseSource = """
             using Atelia.DurableGraph;
             namespace Ancestry;
-            [DurableType("ancestry.replacement", 1, SchemaOnly = true)]
+            [DurableType("ancestry.replacement", 1)]
             public abstract partial class Replacement : DurableBase {
                 [DurableField(1)] public long ReplacementValue;
             }
-            [DurableType("ancestry.leaf", 2, SchemaOnly = true)]
+            [DurableType("ancestry.leaf", 2)]
             public sealed partial class Leaf : Replacement {
                 [DurableField(1)] public bool LeafValue;
             }
@@ -112,15 +106,15 @@ public sealed partial class DurableSchemaGeneratorTests {
     private static string AncestrySource(int baseVersion, int middleVersion, int leafVersion) => $$"""
         using Atelia.DurableGraph;
         namespace Ancestry;
-        [DurableType("ancestry.leaf", {{leafVersion}}, SchemaOnly = true)]
+        [DurableType("ancestry.leaf", {{leafVersion}})]
         public sealed partial class Leaf : Middle {
             [DurableField(1)] public bool LeafValue;
         }
-        [DurableType("ancestry.middle", {{middleVersion}}, SchemaOnly = true)]
+        [DurableType("ancestry.middle", {{middleVersion}})]
         public abstract partial class Middle : Base {
             [DurableField(1)] public long MiddleValue;
         }
-        [DurableType("ancestry.base", {{baseVersion}}, SchemaOnly = true)]
+        [DurableType("ancestry.base", {{baseVersion}})]
         public abstract partial class Base : DurableBase {
             [DurableField(1)] public {{(baseVersion == 1 ? "int" : "long")}} BaseValue;
         }

@@ -19,7 +19,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         Assert.Equal(new[] { "A", "B" }, b.Fields.Select(field => field.TargetSchemaId));
         Assert.Null(a.BaseSchema);
         Assert.Null(b.BaseSchema);
-        string generated = GeneratedSource(run, "DurableSchemaOnly.g.cs");
+        string generated = GeneratedSource(run, "DurableSchemas.g.cs");
         Assert.DoesNotContain("B.GetSchema", generated);
         Assert.DoesNotContain("A.GetSchema", generated);
     }
@@ -40,7 +40,7 @@ public sealed partial class DurableSchemaGeneratorTests {
     public void HistoricalNominalMetadataDoesNotNeedDeletedTargetClrType() {
         GeneratorTestRun run = RunGenerator("""
             using Atelia.DurableGraph;
-            [DurableType("A", 2, SchemaOnly = true)]
+            [DurableType("A", 2)]
             public partial class A : DurableBase { [DurableField(1)] public int Value; }
             """, new InMemoryAdditionalText("a.dgsnapshot", NominalHistory));
         AssertSchemaOnlyCompiles(run);
@@ -102,11 +102,11 @@ public sealed partial class DurableSchemaGeneratorTests {
     private static string NominalSource(int targetVersion) => $$"""
         using Atelia.DurableGraph;
         namespace Nominal;
-        [DurableType("A", 1, SchemaOnly = true)]
+        [DurableType("A", 1)]
         public partial class A : DurableBase {
             [DurableField(1)] public B Next;
         }
-        [DurableType("B", {{targetVersion}}, SchemaOnly = true)]
+        [DurableType("B", {{targetVersion}})]
         public partial class B : DurableBase {
             [DurableField(1)] public A Back;
             [DurableField(2)] public B Self;

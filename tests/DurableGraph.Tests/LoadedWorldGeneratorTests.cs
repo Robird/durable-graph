@@ -180,9 +180,9 @@ public sealed partial class DurableSchemaGeneratorTests {
     private static LoadedWorldFixture CompileLoadedWorldFixture() {
         using AncestryHistoryDirectory history = new();
         GeneratorTestRun initial = RunGenerator(FusedDeltaPreamble + """
-            [DurableType("loaded.base", 1, SchemaOnly = true, GenerateBinaryBody = true)]
+            [DurableType("loaded.base", 1)]
             public abstract partial class OldBase : DurableBase { [DurableField(9)] private string? _retired; }
-            [DurableType("loaded.leaf", 1, SchemaOnly = true, GenerateBinaryBody = true)]
+            [DurableType("loaded.leaf", 1)]
             public sealed partial class Leaf : OldBase {
                 [DurableField(1)] private int _number;
                 [DurableField(2)] private string? _name;
@@ -218,7 +218,7 @@ public sealed partial class DurableSchemaGeneratorTests {
     }
 
     private static readonly string LoadedWorldCurrentSource = FusedDeltaPreamble + """
-        [DurableType("loaded.base", 2, SchemaOnly = true, GenerateBinaryBody = true)]
+        [DurableType("loaded.base", 2)]
         public abstract partial class NewBase : DurableBase {
             public static int ConstructorCalls;
             [DurableField(2)] private readonly byte _marker;
@@ -227,7 +227,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             public byte Marker => _marker;
             public string? BaseName => _baseName;
         }
-        [DurableType("loaded.leaf", 2, SchemaOnly = true, GenerateBinaryBody = true)]
+        [DurableType("loaded.leaf", 2)]
         public sealed partial class Leaf : NewBase {
             public static int Upgrades;
             [DurableField(1)] private int _number;

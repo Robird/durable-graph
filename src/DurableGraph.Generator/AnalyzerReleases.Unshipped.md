@@ -13,13 +13,12 @@ DG0006 | DurableGraph.Generator | Error | Duplicate durable field ID
 DG0007 | DurableGraph.Generator | Error | Unsupported durable field type
 DG0008 | DurableGraph.Generator | Error | Existing Schema member
 DG0009 | DurableGraph.Generator | Error | Classified static field
-DG0010 | DurableGraph.Generator | Error | Reserved serializer member collision
 DG0011 | DurableGraph.Generator | Error | Readonly durable field
 DG0012 | DurableGraph.Generator | Error | Malformed schema history
 DG0013 | DurableGraph.Generator | Error | Conflicting schema history
 DG0014 | DurableGraph.Generator | Error | Missing schema history
 DG0015 | DurableGraph.Generator | Error | Current schema-history candidate mismatch
-DG0016 | DurableGraph.Generator | Error | Reserved legacy snapshot DTO member collision
+DG0016 | DurableGraph.Generator | Error | Reserved Schema-support member collision
 DG0017 | DurableGraph.Generator | Error | Duplicate durable schema ID
 DG0019 | DurableGraph.Generator | Error | Invalid durable schema ancestry
 DG0020 | DurableGraph.Generator | Error | Invalid durable binary body

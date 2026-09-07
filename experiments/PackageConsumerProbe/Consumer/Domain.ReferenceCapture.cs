@@ -4,14 +4,14 @@ using Atelia.DurableGraph.StateStore.Serialization;
 
 namespace PackageConsumerProbe;
 
-[DurableType("package.capture-base", 1, SchemaOnly = true, GenerateBinaryBody = true)]
+[DurableType("package.capture-base", 1)]
 public abstract partial class CaptureBase : DurableBase {
     [DurableField(1)] private string _name;
 
     protected CaptureBase(string name) { _name = name; }
 }
 
-[DurableType("package.capture-hero", 1, SchemaOnly = true, GenerateBinaryBody = true)]
+[DurableType("package.capture-hero", 1)]
 public sealed partial class CaptureHero : CaptureBase {
     [DurableField(1)] private string _alias;
     [DurableField(2)] private int _score = 7;
@@ -20,7 +20,7 @@ public sealed partial class CaptureHero : CaptureBase {
     public void ChangeAlias(string alias) { _alias = alias; _score = 90; }
 }
 
-[DurableType("package.capture-item", 1, SchemaOnly = true, GenerateBinaryBody = true)]
+[DurableType("package.capture-item", 1)]
 public sealed partial class CaptureItem : DurableBase {
     [DurableField(1)] private string _shared;
     [DurableField(2)] private string _equalButDistinct;

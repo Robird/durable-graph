@@ -21,13 +21,13 @@ internal static class Program {
     }
 }
 
-[DurableType("package.persisted-base", 1, SchemaOnly = true, GenerateBinaryBody = true)]
+[DurableType("package.persisted-base", 1)]
 public abstract partial class NamedObject : DurableBase {
     [DurableField(1)] private string _name;
     protected NamedObject(string name) { _name = name; }
 }
 
-[DurableType("package.persisted-character", 1, SchemaOnly = true, GenerateBinaryBody = true)]
+[DurableType("package.persisted-character", 1)]
 public sealed partial class Character : NamedObject {
     [DurableField(1)] private int _score;
     [DurableField(2)] private string _alias;

@@ -7,7 +7,7 @@ using SegmentStore = Atelia.RbfSegmentStore.RbfSegmentStore;
 
 namespace StateStorePackageConsumerProbe;
 
-[DurableType("package.graph-world", 1, SchemaOnly = true, GenerateBinaryBody = true)]
+[DurableType("package.graph-world", 1)]
 public sealed partial class GraphWorld : DurableBase {
     [DurableField(1)] private GraphEntity? _primary;
     [DurableField(2)] private GraphEntity? _alias;
@@ -127,14 +127,14 @@ public sealed partial class GraphWorld : DurableBase {
     }
 }
 
-[DurableType("package.graph-entity", 1, SchemaOnly = true, GenerateBinaryBody = true)]
+[DurableType("package.graph-entity", 1)]
 public abstract partial class GraphEntity : DurableBase {
     [DurableField(1)] private readonly string _name;
     protected GraphEntity(string name) { GraphConstruction.Count++; _name = name; }
     public string Name => _name;
 }
 
-[DurableType("package.graph-character", 1, SchemaOnly = true, GenerateBinaryBody = true)]
+[DurableType("package.graph-character", 1)]
 public sealed partial class GraphCharacter : GraphEntity {
     [DurableField(1)] private int _score;
     [DurableField(2)] private readonly GraphItem _item;
@@ -147,7 +147,7 @@ public sealed partial class GraphCharacter : GraphEntity {
     public GraphItem Item => _item;
 }
 
-[DurableType("package.graph-item", 1, SchemaOnly = true, GenerateBinaryBody = true)]
+[DurableType("package.graph-item", 1)]
 public sealed partial class GraphItem : DurableBase {
     [DurableField(1)] private readonly GraphEntity _owner;
     [DurableField(2)] private readonly GraphItem _self;

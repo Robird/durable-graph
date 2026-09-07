@@ -13,7 +13,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             using Atelia.DurableGraph;
             using Atelia.DurableGraph.StateStore.Serialization;
             namespace BinaryBodies;
-            [DurableType("state.copy", 1, SchemaOnly = true, GenerateBinaryBody = true)]
+            [DurableType("state.copy", 1)]
             public sealed partial class Item : DurableBase {
                 [DurableField(8)] private long _wide = -2;
                 [DurableField(1)] private int _number = -1;
@@ -78,7 +78,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             using Atelia.DurableGraph;
             using Atelia.DurableGraph.StateStore.Serialization;
             namespace BinaryBodies;
-            [DurableType("state.history", 3, SchemaOnly = true, GenerateBinaryBody = true)]
+            [DurableType("state.history", 3)]
             public sealed partial class Item : DurableBase {
                 [DurableField(7)] private bool _current = true;
             }
@@ -135,7 +135,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         ] : [historical];
         GeneratorTestRun run = RunGenerator("""
             using Atelia.DurableGraph;
-            [DurableType("state.item", 2, SchemaOnly = true, GenerateBinaryBody = true)]
+            [DurableType("state.item", 2)]
             public sealed partial class Item : DurableBase { [DurableField(1)] private int _current; }
             """, history);
         AssertSchemaOnlyCompiles(run);
@@ -150,9 +150,9 @@ public sealed partial class DurableSchemaGeneratorTests {
     public void ReferenceCaptureStateDtoScalarLeafKeepsContextFreeCaptureWithHistoricalBaseString() {
         GeneratorTestRun run = RunGenerator("""
             using Atelia.DurableGraph;
-            [DurableType("state.base", 2, SchemaOnly = true, GenerateBinaryBody = true)]
+            [DurableType("state.base", 2)]
             public abstract partial class Base : DurableBase { [DurableField(1)] private int _current; }
-            [DurableType("state.leaf", 1, SchemaOnly = true, GenerateBinaryBody = true)]
+            [DurableType("state.leaf", 1)]
             public sealed partial class Leaf : Base { [DurableField(2)] private bool _flag; }
             """, SnapshotHistory("base-v1.dgsnapshot", "state.base", 1, (1, 4)));
         AssertSchemaOnlyCompiles(run);
@@ -172,7 +172,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             using Atelia.DurableGraph;
             using Atelia.DurableGraph.StateStore.Serialization;
             namespace BinaryBodies;
-            [DurableType("state.empty", 1, SchemaOnly = true, GenerateBinaryBody = true)]
+            [DurableType("state.empty", 1)]
             public sealed partial class Item : DurableBase { }
             public static class Host {
                 public static int[] RoundTrip() {

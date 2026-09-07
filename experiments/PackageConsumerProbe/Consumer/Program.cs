@@ -1,3 +1,3 @@
 using PackageConsumerProbe;
 
-Console.WriteLine(Character.ExerciseGeneratedSnapshots());
+Console.WriteLine(Character.ExerciseGeneratedState());

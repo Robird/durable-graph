@@ -10,7 +10,7 @@ public sealed partial class DurableSchemaGeneratorTests {
     public void SchemaOnlyAllowsAbstractBasesAndDeclaringLayerFieldIds() {
         GeneratorTestRun run = RunGenerator(SchemaOnlyChain(1, 1, 1));
         AssertSchemaOnlyCompiles(run);
-        string generated = GeneratedSource(run, "DurableSchemaOnly.g.cs");
+        string generated = GeneratedSource(run, "DurableSchemas.g.cs");
         Assert.DoesNotContain("Serializer", generated);
         Assert.DoesNotContain("Upgrade", generated);
         Assert.DoesNotContain("Snapshot", generated);
@@ -60,7 +60,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             SchemaOnlyHistory("middle", 1, "base", 1),
             SchemaOnlyHistory("leaf", 1, "middle", 1));
         Assert.Contains(run.GeneratorDiagnostics, diagnostic => diagnostic.Id == "DG0019" && diagnostic.GetMessage().Contains("missing exact base"));
-        Assert.DoesNotContain(run.GeneratedSources, source => source.HintName == "DurableSchemaOnly.g.cs");
+        Assert.DoesNotContain(run.GeneratedSources, source => source.HintName == "DurableSchemas.g.cs");
     }
 
     [Theory]
@@ -116,7 +116,7 @@ public sealed partial class DurableSchemaGeneratorTests {
     public void SchemaOnlyRejectsGeneratedMemberCollisions(string memberName, string declaration) {
         GeneratorTestRun run = RunGenerator($$"""
             using Atelia.DurableGraph;
-            [DurableType("single", 1, SchemaOnly = true)]
+            [DurableType("single", 1)]
             public partial class Single : DurableBase {
                 {{declaration}}
             }
@@ -128,7 +128,7 @@ public sealed partial class DurableSchemaGeneratorTests {
     public void SchemaOnlyDoesNotReserveSerializerOrPayloadSnapshotNames() {
         GeneratorTestRun run = RunGenerator("""
             using Atelia.DurableGraph;
-            [DurableType("single", 1, SchemaOnly = true)]
+            [DurableType("single", 1)]
             public partial class Single : DurableBase {
                 public static int Serializer => 1;
                 private class __DurableSerializer { }
@@ -139,41 +139,15 @@ public sealed partial class DurableSchemaGeneratorTests {
     }
 
     [Theory]
-    [InlineData("[DurableType(\"base\", 1)] public partial class Base : DurableBase { }")]
     [InlineData("public partial class Base : DurableBase { }")]
     public void SchemaOnlyRejectsNonOptedInAncestors(string baseDeclaration) {
         GeneratorTestRun run = RunGenerator($$"""
             using Atelia.DurableGraph;
             {{baseDeclaration}}
-            [DurableType("child", 1, SchemaOnly = true)]
+            [DurableType("child", 1)]
             public partial class Child : Base { }
             """);
         Assert.Contains(run.GeneratorDiagnostics, diagnostic => diagnostic.Id == "DG0019");
-    }
-
-    [Fact]
-    public void SchemaOnlyAndLegacyTypesMayCoexistWithoutSharingAnInheritanceChain() {
-        GeneratorTestRun run = RunGenerator("""
-            using Atelia.DurableGraph;
-            [DurableType("metadata", 1, SchemaOnly = true)]
-            public partial class Metadata : DurableBase { }
-            [DurableType("legacy", 1)]
-            public sealed partial class Legacy : DurableBase { }
-            """);
-        AssertSchemaOnlyCompiles(run);
-        Assert.Contains("Serializer", GeneratedSource(run, "DurableSchemas.g.cs"));
-        Assert.DoesNotContain("Serializer", GeneratedSource(run, "DurableSchemaOnly.g.cs"));
-    }
-
-    [Fact]
-    public void SchemaOnlyHistoryWithBaseIsRejectedByLegacySerializer() {
-        GeneratorTestRun run = RunGenerator("""
-            using Atelia.DurableGraph;
-            [DurableType("leaf", 1)]
-            public sealed partial class Leaf : DurableBase { [DurableField(1)] private int _value; }
-            """, SchemaOnlyHistory("base", 1), SchemaOnlyHistory("leaf", 1, "base", 1));
-        Assert.Contains(run.GeneratorDiagnostics, diagnostic => diagnostic.Id == "DG0019" && diagnostic.GetMessage().Contains("legacy serializer"));
-        Assert.DoesNotContain(run.GeneratedSources, source => source.HintName == "DurableSchemas.g.cs");
     }
 
     [Fact]
@@ -193,25 +167,13 @@ public sealed partial class DurableSchemaGeneratorTests {
     public void SchemaOnlyStillRejectsDuplicateFieldIdsWithinOneDeclaration() {
         GeneratorTestRun run = RunGenerator("""
             using Atelia.DurableGraph;
-            [DurableType("single", 1, SchemaOnly = true)]
+            [DurableType("single", 1)]
             public partial class Single : DurableBase {
                 [DurableField(1)] private int _first;
                 [DurableField(1)] private long _second;
             }
             """);
         Assert.Contains(run.GeneratorDiagnostics, diagnostic => diagnostic.Id == "DG0006");
-    }
-
-    [Fact]
-    public void SchemaOnlyRejectsLegacyChildOfMetadataBase() {
-        GeneratorTestRun run = RunGenerator("""
-            using Atelia.DurableGraph;
-            [DurableType("base", 1, SchemaOnly = true)]
-            public partial class Base : DurableBase { }
-            [DurableType("child", 1)]
-            public sealed partial class Child : Base { }
-            """);
-        Assert.Contains(run.GeneratorDiagnostics, diagnostic => diagnostic.Id == "DG0001");
     }
 
     [Theory]
@@ -221,7 +183,7 @@ public sealed partial class DurableSchemaGeneratorTests {
     public void SchemaOnlyRetainsTheBoundedClrTypeShape(string declaration) {
         GeneratorTestRun run = RunGenerator($$"""
             using Atelia.DurableGraph;
-            [DurableType("single", 1, SchemaOnly = true)]
+            [DurableType("single", 1)]
             {{declaration}}
             """);
         Assert.Contains(run.GeneratorDiagnostics, diagnostic => diagnostic.Id == "DG0001");
@@ -229,21 +191,21 @@ public sealed partial class DurableSchemaGeneratorTests {
 
     [Theory]
     [InlineData("[DurableField(1)] private decimal _unsupported;", "", "DG0007")]
-    [InlineData("", "[DurableType(\"base\", 1, SchemaOnly = true)] public partial class Other : DurableBase { }", "DG0017")]
+    [InlineData("", "[DurableType(\"base\", 1)] public partial class Other : DurableBase { }", "DG0017")]
     public void SchemaOnlyRejectsDescendantsOfFilteredAncestorsWithoutGeneratorFailure(
         string baseFields, string otherDeclaration, string ancestorDiagnostic) {
         GeneratorTestRun run = RunGenerator($$"""
             using Atelia.DurableGraph;
-            [DurableType("base", 1, SchemaOnly = true)]
+            [DurableType("base", 1)]
             public partial class Base : DurableBase { {{baseFields}} }
-            [DurableType("child", 1, SchemaOnly = true)]
+            [DurableType("child", 1)]
             public sealed partial class Child : Base { }
             {{otherDeclaration}}
             """);
         Assert.Contains(run.GeneratorDiagnostics, diagnostic => diagnostic.Id == ancestorDiagnostic);
         Assert.Contains(run.GeneratorDiagnostics, diagnostic => diagnostic.Id == "DG0019");
         Assert.DoesNotContain(run.GeneratorDiagnostics, diagnostic => diagnostic.Id == "CS8785");
-        Assert.DoesNotContain(run.GeneratedSources, source => source.HintName == "DurableSchemaOnly.g.cs");
+        Assert.DoesNotContain(run.GeneratedSources, source => source.HintName == "DurableSchemas.g.cs");
     }
 
     private static void AssertSchemaOnlyCompiles(GeneratorTestRun run) {
@@ -258,13 +220,13 @@ public sealed partial class DurableSchemaGeneratorTests {
     private static string SchemaOnlyChain(int baseVersion, int middleVersion, int leafVersion) => $$"""
         using Atelia.DurableGraph;
         namespace SchemaOnly;
-        [DurableType("base", {{baseVersion}}, SchemaOnly = true)]
+        [DurableType("base", {{baseVersion}})]
         public abstract partial class Base : DurableBase {
             [DurableField(1)] private {{(baseVersion == 1 ? "int" : "long")}} _base;
         }
-        [DurableType("middle", {{middleVersion}}, SchemaOnly = true)]
+        [DurableType("middle", {{middleVersion}})]
         public partial class Middle : Base { [DurableField(1)] private int _middle; }
-        [DurableType("leaf", {{leafVersion}}, SchemaOnly = true)]
+        [DurableType("leaf", {{leafVersion}})]
         public sealed partial class Leaf : Middle { [DurableField(1)] private int _leaf; }
         """;
 

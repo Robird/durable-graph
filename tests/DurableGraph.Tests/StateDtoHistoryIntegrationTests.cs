@@ -57,15 +57,15 @@ public sealed partial class DurableSchemaGeneratorTests {
         using Atelia.DurableGraph;
         using Atelia.DurableGraph.StateStore.Serialization;
         namespace DtoHistory;
-        [DurableType("dto-history.base", 1, SchemaOnly = true, GenerateBinaryBody = true)]
+        [DurableType("dto-history.base", 1)]
         public abstract partial class OldBase : DurableBase {
             [DurableField(1)] private int _removedNumber = -17;
         }
-        [DurableType("dto-history.middle", 1, SchemaOnly = true, GenerateBinaryBody = true)]
+        [DurableType("dto-history.middle", 1)]
         public abstract partial class OldMiddle : OldBase {
             [DurableField(1)] private bool _removedFlag = true;
         }
-        [DurableType("dto-history.leaf", 1, SchemaOnly = true, GenerateBinaryBody = true)]
+        [DurableType("dto-history.leaf", 1)]
         public sealed partial class Leaf : OldMiddle {
             [DurableField(1)] private long _removedAmount = 42;
         }
@@ -82,16 +82,16 @@ public sealed partial class DurableSchemaGeneratorTests {
 
     private static string CurrentStateDtoHistorySource(bool replaceChain) {
         string ancestors = replaceChain ? """
-            [DurableType("dto-history.replacement", 1, SchemaOnly = true, GenerateBinaryBody = true)]
+            [DurableType("dto-history.replacement", 1)]
             public abstract partial class Replacement : DurableBase {
                 [DurableField(1)] private long _newNumber = 64;
             }
             """ : """
-            [DurableType("dto-history.base", 2, SchemaOnly = true, GenerateBinaryBody = true)]
+            [DurableType("dto-history.base", 2)]
             public abstract partial class CurrentBase : DurableBase {
                 [DurableField(1)] private long _newNumber = 64;
             }
-            [DurableType("dto-history.middle", 2, SchemaOnly = true, GenerateBinaryBody = true)]
+            [DurableType("dto-history.middle", 2)]
             public abstract partial class CurrentMiddle : CurrentBase {
                 [DurableField(3)] private int _newCount = 3;
             }
@@ -103,7 +103,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             using Atelia.DurableGraph.StateStore.Serialization;
             namespace DtoHistory;
             {{ancestors}}
-            [DurableType("dto-history.leaf", 2, SchemaOnly = true, GenerateBinaryBody = true)]
+            [DurableType("dto-history.leaf", 2)]
             public sealed partial class Leaf : {{(replaceChain ? "Replacement" : "CurrentMiddle")}} {
                 [DurableField(5)] private int _newLeaf = -7;
                 public void Mutate() { _newLeaf = 999; }

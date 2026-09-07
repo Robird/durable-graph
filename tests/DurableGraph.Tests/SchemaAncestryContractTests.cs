@@ -72,88 +72,9 @@ public sealed class SchemaAncestryContractTests {
     }
 
     [Fact]
-    public void RegisteringLeafRegistersItsCompleteChainAndIsIdempotent() {
-        InMemorySchemaStore store = new();
-        DurableSchema baseSchema = Schema("base", 1);
-        DurableSchema middle = Schema("middle", 1, baseSchema);
-        DurableSchema leaf = Schema("leaf", 1, middle);
-
-        Assert.Same(leaf, store.Register(leaf));
-        Assert.Same(baseSchema, store.GetRequired("base", 1));
-        Assert.Same(middle, store.GetRequired("middle", 1));
-        Assert.Same(leaf, store.Register(Schema("leaf", 1, Schema("middle", 1, Schema("base", 1)))));
-    }
-
-    [Fact]
-    public void ChangedBaseVersionConflictsAtSameDerivedKeyWithoutPublishingNewAncestors() {
-        InMemorySchemaStore store = new();
-        DurableSchema original = Schema("leaf", 1, Schema("middle", 1, Schema("base", 1)));
-        store.Register(original);
-        DurableSchema conflicting = Schema("leaf", 1, Schema("middle", 2, Schema("base", 2)));
-
-        SchemaConflictException exception = Assert.Throws<SchemaConflictException>(() => store.Register(conflicting));
-
-        Assert.Same(original, exception.RegisteredSchema);
-        Assert.Same(conflicting, exception.ConflictingSchema);
-        Assert.Same(original, store.GetRequired("leaf", 1));
-        Assert.Throws<SchemaNotFoundException>(() => store.GetRequired("middle", 2));
-        Assert.Throws<SchemaNotFoundException>(() => store.GetRequired("base", 2));
-    }
-
-    [Fact]
-    public void ConflictingMiddleLeavesNeitherNewLeafNorNewBaseRegistered() {
-        InMemorySchemaStore store = new();
-        DurableSchema originalMiddle = Schema("middle", 1, Schema("base", 1));
-        store.Register(originalMiddle);
-        DurableSchema leaf = Schema("leaf", 1, Schema("middle", 1, Schema("base", 2)));
-
-        Assert.Throws<SchemaConflictException>(() => store.Register(leaf));
-
-        Assert.Same(originalMiddle, store.GetRequired("middle", 1));
-        Assert.Throws<SchemaNotFoundException>(() => store.GetRequired("leaf", 1));
-        Assert.Throws<SchemaNotFoundException>(() => store.GetRequired("base", 2));
-    }
-
-    [Fact]
-    public void ConflictingDeepAncestorLeavesNoNewDerivedSchemasRegistered() {
-        InMemorySchemaStore store = new();
-        DurableSchema originalBase = Schema("base", 1);
-        store.Register(originalBase);
-        DurableSchema changedBase = new("base", 1, new DurableFieldInfo(1, TypeTag.String));
-        DurableSchema leaf = Schema("leaf", 1, Schema("middle", 1, changedBase));
-
-        Assert.Throws<SchemaConflictException>(() => store.Register(leaf));
-
-        Assert.Same(originalBase, store.GetRequired("base", 1));
-        Assert.Throws<SchemaNotFoundException>(() => store.GetRequired("middle", 1));
-        Assert.Throws<SchemaNotFoundException>(() => store.GetRequired("leaf", 1));
-    }
-
-    [Fact]
-    public void NewVersionsCoexistWithoutChangingHistoricalAncestorBindings() {
-        InMemorySchemaStore store = new();
-        DurableSchema oldBase = Schema("base", 1);
-        DurableSchema oldMiddle = Schema("middle", 1, oldBase);
-        DurableSchema oldLeaf = Schema("leaf", 1, oldMiddle);
-        DurableSchema currentLeaf = Schema("leaf", 2, Schema("middle", 2, Schema("base", 2)));
-
-        store.Register(oldLeaf);
-        store.Register(currentLeaf);
-
-        Assert.Same(oldLeaf, store.GetRequired("leaf", 1));
-        Assert.Same(oldMiddle, store.GetRequired("leaf", 1).BaseSchema);
-        Assert.Same(oldBase, store.GetRequired("leaf", 1).BaseSchema!.BaseSchema);
-        Assert.Same(currentLeaf, store.GetRequired("leaf", 2));
-        Assert.Equal(2, store.GetRequired("leaf", 2).BaseSchema!.BaseSchema!.Version);
-    }
-
-    [Fact]
-    public void MetadataOnlyGenerationRequiresExplicitOptIn() {
-        DurableTypeAttribute legacy = new("legacy", 1);
-        DurableTypeAttribute metadata = new("metadata", 1) { SchemaOnly = true };
-
-        Assert.False(legacy.SchemaOnly);
-        Assert.True(metadata.SchemaOnly);
+    public void DurableTypeHasNoGenerationModeFlags() {
+        Assert.Null(typeof(DurableTypeAttribute).GetProperty("SchemaOnly"));
+        Assert.Null(typeof(DurableTypeAttribute).GetProperty("GenerateBinaryBody"));
     }
 
     private static DurableSchema Schema(string schemaId, int version, DurableSchema? baseSchema = null) {

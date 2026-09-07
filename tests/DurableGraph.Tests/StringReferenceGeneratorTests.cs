@@ -42,9 +42,9 @@ public sealed partial class DurableSchemaGeneratorTests {
             using System;
             using Atelia.DurableGraph;
             namespace StringValidation;
-            [DurableType("validation.empty", 1, SchemaOnly = true, GenerateBinaryBody = true)]
+            [DurableType("validation.empty", 1)]
             public sealed partial class Empty : DurableBase { }
-            [DurableType("validation.scalar", 1, SchemaOnly = true, GenerateBinaryBody = true)]
+            [DurableType("validation.scalar", 1)]
             public sealed partial class Scalar : DurableBase {
                 [DurableField(1)] private uint _number = uint.MaxValue;
             }
@@ -123,13 +123,13 @@ public sealed partial class DurableSchemaGeneratorTests {
         using Atelia.DurableGraph;
         using Atelia.DurableGraph.StateStore.Serialization;
         namespace StringValidation;
-        [DurableType("validation.base", 1, SchemaOnly = true, GenerateBinaryBody = true)]
+        [DurableType("validation.base", 1)]
         public abstract partial class Base : DurableBase {
             [DurableField(1)] private string? _name;
             protected Base(string? name) { _name = name; }
             public void Change(string value) { _name = value; }
         }
-        [DurableType("validation.leaf", 1, SchemaOnly = true, GenerateBinaryBody = true)]
+        [DurableType("validation.leaf", 1)]
         public sealed partial class Leaf : Base {
             [DurableField(2)] private string? _alias;
             [DurableField(1)] private uint _number = uint.MaxValue;

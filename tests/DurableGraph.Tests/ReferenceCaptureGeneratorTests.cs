@@ -60,7 +60,7 @@ public sealed partial class DurableSchemaGeneratorTests {
     public void ReferenceCaptureStringOptInKeepsStringSchemaAndGeneratesOnlyIdDtoSlots() {
         GeneratorTestRun run = RunGenerator("""
             using Atelia.DurableGraph;
-            [DurableType("body.string", 1, SchemaOnly = true, GenerateBinaryBody = true)]
+            [DurableType("body.string", 1)]
             public sealed partial class Item : DurableBase {
                 [DurableField(1)] private string _text = string.Empty;
             }
@@ -87,9 +87,9 @@ public sealed partial class DurableSchemaGeneratorTests {
             using Atelia.DurableGraph;
             using Atelia.DurableGraph.StateStore.Serialization;
             namespace BinaryBodies;
-            [DurableType("reference.mixed-base", 1, SchemaOnly = true, GenerateBinaryBody = true)]
+            [DurableType("reference.mixed-base", 1)]
             public abstract partial class Base : DurableBase { [DurableField(1)] {{baseField}} }
-            [DurableType("reference.mixed-leaf", 1, SchemaOnly = true, GenerateBinaryBody = true)]
+            [DurableType("reference.mixed-leaf", 1)]
             public sealed partial class Leaf : Base { [DurableField(1)] {{leafField}} }
             public static class Host {
                 public static byte[] Capture() {
@@ -191,7 +191,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         using Atelia.DurableGraph;
         using Atelia.DurableGraph.StateStore.Serialization;
         namespace ReferenceCaptureDomain;
-        [DurableType("reference.base", 1, SchemaOnly = true, GenerateBinaryBody = true)]
+        [DurableType("reference.base", 1)]
         public abstract partial class Base : DurableBase {
             [DurableField(2)] private string? _optional;
             [DurableField(1)] private string _name;
@@ -199,7 +199,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             protected Base(string name) { _name = name; }
             public void ChangeBase(string name) { _name = name; _optional = name; _cache = new(); }
         }
-        [DurableType("reference.leaf", 1, SchemaOnly = true, GenerateBinaryBody = true)]
+        [DurableType("reference.leaf", 1)]
         public sealed partial class Leaf : Base {
             [DurableField(6)] private string _surrogate = new string(new[] { '\uD800' });
             [DurableField(4)] private string _other;
@@ -209,15 +209,15 @@ public sealed partial class DurableSchemaGeneratorTests {
             public Leaf(string shared, string other) : base(shared) { _alias = shared; _other = other; }
             public void Mutate(string replacement) { ChangeBase(replacement); _alias = replacement; _other = replacement; _number = 99; }
         }
-        [DurableType("reference.item", 1, SchemaOnly = true, GenerateBinaryBody = true)]
+        [DurableType("reference.item", 1)]
         public sealed partial class Item : DurableBase {
             [DurableField(1)] private string _text;
             public Item(string text) { _text = text; }
             public void Change(string text) { _text = text; }
         }
-        [DurableType("reference.concrete", 1, SchemaOnly = true, GenerateBinaryBody = true)]
+        [DurableType("reference.concrete", 1)]
         public partial class Concrete : DurableBase { [DurableField(1)] private int _value = 7; }
-        [DurableType("reference.derived", 1, SchemaOnly = true, GenerateBinaryBody = true)]
+        [DurableType("reference.derived", 1)]
         public sealed partial class Derived : Concrete { [DurableField(1)] private bool _flag = true; }
         public static class Host {
             private static void Check(bool value, string message) { if (!value) throw new Exception(message); }
@@ -341,12 +341,12 @@ public sealed partial class DurableSchemaGeneratorTests {
         using Atelia.DurableGraph;
         using Atelia.DurableGraph.StateStore.Serialization;
         namespace ReferenceHistory;
-        [DurableType("reference-history.base", 1, SchemaOnly = true, GenerateBinaryBody = true)]
+        [DurableType("reference-history.base", 1)]
         public abstract partial class OldBase : DurableBase {
             [DurableField(1)] private string _name;
             protected OldBase(string name) { _name = name; }
         }
-        [DurableType("reference-history.leaf", 1, SchemaOnly = true, GenerateBinaryBody = true)]
+        [DurableType("reference-history.leaf", 1)]
         public sealed partial class Leaf : OldBase {
             [DurableField(1)] private string _alias;
             [DurableField(2)] private string _other = new string(new[] { 'x' });
@@ -373,11 +373,11 @@ public sealed partial class DurableSchemaGeneratorTests {
         using Atelia.DurableGraph;
         using Atelia.DurableGraph.StateStore.Serialization;
         namespace ReferenceHistory;
-        [DurableType("{{(replaceChain ? "reference-history.replacement" : "reference-history.base")}}", {{(replaceChain ? 1 : 2)}}, SchemaOnly = true, GenerateBinaryBody = true)]
+        [DurableType("{{(replaceChain ? "reference-history.replacement" : "reference-history.base")}}", {{(replaceChain ? 1 : 2)}})]
         public abstract partial class CurrentBase : DurableBase {
             [DurableField(1)] private int _number;
         }
-        [DurableType("reference-history.leaf", 2, SchemaOnly = true, GenerateBinaryBody = true)]
+        [DurableType("reference-history.leaf", 2)]
         public sealed partial class Leaf : CurrentBase {
             [DurableField(5)] private bool _flag;
         }

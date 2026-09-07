@@ -8,18 +8,18 @@ public sealed partial class DurableSchemaGeneratorTests {
     public void GeneratedCapturePreparationBindsHeterogeneousFrozenObjectsAndStringChanges() {
         GeneratorTestRun run = RunGenerator(FusedDeltaPreamble + """
             using System.Linq;
-            [DurableType("prepare.base", 1, SchemaOnly = true, GenerateBinaryBody = true)]
+            [DurableType("prepare.base", 1)]
             public abstract partial class Base : DurableBase {
                 [DurableField(7)] private int _count = -17;
             }
-            [DurableType("prepare.leaf", 1, SchemaOnly = true, GenerateBinaryBody = true)]
+            [DurableType("prepare.leaf", 1)]
             public sealed partial class Leaf : Base {
                 [DurableField(1)] private uint _score = 42;
                 [DurableField(2)] private string _name;
                 public Leaf(string name) { _name = name; }
                 public void Change(uint score, string name) { _score = score; _name = name; }
             }
-            [DurableType("prepare.label", 1, SchemaOnly = true, GenerateBinaryBody = true)]
+            [DurableType("prepare.label", 1)]
             public sealed partial class Label : DurableBase {
                 [DurableField(1)] private string _name;
                 [DurableField(2)] private string _empty = string.Empty;
@@ -115,7 +115,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         const string initialSource = """
             using Atelia.DurableGraph;
             namespace PreparationHistory;
-            [DurableType("prepare.history", 1, SchemaOnly = true, GenerateBinaryBody = true)]
+            [DurableType("prepare.history", 1)]
             public sealed partial class Item : DurableBase {
                 [DurableField(1)] private int _value = -17;
             }
@@ -128,7 +128,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             using Atelia.DurableGraph;
             using Atelia.DurableGraph.StateStore.Serialization;
             namespace PreparationHistory;
-            [DurableType("prepare.history", 2, SchemaOnly = true, GenerateBinaryBody = true)]
+            [DurableType("prepare.history", 2)]
             public sealed partial class Item : DurableBase {
                 [DurableField(1)] private int _value = -17;
                 [DurableField(2)] private byte _added = 99;

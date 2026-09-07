@@ -268,7 +268,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         """;
 
     private static readonly string ReferenceGraphSource = FusedDeltaPreamble + """
-        [DurableType("reference.world", 1, SchemaOnly = true, GenerateBinaryBody = true)]
+        [DurableType("reference.world", 1)]
         public sealed partial class World : DurableBase {
             public static int ConstructorCalls;
             [DurableField(1)] private Entity? _child;
@@ -288,13 +288,13 @@ public sealed partial class DurableSchemaGeneratorTests {
                 character.Check(this, expected);
             }
         }
-        [DurableType("reference.entity", 1, SchemaOnly = true, GenerateBinaryBody = true)]
+        [DurableType("reference.entity", 1)]
         public abstract partial class Entity : DurableBase {
             [DurableField(1)] private readonly World _world;
             protected Entity(World world) { World.ConstructorCalls++; _world = world; }
             public World Owner => _world;
         }
-        [DurableType("reference.character", 1, SchemaOnly = true, GenerateBinaryBody = true)]
+        [DurableType("reference.character", 1)]
         public sealed partial class Character : Entity {
             [DurableField(1)] private int _number;
             [DurableField(2)] private readonly Item _item;
@@ -312,7 +312,7 @@ public sealed partial class DurableSchemaGeneratorTests {
                     throw new Exception("Readonly inherited reference, mutual cycle, content or string identity changed.");
             }
         }
-        [DurableType("reference.item", 1, SchemaOnly = true, GenerateBinaryBody = true)]
+        [DurableType("reference.item", 1)]
         public sealed partial class Item : DurableBase {
             [DurableField(1)] private readonly Character _owner;
             [DurableField(2)] private readonly string _name;
@@ -337,7 +337,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         """ + ReferenceGraphHost + "\n}";
 
     private static string ReferenceHistorySource(int version) => FusedDeltaPreamble + """
-        [DurableType("reference.history.world", 1, SchemaOnly = true, GenerateBinaryBody = true)]
+        [DurableType("reference.history.world", 1)]
         public sealed partial class World : DurableBase {
             public static int ConstructorCalls;
             [DurableField(1)] private Node? _child;
@@ -351,7 +351,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             }
         }
         """ + $$"""
-        [DurableType("reference.history.node", {{version}}, SchemaOnly = true, GenerateBinaryBody = true)]
+        [DurableType("reference.history.node", {{version}})]
         public sealed partial class Node : DurableBase {
             public static int Upgrades;
             [DurableField(1)] private int _number;

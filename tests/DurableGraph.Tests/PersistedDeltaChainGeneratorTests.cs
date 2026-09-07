@@ -141,17 +141,17 @@ public sealed partial class DurableSchemaGeneratorTests {
         using AncestryHistoryDirectory files = new();
         SnapshotHistoryTool publisher = new();
         GeneratorTestRun initial = RunGenerator(FusedDeltaPreamble + """
-            [DurableType("persisted.base", 1, SchemaOnly = true, GenerateBinaryBody = true)]
+            [DurableType("persisted.base", 1)]
             public abstract partial class OldBase : DurableBase { [DurableField(99)] private int _number; }
-            [DurableType("persisted.leaf", 1, SchemaOnly = true, GenerateBinaryBody = true)]
+            [DurableType("persisted.leaf", 1)]
             public sealed partial class Leaf : OldBase { [DurableField(99)] private bool _flag; }
             """);
         AssertSchemaOnlyCompiles(initial);
         publisher.Publish(files.WriteManifest(initial), files.History);
         string source = FusedDeltaPreamble + """
-            [DurableType("persisted.base", 2, SchemaOnly = true, GenerateBinaryBody = true)]
+            [DurableType("persisted.base", 2)]
             public abstract partial class NewBase : DurableBase { [DurableField(2)] private byte _small; }
-            [DurableType("persisted.leaf", 2, SchemaOnly = true, GenerateBinaryBody = true)]
+            [DurableType("persisted.leaf", 2)]
             public sealed partial class Leaf : NewBase { [DurableField(1)] private uint _number; }
             public static class Host {
             """ + FusedDeltaHostMethods("Leaf", 1) + FusedDeltaHostMethods("Leaf", 2) + """
@@ -248,13 +248,13 @@ public sealed partial class DurableSchemaGeneratorTests {
         using Atelia.DurableGraph.StateStore.Storage;
         using Atelia.DurableGraph.StateStore.Serialization;
         namespace PersistedCapture;
-        [DurableType("persisted.capture.base", 1, SchemaOnly = true, GenerateBinaryBody = true)]
+        [DurableType("persisted.capture.base", 1)]
         public abstract partial class Base : DurableBase {
             [DurableField(1)] private string _name;
             protected Base(string name) { _name = name; }
             public void Rename(string name) { _name = name; }
         }
-        [DurableType("persisted.capture.leaf", 1, SchemaOnly = true, GenerateBinaryBody = true)]
+        [DurableType("persisted.capture.leaf", 1)]
         public sealed partial class Leaf : Base {
             [DurableField(1)] private string _alias;
             [DurableField(9)] private string _empty = string.Empty;

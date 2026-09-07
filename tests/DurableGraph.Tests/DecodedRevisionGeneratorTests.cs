@@ -15,11 +15,11 @@ public sealed partial class DurableSchemaGeneratorTests {
         using AncestryHistoryDirectory history = new();
         SnapshotHistoryTool publisher = new();
         GeneratorTestRun initial = RunGenerator(FusedDeltaPreamble + """
-            [DurableType("decoded.base", 1, SchemaOnly = true, GenerateBinaryBody = true)]
+            [DurableType("decoded.base", 1)]
             public abstract partial class OldBase : DurableBase {
                 [DurableField(9)] private string? _name;
             }
-            [DurableType("decoded.leaf", 1, SchemaOnly = true, GenerateBinaryBody = true)]
+            [DurableType("decoded.leaf", 1)]
             public sealed partial class Leaf : OldBase {
                 [DurableField(3)] private int _number;
                 [DurableField(8)] private string? _alias;
@@ -132,16 +132,16 @@ public sealed partial class DurableSchemaGeneratorTests {
     }
 
     private static readonly string DecodedRevisionCurrentSource = FusedDeltaPreamble + """
-        [DurableType("decoded.base", 2, SchemaOnly = true, GenerateBinaryBody = true)]
+        [DurableType("decoded.base", 2)]
         public abstract partial class NewBase : DurableBase {
             [DurableField(2)] private byte _small;
         }
-        [DurableType("decoded.leaf", 2, SchemaOnly = true, GenerateBinaryBody = true)]
+        [DurableType("decoded.leaf", 2)]
         public sealed partial class Leaf : NewBase {
             [DurableField(1)] private uint _number;
             [DurableField(8)] private string? _alias;
         }
-        [DurableType("decoded.other", 1, SchemaOnly = true, GenerateBinaryBody = true)]
+        [DurableType("decoded.other", 1)]
         public sealed partial class Other : DurableBase {
             [DurableField(1)] private string? _name;
             [DurableField(2)] private int _number;

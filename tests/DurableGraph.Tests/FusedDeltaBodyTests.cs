@@ -149,7 +149,7 @@ public sealed partial class DurableSchemaGeneratorTests {
     }
 
     private static string FusedDeltaSource(string[] types) => FusedDeltaPreamble + """
-        [DurableType("fused.item", 1, SchemaOnly = true, GenerateBinaryBody = true)]
+        [DurableType("fused.item", 1)]
         public sealed partial class Item : DurableBase {
         """ + string.Join("\n", types.Select((type, index) => $"[DurableField({index * 7 + 1})] private {type} _field{index};")) + "\n}\n" +
         "public static class Host {\n" + FusedDeltaHostMethods("Item", 1) +

@@ -136,7 +136,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         using Atelia.DurableGraph.StateStore.Serialization;
         namespace RawBaseWitness;
 
-        [DurableType("raw-base.owner", 1, SchemaOnly = true, GenerateBinaryBody = true)]
+        [DurableType("raw-base.owner", 1)]
         public sealed partial class Owner : DurableBase {
             [DurableField(1)] private string? _name;
             [DurableField(2)] private string? _alias;

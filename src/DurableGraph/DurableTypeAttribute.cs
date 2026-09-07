@@ -27,21 +27,4 @@ public sealed class DurableTypeAttribute : Attribute {
 
     public int Version { get; }
 
-    /// <summary>
-    /// Generates schema metadata and exact version history without the prototype boxed serializer.
-    /// All durable types in an inheritance chain must explicitly select this mode.
-    /// </summary>
-    public bool SchemaOnly { get; set; }
-
-    /// <summary>
-    /// Also generates versioned readonly state DTOs, current-instance Capture, and typed
-    /// binary bodies for supported scalar layouts, including accepted history.
-    /// String members are supported as durable references: generated bodies store
-    /// reference IDs (UInt32) while string content is captured separately as a string
-    /// object entry. The binary body reader/writer does not perform full object-graph
-    /// restoration; it reads and writes only the DTO-bytes and reference IDs.
-    /// Requires SchemaOnly and the same opt-in on every current domain ancestor.
-    /// It does not upgrade historical DTOs or restore domain instances.
-    /// </summary>
-    public bool GenerateBinaryBody { get; set; }
 }

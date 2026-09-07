@@ -30,20 +30,7 @@ public sealed partial class DurableSchemaGenerator {
         public int Version { get; }
     }
 
-    private static bool IsSchemaOnly(INamedTypeSymbol type) {
-        AttributeData? attribute = GetAttribute(type.GetAttributes(), DurableTypeAttributeMetadataName);
-        if (attribute is not null) {
-            foreach (KeyValuePair<string, TypedConstant> argument in attribute.NamedArguments) {
-                if (argument.Key == "SchemaOnly" && argument.Value.Value is true) {
-                    return true;
-                }
-            }
-        }
-
-        return false;
-    }
-
-    private static bool HasSchemaOnlyTypeShape(
+    private static bool HasDurableTypeShape(
         INamedTypeSymbol type,
         System.Threading.CancellationToken cancellationToken) {
         if (type.TypeKind != TypeKind.Class || type.IsRecord || type.Arity != 0 ||
@@ -61,7 +48,7 @@ public sealed partial class DurableSchemaGenerator {
         return true;
     }
 
-    private static bool ReportSchemaOnlyNameCollisions(SourceProductionContext context, INamedTypeSymbol type) {
+    private static bool ReportSchemaSupportNameCollisions(SourceProductionContext context, INamedTypeSymbol type) {
         bool hasErrors = false;
         foreach (string name in new[] { "GetSchema", SchemaHistoryCacheName }) {
             var members = type.GetMembers(name);
@@ -77,21 +64,16 @@ public sealed partial class DurableSchemaGenerator {
         return hasErrors;
     }
 
-    private static List<DurableTypeModel> ValidateSchemaOnlyChains(
+    private static List<DurableTypeModel> ValidateSchemaChains(
         SourceProductionContext context,
         List<DurableTypeModel> types) {
         List<DurableTypeModel> result = new(types.Count);
         foreach (DurableTypeModel type in types) {
-            if (!IsSchemaOnly(type.Symbol)) {
-                result.Add(type);
-                continue;
-            }
-
             HashSet<ISymbol> seen = new(SymbolEqualityComparer.Default);
             INamedTypeSymbol? ancestor = type.Symbol;
             bool valid = true;
             while (!HasMetadataName(ancestor, DurableBaseMetadataName)) {
-                if (ancestor is null || !seen.Add(ancestor) || !IsSchemaOnly(ancestor) ||
+                if (ancestor is null || !seen.Add(ancestor) ||
                     !SymbolEqualityComparer.Default.Equals(ancestor.ContainingAssembly, type.Symbol.ContainingAssembly) ||
                     !types.Exists(candidate => SymbolEqualityComparer.Default.Equals(candidate.Symbol, ancestor))) {
                     valid = false;
@@ -107,7 +89,7 @@ public sealed partial class DurableSchemaGenerator {
                 context.ReportDiagnostic(Diagnostic.Create(
                     InvalidSchemaAncestry, GetSourceLocation(type.Symbol),
                     type.Symbol.ToDisplayString(QualifiedNameFormat),
-                    "every domain ancestor must explicitly use SchemaOnly, be a supported source type in this compilation, and end at DurableBase"));
+                    "every domain ancestor must be an attributed supported source type in this compilation and end at DurableBase"));
             }
         }
 
@@ -115,7 +97,7 @@ public sealed partial class DurableSchemaGenerator {
     }
 
     private static SchemaReference? GetCurrentBaseReference(INamedTypeSymbol type) {
-        if (!IsSchemaOnly(type) || HasMetadataName(type.BaseType, DurableBaseMetadataName)) {
+        if (HasMetadataName(type.BaseType, DurableBaseMetadataName)) {
             return null;
         }
 
@@ -177,7 +159,7 @@ public sealed partial class DurableSchemaGenerator {
             InvalidSchemaAncestry, CreateAdditionalFileLocation(entry.Path), entry.SchemaId, message));
     }
 
-    private static List<DurableTypeModel> GenerateSchemaOnly(
+    private static List<DurableTypeModel> GenerateSchemas(
         SourceProductionContext context,
         List<DurableTypeModel> currentTypes,
         List<SnapshotHistoryModel> history) {
@@ -191,10 +173,6 @@ public sealed partial class DurableSchemaGenerator {
         List<DurableTypeModel> validatedTypes = new();
         bool emitted = false;
         foreach (DurableTypeModel current in currentTypes) {
-            if (!IsSchemaOnly(current.Symbol)) {
-                continue;
-            }
-
             bool valid = true;
             List<SnapshotHistoryModel> versions = new();
             for (int version = 1; version < current.Version; version++) {
@@ -230,13 +208,13 @@ public sealed partial class DurableSchemaGenerator {
             }
 
             versions.Add(currentShape);
-            AppendSchemaOnlyType(source, current, versions, history, available);
+            AppendSchemaType(source, current, versions, history, available);
             validatedTypes.Add(current);
             emitted = true;
         }
 
         if (emitted) {
-            context.AddSource("DurableSchemaOnly.g.cs", SourceText.From(source.ToString().Replace("\r\n", "\n"), Encoding.UTF8));
+            context.AddSource("DurableSchemas.g.cs", SourceText.From(source.ToString().Replace("\r\n", "\n"), Encoding.UTF8));
         }
 
         return validatedTypes;
@@ -248,7 +226,7 @@ public sealed partial class DurableSchemaGenerator {
             ToSnapshotFields(current.Fields), GetCurrentBaseReference(current.Symbol));
     }
 
-    private static void AppendSchemaOnlyType(
+    private static void AppendSchemaType(
         StringBuilder source,
         DurableTypeModel current,
         List<SnapshotHistoryModel> versions,

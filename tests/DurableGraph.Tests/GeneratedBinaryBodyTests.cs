@@ -12,7 +12,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         using Atelia.DurableGraph.StateStore.Serialization;
         namespace BinaryBodies;
 
-        [DurableType("body.base", 1, SchemaOnly = true, GenerateBinaryBody = true)]
+        [DurableType("body.base", 1)]
         public abstract partial class Base : DurableBase {
             [DurableField(9)] private int _number;
             [Transient] private int _cache = 73;
@@ -22,17 +22,17 @@ public sealed partial class DurableSchemaGeneratorTests {
             public int Number => _number;
             public int Cache => _cache;
         }
-        [DurableType("body.middle", 1, SchemaOnly = true, GenerateBinaryBody = true)]
+        [DurableType("body.middle", 1)]
         public partial class Middle : Base {
             [DurableField(2)] private long _wide;
             protected Middle(bool flag, int number, long wide) : base(flag, number) { _wide = wide; }
             public long Wide => _wide;
         }
-        [DurableType("body.empty", 1, SchemaOnly = true, GenerateBinaryBody = true)]
+        [DurableType("body.empty", 1)]
         public partial class Empty : Middle {
             protected Empty(bool flag, int number, long wide) : base(flag, number, wide) { }
         }
-        [DurableType("body.leaf", 1, SchemaOnly = true, GenerateBinaryBody = true)]
+        [DurableType("body.leaf", 1)]
         public sealed partial class Leaf : Empty {
             [DurableField(2)] private int _last;
             public Leaf(bool flag, int number, long wide, int last) : base(flag, number, wide) { _last = last; }
@@ -151,7 +151,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             using Atelia.DurableGraph;
             using Atelia.DurableGraph.StateStore.Serialization;
             namespace BinaryBodies;
-            [DurableType("body.boolean", 1, SchemaOnly = true, GenerateBinaryBody = true)]
+            [DurableType("body.boolean", 1)]
             public sealed partial class Item : DurableBase {
                 [DurableField(2)] private bool _flag = true;
                 [DurableField(1)] private int _number = 73;
@@ -176,49 +176,6 @@ public sealed partial class DurableSchemaGeneratorTests {
     }
 
     [Theory]
-    [InlineData("", "[DurableField(1)] private int _number;")]
-    [InlineData("SchemaOnly = true", "private static class __DurableBinaryBody { }")]
-    public void BinaryBodyRejectsUnsupportedOptInWithoutPublishingBody(string flags, string members) {
-        string options = string.IsNullOrEmpty(flags) ? "" : flags + ", ";
-        GeneratorTestRun run = RunGenerator($$"""
-            using Atelia.DurableGraph;
-            [DurableType("body.invalid", 1, {{options}}GenerateBinaryBody = true)]
-            public sealed partial class Invalid : DurableBase { {{members}} }
-            """);
-        Assert.Contains(run.GeneratorDiagnostics, diagnostic => diagnostic.Id == "DG0020");
-        Assert.DoesNotContain("static void Write(", BinaryBodyGeneratedText(run));
-    }
-
-    [Fact]
-    public void BinaryBodyRejectsMissingAncestorOptIn() {
-        GeneratorTestRun run = RunGenerator("""
-            using Atelia.DurableGraph;
-            [DurableType("body.base", 1, SchemaOnly = true)]
-            public abstract partial class Base : DurableBase { [DurableField(1)] private int _base; }
-            [DurableType("body.leaf", 1, SchemaOnly = true, GenerateBinaryBody = true)]
-            public sealed partial class Leaf : Base { [DurableField(1)] private int _leaf; }
-            """);
-        Assert.Contains(run.GeneratorDiagnostics, diagnostic => diagnostic.Id == "DG0020");
-        Assert.DoesNotContain("static void Write(", BinaryBodyGeneratedText(run));
-    }
-
-    [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
-    public void BinaryBodyDoesNotChangeNonOptInSchemaOnlyOrLegacyBehavior(bool schemaOnly) {
-        GeneratorTestRun run = RunGenerator($$"""
-            using Atelia.DurableGraph;
-            [DurableType("body.unchanged", 1, SchemaOnly = {{schemaOnly.ToString().ToLowerInvariant()}})]
-            public sealed partial class Unchanged : DurableBase { [DurableField(1)] private string _text = "hello"; }
-            """);
-        AssertSchemaOnlyCompiles(run);
-        string generated = BinaryBodyGeneratedText(run);
-        Assert.DoesNotContain("__DurableBinaryBody", generated);
-        Type type = EmitAndLoad(run.OutputCompilation).GetType("Unchanged")!;
-        Assert.Equal(!schemaOnly, type.GetProperty("Serializer", BindingFlags.Public | BindingFlags.Static) is not null);
-    }
-
-    [Theory]
     [InlineData(false, false)]
     [InlineData(false, true)]
     [InlineData(true, false)]
@@ -226,13 +183,13 @@ public sealed partial class DurableSchemaGeneratorTests {
     public void BinaryBodyRequiresSuccessfulOwnAndAncestorHistory(bool ancestor, bool missingHistory) {
         string source = ancestor ? $$"""
             using Atelia.DurableGraph;
-            [DurableType("body.base", {{(missingHistory ? 2 : 1)}}, SchemaOnly = true, GenerateBinaryBody = true)]
+            [DurableType("body.base", {{(missingHistory ? 2 : 1)}})]
             public abstract partial class Base : DurableBase { [DurableField(1)] private long _base; }
-            [DurableType("body.leaf", 1, SchemaOnly = true, GenerateBinaryBody = true)]
+            [DurableType("body.leaf", 1)]
             public sealed partial class Leaf : Base { [DurableField(1)] private int _leaf; }
             """ : $$"""
             using Atelia.DurableGraph;
-            [DurableType("body.base", {{(missingHistory ? 2 : 1)}}, SchemaOnly = true, GenerateBinaryBody = true)]
+            [DurableType("body.base", {{(missingHistory ? 2 : 1)}})]
             public sealed partial class Base : DurableBase { [DurableField(1)] private long _base; }
             """;
         AdditionalText[] history = missingHistory ? [] : [SnapshotHistory("old.dgsnapshot", "body.base", 1, (1, 2))];
@@ -245,9 +202,9 @@ public sealed partial class DurableSchemaGeneratorTests {
     public void ReferenceCaptureBinaryBodySupportsPrimitiveLeafWhenOptedInAncestorContainsString() {
         GeneratorTestRun run = RunGenerator("""
             using Atelia.DurableGraph;
-            [DurableType("body.base", 1, SchemaOnly = true, GenerateBinaryBody = true)]
+            [DurableType("body.base", 1)]
             public abstract partial class Base : DurableBase { [DurableField(1)] private string _text = "base"; }
-            [DurableType("body.leaf", 1, SchemaOnly = true, GenerateBinaryBody = true)]
+            [DurableType("body.leaf", 1)]
             public sealed partial class Leaf : Base { [DurableField(1)] private int _leaf; }
             """);
         AssertSchemaOnlyCompiles(run);
@@ -272,7 +229,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         ];
         GeneratorTestRun run = RunGenerator("""
             using Atelia.DurableGraph;
-            [DurableType("body.valid", 1, SchemaOnly = true, GenerateBinaryBody = true)]
+            [DurableType("body.valid", 1)]
             public sealed partial class Valid : DurableBase { [DurableField(1)] private int _value; }
             """, history);
         Assert.Contains(run.GeneratorDiagnostics, diagnostic => diagnostic.Id == diagnosticId);
@@ -288,7 +245,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             using Atelia.DurableGraph;
             using Atelia.DurableGraph.StateStore.Serialization;
             namespace BinaryBodies;
-            [DurableType("body.versioned", 2, SchemaOnly = true, GenerateBinaryBody = true)]
+            [DurableType("body.versioned", 2)]
             public sealed partial class Versioned : DurableBase {
                 [DurableField(1)] private long _value = long.MinValue;
             }

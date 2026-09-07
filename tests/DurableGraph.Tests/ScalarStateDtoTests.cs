@@ -39,7 +39,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         SnapshotHistoryTool publisher = new();
         string initialSource = ScalarDtoSource.Replace("public sealed partial class Item", "public partial class Item") + """
 
-            [DurableType("scalar.leaf", 1, SchemaOnly = true, GenerateBinaryBody = true)]
+            [DurableType("scalar.leaf", 1)]
             public sealed partial class Leaf : Item {
                 [DurableField(1)] private uint _leaf = 128;
                 public Leaf() : base(false) { }
@@ -127,7 +127,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         GeneratorTestRun run = RunGenerator($$"""
             using Atelia.DurableGraph;
             namespace {{namespaceName}} { public struct Half { public int Value; } }
-            [DurableType("fake-half", 1, SchemaOnly = true, GenerateBinaryBody = true)]
+            [DurableType("fake-half", 1)]
             public sealed partial class Item : DurableBase {
                 [DurableField(1)] private {{namespaceName}}.Half _value;
             }
@@ -150,7 +150,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             using Atelia.DurableGraph;
             public enum Choice { First, Second }
             public struct Composite { public int Value; }
-            [DurableType("unsupported-scalar", 1, SchemaOnly = true, GenerateBinaryBody = true)]
+            [DurableType("unsupported-scalar", 1)]
             public sealed partial class Item : DurableBase {
                 [DurableField(1)] private {{fieldType}} _value;
             }
@@ -160,39 +160,13 @@ public sealed partial class DurableSchemaGeneratorTests {
         Assert.DoesNotContain(run.GeneratedSources, source => source.HintName == "DurableBinaryBodies.g.cs");
     }
 
-    [Fact]
-    public void ScalarLegacyBoxedSerializerPreservesEveryNewKindAndFloatingBits() {
-        string source = ScalarDtoSource[..ScalarDtoSource.IndexOf("public static class Host", StringComparison.Ordinal)]
-            .Replace(", SchemaOnly = true, GenerateBinaryBody = true", "") + """
-            public static class Host {
-                public static bool RoundTrip(bool high) {
-                    var original = Item.Serializer.Serialize(new Item(high));
-                    var restored = Item.Serializer.Deserialize(Item.Schema, original);
-                    var fields = Item.Serializer.Serialize(restored);
-                    for (int id = 1; id <= 10; id++) {
-                        if (original[id]!.GetType() != fields[id]!.GetType() || !original[id]!.Equals(fields[id])) return false;
-                    }
-                    return BitConverter.HalfToUInt16Bits((Half)original[11]!) == BitConverter.HalfToUInt16Bits((Half)fields[11]!) &&
-                        BitConverter.SingleToUInt32Bits((float)original[12]!) == BitConverter.SingleToUInt32Bits((float)fields[12]!) &&
-                        BitConverter.DoubleToUInt64Bits((double)original[13]!) == BitConverter.DoubleToUInt64Bits((double)fields[13]!);
-                }
-            }
-            """;
-        GeneratorTestRun run = RunGenerator(source);
-        AssertSchemaOnlyCompiles(run);
-        var check = EmitAndLoad(run.OutputCompilation).GetType("ScalarDtos.Host")!.GetMethod("RoundTrip")!
-            .CreateDelegate<Func<bool, bool>>();
-        Assert.True(check(false));
-        Assert.True(check(true));
-    }
-
     private const string ScalarDtoSource = """
         using System;
         using System.Buffers;
         using Atelia.DurableGraph;
         using Atelia.DurableGraph.StateStore.Serialization;
         namespace ScalarDtos;
-        [DurableType("scalar.item", 1, SchemaOnly = true, GenerateBinaryBody = true)]
+        [DurableType("scalar.item", 1)]
         public sealed partial class Item : DurableBase {
             [DurableField(1)] private bool _bool;
             [DurableField(2)] private byte _byte;
@@ -251,11 +225,11 @@ public sealed partial class DurableSchemaGeneratorTests {
         using Atelia.DurableGraph;
         using Atelia.DurableGraph.StateStore.Serialization;
         namespace ScalarDtos;
-        [DurableType("scalar.item", 2, SchemaOnly = true, GenerateBinaryBody = true)]
+        [DurableType("scalar.item", 2)]
         public partial class CurrentBase : DurableBase {
             [DurableField(1)] private int _replacement = 42;
         }
-        [DurableType("scalar.leaf", 2, SchemaOnly = true, GenerateBinaryBody = true)]
+        [DurableType("scalar.leaf", 2)]
         public sealed partial class Leaf : CurrentBase {
             [DurableField(2)] private bool _replacement = true;
         }

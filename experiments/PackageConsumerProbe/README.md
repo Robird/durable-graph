@@ -14,14 +14,13 @@ Run from the repository root:
 ./experiments/PackageConsumerProbe/Run-Probe.ps1
 ```
 
-The probe packs a unique local package, uses an isolated package cache and snapshot-history
+The probe packs a unique local package, uses an isolated package cache and Schema-history
 directory under this experiment's ignored `obj` directory, and exercises local publish plus
-CI-style read-only verification. Its V2 executable also saves a manual V1 boxed record, loads it
-twice through the packaged generated serializer without writeback, explicitly saves V2, and then
-confirms the current-version path no longer invokes the upgrade handler.
+CI-style read-only verification. Its V1/V2 lane proves that bare `[DurableType]` emits exact
+Schema history and versioned State DTOs, including a compile-checked adjacent upgrade shape.
 
-The feed also contains the runtime's Serialization dependency. A final SchemaOnly consumer opts
-into `GenerateBinaryBody`, captures private base/derived fields into a readonly versioned DTO,
+The feed also contains the runtime's Serialization dependency. A final consumer captures private
+base/derived fields into a readonly versioned DTO,
 then mutates the domain instance. Static DTO byte calls verify the original golden bytes,
 DTO/Schema pairing and domain isolation. It still has just one PackageReference;
 Serialization is supplied transitively, with no friend access or manual analyzer wiring.
@@ -30,7 +29,7 @@ The same consumer also exercises every added scalar kind through generated Captu
 including an isolated surrogate, negative zero and NaN payloads against fixed golden bytes.
 This validates the public primitive API and publication of the extended Schema tags.
 
-The same SchemaOnly consumer prepares a Delta between frozen base/derived DTOs after mutating
+The same consumer prepares a Delta between frozen base/derived DTOs after mutating
 their source objects. It checks independent bitmap/value golden bytes, the actual Delta length,
 and a no-change result whose zero bitmap is nonempty. The public `PreparedDelta` comes from the
 transitive Serialization package; its owned payload is reused directly for repeated generated

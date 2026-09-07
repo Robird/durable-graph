@@ -7,7 +7,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             using System;
             using Atelia.DurableGraph;
             namespace ScalarRestore;
-            [DurableType("restore.scalars", 1, SchemaOnly = true, GenerateBinaryBody = true)]
+            [DurableType("restore.scalars", 1)]
             public sealed partial class World : DurableBase {
                 [DurableField(1)] private readonly bool _bool = true;
                 [DurableField(2)] private readonly byte _byte = byte.MaxValue;

@@ -19,19 +19,6 @@ public sealed partial class DurableSchemaGenerator {
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true);
 
-    private static bool RequestsBinaryBody(INamedTypeSymbol type) {
-        AttributeData? attribute = GetAttribute(type.GetAttributes(), DurableTypeAttributeMetadataName);
-        if (attribute is not null) {
-            foreach (KeyValuePair<string, TypedConstant> argument in attribute.NamedArguments) {
-                if (argument.Key == "GenerateBinaryBody" && argument.Value.Value is true) {
-                    return true;
-                }
-            }
-        }
-
-        return false;
-    }
-
     private static void GenerateBinaryBodies(
         SourceProductionContext context,
         List<DurableTypeModel> types,
@@ -49,16 +36,7 @@ public sealed partial class DurableSchemaGenerator {
         HashSet<ISymbol> eligible = new(SymbolEqualityComparer.Default);
         Dictionary<ISymbol, List<BinaryVersionModel>> layouts = new(SymbolEqualityComparer.Default);
         foreach (DurableTypeModel type in types) {
-            if (!RequestsBinaryBody(type.Symbol)) {
-                continue;
-            }
-
             bool valid = true;
-            if (!IsSchemaOnly(type.Symbol)) {
-                ReportInvalidBinaryBody(context, type.Symbol, "GenerateBinaryBody requires SchemaOnly=true");
-                valid = false;
-            }
-
             var members = type.Symbol.GetMembers(BinaryBodyTypeName);
             if (type.Symbol.Name == BinaryBodyTypeName || !members.IsEmpty) {
                 ReportInvalidBinaryBody(context, type.Symbol,
@@ -132,7 +110,7 @@ public sealed partial class DurableSchemaGenerator {
             while (!HasMetadataName(ancestor, DurableBaseMetadataName)) {
                 if (ancestor is null || !eligible.Contains(ancestor)) {
                     ReportInvalidBinaryBody(context, type.Symbol,
-                        "every domain ancestor must enable GenerateBinaryBody and pass metadata, history and binary body validation");
+                        "every domain ancestor must pass metadata, history and binary body validation");
                     valid = false;
                     break;
                 }

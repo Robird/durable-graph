@@ -324,18 +324,15 @@ public sealed partial class DurableSchemaGeneratorTests {
     }
 
     [Fact]
-    public void ProductGeneratorStillRejectsSelfReferencesAndNeverRunsTheProbe() {
+    public void ProductGeneratorSupportsSelfReferencesWithoutRunningTheProbeGenerator() {
         Assert.True(typeof(DurableGraphOperationsProbeGenerator).IsNotPublic);
         Assert.Null(
             typeof(DurableGraphOperationsProbeGenerator)
                 .GetCustomAttribute<GeneratorAttribute>());
         GeneratorTestRun run = RunGenerator(SingleReferenceNodeSource());
 
-        Diagnostic diagnostic = Assert.Single(
-            run.GeneratorDiagnostics,
-            candidate => candidate.Id == "DG0007");
-        Assert.Equal(DiagnosticSeverity.Error, diagnostic.Severity);
-        Assert.Contains("_next", diagnostic.GetMessage(), StringComparison.Ordinal);
+        Assert.DoesNotContain(run.GeneratorDiagnostics, IsError);
+        Assert.Contains(run.GeneratedSources, source => source.HintName == "DurableBinaryBodies.g.cs");
         Assert.DoesNotContain(
             run.GeneratedSources,
             source => source.HintName == GraphOperationsHintName);

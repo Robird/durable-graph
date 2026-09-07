@@ -11,11 +11,11 @@ public sealed partial class DurableSchemaGeneratorTests {
         using AncestryHistoryDirectory files = new();
         SnapshotHistoryTool publisher = new();
         string initialSource = FusedDeltaPreamble + """
-            [DurableType("fused.base", 1, SchemaOnly = true, GenerateBinaryBody = true)]
+            [DurableType("fused.base", 1)]
             public abstract partial class OldBase : DurableBase {
                 [DurableField(99)] private int _number;
             }
-            [DurableType("fused.leaf", 1, SchemaOnly = true, GenerateBinaryBody = true)]
+            [DurableType("fused.leaf", 1)]
             public sealed partial class Leaf : OldBase {
                 [DurableField(205)] private string? _name;
                 [DurableField(99)] private bool _flag;
@@ -27,11 +27,11 @@ public sealed partial class DurableSchemaGeneratorTests {
         Dictionary<string, string> frozenHistory = files.ReadContents();
 
         string currentSource = FusedDeltaPreamble + """
-            [DurableType("fused.base", 2, SchemaOnly = true, GenerateBinaryBody = true)]
+            [DurableType("fused.base", 2)]
             public abstract partial class NewBase : DurableBase {
                 [DurableField(2)] private byte _small;
             }
-            [DurableType("fused.leaf", 2, SchemaOnly = true, GenerateBinaryBody = true)]
+            [DurableType("fused.leaf", 2)]
             public sealed partial class Leaf : NewBase {
                 [DurableField(1)] private uint _number;
             }
@@ -107,13 +107,13 @@ public sealed partial class DurableSchemaGeneratorTests {
         using Atelia.DurableGraph;
         using Atelia.DurableGraph.StateStore.Serialization;
         namespace FusedCapture;
-        [DurableType("fused.capture.base", 1, SchemaOnly = true, GenerateBinaryBody = true)]
+        [DurableType("fused.capture.base", 1)]
         public abstract partial class Base : DurableBase {
             [DurableField(1)] private string? _name;
             protected Base(string name) { _name = name; }
             public void Rename(string name) { _name = name; }
         }
-        [DurableType("fused.capture.leaf", 1, SchemaOnly = true, GenerateBinaryBody = true)]
+        [DurableType("fused.capture.leaf", 1)]
         public sealed partial class Leaf : Base {
             [DurableField(1)] private string? _alias;
             [DurableField(9)] private string? _optional;

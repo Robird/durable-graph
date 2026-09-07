@@ -185,8 +185,8 @@ try {
     $consumerAssembly = Join-Path $probeRoot "Consumer/bin/Debug/net10.0/Atelia.Consumer.dll"
     $consumerOutput = (& dotnet $consumerAssembly | Out-String).Trim()
 
-    if ($LASTEXITCODE -ne 0 -or $consumerOutput -ne "V1:True:2") {
-        throw "Generated strong snapshot exercise failed; output was '$consumerOutput'."
+    if ($LASTEXITCODE -ne 0 -or $consumerOutput -ne "7:True:2") {
+        throw "Generated State-history exercise failed; output was '$consumerOutput'."
     }
 
     $hashesBeforeVerify = @{}

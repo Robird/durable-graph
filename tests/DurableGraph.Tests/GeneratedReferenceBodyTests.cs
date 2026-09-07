@@ -11,7 +11,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             using Atelia.DurableGraph;
             using Atelia.DurableGraph.StateStore.Serialization;
             namespace ReferenceBodies;
-            [DurableType("node", 1, SchemaOnly = true, GenerateBinaryBody = true)]
+            [DurableType("node", 1)]
             public partial class Node : DurableBase {
                 [DurableField(1)] private Node? _next;
                 [DurableField(2)] private string? _name;
@@ -61,13 +61,13 @@ public sealed partial class DurableSchemaGeneratorTests {
         GeneratorTestRun run = RunGenerator("""
             using Atelia.DurableGraph;
             namespace ReferenceBodies;
-            [DurableType("base", 1, SchemaOnly = true, GenerateBinaryBody = true)]
+            [DurableType("base", 1)]
             public abstract partial class Base : DurableBase {
                 [DurableField(7)] private readonly Base? _parent;
                 public Base? Parent => _parent;
                 protected Base(Base? parent) { _parent = parent; }
             }
-            [DurableType("node", 1, SchemaOnly = true, GenerateBinaryBody = true)]
+            [DurableType("node", 1)]
             public sealed partial class Node : Base {
                 [DurableField(1)] private readonly Node? _self;
                 [DurableField(2)] private Node? _child;
@@ -127,9 +127,9 @@ public sealed partial class DurableSchemaGeneratorTests {
         GeneratorTestRun initial = RunGenerator("""
             using Atelia.DurableGraph;
             namespace ReferenceBodies;
-            [DurableType("retired", 1, SchemaOnly = true, GenerateBinaryBody = true)]
+            [DurableType("retired", 1)]
             public partial class Retired : DurableBase { }
-            [DurableType("owner", 1, SchemaOnly = true, GenerateBinaryBody = true)]
+            [DurableType("owner", 1)]
             public partial class Owner : DurableBase { [DurableField(8)] private Retired? _reference; }
             """);
         AssertSchemaOnlyCompiles(initial);
@@ -137,7 +137,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         GeneratorTestRun current = RunGenerator("""
             using Atelia.DurableGraph;
             namespace ReferenceBodies;
-            [DurableType("owner", 2, SchemaOnly = true, GenerateBinaryBody = true)]
+            [DurableType("owner", 2)]
             public partial class Owner : DurableBase {
                 private static void UpgradeStateV1ToV2(in __DurableBinaryBody.V1 prior, out __DurableBinaryBody.V2 next) => next = default;
             }

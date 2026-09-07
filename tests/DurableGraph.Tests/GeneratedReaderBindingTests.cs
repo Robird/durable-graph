@@ -11,11 +11,11 @@ public sealed partial class DurableSchemaGeneratorTests {
         GeneratorTestRun initial = RunGenerator("""
             using Atelia.DurableGraph;
             namespace ReaderHistory;
-            [DurableType("reader.base", 1, SchemaOnly = true, GenerateBinaryBody = true)]
+            [DurableType("reader.base", 1)]
             public abstract partial class RemovedBase : DurableBase {
                 [DurableField(9)] private int _old;
             }
-            [DurableType("reader.leaf", 1, SchemaOnly = true, GenerateBinaryBody = true)]
+            [DurableType("reader.leaf", 1)]
             public sealed partial class Leaf : RemovedBase {
                 [DurableField(1)] private string? _name;
             }
@@ -26,11 +26,11 @@ public sealed partial class DurableSchemaGeneratorTests {
             using Atelia.DurableGraph;
             using Atelia.DurableGraph.StateStore.Serialization;
             namespace ReaderHistory;
-            [DurableType("reader.base", 2, SchemaOnly = true, GenerateBinaryBody = true)]
+            [DurableType("reader.base", 2)]
             public abstract partial class CurrentBase : DurableBase {
                 [DurableField(2)] private byte _new;
             }
-            [DurableType("reader.leaf", 2, SchemaOnly = true, GenerateBinaryBody = true)]
+            [DurableType("reader.leaf", 2)]
             public sealed partial class Leaf : CurrentBase {
                 [DurableField(1)] private uint _number;
             }
@@ -89,7 +89,7 @@ public sealed partial class DurableSchemaGeneratorTests {
     public void GeneratedReaderBindingsKeepMemberOperationsStaticallyBound() {
         GeneratorTestRun run = RunGenerator("""
             using Atelia.DurableGraph;
-            [DurableType("reader.static", 1, SchemaOnly = true, GenerateBinaryBody = true)]
+            [DurableType("reader.static", 1)]
             public sealed partial class Model : DurableBase {
                 [DurableField(1)] private int _number;
                 [DurableField(2)] private string? _name;
@@ -108,14 +108,12 @@ public sealed partial class DurableSchemaGeneratorTests {
         }
     }
 
-    [Theory]
-    [InlineData("", "[DurableField(1)] private int _number;")]
-    [InlineData("SchemaOnly = true, ", "private static class __DurableBinaryBody { }")]
-    public void GeneratedReaderBindingsAreNotPublishedForInvalidBinaryBody(string options, string members) {
-        GeneratorTestRun run = RunGenerator($$"""
+    [Fact]
+    public void GeneratedReaderBindingsAreNotPublishedForReservedHelperCollision() {
+        GeneratorTestRun run = RunGenerator("""
             using Atelia.DurableGraph;
-            [DurableType("reader.invalid", 1, {{options}}GenerateBinaryBody = true)]
-            public sealed partial class Invalid : DurableBase { {{members}} }
+            [DurableType("reader.invalid", 1)]
+            public sealed partial class Invalid : DurableBase { private static class __DurableBinaryBody { } }
             """);
         Assert.Contains(run.GeneratorDiagnostics, diagnostic => diagnostic.Id == "DG0020");
         string generated = BinaryBodyGeneratedText(run);

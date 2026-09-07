@@ -12,7 +12,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         string[] types = emptyLayout ? [] : ["bool", "byte", "sbyte", "short", "ushort", "int", "uint", "long", "ulong", "char", "System.Half", "float", "double", "string?"];
         string fields = string.Join("\n", types.Select((type, index) => $"[DurableField({index + 1})] private {type} _field{index};"));
         string source = FusedDeltaPreamble + """
-            [DurableType("prepared.item", 1, SchemaOnly = true, GenerateBinaryBody = true)]
+            [DurableType("prepared.item", 1)]
             public sealed partial class Item : DurableBase {
             """ + fields + "\n}\npublic static class Host {\n" + PreparedBaseHostMethod("Item", 1) + "\n}";
         GeneratorTestRun run = RunGenerator(source);
@@ -46,11 +46,11 @@ public sealed partial class DurableSchemaGeneratorTests {
         using AncestryHistoryDirectory files = new();
         SnapshotHistoryTool publisher = new();
         string initialSource = FusedDeltaPreamble + """
-            [DurableType("prepared.base", 1, SchemaOnly = true, GenerateBinaryBody = true)]
+            [DurableType("prepared.base", 1)]
             public abstract partial class OldBase : DurableBase {
                 [DurableField(99)] private int _number;
             }
-            [DurableType("prepared.leaf", 1, SchemaOnly = true, GenerateBinaryBody = true)]
+            [DurableType("prepared.leaf", 1)]
             public sealed partial class Leaf : OldBase {
                 [DurableField(205)] private string? _name;
                 [DurableField(99)] private bool _flag;
@@ -60,11 +60,11 @@ public sealed partial class DurableSchemaGeneratorTests {
         AssertSchemaOnlyCompiles(initial);
         publisher.Publish(files.WriteManifest(initial), files.History);
         string source = FusedDeltaPreamble + """
-            [DurableType("prepared.base", 2, SchemaOnly = true, GenerateBinaryBody = true)]
+            [DurableType("prepared.base", 2)]
             public abstract partial class NewBase : DurableBase {
                 [DurableField(2)] private byte _small;
             }
-            [DurableType("prepared.leaf", 2, SchemaOnly = true, GenerateBinaryBody = true)]
+            [DurableType("prepared.leaf", 2)]
             public sealed partial class Leaf : NewBase {
                 [DurableField(1)] private uint _number;
             }
@@ -92,12 +92,12 @@ public sealed partial class DurableSchemaGeneratorTests {
     public void PreparedBaseCapturesFrozenInheritedValuesAndStringIdsBeforeLaterDomainMutation() {
         string source = FusedDeltaPreamble + """
             using System.Linq;
-            [DurableType("prepared.capture.base", 1, SchemaOnly = true, GenerateBinaryBody = true)]
+            [DurableType("prepared.capture.base", 1)]
             public abstract partial class Base : DurableBase {
                 [DurableField(7)] private int _count = -17;
                 protected void ChangeBase() { _count = 500; }
             }
-            [DurableType("prepared.capture.leaf", 1, SchemaOnly = true, GenerateBinaryBody = true)]
+            [DurableType("prepared.capture.leaf", 1)]
             public sealed partial class Leaf : Base {
                 [DurableField(1)] private string _name = "A";
                 [DurableField(2)] private long _total = 42;

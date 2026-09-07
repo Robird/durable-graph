@@ -4,7 +4,7 @@ using Atelia.DurableGraph.StateStore.Serialization;
 
 namespace PackageConsumerProbe;
 
-[DurableType("package.body-base", 1, SchemaOnly = true, GenerateBinaryBody = true)]
+[DurableType("package.body-base", 1)]
 public abstract partial class BinaryBase : DurableBase {
     [DurableField(7)] private readonly int _count;
     [DurableField(1)] private readonly bool _enabled;
@@ -19,7 +19,7 @@ public abstract partial class BinaryBase : DurableBase {
     protected bool HasExpectedBase => _enabled && _count == -17;
 }
 
-[DurableType("package.body-leaf", 1, SchemaOnly = true, GenerateBinaryBody = true)]
+[DurableType("package.body-leaf", 1)]
 public sealed partial class Character : BinaryBase {
     [DurableField(1)] private long _total;
     [Transient] private int _sentinel = 41;
@@ -31,7 +31,7 @@ public sealed partial class Character : BinaryBase {
         _sentinel = sentinel;
     }
 
-    public static string ExerciseGeneratedSnapshots() {
+    public static string ExerciseGeneratedState() {
         ScalarValues.Exercise();
         ReferenceCaptureExercise.Run();
         StringDecodingExercise.Run();
@@ -114,7 +114,7 @@ public sealed partial class Character : BinaryBase {
     }
 }
 
-[DurableType("package.scalar-values", 1, SchemaOnly = true, GenerateBinaryBody = true)]
+[DurableType("package.scalar-values", 1)]
 public sealed partial class ScalarValues : DurableBase {
     [DurableField(1)] private byte _byte = byte.MaxValue;
     [DurableField(2)] private sbyte _sbyte = sbyte.MinValue;
