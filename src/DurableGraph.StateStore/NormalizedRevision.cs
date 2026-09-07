@@ -34,8 +34,9 @@ internal sealed class NormalizedRevision {
         }
         // The complete old chains were decoded first. Validate current references only after
         // every single-object Upgrade completed; source rows remain live even after an edge is cut.
+        StateReferenceValidator validator = new(normalized.ToDictionary(static pair => pair.Key, static pair => pair.Value.Current));
         foreach (NormalizedObject row in normalized.Values) {
-            row.Model?.ValidateReferences(row.Current, source.Strings);
+            row.Model?.VisitReferences(row.Current, validator);
         }
         return new(source.RevisionAddress, normalized, source.Strings);
     }

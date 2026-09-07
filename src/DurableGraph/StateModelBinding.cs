@@ -1,7 +1,7 @@
 namespace Atelia.DurableGraph;
 
 /// <summary>Fills an unpublished domain instance from a current frozen DTO.</summary>
-public delegate void StateHydrator<TDomain, TState>(TDomain domain, in TState state, StringReadTable strings)
+public delegate void StateHydrator<TDomain, TState>(TDomain domain, in TState state, ObjectReadTable objects)
     where TDomain : DurableBase where TState : unmanaged;
 
 /// <summary>Receives explicitly selected generated model families.</summary>
@@ -47,10 +47,12 @@ public abstract class StateModelBinding {
     }
 
     internal abstract CapturedObject Normalize(CapturedObject source);
-    internal abstract void ValidateReferences(CapturedObject current, StringReadTable strings);
+    internal abstract void VisitReferences(CapturedObject current, IStateReferenceVisitor visitor);
     internal abstract DurableBase Allocate();
-    internal abstract void Hydrate(DurableBase domain, CapturedObject current, StringReadTable strings);
+    internal abstract void Hydrate(DurableBase domain, CapturedObject current, ObjectReadTable objects);
     internal abstract uint AddRoot(CaptureContext context, DurableBase domain);
+    internal abstract CapturedObject Capture(uint id, DurableBase domain, CaptureContext context);
+    internal abstract bool MatchesCapture(DurableSchema schema, Delegate capture, ICapturedStatePreparation? preparation);
 
     private sealed class ReaderList(StateReaderBinding[] readers) : IReadOnlyList<StateReaderBinding> {
         public int Count => readers.Length;
@@ -68,7 +70,7 @@ public sealed class StateModelBinding<TDomain, TState> : StateModelBinding
     private readonly Func<TDomain> _allocate;
     private readonly StateHydrator<TDomain, TState> _hydrate;
     private readonly Func<TDomain, CaptureContext, TState> _capture;
-    private readonly StateStringReferenceValidator<TState> _validateReferences;
+    private readonly StateReferenceVisitor<TState> _visitReferences;
 
     public StateModelBinding(
         CapturedStatePreparation<TState> preparation,
@@ -77,19 +79,19 @@ public sealed class StateModelBinding<TDomain, TState> : StateModelBinding
         Func<TDomain> allocate,
         StateHydrator<TDomain, TState> hydrate,
         Func<TDomain, CaptureContext, TState> capture,
-        StateStringReferenceValidator<TState> validateReferences)
+        StateReferenceVisitor<TState> visitReferences)
         : base((preparation ?? throw new ArgumentNullException(nameof(preparation))).Schema, typeof(TDomain), readers) {
         ArgumentNullException.ThrowIfNull(normalize);
         ArgumentNullException.ThrowIfNull(allocate);
         ArgumentNullException.ThrowIfNull(hydrate);
         ArgumentNullException.ThrowIfNull(capture);
-        ArgumentNullException.ThrowIfNull(validateReferences);
+        ArgumentNullException.ThrowIfNull(visitReferences);
         _preparation = preparation;
         _normalize = normalize;
         _allocate = allocate;
         _hydrate = hydrate;
         _capture = capture;
-        _validateReferences = validateReferences;
+        _visitReferences = visitReferences;
     }
 
     internal override CapturedObject Normalize(CapturedObject source) {
@@ -97,10 +99,11 @@ public sealed class StateModelBinding<TDomain, TState> : StateModelBinding
         return new CapturedObject(source.Id, CurrentSchema, _normalize(source), _preparation);
     }
 
-    internal override void ValidateReferences(CapturedObject current, StringReadTable strings) {
+    internal override void VisitReferences(CapturedObject current, IStateReferenceVisitor visitor) {
+        ArgumentNullException.ThrowIfNull(visitor);
         ((ICapturedStatePreparation)_preparation).Validate(current);
         TState state = current.GetState<TState>();
-        _validateReferences(in state, strings);
+        _visitReferences(in state, visitor);
     }
 
     internal override DurableBase Allocate() {
@@ -109,17 +112,26 @@ public sealed class StateModelBinding<TDomain, TState> : StateModelBinding
         return domain;
     }
 
-    internal override void Hydrate(DurableBase domain, CapturedObject current, StringReadTable strings) {
+    internal override void Hydrate(DurableBase domain, CapturedObject current, ObjectReadTable objects) {
         RequireDomain(domain);
-        ValidateReferences(current, strings);
+        ArgumentNullException.ThrowIfNull(objects);
+        ((ICapturedStatePreparation)_preparation).Validate(current);
         TState state = current.GetState<TState>();
-        _hydrate((TDomain)domain, in state, strings);
+        _hydrate((TDomain)domain, in state, objects);
     }
 
     internal override uint AddRoot(CaptureContext context, DurableBase domain) {
         RequireDomain(domain);
         return context.AddRoot((TDomain)domain, CurrentSchema, _capture, _preparation);
     }
+
+    internal override CapturedObject Capture(uint id, DurableBase domain, CaptureContext context) {
+        RequireDomain(domain);
+        return new CapturedObject(id, CurrentSchema, _capture((TDomain)domain, context), _preparation);
+    }
+
+    internal override bool MatchesCapture(DurableSchema schema, Delegate capture, ICapturedStatePreparation? preparation) =>
+        CurrentSchema.Equals(schema) && _capture.Equals(capture) && ReferenceEquals(_preparation, preparation);
 
     private static void RequireDomain(DurableBase? domain) {
         if (domain is null || domain.GetType() != typeof(TDomain)) {

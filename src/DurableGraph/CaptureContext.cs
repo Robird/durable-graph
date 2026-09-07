@@ -10,13 +10,15 @@ public sealed class CaptureContext : IDisposable {
     private CaptureSession? _session;
     private Phase _phase;
     private Dictionary<object, uint> _bindings = new(ReferenceEqualityComparer.Instance);
-    private readonly Dictionary<object, RootCapture> _roots = new(ReferenceEqualityComparer.Instance);
+    private readonly Dictionary<object, RootCapture> _durables = new(ReferenceEqualityComparer.Instance);
+    private readonly IReadOnlyDictionary<Type, StateModelBinding> _models;
     private readonly List<RootCapture> _queue = [];
     private readonly List<uint> _rootIds = [];
     private readonly List<CapturedObject> _objects = [];
 
-    internal CaptureContext(CaptureSession session) {
+    internal CaptureContext(CaptureSession session, IReadOnlyDictionary<Type, StateModelBinding> models) {
         _session = session;
+        _models = models;
     }
 
     internal CapturedGraph? Candidate { get; private set; }
@@ -68,7 +70,11 @@ public sealed class CaptureContext : IDisposable {
             if (value.GetType() != typeof(TDomain)) {
                 throw new ArgumentException("Root capture requires the exact concrete domain type.", nameof(value));
             }
-            if (_roots.TryGetValue(value, out RootCapture? existing)) {
+            if (_models.TryGetValue(typeof(TDomain), out StateModelBinding? model) &&
+                !model.MatchesCapture(schema, capture, preparation)) {
+                throw new ArgumentException("Root capture must match its registered model binding.", nameof(capture));
+            }
+            if (_durables.TryGetValue(value, out RootCapture? existing)) {
                 if (existing is not RootCapture<TDomain, TState> typed ||
                     !typed.Schema.Equals(schema) || !typed.Capture.Equals(capture) ||
                     !ReferenceEquals(typed.Preparation, preparation)) {
@@ -80,9 +86,43 @@ public sealed class CaptureContext : IDisposable {
             uint id = _session!.GetOrAllocateId(value);
             RootCapture<TDomain, TState> root = new(id, value, schema, capture, preparation);
             _bindings.Add(value, id);
-            _roots.Add(value, root);
+            _durables.Add(value, root);
             _queue.Add(root);
             _rootIds.Add(id);
+            return id;
+        }
+        catch {
+            AbortBuild();
+            throw;
+        }
+    }
+
+    /// <summary>Interns a durable reference by actual type, validates its nominal constraint, and queues its capture.</summary>
+    public uint CaptureDurable(DurableBase? value, string nominalSchemaId) {
+        try {
+            RequirePhase(Phase.Capturing);
+            ArgumentException.ThrowIfNullOrWhiteSpace(nominalSchemaId);
+            if (value is null) {
+                return 0;
+            }
+            if (!_models.TryGetValue(value.GetType(), out StateModelBinding? model)) {
+                throw new InvalidOperationException($"No current model is registered for actual domain type {value.GetType()}.");
+            }
+            // Validate every edge before interning, including aliases of an already queued root or child.
+            if (!StateReferenceValidator.Accepts(model.CurrentSchema, nominalSchemaId)) {
+                throw new InvalidOperationException($"The actual domain type does not satisfy nominal Schema {nominalSchemaId}.");
+            }
+            if (_durables.TryGetValue(value, out RootCapture? existing)) {
+                if (!existing.Matches(model)) {
+                    throw new InvalidOperationException("The existing object capture disagrees with its registered model binding.");
+                }
+                return existing.Id;
+            }
+            uint id = _session!.GetOrAllocateId(value);
+            ModelCapture registration = new(id, value, model);
+            _bindings.Add(value, id);
+            _durables.Add(value, registration);
+            _queue.Add(registration);
             return id;
         }
         catch {
@@ -115,13 +155,13 @@ public sealed class CaptureContext : IDisposable {
         }
     }
 
-    /// <summary>Copies all registered roots into a complete immutable graph.</summary>
+    /// <summary>Copies the reachable closure of all registered roots into a complete immutable graph.</summary>
     public CapturedGraph Seal() {
         try {
             RequirePhase(Phase.Registering);
             _phase = Phase.Capturing;
-            foreach (RootCapture root in _queue) {
-                CapturedObject item = root.Invoke(this);
+            for (int index = 0; index < _queue.Count; index++) {
+                CapturedObject item = _queue[index].Invoke(this);
                 // A callback may catch an illegal reentrant call. Such a failure still aborts the build.
                 RequirePhase(Phase.Capturing);
                 _objects.Add(item);
@@ -170,7 +210,7 @@ public sealed class CaptureContext : IDisposable {
     }
 
     private void ClearBuildData() {
-        _roots.Clear();
+        _durables.Clear();
         _queue.Clear();
         _rootIds.Clear();
         _objects.Clear();
@@ -179,6 +219,7 @@ public sealed class CaptureContext : IDisposable {
     private abstract class RootCapture(uint id) {
         public uint Id { get; } = id;
         public abstract CapturedObject Invoke(CaptureContext context);
+        public abstract bool Matches(StateModelBinding model);
     }
 
     private sealed class RootCapture<TDomain, TState>(
@@ -193,5 +234,12 @@ public sealed class CaptureContext : IDisposable {
 
         public override CapturedObject Invoke(CaptureContext context) =>
             new(Id, Schema, Capture(source, context), Preparation);
+
+        public override bool Matches(StateModelBinding model) => model.MatchesCapture(Schema, Capture, Preparation);
+    }
+
+    private sealed class ModelCapture(uint id, DurableBase source, StateModelBinding model) : RootCapture(id) {
+        public override CapturedObject Invoke(CaptureContext context) => model.Capture(Id, source, context);
+        public override bool Matches(StateModelBinding other) => ReferenceEquals(model, other);
     }
 }

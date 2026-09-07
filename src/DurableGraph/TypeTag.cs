@@ -19,4 +19,5 @@ public enum TypeTag {
     Half = 12,
     Single = 13,
     Double = 14,
+    DurableReference = 15,
 }

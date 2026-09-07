@@ -22,5 +22,5 @@ public sealed class StateReaderRegistryTests {
         schema,
         static (ref BinaryPayloadReader reader) => reader.ReadByte(),
         static (ref BinaryPayloadReader reader, in byte prior) => reader.ReadByte(),
-        static (in byte state, StringReadTable strings) => { });
+        static (in byte state, IStateReferenceVisitor visitor) => { });
 }

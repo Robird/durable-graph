@@ -27,6 +27,9 @@ internal static class SchemaBatchWireCodec {
             foreach (DurableFieldInfo field in schema.Fields) {
                 writer.WriteUInt32((uint)field.FieldId);
                 writer.WriteByte(EncodeType(field.TypeTag));
+                if (field.TypeTag == TypeTag.DurableReference) {
+                    writer.WriteString(field.TargetSchemaId!);
+                }
             }
         }
         return buffer.ToArray();
@@ -65,7 +68,12 @@ internal static class SchemaBatchWireCodec {
                     throw new InvalidDataException("Schema fields require positive, strictly increasing Int32 identifiers.");
                 }
                 previousField = (int)fieldId;
-                fields[fieldIndex] = new DurableFieldInfo((int)fieldId, DecodeType(reader.ReadByte()));
+                TypeTag tag = DecodeType(reader.ReadByte());
+                string? targetSchemaId = tag == TypeTag.DurableReference ? reader.ReadString() : null;
+                if (tag == TypeTag.DurableReference && string.IsNullOrWhiteSpace(targetSchemaId)) {
+                    throw new InvalidDataException("A durable reference requires a nonblank nominal Schema identity.");
+                }
+                fields[fieldIndex] = new DurableFieldInfo((int)fieldId, tag, targetSchemaId);
             }
             declarations.Add(key, new Declaration(baseKey, fields));
         }
@@ -144,6 +152,7 @@ internal static class SchemaBatchWireCodec {
         TypeTag.Int16 => 7, TypeTag.UInt16 => 8, TypeTag.UInt32 => 9,
         TypeTag.UInt64 => 10, TypeTag.Char => 11, TypeTag.Half => 12,
         TypeTag.Single => 13, TypeTag.Double => 14,
+        TypeTag.DurableReference => 15,
         _ => throw new ArgumentException("Unsupported Schema field type.", nameof(tag)),
     };
 
@@ -153,6 +162,7 @@ internal static class SchemaBatchWireCodec {
         7 => TypeTag.Int16, 8 => TypeTag.UInt16, 9 => TypeTag.UInt32,
         10 => TypeTag.UInt64, 11 => TypeTag.Char, 12 => TypeTag.Half,
         13 => TypeTag.Single, 14 => TypeTag.Double,
+        15 => TypeTag.DurableReference,
         _ => throw new InvalidDataException($"Unknown Schema field type code {tag}."),
     };
 

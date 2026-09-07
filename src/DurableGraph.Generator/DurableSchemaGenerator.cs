@@ -458,22 +458,24 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
             }
 
             string fieldRecord = line.Substring(FieldPrefix.Length);
-            int separator = fieldRecord.IndexOf('|');
-            if (separator <= 0 ||
-                separator != fieldRecord.LastIndexOf('|') ||
+            string[] parts = fieldRecord.Split('|');
+            string? targetSchemaId = null;
+            if (parts.Length < 2 || parts.Length > 3 ||
                 !TryParsePositiveCanonicalInt(
-                    fieldRecord.Substring(0, separator),
+                    parts[0],
                     out int fieldId) ||
                 fieldId <= previousFieldId ||
                 !TryParsePositiveCanonicalInt(
-                    fieldRecord.Substring(separator + 1),
+                    parts[1],
                     out int typeTagValue) ||
-                !TryGetFieldTypeName(typeTagValue, out _)) {
+                (typeTagValue == 15
+                    ? parts.Length != 3 || !TryDecodeSchemaId(parts[2], out targetSchemaId)
+                    : parts.Length != 2 || !TryGetFieldTypeName(typeTagValue, out _))) {
                 error = "fields must have increasing positive IDs and supported numeric type tags";
                 return false;
             }
 
-            fields.Add(new SnapshotFieldModel(fieldId, typeTagValue));
+            fields.Add(new SnapshotFieldModel(fieldId, typeTagValue, targetSchemaId));
             previousFieldId = fieldId;
         }
 
@@ -551,11 +553,12 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
             List<SnapshotVersionModel> versions = new();
 
             foreach (SnapshotHistoryModel entry in history) {
-                if (StringComparer.Ordinal.Equals(entry.SchemaId, currentType.SchemaId) && entry.BaseSchema.HasValue) {
+                if (StringComparer.Ordinal.Equals(entry.SchemaId, currentType.SchemaId) &&
+                    (entry.BaseSchema.HasValue || entry.Fields.Exists(field => field.TypeTagValue == 15))) {
                     context.ReportDiagnostic(Diagnostic.Create(
                         InvalidSchemaAncestry, GetSourceLocation(currentType.Symbol),
                         currentType.Symbol.ToDisplayString(QualifiedNameFormat),
-                        "the legacy serializer cannot consume history with a base schema; use SchemaOnly"));
+                        "the legacy serializer cannot consume history with a base schema or durable references; use SchemaOnly"));
                     hasErrors = true;
                     break;
                 }
@@ -672,7 +675,8 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
 
         for (int index = 0; index < left.Count; index++) {
             if (left[index].FieldId != right[index].FieldId ||
-                left[index].TypeTagValue != right[index].TypeTagValue) {
+                left[index].TypeTagValue != right[index].TypeTagValue ||
+                !StringComparer.Ordinal.Equals(left[index].TargetSchemaId, right[index].TargetSchemaId)) {
                 return false;
             }
         }
@@ -687,7 +691,7 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
         foreach (DurableFieldModel field in fields) {
             result.Add(new SnapshotFieldModel(
                 field.FieldId,
-                field.TypeTagValue));
+                field.TypeTagValue, field.TargetSchemaId));
         }
 
         return result;
@@ -815,12 +819,15 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
 
             fieldId = candidateFieldId;
 
+            string? targetSchemaId = null;
             if (!TryGetTypeTag(
                 field.Type,
                 halfType,
                 out string? typeTag,
                 out int typeTagValue,
-                out string? fieldTypeName)) {
+                out string? fieldTypeName) &&
+                !(IsSchemaOnly(type) && TryGetNominalReference(field.Type, type,
+                    context.CancellationToken, out typeTag, out typeTagValue, out fieldTypeName, out targetSchemaId))) {
                 context.ReportDiagnostic(Diagnostic.Create(
                     UnsupportedFieldType,
                     GetSourceLocation(field),
@@ -835,7 +842,7 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
                 fieldId,
                 typeTag!,
                 typeTagValue,
-                fieldTypeName!));
+                fieldTypeName!, targetSchemaId));
         }
 
         durableFields.Sort(static (left, right) => left.FieldId.CompareTo(right.FieldId));
@@ -1009,6 +1016,32 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
         return false;
     }
 
+    private static bool TryGetNominalReference(
+        ITypeSymbol fieldType, INamedTypeSymbol owner,
+        System.Threading.CancellationToken cancellationToken,
+        out string? typeTag, out int typeTagValue, out string? fieldTypeName, out string? targetSchemaId) {
+        typeTag = null;
+        typeTagValue = 0;
+        fieldTypeName = null;
+        targetSchemaId = null;
+        if (fieldType is not INamedTypeSymbol target || !IsSchemaOnly(target) ||
+            !HasSchemaOnlyTypeShape(target, cancellationToken) ||
+            !SymbolEqualityComparer.Default.Equals(target.ContainingAssembly, owner.ContainingAssembly)) {
+            return false;
+        }
+        AttributeData? attribute = GetAttribute(target.GetAttributes(), DurableTypeAttributeMetadataName);
+        if (attribute is null || attribute.ConstructorArguments.Length != 2 ||
+            attribute.ConstructorArguments[0].Value is not string identity ||
+            string.IsNullOrWhiteSpace(identity) || !CanEncodeStrictUtf8(identity)) {
+            return false;
+        }
+        typeTag = "DurableReference";
+        typeTagValue = 15;
+        fieldTypeName = fieldType.ToDisplayString(QualifiedNameFormat);
+        targetSchemaId = identity;
+        return true;
+    }
+
     private static bool TryGetFieldTypeName(
         int typeTagValue,
         out string? fieldTypeName) {
@@ -1078,7 +1111,11 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
                 source.Append("// field:")
                     .Append(field.FieldId.ToString(CultureInfo.InvariantCulture))
                     .Append('|')
-                    .AppendLine(field.TypeTagValue.ToString(CultureInfo.InvariantCulture));
+                    .Append(field.TypeTagValue.ToString(CultureInfo.InvariantCulture));
+                if (field.TargetSchemaId is not null) {
+                    source.Append('|').Append(Convert.ToBase64String(StrictUtf8.GetBytes(field.TargetSchemaId)));
+                }
+                source.AppendLine();
             }
 
             source.AppendLine("// snapshot-end");
@@ -1611,6 +1648,8 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
                 return "Single";
             case 14:
                 return "Double";
+            case 15:
+                return "DurableReference";
             default:
                 throw new InvalidOperationException("Unsupported snapshot type tag.");
         }
@@ -1682,12 +1721,14 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
             int fieldId,
             string typeTag,
             int typeTagValue,
-            string fieldTypeName) {
+            string fieldTypeName,
+            string? targetSchemaId = null) {
             Symbol = symbol;
             FieldId = fieldId;
             TypeTag = typeTag;
             TypeTagValue = typeTagValue;
             FieldTypeName = fieldTypeName;
+            TargetSchemaId = targetSchemaId;
         }
 
         public IFieldSymbol Symbol { get; }
@@ -1699,6 +1740,7 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
         public int TypeTagValue { get; }
 
         public string FieldTypeName { get; }
+        public string? TargetSchemaId { get; }
     }
 
     private readonly struct DurableTypeModel {
@@ -1734,14 +1776,16 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
     }
 
     private readonly struct SnapshotFieldModel {
-        public SnapshotFieldModel(int fieldId, int typeTagValue) {
+        public SnapshotFieldModel(int fieldId, int typeTagValue, string? targetSchemaId = null) {
             FieldId = fieldId;
             TypeTagValue = typeTagValue;
+            TargetSchemaId = targetSchemaId;
         }
 
         public int FieldId { get; }
 
         public int TypeTagValue { get; }
+        public string? TargetSchemaId { get; }
     }
 
     private readonly struct SnapshotHistoryModel {

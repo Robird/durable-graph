@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Text;
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.Text;
 
 namespace Atelia.DurableGraph.Generator;
@@ -68,7 +69,7 @@ public sealed partial class DurableSchemaGenerator {
             foreach (DurableFieldModel field in type.Fields) {
                 if (!IsBinaryField(field.TypeTagValue)) {
                     ReportInvalidBinaryBody(context, type.Symbol,
-                        "field '" + field.Symbol.Name + "' is not a supported scalar or string reference",
+                        "field '" + field.Symbol.Name + "' is not a supported scalar or reference",
                         GetSourceLocation(field.Symbol));
                     valid = false;
                 }
@@ -96,7 +97,7 @@ public sealed partial class DurableSchemaGenerator {
                             ReportInvalidBinaryBody(context, type.Symbol,
                                 "version " + version.ToString(CultureInfo.InvariantCulture) +
                                 " field '" + field.Name +
-                                "' is not a supported scalar or string reference");
+                                "' is not a supported scalar or reference");
                             valid = false;
                         }
                     }
@@ -152,10 +153,12 @@ public sealed partial class DurableSchemaGenerator {
     }
 
     private static bool IsBinaryField(int typeTagValue) =>
-        typeTagValue >= 1 && typeTagValue <= 14;
+        typeTagValue >= 1 && typeTagValue <= 15;
 
-    // Schema tags describe domain fields. The DTO stores a string's identity as a UInt32 slot.
-    private static int GetBinarySlotTypeTag(int typeTagValue) => typeTagValue == 4 ? 9 : typeTagValue;
+    // Schema tags describe domain fields. Every reference DTO slot stores UInt32 identity.
+    private static int GetBinarySlotTypeTag(int typeTagValue) => IsBinaryReference(typeTagValue) ? 9 : typeTagValue;
+
+    private static bool IsBinaryReference(int typeTagValue) => typeTagValue == 4 || typeTagValue == 15;
 
     private static void ReportInvalidBinaryBody(
         SourceProductionContext context, INamedTypeSymbol type, string message, Location? location = null) {
@@ -185,6 +188,7 @@ public sealed partial class DurableSchemaGenerator {
             AppendBinaryPrepareDelta(source, version, bodyIndent);
             AppendBinaryApplyDelta(source, version, bodyIndent);
             AppendBinaryStringReferenceValidation(source, version, bodyIndent);
+            AppendBinaryReferenceTraversal(source, version, bodyIndent);
         }
 
         AppendBinaryReaderRegistration(source, versions, bodyIndent);
@@ -209,7 +213,7 @@ public sealed partial class DurableSchemaGenerator {
             source.Append(indent).Append("private static readonly global::Atelia.DurableGraph.StateReaderBinding<")
                 .Append(version.Name).Append("> Reader").Append(version.Name).Append(" = new(")
                 .Append(version.Name).Append(".Schema, Read").Append(version.Name).Append(", ApplyDelta")
-                .Append(version.Name).AppendLine(", ValidateStringReferences);");
+                .Append(version.Name).AppendLine(", VisitReferences);");
         }
 
         source.Append(indent).AppendLine("internal static void RegisterReaders(global::Atelia.DurableGraph.IStateReaderRegistration readers) {");
@@ -223,7 +227,7 @@ public sealed partial class DurableSchemaGenerator {
 
     private static void AppendBinaryCapture(
         StringBuilder source, DurableTypeModel type, BinaryVersionModel version, string indent, bool hasDomainBase) {
-        bool needsContext = version.HasStringReferences;
+        bool needsContext = version.HasReferences;
         source.Append(indent).Append("internal static ").Append(version.Name).Append(" Capture(")
             .Append(type.Symbol.ToDisplayString(FullyQualifiedNameFormat)).Append(" value");
         if (needsContext) {
@@ -242,7 +246,7 @@ public sealed partial class DurableSchemaGenerator {
                 .Append(type.Symbol.BaseType!.ToDisplayString(FullyQualifiedNameFormat))
                 .Append('.').Append(BinaryBodyTypeName).Append(".Capture(value");
             for (int index = 0; index < inheritedCount; index++) {
-                if (version.Fields[index].TypeTagValue == 4) {
+                if (IsBinaryReference(version.Fields[index].TypeTagValue)) {
                     source.Append(", context");
                     break;
                 }
@@ -260,13 +264,20 @@ public sealed partial class DurableSchemaGenerator {
             if (index < inheritedCount) {
                 source.Append("baseState.").Append(version.Fields[index].Name);
             } else {
-                bool isString = version.Fields[index].TypeTagValue == 4;
+                BinaryFieldModel field = version.Fields[index];
+                bool isString = field.TypeTagValue == 4;
+                bool isDurable = field.TypeTagValue == 15;
                 if (isString) {
                     source.Append("context.CaptureString(");
+                } else if (isDurable) {
+                    source.Append("context.CaptureDurable(");
                 }
 
                 source.Append("value.").Append(EscapeIdentifier(type.Fields[index - inheritedCount].Symbol.Name));
-                if (isString) {
+                if (isDurable) {
+                    source.Append(", ").Append(SymbolDisplay.FormatLiteral(field.TargetSchemaId!, quote: true));
+                }
+                if (isString || isDurable) {
                     source.Append(')');
                 }
             }
@@ -284,12 +295,7 @@ public sealed partial class DurableSchemaGenerator {
         source.Append(indent).AppendLine("    global::System.ArgumentNullException.ThrowIfNull(context);");
         source.Append(indent).Append("    return context.AddRoot<").Append(domainType).Append(", ")
             .Append(version.Name).Append(">(value, ").Append(version.Name)
-            .Append(".Schema, static (source, shared) => Capture(source");
-        if (version.HasStringReferences) {
-            source.Append(", shared");
-        }
-
-        source.AppendLine("), Preparation);");
+            .AppendLine(".Schema, CaptureDelegate, Preparation);");
         source.Append(indent).AppendLine("}");
     }
 
@@ -519,6 +525,24 @@ public sealed partial class DurableSchemaGenerator {
         source.Append(indent).AppendLine("}");
     }
 
+    private static void AppendBinaryReferenceTraversal(
+        StringBuilder source, BinaryVersionModel version, string indent) {
+        source.Append(indent).Append("internal static void VisitReferences(in ").Append(version.Name)
+            .AppendLine(" state, global::Atelia.DurableGraph.IStateReferenceVisitor visitor) {");
+        source.Append(indent).AppendLine("    global::System.ArgumentNullException.ThrowIfNull(visitor);");
+        foreach (BinaryFieldModel field in version.Fields) {
+            if (!IsBinaryReference(field.TypeTagValue)) continue;
+            source.Append(indent).Append("    visitor.")
+                .Append(field.TypeTagValue == 4 ? "VisitString" : "VisitDurable")
+                .Append("(state.").Append(field.Name);
+            if (field.TypeTagValue == 15) {
+                source.Append(", ").Append(SymbolDisplay.FormatLiteral(field.TargetSchemaId!, quote: true));
+            }
+            source.AppendLine(");");
+        }
+        source.Append(indent).AppendLine("}");
+    }
+
     private static int AppendBinaryFields(
         SnapshotHistoryModel shape, List<SnapshotHistoryModel> available, List<BinaryFieldModel> fields, int segment) {
         if (shape.BaseSchema.HasValue) {
@@ -528,7 +552,7 @@ public sealed partial class DurableSchemaGenerator {
         }
 
         foreach (SnapshotFieldModel field in shape.Fields) {
-            fields.Add(new BinaryFieldModel(segment, field.FieldId, field.TypeTagValue));
+            fields.Add(new BinaryFieldModel(segment, field.FieldId, field.TypeTagValue, field.TargetSchemaId));
         }
 
         return segment + 1;
@@ -543,18 +567,20 @@ public sealed partial class DurableSchemaGenerator {
         public int Version { get; }
         public string Name => "V" + Version.ToString(CultureInfo.InvariantCulture);
         public List<BinaryFieldModel> Fields { get; }
-        public bool HasStringReferences => Fields.Exists(entry => entry.TypeTagValue == 4);
+        public bool HasReferences => Fields.Exists(entry => IsBinaryReference(entry.TypeTagValue));
     }
 
     private readonly struct BinaryFieldModel {
-        public BinaryFieldModel(int segment, int fieldId, int typeTagValue) {
+        public BinaryFieldModel(int segment, int fieldId, int typeTagValue, string? targetSchemaId) {
             Name = "Segment" + segment.ToString(CultureInfo.InvariantCulture) +
                 "Field" + fieldId.ToString(CultureInfo.InvariantCulture);
             TypeTagValue = typeTagValue;
+            TargetSchemaId = targetSchemaId;
         }
 
         public string Name { get; }
         public string ParameterName => "s" + Name.Substring(1);
         public int TypeTagValue { get; }
+        public string? TargetSchemaId { get; }
     }
 }

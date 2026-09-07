@@ -11,6 +11,7 @@ public sealed class CaptureSession {
     private Dictionary<object, uint> _bindings = new(ReferenceEqualityComparer.Instance);
     private CaptureContext? _pending;
     private bool _preparing;
+    private bool _beginningCapture;
 
     public CaptureSession() : this(1) { }
 
@@ -91,12 +92,33 @@ public sealed class CaptureSession {
         return objects;
     }
 
-    public CaptureContext BeginCapture() {
-        if (_pending is not null) {
+    public CaptureContext BeginCapture() => BeginCapture([]);
+
+    /// <summary>Begins a capture with an explicit, frozen directory of current model bindings.</summary>
+    public CaptureContext BeginCapture(IEnumerable<StateModelBinding> models) {
+        RequireNotPreparing();
+        if (_pending is not null || _beginningCapture) {
             throw new InvalidOperationException("Resolve the current capture before beginning another.");
         }
-        _pending = new CaptureContext(this);
-        return _pending;
+        ArgumentNullException.ThrowIfNull(models);
+        _beginningCapture = true;
+        try {
+            Dictionary<Type, StateModelBinding> types = [];
+            Dictionary<string, StateModelBinding> families = new(StringComparer.Ordinal);
+            foreach (StateModelBinding model in models) {
+                ArgumentNullException.ThrowIfNull(model);
+                if ((types.TryGetValue(model.DomainType, out StateModelBinding? byType) && !ReferenceEquals(byType, model)) ||
+                    (families.TryGetValue(model.CurrentSchema.SchemaId, out StateModelBinding? byFamily) && !ReferenceEquals(byFamily, model))) {
+                    throw new ArgumentException("Each exact domain type and Schema family requires one stable model binding.", nameof(models));
+                }
+                types.TryAdd(model.DomainType, model);
+                families.TryAdd(model.CurrentSchema.SchemaId, model);
+            }
+            _pending = new CaptureContext(this, types);
+            return _pending;
+        } finally {
+            _beginningCapture = false;
+        }
     }
 
     /// <summary>Installs the actual candidate and its live bindings without recapturing domain data.</summary>

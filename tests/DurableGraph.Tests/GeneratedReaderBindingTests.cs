@@ -97,7 +97,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             """);
         AssertSchemaOnlyCompiles(run);
         string generated = GeneratedSource(run, "DurableBinaryBodies.g.cs");
-        Assert.Contains("StateReaderBinding<V1> ReaderV1 = new(V1.Schema, ReadV1, ApplyDeltaV1, ValidateStringReferences);", generated);
+        Assert.Contains("StateReaderBinding<V1> ReaderV1 = new(V1.Schema, ReadV1, ApplyDeltaV1, VisitReferences);", generated);
         Assert.Contains("writer.WriteInt32(value.Segment0Field1);", generated);
         Assert.Contains("writer.WriteUInt32(value.Segment0Field2);", generated);
         Assert.Contains("reader.ReadInt32();", generated);

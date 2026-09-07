@@ -25,8 +25,8 @@ public sealed class StateReaderBindingTests {
         Assert.Equal((byte)12, row.GetState<State>().Value);
         Assert.Equal(9u, row.GetState<State>().Text);
         // Only the final DTO is validated: string 7 is no longer referenced.
-        binding.ValidateReferences(row, StringReadTable.FromDecoded([(9u, "current")]));
-        Assert.Throws<InvalidDataException>(() => binding.ValidateReferences(row, StringReadTable.FromDecoded([])));
+        binding.VisitReferences(row, new StateReferenceValidator(new Dictionary<uint, CapturedObject> { [9] = new(9, "current") }));
+        Assert.Throws<InvalidDataException>(() => binding.VisitReferences(row, new StateReferenceValidator(new Dictionary<uint, CapturedObject>())));
     }
 
     [Fact]
@@ -34,7 +34,7 @@ public sealed class StateReaderBindingTests {
         StateReaderBinding<State> binding = new(Schema, ReadBase, ApplyDelta, ValidateStrings);
         CapturedObject row = binding.Read(uint.MaxValue, new BodySource([5, 0]));
         Assert.Equal((byte)5, row.GetState<State>().Value);
-        binding.ValidateReferences(row, StringReadTable.FromDecoded([]));
+        binding.VisitReferences(row, new StateReferenceValidator(new Dictionary<uint, CapturedObject>()));
     }
 
     [Theory]
@@ -75,8 +75,8 @@ public sealed class StateReaderBindingTests {
     public void ReferenceValidationRejectsWrongKindSchemaAncestorOrDtoBeforeCallback() {
         int calls = 0;
         StateReaderBinding<State> binding = new(Schema, ReadBase, ApplyDelta,
-            (in State state, StringReadTable table) => calls++);
-        StringReadTable table = StringReadTable.FromDecoded([]);
+            (in State state, IStateReferenceVisitor visitor) => calls++);
+        StateReferenceValidator table = new(new Dictionary<uint, CapturedObject>());
         DurableSchema wrongFields = new(Schema.SchemaId, Schema.Version,
             new DurableFieldInfo(1, TypeTag.UInt32), new DurableFieldInfo(2, TypeTag.String));
         DurableSchema wrongVersion = new(Schema.SchemaId, 2, Schema.Fields.ToArray());
@@ -90,12 +90,12 @@ public sealed class StateReaderBindingTests {
             new(1, Schema, 123u),
         ];
         foreach (CapturedObject row in invalidRows) {
-            Assert.Throws<InvalidDataException>(() => binding.ValidateReferences(row, table));
+            Assert.Throws<InvalidDataException>(() => binding.VisitReferences(row, table));
         }
         Assert.Equal(0, calls);
         // Equivalent immutable definitions need not be the same CLR instance.
         DurableSchema equal = new(Schema.SchemaId, Schema.Version, Schema.Fields.ToArray());
-        binding.ValidateReferences(new CapturedObject(1, equal, new State()), table);
+        binding.VisitReferences(new CapturedObject(1, equal, new State()), table);
         Assert.Equal(1, calls);
     }
 
@@ -176,7 +176,7 @@ public sealed class StateReaderBindingTests {
         return result;
     }
 
-    private static void ValidateStrings(in State state, StringReadTable table) => table.ResolveString(state.Text);
+    private static void ValidateStrings(in State state, IStateReferenceVisitor visitor) => visitor.VisitString(state.Text);
 
     private sealed class BodySource(params byte[][] bodies) : IStateBodySource {
         public List<int> Requests { get; } = [];

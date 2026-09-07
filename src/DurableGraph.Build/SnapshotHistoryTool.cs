@@ -316,19 +316,19 @@ internal static class SnapshotDocument {
             while (index < lines.Length &&
                 lines[index].StartsWith(FieldPrefix, StringComparison.Ordinal)) {
                 string fieldText = lines[index].Substring(FieldPrefix.Length);
-                int separator = fieldText.IndexOf('|');
+                string[] parts = fieldText.Split('|');
 
-                if (separator <= 0 || separator != fieldText.LastIndexOf('|')) {
+                if (parts.Length is < 2 or > 3) {
                     throw Invalid(path, $"line {index + 1} has an invalid field entry");
                 }
 
                 int fieldId = ParsePositiveCanonicalInt(
                     path,
-                    fieldText.Substring(0, separator),
+                    parts[0],
                     $"field ID on line {index + 1}");
                 int typeTag = ParsePositiveCanonicalInt(
                     path,
-                    fieldText.Substring(separator + 1),
+                    parts[1],
                     $"TypeTag on line {index + 1}");
 
                 if (fieldId <= previousFieldId) {
@@ -337,11 +337,15 @@ internal static class SnapshotDocument {
                         $"field IDs must be unique and sorted; line {index + 1} has {fieldId} after {previousFieldId}");
                 }
 
-                if (typeTag is < 1 or > 14) {
+                if (typeTag is < 1 or > 15) {
                     throw Invalid(path, $"line {index + 1} has unsupported TypeTag {typeTag}");
                 }
 
-                fields.Add(new SnapshotField(fieldId, typeTag));
+                if (parts.Length != (typeTag == 15 ? 3 : 2)) {
+                    throw Invalid(path, $"line {index + 1} has an invalid nominal reference operand");
+                }
+                string? targetSchemaId = typeTag == 15 ? DecodeSchemaId(path, parts[2]) : null;
+                fields.Add(new SnapshotField(fieldId, typeTag, targetSchemaId));
                 previousFieldId = fieldId;
                 index++;
             }
@@ -500,7 +504,11 @@ internal static class SnapshotDocument {
             builder.Append(FieldPrefix)
                 .Append(field.FieldId.ToString(CultureInfo.InvariantCulture))
                 .Append('|')
-                .AppendLine(field.TypeTag.ToString(CultureInfo.InvariantCulture));
+                .Append(field.TypeTag.ToString(CultureInfo.InvariantCulture));
+            if (field.TargetSchemaId is not null) {
+                builder.Append('|').Append(Convert.ToBase64String(Utf8NoBom.GetBytes(field.TargetSchemaId)));
+            }
+            builder.AppendLine();
         }
 
         builder.AppendLine(SnapshotEnd);
@@ -549,7 +557,7 @@ internal sealed class SnapshotRecord {
 
 internal readonly record struct SnapshotKey(string SchemaId, int Version);
 
-internal readonly record struct SnapshotField(int FieldId, int TypeTag);
+internal readonly record struct SnapshotField(int FieldId, int TypeTag, string? TargetSchemaId = null);
 
 internal readonly record struct SnapshotHistoryResult(string Message);
 

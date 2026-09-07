@@ -216,7 +216,7 @@ public sealed class LoadedWorldTests : IDisposable {
         DurableSchema other = Schema("Other", 1);
         _schemas.Register(other);
         FrameAddress withOther = _store.Append(StateRevision.CreateDelta(address, [Durable(99, other, new(1, 0, 0))], []));
-        StateModelBinding late = Model(current: other, old: other);
+        StateModelBinding late = ModelCore<OtherWorld>(current: other, old: other);
         StateModelRegistry changing = new();
         changing.Register(Model(onRead: () => changing.Register(late)));
         Assert.Throws<InvalidDataException>(() => LoadedWorld.Load<World>(_store, _schemas, withOther, 1, changing));
@@ -231,7 +231,7 @@ public sealed class LoadedWorldTests : IDisposable {
         _schemas.Register(otherOld);
         FrameAddress withOther = _store.Append(StateRevision.CreateDelta(address, [Durable(99, otherOld, new(1, 0, 0))], []));
         StateModelRegistry models = Registry(Model());
-        models.Register(Model(upgrade: _ => throw new InvalidOperationException("unreachable upgrade fails"), current: otherCurrent, old: otherOld));
+        models.Register(ModelCore<OtherWorld>(upgrade: _ => throw new InvalidOperationException("unreachable upgrade fails"), current: otherCurrent, old: otherOld));
         LoadedWorld<World>? delivered = null;
         Assert.Throws<InvalidOperationException>(() => delivered = LoadedWorld.Load<World>(_store, _schemas, withOther, 1, models));
         Assert.Null(delivered);
@@ -263,6 +263,27 @@ public sealed class LoadedWorldTests : IDisposable {
     }
 
     [Fact]
+    public void DuplicateClrTypeRegistrationIsAtomicAndDoesNotReserveTheRejectedFamilyOrReaders() {
+        StateModelBinding original = Model();
+        StateModelRegistry models = Registry(original);
+        DurableSchema other = Schema("Other", 1);
+        Assert.Throws<InvalidOperationException>(() => models.Register(Model(current: other, old: other)));
+        StateModelSnapshot afterFailure = models.Snapshot();
+        Assert.Same(original, Assert.Single(afterFailure.Models).Value);
+        Assert.Same(original, Assert.Single(afterFailure.Types).Value);
+        Assert.DoesNotContain(afterFailure.Readers.Keys, key => key.SchemaId == "Other");
+
+        StateModelBinding accepted = ModelCore<OtherWorld>(current: other, old: other);
+        models.Register(accepted);
+        StateModelSnapshot afterSuccess = models.Snapshot();
+        Assert.Same(accepted, afterSuccess.Models["Other"]);
+        Assert.Same(accepted, afterSuccess.Types[typeof(OtherWorld)]);
+        Assert.Same(accepted.Readers[0], afterSuccess.Readers[new("Other", 1)]);
+        Assert.Single(afterFailure.Models);
+        Assert.Single(afterFailure.Types);
+    }
+
+    [Fact]
     public void DefiniteAppendFailureDoesNotAdvanceTheLoadedBaseline() {
         FrameAddress address = Seed(Old, new(5, 0, 0));
         LoadedWorld<World> loaded = LoadedWorld.Load<World>(_store, _schemas, address, 1, Registry(Model()));
@@ -280,18 +301,22 @@ public sealed class LoadedWorldTests : IDisposable {
         Assert.NotEqual(address, _store.Append(retry.Revision));
     }
 
-    private sealed class World : DurableBase {
+    private class World : DurableBase {
         internal byte Value;
         internal string? Text;
         internal string? Alias;
         internal int TransientMarker = 73;
         internal World(int unused) => throw new InvalidOperationException("Constructors must not run.");
     }
-    private sealed class OtherWorld : DurableBase { }
+    private sealed class OtherWorld() : World(0) { }
     private readonly record struct State(byte Value, uint TextId, uint AliasId);
 
     private static StateModelBinding Model(Func<State, State>? upgrade = null, Action? beforePrepare = null,
-        Action? onRead = null, DurableSchema? current = null, DurableSchema? old = null) {
+        Action? onRead = null, DurableSchema? current = null, DurableSchema? old = null) =>
+        ModelCore<World>(upgrade, beforePrepare, onRead, current, old);
+
+    private static StateModelBinding ModelCore<TWorld>(Func<State, State>? upgrade = null, Action? beforePrepare = null,
+        Action? onRead = null, DurableSchema? current = null, DurableSchema? old = null) where TWorld : World {
         DurableSchema currentSchema = current ?? Current;
         DurableSchema oldSchema = old ?? Old;
         CapturedStatePreparation<State> preparation = new(currentSchema,
@@ -302,10 +327,10 @@ public sealed class LoadedWorldTests : IDisposable {
             static (ref BinaryPayloadReader reader, in State prior) => Apply(ref reader, prior), Validate);
         StateReaderBinding[] readers = currentSchema.Equals(oldSchema)
             ? [Reader(currentSchema)] : [Reader(oldSchema), Reader(currentSchema)];
-        return new StateModelBinding<World, State>(preparation, readers,
+        return new StateModelBinding<TWorld, State>(preparation, readers,
             row => row.Schema!.Equals(currentSchema) ? row.GetState<State>() : (upgrade ?? (static state => state))(row.GetState<State>()),
-            static () => (World)RuntimeHelpers.GetUninitializedObject(typeof(World)),
-            static (World world, in State state, StringReadTable strings) => {
+            static () => (TWorld)RuntimeHelpers.GetUninitializedObject(typeof(TWorld)),
+            static (TWorld world, in State state, ObjectReadTable strings) => {
                 world.Value = state.Value;
                 world.Text = strings.ResolveString(state.TextId);
                 world.Alias = strings.ResolveString(state.AliasId);
@@ -314,9 +339,9 @@ public sealed class LoadedWorldTests : IDisposable {
             Validate);
     }
 
-    private static void Validate(in State state, StringReadTable table) {
-        _ = table.ResolveString(state.TextId);
-        _ = table.ResolveString(state.AliasId);
+    private static void Validate(in State state, IStateReferenceVisitor visitor) {
+        visitor.VisitString(state.TextId);
+        visitor.VisitString(state.AliasId);
     }
     private static StateModelRegistry Registry(StateModelBinding model) {
         StateModelRegistry result = new();

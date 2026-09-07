@@ -96,7 +96,7 @@ public sealed partial class DurableSchemaGeneratorTests {
 
         string generated = GeneratedSource(run, "DurableBinaryBodies.g.cs");
         Assert.Contains("CapturedStatePreparation<V1> Preparation = new(V1.Schema, PrepareBase, PrepareDelta);", generated);
-        Assert.Contains("), Preparation);", generated);
+        Assert.Contains(".Schema, CaptureDelegate, Preparation);", generated);
         foreach (string forbidden in new[] { "ValueSlotCodec", "PrimitiveSlotCodecs", "DynamicInvoke", "System.Reflection", "Dictionary<" }) {
             Assert.DoesNotContain(forbidden, generated);
         }

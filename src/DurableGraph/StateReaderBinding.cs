@@ -11,7 +11,6 @@ internal interface IStateBodySource {
 
 public delegate TState StateBaseReader<TState>(ref BinaryPayloadReader reader) where TState : unmanaged;
 public delegate TState StateDeltaApplier<TState>(ref BinaryPayloadReader reader, in TState prior) where TState : unmanaged;
-public delegate void StateStringReferenceValidator<TState>(in TState state, StringReadTable table) where TState : unmanaged;
 
 /// <summary>Receives generated readers for explicitly selected model families and their history.</summary>
 public interface IStateReaderRegistration {
@@ -29,7 +28,7 @@ public abstract class StateReaderBinding {
     public DurableSchema Schema { get; }
 
     internal abstract CapturedObject Read(uint objectId, IStateBodySource source);
-    internal abstract void ValidateReferences(CapturedObject item, StringReadTable strings);
+    internal abstract void VisitReferences(CapturedObject item, IStateReferenceVisitor visitor);
 }
 
 /// <summary>Reconstructs one exact-version unmanaged DTO before boxing the completed value once.</summary>
@@ -37,19 +36,19 @@ public abstract class StateReaderBinding {
 public sealed class StateReaderBinding<TState> : StateReaderBinding where TState : unmanaged {
     private readonly StateBaseReader<TState> _readBase;
     private readonly StateDeltaApplier<TState> _applyDelta;
-    private readonly StateStringReferenceValidator<TState> _validateReferences;
+    private readonly StateReferenceVisitor<TState> _visitReferences;
 
     public StateReaderBinding(
         DurableSchema schema,
         StateBaseReader<TState> readBase,
         StateDeltaApplier<TState> applyDelta,
-        StateStringReferenceValidator<TState> validateReferences) : base(schema) {
+        StateReferenceVisitor<TState> visitReferences) : base(schema) {
         ArgumentNullException.ThrowIfNull(readBase);
         ArgumentNullException.ThrowIfNull(applyDelta);
-        ArgumentNullException.ThrowIfNull(validateReferences);
+        ArgumentNullException.ThrowIfNull(visitReferences);
         _readBase = readBase;
         _applyDelta = applyDelta;
-        _validateReferences = validateReferences;
+        _visitReferences = visitReferences;
     }
 
     internal override CapturedObject Read(uint objectId, IStateBodySource source) {
@@ -60,9 +59,9 @@ public sealed class StateReaderBinding<TState> : StateReaderBinding where TState
         return new CapturedObject(objectId, Schema, state);
     }
 
-    internal override void ValidateReferences(CapturedObject item, StringReadTable strings) {
+    internal override void VisitReferences(CapturedObject item, IStateReferenceVisitor visitor) {
         ArgumentNullException.ThrowIfNull(item);
-        ArgumentNullException.ThrowIfNull(strings);
+        ArgumentNullException.ThrowIfNull(visitor);
         if (item.Kind != CapturedObjectKind.Durable || !Schema.Equals(item.Schema)) {
             throw new InvalidDataException("The object does not match this reader's exact Schema.");
         }
@@ -72,7 +71,7 @@ public sealed class StateReaderBinding<TState> : StateReaderBinding where TState
         } catch (InvalidOperationException error) {
             throw new InvalidDataException("The object does not contain this reader's exact DTO type.", error);
         }
-        _validateReferences(in state, strings);
+        _visitReferences(in state, visitor);
     }
 }
 

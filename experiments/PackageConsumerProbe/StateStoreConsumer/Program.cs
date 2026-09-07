@@ -15,6 +15,8 @@ internal static class Program {
 #if RESTORE_V2
         World.Exercise(Path.Combine(Path.GetFullPath(args[0]), "restore"));
         Console.WriteLine("HistoricalUpgrade:True:ConstructorFree:True:ReadonlyHydrate:True:ForcedBase:True:UnchangedResave:True:NormalDelta:True:ReopenedWorld:True");
+        GraphWorld.Exercise(Path.Combine(Path.GetFullPath(args[0]), "graph"));
+        Console.WriteLine("PrepareNewGraph:True:SharedDerived:True:ReadonlyCycles:True:ChildOnlyDelta:True:UnreachableCycleRemoved:True:HistoricalGraphPreserved:True");
 #endif
     }
 }

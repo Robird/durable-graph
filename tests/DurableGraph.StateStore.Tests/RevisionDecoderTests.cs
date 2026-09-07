@@ -215,14 +215,14 @@ public sealed class RevisionDecoderTests : IDisposable {
                 uint textId = (bitmap & 2) != 0 ? reader.ReadUInt32() : prior.TextId;
                 return new(value, textId);
             },
-            static (in NodeState state, StringReadTable table) => { _ = table.ResolveString(state.TextId); }));
+            static (in NodeState state, IStateReferenceVisitor visitor) => { visitor.VisitString(state.TextId); }));
         return readers;
     }
 
     private static StateReaderBinding<byte> ByteBinding(DurableSchema schema, Action? onRead = null) => new(schema,
         (ref BinaryPayloadReader reader) => { onRead?.Invoke(); return reader.ReadByte(); },
         static (ref BinaryPayloadReader reader, in byte prior) => reader.ReadByte(),
-        static (in byte state, StringReadTable table) => { });
+        static (in byte state, IStateReferenceVisitor visitor) => { });
 
     private static ObjectVersionRecord Node(uint id, byte value, byte textId) => Durable(id, NodeSchema, [value, textId]);
     private static ObjectVersionRecord Durable(uint id, DurableSchema schema, ReadOnlySpan<byte> body) =>

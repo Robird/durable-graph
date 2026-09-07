@@ -114,7 +114,8 @@ markers plus `DecodedRevision:True` and retains artifacts under its unique ignor
 directory. This first phase retains its two-owner stored-exact witness and two history files.
 
 The script then builds a separate `World` model at V1 and V2 against the same actual packages,
-publishing and consuming real generated history (three then four total history files). The V2
+publishing and consuming real generated history (three history files after V1; eight after V2,
+including the four reference-graph models described below). The V2
 consumer writes a historical Base plus two Deltas and closes the files. After writable reopening,
 public `LoadedWorld.Load<World>` upgrades the complete old DTO, allocates without a constructor,
 and hydrates private readonly scalar/string fields. `Prepare` forces an unchanged upgraded object
@@ -126,6 +127,22 @@ for the public loading/preparation APIs.
 
 Additional required markers are `HistoricalUpgrade`, `ConstructorFree`, `ReadonlyHydrate`,
 `ForcedBase`, `UnchangedResave`, `NormalDelta`, and `ReopenedWorld`, each followed by `True`.
-The witness supplies the explicit World ID and does not publish a head, discover roots/CLR types,
-invoke transient hooks, or claim general reference-graph support. Mixed historical model families
+The historical witness supplies the explicit World ID and does not publish a head, discover roots/CLR types,
+or invoke transient hooks. Mixed historical model families
 and failure boundaries remain covered by product integration tests.
+
+The V2 consumer additionally constructs an ordinary `GraphWorld` with a shared derived
+`GraphCharacter` in nominal base fields. The Character and Item retain readonly mutual references;
+the Item also refers to itself, and its label shares the Character's inherited readonly name.
+Public `LoadedWorld.PrepareNew` produces the initial no-Parent plan, which the host appends without
+hand-built DTOs or bootstrap records. Mutating and disconnecting the original graph after preparation
+cannot change those saved bytes. Closing and reopening restores the exact derived type, sharing,
+cycles and readonly fields without executing constructors or transient initializers.
+
+A child-only edit produces one Character Delta and retains the World's previous head. Repeated
+preparation is equivalent, reloading an unchanged graph produces no writes, and disconnecting both
+World references removes the entire cyclic island and its string from the new view. A final cold
+reopening checks the removed view and both earlier graphs. Required markers are `PrepareNewGraph`,
+`SharedDerived`, `ReadonlyCycles`, `ChildOnlyDelta`, `UnreachableCycleRemoved`, and
+`HistoricalGraphPreserved`, each followed by `True`. The host still retains the explicit WorldId
+and Revision address; preparation and Append do not publish a head or advance the loaded baseline.

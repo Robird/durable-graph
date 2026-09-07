@@ -94,7 +94,7 @@ public sealed partial class Character : BinaryBase {
         var state = __DurableBinaryBody.Normalize(graph.Objects.Single(row => row.Id == id));
         int constructors = _constructorCalls, baseConstructors = BaseConstructorCalls;
         Character restored = __DurableBinaryBody.Allocate();
-        __DurableBinaryBody.Hydrate(restored, in state, StringReadTable.Decode([]));
+        __DurableBinaryBody.Hydrate(restored, in state, new ObjectReadTable(StringReadTable.Decode([]), new Dictionary<uint, DurableBase>()));
         if (ReferenceEquals(source, restored) || !restored.HasExpectedBase || restored._total != 42 ||
             restored._sentinel != 0 || _constructorCalls != constructors || BaseConstructorCalls != baseConstructors) {
             throw new InvalidOperationException("Generated allocation/hydration ran constructors or lost private readonly base fields.");

@@ -310,7 +310,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         Assert.Equal<byte>([0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 1],
             BinaryBodyDelegate<Func<byte[]>>(assembly, "Write")());
         Type body = type.GetNestedType("__DurableBinaryBody", BindingFlags.NonPublic)!;
-        Assert.Equal(new[] { "AddRoot", "Allocate", "ApplyDeltaV1", "ApplyDeltaV2", "Capture", "Hydrate", "Normalize", "PrepareBase", "PrepareBase", "PrepareDelta", "PrepareDelta", "ReadV1", "ReadV2", "RegisterModel", "RegisterReaders", "ValidateStringReferences", "ValidateStringReferences", "Write", "Write" }, body.GetMethods(BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.DeclaredOnly)
+        Assert.Equal(new[] { "AddRoot", "Allocate", "ApplyDeltaV1", "ApplyDeltaV2", "Capture", "Hydrate", "Normalize", "PrepareBase", "PrepareBase", "PrepareDelta", "PrepareDelta", "ReadV1", "ReadV2", "RegisterModel", "RegisterReaders", "ValidateStringReferences", "ValidateStringReferences", "VisitReferences", "VisitReferences", "Write", "Write" }, body.GetMethods(BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.DeclaredOnly)
             .Select(method => method.Name).OrderBy(name => name).ToArray());
         AssertGeneratedBodiesRemainStaticallyBound(BinaryBodyGeneratedText(run));
         Assert.DoesNotContain("__DurableSnapshot", BinaryBodyGeneratedText(run));

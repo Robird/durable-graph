@@ -73,9 +73,10 @@ try {
     Invoke-DotNet (@("clean", $consumerProject, "-p:RestoreVersion=2") + $consumerProperties)
     Invoke-DotNet (@("build", $consumerProject, "--no-restore", "-p:RestoreVersion=2") + $consumerProperties)
     $historyFiles = @(Get-ChildItem -LiteralPath $history -Filter *.dgsnapshot -File)
-    if ($historyFiles.Count -ne 4) { throw "Expected original two plus World V1/V2 history, found $($historyFiles.Count)." }
+    if ($historyFiles.Count -ne 8) { throw "Expected original two plus World V1/V2 and four graph model histories, found $($historyFiles.Count)." }
     $restoreOutput = (& dotnet $consumerAssembly (Join-Path $workRoot "upgraded-database") | Out-String).Trim().Replace("`r`n", "`n")
     $expectedRestore = $consumerOutput + "`nHistoricalUpgrade:True:ConstructorFree:True:ReadonlyHydrate:True:ForcedBase:True:UnchangedResave:True:NormalDelta:True:ReopenedWorld:True"
+    $expectedRestore += "`nPrepareNewGraph:True:SharedDerived:True:ReadonlyCycles:True:ChildOnlyDelta:True:UnreachableCycleRemoved:True:HistoricalGraphPreserved:True"
     if ($LASTEXITCODE -ne 0 -or $restoreOutput -ne $expectedRestore) {
         throw "Packaged upgrade/restore/resave exercise failed; output was '$restoreOutput'."
     }

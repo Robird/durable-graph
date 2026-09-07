@@ -1,7 +1,7 @@
 # DB-034：领域引用图与首次保存的连续施工计划
 
-状态：**Proposed / 推荐下一轮实施，尚未授权施工**；2026-09-07。
-基线 `cab7b5c`（DB-033）；本轮只核对源码和修订计划，没有执行产品代码改动或新 build/tests。
+状态：**Chosen / Implemented，G0–G6 已验收**；2026-09-07。
+实现基线 `e529f9f`，产品基线 `cab7b5c`（DB-033）；实施证据集中在 §8。
 当前事实：[PROJECT-STATE](../../src/PROJECT-STATE.md)；长期约束：[目标设计](../DurableGraph-target-design-v0.md)。
 
 ## 1. 本批要得到什么
@@ -177,16 +177,73 @@ G0/G1 涉及同一 Schema/历史模型，先串行整合；冻结接缝后 Runti
 若证据要求扩大到完整 TypeCodec、发布恢复、跨对象 Upgrade 或另一份基线权威，先记录具体冲突，
 暂停依赖该扩张的工作。格式建议若不能保持明确旧输入含义，先修订 G0 合同，不能默默破坏旧 history。
 
-本文件尚为计划。用户批准后可直接以 spec-driven-implementation 实施整批；当前不创建或启动 Goal。
+用户已批准以 spec-driven-implementation 连续实施 G0–G6；完成范围仍以上述 gates 为准。
 
-## 7. 本轮规划依据
+## 7. 最初规划轮的依据（历史记录）
 
 主代理核对 DurableFieldInfo/TypeTag、SchemaBatchWireCodec、SG/Build history、CaptureContext、
 StateModelBinding/StateModelRegistry 与 LoadedWorld 的真实限制。三位独立 reviewer 分别审查需求、
 最小架构及语义反例。均推荐引用图为主，PrepareNew 为配套；struct 和发布独立后排。
 交叉审议撤回“全 source Allocate”以保留 abstract current orphan 的既有行为，改用共享引用遍历求闭包。
 格式推荐为新增词汇/条件 operand，理由是旧 parser 已严格拒绝未知 tag/额外列；不臆造双版本迁移需求。
-本轮没有验证新算法实现，所有上述新能力仍是 Proposed。
+该规划轮没有验证新算法实现，当时新能力仍是 Proposed；其后实施结果见 §8。
 
 草稿经独立复审，无架构阻塞；补清 Schema 注册仍自行持久化、PrepareNew 不负责 State 屏障。
 本轮 4 份 Markdown 的 124 个本地链接/锚点、UTF-8/LF 和 Git diff 检查通过；未重跑产品 build/tests。
+
+## 8. 实施合同与验收账本
+
+2026-09-07 开始实施。范围、非目标及成功条件沿 §3–§6，不另建第二份设计。
+主代理负责格式/跨模块契约、集成、最终验收；元数据由单一子任务贯通 Runtime/SG/Build/SchemaStore，
+其后以冻结字段模型为接缝，分别实现 Runtime 图操作、SG body、StateStore 协调和独立测试。
+所有 dotnet 与包脚本由主代理串行执行。
+
+G0 已选接缝：
+
+- `DurableFieldInfo(..., string? targetSchemaId = null)` / `TargetSchemaId`；tag15 必填，其余 tag 禁止。
+  Schema/history 编码按 §4.1，不改变旧 1–14 的意义与 bytes。
+- `StateReferenceVisitor<TState>(in TState, IStateReferenceVisitor)`；sink 只提供 `VisitString(id)`、
+  `VisitDurable(id, nominalSchemaId)`。reader/model 登记统一采用该遍历，替换旧 string-only validator 合同；
+  现有测试按相同语义迁移，避免可选遍历漏掉可达边。生成的直接 string 校验 helper 保留。
+- `ObjectReadTable(StringReadTable, IReadOnlyDictionary<uint, DurableBase>)` 供 Hydrate；
+  `ResolveDurable<T>` 只解析已分配对象。持久引用校验另按 DTO 目录 Schema 进行，不能用 current CLR 代替。
+- `CaptureSession.BeginCapture(IEnumerable<StateModelBinding>)` 冻结本次目录；
+  `CaptureContext.CaptureDurable(value, nominalSchemaId)` 只在对象登记边界分派。
+  无参数 BeginCapture 仍可用于已有根/string 机制；图操作需要显式登记实际模型。
+- `LoadedWorld.PrepareNew` 为首次准备入口；Schema 可自行 flush，State 的 Append/屏障/发布仍归宿主。
+
+| Gate / 不变量 | 状态 | 实现归属 | 直接验收证据 |
+|---|---|---|---|
+| G0 基线及合同 | 已验收 | 主代理 / 本节 | 根 build 零警告/错误；新跑基线 835/835、零跳过；独立 tag15 golden；旧 golden/历史继续通过 |
+| G1 nominal 元数据与严格格式 | 已验收 | Runtime、SG history、Build、SchemaBatch | [history tests](../../tests/DurableGraph.Tests/NominalReferenceSchemaHistoryTests.cs) 14 项、[wire/Store tests](../../tests/DurableGraph.StateStore.Tests/NominalReferenceSchemaWireTests.cs) 9 项：独立 golden、冲突、损坏/截断、nominal 无 exact 环、目标升版不传播 |
+| G2 强类型生成与历史引用槽 | 已验收 | SG BinaryBody / StateModel | [generated body tests](../../tests/DurableGraph.Tests/GeneratedReferenceBodyTests.cs) 3 项：UInt32 Base/Delta golden、refs-only 遍历、private/readonly 继承循环、历史 CLR 删除；原静态绑定 guards 通过 |
+| G3 目录/队列/首次准备 | 已验收 | CaptureSession / CaptureContext / LoadedWorld | [runtime tests](../../tests/DurableGraph.Tests/RuntimeReferenceGraphTests.cs) 8 项及 [文件 tests](../../tests/DurableGraph.Tests/PersistedReferenceGraphTests.cs)：12,000 节点队列、共享/循环、逐边约束、目录冻结/冲突、公开 new 图准备与冻结 |
+| G4 完整双视图校验/可达分配 | 已验收 | RevisionDecoder / NormalizedRevision / LoadedWorld | [加载 tests](../../tests/DurableGraph.StateStore.Tests/LoadedReferenceWorldTests.cs) 15 项：双时态 ancestry、坏/abstract orphan、错误目标、exact/unique 分配、late failure；3,000 节点链统一分配后填充 |
+| G5 固定 Parent 增量保存 | 已验收 | 原 LoadedRevisionPlanner / 恢复身份导入 | [文件 tests](../../tests/DurableGraph.Tests/PersistedReferenceGraphTests.cs) 4 项：child-only Delta、引用替换新 Base、循环岛 Remove、两次历史 Delta 后 Upgrade 仅目标强制 Base；原 Empty、耗尽、重入、Append 失败、重复 Prepare 回归通过 |
+| G6 冷重开/包/独立审查 | 已验收 | 文件 tests / 包消费者 / 主代理与独立 reviewer | 完整 889/889、两实际包脚本、无阻塞独立审查；实际首次入口不依赖 raw seed |
+
+基线命令：`dotnet build DurableGraph.slnx --verbosity quiet`；
+`dotnet test DurableGraph.slnx --no-build --verbosity quiet --logger "trx;LogFilePrefix=db034-baseline"`。
+最终命令与执行结果：
+
+- `dotnet build DurableGraph.slnx --verbosity quiet`：零警告、零错误。
+- `dotnet test DurableGraph.slnx --no-build --verbosity quiet --logger "trx;LogFilePrefix=db034-verified"`：
+  **889/889，零跳过**（Runtime/SG 441、StateStore 190、Storage 155、Serialization 103），比基线新增 54 项。
+- `./experiments/PackageConsumerProbe/Run-Probe.ps1`：通过，7 份 history；实际产物
+  `experiments/PackageConsumerProbe/obj/run-20260907053621-36380`。
+- `./experiments/PackageConsumerProbe/Run-StateStoreProbe.ps1`：通过，history 2 → 3 → 8；实际产物
+  `experiments/PackageConsumerProbe/obj/state-store-run-20260907053722-1324-8a91f510`。
+  原持久 Schema/历史升级 markers 保留，新增 PrepareNewGraph、SharedDerived、ReadonlyCycles、ChildOnlyDelta、
+  UnreachableCycleRemoved、HistoricalGraphPreserved 全为 True。
+
+集成修正与独立审查：
+
+- 根与 Model 生成同一稳定 CaptureDelegate，避免独立 lambda 在严格 binding 检查中不等价。
+- 旧测试中占同一 CLR 类型的两个模型族改为两个实际类型，继续验证 late registration 快照和 orphan Upgrade 失败；
+  新增三份 registry 索引原子拒绝测试。旧方法清单/reader 登记断言适配 VisitReferences，未知 tag 从 15 改测 16；
+  tag15 缺 operand 由新测试直接覆盖。没有放宽静态 body、历史字段或失败边界的检查。
+- 独立 reviewer 无未解决阻塞；其建议的两个负例已通过：查询 Revision 删除 target、owner 沿用旧 Frame 时拒绝；
+  第三个对象 Capture 失败后 Schema/State 零写，修复后 PrepareNew 成功。晚期 Hydrate 失败不交付对象图。
+- Schema wire/history 确实新增 tag15/operand；StateRevision v3、Base envelope、Storage、Serialization 和固定 policy 未改。
+  无发布/Commit/持久根、其他类型扩展、ID 回收池或性能框架；未进入下一施工分片。
+- 最终集成 diff 检查通过；47 个变更文件均 UTF-8 无 BOM/LF，7 份 Markdown 的 154 个本地链接/锚点有效。

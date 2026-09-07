@@ -87,6 +87,10 @@ Source Generator 负责可在编译期确定的类型知识与机械代码，框
   新占用者从 Base 开始，不能继承旧占用者的 Delta 链。
 - 引用槽经正在加载的目标 Revision 解析，即使 owner body 沿用更早的记录；旧 Revision
   使用自己的视图。已解析的 CLR 对象图缓存不能直接跨视图复用。
+- stored DTO 的引用按该 Revision 中目标的 stored Schema 祖先校验；全部单对象 Upgrade 完成后，
+  再按 current DTO 目录校验。历史合法不保证升级后仍合法，current CLR 祖先也不能替代旧 Schema。
+  完整源目录均须解码、升级和验证；仅当前 World 可达的实例参与分配，全部分配完成后才填充引用。
+  不可达对象的坏数据仍拒绝，但其 current 类型不可实例化本身不应阻止其他 World 的加载。
 - 首轮采用会话内单调分配，失败或放弃候选可以烧号。允许未来复用不要求立即实现回收器；
   CLR 实例映射清理、可达集合变化、编号回收与历史文件物理 GC 是不同动作。
   publication 不确定也不能当作确定失败释放候选身份。
@@ -96,7 +100,8 @@ Source Generator 负责可在编译期确定的类型知识与机械代码，框
 
 设计来源：[DB-018](design-branches/0018-generated-graph-codec-shape.md)、
 [DB-024](design-branches/0024-reference-capture-and-reusable-object-ids.md)、
-[DB-025](design-branches/0025-string-object-decoding-slice.md)。
+[DB-025](design-branches/0025-string-object-decoding-slice.md)、
+[DB-034](design-branches/0034-durable-reference-graph-batch.md)。
 
 ### Schema 依赖与强类型代码
 

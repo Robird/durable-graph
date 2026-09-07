@@ -52,8 +52,9 @@ public static class RevisionDecoder {
         }
 
         StringReadTable table = StringReadTable.FromDecoded(strings);
+        StateReferenceValidator validator = new(objects.ToDictionary(static row => row.Id));
         foreach ((CapturedObject row, StateReaderBinding binding) in durableRows) {
-            binding.ValidateReferences(row, table);
+            binding.VisitReferences(row, validator);
         }
         return new DecodedRevision(revisionAddress, objects, table);
     }

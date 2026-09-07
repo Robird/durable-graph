@@ -302,7 +302,11 @@ public sealed partial class DurableSchemaGenerator {
             source.Append("new global::Atelia.DurableGraph.DurableFieldInfo(")
                 .Append(field.FieldId.ToString(CultureInfo.InvariantCulture))
                 .Append(", (global::Atelia.DurableGraph.TypeTag)")
-                .Append(field.TypeTagValue.ToString(CultureInfo.InvariantCulture)).Append("), ");
+                .Append(field.TypeTagValue.ToString(CultureInfo.InvariantCulture));
+            if (field.TargetSchemaId is not null) {
+                source.Append(", ").Append(SymbolDisplay.FormatLiteral(field.TargetSchemaId, quote: true));
+            }
+            source.Append("), ");
         }
 
         source.Append("}, ");

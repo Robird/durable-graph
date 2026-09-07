@@ -142,7 +142,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         Assert.Equal(99u, StateModelField(current, "Segment1Field1"));
         DurableBase domain = model.Allocate();
         string name = new(new[] { 'N' });
-        model.Hydrate(domain, current, StringReadTable.FromDecoded([(99, name)]));
+        model.Hydrate(domain, current, new ObjectReadTable(StringReadTable.FromDecoded([(99, name)]), new Dictionary<uint, DurableBase>()));
         Assert.Equal((byte)8, domain.GetType().BaseType!.GetField("_small", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(domain));
         Assert.Same(name, domain.GetType().GetField("_name", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(domain));
     }
@@ -186,10 +186,12 @@ public sealed partial class DurableSchemaGeneratorTests {
         Assert.Equal(0, parent.GetField("_number", fields)!.GetValue(domain));
         Assert.Equal(0, parent.GetField("Cache")!.GetValue(domain));
         Assert.Equal(0, leaf.GetField("_mutable", fields)!.GetValue(domain));
-        Assert.Throws<InvalidDataException>(() => model.Hydrate(domain, current, StringReadTable.FromDecoded([])));
+        // Loading validates the complete DTO view before allocating or hydrating any domain instance.
+        Assert.Throws<InvalidDataException>(() => model.VisitReferences(current,
+            new StateReferenceValidator(new Dictionary<uint, CapturedObject>())));
         Assert.Equal(0, parent.GetField("_number", fields)!.GetValue(domain));
         string first = new(new[] { 'S' }), second = new(new[] { 'S' });
-        model.Hydrate(domain, current, StringReadTable.FromDecoded([(7, first), (8, second), (9, ""), (10, "")]));
+        model.Hydrate(domain, current, new ObjectReadTable(StringReadTable.FromDecoded([(7, first), (8, second), (9, ""), (10, "")]), new Dictionary<uint, DurableBase>()));
         Assert.Equal(0, parent.GetField("Calls")!.GetValue(null));
         Assert.Equal(17, parent.GetField("_number", fields)!.GetValue(domain));
         Assert.Equal(91, leaf.GetField("_mutable", fields)!.GetValue(domain));

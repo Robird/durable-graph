@@ -22,8 +22,13 @@ The manifest format is strict:
 ```
 
 It may contain zero or more snapshot blocks. Field IDs must be positive,
-unique, and sorted. Type tags use the numeric DurableGraph values `1` through
-`14`; the original values `1` through `4` retain their meanings.
+unique, and sorted. Type tags `1` through `14` retain their existing meanings
+and two-column field records. Tag `15` is a durable reference and requires a
+third column containing its nominal target SchemaId in canonical UTF-8 Base64:
+`// field:2|15|cHJvYmUuaXRlbQ==`. It binds a family, without a target version
+or an exact target Schema dependency. Other tags prohibit a third column.
+This extends the vocabulary under the existing headers; older strict parsers
+reject reference records. Existing scalar/string history bytes and hashes stay unchanged.
 
 Each checked-in `*.dgsnapshot` uses the same single block with the header
 `// durable-graph-snapshot:1`. History is canonical UTF-8 without a byte-order
