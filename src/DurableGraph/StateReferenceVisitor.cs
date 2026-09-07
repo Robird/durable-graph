@@ -38,6 +38,7 @@ public sealed class StateReferenceValidator : IStateReferenceVisitor {
     }
 
     internal static bool Accepts(DurableSchema schema, string nominalSchemaId) {
+        if (schema.Kind != SchemaKind.ReferenceObject) { return false; }
         for (DurableSchema? current = schema; current is not null; current = current.BaseSchema) {
             if (StringComparer.Ordinal.Equals(current.SchemaId, nominalSchemaId)) {
                 return true;

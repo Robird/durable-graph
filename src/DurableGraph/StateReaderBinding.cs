@@ -22,6 +22,7 @@ public interface IStateReaderRegistration {
 public abstract class StateReaderBinding {
     private protected StateReaderBinding(DurableSchema schema) {
         ArgumentNullException.ThrowIfNull(schema);
+        schema.RequireReferenceObject();
         Schema = schema;
     }
 

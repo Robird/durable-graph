@@ -10,7 +10,7 @@ public sealed class SchemaBatchWireCodecTests {
     public void IndependentGoldenOrdersRowsAndFieldsAndAllowsForwardBaseReference() {
         DurableSchema ancestor = new("Z", 2, new DurableFieldInfo(3, TypeTag.String));
         DurableSchema derived = new("A", 1, [new(8, TypeTag.UInt32), new(1, TypeTag.Boolean)], ancestor);
-        byte[] golden = Convert.FromHexString("010203410101035A020201010809035A0200010304");
+        byte[] golden = Convert.FromHexString("02020341010101035A020201010809035A020100010304");
         Assert.Equal(golden, SchemaBatchWireCodec.Write([ancestor, derived]));
         var result = SchemaBatchWireCodec.Read(golden, Empty);
         Assert.Equal(derived, result[new("A", 1)]);
@@ -24,13 +24,13 @@ public sealed class SchemaBatchWireCodecTests {
             TypeTag.Byte, TypeTag.SByte, TypeTag.Int16, TypeTag.UInt16, TypeTag.UInt32,
             TypeTag.UInt64, TypeTag.Char, TypeTag.Half, TypeTag.Single, TypeTag.Double];
         DurableSchema schema = new("T", 1, tags.Select((tag, i) => new DurableFieldInfo(i + 1, tag)).ToArray());
-        byte[] golden = Convert.FromHexString("0101035401000E0101020203030404050506060707080809090A0A0B0B0C0C0D0D0E0E");
+        byte[] golden = Convert.FromHexString("020103540101000E0101020203030404050506060707080809090A0A0B0B0C0C0D0D0E0E");
         Assert.Equal(golden, SchemaBatchWireCodec.Write([schema]));
         Assert.Equal(schema, SchemaBatchWireCodec.Read(golden, Empty)[new("T", 1)]);
     }
 
     [Theory]
-    [InlineData("02010341010000")] // Unknown version.
+    [InlineData("03010341010000")] // Unknown version.
     [InlineData("0100")] // Empty physical batch.
     [InlineData("01FFFFFFFF0F")] // Impossible count.
     [InlineData("010103410100FFFFFFFF0F")] // Impossible field count.

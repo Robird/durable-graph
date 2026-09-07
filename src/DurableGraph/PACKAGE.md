@@ -38,6 +38,33 @@ Each DTO physically flattens the exact ancestor chain into fields such as `Segme
 declarations first, then each declaration's fields in FieldId order. Schema metadata remains
 segmented. Historical DTOs do not depend on old CLR base definitions remaining in source.
 
+Inline structs are explicitly marked with their own `[DurableType("example.position", 1)]` on a
+top-level non-generic `partial struct` (including `readonly partial struct`). They do not derive
+from DurableBase. Each has Schema/history even if no class currently uses it, and every instance
+field remains explicitly durable or transient. Supported scalar, string, durable-reference and
+nested struct fields are recursively projected into unmanaged readonly DTOs; references become IDs.
+The struct has no separate ObjectId, object row, root registration or StateModelBinding.
+
+`SchemaKind.InlineValue` distinguishes these layouts from `ReferenceObject` definitions.
+`DurableFieldInfo.InlineSchema` binds the exact nested value layout. A value version change requires
+explicit owner version increases along inline/base dependencies; nominal target versions do not
+propagate. A Schema family cannot switch kind. Shared generated value DTO/body helpers use exact
+Schema identity independently of the current domain struct declaration. Removing an old struct
+does not remove a retained owner's historical inline layout or require a value migration shell.
+Owner upgrades explicitly construct nested DTOs, including target-typed `new`; the framework does
+not run a second automatic struct upgrade chain.
+
+Base and fused Delta bodies compose through static nested calls. A changed composite Delta slot
+contains a nonempty child Delta, without another Schema header or length. Struct ref Hydrate starts
+with a default temporary and fills private/readonly fields without running constructors or
+initializers; Transient fields remain default. Field and array-element slots can use this same
+helper, but array-object serialization is not yet supported. Current Capture/Hydrate bridges keep
+domain and state types separate for future generic composition. Generic types, record/ref structs,
+CLR nested type declarations, boxed identity and additional BCL value types remain unsupported.
+
+Schema history/manifest and runtime Schema batches write format v2 and also read the previous
+class-only v1 format. Already accepted history files are not rewritten.
+
 For a scalar-only layout:
 
 ```csharp
@@ -111,7 +138,9 @@ delivery.
 For a new graph, use `LoadedWorld.PrepareNew`. For an explicitly selected Revision and WorldId, use
 `LoadedWorld.Load`, mutate `World`, and call `Prepare`. Prepare may persist Schema registrations but
 does not append State, publish a head, or advance the loaded Parent. The host appends the returned
-`StateRevision` and currently reloads its exact address to establish the next baseline.
+`StateRevision` and reloads its exact address to establish the next baseline on this low-level path.
+For continuous saves retaining the same domain instances, use `GraphRepository.Create/Load` and
+`GraphSession.Commit`; it owns the published Parent, frozen baseline and instance identity bindings.
 
 The Base type-header codec is internal to StateStore. Public generated bodies are raw;
 `EncodedBaseObjectBody` brands the internal `[type header | raw Base body]` result so the typed

@@ -18,11 +18,11 @@
 
 ## 当前规划
 
-DB-034–036 已验收；下一推荐为 DB-037，其他类型与发布能力扩展从活跃路线图选片：
+DB-034–037 已实现；后续泛型、数组与发布能力扩展从活跃路线图选片：
 
 | 文档 | 状态 | 实施范围 |
 |---|---|---|
-| [DB-037 inline struct 状态](0037-inline-struct-state-slice.md) | Proposed | 非泛型嵌套值的 exact Schema/history、静态 DTO/融合 Delta、引用与 ref 恢复、owner Upgrade/连续保存；G0–G4 尚未实施 |
+| [DB-037 inline struct 状态](0037-inline-struct-state-slice.md) | Chosen / Implemented | G0–G4：显式非泛型 struct、exact Schema DAG/history v2、静态嵌套 DTO/融合 Delta、ref 恢复、owner Upgrade/连续保存与删除领域值声明后的历史包恢复；不含泛型或数组对象 |
 | [DB-036 工作会话与历史恢复能力](0036-working-session-and-history-capabilities.md) | Chosen / Implemented | 单 head Repository/同实例 GraphSession Commit、原 lease 屏障/严格发布日志、迁移壳跨版本真实包见证；不含自动坏尾恢复或联合 Store 视图 |
 | [DB-035 公开合同与持久格式术语迁移](0035-public-contract-terminology-migration.md) | Chosen / Implemented | 删除 legacy、唯一 State model、`.dgschema`、生成/runtime/Storage 术语；State wire v3 不变 |
 | [DB-034 领域引用图与首次保存](0034-durable-reference-graph-batch.md) | Chosen / Implemented | G0–G6：nominal Schema/history、非泛型 class 共享/循环、队列 Capture、两阶段 Restore、PrepareNew 与独立增量续写；不含 Commit/发布 |

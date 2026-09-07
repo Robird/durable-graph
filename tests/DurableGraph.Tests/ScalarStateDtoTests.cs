@@ -103,7 +103,7 @@ public sealed partial class DurableSchemaGeneratorTests {
     }
 
     [Theory]
-    [InlineData(16)]
+    [InlineData(17)]
     [InlineData(999)]
     public void ScalarHistoryRejectsUnknownTagsInGeneratorAndPublisher(int tag) {
         var history = SchemaHistory("unknown.dgschema", "unknown", 1, (1, tag));

@@ -57,7 +57,8 @@ public static class TypedObjectVersionReader {
 
     internal static void MatchSchema(SchemaStore schemas, SchemaKey key, DurableSchema expectedSchema) {
         DurableSchema storedSchema = schemas.GetRequired(key);
-        if (!storedSchema.Equals(expectedSchema)) {
+        if (storedSchema.Kind != SchemaKind.ReferenceObject || expectedSchema.Kind != SchemaKind.ReferenceObject ||
+            !storedSchema.Equals(expectedSchema)) {
             throw new InvalidDataException("The stored exact Schema definition does not match the selected body reader.");
         }
     }

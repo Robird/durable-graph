@@ -86,3 +86,12 @@ BoxCodec<TDomainValue, TValueState>
 再验证同一泛型定义的历史版本读取不会命中 current body；复合 struct 可在其 Schema/DTO 能力到位后加入。
 数组组合遵守已选 rank/零下界范围。测试应涵盖 Capture 后领域变动不影响 DTO、不同领域实参即使
 共享同一种 DTO CLR 表示也不会混淆绑定。该建议不是当前实施授权，亦不重排正在讨论的 Upgrade/Restore。
+
+## 5. DB-037 提供的产品接缝
+
+2026-09-07，非泛型 inline struct 已由 [DB-037](0037-inline-struct-state-slice.md) 接通产品。
+[生成值 helper](../../src/DurableGraph.Generator/DurableSchemaGenerator.InlineState.cs) 将 exact 版本 DTO/body
+与当前领域 struct 的 Capture/ref Hydrate 分开，已验证删除领域值声明后仍生成历史 DTO 并保留 owner 升级链。
+SchemaKind 与 InlineSchema 只表达当前非泛型 exact 布局，不是一般 TypeExpr。
+后续泛型可复用静态值操作的组合方式，但仍须显式建立领域参数与状态表示参数的对应关系，
+并为闭合实参及历史版本设计身份/缓存；当前按 SchemaId/version 的 helper 名称不能代替这些工作。

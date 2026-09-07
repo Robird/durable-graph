@@ -177,3 +177,34 @@ An application that still promises to load older Revisions must retain their rea
 capabilities. Removing a family from a newer Revision does not make its older versions independently
 recoverable from metadata. `-PackageSource <feed> -Version <version>` can reuse an existing eight-package
 feed; the default invocation packs its own isolated dependency closure.
+
+
+## Inline struct history and retained value layouts
+
+```powershell
+./experiments/PackageConsumerProbe/Run-InlineStructProbe.ps1
+```
+
+This DB-037 regression builds four actual package consumers using the same feed and immutable
+history directory. V1 saves an inherited World with two levels of readonly inline values, shared
+and distinct-equal string references, a shared child and a World self-reference. A nested leaf edit
+produces one owner Delta; the inline values never acquire object rows. Reopening restores private
+readonly fields and defaults transient state without running value constructors.
+
+V2 changes the inner value's numeric layout and explicitly advances the outer value, base owner
+and derived World Schemas. The owner Upgrade constructs nested historical DTOs through target-typed
+constructors. GraphSession rewrites upgraded objects as Base, then compares unchanged while retaining
+the same domain instances. A separate rebuild advances only the nominal child's version: owner and
+inline Schema versions remain unchanged, and the next save writes only a required child Base.
+
+V3 removes both inline domain struct declarations and their containing persistent field. Its retained
+V1-to-V2-to-V3 owner Upgrade chain still compiles, exact-reads the original Base/Delta revision, and
+loads that old revision into the current model. The published current head removes the now-unreachable
+child and strings and reopens normally. Shared historical value DTO/body helpers survive independently
+of the deleted domain CLR names; this does not provide readers for deleted reference-object families.
+
+The script requires all stage markers and history counts `5 -> 10 -> 11 -> 13`, rejects deletion or
+modification of previously published `.dgschema` files, and checks that new history uses text format v2.
+It packs the same eight-package dependency closure by default; `-PackageSource <feed> -Version <version>`
+reuses an existing feed. Generated artifacts and probe-owned address sidecars remain under the unique
+ignored `obj` run directory.

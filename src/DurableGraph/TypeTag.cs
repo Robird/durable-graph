@@ -20,4 +20,5 @@ public enum TypeTag {
     Single = 13,
     Double = 14,
     DurableReference = 15,
+    InlineValue = 16,
 }

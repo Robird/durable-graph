@@ -65,24 +65,42 @@ public sealed class SchemaStore {
         _busy = true;
         try {
             var merged = new Dictionary<SchemaKey, DurableSchema>(_schemas);
+            var familyKinds = new Dictionary<string, SchemaKind>(StringComparer.Ordinal);
+            foreach (DurableSchema schema in _schemas.Values) { familyKinds[schema.SchemaId] = schema.Kind; }
+            var heights = new Dictionary<DurableSchema, int>(ReferenceEqualityComparer.Instance);
             foreach (DurableSchema schema in schemas) {
                 ArgumentNullException.ThrowIfNull(schema);
-                int depth = 0;
-                // Check depth before structural equality, whose recursion follows the chain.
-                for (DurableSchema? item = schema; item is not null; item = item.BaseSchema) {
-                    if (++depth > SchemaBatchWireCodec.MaximumDepth) {
-                        throw new ArgumentException("Schema inheritance exceeds the maximum depth.", nameof(schemas));
-                    }
+                AddClosure(schema, 1);
+            }
+
+            int AddClosure(DurableSchema schema, int depth) {
+                if (depth > SchemaBatchWireCodec.MaximumDepth) {
+                    throw new ArgumentException("Schema layout exceeds the maximum depth.", nameof(schemas));
                 }
-                for (DurableSchema? item = schema; item is not null; item = item.BaseSchema) {
-                    SchemaKey key = SchemaBatchWireCodec.Key(item);
-                    if (merged.TryGetValue(key, out DurableSchema? old)) {
-                        if (!old.Equals(item)) { throw new SchemaConflictException(old, item); }
+                if (heights.TryGetValue(schema, out int cached)) {
+                    if (depth + cached - 1 > SchemaBatchWireCodec.MaximumDepth) {
+                        throw new ArgumentException("Schema layout exceeds the maximum depth.", nameof(schemas));
                     }
-                    else {
-                        merged.Add(key, item);
-                    }
+                    return cached;
                 }
+                int height = 1;
+                if (schema.BaseSchema is { } ancestor) { height = Math.Max(height, 1 + AddClosure(ancestor, depth + 1)); }
+                foreach (DurableFieldInfo field in schema.Fields) {
+                    if (field.InlineSchema is { } inline) { height = Math.Max(height, 1 + AddClosure(inline, depth + 1)); }
+                }
+                SchemaKey key = SchemaBatchWireCodec.Key(schema);
+                if (merged.TryGetValue(key, out DurableSchema? old)) {
+                    if (!old.Equals(schema)) { throw new SchemaConflictException(old, schema); }
+                }
+                else {
+                    if (familyKinds.TryGetValue(schema.SchemaId, out SchemaKind oldKind) && oldKind != schema.Kind) {
+                        throw new ArgumentException($"Schema family '{schema.SchemaId}' cannot change kind across versions.", nameof(schemas));
+                    }
+                    familyKinds[schema.SchemaId] = schema.Kind;
+                    merged.Add(key, schema);
+                }
+                heights.Add(schema, height);
+                return height;
             }
             DurableSchema[] missing = merged.Where(pair => !_schemas.ContainsKey(pair.Key)).Select(static pair => pair.Value).ToArray();
             RequireUnchangedTail();

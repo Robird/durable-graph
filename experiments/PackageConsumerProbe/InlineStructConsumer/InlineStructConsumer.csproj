@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <HistoryVersion Condition="'$(HistoryVersion)' == ''">1</HistoryVersion>
+    <ChildVersion Condition="'$(ChildVersion)' == ''">1</ChildVersion>
+    <DefineConstants>$(DefineConstants);HISTORY_V$(HistoryVersion);CHILD_V$(ChildVersion)</DefineConstants>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="Program.cs" />
+    <Compile Include="World.cs" />
+    <Compile Include="Node.cs" />
+    <Compile Include="InlineValues.cs" Condition="'$(HistoryVersion)' != '3'" />
+    <PackageReference Include="Atelia.DurableGraph" Version="$(DurableGraphPackageVersion)" />
+    <PackageReference Include="Atelia.DurableGraph.StateStore" Version="$(DurableGraphPackageVersion)" />
+  </ItemGroup>
+</Project>

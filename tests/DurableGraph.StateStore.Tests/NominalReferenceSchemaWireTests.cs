@@ -6,7 +6,7 @@ public sealed class NominalReferenceSchemaWireTests {
     [Fact]
     public void ReferenceOperandHasIndependentGoldenAndDoesNotRequireTargetRegistration() {
         DurableSchema owner = new("A", 1, new DurableFieldInfo(1, TypeTag.DurableReference, "B"));
-        byte[] golden = Convert.FromHexString("01010341010001010F0342");
+        byte[] golden = Convert.FromHexString("0201034101010001010F0342");
         Assert.Equal(golden, SchemaBatchWireCodec.Write([owner]));
         Assert.Equal(owner, SchemaBatchWireCodec.Read(golden, new Dictionary<SchemaKey, DurableSchema>())[new("A", 1)]);
         for (int length = 0; length < golden.Length; length++) {
@@ -20,7 +20,7 @@ public sealed class NominalReferenceSchemaWireTests {
     [InlineData("01010341010001010F00")] // Null/empty string representation.
     [InlineData("01010341010001010F0320")] // Blank nominal identity.
     [InlineData("01010341010001010F034200")] // Extra operand/trailing byte.
-    [InlineData("010103410100010110")] // Unknown tag 16.
+    [InlineData("010103410100010110")] // Inline tag 16 is illegal in v1.
     public void MalformedNominalOperandsFailClosed(string hex) {
         Assert.ThrowsAny<Exception>(() => SchemaBatchWireCodec.Read(Convert.FromHexString(hex), new Dictionary<SchemaKey, DurableSchema>()));
     }

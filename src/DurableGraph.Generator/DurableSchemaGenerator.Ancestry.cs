@@ -33,13 +33,13 @@ public sealed partial class DurableSchemaGenerator {
     private static bool HasDurableTypeShape(
         INamedTypeSymbol type,
         System.Threading.CancellationToken cancellationToken) {
-        if (type.TypeKind != TypeKind.Class || type.IsRecord || type.Arity != 0 ||
+        if ((type.TypeKind != TypeKind.Class && type.TypeKind != TypeKind.Struct) || type.IsRefLikeType || type.IsRecord || type.Arity != 0 ||
             type.ContainingType is not null || type.DeclaringSyntaxReferences.Length == 0) {
             return false;
         }
 
         foreach (SyntaxReference syntaxReference in type.DeclaringSyntaxReferences) {
-            if (syntaxReference.GetSyntax(cancellationToken) is not ClassDeclarationSyntax declaration ||
+            if (syntaxReference.GetSyntax(cancellationToken) is not TypeDeclarationSyntax declaration ||
                 !HasPartialModifier(declaration.Modifiers) || HasFileModifier(declaration.Modifiers)) {
                 return false;
             }
@@ -68,36 +68,49 @@ public sealed partial class DurableSchemaGenerator {
         SourceProductionContext context,
         List<DurableTypeModel> types) {
         List<DurableTypeModel> result = new(types.Count);
+        Dictionary<ISymbol, int> heights = new(SymbolEqualityComparer.Default);
         foreach (DurableTypeModel type in types) {
-            HashSet<ISymbol> seen = new(SymbolEqualityComparer.Default);
-            INamedTypeSymbol? ancestor = type.Symbol;
-            bool valid = true;
-            while (!HasMetadataName(ancestor, DurableBaseMetadataName)) {
-                if (ancestor is null || !seen.Add(ancestor) ||
-                    !SymbolEqualityComparer.Default.Equals(ancestor.ContainingAssembly, type.Symbol.ContainingAssembly) ||
-                    !types.Exists(candidate => SymbolEqualityComparer.Default.Equals(candidate.Symbol, ancestor))) {
-                    valid = false;
-                    break;
-                }
-
-                ancestor = ancestor.BaseType;
-            }
-
+            bool valid = ValidateCurrentDependency(type, types, new HashSet<ISymbol>(SymbolEqualityComparer.Default), heights, 0, out _);
             if (valid) {
                 result.Add(type);
             } else {
                 context.ReportDiagnostic(Diagnostic.Create(
                     InvalidSchemaAncestry, GetSourceLocation(type.Symbol),
                     type.Symbol.ToDisplayString(QualifiedNameFormat),
-                    "every domain ancestor must be an attributed supported source type in this compilation and end at DurableBase"));
+                    "base and inline dependencies must form a supported source-type DAG of depth at most 256; class ancestry must end at DurableBase"));
             }
         }
 
         return result;
     }
 
+    private static bool ValidateCurrentDependency(DurableTypeModel type, List<DurableTypeModel> types,
+        HashSet<ISymbol> path, Dictionary<ISymbol, int> heights, int depth, out int height) {
+        height = 1;
+        if (depth >= 256 || !path.Add(type.Symbol)) return false;
+        if (heights.TryGetValue(type.Symbol, out height)) {
+            path.Remove(type.Symbol);
+            return depth + height <= 256;
+        }
+        height = 1;
+        if (!type.IsInline && !HasMetadataName(type.Symbol.BaseType, DurableBaseMetadataName)) {
+            int index = types.FindIndex(candidate => SymbolEqualityComparer.Default.Equals(candidate.Symbol, type.Symbol.BaseType));
+            if (index < 0 || types[index].IsInline || !ValidateCurrentDependency(types[index], types, path, heights, depth + 1, out int childHeight)) return false;
+            height = Math.Max(height, childHeight + 1);
+        }
+        foreach (DurableFieldModel field in type.Fields) {
+            if (!field.InlineSchema.HasValue) continue;
+            int index = types.FindIndex(candidate => SymbolEqualityComparer.Default.Equals(candidate.Symbol, field.Symbol.Type));
+            if (index < 0 || !types[index].IsInline || !ValidateCurrentDependency(types[index], types, path, heights, depth + 1, out int childHeight)) return false;
+            height = Math.Max(height, childHeight + 1);
+        }
+        path.Remove(type.Symbol);
+        heights[type.Symbol] = height;
+        return true;
+    }
+
     private static SchemaReference? GetCurrentBaseReference(INamedTypeSymbol type) {
-        if (HasMetadataName(type.BaseType, DurableBaseMetadataName)) {
+        if (type.TypeKind == TypeKind.Struct || HasMetadataName(type.BaseType, DurableBaseMetadataName)) {
             return null;
         }
 
@@ -115,42 +128,83 @@ public sealed partial class DurableSchemaGenerator {
     }
 
     private static bool HaveSameShape(SchemaHistoryModel left, SchemaHistoryModel right) {
-        return SameReference(left.BaseSchema, right.BaseSchema) && HaveSameFields(left.Fields, right.Fields);
+        return left.Kind == right.Kind && SameReference(left.BaseSchema, right.BaseSchema) && HaveSameFields(left.Fields, right.Fields);
     }
 
     // Accepted history is checked by itself. Current candidates must never repair a missing historical ancestor.
     private static bool ValidateHistoryClosure(SourceProductionContext context, List<SchemaHistoryModel> history) {
         bool valid = true;
+        Dictionary<string, int> kinds = new(StringComparer.Ordinal);
+        Dictionary<string, int> heights = new(StringComparer.Ordinal);
         foreach (SchemaHistoryModel entry in history) {
-            HashSet<string> seen = new(StringComparer.Ordinal) { entry.SchemaId };
-            SchemaReference? next = entry.BaseSchema;
-            while (next.HasValue) {
-                SchemaReference reference = next.Value;
-                if (!seen.Add(reference.SchemaId)) {
-                    ReportInvalidHistoryAncestry(context, entry, "an ancestor repeats a schema ID");
-                    valid = false;
-                    break;
-                }
-
-                List<SchemaHistoryModel> matches = FindHistory(history, reference.SchemaId, reference.Version);
-                if (matches.Count == 0) {
-                    ReportInvalidHistoryAncestry(context, entry,
-                        "accepted history is missing exact base '" + reference.SchemaId + "' version " +
-                        reference.Version.ToString(CultureInfo.InvariantCulture));
-                    valid = false;
-                    break;
-                }
-
-                if (!AllHaveSameShape(matches)) {
-                    valid = false; // ParseSchemaHistory already diagnosed the conflicting key.
-                    break;
-                }
-
-                next = matches[0].BaseSchema;
+            if (kinds.TryGetValue(entry.SchemaId, out int kind) && kind != entry.Kind) {
+                ReportInvalidHistoryAncestry(context, entry, "a Schema family cannot change kind");
+                valid = false;
             }
+            kinds[entry.SchemaId] = entry.Kind;
+            if (!ValidateExactDependency(context, entry, history, new HashSet<string>(StringComparer.Ordinal), heights, 0, out _)) valid = false;
         }
-
         return valid;
+    }
+
+    private static string SchemaKey(SchemaHistoryModel shape) =>
+        Convert.ToBase64String(StrictUtf8.GetBytes(shape.SchemaId)) + ":" + shape.Version.ToString(CultureInfo.InvariantCulture);
+
+    private static bool ValidateExactDependency(SourceProductionContext context, SchemaHistoryModel entry,
+        List<SchemaHistoryModel> available, HashSet<string> path, Dictionary<string, int> heights, int depth, out int height) {
+        height = 1;
+        string key = SchemaKey(entry);
+        if (depth >= 256 || !path.Add(key)) {
+            ReportInvalidHistoryAncestry(context, entry, "the exact dependency graph is cyclic or exceeds depth 256");
+            return false;
+        }
+        if (heights.TryGetValue(key, out height)) {
+            path.Remove(key);
+            if (depth + height > 256) {
+                ReportInvalidHistoryAncestry(context, entry, "the exact dependency graph exceeds depth 256");
+                return false;
+            }
+            return true;
+        }
+        height = 1;
+        if (entry.Kind == 2 && entry.BaseSchema.HasValue) {
+            ReportInvalidHistoryAncestry(context, entry, "inline Schema cannot have a base");
+            return false;
+        }
+        HashSet<string> ancestorFamilies = new(StringComparer.Ordinal) { entry.SchemaId };
+        SchemaReference? ancestor = entry.BaseSchema;
+        while (ancestor.HasValue) {
+            if (!ancestorFamilies.Add(ancestor.Value.SchemaId)) {
+                ReportInvalidHistoryAncestry(context, entry, "an ancestor repeats a schema ID");
+                return false;
+            }
+            List<SchemaHistoryModel> ancestors = FindHistory(available, ancestor.Value.SchemaId, ancestor.Value.Version);
+            if (ancestors.Count == 0) break; // The exact dependency check below reports the missing record.
+            ancestor = ancestors[0].BaseSchema;
+        }
+        List<(SchemaReference Reference, int Kind)> dependencies = new();
+        if (entry.BaseSchema.HasValue) dependencies.Add((entry.BaseSchema.Value, 1));
+        foreach (SchemaHistoryFieldModel field in entry.Fields) {
+            if (field.InlineSchema.HasValue) dependencies.Add((field.InlineSchema.Value, 2));
+        }
+        foreach (var dependency in dependencies) {
+            List<SchemaHistoryModel> matches = FindHistory(available, dependency.Reference.SchemaId, dependency.Reference.Version);
+            if (matches.Count == 0) {
+                ReportInvalidHistoryAncestry(context, entry,
+                    (entry.Path.Length == 0 ? "current Schema is" : "accepted history is") +
+                    " missing exact dependency '" + dependency.Reference.SchemaId + "' version " + dependency.Reference.Version.ToString(CultureInfo.InvariantCulture));
+                return false;
+            }
+            if (!AllHaveSameShape(matches) || matches[0].Kind != dependency.Kind) {
+                ReportInvalidHistoryAncestry(context, entry, "conflicting or wrong-kind exact dependency '" + dependency.Reference.SchemaId + "'");
+                return false;
+            }
+            if (!ValidateExactDependency(context, matches[0], available, path, heights, depth + 1, out int childHeight)) return false;
+            height = Math.Max(height, childHeight + 1);
+        }
+        path.Remove(key);
+        heights[key] = height;
+        return true;
     }
 
     private static void ReportInvalidHistoryAncestry(
@@ -169,8 +223,20 @@ public sealed partial class DurableSchemaGenerator {
             available.Add(CurrentShape(current));
         }
 
+        // Exact accepted records and current candidates must agree before a cache can share their keys.
+        foreach (DurableTypeModel current in currentTypes) {
+            foreach (SchemaHistoryModel old in history) {
+                if (old.SchemaId == current.SchemaId && old.Kind != (current.IsInline ? 2 : 1)) {
+                    context.ReportDiagnostic(Diagnostic.Create(CurrentSchemaHistoryMismatch, GetSourceLocation(current.Symbol),
+                        current.Symbol.ToDisplayString(QualifiedNameFormat), current.SchemaId, current.Version));
+                    return new List<DurableTypeModel>();
+                }
+            }
+        }
+        if (!ValidateHistoryClosure(context, available)) return new List<DurableTypeModel>();
         StringBuilder source = new("// <auto-generated/>\n#nullable enable\n");
         List<DurableTypeModel> validatedTypes = new();
+        AppendSharedSchemaCache(source, available);
         bool emitted = false;
         foreach (DurableTypeModel current in currentTypes) {
             bool valid = true;
@@ -223,7 +289,7 @@ public sealed partial class DurableSchemaGenerator {
     private static SchemaHistoryModel CurrentShape(DurableTypeModel current) {
         return new SchemaHistoryModel(
             string.Empty, current.SchemaId, current.Version,
-            ToSchemaHistoryFields(current.Fields), GetCurrentBaseReference(current.Symbol));
+            ToSchemaHistoryFields(current.Fields), GetCurrentBaseReference(current.Symbol), current.IsInline ? 2 : 1);
     }
 
     private static void AppendSchemaType(
@@ -240,7 +306,7 @@ public sealed partial class DurableSchemaGenerator {
         string indent = hasNamespace ? "    " : string.Empty;
         string member = indent + "    ";
         string hiding = GetCurrentBaseReference(current.Symbol).HasValue ? "new " : string.Empty;
-        source.Append(indent).Append("partial class ").Append(EscapeIdentifier(current.Symbol.Name)).AppendLine(" {");
+        source.Append(indent).Append(current.IsInline ? "partial struct " : "partial class ").Append(EscapeIdentifier(current.Symbol.Name)).AppendLine(" {");
         source.Append(member).Append("public ").Append(hiding)
             .Append("static global::Atelia.DurableGraph.DurableSchema Schema => GetSchema(")
             .Append(current.Version.ToString(CultureInfo.InvariantCulture)).AppendLine(");");
@@ -270,7 +336,32 @@ public sealed partial class DurableSchemaGenerator {
         }
     }
 
-    private static void AppendSchemaExpression(
+    private static string SchemaCacheMember(SchemaHistoryModel shape) =>
+        "S_" + BitConverter.ToString(StrictUtf8.GetBytes(shape.SchemaId)).Replace("-", string.Empty) + "_V" + shape.Version.ToString(CultureInfo.InvariantCulture);
+
+    private static void AppendSharedSchemaCache(StringBuilder source, List<SchemaHistoryModel> available) {
+        source.AppendLine("namespace Atelia.DurableGraph.Generated {");
+        source.AppendLine("internal static class __ExactSchemas {");
+        HashSet<string> emitted = new(StringComparer.Ordinal);
+        foreach (SchemaHistoryModel shape in available) {
+            string member = SchemaCacheMember(shape);
+            if (!emitted.Add(member)) continue;
+            source.Append("    internal static global::Atelia.DurableGraph.DurableSchema ").Append(member).Append(" => Cache_").Append(member).AppendLine(".Value;");
+            source.Append("    private static class Cache_").Append(member).AppendLine(" {");
+            source.Append("        internal static readonly global::Atelia.DurableGraph.DurableSchema Value = ");
+            AppendSchemaConstruction(source, shape, available);
+            source.AppendLine(";");
+            source.AppendLine("    }");
+        }
+        source.AppendLine("}");
+        source.AppendLine("}");
+    }
+
+    private static void AppendSchemaExpression(StringBuilder source, SchemaHistoryModel shape, List<SchemaHistoryModel> available) {
+        source.Append("global::Atelia.DurableGraph.Generated.__ExactSchemas.").Append(SchemaCacheMember(shape));
+    }
+
+    private static void AppendSchemaConstruction(
         StringBuilder source, SchemaHistoryModel shape, List<SchemaHistoryModel> available) {
         source.Append("new global::Atelia.DurableGraph.DurableSchema(")
             .Append(SymbolDisplay.FormatLiteral(shape.SchemaId, quote: true)).Append(", ")
@@ -283,18 +374,18 @@ public sealed partial class DurableSchemaGenerator {
                 .Append(field.TypeTagValue.ToString(CultureInfo.InvariantCulture));
             if (field.TargetSchemaId is not null) {
                 source.Append(", ").Append(SymbolDisplay.FormatLiteral(field.TargetSchemaId, quote: true));
+            } else if (field.InlineSchema.HasValue) {
+                SchemaReference reference = field.InlineSchema.Value;
+                source.Append(", inlineSchema: ");
+                AppendSchemaExpression(source, FindHistory(available, reference.SchemaId, reference.Version)[0], available);
             }
             source.Append("), ");
         }
-
         source.Append("}, ");
         if (shape.BaseSchema.HasValue) {
             SchemaReference reference = shape.BaseSchema.Value;
             AppendSchemaExpression(source, FindHistory(available, reference.SchemaId, reference.Version)[0], available);
-        } else {
-            source.Append("null");
-        }
-
-        source.Append(')');
+        } else source.Append("null");
+        source.Append(", (global::Atelia.DurableGraph.SchemaKind)").Append(shape.Kind.ToString(CultureInfo.InvariantCulture)).Append(')');
     }
 }

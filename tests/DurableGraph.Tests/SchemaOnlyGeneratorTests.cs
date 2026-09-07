@@ -59,7 +59,8 @@ public sealed partial class DurableSchemaGeneratorTests {
         GeneratorTestRun run = RunGenerator(SchemaOnlyChain(1, 1, 1),
             SchemaOnlyHistory("middle", 1, "base", 1),
             SchemaOnlyHistory("leaf", 1, "middle", 1));
-        Assert.Contains(run.GeneratorDiagnostics, diagnostic => diagnostic.Id == "DG0019" && diagnostic.GetMessage().Contains("missing exact base"));
+        Assert.Contains(run.GeneratorDiagnostics, diagnostic => diagnostic.Id == "DG0019" &&
+            diagnostic.GetMessage().Contains("accepted history is missing exact dependency 'base' version 1"));
         Assert.DoesNotContain(run.GeneratedSources, source => source.HintName == "DurableSchemas.g.cs");
     }
 

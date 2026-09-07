@@ -139,13 +139,14 @@ public sealed class SchemaHistoryToolTests {
 
         string path = Assert.Single(Directory.GetFiles(history));
         Assert.Equal(
-            "schema.7b47361aad19bb483aeab081a7df0a55f7cb0fdb3327efe6dd016e6353a17880.V1.6aac0f72050f956166e525e9bc8bcfce52f44aabd8c5e2988b8baa36c38a81a0.dgschema",
+            "schema.7b47361aad19bb483aeab081a7df0a55f7cb0fdb3327efe6dd016e6353a17880.V1.04f7dacddc3e529048ea0bd58c9dda142f2e1c4dc57ebc7e5e28675a463dc7ac.dgschema",
             Path.GetFileName(path));
         Assert.Equal(
-            "// durable-graph-schema-history:1\n" +
+            "// durable-graph-schema-history:2\n" +
             "// schema-begin\n" +
             "// schema-id-base64:QmFzZQ==\n" +
             "// version:1\n" +
+            "// kind:1\n" +
             "// field:1|2\n" +
             "// schema-end\n",
             File.ReadAllText(path));

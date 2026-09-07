@@ -22,6 +22,7 @@ public sealed class CapturedStatePreparation<TState> : ICapturedStatePreparation
         StateBasePreparer<TState> prepareBase,
         StateDeltaPreparer<TState> prepareDelta) {
         ArgumentNullException.ThrowIfNull(schema);
+        schema.RequireReferenceObject();
         ArgumentNullException.ThrowIfNull(prepareBase);
         ArgumentNullException.ThrowIfNull(prepareDelta);
         Schema = schema;

@@ -125,7 +125,11 @@ public sealed class GraphRepository : IDisposable {
         foreach (uint id in objects.Keys) {
             ObjectVersionChain chain = _states.ReadObjectVersionChain(head.RevisionAddress, id);
             DecodedBaseObjectBody body = BaseObjectBodyCodec.Decode(chain.Records[0].Record.Body);
-            if (body.Kind == ObjectStateKind.Durable) { _ = _schemas.GetRequired(body.SchemaKey!.Value); }
+            if (body.Kind == ObjectStateKind.Durable) {
+                if (_schemas.GetRequired(body.SchemaKey!.Value).Kind != SchemaKind.ReferenceObject) {
+                    throw new InvalidDataException("An object Base cannot refer to an inline Schema.");
+                }
+            }
             else if (chain.Records.Count != 1) { throw new InvalidDataException("String cannot have a Delta chain."); }
             if (id == head.WorldId && body.Kind != ObjectStateKind.Durable) { throw new InvalidDataException("World must be a durable object."); }
         }

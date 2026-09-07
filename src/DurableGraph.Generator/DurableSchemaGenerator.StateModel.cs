@@ -121,6 +121,9 @@ public sealed partial class DurableSchemaGenerator {
         source.Append(indent).AppendLine("}");
     }
 
+    private static void AppendInlineHydrate(StringBuilder source, DurableTypeModel type, BinaryVersionModel current, string indent) =>
+        AppendBinaryHydrate(source, type, current, indent, false);
+
     private static void AppendBinaryHydrate(
         StringBuilder source, DurableTypeModel type, BinaryVersionModel current, string indent, bool hasDomainBase) {
         string domain = type.Symbol.ToDisplayString(FullyQualifiedNameFormat);
@@ -131,17 +134,28 @@ public sealed partial class DurableSchemaGenerator {
                 .Append(field.Symbol.Name).AppendLine("\")]");
             source.Append(indent).Append("private static extern ref ").Append(field.FieldTypeName)
                 .Append(" ReadonlyField").Append(index.ToString(CultureInfo.InvariantCulture))
-                .Append('(').Append(domain).AppendLine(" value);");
+                .Append('(').Append(type.IsInline ? "ref " : string.Empty).Append(domain).AppendLine(" value);");
         }
-        source.Append(indent).Append("internal static void Hydrate(").Append(domain).Append(" value, in ")
-            .Append(current.Name).AppendLine(" state, global::Atelia.DurableGraph.ObjectReadTable objects) {");
-        source.Append(indent).AppendLine("    global::System.ArgumentNullException.ThrowIfNull(value);");
+        source.Append(indent).Append("internal static void Hydrate(").Append(type.IsInline ? "ref " : string.Empty).Append(domain).Append(type.IsInline ? " target, in " : " value, in ")
+            .Append(type.IsInline ? InlineDtoTypeName(new SchemaReference(type.SchemaId, type.Version)) : current.Name)
+            .AppendLine(" state, global::Atelia.DurableGraph.ObjectReadTable objects) {");
+        if (type.IsInline) source.Append(indent).Append("    ").Append(domain).AppendLine(" value = default;");
+        else source.Append(indent).AppendLine("    global::System.ArgumentNullException.ThrowIfNull(value);");
         source.Append(indent).AppendLine("    global::System.ArgumentNullException.ThrowIfNull(objects);");
         int inheritedCount = current.Fields.Count - type.Fields.Count;
         // Resolve this declaring segment before invoking its base helper or writing fields.
         // Each base helper does the same, so a bad reference cannot leave partial assignments.
         for (int index = 0; index < type.Fields.Count; index++) {
             DurableFieldModel field = type.Fields[index];
+            if (field.InlineSchema.HasValue) {
+                source.Append(indent).Append("    ").Append(field.FieldTypeName).Append(" inline")
+                    .Append(index.ToString(CultureInfo.InvariantCulture)).AppendLine(" = default;");
+                source.Append(indent).Append("    ").Append(field.Symbol.Type.ToDisplayString(FullyQualifiedNameFormat))
+                    .Append('.').Append(GeneratedStateTypeName).Append(".Hydrate(ref inline")
+                    .Append(index.ToString(CultureInfo.InvariantCulture)).Append(", in state.")
+                    .Append(current.Fields[inheritedCount + index].Name).AppendLine(", objects);");
+                continue;
+            }
             if (!IsBinaryReference(field.TypeTagValue)) continue;
             source.Append(indent).Append("    var reference").Append(index.ToString(CultureInfo.InvariantCulture))
                 .Append(" = objects.");
@@ -166,16 +180,19 @@ public sealed partial class DurableSchemaGenerator {
             DurableFieldModel field = type.Fields[index];
             source.Append(indent).Append("    ");
             if (field.Symbol.IsReadOnly) {
-                source.Append("ReadonlyField").Append(index.ToString(CultureInfo.InvariantCulture)).Append("(value)");
+                source.Append("ReadonlyField").Append(index.ToString(CultureInfo.InvariantCulture)).Append(type.IsInline ? "(ref value)" : "(value)");
             } else {
                 source.Append("value.").Append(EscapeIdentifier(field.Symbol.Name));
             }
             source.Append(" = ");
-            if (IsBinaryReference(field.TypeTagValue)) {
+            if (field.InlineSchema.HasValue) {
+                source.Append("inline").Append(index.ToString(CultureInfo.InvariantCulture));
+            } else if (IsBinaryReference(field.TypeTagValue)) {
                 source.Append("reference").Append(index.ToString(CultureInfo.InvariantCulture)).Append('!');
             } else source.Append("state.").Append(current.Fields[inheritedCount + index].Name);
             source.AppendLine(";");
         }
+        if (type.IsInline) source.Append(indent).AppendLine("    target = value;");
         source.Append(indent).AppendLine("}");
     }
 }

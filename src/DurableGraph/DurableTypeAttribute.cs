@@ -3,7 +3,7 @@ namespace Atelia.DurableGraph;
 /// <summary>
 /// Assigns a stable schema identity and version to a durable CLR type.
 /// </summary>
-[AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = false)]
+[AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct, AllowMultiple = false, Inherited = false)]
 public sealed class DurableTypeAttribute : Attribute {
     public DurableTypeAttribute(string schemaId, int version) {
         ArgumentException.ThrowIfNullOrWhiteSpace(schemaId);

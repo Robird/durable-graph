@@ -59,6 +59,7 @@ public sealed class CaptureContext : IDisposable {
         try {
             RequirePhase(Phase.Registering);
             ArgumentNullException.ThrowIfNull(schema);
+            schema.RequireReferenceObject();
             ArgumentNullException.ThrowIfNull(capture);
             if (preparation is not null && !schema.Equals(preparation.Schema)) {
                 throw new ArgumentException("Preparation requires the registered root's exact Schema.", nameof(preparation));

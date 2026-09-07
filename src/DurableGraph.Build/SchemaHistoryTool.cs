@@ -108,7 +108,7 @@ internal sealed class SchemaHistoryTool {
 
         foreach (string path in paths) {
             SchemaHistoryRecord record = SchemaHistoryDocument.ParseHistory(path);
-            string canonicalContent = SchemaHistoryDocument.RenderHistory(record);
+            string canonicalContent = SchemaHistoryDocument.RenderHistory(record, record.SourceFormatVersion);
             string expectedFileName = SchemaHistoryDocument.GetHistoryFileName(record, canonicalContent);
             string actualFileName = Path.GetFileName(path);
 
@@ -136,23 +136,76 @@ internal sealed class SchemaHistoryTool {
     }
 
     private static void ValidateClosure(IReadOnlyDictionary<SchemaHistoryKey, SchemaHistoryRecord> records) {
+        const int maximumDepth = 256;
+        Dictionary<string, int> kinds = new(StringComparer.Ordinal);
         foreach (SchemaHistoryRecord record in records.Values) {
+            if (kinds.TryGetValue(record.SchemaId, out int kind) && kind != record.Kind) {
+                throw new SchemaHistoryException($"schema family '{record.SchemaId}' changes kind across versions");
+            }
+            kinds[record.SchemaId] = record.Kind;
+            if (record.Kind == 2 && record.BaseSchema is not null) {
+                throw new SchemaHistoryException($"inline schema '{record.SchemaId}' cannot have a base schema");
+            }
+
+            // Retain the stronger CLR ancestry rule: a base chain cannot repeat a family,
+            // even through a different exact version. Nominal references are not dependencies.
             HashSet<string> ancestors = new(StringComparer.Ordinal) { record.SchemaId };
             SchemaHistoryRecord current = record;
-
             while (current.BaseSchema is SchemaHistoryKey baseKey) {
                 if (!ancestors.Add(baseKey.SchemaId)) {
                     throw new SchemaHistoryException(
                         $"schema '{record.SchemaId}' version {record.Version} repeats ancestor schema '{baseKey.SchemaId}'");
                 }
-
-                if (!records.TryGetValue(baseKey, out SchemaHistoryRecord? baseSchema)) {
-                    throw new SchemaHistoryException(
-                        $"schema '{current.SchemaId}' version {current.Version} is missing base schema '{baseKey.SchemaId}' version {baseKey.Version}");
+                if (ancestors.Count > maximumDepth) {
+                    throw new SchemaHistoryException($"exact schema dependency depth exceeds {maximumDepth}");
                 }
-
-                current = baseSchema;
+                current = Resolve(current, baseKey, "base", 1);
             }
+        }
+
+        Dictionary<SchemaHistoryKey, int> heights = new();
+        HashSet<SchemaHistoryKey> visiting = new();
+        foreach (SchemaHistoryRecord record in records.Values) {
+            Visit(record, 1);
+        }
+
+        SchemaHistoryRecord Resolve(SchemaHistoryRecord owner, SchemaHistoryKey key, string edge, int expectedKind) {
+            if (!records.TryGetValue(key, out SchemaHistoryRecord? dependency)) {
+                throw new SchemaHistoryException(
+                    $"schema '{owner.SchemaId}' version {owner.Version} is missing {edge} schema '{key.SchemaId}' version {key.Version}");
+            }
+            if (dependency.Kind != expectedKind) {
+                throw new SchemaHistoryException(
+                    $"schema '{owner.SchemaId}' has {edge} schema '{key.SchemaId}' with incompatible kind {dependency.Kind}");
+            }
+            return dependency;
+        }
+
+        int Visit(SchemaHistoryRecord record, int depth) {
+            if (depth > maximumDepth) {
+                throw new SchemaHistoryException($"exact schema dependency depth exceeds {maximumDepth}");
+            }
+            if (heights.TryGetValue(record.Key, out int cached)) {
+                if (depth + cached - 1 > maximumDepth) {
+                    throw new SchemaHistoryException($"exact schema dependency depth exceeds {maximumDepth}");
+                }
+                return cached;
+            }
+            if (!visiting.Add(record.Key)) {
+                throw new SchemaHistoryException($"exact schema dependency cycle at '{record.SchemaId}' version {record.Version}");
+            }
+            int height = 1;
+            if (record.BaseSchema is SchemaHistoryKey baseKey) {
+                height = Math.Max(height, 1 + Visit(Resolve(record, baseKey, "base", 1), depth + 1));
+            }
+            foreach (SchemaHistoryField field in record.Fields) {
+                if (field.InlineSchema is SchemaHistoryKey inlineKey) {
+                    height = Math.Max(height, 1 + Visit(Resolve(record, inlineKey, "inline", 2), depth + 1));
+                }
+            }
+            visiting.Remove(record.Key);
+            heights.Add(record.Key, height);
+            return height;
         }
     }
 
@@ -190,12 +243,13 @@ internal sealed class SchemaHistoryTool {
 }
 
 internal static class SchemaHistoryDocument {
-    private const string ManifestHeader = "// durable-graph-schema-history-manifest:1";
-    private const string HistoryHeader = "// durable-graph-schema-history:1";
+    private const string ManifestHeader = "// durable-graph-schema-history-manifest:";
+    private const string HistoryHeader = "// durable-graph-schema-history:";
     private const string SchemaBegin = "// schema-begin";
     private const string SchemaEnd = "// schema-end";
     private const string SchemaIdPrefix = "// schema-id-base64:";
     private const string VersionPrefix = "// version:";
+    private const string KindPrefix = "// kind:";
     private const string BasePrefix = "// base:";
     private const string FieldPrefix = "// field:";
 
@@ -244,7 +298,7 @@ internal static class SchemaHistoryDocument {
             text,
             HistoryHeader,
             requireExactlyOneRecord: true)[0];
-        byte[] canonicalBytes = Utf8NoBom.GetBytes(RenderHistory(record));
+        byte[] canonicalBytes = Utf8NoBom.GetBytes(RenderHistory(record, record.SourceFormatVersion));
 
         if (!bytes.AsSpan().SequenceEqual(canonicalBytes)) {
             throw Invalid(path, "content is not canonical UTF-8 with LF line endings");
@@ -253,10 +307,10 @@ internal static class SchemaHistoryDocument {
         return record;
     }
 
-    public static string RenderHistory(SchemaHistoryRecord record) {
+    public static string RenderHistory(SchemaHistoryRecord record, int formatVersion = 2) {
         StringBuilder builder = new();
-        builder.AppendLine(HistoryHeader);
-        AppendSchemaRecord(builder, record);
+        builder.Append(HistoryHeader).AppendLine(formatVersion.ToString(CultureInfo.InvariantCulture));
+        AppendSchemaRecord(builder, record, formatVersion);
         return builder.ToString().Replace("\r\n", "\n", StringComparison.Ordinal);
     }
 
@@ -275,9 +329,12 @@ internal static class SchemaHistoryDocument {
         bool requireExactlyOneRecord) {
         string[] lines = SplitLines(path, text);
 
-        if (lines.Length == 0 || !StringComparer.Ordinal.Equals(lines[0], expectedHeader)) {
-            throw Invalid(path, $"expected header '{expectedHeader}'");
+        if (lines.Length == 0 ||
+            (!StringComparer.Ordinal.Equals(lines[0], expectedHeader + "1") &&
+             !StringComparer.Ordinal.Equals(lines[0], expectedHeader + "2"))) {
+            throw Invalid(path, $"expected header '{expectedHeader}1' or '{expectedHeader}2'");
         }
+        int formatVersion = lines[0].EndsWith("2", StringComparison.Ordinal) ? 2 : 1;
 
         List<SchemaHistoryRecord> records = new();
         int index = 1;
@@ -300,6 +357,11 @@ internal static class SchemaHistoryDocument {
                 ref index,
                 VersionPrefix);
             int version = ParsePositiveCanonicalInt(path, versionText, "version");
+            int kind = formatVersion == 1 ? 1 : ParsePositiveCanonicalInt(
+                path, ReadPrefixedLine(path, lines, ref index, KindPrefix), "kind");
+            if (kind is not (1 or 2)) {
+                throw Invalid(path, $"unsupported schema kind {kind}");
+            }
             SchemaHistoryKey? baseSchema = null;
 
             if (index < lines.Length && lines[index].StartsWith(BasePrefix, StringComparison.Ordinal)) {
@@ -324,7 +386,7 @@ internal static class SchemaHistoryDocument {
                 string fieldText = lines[index].Substring(FieldPrefix.Length);
                 string[] parts = fieldText.Split('|');
 
-                if (parts.Length is < 2 or > 3) {
+                if (parts.Length is < 2 or > 4) {
                     throw Invalid(path, $"line {index + 1} has an invalid field entry");
                 }
 
@@ -343,15 +405,18 @@ internal static class SchemaHistoryDocument {
                         $"field IDs must be unique and sorted; line {index + 1} has {fieldId} after {previousFieldId}");
                 }
 
-                if (typeTag is < 1 or > 15) {
+                if (typeTag < 1 || typeTag > (formatVersion == 1 ? 15 : 16)) {
                     throw Invalid(path, $"line {index + 1} has unsupported TypeTag {typeTag}");
                 }
 
-                if (parts.Length != (typeTag == 15 ? 3 : 2)) {
-                    throw Invalid(path, $"line {index + 1} has an invalid nominal reference operand");
+                if (parts.Length != (typeTag == 16 ? 4 : typeTag == 15 ? 3 : 2)) {
+                    throw Invalid(path, $"line {index + 1} has an invalid field operand");
                 }
                 string? targetSchemaId = typeTag == 15 ? DecodeSchemaId(path, parts[2]) : null;
-                fields.Add(new SchemaHistoryField(fieldId, typeTag, targetSchemaId));
+                SchemaHistoryKey? inlineSchema = typeTag == 16 ? new SchemaHistoryKey(
+                    DecodeSchemaId(path, parts[2]),
+                    ParsePositiveCanonicalInt(path, parts[3], "inline version")) : null;
+                fields.Add(new SchemaHistoryField(fieldId, typeTag, targetSchemaId, inlineSchema));
                 previousFieldId = fieldId;
                 index++;
             }
@@ -361,7 +426,12 @@ internal static class SchemaHistoryDocument {
             }
 
             index++;
-            records.Add(new SchemaHistoryRecord(schemaId, schemaIdBase64, version, fields, baseSchema));
+            if (kind == 2 && baseSchema is not null) {
+                throw Invalid(path, "inline schema cannot have a base schema");
+            }
+            records.Add(new SchemaHistoryRecord(schemaId, schemaIdBase64, version, fields, baseSchema, kind) {
+                SourceFormatVersion = formatVersion,
+            });
         }
 
         if (requireExactlyOneRecord && records.Count != 1) {
@@ -493,12 +563,16 @@ internal static class SchemaHistoryDocument {
 
     private static void AppendSchemaRecord(
         StringBuilder builder,
-        SchemaHistoryRecord record) {
+        SchemaHistoryRecord record,
+        int formatVersion) {
         builder.AppendLine(SchemaBegin);
         builder.Append(SchemaIdPrefix).AppendLine(record.SchemaIdBase64);
         builder.Append(VersionPrefix)
             .AppendLine(record.Version.ToString(CultureInfo.InvariantCulture));
 
+        if (formatVersion == 2) {
+            builder.Append(KindPrefix).AppendLine(record.Kind.ToString(CultureInfo.InvariantCulture));
+        }
         if (record.BaseSchema is SchemaHistoryKey baseSchema) {
             builder.Append(BasePrefix)
                 .Append(Convert.ToBase64String(Utf8NoBom.GetBytes(baseSchema.SchemaId)))
@@ -513,6 +587,10 @@ internal static class SchemaHistoryDocument {
                 .Append(field.TypeTag.ToString(CultureInfo.InvariantCulture));
             if (field.TargetSchemaId is not null) {
                 builder.Append('|').Append(Convert.ToBase64String(Utf8NoBom.GetBytes(field.TargetSchemaId)));
+            }
+            if (field.InlineSchema is SchemaHistoryKey inlineSchema) {
+                builder.Append('|').Append(Convert.ToBase64String(Utf8NoBom.GetBytes(inlineSchema.SchemaId)))
+                    .Append('|').Append(inlineSchema.Version.ToString(CultureInfo.InvariantCulture));
             }
             builder.AppendLine();
         }
@@ -536,12 +614,14 @@ internal sealed class SchemaHistoryRecord {
         string schemaIdBase64,
         int version,
         IReadOnlyList<SchemaHistoryField> fields,
-        SchemaHistoryKey? baseSchema = null) {
+        SchemaHistoryKey? baseSchema = null,
+        int kind = 1) {
         SchemaId = schemaId;
         SchemaIdBase64 = schemaIdBase64;
         Version = version;
         Fields = fields;
         BaseSchema = baseSchema;
+        Kind = kind;
     }
 
     public string SchemaId { get; }
@@ -554,16 +634,21 @@ internal sealed class SchemaHistoryRecord {
 
     public SchemaHistoryKey? BaseSchema { get; }
 
+    public int Kind { get; }
+
+    internal int SourceFormatVersion { get; init; } = 2;
+
     public SchemaHistoryKey Key => new(SchemaId, Version);
 
     public bool ShapeEquals(SchemaHistoryRecord other) {
-        return BaseSchema == other.BaseSchema && Fields.SequenceEqual(other.Fields);
+        return Kind == other.Kind && BaseSchema == other.BaseSchema && Fields.SequenceEqual(other.Fields);
     }
 }
 
 internal readonly record struct SchemaHistoryKey(string SchemaId, int Version);
 
-internal readonly record struct SchemaHistoryField(int FieldId, int TypeTag, string? TargetSchemaId = null);
+internal readonly record struct SchemaHistoryField(
+    int FieldId, int TypeTag, string? TargetSchemaId = null, SchemaHistoryKey? InlineSchema = null);
 
 internal readonly record struct SchemaHistoryResult(string Message);
 

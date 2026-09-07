@@ -16,6 +16,7 @@ public abstract class StateModelBinding {
 
     private protected StateModelBinding(DurableSchema currentSchema, Type domainType, IEnumerable<StateReaderBinding> readers) {
         ArgumentNullException.ThrowIfNull(currentSchema);
+        currentSchema.RequireReferenceObject();
         ArgumentNullException.ThrowIfNull(domainType);
         ArgumentNullException.ThrowIfNull(readers);
         CurrentSchema = currentSchema;

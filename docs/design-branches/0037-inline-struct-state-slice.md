@@ -1,6 +1,6 @@
 # DB-037：inline struct 的 exact Schema、嵌套状态与增量保存
 
-> 状态：Proposed — 2026-09-07。下一工作分片的推荐方案，尚未实施；本文不自授实施权限。
+> 状态：Chosen / Implemented — 2026-09-07。G0–G4 已实施并验收；实际合同与证据见 §6。
 > 核验源码基线：`8d84f3b`（DB-036 后的 Probe 归档）；当前能力从
 > [PROJECT-STATE](../../src/PROJECT-STATE.md)进入，长期约束见[目标设计](../DurableGraph-target-design-v0.md)。
 
@@ -27,6 +27,8 @@ struct 无独立对象行，历史按旧布局读，新模型按显式 Upgrade �
 
 ## 2. 现有接缝与范围
 
+下表保留开工前的接缝定位；完成后的实现与验收见 §6，现状导航见 PROJECT-STATE。
+
 | 当前实现 | 本片所需增量 |
 |---|---|
 | [DurableTypeAttribute](../../src/DurableGraph/DurableTypeAttribute.cs) 只允许 class；[SG](../../src/DurableGraph.Generator/DurableSchemaGenerator.cs) 拒绝 struct 字段 | 增加显式标记的 struct 类型路径，与 class 的 DurableBase 继承规则区分 |
@@ -36,9 +38,30 @@ struct 无独立对象行，历史按旧布局读，新模型按显式 Upgrade �
 | [StateModel 生成](../../src/DurableGraph.Generator/DurableSchemaGenerator.StateModel.cs) class Normalize/Allocate/Hydrate | owner Upgrade 保持；增加当前值的 ref 恢复 helper |
 | [StateReaderBinding](../../src/DurableGraph/StateReaderBinding.cs) 与准备管线要求 unmanaged DTO | 嵌套 DTO 的叶子仍为标量/UInt32 ID，保持该约束，不把领域引用复制进去 |
 
-推荐支持：同一编译中的顶层、非泛型、非 record 的 `partial struct`，包括 `readonly partial struct`；
+推荐支持：同一编译中的顶层、非泛型、非 record 的 `partial struct`，包括 `readonly partial struct`。
+**用户直接在 struct 声明上添加 `[DurableType(schemaId, version)]`，与 class 一样显式纳入 SG 管线。**
+它有自己的 SchemaId、版本及 Schema history；不需要先被某个 class 使用才取得 Durable 类型资格。
 字段继续明确标注 DurableField 或 Transient，支持 private/readonly 持久字段。struct 不继承 DurableBase。
-可嵌套多个值布局层次，但不要求 CLR 声明嵌套在另一个类型中。
+
+以下是已支持的用户代码形状：
+
+```csharp
+[DurableType("Position", 1)]
+public partial struct Position {
+    [DurableField(1)] public int X;
+    [DurableField(2)] public int Y;
+}
+
+[DurableType("Character", 1)]
+public partial class Character : DurableBase {
+    [DurableField(1)] public Position Location;
+}
+```
+
+本文“嵌套值/嵌套布局”指 `Character.Location` 的值及其 DTO/body 内含 Position 的状态，
+不是把 `struct Position` 的 C# 类型声明写进 `class Character`。本片反而限定顶层声明，
+CLR nested type 尚不在范围内。后文“历史 DTO 宿主”讨论的是 SG 生成辅助类型的位置，
+也不改变用户直接标记 struct 的入口。
 
 不包含：ref struct、record struct、开放或自定义闭合泛型、enum/nullable/decimal/native int 扩充，
 完整数组对象、BCL 容器、boxed value identity、跨程序集模型、一般 TypeCodec、独立 struct ObjectId/Model，
@@ -170,7 +193,7 @@ G0 编译并执行等价生成代码，不以字符串快照代替机制验证�
 不证明 SG/history 已实现。G1 形成 exact 输入后，
 G2 必须由真实 SG 重做这些见证，G4 再验证真实历史包链路，不留下第二套生产实现。
 历史包验收同时证明：未递增 owner 或任一 exact 中间依赖版本时构建拒绝；nominal 目标单独升版不要求 owner 升版。
-readonly/ref 恢复是尚需本片验证的 struct 机制，现有 class 的 UnsafeAccessor 测试不充当其完成证据。
+readonly/ref 恢复使用本片 struct 的独立及真实 SG 见证，现有 class 的 UnsafeAccessor 测试不充当其完成证据。
 
 建议委派方式：
 
@@ -182,12 +205,57 @@ readonly/ref 恢复是尚需本片验证的 struct 机制，现有 class 的 Uns
 
 最终验证：`dotnet build DurableGraph.slnx`、完整 solution tests、适用的既有 PackageConsumer 回归及新增 inline 历史包见证；
 不因只改嵌套值而重复运行无变化的所有 crash probe。格式与历史检查失败不能改成跳过或静默兼容。
-本次仅规划，未运行这些未来验收，也未把 DB-036 的测试结果算作 DB-037 的证据。
+下述账本区分本片已执行的验收与尚未完成项，不把 DB-036 的结果算作本片证据。
 
 ## 5. 结束与后续
 
 完成后，PROJECT-STATE 更新支持范围与证据入口；长期采纳的 inline Upgrade、kind 和历史 helper 边界进入目标设计；
 路线图删除本片已完成项，保留有限数组、泛型与跨程序集的剩余问题。本记录保存实际施工与验证结果。
 
-下一候选为有限数组对象：此时再决定 rank 上界、元素类型表达/闭合、内容 DTO 所有权、shape 及分配，
-用本片产生的 ref 值 helper 与引用槽形成消费者；不因本片完成自动进入数组实施。
+用户本次要求为下一步泛型留准备：后续以泛型定义/实参身份、领域与表示参数闭合作为评估入口；
+当前静态值 helper 与 exact Schema 闭包可复用，但不能仅凭 DTO CLR 类型推导领域类型。
+有限数组仍可单独安排，届时决定 shape、rank、元素闭合与冻结内容；本片不自动进入后继实施。
+
+## 6. 施工账本
+
+用户于 2026-09-07 授权完整实施，并要求为后续泛型保留领域类型/状态表示分离。
+本轮仍不实现泛型闭合、数组对象、独立值身份或第二套升级调度。
+开工前仅有上一轮明确 struct 标注入口的文档修改，纳入本记录；源码基线 build 为零警告/错误，tests 916/916。
+
+本轮已冻结的协作接缝：SchemaKind ReferenceObject=1 / InlineValue=2，TypeTag.InlineValue=16；
+DurableFieldInfo.InlineSchema 持有完整 exact 布局，Schema 构造支持 kind。
+history/manifest v2 在 version 后写 kind 行，inline field 写 exact key；SchemaBatch v2 在 row key 后写 kind byte。
+新写只用 v2，旧 v1 只读；exact DAG 路径上界 256。跨模块具体格式由 golden 与负例验收。
+
+| 闸门 | 落点 | 已执行证据 |
+|---|---|---|
+| G0 | [代码形状见证](../../tests/DurableGraph.Tests/InlineStructShapeWitnessTests.cs) | 独立 test-only project 编译执行 2/2；精确 struct ref、private readonly、default 恢复、字段/元素及删除领域宿主后的完整升级链 |
+| G1 Runtime | [Schema 合同测试](../../tests/DurableGraph.Tests/InlineSchemaContractTests.cs) | exact 值依赖相等性、kind/参数互斥、200 层共享 DAG 比较/哈希、inline 无对象身份入口 |
+| G1 Build | [history 工具测试](../../tests/DurableGraph.Tests/InlineSchemaHistoryToolTests.cs) | v2 golden、旧 v1 原字节保留、闭包/深度/冲突/kind、历史缺口不由 current 补齐、批次失败无写入 |
+| G1 Store | [持久 Schema 测试](../../tests/DurableGraph.StateStore.Tests/InlineSchemaStoreTests.cs) | 混合 v1/v2 重开、base+inline DAG、原子预检、对象头/typed reader/发布 head 指向 inline 的拒绝 |
+| G1/G2 SG | [生成器测试](../../tests/DurableGraph.Tests/InlineStructGeneratorTests.cs)、[body 测试](../../tests/DurableGraph.Tests/InlineStructBodyTests.cs) | standalone 标注、支持形状、历史宿主消失、深度/升版、静态 nested Delta golden、浮点按位、坏位图/空子变化/截断/尾随拒绝、真实 SG ref 恢复 |
+| G3 | [真实生成图测试](../../tests/DurableGraph.Tests/InlineStructGraphTests.cs) | 同实例连续 Commit、nested owner Delta、child-only、共享/循环/string 身份、Remove、失败基线、候选隔离、stored 深层缺失/错误 kind ID 拒绝 |
+| G4 | [真实 PackageReference 消费者](../../experiments/PackageConsumerProbe/InlineStructConsumer)、[运行脚本](../../experiments/PackageConsumerProbe/Run-InlineStructProbe.ps1) | 四阶段全部通过；history 5→10→11→13，旧 hash 不变；精确值/owner/派生升版强制 Base；nominal child 独升；删除 Point/Links CLR 后 exact read 和完整 owner Upgrade 链均成功 |
+| 独立审阅 | Runtime/Build/Store 与 SG metadata/body 分开审查 | 未留 P1/P2；主代理检视集成 diff，保留 class 原 Apply 两参数形状；新增 kind 范围和 v2 manifest 的旧断言按真实新合同更新 |
+
+最终生成形状：class 的 `__DurableState.Vn` 保持原入口；inline DTO/body 放在编译内共享
+`Atelia.DurableGraph.Generated.__Inline_<SchemaId UTF8 hex>_Vn` 中，表示不含领域 CLR 名称。
+当前 struct 的 `__DurableState.Capture(in TDomain[, context])` 与
+`Hydrate(ref TDomain, in TState, ObjectReadTable)` 桥接该表示；历史 Upgrade 用可访问构造器及 target-typed new。
+嵌套 Apply 的 requireChanges 只存在于 inline helper，不给所有 class 增加重载。
+所有已知成员仍静态绑定；BinaryPayloadWriter.WriteSpan 公开为不带长度前缀的既编码 body 拼接操作。
+
+本轮明确保留的限制：DTO 仍 unmanaged；无一般泛型、数组对象、独立值 Normalize 或 boxed identity；
+最大布局路径 256，Schema/State/发布日志各自的其他容量与故障模型不变。
+递归 PrepareDelta 的临时缓冲与复制留有性能 TODO，尚未引入 pool/cache。
+
+包证据（2026-09-07，产物位于忽略的 obj）：
+
+- 新 inline 四阶段：`experiments/PackageConsumerProbe/obj/inline-struct-20260907144544-30792-7af35e26`。
+- Runtime 既有回归：`experiments/PackageConsumerProbe/obj/run-20260907145057-15568`。
+- StateStore 既有回归：`experiments/PackageConsumerProbe/obj/state-store-run-20260907145201-26392-483e44b6`。
+- 历史引用族迁移壳回归：`experiments/PackageConsumerProbe/obj/history-capability-20260907145318-25536-7eb074be`。
+
+最终 root solution build：零警告、零错误；完整 tests **994/994**、零跳过（TRX 前缀 `db037-final`）：
+Runtime/SG 450、StateStore 286、Storage 155、Serialization 103。所有实际运行的包见证通过。
+未改变 Storage wire v3 或发布格式；未修改上游 Atelia 项目。

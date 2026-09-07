@@ -18,6 +18,9 @@ internal static class BaseObjectBodyCodec {
     /// <summary>Wraps a raw body. The caller must register its Schema before saving the object.</summary>
     internal static EncodedBaseObjectBody EncodeDurable(DurableSchema schema, PreparedBaseBody rawBody) {
         ArgumentNullException.ThrowIfNull(schema);
+        if (schema.Kind != SchemaKind.ReferenceObject) {
+            throw new ArgumentException("Only reference-object Schemas may identify an object Base.", nameof(schema));
+        }
         ArgumentNullException.ThrowIfNull(rawBody);
         return Encode(rawBody, new SchemaKey(schema.SchemaId, schema.Version));
     }

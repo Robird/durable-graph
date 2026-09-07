@@ -60,7 +60,8 @@ public ref struct BinaryPayloadWriter {
         _downstream.Advance(sizeof(double));
     }
 
-    internal void WriteSpan(ReadOnlySpan<byte> value) {
+    /// <summary>Writes already encoded body bytes verbatim, without a length prefix.</summary>
+    public void WriteSpan(ReadOnlySpan<byte> value) {
         if (value.IsEmpty) {
             return;
         }

@@ -111,6 +111,12 @@ Source Generator 负责可在编译期确定的类型知识与机械代码，框
   祖先 exact 依赖改变时，受影响的派生版本也必须递增。
 - inline struct 也是 exact 布局依赖，其版本变化沿 inline/base 依赖传播到 owner。
   引用成员使用稳定 nominal 类型约束，不因引用目标升版而递归升版整个引用图。
+- 自定义 struct 与 class 一样显式标注 DurableType，拥有自己的 SchemaId/版本/history；
+  inline 值没有独立 ObjectId 或对象 Model。SchemaKind 区分 ReferenceObject/InlineValue，
+  同 SchemaId 不跨 kind；exact base/inline 依赖形成有界 DAG，nominal 边不进入布局闭包。
+- owner 的单对象 Upgrade 显式转换嵌套 DTO；框架不另行先升级 struct。历史 inline DTO/body
+  从保留的 exact history 生成，不依赖当前领域 struct 声明存在，也不要求值迁移壳。
+  领域/DTO 表示保持分离，不能为泛型复用而把可变领域引用保留在 DTO 中。
 - 引用对象的 Base 头表达实际 exact 类型/Schema，后续 Delta 沿同一 Schema 解释；版本变化从新 Base 开始。
   读取先在 stored Schema 下完整重建，再升级；仍存活的升级对象下次显式保存必须 Base，即使业务值未变。
   TypeCodec 表达受支持类型经数组或泛型构造的组合；
@@ -123,6 +129,8 @@ Source Generator 负责可在编译期确定的类型知识与机械代码，框
 设计来源：[DB-018](design-branches/0018-generated-graph-codec-shape.md)、
 [DB-019](design-branches/0019-schema-ancestry-implementation-slice.md)、
 [DB-020](design-branches/0020-typed-slot-array-binding-slice.md)。
+
+复合值的细化合同及证据见 [DB-037](design-branches/0037-inline-struct-state-slice.md)。
 
 ### 对象表示与存储职责
 

@@ -57,7 +57,8 @@ public sealed partial class DurableSchemaGeneratorTests {
             string file = Path.Combine(directory, "a.dgschema");
             File.WriteAllText(file, NominalHistory, new UTF8Encoding(false));
             SchemaHistoryRecord record = SchemaHistoryDocument.ParseHistory(file);
-            Assert.Equal(NominalHistory, SchemaHistoryDocument.RenderHistory(record));
+            Assert.Equal(NominalHistory.Replace("history:1", "history:2").Replace("// version:1\n", "// version:1\n// kind:1\n"),
+                SchemaHistoryDocument.RenderHistory(record));
             Assert.Equal("B", Assert.Single(record.Fields).TargetSchemaId);
             string manifest = Path.Combine(directory, "manifest.g.cs");
             File.WriteAllText(manifest, NominalHistory.Replace("// durable-graph-schema-history:1", "// durable-graph-schema-history-manifest:1"));

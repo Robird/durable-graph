@@ -14,6 +14,8 @@ public sealed class ObjectStateRecord {
     private readonly object _content;
 
     internal ObjectStateRecord(uint id, DurableSchema schema, object state, ICapturedStatePreparation? preparation = null) {
+        ArgumentNullException.ThrowIfNull(schema);
+        schema.RequireReferenceObject();
         Id = id;
         Kind = ObjectStateKind.Durable;
         Schema = schema;

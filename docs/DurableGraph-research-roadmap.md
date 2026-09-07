@@ -9,8 +9,8 @@
 
 当前能力与已完成分片的验收从 PROJECT-STATE/其账本进入；这里仅保留后续增量。
 
-后续方向按依赖而非承诺日期安排：引用图 → 分别评估 inline struct、有限数组对象和泛型闭合；
-BCL 内容恢复在所需引用/值/类型表达可用后逐类型推进。struct 可独立穿插，不强制等待全部引用能力。
+后续方向按依赖而非承诺日期安排：已建立的引用图/inline 值组合 → 泛型闭合与有限数组对象；
+BCL 内容恢复在所需引用/值/类型表达可用后逐类型推进。
 DB-036 单 World/单 head 工作会话已实现；branch/Reset、联合 Store 视图及更强恢复保证仍独立排期。
 MVP 库内加载顺序为 exact 重建 → 单对象 Upgrade → 分配实例 → 填充/连接引用 → 完整交付 World；
 Transient 由用户在交付后处理，约束维护在[目标设计](DurableGraph-target-design-v0.md#恢复transient-与宿主边界)。
@@ -18,10 +18,10 @@ Transient 由用户在交付后处理，约束维护在[目标设计](DurableGra
 [MVP 功能边界](DurableGraph-target-design-v0.md#mvp-功能边界)，不再作为开放范围反复讨论。
 GraphSession 的正常同实例 Commit 与严格重开从 PROJECT-STATE/DB-036 查证；不再列为未完成能力。
 当前只支持单活动会话、固定非空 World，发布故障范围为正常关闭/进程中止和明确的 I/O 异常。
-下一片推荐 [DB-037 inline struct](design-branches/0037-inline-struct-state-slice.md)（Proposed）：
-先补 exact inline Schema/history 与嵌套 DTO/融合 Delta，包含现有引用槽并接通 owner Upgrade/连续 Commit。
-方案比较、尚需验证的生成形状及 G0–G4 验收只在该文维护；推荐不等于已实施或用户已批准新格式。
-之后优先重新评估有限数组对象，自定义泛型闭合独立设计，不在本轮一并扩张。
+DB-037 的已实现边界与 G0–G4 证据从 PROJECT-STATE 进入，不再把非泛型 inline struct 列为待办。
+用户要求为下一步泛型留准备：现有静态值 helper 已分离领域类型与冻结 DTO，后续先核对
+[泛型技术备忘](design-branches/0018-generic-dto-binding-followup.md)，冻结定义/实参身份、表示参数及历史闭合。
+有限数组仍为独立候选；本片不自动授权开始任一后继。
 
 ## 2. 已采纳方向中的未完成能力
 
@@ -32,9 +32,8 @@ B/D/H 分别指本轮精确 Base payload、Delta payload 上界、已有对象�
 | 工作项 | 最小应回答的问题 | 设计或证据入口 |
 |---|---|---|
 | TypeCodec 与 exact Schema 绑定 | 一般类型组合与内建复合类型 codec；已有 nominal class 引用及 exact reader 分派不等于一般 TypeCodec，也不自动复活已删除模型族 | [DB-034](design-branches/0034-durable-reference-graph-batch.md)、[DB-018](design-branches/0018-generated-graph-codec-shape.md)、[DB-001](design-branches/0001-schema-authority-and-runtime-representation.md) |
-| 复合类型的 DTO 升级与恢复 | 将单对象 Upgrade/Restore 扩展到复合值、数组与容器内容；保持完整 source 目录、强制 Base、当前版本 DTO 图的可达分析和失败不交付 | [DB-034](design-branches/0034-durable-reference-graph-batch.md)、[DB-018](design-branches/0018-generated-graph-codec-shape.md) |
+| 复合类型的 DTO 升级与恢复 | 将单对象 Upgrade/Restore 扩展到数组与容器内容；保持完整 source 目录、强制 Base、当前版本 DTO 图的可达分析和失败不交付 | [DB-034](design-branches/0034-durable-reference-graph-batch.md)、[DB-018](design-branches/0018-generated-graph-codec-shape.md) |
 | 自定义泛型 Schema/DTO | 保留 SG 开放模板 + 首次运行时闭合/缓存方向；领域 T 与冻结表示参数分离，接通泛型定义/实参身份及历史 exact reader；现有手写 body 见证不等于 SG 已支持 | [泛型 DTO 技术备忘](design-branches/0018-generic-dto-binding-followup.md)，扩充 Schema 类型表达或泛型 Capture 时重访 |
-| 自定义 struct | exact inline Schema/history 与 owner 升版，含引用嵌套 DTO/融合 Delta、ref 恢复及历史值宿主独立性 | [DB-037 推荐分片](design-branches/0037-inline-struct-state-slice.md)；原始方向见 [DB-024 struct TODO](design-branches/0024-reference-capture-and-reusable-object-ids.md) |
 | 完整数组对象 | 在已选零下界 SZ/有限多维 rank 范围内，实现 identity、shape、分配与元素循环，并拒绝不支持的形状；不能把现有元素模板视为完整数组支持 | [MVP 边界](DurableGraph-target-design-v0.md#mvp-功能边界)、[DB-020](design-branches/0020-typed-slot-array-binding-slice.md) |
 
 ## 3. 尚待裁决的机制
@@ -42,12 +41,12 @@ B/D/H 分别指本轮精确 Base payload、Delta payload 上界、已有对象�
 | 问题 | 现有依据与裁决边界 |
 |---|---|
 | 对象版本解释与保存来源 | 已登记模型族可按 Base exact Schema 自动读取；完整 ObjectHeadMap 中 external object heads 的来源、候选对象身份连续性仍需产品 Save/Load 合同，不能由 Revision Parent 声明一致推导全局身份认证 |
-| 保存相等性与真实估算 | 同版标量 DTO 的浮点按位、引用槽按 ID 已采纳；未来复合值/容器相等性另定。已准备 body 与当前 v3 envelope 计量见 [DB-029](design-branches/0029-prepared-object-revision-planning-slice.md)；Base 类型头已计入 B/H。未来新增类型头/容器布局时继续按实际对象 payload 计量 |
+| 保存相等性与真实估算 | 同版 DTO 的浮点按位、引用槽按 ID、inline 值递归融合 Delta 已采纳；未来数组/容器相等性另定。已准备 body 与当前 v3 envelope 计量见 [DB-029](design-branches/0029-prepared-object-revision-planning-slice.md)；Base 类型头已计入 B/H。未来新增类型头/容器布局时继续按实际对象 payload 计量 |
 | Schema 规范表示和持久引用 | canonical 注册批次与逻辑 SchemaKey 已闭合；未来 SchemaHash、紧凑引用及一般类型家族约束随消费者裁决，不用 GetHashCode 作持久身份 |
 | 开放泛型/数组组合绑定 | 已有 static-T 缓存与 typed ref 运行时组合证据；剩余为领域/DTO 表示参数闭合、版本缓存边界及注册初始化协议，不要求全面切换 DynamicMethod。摘要、取舍与首个 SG 验证见[技术备忘](design-branches/0018-generic-dto-binding-followup.md) |
 | 跨程序集与一般类型形状 | 继承 helper 可见性、外部历史祖先、enum/nullable/decimal/native int 等支持范围；自定义泛型的具体形状/约束仍须分片确定，技术方向见上项；boxed value identity 已排除 MVP |
 | 多态与运行时注册扩展 | 已标记 class 基类到登记派生实例按 DB-034 合同；interface/object 通配引用、开放组合与跨程序集发现仍后续裁决，不能自动回退成声明基类的 codec |
-| 捕获复合值的所有权 | 含引用 struct/数组/容器如何真正冻结候选，不能从 scalar readonly DTO 推导浅复制足够 |
+| 捕获复合值的所有权 | 数组/容器如何真正冻结候选；inline struct 已递归捕获成标量/ID 的 unmanaged DTO，不能据此推导一般容器浅复制足够 |
 | 数组完整形状与分配 | 非零下界与非 SZ rank-1 已明确不支持；实施时在 rank 上界 3/4 中选择，确定有限 tag、元素类型和各维长度编码、分配及按 ref 遍历 |
 | 根与持久目录扩展 | 单 WorldId/Revision 发布已闭合；后续仅在真实需求下选择 null/清空/替换、命名 branch 与 Reset，不建设多根 API |
 
