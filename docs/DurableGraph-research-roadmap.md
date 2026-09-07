@@ -31,6 +31,7 @@ B/D/H 分别指 Base 写入字节、Delta 写入字节、当前对象重建字�
 
 | 工作项 | 最小应回答的问题 | 设计或证据入口 |
 |---|---|---|
+| 术语一致化 | 按首选词分批核对活跃文档、注释和代码符号；先区分同义、同词异义与职责变化，再决定迁移。历史材料保留语境，涉及 API/持久格式的名称须单独核对影响 | [项目术语表与命名差异](DurableGraph-glossary.md#多义词历史叫法与代码命名差异) |
 | 工作会话与 exact Parent baseline | 已选 Repository 受控创建/加载的 WorkingTree/GraphSession；现有 LoadedWorld 固定 Parent、DTO 与实例身份并在 Append 后重新 Load；后续定义发布后安装、Commit API 与故障裁决 | [目标约束](DurableGraph-target-design-v0.md#单一发布权威与明确故障结果)、[DB-030 接缝](design-branches/0030-captured-object-preparation-slice.md#4-exact-parent-接缝明确留到后片) |
 | TypeCodec 与 exact Schema 绑定 | 一般类型组合与内建复合类型 codec；已有 nominal class 引用及 exact reader 分派不等于一般 TypeCodec，也不自动复活已删除模型族 | [DB-034](design-branches/0034-durable-reference-graph-batch.md)、[DB-018](design-branches/0018-generated-graph-codec-shape.md)、[DB-001](design-branches/0001-schema-authority-and-runtime-representation.md) |
 | 复合类型的 DTO 升级与恢复 | 将单对象 Upgrade/Restore 扩展到复合值、数组与容器内容；保持完整源目录、强制 Base、current 可达分析和失败不交付 | [DB-034](design-branches/0034-durable-reference-graph-batch.md)、[DB-018](design-branches/0018-generated-graph-codec-shape.md) |

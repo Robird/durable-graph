@@ -8,6 +8,7 @@
 先读本文，再按任务选择一份材料；不需要按 DB 编号通读历史。
 
 - 理解产品目标与已选约束：[目标设计](../docs/DurableGraph-target-design-v0.md)。
+- 查首选用语、概念示意和对应代码：[项目术语表](../docs/DurableGraph-glossary.md)；后续文档、代码命名与注释的一致化以此定位差异。
 - 选择下一片、查未完成决策与问题：[后续路线](../docs/DurableGraph-research-roadmap.md)。
 - 查某项实现的来由或验收：[设计与施工记录索引](../docs/design-branches/README.md)。
 - 查历史实验：[实验簿入口](../docs/DurableGraph-lab-notebook.md)；重跑独立实验：[Probe 导航](../experiments/README.md)。
