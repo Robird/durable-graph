@@ -4,7 +4,7 @@ namespace Atelia.DurableGraph.StateStore.Storage;
 public static class ObjectVersionPayloadSize {
     /// <summary>Returns the exact kind, body-length prefix, and Base body byte count.</summary>
     /// <remarks>This measures a payload; it does not check whether a complete Frame will fit.</remarks>
-    public static long GetBaseBytes(int bodyLength) {
+    public static long GetBasePayloadBytes(int bodyLength) {
         ArgumentOutOfRangeException.ThrowIfNegative(bodyLength);
         return checked(1L + GetVarUIntBytes((uint)bodyLength) + bodyLength);
     }
@@ -16,7 +16,7 @@ public static class ObjectVersionPayloadSize {
     /// for any legal target scope the excess over actual payload size is zero to four bytes.
     /// This does not check whether a complete Frame will fit.
     /// </remarks>
-    public static long EstimateDeltaBytes(int bodyLength, FrameAddress prior) {
+    public static long EstimateDeltaPayloadBytesUpperBound(int bodyLength, FrameAddress prior) {
         ArgumentOutOfRangeException.ThrowIfNegative(bodyLength);
         FrameAddressValidator.ValidateRequired(prior, nameof(prior));
         return checked(1L + 5 + GetVarUIntBytes(prior.FrameTicket.Serialize())

@@ -122,9 +122,9 @@ public sealed class TypedObjectVersionReaderTests : IDisposable {
     private ObjectVersionChain Chain(EncodedBaseObjectBody encodedBaseBody, params byte[][] deltas) {
         using SegmentStore segments = SegmentStore.CreateNew(NextPath(), new() { NewStoreLayout = RbfSegmentStoreLayout.Flat });
         StateRevisionStore store = new(segments);
-        FrameAddress address = store.Append(StateRevision.CreateBase(null, [ObjectVersionRecord.CreateBase(1, encodedBaseBody.Body)], []));
+        FrameAddress address = store.Append(StateRevision.CreateObjectHeadMapBase(null, [ObjectVersionRecord.CreateBase(1, encodedBaseBody.Body)], []));
         foreach (byte[] delta in deltas) {
-            address = store.Append(StateRevision.CreateDelta(address, [ObjectVersionRecord.CreateDelta(1, address, delta)], []));
+            address = store.Append(StateRevision.CreateObjectHeadMapDelta(address, [ObjectVersionRecord.CreateDelta(1, address, delta)], []));
         }
         return store.ReadObjectVersionChain(address, 1);
     }

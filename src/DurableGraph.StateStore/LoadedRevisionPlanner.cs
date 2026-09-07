@@ -7,7 +7,7 @@ internal static class LoadedRevisionPlanner {
     internal static PreparedObjectRevision Prepare(StateRevisionStore store, SchemaStore schemas,
         NormalizedRevision source, IReadOnlyList<PreparedCapturedObject> contents,
         ReadAmplificationBaseBudgetParameters parameters) {
-        IReadOnlyDictionary<uint, FrameAddress> heads = store.ReadLiveObjectHeads(source.RevisionAddress);
+        IReadOnlyDictionary<uint, FrameAddress> heads = store.ReadLiveObjectHeadMap(source.RevisionAddress);
         if (heads.Count != source.Objects.Count || source.Objects.Keys.Any(id => !heads.ContainsKey(id))) {
             throw new InvalidDataException("Loaded source membership no longer matches the exact Parent.");
         }

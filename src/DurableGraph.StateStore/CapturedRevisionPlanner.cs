@@ -23,7 +23,7 @@ internal static class CapturedRevisionPlanner {
         }
 
         IReadOnlyDictionary<uint, FrameAddress> parentHeads = parentRevisionAddress is { } parent
-            ? store.ReadLiveObjectHeads(parent)
+            ? store.ReadLiveObjectHeadMap(parent)
             : new Dictionary<uint, FrameAddress>();
         if (input.Previous is { } previous &&
             (previous.Objects.Count != parentHeads.Count || previous.Objects.Any(item => !parentHeads.ContainsKey(item.Id)))) {

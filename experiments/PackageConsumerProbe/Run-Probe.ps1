@@ -195,7 +195,7 @@ try {
             "-p:DurableGraphPackageVersion=$packageVersion",
             "-p:DurableGraphSchemaHistoryDirectory=$history",
             "-p:ProbeVersion=1"
-        ) -ExpectedText "The legacy default DurableGraphSnapshots directory contains .dgsnapshot files; move regenerated .dgschema history to DurableGraphSchemaHistory."
+        ) -ExpectedText "The legacy default DurableGraphSnapshots directory contains Schema-history files; move regenerated .dgschema history to DurableGraphSchemaHistory."
     }
     finally {
         Remove-Item -LiteralPath $legacyDefaultFile -ErrorAction SilentlyContinue

@@ -43,24 +43,24 @@ public sealed partial class DurableSchemaGeneratorTests {
             SchemaStore schemas = new(schemaFile);
             StateRevisionStore store = new(segments);
             schemas.RegisterBatch([schema]);
-            first = store.Append(StateRevision.CreateBase(null,
+            first = store.Append(StateRevision.CreateObjectHeadMapBase(null,
                 input.Strings.Where(item => item.Id != aliasId).Select(item => ObjectVersionRecord.CreateBase(item.Id, BaseObjectBodyCodec.EncodeString(new(item.Body)).Body))
                     .Append(ObjectVersionRecord.CreateBase(ownerId, BaseObjectBodyCodec.EncodeDurable(schema, new(input.Base)).Body)), []));
-            second = store.Append(StateRevision.CreateDelta(first,
+            second = store.Append(StateRevision.CreateObjectHeadMapDelta(first,
                 [ObjectVersionRecord.CreateDelta(ownerId, first, input.First.Body),
                     ObjectVersionRecord.CreateBase(aliasId, BaseObjectBodyCodec.EncodeString(new(input.Strings.Single(item => item.Id == aliasId).Body)).Body)], []));
-            third = store.Append(StateRevision.CreateDelta(second,
+            third = store.Append(StateRevision.CreateObjectHeadMapDelta(second,
                 [ObjectVersionRecord.CreateDelta(ownerId, second, input.Second.Body)], []));
 
             // Reuse the same prepared bytes on another branch; no serialization is repeated.
-            repeated = store.Append(StateRevision.CreateDelta(first,
+            repeated = store.Append(StateRevision.CreateObjectHeadMapDelta(first,
                 [ObjectVersionRecord.CreateDelta(ownerId, first, input.First.Body),
                     ObjectVersionRecord.CreateBase(aliasId, BaseObjectBodyCodec.EncodeString(new(input.Strings.Single(item => item.Id == aliasId).Body)).Body)], []));
             Assert.Equal(input.First.Body.ToArray(), store.ReadObjectVersionChain(repeated, ownerId).Records[^1].Record.Body.ToArray());
-            missingString = store.Append(StateRevision.CreateDelta(third, [], [nameId]));
-            wrongKind = store.Append(StateRevision.CreateDelta(third,
+            missingString = store.Append(StateRevision.CreateObjectHeadMapDelta(third, [], [nameId]));
+            wrongKind = store.Append(StateRevision.CreateObjectHeadMapDelta(third,
                 [ObjectVersionRecord.CreateBase(nameId, BaseObjectBodyCodec.EncodeDurable(schema, new(expected[2])).Body)], []));
-            malformed = store.Append(StateRevision.CreateDelta(third,
+            malformed = store.Append(StateRevision.CreateObjectHeadMapDelta(third,
                 [ObjectVersionRecord.CreateDelta(ownerId, third, new byte[] { 8, 8, 0 })], []));
         }
         Assert.NotEqual(first.FileNumber, second.FileNumber);
@@ -76,7 +76,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         byte[] Load(FrameAddress revision, SchemaStore? registry = null, DurableSchema? expectedSchema = null) {
             ObjectVersionChain chain = cold.ReadObjectVersionChain(revision, ownerId);
             Dictionary<uint, byte[]> strings = [];
-            foreach ((uint id, FrameAddress address) in cold.ReadLiveObjectHeads(revision)) {
+            foreach ((uint id, FrameAddress address) in cold.ReadLiveObjectHeadMap(revision)) {
                 var objectChain = cold.ReadObjectVersionChain(revision, id);
                 var stored = BaseObjectBodyCodec.Decode(objectChain.Records[0].Record.Body);
                 if (stored.Kind == ObjectStateKind.String) {
@@ -93,11 +93,11 @@ public sealed partial class DurableSchemaGeneratorTests {
         ObjectVersionChain oldest = cold.ReadObjectVersionChain(first, ownerId);
         ObjectVersionChain latest = cold.ReadObjectVersionChain(third, ownerId);
         Assert.Single(oldest.Records);
-        Assert.Equal(new[] { first, second, third }, latest.Records.Select(entry => entry.Address));
-        Assert.Equal(third, latest.HeadAddress);
+        Assert.Equal(new[] { first, second, third }, latest.Records.Select(entry => entry.ContainingRevisionAddress));
+        Assert.Equal(third, latest.ObjectHeadAddress);
         Assert.Equal(ownerId, latest.ObjectId);
-        Assert.Equal(latest.Records.Sum(entry => (long)entry.PayloadBytes), latest.ReconstructionBytes);
-        Assert.True(latest.ReconstructionBytes > oldest.ReconstructionBytes);
+        Assert.Equal(latest.Records.Sum(entry => (long)entry.ObjectVersionPayloadBytes), latest.ReconstructionPayloadBytes);
+        Assert.True(latest.ReconstructionPayloadBytes > oldest.ReconstructionPayloadBytes);
 
         // The Base key selects one persistent exact Schema for the whole chain.
         // Neither missing registration nor a mismatched reader may enter a body callback.
@@ -196,10 +196,10 @@ public sealed partial class DurableSchemaGeneratorTests {
             SchemaStore schemas = new(schemaFile);
             StateRevisionStore store = new(segments);
             schemas.RegisterBatch([oldSchema, newSchema]);
-            first = store.Append(StateRevision.CreateBase(null, [ObjectVersionRecord.CreateBase(1,
+            first = store.Append(StateRevision.CreateObjectHeadMapBase(null, [ObjectVersionRecord.CreateBase(1,
                 BaseObjectBodyCodec.EncodeDurable(oldSchema, new(baseBytes)).Body)], []));
-            second = store.Append(StateRevision.CreateDelta(first, [ObjectVersionRecord.CreateDelta(1, first, delta1.Body)], []));
-            third = store.Append(StateRevision.CreateDelta(second, [ObjectVersionRecord.CreateDelta(1, second, delta2.Body)], []));
+            second = store.Append(StateRevision.CreateObjectHeadMapDelta(first, [ObjectVersionRecord.CreateDelta(1, first, delta1.Body)], []));
+            third = store.Append(StateRevision.CreateObjectHeadMapDelta(second, [ObjectVersionRecord.CreateDelta(1, second, delta2.Body)], []));
         }
         Array.Clear(baseBytes);
         delta1 = null!;

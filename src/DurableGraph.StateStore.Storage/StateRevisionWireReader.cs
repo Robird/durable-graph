@@ -42,14 +42,14 @@ internal static class StateRevisionWireReader {
         StateRevision revision;
         try {
             revision = kind switch {
-                ObjectHeadMapKind.Base => StateRevision.CreateBase(
+                ObjectHeadMapKind.Base => StateRevision.CreateObjectHeadMapBase(
                     parent,
                     localObjects,
                     ReadExternalObjectHeads(
                         ref reader,
                         scope)),
                 ObjectHeadMapKind.Delta when parent is { } parentAddress =>
-                    StateRevision.CreateDelta(
+                    StateRevision.CreateObjectHeadMapDelta(
                         parentAddress,
                         localObjects,
                         ReadObjectIds(ref reader)),

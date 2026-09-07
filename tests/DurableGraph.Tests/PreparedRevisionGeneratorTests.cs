@@ -111,7 +111,7 @@ public sealed partial class DurableSchemaGeneratorTests {
                 // Neither Prepare nor the raw Storage planner certifies that correspondence.
                 FrameAddress? parent = stage == 0 ? null : revisions[stage - 1];
                 IReadOnlyDictionary<uint, FrameAddress> priorHeads = parent is null
-                    ? new Dictionary<uint, FrameAddress>() : store.ReadLiveObjectHeads(parent.Value);
+                    ? new Dictionary<uint, FrameAddress>() : store.ReadLiveObjectHeadMap(parent.Value);
                 var parameters = new ReadAmplificationBaseBudgetParameters(stage < 3 ? 100 : 1, 100);
                 var prepared = CapturedRevisionPlanner.PrepareRevision(store, schemas, parent, input, parameters);
                 Assert.Same(accepted, session.Current); // Planning never installs a candidate or baseline.
@@ -146,7 +146,7 @@ public sealed partial class DurableSchemaGeneratorTests {
                 }
                 revisions[stage] = store.Append(prepared.Revision);
                 Assert.Same(accepted, session.Current); // Append produces an address, not a publication or Capture.Accept.
-                var heads = store.ReadLiveObjectHeads(revisions[stage]);
+                var heads = store.ReadLiveObjectHeadMap(revisions[stage]);
                 Assert.Equal(input.Objects.Select(row => row.Current.Id).Order(), heads.Keys.Order());
                 Assert.Equal(stage == 0 ? revisions[0] : priorHeads[emptyId], heads[emptyId]);
                 if (stage == 1) Assert.Equal(revisions[0], heads[originalStringId]);
@@ -155,16 +155,16 @@ public sealed partial class DurableSchemaGeneratorTests {
                 if (stage is 1 or 2) Assert.Equal(revisions[1], heads[tagId]);
                 if (stage >= 3) Assert.False(heads.ContainsKey(tagId));
                 ObjectVersionChain chain = store.ReadObjectVersionChain(revisions[stage], ownerId);
-                if (stage == 0) initialH = chain.ReconstructionBytes;
+                if (stage == 0) initialH = chain.ReconstructionPayloadBytes;
                 if (stage == 2) {
-                    accumulatedH = chain.ReconstructionBytes;
+                    accumulatedH = chain.ReconstructionPayloadBytes;
                     Assert.True(accumulatedH > initialH);
                     Assert.Equal(3, chain.Records.Count);
                 }
                 if (stage >= 3) {
                     Assert.Single(chain.Records);
-                    Assert.Equal(initialH, chain.ReconstructionBytes);
-                    Assert.Equal(revisions[3], chain.HeadAddress);
+                    Assert.Equal(initialH, chain.ReconstructionPayloadBytes);
+                    Assert.Equal(revisions[3], chain.ObjectHeadAddress);
                 }
                 if (stage < revisions.Length - 1) session.Accept(graph); // Explicit fixture baseline choice only.
                 else session.Discard(graph);
@@ -179,7 +179,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         using SegmentStore reopened = SegmentStore.OpenReadOnlyExisting(directory.Path, options);
         StateRevisionStore cold = new(reopened);
         for (int stage = 0; stage < revisions.Length; stage++) {
-            var heads = cold.ReadLiveObjectHeads(revisions[stage]);
+            var heads = cold.ReadLiveObjectHeadMap(revisions[stage]);
             ObjectVersionChain chain = cold.ReadObjectVersionChain(revisions[stage], ownerId);
             Assert.All(roots[stage].Where(id => id != 0), id => Assert.True(id == ownerId || id == tagId));
             ObjectVersionChain? tagChain = null;
@@ -200,9 +200,9 @@ public sealed partial class DurableSchemaGeneratorTests {
             strings.Remove(emptyId);
             Assert.Throws<InvalidDataException>(() => decode(chain, coldSchemas, strings, stage == 1, tagChain));
         }
-        Assert.True(cold.ReadLiveObjectHeads(revisions[0]).ContainsKey(originalStringId));
-        Assert.False(cold.ReadLiveObjectHeads(revisions[2]).ContainsKey(originalStringId));
-        Assert.Equal<byte>([3, (byte)'x'], BaseObjectBodyCodec.Decode(cold.ReadObjectBase(revisions[0], originalStringId)).Body.ToArray());
+        Assert.True(cold.ReadLiveObjectHeadMap(revisions[0]).ContainsKey(originalStringId));
+        Assert.False(cold.ReadLiveObjectHeadMap(revisions[2]).ContainsKey(originalStringId));
+        Assert.Equal<byte>([3, (byte)'x'], BaseObjectBodyCodec.Decode(cold.ReadObjectBaseBody(revisions[0], originalStringId)).Body.ToArray());
     }
 
     private delegate CapturedGraph PreparedRevisionCapture(int stage);

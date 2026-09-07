@@ -95,7 +95,7 @@ public sealed class LoadedReferenceWorldTests : IDisposable {
         DurableSchema worldSchema = Schema("World", 1, "Expected");
         DurableSchema otherSchema = Schema("Other", 1, "Expected");
         _schemas.RegisterBatch([worldSchema, otherSchema]);
-        FrameAddress source = _store.Append(StateRevision.CreateBase(null,
+        FrameAddress source = _store.Append(StateRevision.CreateObjectHeadMapBase(null,
             [Durable(1, worldSchema, new(reference, 1)),
              ObjectVersionRecord.CreateBase(2, BaseObjectBodyCodec.EncodeString(StringPayloadCodec.PrepareBase("text")).Body),
              Durable(3, otherSchema, new(0, 3))], []));
@@ -173,7 +173,7 @@ public sealed class LoadedReferenceWorldTests : IDisposable {
     public void UnchangedOwnerReferencesAreValidatedAgainstQueriedRevisionMembership() {
         DurableSchema schema = Schema("World", 1, "World");
         FrameAddress original = Seed((1, schema, new State(2, 1)), (2, schema, new State(0, 2)));
-        FrameAddress removed = _store.Append(StateRevision.CreateDelta(original, [], [2]));
+        FrameAddress removed = _store.Append(StateRevision.CreateObjectHeadMapDelta(original, [], [2]));
         int allocations = 0;
         StateModelRegistry models = Registry(Model<World>(schema, () => { allocations++; return new World(); }));
         Assert.Throws<InvalidDataException>(() => LoadedWorld.Load<World>(_store, _schemas, removed, 1, models));
@@ -287,7 +287,7 @@ public sealed class LoadedReferenceWorldTests : IDisposable {
     }
     private FrameAddress Seed(params (uint Id, DurableSchema Schema, State State)[] rows) {
         _schemas.RegisterBatch(rows.Select(static row => row.Schema));
-        return _store.Append(StateRevision.CreateBase(null, rows.Select(static row => Durable(row.Id, row.Schema, row.State)), []));
+        return _store.Append(StateRevision.CreateObjectHeadMapBase(null, rows.Select(static row => Durable(row.Id, row.Schema, row.State)), []));
     }
     private static ObjectVersionRecord Durable(uint id, DurableSchema schema, State state) =>
         ObjectVersionRecord.CreateBase(id, BaseObjectBodyCodec.EncodeDurable(schema, Base(state)).Body);

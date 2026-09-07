@@ -31,7 +31,7 @@ public static class RevisionDecoder {
         List<(uint Id, string Value)> strings = [];
 
         // Object-first reconstruction: only one raw chain is retained at a time.
-        foreach (uint id in store.ReadLiveObjectHeads(revisionAddress).Keys.Order()) {
+        foreach (uint id in store.ReadLiveObjectHeadMap(revisionAddress).Keys.Order()) {
             ObjectVersionChain chain = store.ReadObjectVersionChain(revisionAddress, id);
             DecodedBaseObjectBody body = TypedObjectVersionReader.DecodeBase(chain);
             if (body.Kind == ObjectStateKind.String) {

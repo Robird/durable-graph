@@ -31,25 +31,25 @@ public sealed class ObjectVersionChain {
                 throw new InvalidOperationException("An ObjectVersion chain must start with Base and contain only this ObjectId.");
             }
 
-            if (index > 0 && entry.Record.PriorAddress != frozen[index - 1].Address) {
+            if (index > 0 && entry.Record.PriorAddress != frozen[index - 1].ContainingRevisionAddress) {
                 throw new InvalidOperationException("An ObjectVersion chain must follow exact prior addresses.");
             }
 
-            reconstructionBytes = checked(reconstructionBytes + entry.PayloadBytes);
+            reconstructionBytes = checked(reconstructionBytes + entry.ObjectVersionPayloadBytes);
         }
 
-        if (frozen[^1].Address != headAddress) {
+        if (frozen[^1].ContainingRevisionAddress != headAddress) {
             throw new InvalidOperationException("An ObjectVersion chain must end at the requested head.");
         }
 
         ObjectId = objectId;
-        HeadAddress = headAddress;
-        ReconstructionBytes = reconstructionBytes;
+        ObjectHeadAddress = headAddress;
+        ReconstructionPayloadBytes = reconstructionBytes;
         _records = new(frozen);
     }
 
     public uint ObjectId { get; }
-    public FrameAddress HeadAddress { get; }
+    public FrameAddress ObjectHeadAddress { get; }
     public IReadOnlyList<ObjectVersionChainEntry> Records => _records;
 
     /// <summary>
@@ -58,7 +58,7 @@ public sealed class ObjectVersionChain {
     /// shared Revision-Frame reads are excluded, including any repeated reads
     /// used to validate prior edges.
     /// </summary>
-    public long ReconstructionBytes { get; }
+    public long ReconstructionPayloadBytes { get; }
 
     // Exposing only read interfaces also prevents ICollection.SyncRoot from
     // revealing the backing array.

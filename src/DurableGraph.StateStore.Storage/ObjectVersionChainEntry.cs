@@ -11,12 +11,12 @@ public sealed class ObjectVersionChainEntry {
             throw new InvalidOperationException("An encoded ObjectVersion payload includes a nonempty envelope.");
         }
 
-        Address = address;
+        ContainingRevisionAddress = address;
         Record = record;
-        PayloadBytes = payloadBytes;
+        ObjectVersionPayloadBytes = payloadBytes;
     }
 
-    public FrameAddress Address { get; }
+    public FrameAddress ContainingRevisionAddress { get; }
     public ObjectVersionRecord Record { get; }
 
     /// <summary>
@@ -24,5 +24,5 @@ public sealed class ObjectVersionChainEntry {
     /// Delta's prior locator. Excludes ObjectId, ObjectHeadMap membership, and
     /// shared Revision-Frame bytes.
     /// </summary>
-    public int PayloadBytes { get; }
+    public int ObjectVersionPayloadBytes { get; }
 }

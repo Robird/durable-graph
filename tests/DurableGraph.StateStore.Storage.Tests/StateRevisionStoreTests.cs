@@ -13,7 +13,7 @@ public sealed class StateRevisionStoreTests : IDisposable {
         string storePath = NewStorePath();
         using SegmentStore segments = SegmentStore.CreateNew(storePath);
         StateRevisionStore store = new(segments);
-        StateRevision expected = StateRevision.CreateBase(
+        StateRevision expected = StateRevision.CreateObjectHeadMapBase(
             null,
             localObjects: Records(1, 2, 3),
             externalObjectHeads: []);
@@ -24,7 +24,7 @@ public sealed class StateRevisionStoreTests : IDisposable {
         Assert.Equal(1u, address.FileNumber);
         AssertRevisionEqual(expected, actual);
         AssertHeads(
-            store.ReadLiveObjectHeads(address),
+            store.ReadLiveObjectHeadMap(address),
             (1, address),
             (2, address),
             (3, address));
@@ -40,46 +40,46 @@ public sealed class StateRevisionStoreTests : IDisposable {
         FrameAddress f5;
         using (SegmentStore segments = SegmentStore.CreateNew(storePath)) {
             StateRevisionStore store = new(segments);
-            f1 = store.Append(StateRevision.CreateBase(
+            f1 = store.Append(StateRevision.CreateObjectHeadMapBase(
                 null,
                 localObjects: Records(1, 2),
                 externalObjectHeads: []));
-            AssertHeads(store.ReadLiveObjectHeads(f1), (1, f1), (2, f1));
+            AssertHeads(store.ReadLiveObjectHeadMap(f1), (1, f1), (2, f1));
 
-            f2 = store.Append(StateRevision.CreateDelta(
+            f2 = store.Append(StateRevision.CreateObjectHeadMapDelta(
                 f1,
                 localObjects: Records(3, 1),
                 removedObjectIds: [2]));
-            AssertHeads(store.ReadLiveObjectHeads(f2), (1, f2), (3, f2));
+            AssertHeads(store.ReadLiveObjectHeadMap(f2), (1, f2), (3, f2));
 
-            f3 = store.Append(StateRevision.CreateDelta(
+            f3 = store.Append(StateRevision.CreateObjectHeadMapDelta(
                 f2,
                 localObjects: Records(),
                 removedObjectIds: []));
-            AssertHeads(store.ReadLiveObjectHeads(f3), (1, f2), (3, f2));
+            AssertHeads(store.ReadLiveObjectHeadMap(f3), (1, f2), (3, f2));
 
-            f4 = store.Append(StateRevision.CreateDelta(
+            f4 = store.Append(StateRevision.CreateObjectHeadMapDelta(
                 f3,
                 localObjects: Records(),
                 removedObjectIds: [1]));
-            AssertHeads(store.ReadLiveObjectHeads(f4), (3, f2));
+            AssertHeads(store.ReadLiveObjectHeadMap(f4), (3, f2));
 
-            f5 = store.Append(StateRevision.CreateDelta(
+            f5 = store.Append(StateRevision.CreateObjectHeadMapDelta(
                 f4,
                 localObjects: Records(1),
                 removedObjectIds: []));
-            AssertHeads(store.ReadLiveObjectHeads(f5), (1, f5), (3, f2));
+            AssertHeads(store.ReadLiveObjectHeadMap(f5), (1, f5), (3, f2));
         }
 
         using SegmentStore reopened = SegmentStore.OpenReadOnlyExisting(
             storePath);
         StateRevisionStore coldStore = new(reopened);
 
-        AssertHeads(coldStore.ReadLiveObjectHeads(f1), (1, f1), (2, f1));
-        AssertHeads(coldStore.ReadLiveObjectHeads(f2), (1, f2), (3, f2));
-        AssertHeads(coldStore.ReadLiveObjectHeads(f3), (1, f2), (3, f2));
-        AssertHeads(coldStore.ReadLiveObjectHeads(f4), (3, f2));
-        AssertHeads(coldStore.ReadLiveObjectHeads(f5), (1, f5), (3, f2));
+        AssertHeads(coldStore.ReadLiveObjectHeadMap(f1), (1, f1), (2, f1));
+        AssertHeads(coldStore.ReadLiveObjectHeadMap(f2), (1, f2), (3, f2));
+        AssertHeads(coldStore.ReadLiveObjectHeadMap(f3), (1, f2), (3, f2));
+        AssertHeads(coldStore.ReadLiveObjectHeadMap(f4), (3, f2));
+        AssertHeads(coldStore.ReadLiveObjectHeadMap(f5), (1, f5), (3, f2));
     }
 
     [Fact]
@@ -96,15 +96,15 @@ public sealed class StateRevisionStoreTests : IDisposable {
             storePath,
             options)) {
             StateRevisionStore store = new(segments);
-            f1 = store.Append(StateRevision.CreateBase(
+            f1 = store.Append(StateRevision.CreateObjectHeadMapBase(
                 null,
                 localObjects: Records(1, 2),
                 externalObjectHeads: []));
-            f2 = store.Append(StateRevision.CreateDelta(
+            f2 = store.Append(StateRevision.CreateObjectHeadMapDelta(
                 f1,
                 localObjects: Records(3, 1),
                 removedObjectIds: [2]));
-            f3 = store.Append(StateRevision.CreateBase(
+            f3 = store.Append(StateRevision.CreateObjectHeadMapBase(
                 f2,
                 localObjects: Records(1),
                 externalObjectHeads: [
@@ -114,8 +114,8 @@ public sealed class StateRevisionStoreTests : IDisposable {
             Assert.Equal(1u, f1.FileNumber);
             Assert.Equal(2u, f2.FileNumber);
             Assert.Equal(3u, f3.FileNumber);
-            AssertHeads(store.ReadLiveObjectHeads(f2), (1, f2), (3, f2));
-            AssertHeads(store.ReadLiveObjectHeads(f3), (1, f3), (3, f2));
+            AssertHeads(store.ReadLiveObjectHeadMap(f2), (1, f2), (3, f2));
+            AssertHeads(store.ReadLiveObjectHeadMap(f3), (1, f3), (3, f2));
         }
 
         using SegmentStore reopened = SegmentStore.OpenReadOnlyExisting(
@@ -126,10 +126,10 @@ public sealed class StateRevisionStoreTests : IDisposable {
         StateRevision decodedCheckpoint = coldStore.Read(f3);
 
         Assert.Equal(f1, decodedDelta.ParentRevisionAddress);
-        AssertHeads(coldStore.ReadLiveObjectHeads(f2), (1, f2), (3, f2));
+        AssertHeads(coldStore.ReadLiveObjectHeadMap(f2), (1, f2), (3, f2));
         Assert.Equal(f2, decodedCheckpoint.ParentRevisionAddress);
         Assert.Equal(f2, decodedCheckpoint.ExternalObjectHeads[3]);
-        AssertHeads(coldStore.ReadLiveObjectHeads(f3), (1, f3), (3, f2));
+        AssertHeads(coldStore.ReadLiveObjectHeadMap(f3), (1, f3), (3, f2));
     }
 
     [Theory]
@@ -149,18 +149,18 @@ public sealed class StateRevisionStoreTests : IDisposable {
         FrameAddress reused;
         using (SegmentStore segments = SegmentStore.CreateNew(storePath, options)) {
             StateRevisionStore store = new(segments);
-            original = store.Append(StateRevision.CreateBase(null, [
+            original = store.Append(StateRevision.CreateObjectHeadMapBase(null, [
                 ObjectVersionRecord.CreateBase(1, [10, 11]),
                 ObjectVersionRecord.CreateBase(2, [20, 21, 22]),
             ], []));
-            updated = store.Append(StateRevision.CreateDelta(original, [
+            updated = store.Append(StateRevision.CreateObjectHeadMapDelta(original, [
                 ObjectVersionRecord.CreateBase(1, [12, 13, 14]),
             ], []));
-            removed = store.Append(StateRevision.CreateDelta(updated, [], [2]));
-            checkpoint = store.Append(StateRevision.CreateBase(removed, [], [
+            removed = store.Append(StateRevision.CreateObjectHeadMapDelta(updated, [], [2]));
+            checkpoint = store.Append(StateRevision.CreateObjectHeadMapBase(removed, [], [
                 new KeyValuePair<uint, FrameAddress>(1, updated),
             ]));
-            reused = store.Append(StateRevision.CreateDelta(checkpoint, [
+            reused = store.Append(StateRevision.CreateObjectHeadMapDelta(checkpoint, [
                 ObjectVersionRecord.CreateBase(2, [90]),
             ], []));
 
@@ -172,18 +172,18 @@ public sealed class StateRevisionStoreTests : IDisposable {
         Verify(new StateRevisionStore(reopened));
 
         void Verify(StateRevisionStore store) {
-            Assert.Equal(new byte[] { 10, 11 }, store.ReadObjectBase(original, 1));
-            Assert.Equal(new byte[] { 20, 21, 22 }, store.ReadObjectBase(original, 2));
-            Assert.Equal(new byte[] { 12, 13, 14 }, store.ReadObjectBase(updated, 1));
-            Assert.Equal(new byte[] { 20, 21, 22 }, store.ReadObjectBase(updated, 2));
-            AssertHeads(store.ReadLiveObjectHeads(updated), (1, updated), (2, original));
-            Assert.Throws<InvalidDataException>(() => store.ReadObjectBase(removed, 2));
-            Assert.Throws<InvalidDataException>(() => store.ReadObjectBase(checkpoint, 2));
-            Assert.Equal(new byte[] { 12, 13, 14 }, store.ReadObjectBase(checkpoint, 1));
-            AssertHeads(store.ReadLiveObjectHeads(checkpoint), (1, updated));
-            Assert.Equal(new byte[] { 12, 13, 14 }, store.ReadObjectBase(reused, 1));
-            Assert.Equal(new byte[] { 90 }, store.ReadObjectBase(reused, 2));
-            AssertHeads(store.ReadLiveObjectHeads(reused), (1, updated), (2, reused));
+            Assert.Equal(new byte[] { 10, 11 }, store.ReadObjectBaseBody(original, 1));
+            Assert.Equal(new byte[] { 20, 21, 22 }, store.ReadObjectBaseBody(original, 2));
+            Assert.Equal(new byte[] { 12, 13, 14 }, store.ReadObjectBaseBody(updated, 1));
+            Assert.Equal(new byte[] { 20, 21, 22 }, store.ReadObjectBaseBody(updated, 2));
+            AssertHeads(store.ReadLiveObjectHeadMap(updated), (1, updated), (2, original));
+            Assert.Throws<InvalidDataException>(() => store.ReadObjectBaseBody(removed, 2));
+            Assert.Throws<InvalidDataException>(() => store.ReadObjectBaseBody(checkpoint, 2));
+            Assert.Equal(new byte[] { 12, 13, 14 }, store.ReadObjectBaseBody(checkpoint, 1));
+            AssertHeads(store.ReadLiveObjectHeadMap(checkpoint), (1, updated));
+            Assert.Equal(new byte[] { 12, 13, 14 }, store.ReadObjectBaseBody(reused, 1));
+            Assert.Equal(new byte[] { 90 }, store.ReadObjectBaseBody(reused, 2));
+            AssertHeads(store.ReadLiveObjectHeadMap(reused), (1, updated), (2, reused));
         }
     }
 
@@ -192,24 +192,24 @@ public sealed class StateRevisionStoreTests : IDisposable {
         string storePath = NewStorePath();
         using SegmentStore segments = SegmentStore.CreateNew(storePath);
         StateRevisionStore store = new(segments);
-        FrameAddress original = store.Append(StateRevision.CreateBase(
+        FrameAddress original = store.Append(StateRevision.CreateObjectHeadMapBase(
             null, [ObjectVersionRecord.CreateBase(1, [42])], []));
-        FrameAddress inherited = store.Append(StateRevision.CreateDelta(original, [], []));
-        FrameAddress invalidCheckpoint = store.Append(StateRevision.CreateBase(inherited, [], [
+        FrameAddress inherited = store.Append(StateRevision.CreateObjectHeadMapDelta(original, [], []));
+        FrameAddress invalidCheckpoint = store.Append(StateRevision.CreateObjectHeadMapBase(inherited, [], [
             new KeyValuePair<uint, FrameAddress>(1, inherited),
         ]));
 
-        Assert.Equal(new byte[] { 42 }, store.ReadObjectBase(inherited, 1));
-        AssertHeads(store.ReadLiveObjectHeads(invalidCheckpoint), (1, inherited));
-        Assert.Throws<InvalidDataException>(() => store.ReadObjectBase(invalidCheckpoint, 1));
-        Assert.Equal(new byte[] { 42 }, store.ReadObjectBase(original, 1));
+        Assert.Equal(new byte[] { 42 }, store.ReadObjectBaseBody(inherited, 1));
+        AssertHeads(store.ReadLiveObjectHeadMap(invalidCheckpoint), (1, inherited));
+        Assert.Throws<InvalidDataException>(() => store.ReadObjectBaseBody(invalidCheckpoint, 1));
+        Assert.Equal(new byte[] { 42 }, store.ReadObjectBaseBody(original, 1));
     }
 
     [Fact]
     public void Object_read_returns_owned_bytes_independent_of_inputs_other_reads_and_store_lifetime() {
         string storePath = NewStorePath();
         byte[] source = [1, 2, 3, 4];
-        StateRevision revision = StateRevision.CreateBase(
+        StateRevision revision = StateRevision.CreateObjectHeadMapBase(
             null, [ObjectVersionRecord.CreateBase(7, source)], []);
         source.AsSpan().Fill(99);
         byte[] retainedBody;
@@ -217,18 +217,18 @@ public sealed class StateRevisionStoreTests : IDisposable {
         using (SegmentStore segments = SegmentStore.CreateNew(storePath)) {
             StateRevisionStore store = new(segments);
             FrameAddress address = store.Append(revision);
-            retainedBody = store.ReadObjectBase(address, 7);
+            retainedBody = store.ReadObjectBaseBody(address, 7);
             retainedRevision = store.Read(address);
-            byte[] changedResult = store.ReadObjectBase(address, 7);
+            byte[] changedResult = store.ReadObjectBaseBody(address, 7);
             changedResult.AsSpan().Fill(88);
-            Assert.Equal(new byte[] { 1, 2, 3, 4 }, store.ReadObjectBase(address, 7));
+            Assert.Equal(new byte[] { 1, 2, 3, 4 }, store.ReadObjectBaseBody(address, 7));
 
             // Exercise new pooled reads after the first Frame's pool lease ended.
             for (byte value = 10; value < 42; value++) {
-                FrameAddress other = store.Append(StateRevision.CreateBase(null, [
+                FrameAddress other = store.Append(StateRevision.CreateObjectHeadMapBase(null, [
                     ObjectVersionRecord.CreateBase(7, [value, value, value, value]),
                 ], []));
-                Assert.Equal(new byte[] { value, value, value, value }, store.ReadObjectBase(other, 7));
+                Assert.Equal(new byte[] { value, value, value, value }, store.ReadObjectBaseBody(other, 7));
             }
         }
 
@@ -242,18 +242,18 @@ public sealed class StateRevisionStoreTests : IDisposable {
         string storePath = NewStorePath();
         using SegmentStore segments = SegmentStore.CreateNew(storePath);
         StateRevisionStore store = new(segments);
-        FrameAddress address = store.Append(StateRevision.CreateBase(null, [
+        FrameAddress address = store.Append(StateRevision.CreateObjectHeadMapBase(null, [
             ObjectVersionRecord.CreateBase(uint.MaxValue, []),
         ], []));
 
-        Assert.Empty(store.ReadObjectBase(address, uint.MaxValue));
-        Assert.Throws<InvalidDataException>(() => store.ReadObjectBase(address, 1));
-        Assert.Throws<ArgumentOutOfRangeException>(() => store.ReadObjectBase(address, 0));
-        Assert.Throws<ArgumentOutOfRangeException>(() => store.ReadObjectBase(default, 1));
+        Assert.Empty(store.ReadObjectBaseBody(address, uint.MaxValue));
+        Assert.Throws<InvalidDataException>(() => store.ReadObjectBaseBody(address, 1));
+        Assert.Throws<ArgumentOutOfRangeException>(() => store.ReadObjectBaseBody(address, 0));
+        Assert.Throws<ArgumentOutOfRangeException>(() => store.ReadObjectBaseBody(default, 1));
         Assert.Throws<ArgumentOutOfRangeException>(() =>
-            store.ReadObjectBase(new FrameAddress(1, default), 1));
+            store.ReadObjectBaseBody(new FrameAddress(1, default), 1));
         Assert.Throws<ArgumentOutOfRangeException>(() =>
-            store.ReadObjectBase(new FrameAddress(0, address.FrameTicket), 1));
+            store.ReadObjectBaseBody(new FrameAddress(0, address.FrameTicket), 1));
     }
 
     [Fact]
@@ -280,7 +280,7 @@ public sealed class StateRevisionStoreTests : IDisposable {
             ArrayBufferWriter<byte> payload = new();
             StateRevisionWireWriter.Write(
                 payload,
-                StateRevision.CreateBase(null, Records(1), []),
+                StateRevision.CreateObjectHeadMapBase(null, Records(1), []),
                 new FileScope(writer.SegmentNumber));
             ticket = writer.File.Append(
                 StateRevisionWireFormat.RbfTag,
@@ -299,7 +299,7 @@ public sealed class StateRevisionStoreTests : IDisposable {
         string storePath = NewStorePath();
         using SegmentStore segments = SegmentStore.CreateNew(storePath);
         StateRevisionStore store = new(segments);
-        StateRevision invalidForCurrentOrigin = StateRevision.CreateBase(
+        StateRevision invalidForCurrentOrigin = StateRevision.CreateObjectHeadMapBase(
             new FrameAddress(2, SizedPtr.Create(4, 4)),
             [],
             []);
@@ -316,7 +316,7 @@ public sealed class StateRevisionStoreTests : IDisposable {
         }
 
         FrameAddress appended = store.Append(
-            StateRevision.CreateBase(null, Records(1), []));
+            StateRevision.CreateObjectHeadMapBase(null, Records(1), []));
         Assert.Equal(1u, appended.FileNumber);
     }
 
@@ -330,8 +330,8 @@ public sealed class StateRevisionStoreTests : IDisposable {
         using SegmentStore segments = SegmentStore.CreateNew(storePath, options);
         StateRevisionStore store = new(segments);
         FrameAddress first = store.Append(
-            StateRevision.CreateBase(null, Records(1), []));
-        StateRevision invalidForNextOrigin = StateRevision.CreateBase(
+            StateRevision.CreateObjectHeadMapBase(null, Records(1), []));
+        StateRevision invalidForNextOrigin = StateRevision.CreateObjectHeadMapBase(
             new FrameAddress(3, SizedPtr.Create(4, 4)),
             [],
             []);
@@ -348,7 +348,7 @@ public sealed class StateRevisionStoreTests : IDisposable {
         }
 
         FrameAddress appended = store.Append(
-            StateRevision.CreateBase(null, Records(2), []));
+            StateRevision.CreateObjectHeadMapBase(null, Records(2), []));
         Assert.Equal(2u, segmentAfterFailure);
         Assert.Equal(segmentAfterFailure, appended.FileNumber);
         Assert.Equal(tailAfterFailure, appended.FrameTicket.Offset);
@@ -371,7 +371,7 @@ public sealed class StateRevisionStoreTests : IDisposable {
             headerOnlyTail = writer.File.TailOffset;
         }
 
-        FrameAddress first = store.Append(StateRevision.CreateBase(null, Records(1), []));
+        FrameAddress first = store.Append(StateRevision.CreateObjectHeadMapBase(null, Records(1), []));
         long expectedTail = headerOnlyTail;
         if (!forceRollover) {
             using RbfSegmentWriterLease writer = segments.OpenActiveWriter();
@@ -386,7 +386,7 @@ public sealed class StateRevisionStoreTests : IDisposable {
 
         // External addresses follow all local bodies on wire, so this failure
         // happens after the nonempty body has been buffered into the Frame builder.
-        StateRevision invalid = StateRevision.CreateBase(null, [
+        StateRevision invalid = StateRevision.CreateObjectHeadMapBase(null, [
             ObjectVersionRecord.CreateBase(2, body),
         ], [
             new KeyValuePair<uint, FrameAddress>(3,
@@ -399,13 +399,13 @@ public sealed class StateRevisionStoreTests : IDisposable {
             Assert.Equal(expectedTail, writer.File.TailOffset);
         }
 
-        FrameAddress recovered = store.Append(StateRevision.CreateBase(null, [
+        FrameAddress recovered = store.Append(StateRevision.CreateObjectHeadMapBase(null, [
             ObjectVersionRecord.CreateBase(2, body),
         ], []));
         Assert.Equal(expectedSegment, recovered.FileNumber);
         Assert.Equal(expectedTail, recovered.FrameTicket.Offset);
-        Assert.Equal(body, store.ReadObjectBase(recovered, 2));
-        Assert.Equal(new byte[] { 1 }, store.ReadObjectBase(first, 1));
+        Assert.Equal(body, store.ReadObjectBaseBody(recovered, 2));
+        Assert.Equal(new byte[] { 1 }, store.ReadObjectBaseBody(first, 1));
     }
 
     public void Dispose() {

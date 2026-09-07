@@ -27,7 +27,7 @@ internal static class ObjectRevisionPlanner {
         Array.Sort(rows, static (left, right) => left.ObjectId.CompareTo(right.ObjectId));
 
         IReadOnlyDictionary<uint, FrameAddress> parentHeads = parentRevisionAddress is { } parent
-            ? store.ReadLiveObjectHeads(parent)
+            ? store.ReadLiveObjectHeadMap(parent)
             : new Dictionary<uint, FrameAddress>();
         foreach (PreparedObject row in rows) {
             bool exists = parentHeads.TryGetValue(row.ObjectId, out FrameAddress head);
@@ -47,14 +47,14 @@ internal static class ObjectRevisionPlanner {
         for (int index = 0; index < rows.Length; index++) {
             PreparedObject row = rows[index];
             long? deltaBytes = row.ChangeKind == ObjectSaveChangeKind.Update
-                ? ObjectVersionPayloadSize.EstimateDeltaBytes(row.DeltaBody!.Body.Length, row.PriorAddress!.Value)
+                ? ObjectVersionPayloadSize.EstimateDeltaPayloadBytesUpperBound(row.DeltaBody!.Body.Length, row.PriorAddress!.Value)
                 : null;
             // TODO(DB-029): Measure repeated object-chain reads before adding batch/cache support.
             long? reconstructionBytes = row.ChangeKind is ObjectSaveChangeKind.Update or ObjectSaveChangeKind.NoChange
-                ? store.ReadObjectVersionChain(parentRevisionAddress!.Value, row.ObjectId).ReconstructionBytes
+                ? store.ReadObjectVersionChain(parentRevisionAddress!.Value, row.ObjectId).ReconstructionPayloadBytes
                 : null;
             estimates[index] = new(row.ObjectId, row.ChangeKind,
-                ObjectVersionPayloadSize.GetBaseBytes(row.EncodedBaseBody.Body.Length), deltaBytes, reconstructionBytes);
+                ObjectVersionPayloadSize.GetBasePayloadBytes(row.EncodedBaseBody.Body.Length), deltaBytes, reconstructionBytes);
         }
 
         ObjectRepresentationPlan plan = ReadAmplificationBaseBudgetPolicy.Plan(estimates, parameters);
@@ -67,8 +67,8 @@ internal static class ObjectRevisionPlanner {
         }
 
         StateRevision revision = parentRevisionAddress is { } exactParent
-            ? StateRevision.CreateDelta(exactParent, records, parentHeads.Keys.Where(id => !byId.ContainsKey(id)))
-            : StateRevision.CreateBase(null, records, []);
+            ? StateRevision.CreateObjectHeadMapDelta(exactParent, records, parentHeads.Keys.Where(id => !byId.ContainsKey(id)))
+            : StateRevision.CreateObjectHeadMapBase(null, records, []);
         return new(revision, estimates, plan);
     }
 }

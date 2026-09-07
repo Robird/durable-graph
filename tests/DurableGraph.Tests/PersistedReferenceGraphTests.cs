@@ -71,7 +71,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             ObjectVersionRecord worldChange = Assert.Single(removal.Revision.LocalObjects);
             Assert.Equal(worldId, worldChange.ObjectId);
             detached = store.Append(removal.Revision);
-            Assert.Equal<uint>([worldId], store.ReadLiveObjectHeads(detached).Keys);
+            Assert.Equal<uint>([worldId], store.ReadLiveObjectHeadMap(detached).Keys);
         }
 
         using (var schemaFile = RbfFile.OpenExisting(schemaPath))
@@ -81,7 +81,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             fixture.Check(fixture.Load(store, schemas, detached, worldId), -1);
             fixture.Check(fixture.Load(store, schemas, first, worldId), 7);
             fixture.Check(fixture.Load(store, schemas, changed, worldId), 8);
-            Assert.Equal(allIds.Order(), store.ReadLiveObjectHeads(first).Keys.Order());
+            Assert.Equal(allIds.Order(), store.ReadLiveObjectHeadMap(first).Keys.Order());
             Assert.Equal(2, store.ReadObjectVersionChain(changed, characterId).Records.Count);
             Assert.Single(store.ReadObjectVersionChain(changed, worldId).Records);
             Assert.NotEqual(first.FileNumber, detached.FileNumber);
@@ -155,7 +155,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         FrameAddress changed = store.Append(replacement.Revision);
         fixture.Check(fixture.Load(store, schemas, changed, initial.WorldId), 42);
         fixture.Check(fixture.Load(store, schemas, first, initial.WorldId), 7);
-        Assert.Equal(5, store.ReadLiveObjectHeads(changed).Count);
+        Assert.Equal(5, store.ReadLiveObjectHeadMap(changed).Count);
     }
 
     [Fact]
@@ -213,7 +213,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             Assert.Equal(ObjectVersionKind.Base, record.Kind);
             Assert.Equal(2, BaseObjectBodyCodec.Decode(record.Body).SchemaKey!.Value.Version);
             rewritten = store.Append(rewrite.Revision);
-            Assert.Equal(ids.Order(), store.ReadLiveObjectHeads(rewritten).Keys.Order());
+            Assert.Equal(ids.Order(), store.ReadLiveObjectHeadMap(rewritten).Keys.Order());
             Assert.Single(store.ReadObjectVersionChain(rewritten, nodeId).Records);
         }
         using (var schemaFile = RbfFile.OpenExisting(schemaPath))

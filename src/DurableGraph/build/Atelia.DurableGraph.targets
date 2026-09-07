@@ -20,14 +20,14 @@
                      and '$(Language)' == 'C#'">
     <ItemGroup>
       <_DurableGraphLegacySchemaHistory Include="$(DurableGraphSchemaHistoryDirectory)/*.dgsnapshot" />
-      <_DurableGraphLegacyDefaultSchemaHistory Include="$(_DurableGraphLegacyDefaultSchemaHistoryDirectory)/*.dgsnapshot" />
+      <_DurableGraphLegacyDefaultSchemaHistory Include="$(_DurableGraphLegacyDefaultSchemaHistoryDirectory)/*.dgsnapshot;$(_DurableGraphLegacyDefaultSchemaHistoryDirectory)/*.dgschema" />
     </ItemGroup>
     <Error Condition="'$(DurableGraphSnapshotHistoryDirectory)' != ''"
            Text="DurableGraphSnapshotHistoryDirectory has been removed; use DurableGraphSchemaHistoryDirectory and .dgschema files." />
     <Error Condition="'@(_DurableGraphLegacySchemaHistory->Count())' != '0'"
            Text="DurableGraph Schema-history directory contains legacy .dgsnapshot files; regenerate them as .dgschema because legacy history is not accepted." />
     <Error Condition="'@(_DurableGraphLegacyDefaultSchemaHistory->Count())' != '0'"
-           Text="The legacy default DurableGraphSnapshots directory contains .dgsnapshot files; move regenerated .dgschema history to DurableGraphSchemaHistory." />
+           Text="The legacy default DurableGraphSnapshots directory contains Schema-history files; move regenerated .dgschema history to DurableGraphSchemaHistory." />
   </Target>
 
   <Target Name="DurableGraphProcessSchemaHistory"

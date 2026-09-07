@@ -32,7 +32,6 @@ B/D/H 分别指本轮精确 Base payload、Delta payload 上界、已有对象�
 
 | 工作项 | 最小应回答的问题 | 设计或证据入口 |
 |---|---|---|
-| Storage 公开符号命名迁移 | DB-035 Wave 1–3 已收敛唯一 State model、Schema history、`__DurableState`、`ObjectStateRecord` 与 raw/encoded Base body 边界。剩余 Wave 只清理 `StateRevision.CreateBase/CreateDelta`、`revisionHead` 和读取方法，使其显式表达 ObjectHeadMap/Revision 地址；State wire v3 必须逐字节不变。`CaptureSession.Current`、`PreparedCapturedObject.Current/Previous` 留待 Repository/Commit 分片决定可见性与最终生命周期词汇 | [DB-035](design-branches/0035-public-contract-terminology-migration.md)、[项目术语表](DurableGraph-glossary.md#多义词历史叫法与代码命名差异) |
 | 工作会话与 exact Revision Parent 比较基线 | 已选 Repository 受控创建/加载的 WorkingTree/GraphSession；现有 LoadedWorld 固定 Revision Parent、当前版本 DTO 与实例身份并在 Append 后重新 Load；后续定义发布后安装、Commit API 与故障裁决 | [目标约束](DurableGraph-target-design-v0.md#单一发布权威与明确故障结果)、[DB-030 接缝](design-branches/0030-captured-object-preparation-slice.md#4-exact-parent-接缝明确留到后片) |
 | TypeCodec 与 exact Schema 绑定 | 一般类型组合与内建复合类型 codec；已有 nominal class 引用及 exact reader 分派不等于一般 TypeCodec，也不自动复活已删除模型族 | [DB-034](design-branches/0034-durable-reference-graph-batch.md)、[DB-018](design-branches/0018-generated-graph-codec-shape.md)、[DB-001](design-branches/0001-schema-authority-and-runtime-representation.md) |
 | 复合类型的 DTO 升级与恢复 | 将单对象 Upgrade/Restore 扩展到复合值、数组与容器内容；保持完整 source 目录、强制 Base、当前版本 DTO 图的可达分析和失败不交付 | [DB-034](design-branches/0034-durable-reference-graph-batch.md)、[DB-018](design-branches/0018-generated-graph-codec-shape.md) |

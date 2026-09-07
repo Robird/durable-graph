@@ -81,7 +81,7 @@ public sealed partial class GraphWorld : DurableBase {
                 "Host Append must not advance the original loaded baseline.");
             var current = LoadedWorld.Load<GraphWorld>(store, schemas, childRevision, worldId, models);
             AssertGraph(current.World, 8, constructed);
-            Require(store.ReadLiveObjectHeads(childRevision)[worldId] == initialRevision &&
+            Require(store.ReadLiveObjectHeadMap(childRevision)[worldId] == initialRevision &&
                 store.ReadObjectVersionChain(childRevision, characterId).Records.Count == 2,
                 "A child-only edit must reuse the World head and extend only the child's content chain.");
             var unchanged = current.Prepare(policy);
@@ -102,7 +102,7 @@ public sealed partial class GraphWorld : DurableBase {
             StateRevisionStore store = new(segments);
             var removed = LoadedWorld.Load<GraphWorld>(store, schemas, removedRevision, worldId, models);
             Require(removed.World._primary is null && removed.World._alias is null &&
-                store.ReadLiveObjectHeads(removedRevision).Keys.SequenceEqual(new[] { worldId }),
+                store.ReadLiveObjectHeadMap(removedRevision).Keys.SequenceEqual(new[] { worldId }),
                 "Cold reopening must retain the removed graph's exact membership.");
             AssertGraph(LoadedWorld.Load<GraphWorld>(store, schemas, initialRevision, worldId, models).World, 7, constructed);
             AssertGraph(LoadedWorld.Load<GraphWorld>(store, schemas, childRevision, worldId, models).World, 8, constructed);

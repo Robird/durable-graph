@@ -24,9 +24,9 @@ public sealed class RevisionDecoderTests : IDisposable {
             SchemaStore schemas = new(file);
             schemas.Register(NodeSchema);
             StateRevisionStore store = new(segments);
-            FrameAddress original = store.Append(StateRevision.CreateBase(null,
+            FrameAddress original = store.Append(StateRevision.CreateObjectHeadMapBase(null,
                 [Node(1, 4, 3), Node(2, 5, 3), Text(3, "same"), Text(4, "same"), Text(5, ""), Text(6, "")], []));
-            latest = store.Append(StateRevision.CreateDelta(original,
+            latest = store.Append(StateRevision.CreateObjectHeadMapDelta(original,
                 [ObjectVersionRecord.CreateDelta(1, original, new byte[] { 1, 9 })], []));
             StateReaderRegistry readers = NodeReaders();
             long schemaTail = file.TailOffset;
@@ -62,7 +62,7 @@ public sealed class RevisionDecoderTests : IDisposable {
         using SegmentStore segments = NewSegments();
         SchemaStore schemas = new(file);
         StateRevisionStore store = new(segments);
-        FrameAddress address = store.Append(StateRevision.CreateBase(null, [], []));
+        FrameAddress address = store.Append(StateRevision.CreateObjectHeadMapBase(null, [], []));
         DecodedRevision result = RevisionDecoder.Read(store, schemas, address, new());
         Assert.Empty(result.Objects);
         Assert.Null(result.Strings.ResolveString(0));
@@ -78,11 +78,11 @@ public sealed class RevisionDecoderTests : IDisposable {
         SchemaStore schemas = new(file);
         schemas.RegisterBatch([NodeSchema, ByteSchema]);
         StateRevisionStore store = new(segments);
-        FrameAddress original = store.Append(StateRevision.CreateBase(null, [Node(1, 4, 2), Text(2, "value")], []));
+        FrameAddress original = store.Append(StateRevision.CreateObjectHeadMapBase(null, [Node(1, 4, 2), Text(2, "value")], []));
         StateReaderRegistry readers = NodeReaders();
         readers.Register(ByteBinding(ByteSchema));
         DecodedRevision previous = RevisionDecoder.Read(store, schemas, original, readers);
-        FrameAddress invalid = store.Append(StateRevision.CreateDelta(original,
+        FrameAddress invalid = store.Append(StateRevision.CreateObjectHeadMapDelta(original,
             wrongKind ? [Durable(2, ByteSchema, [7])] : [], wrongKind ? [] : [2]));
         long stateTail = Tail(segments);
         long schemaTail = file.TailOffset;
@@ -106,7 +106,7 @@ public sealed class RevisionDecoderTests : IDisposable {
         DurableSchema stored = missing == 2 ? new("Number", 2, new DurableFieldInfo(1, TypeTag.Byte)) : ByteSchema;
         if (missing != 0) { schemas.Register(stored); }
         StateRevisionStore store = new(segments);
-        FrameAddress address = store.Append(StateRevision.CreateBase(null, [Durable(1, stored, [7])], []));
+        FrameAddress address = store.Append(StateRevision.CreateObjectHeadMapBase(null, [Durable(1, stored, [7])], []));
         StateReaderRegistry readers = new();
         int calls = 0;
         if (missing != 1) { readers.Register(ByteBinding(ByteSchema, () => calls++)); }
@@ -131,7 +131,7 @@ public sealed class RevisionDecoderTests : IDisposable {
         SchemaStore schemas = new(file);
         schemas.Register(stored);
         StateRevisionStore store = new(segments);
-        FrameAddress address = store.Append(StateRevision.CreateBase(null, [Durable(1, stored, [7])], []));
+        FrameAddress address = store.Append(StateRevision.CreateObjectHeadMapBase(null, [Durable(1, stored, [7])], []));
         StateReaderRegistry readers = new();
         int calls = 0;
         readers.Register(ByteBinding(wrong, () => calls++));
@@ -147,7 +147,7 @@ public sealed class RevisionDecoderTests : IDisposable {
         SchemaStore schemas = new(file);
         schemas.RegisterBatch([ByteSchema, second]);
         StateRevisionStore store = new(segments);
-        FrameAddress address = store.Append(StateRevision.CreateBase(null,
+        FrameAddress address = store.Append(StateRevision.CreateObjectHeadMapBase(null,
             [Durable(1, ByteSchema, [7]), Durable(2, second, [8])], []));
         StateReaderRegistry readers = new();
         StateReaderBinding<byte> late = ByteBinding(second);
@@ -172,7 +172,7 @@ public sealed class RevisionDecoderTests : IDisposable {
         SchemaStore schemas = new(file);
         schemas.Register(NodeSchema);
         StateRevisionStore store = new(segments);
-        FrameAddress original = store.Append(StateRevision.CreateBase(null,
+        FrameAddress original = store.Append(StateRevision.CreateObjectHeadMapBase(null,
             [Node(1, 4, 0), malformed == 3 ? Text(2, "text") : Node(2, 5, 0)], []));
         ObjectVersionRecord bad = malformed switch {
             0 => Durable(2, NodeSchema, [5, 0, 0]), // Trailing Base byte.
@@ -180,7 +180,7 @@ public sealed class RevisionDecoderTests : IDisposable {
             2 => ObjectVersionRecord.CreateDelta(2, original, new byte[] { 1, 9, 0 }), // Trailing Delta byte.
             _ => ObjectVersionRecord.CreateDelta(2, original, Array.Empty<byte>()),
         };
-        FrameAddress address = store.Append(StateRevision.CreateDelta(original, [bad], []));
+        FrameAddress address = store.Append(StateRevision.CreateObjectHeadMapDelta(original, [bad], []));
         DecodedRevision? result = null;
         if (malformed == 1) {
             Assert.Throws<EndOfStreamException>(() => result = RevisionDecoder.Read(store, schemas, address, NodeReaders()));
@@ -196,9 +196,9 @@ public sealed class RevisionDecoderTests : IDisposable {
         using SegmentStore segments = NewSegments();
         SchemaStore schemas = new(file);
         StateRevisionStore store = new(segments);
-        FrameAddress original = store.Append(StateRevision.CreateBase(null, [Text(1, "text")], []));
-        FrameAddress unchanged = store.Append(StateRevision.CreateDelta(original, [], []));
-        FrameAddress corrupt = store.Append(StateRevision.CreateBase(unchanged, [], [new(1, unchanged)]));
+        FrameAddress original = store.Append(StateRevision.CreateObjectHeadMapBase(null, [Text(1, "text")], []));
+        FrameAddress unchanged = store.Append(StateRevision.CreateObjectHeadMapDelta(original, [], []));
+        FrameAddress corrupt = store.Append(StateRevision.CreateObjectHeadMapBase(unchanged, [], [new(1, unchanged)]));
         Assert.Throws<InvalidDataException>(() => RevisionDecoder.Read(store, schemas, corrupt, new()));
     }
 

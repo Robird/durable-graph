@@ -7,7 +7,7 @@ namespace Atelia.DurableGraph.StateStore.Storage.Tests;
 public sealed class StateRevisionWireTests {
     [Fact]
     public void Genesis_head_map_Base_has_stable_golden_bytes() {
-        StateRevision revision = StateRevision.CreateBase(null, [ObjectVersionRecord.CreateBase(128, []), ObjectVersionRecord.CreateBase(1, [0xaa, 0xbb])], []);
+        StateRevision revision = StateRevision.CreateObjectHeadMapBase(null, [ObjectVersionRecord.CreateBase(128, []), ObjectVersionRecord.CreateBase(1, [0xaa, 0xbb])], []);
         byte[] golden = [0x03, 0x01, 0x00, 0x02, 0x01, 0x01, 0x02, 0xaa, 0xbb, 0x80, 0x01, 0x01, 0x00, 0x00];
 
         Assert.Equal(golden, Encode(revision, new FileScope(1)));
@@ -16,7 +16,7 @@ public sealed class StateRevisionWireTests {
 
     [Fact]
     public void Head_map_Delta_with_previous_file_parent_has_stable_golden_bytes() {
-        StateRevision revision = StateRevision.CreateDelta(
+        StateRevision revision = StateRevision.CreateObjectHeadMapDelta(
             new FrameAddress(1, SizedPtr.Create(4, 4)), [ObjectVersionRecord.CreateBase(3, [0xfe])], [2]);
         byte[] golden = [0x03, 0x02, 0x01, 0x01, 0x05, 0x01, 0x03, 0x01, 0x01, 0xfe, 0x01, 0x02];
 
@@ -26,7 +26,7 @@ public sealed class StateRevisionWireTests {
 
     [Fact]
     public void Head_map_Base_round_trip_restores_absolute_parent_and_external_heads() {
-        StateRevision source = StateRevision.CreateBase(
+        StateRevision source = StateRevision.CreateObjectHeadMapBase(
             new FrameAddress(3, SizedPtr.Create(4, 32)),
             [ObjectVersionRecord.CreateBase(9, [90]), ObjectVersionRecord.CreateBase(1, [10]), ObjectVersionRecord.CreateBase(7, []), ObjectVersionRecord.CreateBase(3, [30, 31])],
             [
@@ -58,7 +58,7 @@ public sealed class StateRevisionWireTests {
     public void Large_id_and_multibyte_body_length_have_independent_golden_encoding() {
         byte[] body = Enumerable.Range(0, 128).Select(static value => (byte)value).ToArray();
         byte[] golden = [0x03, 0x01, 0x00, 0x01, 0xff, 0xff, 0xff, 0xff, 0x0f, 0x01, 0x80, 0x01, .. body, 0x00];
-        StateRevision revision = StateRevision.CreateBase(null, [ObjectVersionRecord.CreateBase(uint.MaxValue, body)], []);
+        StateRevision revision = StateRevision.CreateObjectHeadMapBase(null, [ObjectVersionRecord.CreateBase(uint.MaxValue, body)], []);
         Assert.Equal(golden, Encode(revision, new FileScope(1)));
         AssertRevisionEqual(revision, StateRevisionWireReader.Read(golden, new FileScope(1)));
     }
@@ -86,7 +86,7 @@ public sealed class StateRevisionWireTests {
 
     [Fact]
     public void Default_scope_is_rejected_for_address_free_genesis_head_map_Base() {
-        StateRevision revision = StateRevision.CreateBase(null, [], []);
+        StateRevision revision = StateRevision.CreateObjectHeadMapBase(null, [], []);
         byte[] encoded = [0x03, 0x01, 0x00, 0x00, 0x00];
         Assert.Throws<ArgumentOutOfRangeException>(() => Encode(revision, default));
         Assert.Throws<ArgumentOutOfRangeException>(() => StateRevisionWireReader.Read(encoded, default));
@@ -125,7 +125,7 @@ public sealed class StateRevisionWireTests {
 
     [Fact]
     public void Writer_rejects_collection_above_its_reader_limit_before_writing() {
-        StateRevision revision = StateRevision.CreateBase(
+        StateRevision revision = StateRevision.CreateObjectHeadMapBase(
             null,
             Enumerable.Range(1, StateRevisionWireFormat.MaxCollectionCount + 1)
                 .Select(value => ObjectVersionRecord.CreateBase((uint)value, [])),
@@ -186,8 +186,8 @@ public sealed class StateRevisionWireTests {
             ObjectVersionRecord.CreateBase(1, [0xab]),
         ];
         StateRevision source = mapKind == ObjectHeadMapKind.Base
-            ? StateRevision.CreateBase(prior, records, [])
-            : StateRevision.CreateDelta(prior, records, []);
+            ? StateRevision.CreateObjectHeadMapBase(prior, records, [])
+            : StateRevision.CreateObjectHeadMapDelta(prior, records, []);
         byte[] golden = [3, (byte)mapKind, 1, 1, 5, 2, 1, 1, 1, 0xab, 0x80, 1, 2, 1, 5, 1, 0xfe, 0];
         Assert.Equal(golden, Encode(source, new FileScope(2)));
         StateRevision decoded = StateRevisionWireReader.Read(golden, new FileScope(2));
@@ -214,7 +214,7 @@ public sealed class StateRevisionWireTests {
         // The handwritten payload excludes the five-byte ObjectId key and every shared byte.
         byte[] payload = [2, .. distanceBytes, 5, .. lengthBytes, .. body];
         byte[] golden = [3, 1, 1, .. distanceBytes, 5, 1, 0xff, 0xff, 0xff, 0xff, 0x0f, .. payload, 0];
-        StateRevision source = StateRevision.CreateBase(prior, [ObjectVersionRecord.CreateDelta(uint.MaxValue, prior, body)], []);
+        StateRevision source = StateRevision.CreateObjectHeadMapBase(prior, [ObjectVersionRecord.CreateDelta(uint.MaxValue, prior, body)], []);
         Assert.Equal(golden, Encode(source, scope));
         StateRevision decoded = StateRevisionWireReader.Read(golden, scope);
         Assert.Equal(payload.Length, decoded.LocalObjects[0].EncodedPayloadBytes);

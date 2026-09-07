@@ -88,7 +88,7 @@ public sealed class StateRevision {
     /// Creates a revision with an ObjectHeadMap Base representation. This does not
     /// constrain the Base or Delta representation of its local object records.
     /// </summary>
-    public static StateRevision CreateBase(
+    public static StateRevision CreateObjectHeadMapBase(
         FrameAddress? parentRevisionAddress,
         IEnumerable<ObjectVersionRecord> localObjects,
         IEnumerable<KeyValuePair<uint, FrameAddress>> externalObjectHeads) =>
@@ -98,7 +98,7 @@ public sealed class StateRevision {
     /// Creates a revision with an ObjectHeadMap Delta representation. This does not
     /// constrain the Base or Delta representation of its local object records.
     /// </summary>
-    public static StateRevision CreateDelta(
+    public static StateRevision CreateObjectHeadMapDelta(
         FrameAddress parentRevisionAddress,
         IEnumerable<ObjectVersionRecord> localObjects,
         IEnumerable<uint> removedObjectIds) =>

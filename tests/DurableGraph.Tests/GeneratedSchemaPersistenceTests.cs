@@ -129,12 +129,12 @@ public sealed partial class DurableSchemaGeneratorTests {
                 selectedParent = null;
                 break;
             case "membership":
-                selectedParent = store.Append(StateRevision.CreateDelta(parent, [],
+                selectedParent = store.Append(StateRevision.CreateObjectHeadMapDelta(parent, [],
                     [first.Objects.First(item => item.Kind == ObjectStateKind.String).Id]));
                 break;
             case "kind":
                 var text = BaseObjectBodyCodec.EncodeString(StringPayloadCodec.PrepareBase("x"));
-                selectedParent = store.Append(StateRevision.CreateDelta(parent,
+                selectedParent = store.Append(StateRevision.CreateObjectHeadMapDelta(parent,
                     [ObjectVersionRecord.CreateBase(ownerId, text.Body)], []));
                 break;
             case "schema":
@@ -143,7 +143,7 @@ public sealed partial class DurableSchemaGeneratorTests {
                 var versionTwo = new DurableSchema(original.SchemaId, 2, original.Fields.ToArray(), original.BaseSchema);
                 schemas.RegisterBatch([versionTwo]);
                 var differentType = BaseObjectBodyCodec.EncodeDurable(versionTwo, owner.BaseBody);
-                selectedParent = store.Append(StateRevision.CreateDelta(parent,
+                selectedParent = store.Append(StateRevision.CreateObjectHeadMapDelta(parent,
                     [ObjectVersionRecord.CreateBase(ownerId, differentType.Body)], []));
                 break;
         }

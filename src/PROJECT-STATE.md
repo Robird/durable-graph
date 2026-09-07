@@ -1,6 +1,6 @@
 # DurableGraph 产品开发工作集
 
-> 校准：2026-09-07，本轮验收见 [DB-034 §8](../docs/design-branches/0034-durable-reference-graph-batch.md#8-实施合同与验收账本)。本文只维护当前能力、边界与续工入口。
+> 校准：2026-09-07，本轮验收见 [DB-035](../docs/design-branches/0035-public-contract-terminology-migration.md)。本文只维护当前能力、边界与续工入口。
 > 文档不是实现授权；事实以当前源码、测试和工具输出为准。
 
 ## 从这里继续
@@ -27,7 +27,8 @@ Wave 1 已删除 legacy 生成路径并把裸 `[DurableType]` 收敛为唯一 St
 Schema history 原子迁移为 `.dgschema`、`SchemaHistory` tool/manifest 和对应 MSBuild 合同；Wave 3
 已将生成 ABI 收敛为 `__DurableState` 及显式 Base/Delta body 方法，以 `ObjectStateRecord` 统一单行
 carrier，并用 StateStore 内部 `EncodedBaseObjectBody` 保证 Base 类型头只包装一次。Storage API 清理
-仍留给后续 Wave；State wire v3 未改变。
+也已显式区分 ObjectHeadMap factory、Revision-address read、对象 head/所在 Revision 地址及 B/D/H
+计量；State wire v3 未改变。
 自定义 struct、有限数组对象和泛型闭合待后续分别选片；本批不自动进入下一片。
 持久 World 根、Commit/Ref 和其他类型扩展继续按[路线图](../docs/DurableGraph-research-roadmap.md)独立排期。
 未来联合 Commit/Ref 及内建类型自举的 SchemaStore 复用路线见
@@ -85,7 +86,7 @@ carrier，并用 StateStore 内部 `EncodedBaseObjectBody` 保证 Base 类型头
   策略 D 还须计入对象 envelope，不能直接以裸 body 大小代替。
   PrepareBaseBody 对每版 DTO 复用 WriteBaseBody；全部 live Base 提前准备，决策后复用 bytes，性能优化留待 MVP 后。
   B 为完整 Base payload 精确值，D 仅对未定文件距离按 5 字节上界计量（超额 0..4）；H 仍是原记录实编码。
-  ApplyDeltaVn 只处理同 Vn；不证明 prior 身份，之后仍须对完整 DTO 验证引用。
+  ApplyDeltaBodyVn 只处理同 Vn；不证明 prior 身份，之后仍须对完整 DTO 验证引用。
 - SchemaStore 借用独占的专用 IRbfFile；完整祖先闭包与同 key 冲突预检后，一批次一帧追加/flush，等价注册不写。
   tag15 DurableReference 只携带稳定 TargetSchemaId，不绑定目标版本或形成 exact 注册依赖；
   nominal 自环/互环无 Schema 初始化环。SchemaBatch 与 `.dgschema` history 各自维护冻结格式，字段 type tag 的旧 1–14 不变；
@@ -106,7 +107,7 @@ carrier，并用 StateStore 内部 `EncodedBaseObjectBody` 保证 Base 类型头
 - Storage 的 ObjectHeadMap 与对象内容的 Base/Delta 独立组合。ReadObjectVersionChain 逐条核对
   prior 等于该记录 exact Parent Revision 选定的对象 head，要求 direct local record；Base 截断内容链，H 随之重置。
   Append 只预检直接 edge；完整 map 的 external heads 仍是浅声明，不认证全局实体历史。
-  ReadObjectBase 仍只接受 Base head，不回退 parent 补内容；wire v3 拒绝 v1/v2。
+  ReadObjectBaseBody 仍只接受 Base head，不回退 parent 补内容；wire v3 拒绝 v1/v2。
   H 含 kind/prior/length/body，不含 ObjectId/membership/共享 Frame；不是总冷读 I/O。
   先直读 RBF，缓存优化留有 [TODO](DurableGraph.StateStore.Storage/StateRevisionStore.cs)。
 - 数组循环可操作已有 rank-2 非零下界数组，但尚无 shape 编码/分配、其他 rank 或非 SZ rank-1 支持。

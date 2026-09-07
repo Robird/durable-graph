@@ -29,11 +29,11 @@ public sealed class LoadedWorldTests : IDisposable {
     [Fact]
     public void NormalizationFollowsCompleteDeltaChainAndRetainsSourceRowsWithoutWriting() {
         _schemas.Register(Old);
-        FrameAddress first = _store.Append(StateRevision.CreateBase(null,
+        FrameAddress first = _store.Append(StateRevision.CreateObjectHeadMapBase(null,
             [Durable(1, Old, new(2, 8, 0)), Text(8, "removed by upgrade")], []));
-        FrameAddress second = _store.Append(StateRevision.CreateDelta(first,
+        FrameAddress second = _store.Append(StateRevision.CreateObjectHeadMapDelta(first,
             [ObjectVersionRecord.CreateDelta(1, first, Delta(new(2, 8, 0), new(3, 8, 0)).Body)], []));
-        FrameAddress third = _store.Append(StateRevision.CreateDelta(second,
+        FrameAddress third = _store.Append(StateRevision.CreateObjectHeadMapDelta(second,
             [ObjectVersionRecord.CreateDelta(1, second, Delta(new(3, 8, 0), new(4, 8, 0)).Body)], []));
         StateModelRegistry models = Registry(Model(upgrade: state => state with { Value = (byte)(state.Value + 10), TextId = 0 }));
         StateModelSnapshot snapshot = models.Snapshot();
@@ -76,7 +76,7 @@ public sealed class LoadedWorldTests : IDisposable {
         Assert.Empty(loaded.Prepare(NoRebase).Revision.LocalObjects);
         DurableSchema unknown = Schema("Unknown", 1);
         _schemas.Register(unknown);
-        FrameAddress bad = _store.Append(StateRevision.CreateDelta(address, [Durable(99, unknown, new(1, 0, 0))], []));
+        FrameAddress bad = _store.Append(StateRevision.CreateObjectHeadMapDelta(address, [Durable(99, unknown, new(1, 0, 0))], []));
         Assert.Throws<InvalidDataException>(() => LoadedWorld.Load<World>(_store, _schemas, bad, 1, models));
     }
 
@@ -198,7 +198,7 @@ public sealed class LoadedWorldTests : IDisposable {
         LoadedWorld<World> first = LoadedWorld.Load<World>(_store, _schemas, shared, 1, models);
         Assert.Same(first.World.Text, first.World.Alias);
         Assert.Equal(0, first.World.TransientMarker);
-        FrameAddress distinct = _store.Append(StateRevision.CreateDelta(shared,
+        FrameAddress distinct = _store.Append(StateRevision.CreateObjectHeadMapDelta(shared,
             [Durable(1, Current, new(1, 8, 9)), Text(9, "same")], []));
         LoadedWorld<World> second = LoadedWorld.Load<World>(_store, _schemas, distinct, 1, models);
         Assert.Equal(second.World.Text, second.World.Alias);
@@ -215,7 +215,7 @@ public sealed class LoadedWorldTests : IDisposable {
 
         DurableSchema other = Schema("Other", 1);
         _schemas.Register(other);
-        FrameAddress withOther = _store.Append(StateRevision.CreateDelta(address, [Durable(99, other, new(1, 0, 0))], []));
+        FrameAddress withOther = _store.Append(StateRevision.CreateObjectHeadMapDelta(address, [Durable(99, other, new(1, 0, 0))], []));
         StateModelBinding late = ModelCore<OtherWorld>(current: other, old: other);
         StateModelRegistry changing = new();
         changing.Register(Model(onRead: () => changing.Register(late)));
@@ -229,7 +229,7 @@ public sealed class LoadedWorldTests : IDisposable {
         DurableSchema otherOld = Schema("Other", 1);
         DurableSchema otherCurrent = Schema("Other", 2);
         _schemas.Register(otherOld);
-        FrameAddress withOther = _store.Append(StateRevision.CreateDelta(address, [Durable(99, otherOld, new(1, 0, 0))], []));
+        FrameAddress withOther = _store.Append(StateRevision.CreateObjectHeadMapDelta(address, [Durable(99, otherOld, new(1, 0, 0))], []));
         StateModelRegistry models = Registry(Model());
         models.Register(ModelCore<OtherWorld>(upgrade: _ => throw new InvalidOperationException("unreachable upgrade fails"), current: otherCurrent, old: otherOld));
         LoadedWorld<World>? delivered = null;
@@ -352,7 +352,7 @@ public sealed class LoadedWorldTests : IDisposable {
         new DurableFieldInfo(1, TypeTag.Byte), new DurableFieldInfo(2, TypeTag.String), new DurableFieldInfo(3, TypeTag.String));
     private FrameAddress Seed(DurableSchema schema, State state, params ObjectVersionRecord[] strings) {
         _schemas.Register(schema);
-        return _store.Append(StateRevision.CreateBase(null, new[] { Durable(1, schema, state) }.Concat(strings), []));
+        return _store.Append(StateRevision.CreateObjectHeadMapBase(null, new[] { Durable(1, schema, state) }.Concat(strings), []));
     }
     private static ObjectVersionRecord Durable(uint id, DurableSchema schema, State state) =>
         ObjectVersionRecord.CreateBase(id, BaseObjectBodyCodec.EncodeDurable(schema, Base(state)).Body);

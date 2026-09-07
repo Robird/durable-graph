@@ -77,9 +77,9 @@ public sealed class StateRevisionStore {
     /// These shallow declarations are not dereferenced or validated as
     /// ObjectVersion records by this operation.
     /// </remarks>
-    public IReadOnlyDictionary<uint, FrameAddress> ReadLiveObjectHeads(
-        FrameAddress revisionHead) =>
-        LiveObjectHeadMapMaterializer.Materialize(revisionHead, Read);
+    public IReadOnlyDictionary<uint, FrameAddress> ReadLiveObjectHeadMap(
+        FrameAddress revisionAddress) =>
+        LiveObjectHeadMapMaterializer.Materialize(revisionAddress, Read);
 
     /// <summary>
     /// Reads the complete Base body of an Object live in the specified StateRevision.
@@ -92,8 +92,8 @@ public sealed class StateRevisionStore {
     /// This validates only the requested Object's locator and raw body; it does
     /// not validate types, other external heads, or graph references.
     /// </remarks>
-    public byte[] ReadObjectBase(FrameAddress revisionHead, uint objectId) {
-        FrameAddress head = ResolveObjectHead(revisionHead, objectId);
+    public byte[] ReadObjectBaseBody(FrameAddress revisionAddress, uint objectId) {
+        FrameAddress head = ResolveObjectHead(revisionAddress, objectId);
         ObjectVersionRecord record = FindLocalRecord(Read(head), head, objectId);
         if (record.Kind != ObjectVersionKind.Base) {
             throw new InvalidDataException(
@@ -114,9 +114,9 @@ public sealed class StateRevisionStore {
     /// Complete maps retain their shallow external-head declaration contract.
     /// </remarks>
     public ObjectVersionChain ReadObjectVersionChain(
-        FrameAddress revisionHead,
+        FrameAddress revisionAddress,
         uint objectId) {
-        FrameAddress head = ResolveObjectHead(revisionHead, objectId);
+        FrameAddress head = ResolveObjectHead(revisionAddress, objectId);
         FrameAddress address = head;
         StateRevision revision = Read(address);
         ObjectVersionRecord record = FindLocalRecord(revision, address, objectId);
@@ -135,7 +135,7 @@ public sealed class StateRevisionStore {
                     $"Delta ObjectId {objectId} at {address} has no prior address.");
             FrameAddressValidator.EnsureStrictlyEarlier(address, parent);
             FrameAddressValidator.EnsureStrictlyEarlier(address, prior);
-            RequireParentHead(ReadLiveObjectHeads(parent), objectId, prior);
+            RequireParentHead(ReadLiveObjectHeadMap(parent), objectId, prior);
             revision = Read(prior);
             record = FindLocalRecord(revision, prior, objectId);
             address = prior;
@@ -158,22 +158,22 @@ public sealed class StateRevisionStore {
             FrameAddress prior = record.PriorAddress
                 ?? throw new InvalidDataException(
                     $"Delta ObjectId {record.ObjectId} requires a prior address.");
-            parentHeads ??= ReadLiveObjectHeads(parent);
+            parentHeads ??= ReadLiveObjectHeadMap(parent);
             RequireParentHead(parentHeads, record.ObjectId, prior);
             _ = FindLocalRecord(Read(prior), prior, record.ObjectId);
         }
     }
 
-    private FrameAddress ResolveObjectHead(FrameAddress revisionHead, uint objectId) {
-        FrameAddressValidator.ValidateRequired(revisionHead, nameof(revisionHead));
+    private FrameAddress ResolveObjectHead(FrameAddress revisionAddress, uint objectId) {
+        FrameAddressValidator.ValidateRequired(revisionAddress, nameof(revisionAddress));
         if (objectId == 0) {
             throw new ArgumentOutOfRangeException(
                 nameof(objectId), objectId, "ObjectId must be nonzero.");
         }
 
-        if (!ReadLiveObjectHeads(revisionHead).TryGetValue(objectId, out FrameAddress head)) {
+        if (!ReadLiveObjectHeadMap(revisionAddress).TryGetValue(objectId, out FrameAddress head)) {
             throw new InvalidDataException(
-                $"ObjectId {objectId} is not live in Revision {revisionHead}.");
+                $"ObjectId {objectId} is not live in Revision {revisionAddress}.");
         }
 
         return head;

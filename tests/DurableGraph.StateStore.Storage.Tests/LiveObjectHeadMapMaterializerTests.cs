@@ -8,7 +8,7 @@ public sealed class LiveObjectHeadMapMaterializerTests {
         FrameAddress parent = Address(1, 32);
         FrameAddress externalHead = Address(1, 96);
         FrameAddress checkpoint = Address(2, 32);
-        StateRevision revision = StateRevision.CreateBase(
+        StateRevision revision = StateRevision.CreateObjectHeadMapBase(
             parent,
             localObjects: Records(3, 1),
             externalObjectHeads: [
@@ -34,11 +34,11 @@ public sealed class LiveObjectHeadMapMaterializerTests {
         FrameAddress f1 = Address(1, 32);
         FrameAddress f2 = Address(1, 96);
         Dictionary<FrameAddress, StateRevision> revisions = new() {
-            [f1] = StateRevision.CreateBase(
+            [f1] = StateRevision.CreateObjectHeadMapBase(
                 null,
                 localObjects: Records(1, 2, 3),
                 externalObjectHeads: []),
-            [f2] = StateRevision.CreateDelta(
+            [f2] = StateRevision.CreateObjectHeadMapDelta(
                 f1,
                 localObjects: Records(4, 1),
                 removedObjectIds: [2]),
@@ -58,13 +58,13 @@ public sealed class LiveObjectHeadMapMaterializerTests {
         FrameAddress checkpoint = Address(2, 32);
         FrameAddress noChange = Address(2, 96);
         Dictionary<FrameAddress, StateRevision> revisions = new() {
-            [checkpoint] = StateRevision.CreateBase(
+            [checkpoint] = StateRevision.CreateObjectHeadMapBase(
                 externalHead,
                 localObjects: Records(2),
                 externalObjectHeads: [
                     new KeyValuePair<uint, FrameAddress>(1, externalHead),
                 ]),
-            [noChange] = StateRevision.CreateDelta(
+            [noChange] = StateRevision.CreateObjectHeadMapDelta(
                 checkpoint,
                 localObjects: Records(),
                 removedObjectIds: []),
@@ -84,9 +84,9 @@ public sealed class LiveObjectHeadMapMaterializerTests {
         FrameAddress f2 = Address(1, 96);
         FrameAddress f3 = Address(1, 160);
         Dictionary<FrameAddress, StateRevision> revisions = new() {
-            [f1] = StateRevision.CreateBase(null, Records(1, 2), []),
-            [f2] = StateRevision.CreateDelta(f1, Records(1), []),
-            [f3] = StateRevision.CreateDelta(f2, Records(1), []),
+            [f1] = StateRevision.CreateObjectHeadMapBase(null, Records(1, 2), []),
+            [f2] = StateRevision.CreateObjectHeadMapDelta(f1, Records(1), []),
+            [f3] = StateRevision.CreateObjectHeadMapDelta(f2, Records(1), []),
         };
 
         IReadOnlyDictionary<uint, FrameAddress> heads =
@@ -103,9 +103,9 @@ public sealed class LiveObjectHeadMapMaterializerTests {
         FrameAddress f2 = Address(1, 96);
         FrameAddress f3 = Address(1, 160);
         Dictionary<FrameAddress, StateRevision> revisions = new() {
-            [f1] = StateRevision.CreateBase(null, Records(1, 2), []),
-            [f2] = StateRevision.CreateDelta(f1, Records(), [1]),
-            [f3] = StateRevision.CreateDelta(f2, Records(1), []),
+            [f1] = StateRevision.CreateObjectHeadMapBase(null, Records(1, 2), []),
+            [f2] = StateRevision.CreateObjectHeadMapDelta(f1, Records(), [1]),
+            [f3] = StateRevision.CreateObjectHeadMapDelta(f2, Records(1), []),
         };
 
         IReadOnlyDictionary<uint, FrameAddress> heads =
@@ -120,7 +120,7 @@ public sealed class LiveObjectHeadMapMaterializerTests {
     public void Non_genesis_Base_is_complete_and_does_not_read_its_parent() {
         FrameAddress missingParent = Address(1, 32);
         FrameAddress checkpoint = Address(2, 32);
-        StateRevision revision = StateRevision.CreateBase(
+        StateRevision revision = StateRevision.CreateObjectHeadMapBase(
             missingParent,
             localObjects: Records(3, 1),
             externalObjectHeads: [
@@ -149,7 +149,7 @@ public sealed class LiveObjectHeadMapMaterializerTests {
     [Fact]
     public void Result_enumerates_in_ObjectId_order_and_is_immutable() {
         FrameAddress head = Address(1, 32);
-        StateRevision revision = StateRevision.CreateBase(
+        StateRevision revision = StateRevision.CreateObjectHeadMapBase(
             null,
             localObjects: Records(3, 1, 2),
             externalObjectHeads: []);
@@ -173,8 +173,8 @@ public sealed class LiveObjectHeadMapMaterializerTests {
         FrameAddress f1 = Address(1, 32);
         FrameAddress f2 = Address(1, 96);
         Dictionary<FrameAddress, StateRevision> revisions = new() {
-            [f1] = StateRevision.CreateDelta(f2, Records(), []),
-            [f2] = StateRevision.CreateBase(null, Records(1), []),
+            [f1] = StateRevision.CreateObjectHeadMapDelta(f2, Records(), []),
+            [f2] = StateRevision.CreateObjectHeadMapBase(null, Records(1), []),
         };
 
         Assert.Throws<InvalidDataException>(() =>
@@ -186,7 +186,7 @@ public sealed class LiveObjectHeadMapMaterializerTests {
     [Fact]
     public void Future_external_head_fails_closed() {
         FrameAddress checkpoint = Address(1, 32);
-        StateRevision revision = StateRevision.CreateBase(
+        StateRevision revision = StateRevision.CreateObjectHeadMapBase(
             null,
             localObjects: Records(),
             externalObjectHeads: [
@@ -206,8 +206,8 @@ public sealed class LiveObjectHeadMapMaterializerTests {
         FrameAddress f1 = Address(1, 32);
         FrameAddress f2 = Address(1, 96);
         Dictionary<FrameAddress, StateRevision> revisions = new() {
-            [f1] = StateRevision.CreateDelta(f2, Records(), []),
-            [f2] = StateRevision.CreateDelta(f1, Records(), []),
+            [f1] = StateRevision.CreateObjectHeadMapDelta(f2, Records(), []),
+            [f2] = StateRevision.CreateObjectHeadMapDelta(f1, Records(), []),
         };
 
         Assert.Throws<InvalidDataException>(() =>

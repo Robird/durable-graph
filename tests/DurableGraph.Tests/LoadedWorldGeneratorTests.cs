@@ -30,13 +30,13 @@ public sealed partial class DurableSchemaGeneratorTests {
             SchemaStore schemas = new(schemaFile);
             schemas.RegisterBatch([fixture.OldSchema]);
             StateRevisionStore store = new(segments);
-            first = store.Append(StateRevision.CreateBase(null, [
+            first = store.Append(StateRevision.CreateObjectHeadMapBase(null, [
                 LoadedDurable(1, fixture.OldSchema, original), LoadedText(10, "same"),
                 LoadedText(11, "same"), LoadedText(12, ""), LoadedText(20, "retired ancestor field"),
             ], []));
-            second = store.Append(StateRevision.CreateDelta(first,
+            second = store.Append(StateRevision.CreateObjectHeadMapDelta(first,
                 [ObjectVersionRecord.CreateDelta(1, first, delta1.Body)], []));
-            third = store.Append(StateRevision.CreateDelta(second,
+            third = store.Append(StateRevision.CreateObjectHeadMapDelta(second,
                 [ObjectVersionRecord.CreateDelta(1, second, delta2.Body)], []));
         }
         Assert.NotEqual(first.FileNumber, third.FileNumber);
@@ -66,7 +66,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             fixture.Change(loaded, 99); // Frozen output cannot follow later domain mutation.
             rewritten = store.Append(plan.Revision);
             Assert.Single(store.ReadObjectVersionChain(rewritten, 1).Records);
-            Assert.Equal<uint>([1, 10, 11, 12], store.ReadLiveObjectHeads(rewritten).Keys.Order());
+            Assert.Equal<uint>([1, 10, 11, 12], store.ReadLiveObjectHeadMap(rewritten).Keys.Order());
             fixture.Change(loaded, 3);
             PreparedWorldRevision repeated = fixture.Prepare(loaded);
             Assert.Equal(third, repeated.Revision.ParentRevisionAddress);
@@ -100,11 +100,11 @@ public sealed partial class DurableSchemaGeneratorTests {
             StateRevisionStore store = new(segments);
             fixture.Check(fixture.Load(store, schemas, changed), 4);
             ObjectVersionChain chain = store.ReadObjectVersionChain(changed, 1);
-            Assert.Equal(new[] { rewritten, changed }, chain.Records.Select(row => row.Address));
+            Assert.Equal(new[] { rewritten, changed }, chain.Records.Select(row => row.ContainingRevisionAddress));
             fixture.Check(fixture.Load(store, schemas, first), 1);
             fixture.Check(fixture.Load(store, schemas, third), 3);
             Assert.Equal<byte>(latest, fixture.ReadStored(store, schemas, third));
-            Assert.Contains(20u, store.ReadLiveObjectHeads(third).Keys);
+            Assert.Contains(20u, store.ReadLiveObjectHeadMap(third).Keys);
 
             // A read-only Segment gives a definite pre-append failure, not an uncertain IO outcome.
             // Schema registration remains writable; its exact current definitions already exist.
@@ -136,7 +136,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             SchemaStore schemas = new(schemaFile);
             schemas.RegisterBatch([fixture.CurrentSchema]);
             StateRevisionStore store = new(segments);
-            original = store.Append(StateRevision.CreateBase(null, [
+            original = store.Append(StateRevision.CreateObjectHeadMapBase(null, [
                 LoadedDurable(1, fixture.CurrentSchema, [7, 10, 6, 10, 11, 10, 12, 13]),
                 LoadedText(10, "same"), LoadedText(11, "same"), LoadedText(12, ""), LoadedText(13, ""),
             ], []));
@@ -165,7 +165,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             fixture.Check(fixture.Load(store, schemas, original), 3);
             object loaded = fixture.Load(store, schemas, normalized);
             fixture.Check(loaded, 3);
-            Assert.Equal<uint>([1, 10, 11, 12], store.ReadLiveObjectHeads(normalized).Keys.Order());
+            Assert.Equal<uint>([1, 10, 11, 12], store.ReadLiveObjectHeadMap(normalized).Keys.Order());
             Assert.Empty(fixture.Prepare(loaded).Revision.LocalObjects);
             Assert.Equal(2, store.ReadObjectVersionChain(normalized, 1).Records.Count);
         }

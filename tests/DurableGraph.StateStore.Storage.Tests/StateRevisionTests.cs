@@ -16,7 +16,7 @@ public sealed class StateRevisionTests {
             [2] = Address(1, 96),
         };
 
-        StateRevision revision = StateRevision.CreateBase(Parent, records, external);
+        StateRevision revision = StateRevision.CreateObjectHeadMapBase(Parent, records, external);
         records.Clear();
         external.Clear();
 
@@ -32,7 +32,7 @@ public sealed class StateRevisionTests {
     [Fact]
     public void Head_map_Delta_freezes_canonical_removed_ids_and_requires_parent() {
         List<uint> removed = [9, 2];
-        StateRevision revision = StateRevision.CreateDelta(Parent, [ObjectVersionRecord.CreateBase(3, [30]), ObjectVersionRecord.CreateBase(7, [])], removed);
+        StateRevision revision = StateRevision.CreateObjectHeadMapDelta(Parent, [ObjectVersionRecord.CreateBase(3, [30]), ObjectVersionRecord.CreateBase(7, [])], removed);
         removed.Clear();
 
         Assert.Equal(ObjectHeadMapKind.Delta, revision.ObjectHeadMapKind);
@@ -40,13 +40,13 @@ public sealed class StateRevisionTests {
         Assert.Equal([3u, 7u], revision.LocalObjectIds);
         Assert.Equal([2u, 9u], revision.RemovedObjectIds);
         Assert.Empty(revision.ExternalObjectHeads);
-        Assert.Throws<ArgumentOutOfRangeException>(() => StateRevision.CreateDelta(default, [], []));
+        Assert.Throws<ArgumentOutOfRangeException>(() => StateRevision.CreateObjectHeadMapDelta(default, [], []));
     }
 
     [Fact]
     public void Collections_do_not_expose_mutable_interfaces_or_SyncRoot_backing() {
-        StateRevision revision = StateRevision.CreateBase(Parent, [ObjectVersionRecord.CreateBase(3, [30])], [new(4, Parent)]);
-        StateRevision delta = StateRevision.CreateDelta(Parent, [], [3]);
+        StateRevision revision = StateRevision.CreateObjectHeadMapBase(Parent, [ObjectVersionRecord.CreateBase(3, [30])], [new(4, Parent)]);
+        StateRevision delta = StateRevision.CreateObjectHeadMapDelta(Parent, [], [3]);
         object[] collections = [
             revision.LocalObjects, revision.LocalObjectIds, revision.ExternalObjectHeads,
             revision.ExternalObjectHeads.Keys, revision.ExternalObjectHeads.Values,
@@ -70,12 +70,12 @@ public sealed class StateRevisionTests {
 
     [Fact]
     public void Null_collections_and_null_records_are_rejected() {
-        Assert.Throws<ArgumentNullException>(() => StateRevision.CreateBase(null, null!, []));
-        Assert.Throws<ArgumentNullException>(() => StateRevision.CreateBase(null, [], null!));
-        Assert.Throws<ArgumentNullException>(() => StateRevision.CreateDelta(Parent, null!, []));
-        Assert.Throws<ArgumentNullException>(() => StateRevision.CreateDelta(Parent, [], null!));
-        Assert.Throws<ArgumentException>(() => StateRevision.CreateBase(null, [null!], []));
-        Assert.Throws<ArgumentException>(() => StateRevision.CreateDelta(Parent, [ObjectVersionRecord.CreateBase(1, []), null!], []));
+        Assert.Throws<ArgumentNullException>(() => StateRevision.CreateObjectHeadMapBase(null, null!, []));
+        Assert.Throws<ArgumentNullException>(() => StateRevision.CreateObjectHeadMapBase(null, [], null!));
+        Assert.Throws<ArgumentNullException>(() => StateRevision.CreateObjectHeadMapDelta(Parent, null!, []));
+        Assert.Throws<ArgumentNullException>(() => StateRevision.CreateObjectHeadMapDelta(Parent, [], null!));
+        Assert.Throws<ArgumentException>(() => StateRevision.CreateObjectHeadMapBase(null, [null!], []));
+        Assert.Throws<ArgumentException>(() => StateRevision.CreateObjectHeadMapDelta(Parent, [ObjectVersionRecord.CreateBase(1, []), null!], []));
     }
 
     [Theory]
@@ -85,25 +85,25 @@ public sealed class StateRevisionTests {
     }
 
     public static TheoryData<Func<StateRevision>> InvalidObjectIdCollections => new() {
-        () => StateRevision.CreateBase(null, [ObjectVersionRecord.CreateBase(1, []), ObjectVersionRecord.CreateBase(1, [2])], []),
-        () => StateRevision.CreateDelta(Parent, [], [0]),
-        () => StateRevision.CreateDelta(Parent, [], [1, 1]),
-        () => StateRevision.CreateBase(null, [], [new(0, Address(1, 32))]),
+        () => StateRevision.CreateObjectHeadMapBase(null, [ObjectVersionRecord.CreateBase(1, []), ObjectVersionRecord.CreateBase(1, [2])], []),
+        () => StateRevision.CreateObjectHeadMapDelta(Parent, [], [0]),
+        () => StateRevision.CreateObjectHeadMapDelta(Parent, [], [1, 1]),
+        () => StateRevision.CreateObjectHeadMapBase(null, [], [new(0, Address(1, 32))]),
     };
 
     [Fact]
     public void Local_ids_must_not_overlap_membership_entries() {
         Assert.Throws<ArgumentException>(() =>
-            StateRevision.CreateBase(null, [ObjectVersionRecord.CreateBase(1, [])], [new(1, Address(1, 32))]));
-        Assert.Throws<ArgumentException>(() => StateRevision.CreateDelta(Parent, [ObjectVersionRecord.CreateBase(1, [])], [1]));
+            StateRevision.CreateObjectHeadMapBase(null, [ObjectVersionRecord.CreateBase(1, [])], [new(1, Address(1, 32))]));
+        Assert.Throws<ArgumentException>(() => StateRevision.CreateObjectHeadMapDelta(Parent, [ObjectVersionRecord.CreateBase(1, [])], [1]));
     }
 
     [Fact]
     public void External_heads_reject_duplicate_ids_and_empty_addresses() {
         Assert.Throws<ArgumentException>(() =>
-            StateRevision.CreateBase(null, [], [new(1, Address(1, 32)), new(1, Address(1, 64))]));
-        Assert.Throws<ArgumentOutOfRangeException>(() => StateRevision.CreateBase(null, [], [new(1, default)]));
-        Assert.Throws<ArgumentOutOfRangeException>(() => StateRevision.CreateBase(default(FrameAddress), [], []));
+            StateRevision.CreateObjectHeadMapBase(null, [], [new(1, Address(1, 32)), new(1, Address(1, 64))]));
+        Assert.Throws<ArgumentOutOfRangeException>(() => StateRevision.CreateObjectHeadMapBase(null, [], [new(1, default)]));
+        Assert.Throws<ArgumentOutOfRangeException>(() => StateRevision.CreateObjectHeadMapBase(default(FrameAddress), [], []));
     }
 
     [Theory]
@@ -114,24 +114,24 @@ public sealed class StateRevisionTests {
         ObjectVersionRecord delta = ObjectVersionRecord.CreateDelta(1, Parent, [10]);
         List<ObjectVersionRecord> records = [full, delta];
         StateRevision revision = mapDelta
-            ? StateRevision.CreateDelta(Parent, records, [])
-            : StateRevision.CreateBase(Parent, records, []);
+            ? StateRevision.CreateObjectHeadMapDelta(Parent, records, [])
+            : StateRevision.CreateObjectHeadMapBase(Parent, records, []);
         records.Clear();
         Assert.Equal([1u, 9u], revision.LocalObjectIds);
         Assert.Equal([delta, full], revision.LocalObjects);
         Assert.Equal(ObjectVersionKind.Delta, revision.LocalObjects[0].Kind);
         Assert.Equal(Parent, revision.LocalObjects[0].PriorAddress);
         Assert.Throws<ArgumentException>(() => mapDelta
-            ? StateRevision.CreateDelta(Parent, [delta, ObjectVersionRecord.CreateBase(1, [])], [])
-            : StateRevision.CreateBase(Parent, [delta, ObjectVersionRecord.CreateBase(1, [])], []));
+            ? StateRevision.CreateObjectHeadMapDelta(Parent, [delta, ObjectVersionRecord.CreateBase(1, [])], [])
+            : StateRevision.CreateObjectHeadMapBase(Parent, [delta, ObjectVersionRecord.CreateBase(1, [])], []));
         Assert.Throws<ArgumentException>(() => mapDelta
-            ? StateRevision.CreateDelta(Parent, [delta], [1])
-            : StateRevision.CreateBase(Parent, [delta], [new(1, Parent)]));
+            ? StateRevision.CreateObjectHeadMapDelta(Parent, [delta], [1])
+            : StateRevision.CreateObjectHeadMapBase(Parent, [delta], [new(1, Parent)]));
     }
 
     [Fact]
     public void Local_Delta_requires_parent_even_in_complete_head_map() {
-        Assert.Throws<ArgumentException>(() => StateRevision.CreateBase(
+        Assert.Throws<ArgumentException>(() => StateRevision.CreateObjectHeadMapBase(
             null, [ObjectVersionRecord.CreateDelta(1, Parent, [])], []));
     }
 

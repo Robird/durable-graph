@@ -39,9 +39,9 @@ public sealed partial class DurableSchemaGeneratorTests {
         FrameAddress wrongKind;
         using (SegmentStore segments = SegmentStore.CreateNew(directory.Path, options)) {
             StateRevisionStore store = new(segments);
-            first = store.Append(StateRevision.CreateBase(null,
+            first = store.Append(StateRevision.CreateObjectHeadMapBase(null,
                 input.First.Reverse().Select(record => ObjectVersionRecord.CreateBase(record.Id, record.Body)), []));
-            second = store.Append(StateRevision.CreateDelta(first,
+            second = store.Append(StateRevision.CreateObjectHeadMapDelta(first,
                 [ObjectVersionRecord.CreateBase(firstOwner, input.Second.Single(record => record.Id == firstOwner).Body)], []));
 
             // Storage deliberately accepts opaque bytes. Typed validation must reject these
@@ -49,33 +49,33 @@ public sealed partial class DurableSchemaGeneratorTests {
             byte[] missing = input.Second.Single(record => record.Id == secondOwner).Body.ToArray();
             Assert.InRange(missing[0], (byte)1, (byte)127); // The fixture's first reference is one byte.
             missing[0] = 127;
-            missingString = store.Append(StateRevision.CreateDelta(second,
+            missingString = store.Append(StateRevision.CreateObjectHeadMapDelta(second,
                 [ObjectVersionRecord.CreateBase(secondOwner, missing)], []));
             byte[] nonString = input.Second.Single(record => record.Id == firstOwner).Body.ToArray();
             nonString[0] = checked((byte)secondOwner);
-            wrongKind = store.Append(StateRevision.CreateDelta(second,
+            wrongKind = store.Append(StateRevision.CreateObjectHeadMapDelta(second,
                 [ObjectVersionRecord.CreateBase(firstOwner, nonString)], []));
         }
         Assert.NotEqual(first.FileNumber, second.FileNumber);
 
         // Clear every supplied body before cold reopening. The decoder obtains content only by
-        // ReadObjectBase; neither CaptureSession nor any source object is an input to loading.
+        // ReadObjectBaseBody; neither CaptureSession nor any source object is an input to loading.
         foreach (var record in input.First.Concat(input.Second)) {
             Array.Clear(record.Body);
         }
         using SegmentStore reopened = SegmentStore.OpenReadOnlyExisting(directory.Path, options);
         StateRevisionStore cold = new(reopened);
-        Dictionary<uint, byte[]> ReadBodies(FrameAddress revision) => cold.ReadLiveObjectHeads(revision)
-            .Keys.Reverse().ToDictionary(id => id, id => cold.ReadObjectBase(revision, id));
+        Dictionary<uint, byte[]> ReadBodies(FrameAddress revision) => cold.ReadLiveObjectHeadMap(revision)
+            .Keys.Reverse().ToDictionary(id => id, id => cold.ReadObjectBaseBody(revision, id));
 
         Dictionary<uint, byte[]> oldBodies = ReadBodies(first);
         Dictionary<uint, byte[]> newBodies = ReadBodies(second);
         Assert.True(validate(input.Roots, metadata, oldBodies, 7));
         Assert.True(validate(input.Roots, metadata.Reverse().ToArray(), newBodies, 8));
         Assert.False(oldBodies[firstOwner].SequenceEqual(newBodies[firstOwner]));
-        Assert.Equal(first, cold.ReadLiveObjectHeads(second)[secondOwner]);
+        Assert.Equal(first, cold.ReadLiveObjectHeadMap(second)[secondOwner]);
         foreach (var item in metadata.Where(item => item.IsString)) {
-            Assert.Equal(first, cold.ReadLiveObjectHeads(second)[item.Id]);
+            Assert.Equal(first, cold.ReadLiveObjectHeadMap(second)[item.Id]);
             Assert.Equal(oldBodies[item.Id], newBodies[item.Id]);
         }
 
