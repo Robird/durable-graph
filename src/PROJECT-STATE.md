@@ -16,7 +16,9 @@
 
 DB-031 已完成持久 Schema 注册与 Base 类型引用，当前没有正在施工的分片，验证见分片账本。
 MVP 使用专用 RBF Schema 日志和 Repository 内单调注册；Base 持 exact SchemaKey，Delta 沿同版链解释。
-后续候选为 roots/自动读取分派、新 DTO 升级及加载基线导入，或受控工作会话；下一范围尚未选择。
+下一片推荐 [DB-032：完整 exact-version 对象目录冷读](../docs/design-branches/0032-exact-revision-decoding-slice.md)，
+状态 Proposed：SG 登记模型族历史 reader，按指定 Revision 自动读取全部 DTO/string 并验证引用；尚未施工。
+选择理由、范围与最小验收只维护在该提案；Upgrade、roots/Restore 与工作会话仍为后继候选。
 WorkingTree/GraphSession 仍是统一持有 Parent、DTO 基线与实例身份的目标，现有保存接缝不等于 Commit。
 未来联合 Commit/Ref 及内建类型自举的 SchemaStore 复用路线见
 [路线图](../docs/DurableGraph-research-roadmap.md#41-schemastore-复用-statestore-与联合版本视图)。

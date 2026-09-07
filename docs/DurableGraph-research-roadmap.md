@@ -8,8 +8,10 @@
 ## 1. 下一个分片如何选择
 
 [DB-031](design-branches/0031-persisted-object-type-envelope-slice.md) 已闭合持久 Schema 注册、Base 类型引用
-及显式 reader 的同版冷重建，接续现有统一准备和策略。下一轮从 roots/自动读取分派、新 DTO
-升级及加载身份/基线导入，或受控工作会话中选择一个可观察闭环，不预定扩大为完整 Commit。
+及显式 reader 的同版冷重建，接续现有统一准备和策略。下一片推荐
+[DB-032 完整 exact-version 对象目录冷读](design-branches/0032-exact-revision-decoding-slice.md)（Proposed，未实施）：
+先把现有静态历史 reader 接成完整目录读取，具体取舍和验收只维护在提案。
+其后重新评估新 DTO 升级、roots/Restore、加载身份/基线导入和工作会话，不预定扩大为完整 Commit。
 WorkingTree/GraphSession 的职责方向已采纳；发布/故障裁决尚未实现。不要把内存 Current、Schema
 注册成功或 State Append 返回地址直接当作已发布基线。Schema 严格坏尾拒绝合同见 DB-031 §8。
 
