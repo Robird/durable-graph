@@ -18,10 +18,11 @@
 
 ## 当前规划
 
-DB-034–037 已实现；后续泛型、数组与发布能力扩展从活跃路线图选片：
+DB-034–037 已实现；DB-038 为下一泛型设计提案，其他扩展从活跃路线图选片：
 
 | 文档 | 状态 | 实施范围 |
 |---|---|---|
+| [DB-038 泛型 Schema、状态与绑定](0038-generic-schema-state-and-binding-design.md) | Proposed | 开放模板/静态 helper、nominal 类型表达与 exact Schema、通用/闭合 Upgrade、多跳布局与目录快照；独立代码形状见证完成，产品未实施 |
 | [DB-037 inline struct 状态](0037-inline-struct-state-slice.md) | Chosen / Implemented | G0–G4：显式非泛型 struct、exact Schema DAG/history v2、静态嵌套 DTO/融合 Delta、ref 恢复、owner Upgrade/连续保存与删除领域值声明后的历史包恢复；不含泛型或数组对象 |
 | [DB-036 工作会话与历史恢复能力](0036-working-session-and-history-capabilities.md) | Chosen / Implemented | 单 head Repository/同实例 GraphSession Commit、原 lease 屏障/严格发布日志、迁移壳跨版本真实包见证；不含自动坏尾恢复或联合 Store 视图 |
 | [DB-035 公开合同与持久格式术语迁移](0035-public-contract-terminology-migration.md) | Chosen / Implemented | 删除 legacy、唯一 State model、`.dgschema`、生成/runtime/Storage 术语；State wire v3 不变 |

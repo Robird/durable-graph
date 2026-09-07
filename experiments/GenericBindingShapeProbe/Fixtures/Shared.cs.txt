@@ -1,0 +1,111 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Runtime.CompilerServices;
+
+public static class Check {
+    public static void That(bool condition, string message) {
+        if (!condition) { throw new InvalidOperationException(message); }
+    }
+}
+
+// These are generated-like DTO/body shapes, not production wire or generated output.
+public readonly record struct BoxStateV1<TState>(TState Value) where TState : unmanaged;
+public readonly record struct BoxStateV2<TState>(TState Value, int RevisionNote) where TState : unmanaged;
+public readonly record struct PairState<TState>(TState First, TState Second) where TState : unmanaged;
+public readonly record struct PointStateV1(int X, uint Label);
+public readonly record struct PointStateV2(long X, uint Label);
+
+public interface IStateOps<TState> where TState : unmanaged {
+    static abstract void Write(BinaryWriter writer, in TState state);
+    static abstract TState Read(BinaryReader reader);
+    static abstract void Visit(in TState state, ReferenceChecks checks);
+}
+
+public sealed class ReferenceChecks {
+    private readonly IReadOnlyDictionary<uint, string> _kinds;
+    public int Visits { get; private set; }
+    public ReferenceChecks(IReadOnlyDictionary<uint, string> kinds) => _kinds = kinds;
+    public void Expect(uint id, string kind) {
+        if (id == 0) { return; }
+        if (!_kinds.TryGetValue(id, out var actual) || actual != kind) {
+            throw new InvalidDataException("Reference constraint mismatch: " + kind);
+        }
+        Visits++;
+    }
+}
+
+public readonly struct IntOps : IStateOps<int> {
+    public static void Write(BinaryWriter writer, in int state) => writer.Write(state);
+    public static int Read(BinaryReader reader) => reader.ReadInt32();
+    public static void Visit(in int state, ReferenceChecks checks) { }
+}
+
+public readonly struct UIntOps : IStateOps<uint> {
+    public static void Write(BinaryWriter writer, in uint state) => writer.Write(state);
+    public static uint Read(BinaryReader reader) => reader.ReadUInt32();
+    public static void Visit(in uint state, ReferenceChecks checks) { }
+}
+
+public readonly struct StringIdOps : IStateOps<uint> {
+    public static void Write(BinaryWriter writer, in uint state) => writer.Write(state);
+    public static uint Read(BinaryReader reader) => reader.ReadUInt32();
+    public static void Visit(in uint state, ReferenceChecks checks) => checks.Expect(state, "string");
+}
+
+// Nominal identity is retained without mentioning the current domain Node CLR type.
+public readonly struct NodeIdOps : IStateOps<uint> {
+    public static void Write(BinaryWriter writer, in uint state) => writer.Write(state);
+    public static uint Read(BinaryReader reader) => reader.ReadUInt32();
+    public static void Visit(in uint state, ReferenceChecks checks) => checks.Expect(state, "sample.Node");
+}
+
+public readonly struct PointV1Ops : IStateOps<PointStateV1> {
+    public static void Write(BinaryWriter writer, in PointStateV1 state) {
+        writer.Write(state.X);
+        StringIdOps.Write(writer, state.Label);
+    }
+    public static PointStateV1 Read(BinaryReader reader) => new(reader.ReadInt32(), StringIdOps.Read(reader));
+    public static void Visit(in PointStateV1 state, ReferenceChecks checks) => StringIdOps.Visit(state.Label, checks);
+}
+
+public readonly struct PairOps<TState, TOps> : IStateOps<PairState<TState>>
+    where TState : unmanaged where TOps : unmanaged, IStateOps<TState> {
+    public static void Write(BinaryWriter writer, in PairState<TState> state) {
+        TOps.Write(writer, state.First);
+        TOps.Write(writer, state.Second);
+    }
+    public static PairState<TState> Read(BinaryReader reader) => new(TOps.Read(reader), TOps.Read(reader));
+    public static void Visit(in PairState<TState> state, ReferenceChecks checks) {
+        TOps.Visit(state.First, checks);
+        TOps.Visit(state.Second, checks);
+    }
+}
+
+public static class BoxBodyV1<TState, TOps>
+    where TState : unmanaged where TOps : unmanaged, IStateOps<TState> {
+    public static byte[] Write(in BoxStateV1<TState> state) {
+        using var stream = new MemoryStream();
+        using var writer = new BinaryWriter(stream);
+        TOps.Write(writer, state.Value);
+        return stream.ToArray();
+    }
+    public static BoxStateV1<TState> Read(byte[] bytes) {
+        using var stream = new MemoryStream(bytes, writable: false);
+        using var reader = new BinaryReader(stream);
+        var result = new BoxStateV1<TState>(TOps.Read(reader));
+        Check.That(stream.Position == stream.Length, "Body must consume all bytes.");
+        return result;
+    }
+    public static void Visit(in BoxStateV1<TState> state, ReferenceChecks checks) => TOps.Visit(state.Value, checks);
+}
+
+public static class OwnerUpgrade {
+    // The user can preserve an arbitrary representation using one open generic edge.
+    public static BoxStateV2<TState> SameRepresentation<TState>(BoxStateV1<TState> old)
+        where TState : unmanaged => new(old.Value, 27);
+
+    // A business transform remains explicit. No old domain Point is required.
+    public static BoxStateV2<PointStateV2> PointClosedEdge(BoxStateV1<PointStateV1> old) =>
+        new(new PointStateV2(checked(old.Value.X * 1000L), old.Value.Label), 42);
+}

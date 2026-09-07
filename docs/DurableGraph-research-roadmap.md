@@ -19,8 +19,9 @@ Transient 由用户在交付后处理，约束维护在[目标设计](DurableGra
 GraphSession 的正常同实例 Commit 与严格重开从 PROJECT-STATE/DB-036 查证；不再列为未完成能力。
 当前只支持单活动会话、固定非空 World，发布故障范围为正常关闭/进程中止和明确的 I/O 异常。
 DB-037 的已实现边界与 G0–G4 证据从 PROJECT-STATE 进入，不再把非泛型 inline struct 列为待办。
-用户要求为下一步泛型留准备：现有静态值 helper 已分离领域类型与冻结 DTO，后续先核对
-[泛型技术备忘](design-branches/0018-generic-dto-binding-followup.md)，冻结定义/实参身份、表示参数及历史闭合。
+用户要求为下一步泛型留准备：现有静态值 helper 已分离领域类型与冻结 DTO，后续从
+[DB-038 完整设计提案](design-branches/0038-generic-schema-state-and-binding-design.md)进入；它包含方案比较、
+历史类型/升级/中间布局、目录快照及验收顺序，尚未实施。原始素材见泛型技术备忘。
 有限数组仍为独立候选；本片不自动授权开始任一后继。
 
 ## 2. 已采纳方向中的未完成能力
@@ -33,7 +34,7 @@ B/D/H 分别指本轮精确 Base payload、Delta payload 上界、已有对象�
 |---|---|---|
 | TypeCodec 与 exact Schema 绑定 | 一般类型组合与内建复合类型 codec；已有 nominal class 引用及 exact reader 分派不等于一般 TypeCodec，也不自动复活已删除模型族 | [DB-034](design-branches/0034-durable-reference-graph-batch.md)、[DB-018](design-branches/0018-generated-graph-codec-shape.md)、[DB-001](design-branches/0001-schema-authority-and-runtime-representation.md) |
 | 复合类型的 DTO 升级与恢复 | 将单对象 Upgrade/Restore 扩展到数组与容器内容；保持完整 source 目录、强制 Base、当前版本 DTO 图的可达分析和失败不交付 | [DB-034](design-branches/0034-durable-reference-graph-batch.md)、[DB-018](design-branches/0018-generated-graph-codec-shape.md) |
-| 自定义泛型 Schema/DTO | 保留 SG 开放模板 + 首次运行时闭合/缓存方向；领域 T 与冻结表示参数分离，接通泛型定义/实参身份及历史 exact reader；现有手写 body 见证不等于 SG 已支持 | [泛型 DTO 技术备忘](design-branches/0018-generic-dto-binding-followup.md)，扩充 Schema 类型表达或泛型 Capture 时重访 |
+| 自定义泛型 Schema/DTO | 保留 SG 开放模板 + 首次运行时闭合/缓存方向；领域 T 与冻结表示参数分离，接通泛型定义/实参身份及历史 exact reader；现有手写 body 见证不等于 SG 已支持 | [DB-038 设计提案](design-branches/0038-generic-schema-state-and-binding-design.md)、[泛型技术备忘](design-branches/0018-generic-dto-binding-followup.md) |
 | 完整数组对象 | 在已选零下界 SZ/有限多维 rank 范围内，实现 identity、shape、分配与元素循环，并拒绝不支持的形状；不能把现有元素模板视为完整数组支持 | [MVP 边界](DurableGraph-target-design-v0.md#mvp-功能边界)、[DB-020](design-branches/0020-typed-slot-array-binding-slice.md) |
 
 ## 3. 尚待裁决的机制
@@ -77,6 +78,7 @@ DB-009/010 的旧 no-reuse 前提不能沿用；借用 Base 共享 prior 等结�
 | 跨对象升级与外部副作用 | MVP 仅单对象字段转换；读取其他对象、拆分/合并及创建持久新对象均延后。MVP 后有真实迁移案例时，再讨论图访问、新 ID 与失败隔离；不借普通升级默认授权 |
 | 无 CLR 迁移壳的历史族 | 应用需要完全删除迁移壳且继续恢复含该族的旧 Revision 时，再设计独立状态族 Normalize/引用能力、显式退休声明和 history-only 生成；现有保留规则与包见证见 [DB-036 §4](design-branches/0036-working-session-and-history-capabilities.md#4-并行小线明确历史恢复能力合同) |
 | 历史工具/升级调用优化 | 有 package/history 或升级调用的真实限制后，再重访 DB-003 的 Try/result/ABI 和 DB-004 的多 writer/多 TFM 与批次原子性，不顺带做兼容框架 |
+| 泛型闭合历史账本/独立版本 | 用户已选 MVP 仓库内严格一致；要求共享 build history 对所有空库也锁住闭合布局、跨程序集独立演化或跨库交换时，再比较闭合目录与布局身份，见 [DB-038 §3.3](design-branches/0038-generic-schema-state-and-binding-design.md#33-必须明确的保证作用域两个空仓库) |
 
 ### 4.1 SchemaStore 复用 StateStore 与联合版本视图
 

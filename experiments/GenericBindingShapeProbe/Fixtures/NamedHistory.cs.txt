@@ -1,0 +1,70 @@
+using BoxStates = Generated.Family_Box;
+using PointStates = Generated.Family_Point;
+using PhantomStates = Generated.Family_Phantom;
+
+// Stable nongeneric family hosts allow ordinary aliases, even for generic versions.
+// The host names are handwritten here; no generator/history naming policy is proved.
+namespace Generated {
+    public static class Family_Box {
+        public readonly record struct V1<TState>(TState Value) where TState : unmanaged;
+        public readonly record struct V2<TState>(TState Value, int Note) where TState : unmanaged;
+    }
+
+    public static class Family_Point {
+        public readonly record struct V1(int X, uint Label);
+        public readonly record struct V2(long X, uint Label);
+    }
+
+    // V1 has no field involving the family's domain T; its DTO needs no state parameter.
+    public static class Family_Phantom {
+        public readonly record struct V1(int Seed);
+        public readonly record struct V2<TState>(TState Value) where TState : unmanaged;
+        public readonly record struct V3<TState>(TState Value) where TState : unmanaged;
+    }
+}
+
+public static class NamedOwnerEdges {
+    public static BoxStates.V2<TState> Upgrade<TState>(in BoxStates.V1<TState> old)
+        where TState : unmanaged => new(old.Value, 27);
+
+    public static BoxStates.V2<PointStates.V2> Upgrade(in BoxStates.V1<PointStates.V1> old) =>
+        new(new PointStates.V2(checked(old.Value.X * 1000L), old.Value.Label), 42);
+}
+
+public static class PhantomOwnerEdges {
+    public static PhantomStates.V2<TState> AddField<TState>(in PhantomStates.V1 old)
+        where TState : unmanaged => new(default);
+
+    public static PhantomStates.V2<PointStates.V1> SelectPointV1(in PhantomStates.V1 old) =>
+        new(new PointStates.V1(old.Seed, 7));
+
+    public static PhantomStates.V3<PointStates.V2> PointV1ToV2(in PhantomStates.V2<PointStates.V1> old) =>
+        new(new PointStates.V2(checked(old.Value.X * 1000L), old.Value.Label));
+}
+
+public static class NamedHistoryChecks {
+    public static string[] Run() {
+        var sameSource = new BoxStates.V1<uint>(7);
+        var same = NamedOwnerEdges.Upgrade(in sameSource);
+        var changedSource = new BoxStates.V1<PointStates.V1>(new(12, 7));
+        var changed = NamedOwnerEdges.Upgrade(in changedSource);
+        Check.That(same.Value == 7 && same.Note == 27, "named open owner upgrade");
+        Check.That(changed.Value.X == 12000 && changed.Value.Label == 7 && changed.Note == 42,
+            "named closed owner upgrade");
+
+        var phantomSource = new PhantomStates.V1(12);
+        var possibleUIntMiddle = PhantomOwnerEdges.AddField<uint>(in phantomSource);
+        var possiblePointMiddle = PhantomOwnerEdges.AddField<PointStates.V1>(in phantomSource);
+        Check.That(possibleUIntMiddle.GetType() != possiblePointMiddle.GetType(),
+            "both intermediate representation closures compile, so source DTO alone does not select one");
+        var chosenMiddle = PhantomOwnerEdges.SelectPointV1(in phantomSource);
+        var current = PhantomOwnerEdges.PointV1ToV2(in chosenMiddle);
+        Check.That(chosenMiddle.Value.X == 12 && current.Value.X == 12000 && current.Value.Label == 7,
+            "three-version chain must apply explicit historical intermediate and business conversion");
+        return new[] {
+            "NamedFamilyDtoAliasesAndOwnerUpgrade:True",
+            "PhantomFirstEdgeHasMultipleStateClosures:True",
+            "ExplicitHistoricalMiddleThreeVersionUpgrade:True"
+        };
+    }
+}

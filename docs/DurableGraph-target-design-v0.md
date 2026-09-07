@@ -117,6 +117,10 @@ Source Generator 负责可在编译期确定的类型知识与机械代码，框
 - owner 的单对象 Upgrade 显式转换嵌套 DTO；框架不另行先升级 struct。历史 inline DTO/body
   从保留的 exact history 生成，不依赖当前领域 struct 声明存在，也不要求值迁移壳。
   领域/DTO 表示保持分离，不能为泛型复用而把可变领域引用保留在 DTO 中。
+- 2026-09-08 用户选择泛型闭合 Schema 的 MVP 保证范围为目标 Repository 内严格一致，暂不增加闭合历史账本。
+  开放定义 history 保证模板不变，不承诺穷尽检测所有实参导致的漏升版；不同空库可能首次接受同 key、不同完整布局。
+  因此完整 Schema 校验不能省略，也不能仅凭 key 跨库复用绑定。具体反例、方案比较与后续触发见
+  [DB-038 §3.3](design-branches/0038-generic-schema-state-and-binding-design.md#33-必须明确的保证作用域两个空仓库)。
 - 引用对象的 Base 头表达实际 exact 类型/Schema，后续 Delta 沿同一 Schema 解释；版本变化从新 Base 开始。
   读取先在 stored Schema 下完整重建，再升级；仍存活的升级对象下次显式保存必须 Base，即使业务值未变。
   TypeCodec 表达受支持类型经数组或泛型构造的组合；

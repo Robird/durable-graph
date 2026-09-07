@@ -1,6 +1,6 @@
 # DurableGraph 产品开发工作集
 
-> 校准：2026-09-07，本轮施工及验收见 [DB-037](../docs/design-branches/0037-inline-struct-state-slice.md)。本文只维护当前能力、边界与续工入口。
+> 校准：2026-09-08，最近产品施工及验收见 [DB-037](../docs/design-branches/0037-inline-struct-state-slice.md)。本文只维护当前能力、边界与续工入口。
 > 文档不是实现授权；事实以当前源码、测试和工具输出为准。
 
 ## 从这里继续
@@ -27,8 +27,13 @@
 DB-036 的单 head GraphRepository/同实例 GraphSession Commit、严格发布重开及引用对象族历史能力合同继续沿用；
 其原 lease 屏障、失败裁决与迁移壳证据见 [DB-036](../docs/design-branches/0036-working-session-and-history-capabilities.md)。
 当前 struct 桥接已分离领域类型与 DTO 表示，为后续泛型闭合提供静态值操作；泛型实参身份、表示参数映射
-及初始化协议仍需独立设计。后续泛型/有限数组从[路线图](../docs/DurableGraph-research-roadmap.md)进入，
+及初始化协议已在下述 DB-038 提案中收敛，尚需产品实施验证。后续泛型/有限数组从[路线图](../docs/DurableGraph-research-roadmap.md)进入，
 不把已有 ref 数组元素操作当作完整数组对象支持。
+
+下一推荐设计为 [DB-038 泛型 Schema/状态/绑定](../docs/design-branches/0038-generic-schema-state-and-binding-design.md)
+（Proposed，尚未实施）。完整比较包含同编译的定义统一升版代价、静态 helper、纯状态历史宿主、通用/闭合 Upgrade
+及中间 exact 布局来源；独立 [GenericBindingShapeProbe](../experiments/GenericBindingShapeProbe/README.md)
+仅验证代码形状，不表示产品 SG 或持久格式已支持泛型。
 
 ## 当前能力与实际边界
 

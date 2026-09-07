@@ -1,0 +1,17 @@
+using System;
+using System.Collections.Generic;
+
+public static class HistoricalChecks {
+    public static string[] Run(byte[] bytes) {
+        var restored = BoxBodyV1<PointStateV1, PointV1Ops>.Read(bytes);
+        var references = new ReferenceChecks(new Dictionary<uint, string> { [7] = "string" });
+        BoxBodyV1<PointStateV1, PointV1Ops>.Visit(restored, references);
+        var changedRepresentation = OwnerUpgrade.PointClosedEdge(restored);
+        var sameRepresentation = OwnerUpgrade.SameRepresentation(restored);
+        Check.That(changedRepresentation.Value.X == 12000 && changedRepresentation.Value.Label == 7,
+            "historical owner business conversion");
+        Check.That(sameRepresentation.Value == restored.Value && references.Visits == 1,
+            "historical generic pass through and reference validation");
+        return new[] { "HistoricalBodyAndUpgradeWithoutOldDomain:True" };
+    }
+}

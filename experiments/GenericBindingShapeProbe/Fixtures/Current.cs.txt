@@ -1,0 +1,292 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Reflection;
+using System.Runtime.CompilerServices;
+
+public sealed class CaptureTable {
+    private readonly Dictionary<object, uint> _ids = new(ReferenceEqualityComparer.Instance);
+    public Dictionary<uint, object> Objects { get; } = new();
+    public Dictionary<uint, string> Kinds { get; } = new();
+    public uint Intern(object? value, string kind) {
+        if (value is null) { return 0; }
+        if (_ids.TryGetValue(value, out var prior)) { return prior; }
+        var id = checked((uint)_ids.Count + 1);
+        _ids.Add(value, id);
+        Objects.Add(id, value);
+        Kinds.Add(id, kind);
+        return id;
+    }
+    public T Get<T>(uint id) => id == 0 ? default! : (T)Objects[id];
+}
+
+public interface IProjection<TDomain, TState> where TState : unmanaged {
+    static abstract TState Capture(in TDomain value, CaptureTable table);
+    static abstract void Hydrate(ref TDomain target, in TState state, CaptureTable table);
+}
+
+public sealed class Node {
+    public int Data;
+}
+
+public struct Point {
+    public int X;
+    public string Label;
+    public Point(int x, string label) { X = x; Label = label; }
+}
+
+public readonly record struct Pair<T>(T First, T Second);
+public sealed class Box<T> {
+    public T Value;
+    public Box(T value) => Value = value;
+}
+
+public readonly struct IntProjection : IProjection<int, int> {
+    public static int Capture(in int value, CaptureTable table) => value;
+    public static void Hydrate(ref int target, in int state, CaptureTable table) => target = state;
+}
+
+public readonly struct UIntProjection : IProjection<uint, uint> {
+    public static uint Capture(in uint value, CaptureTable table) => value;
+    public static void Hydrate(ref uint target, in uint state, CaptureTable table) => target = state;
+}
+
+public readonly struct StringProjection : IProjection<string, uint> {
+    public static uint Capture(in string value, CaptureTable table) => table.Intern(value, "string");
+    public static void Hydrate(ref string target, in uint state, CaptureTable table) => target = table.Get<string>(state);
+}
+
+public readonly struct NodeProjection : IProjection<Node, uint> {
+    public static uint Capture(in Node value, CaptureTable table) => table.Intern(value, "sample.Node");
+    public static void Hydrate(ref Node target, in uint state, CaptureTable table) => target = table.Get<Node>(state);
+}
+
+public readonly struct PointProjection : IProjection<Point, PointStateV1> {
+    public static PointStateV1 Capture(in Point value, CaptureTable table) => new(value.X, StringProjection.Capture(value.Label, table));
+    public static void Hydrate(ref Point target, in PointStateV1 state, CaptureTable table) =>
+        target = new Point(state.X, table.Get<string>(state.Label));
+}
+
+public readonly struct PairProjection<TDomain, TState, TProjection> : IProjection<Pair<TDomain>, PairState<TState>>
+    where TState : unmanaged where TProjection : unmanaged, IProjection<TDomain, TState> {
+    public static PairState<TState> Capture(in Pair<TDomain> value, CaptureTable table) =>
+        new(TProjection.Capture(value.First, table), TProjection.Capture(value.Second, table));
+    public static void Hydrate(ref Pair<TDomain> target, in PairState<TState> state, CaptureTable table) {
+        TDomain first = default!, second = default!;
+        TProjection.Hydrate(ref first, state.First, table);
+        TProjection.Hydrate(ref second, state.Second, table);
+        target = new(first, second);
+    }
+}
+
+public static class BoxProjection<TDomain, TState, TProjection>
+    where TState : unmanaged where TProjection : unmanaged, IProjection<TDomain, TState> {
+    public static BoxStateV1<TState> Capture(Box<TDomain> domain, CaptureTable table) =>
+        new(TProjection.Capture(domain.Value, table));
+    public static void Hydrate(Box<TDomain> domain, in BoxStateV1<TState> state, CaptureTable table) =>
+        TProjection.Hydrate(ref domain.Value, state.Value, table);
+}
+
+public interface IBoxFacade {
+    Type StateType { get; }
+    Type ProjectionType { get; }
+    Type OperationsType { get; }
+    object Capture(object domain, CaptureTable table);
+    byte[] Write(object state);
+    object Read(byte[] bytes);
+    void Visit(object state, ReferenceChecks checks);
+}
+
+public sealed class BoxFacade<TDomain, TState, TProjection, TOps> : IBoxFacade
+    where TState : unmanaged where TProjection : unmanaged, IProjection<TDomain, TState>
+    where TOps : unmanaged, IStateOps<TState> {
+    public Type StateType => typeof(BoxStateV1<TState>);
+    public Type ProjectionType => typeof(TProjection);
+    public Type OperationsType => typeof(TOps);
+    public object Capture(object domain, CaptureTable table) => BoxProjection<TDomain, TState, TProjection>.Capture((Box<TDomain>)domain, table);
+    public byte[] Write(object state) => BoxBodyV1<TState, TOps>.Write((BoxStateV1<TState>)state);
+    public object Read(byte[] bytes) => BoxBodyV1<TState, TOps>.Read(bytes);
+    public void Visit(object state, ReferenceChecks checks) => BoxBodyV1<TState, TOps>.Visit((BoxStateV1<TState>)state, checks);
+}
+
+public static class FacadeFactory {
+    private static readonly Dictionary<Type, IBoxFacade> Cache = new();
+    public static int Closures { get; private set; }
+    public static IBoxFacade Get(Type domainArgument) {
+        if (Cache.TryGetValue(domainArgument, out var prior)) { return prior; }
+        var shape = Resolve(domainArgument);
+        var method = typeof(FacadeFactory).GetMethod(nameof(Create), BindingFlags.NonPublic | BindingFlags.Static)!;
+        var factory = method.MakeGenericMethod(domainArgument, shape.State, shape.Projection, shape.Ops)
+            .CreateDelegate<Func<IBoxFacade>>();
+        var result = factory();
+        Cache.Add(domainArgument, result);
+        Closures++;
+        return result;
+    }
+    private static IBoxFacade Create<TDomain, TState, TProjection, TOps>()
+        where TState : unmanaged where TProjection : unmanaged, IProjection<TDomain, TState>
+        where TOps : unmanaged, IStateOps<TState> => new BoxFacade<TDomain, TState, TProjection, TOps>();
+    private static (Type State, Type Projection, Type Ops) Resolve(Type domain) {
+        if (domain == typeof(int)) { return (typeof(int), typeof(IntProjection), typeof(IntOps)); }
+        if (domain == typeof(uint)) { return (typeof(uint), typeof(UIntProjection), typeof(UIntOps)); }
+        if (domain == typeof(string)) { return (typeof(uint), typeof(StringProjection), typeof(StringIdOps)); }
+        if (domain == typeof(Node)) { return (typeof(uint), typeof(NodeProjection), typeof(NodeIdOps)); }
+        if (domain == typeof(Point)) { return (typeof(PointStateV1), typeof(PointProjection), typeof(PointV1Ops)); }
+        if (domain.IsGenericType && domain.GetGenericTypeDefinition() == typeof(Pair<>)) {
+            var argument = domain.GetGenericArguments()[0];
+            var nested = Resolve(argument);
+            return (typeof(PairState<>).MakeGenericType(nested.State),
+                typeof(PairProjection<,,>).MakeGenericType(argument, nested.State, nested.Projection),
+                typeof(PairOps<,>).MakeGenericType(nested.State, nested.Ops));
+        }
+        throw new NotSupportedException("No registered template for " + domain);
+    }
+}
+
+public sealed class RefBox<T> where T : class {
+    private readonly T _value;
+    public RefBox(T value) => _value = value;
+    public T Value => _value;
+}
+
+// UnsafeAccessor's generic declaring type contains domain parameters only.
+public static class ReferenceDomainAccess<T> where T : class {
+    [UnsafeAccessor(UnsafeAccessorKind.Field, Name = "_value")]
+    public static extern ref T Value(RefBox<T> owner);
+}
+
+public static class ExtendedDomainAccess<TDomain, TState> where TDomain : class where TState : unmanaged {
+    [UnsafeAccessor(UnsafeAccessorKind.Field, Name = "_value")]
+    public static extern ref TDomain Value(RefBox<TDomain> owner);
+}
+
+public static class ReorderedDomainAccess<TState, TDomain> where TState : unmanaged where TDomain : class {
+    [UnsafeAccessor(UnsafeAccessorKind.Field, Name = "_value")]
+    public static extern ref TDomain Value(RefBox<TDomain> owner);
+}
+
+public static class ReferenceHydrate<TDomain, TState, TProjection>
+    where TDomain : class where TState : unmanaged
+    where TProjection : unmanaged, IProjection<TDomain, TState> {
+    public static void Apply(RefBox<TDomain> target, in TState state, CaptureTable table) =>
+        TProjection.Hydrate(ref ReferenceDomainAccess<TDomain>.Value(target), state, table);
+}
+
+public readonly struct ValueCell<T> where T : unmanaged {
+    private readonly T _value;
+    private readonly int _transient;
+    public ValueCell(T value) { _value = value; _transient = 19; }
+    public T Value => _value;
+    public int Transient => _transient;
+}
+
+public static class ValueDomainAccess<T> where T : unmanaged {
+    [UnsafeAccessor(UnsafeAccessorKind.Field, Name = "_value")]
+    public static extern ref T Value(ref ValueCell<T> owner);
+}
+
+public static class ValueHydrate<TDomain, TState, TProjection>
+    where TDomain : unmanaged where TState : unmanaged
+    where TProjection : unmanaged, IProjection<TDomain, TState> {
+    public static void Apply(ref ValueCell<TDomain> target, in TState state, CaptureTable table) =>
+        TProjection.Hydrate(ref ValueDomainAccess<TDomain>.Value(ref target), state, table);
+}
+
+public static class CurrentChecks {
+    public static byte[] HistoricalPayload() => BoxBodyV1<PointStateV1, PointV1Ops>.Write(new(new(12, 7)));
+
+    public static string[] Run() {
+        var table = new CaptureTable();
+        var intFacade = FacadeFactory.Get(typeof(int));
+        var intState = intFacade.Capture(new Box<int>(31), table);
+        Check.That(intFacade.Read(intFacade.Write(intState)).Equals(intState), "int roundtrip");
+        Check.That(ReferenceEquals(intFacade, FacadeFactory.Get(typeof(int))), "cached facade");
+
+        var numbers = FacadeFactory.Get(typeof(uint));
+        var numericState = numbers.Capture(new Box<uint>(999), table);
+        Check.That(numbers.Read(numbers.Write(numericState)).Equals(numericState) && table.Objects.Count == 0,
+            "primitive uint roundtrip must not intern an object");
+        var numericChecks = new ReferenceChecks(new Dictionary<uint, string>());
+        numbers.Visit(numericState, numericChecks);
+        Check.That(numericChecks.Visits == 0, "primitive uint must not visit references");
+
+        var label = new string(new[] { 'o', 'k' });
+        var strings = FacadeFactory.Get(typeof(string));
+        var nodes = FacadeFactory.Get(typeof(Node));
+        var stringState = strings.Capture(new Box<string>(label), table);
+        var node = new Node { Data = 4 };
+        var nodeState = nodes.Capture(new Box<Node>(node), table);
+        Check.That(strings.StateType == nodes.StateType && strings.ProjectionType != nodes.ProjectionType
+            && strings.OperationsType != nodes.OperationsType, "uint representation must not collapse semantics");
+        Check.That(numbers.StateType == strings.StateType && numbers.ProjectionType != strings.ProjectionType
+            && numbers.ProjectionType != nodes.ProjectionType && numbers.OperationsType != strings.OperationsType
+            && numbers.OperationsType != nodes.OperationsType, "primitive uint has a third distinct binding");
+        var checks = new ReferenceChecks(table.Kinds);
+        strings.Visit(strings.Read(strings.Write(stringState)), checks);
+        nodes.Visit(nodes.Read(nodes.Write(nodeState)), checks);
+        Check.That(checks.Visits == 2, "reference visits");
+        bool rejected = false;
+        try { nodes.Visit(stringState, checks); }
+        catch (InvalidDataException) { rejected = true; }
+        Check.That(rejected, "same DTO CLR type must preserve nominal reference constraint");
+        foreach (var referenceFacade in new[] { strings, nodes }) {
+            bool numericAsReferenceRejected = false;
+            try { referenceFacade.Visit(numericState, checks); }
+            catch (InvalidDataException) { numericAsReferenceRejected = true; }
+            Check.That(numericAsReferenceRejected, "reference ops must reject a numeric value absent from the object table");
+        }
+
+        var nested = FacadeFactory.Get(typeof(Pair<Pair<Point>>));
+        var point = new Point(8, label);
+        var source = new Box<Pair<Pair<Point>>>(new(new(point, point), new(point, point)));
+        var frozen = nested.Capture(source, table);
+        source.Value = new(new(new Point(99, "new"), point), new(point, point));
+        Check.That(nested.Read(nested.Write(frozen)).Equals(frozen), "nested state body roundtrip");
+        var typed = (BoxStateV1<PairState<PairState<PointStateV1>>>)frozen;
+        Check.That(typed.Value.First.First.X == 8, "capture must freeze nested values");
+        Check.That(!RuntimeHelpers.IsReferenceOrContainsReferences<BoxStateV1<PairState<PairState<PointStateV1>>>>(),
+            "nested DTO must not contain domain references");
+        var nestedChecks = new ReferenceChecks(table.Kinds);
+        nested.Visit(frozen, nestedChecks);
+        Check.That(nestedChecks.Visits == 4, "nested static refs traversal");
+
+        var refBox = (RefBox<string>)RuntimeHelpers.GetUninitializedObject(typeof(RefBox<string>));
+        var id = ((BoxStateV1<uint>)stringState).Value;
+        ReferenceHydrate<string, uint, StringProjection>.Apply(refBox, id, table);
+        Check.That(ReferenceEquals(refBox.Value, label), "private readonly generic reference field hydration");
+        ref var field = ref ReferenceDomainAccess<string>.Value(refBox);
+        field = "other";
+        Check.That(refBox.Value == "other", "private readonly generic field ref write");
+        ExtendedDomainAccess<string, uint>.Value(refBox) = "extra";
+        Check.That(refBox.Value == "extra", "an unused trailing accessor type parameter is supported in this shape");
+        bool reorderedAccessorRejected = false;
+        try {
+            ReorderedDomainAccess<uint, string>.Value(refBox) = "reordered";
+        }
+        catch (MissingFieldException) {
+            reorderedAccessorRejected = true;
+        }
+        Check.That(reorderedAccessorRejected, "reordering domain argument index is rejected by this runtime");
+        ValueCell<int> value = default;
+        ValueHydrate<int, int, IntProjection>.Apply(ref value, 61, table);
+        Check.That(value.Value == 61 && value.Transient == 0, "default readonly generic struct hydration");
+
+        var passthrough = OwnerUpgrade.SameRepresentation((BoxStateV1<uint>)stringState);
+        var upgraded = OwnerUpgrade.PointClosedEdge(new BoxStateV1<PointStateV1>(new(7, id)));
+        Check.That(passthrough.Value == id && upgraded.Value.X == 7000 && upgraded.Value.Label == id,
+            "open same representation and explicit closed owner upgrade");
+        Check.That(FacadeFactory.Closures == 5, "cache closes each facade once in this single-thread probe");
+        return new[] {
+            "ColdMakeGenericMethodCreateDelegateCachedFacade:True",
+            "SameUInt32RepresentationDistinctReferenceSemantics:True",
+            "PrimitiveUInt32ThirdBindingWithoutReferenceVisit:True",
+            "NestedStaticProjectionBodyAndReferenceVisit:True",
+            "FrozenUnmanagedDtoWithoutDomainReferences:True",
+            "GenericPrivateReadonlyClassFieldRefHydration:True",
+            "TrailingUnusedAccessorTypeParameterAlsoWorks:True",
+            "ReorderedAccessorParameters:MissingFieldException",
+            "GenericReadonlyStructDefaultRefHydration:True",
+            "OpenSameRepresentationAndClosedOwnerUpgrade:True"
+        };
+    }
+}

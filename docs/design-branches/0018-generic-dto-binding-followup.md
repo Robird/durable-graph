@@ -4,6 +4,7 @@
 接续 [DB-018 运行时绑定见证](0018-runtime-binding-witness.md)与
 [DB-020](0020-typed-slot-array-binding-slice.md)，补充采用冻结 Versioned DTO 后必须处理的表示映射。
 不回写旧实验的历史含义；排期与剩余工作见[路线图](../DurableGraph-research-roadmap.md)。
+完整方案比较及最新审阅收敛见 [DB-038](0038-generic-schema-state-and-binding-design.md)；本附件保留技术素材来由。
 
 ## 1. 已验证的技术基础
 
