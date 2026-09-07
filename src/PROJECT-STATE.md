@@ -28,8 +28,11 @@
 无需当前就拆 StateModelBinding 或建设无 CLR 宿主的退休族框架。DB-035 的唯一 State model、
 `.dgschema`、`__DurableState`、ObjectStateRecord 和内部 encoded Base body 边界继续沿用。
 
-下一片从[路线图](../docs/DurableGraph-research-roadmap.md)选择；inline struct、有限数组与泛型闭合
-仍可分别排期。单 head 不等于命名 branch/Reset 或联合 State/Schema/Artifact 版本视图，后者仍独立推进。
+下一片推荐 [DB-037 inline struct](../docs/design-branches/0037-inline-struct-state-slice.md)（Proposed，尚未实施）：
+非泛型嵌套值，包含现有 string/durable 引用槽；贯通 exact inline Schema/history、递归静态 DTO/融合 Delta、
+owner Upgrade 与 GraphSession 保存/冷读。先验证 readonly/ref 恢复及历史 struct CLR 宿主消失的生成形状，
+再按 G0–G4 推进。有限数组与泛型闭合后续分别排期，细节仅在该分片维护。
+单 head 不等于命名 branch/Reset 或联合 State/Schema/Artifact 版本视图，后者仍独立推进。
 
 ## 当前能力与实际边界
 

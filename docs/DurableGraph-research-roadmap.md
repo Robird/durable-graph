@@ -7,8 +7,7 @@
 
 ## 1. 下一个分片如何选择
 
-DB-034 领域引用图与首次准备的实现、实际边界及验收从 PROJECT-STATE/其账本进入；
-这里仅保留后续增量，不再把 nominal 引用、可达图恢复或公开 PrepareNew 列为未实现能力。
+当前能力与已完成分片的验收从 PROJECT-STATE/其账本进入；这里仅保留后续增量。
 
 后续方向按依赖而非承诺日期安排：引用图 → 分别评估 inline struct、有限数组对象和泛型闭合；
 BCL 内容恢复在所需引用/值/类型表达可用后逐类型推进。struct 可独立穿插，不强制等待全部引用能力。
@@ -19,7 +18,10 @@ Transient 由用户在交付后处理，约束维护在[目标设计](DurableGra
 [MVP 功能边界](DurableGraph-target-design-v0.md#mvp-功能边界)，不再作为开放范围反复讨论。
 GraphSession 的正常同实例 Commit 与严格重开从 PROJECT-STATE/DB-036 查证；不再列为未完成能力。
 当前只支持单活动会话、固定非空 World，发布故障范围为正常关闭/进程中止和明确的 I/O 异常。
-inline struct、完整数组对象、泛型闭合的穿插顺序仍未冻结。
+下一片推荐 [DB-037 inline struct](design-branches/0037-inline-struct-state-slice.md)（Proposed）：
+先补 exact inline Schema/history 与嵌套 DTO/融合 Delta，包含现有引用槽并接通 owner Upgrade/连续 Commit。
+方案比较、尚需验证的生成形状及 G0–G4 验收只在该文维护；推荐不等于已实施或用户已批准新格式。
+之后优先重新评估有限数组对象，自定义泛型闭合独立设计，不在本轮一并扩张。
 
 ## 2. 已采纳方向中的未完成能力
 
@@ -32,7 +34,7 @@ B/D/H 分别指本轮精确 Base payload、Delta payload 上界、已有对象�
 | TypeCodec 与 exact Schema 绑定 | 一般类型组合与内建复合类型 codec；已有 nominal class 引用及 exact reader 分派不等于一般 TypeCodec，也不自动复活已删除模型族 | [DB-034](design-branches/0034-durable-reference-graph-batch.md)、[DB-018](design-branches/0018-generated-graph-codec-shape.md)、[DB-001](design-branches/0001-schema-authority-and-runtime-representation.md) |
 | 复合类型的 DTO 升级与恢复 | 将单对象 Upgrade/Restore 扩展到复合值、数组与容器内容；保持完整 source 目录、强制 Base、当前版本 DTO 图的可达分析和失败不交付 | [DB-034](design-branches/0034-durable-reference-graph-batch.md)、[DB-018](design-branches/0018-generated-graph-codec-shape.md) |
 | 自定义泛型 Schema/DTO | 保留 SG 开放模板 + 首次运行时闭合/缓存方向；领域 T 与冻结表示参数分离，接通泛型定义/实参身份及历史 exact reader；现有手写 body 见证不等于 SG 已支持 | [泛型 DTO 技术备忘](design-branches/0018-generic-dto-binding-followup.md)，扩充 Schema 类型表达或泛型 Capture 时重访 |
-| 自定义 struct | exact inline Schema/history 与 owner 升版，嵌套 DTO/布局及字段和数组元素的 ref body 复用 | [DB-024 struct TODO](design-branches/0024-reference-capture-and-reusable-object-ids.md)、[DB-020](design-branches/0020-typed-slot-array-binding-slice.md) |
+| 自定义 struct | exact inline Schema/history 与 owner 升版，含引用嵌套 DTO/融合 Delta、ref 恢复及历史值宿主独立性 | [DB-037 推荐分片](design-branches/0037-inline-struct-state-slice.md)；原始方向见 [DB-024 struct TODO](design-branches/0024-reference-capture-and-reusable-object-ids.md) |
 | 完整数组对象 | 在已选零下界 SZ/有限多维 rank 范围内，实现 identity、shape、分配与元素循环，并拒绝不支持的形状；不能把现有元素模板视为完整数组支持 | [MVP 边界](DurableGraph-target-design-v0.md#mvp-功能边界)、[DB-020](design-branches/0020-typed-slot-array-binding-slice.md) |
 
 ## 3. 尚待裁决的机制
