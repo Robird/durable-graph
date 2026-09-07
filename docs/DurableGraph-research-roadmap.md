@@ -24,6 +24,10 @@ WorkingTree/GraphSession 的职责方向已采纳；发布/故障裁决尚未实
 它们与存储推进的穿插顺序尚未冻结；不要恢复旧 R4 → R5 → R6 或 P0–P7 为强制流水线。
 选片时给出一个可观察成功/失败判据；新增类型表达先冻结 Schema/history 格式，publication 仍另行裁决。
 
+[DB-036](design-branches/0036-working-session-and-history-capabilities.md)是工作会话与历史能力的
+Proposed 重构方案：推荐以发布 G0 为停点，再闭合同实例连续 Commit；历史能力先验证现有 ABI 的迁移壳。
+原 Base body 阶段混用已由 DB-035 修复，不再列入该方案的未完成工作。
+
 ## 2. 已采纳方向中的未完成能力
 
 此表只列仍需工作的增量。方向已选不代表每项 API、顺序和细节已经批准。
@@ -33,6 +37,7 @@ B/D/H 分别指本轮精确 Base payload、Delta payload 上界、已有对象�
 | 工作项 | 最小应回答的问题 | 设计或证据入口 |
 |---|---|---|
 | 工作会话与 exact Revision Parent 比较基线 | 已选 Repository 受控创建/加载的 WorkingTree/GraphSession；现有 LoadedWorld 固定 Revision Parent、当前版本 DTO 与实例身份并在 Append 后重新 Load；后续定义发布后安装、Commit API 与故障裁决 | [目标约束](DurableGraph-target-design-v0.md#单一发布权威与明确故障结果)、[DB-030 接缝](design-branches/0030-captured-object-preparation-slice.md#4-exact-parent-接缝明确留到后片) |
+| 历史恢复能力保留 | 区分 exact DTO 解码与当前 World 恢复；明确所支持历史版本所需的 reader/Upgrade/model 保留规则，验证迁移壳，不把 Schema history 当作可执行能力 | [DB-036 §4 候选合同](design-branches/0036-working-session-and-history-capabilities.md#4-并行小线明确历史恢复能力合同)；完全删除 CLR 壳的独立能力目录尚未选定 |
 | TypeCodec 与 exact Schema 绑定 | 一般类型组合与内建复合类型 codec；已有 nominal class 引用及 exact reader 分派不等于一般 TypeCodec，也不自动复活已删除模型族 | [DB-034](design-branches/0034-durable-reference-graph-batch.md)、[DB-018](design-branches/0018-generated-graph-codec-shape.md)、[DB-001](design-branches/0001-schema-authority-and-runtime-representation.md) |
 | 复合类型的 DTO 升级与恢复 | 将单对象 Upgrade/Restore 扩展到复合值、数组与容器内容；保持完整 source 目录、强制 Base、当前版本 DTO 图的可达分析和失败不交付 | [DB-034](design-branches/0034-durable-reference-graph-batch.md)、[DB-018](design-branches/0018-generated-graph-codec-shape.md) |
 | 自定义泛型 Schema/DTO | 保留 SG 开放模板 + 首次运行时闭合/缓存方向；领域 T 与冻结表示参数分离，接通泛型定义/实参身份及历史 exact reader；现有手写 body 见证不等于 SG 已支持 | [泛型 DTO 技术备忘](design-branches/0018-generic-dto-binding-followup.md)，扩充 Schema 类型表达或泛型 Capture 时重访 |

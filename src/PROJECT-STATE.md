@@ -15,6 +15,10 @@
 
 ## 当前焦点
 
+[DB-036 重构调研草案](../docs/design-branches/0036-working-session-and-history-capabilities.md)提出
+同实例工作会话与最小持久发布、历史能力保留及迁移壳见证；状态为 Proposed，发布机制须先经 G0 验证。
+本轮仅形成方案，没有实施这些能力；DB-035 已修的 Base body 阶段边界不再重复列为重构任务。
+
 [DB-034 引用图与首次保存](../docs/design-branches/0034-durable-reference-graph-batch.md) 已完成 G0–G6 验收；
 范围、冻结合同及执行证据集中在其 §8。普通 new World 可以经公开 PrepareNew 得到无 Parent 计划，
 宿主 Append 后按显式地址/WorldId 恢复非泛型领域引用图，再 Prepare 对象级增量；共享、循环、
