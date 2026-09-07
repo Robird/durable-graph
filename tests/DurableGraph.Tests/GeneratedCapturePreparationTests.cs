@@ -111,7 +111,7 @@ public sealed partial class DurableSchemaGeneratorTests {
     [Fact]
     public void GeneratedCapturePreparationBindsCurrentVersionWithoutChangingHistoricalBodyLayout() {
         using AncestryHistoryDirectory files = new();
-        SnapshotHistoryTool publisher = new();
+        SchemaHistoryTool publisher = new();
         const string initialSource = """
             using Atelia.DurableGraph;
             namespace PreparationHistory;

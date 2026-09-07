@@ -43,7 +43,7 @@ function Invoke-ConsumerClean {
     Invoke-DotNet @(
         "clean", $Project,
         "-p:DurableGraphPackageVersion=$PackageVersion",
-        "-p:DurableGraphSnapshotHistoryDirectory=$HistoryDirectory",
+        "-p:DurableGraphSchemaHistoryDirectory=$HistoryDirectory",
         "-p:ProbeVersion=$ProbeVersion"
     )
 }
@@ -55,7 +55,7 @@ function Get-HistoryFiles {
         return @()
     }
 
-    return @(Get-ChildItem -LiteralPath $HistoryDirectory -Filter *.dgsnapshot -File)
+    return @(Get-ChildItem -LiteralPath $HistoryDirectory -Filter *.dgschema -File)
 }
 
 function Assert-HistoryCount {
@@ -159,16 +159,29 @@ try {
     Invoke-DotNetExpectFailure -Arguments @(
         "build", $consumerProject, "--no-restore",
         "-p:DurableGraphPackageVersion=$packageVersion",
-        "-p:DurableGraphSnapshotHistoryDirectory=$history",
+        "-p:DurableGraphSchemaHistoryDirectory=$history",
         "-p:ProbeVersion=2"
     ) -ExpectedText "DG0014"
+    Assert-HistoryCount $history 0
+
+    Invoke-ConsumerClean $consumerProject $packageVersion $history 1
+    New-Item -ItemType Directory -Path $history -Force | Out-Null
+    $legacyHistoryFile = Join-Path $history "legacy.dgsnapshot"
+    Set-Content -LiteralPath $legacyHistoryFile -Value "legacy Schema-history fixture" -NoNewline
+    Invoke-DotNetExpectFailure -Arguments @(
+        "build", $consumerProject, "--no-restore",
+        "-p:DurableGraphPackageVersion=$packageVersion",
+        "-p:DurableGraphSchemaHistoryDirectory=$history",
+        "-p:ProbeVersion=1"
+    ) -ExpectedText "DurableGraph Schema-history directory contains legacy .dgsnapshot files; regenerate them as .dgschema because legacy history is not accepted."
+    Remove-Item -LiteralPath $legacyHistoryFile
     Assert-HistoryCount $history 0
 
     Invoke-ConsumerClean $consumerProject $packageVersion $history 1
     Invoke-DotNet @(
         "build", $consumerProject, "--no-restore",
         "-p:DurableGraphPackageVersion=$packageVersion",
-        "-p:DurableGraphSnapshotHistoryDirectory=$history",
+        "-p:DurableGraphSchemaHistoryDirectory=$history",
         "-p:ProbeVersion=1"
     )
     Assert-HistoryCount $history 1
@@ -177,7 +190,7 @@ try {
     Invoke-DotNet @(
         "build", $consumerProject, "--no-restore",
         "-p:DurableGraphPackageVersion=$packageVersion",
-        "-p:DurableGraphSnapshotHistoryDirectory=$history",
+        "-p:DurableGraphSchemaHistoryDirectory=$history",
         "-p:ProbeVersion=2"
     )
     Assert-HistoryCount $history 2
@@ -186,7 +199,7 @@ try {
     $consumerOutput = (& dotnet $consumerAssembly | Out-String).Trim()
 
     if ($LASTEXITCODE -ne 0 -or $consumerOutput -ne "7:True:2") {
-        throw "Generated State-history exercise failed; output was '$consumerOutput'."
+        throw "Generated Schema-history exercise failed; output was '$consumerOutput'."
     }
 
     $hashesBeforeVerify = @{}
@@ -198,15 +211,15 @@ try {
     Invoke-DotNet @(
         "build", $consumerProject, "--no-restore",
         "-p:DurableGraphPackageVersion=$packageVersion",
-        "-p:DurableGraphSnapshotHistoryDirectory=$history",
+        "-p:DurableGraphSchemaHistoryDirectory=$history",
         "-p:ProbeVersion=0"
     )
     $generatedRoot = Join-Path $probeRoot "Consumer/obj/Debug/net10.0/generated"
     $emptyManifests = @(Get-ChildItem -LiteralPath $generatedRoot -Recurse -File |
-        Where-Object Name -eq "DurableGraphSnapshotCandidates.g.cs")
+        Where-Object Name -eq "DurableGraphSchemaHistoryCandidates.g.cs")
 
     if ($emptyManifests.Count -ne 1 -or
-        (Get-Content -LiteralPath $emptyManifests[0].FullName -Raw) -ne "// durable-graph-snapshot-manifest:1`n") {
+        (Get-Content -LiteralPath $emptyManifests[0].FullName -Raw) -ne "// durable-graph-schema-history-manifest:1`n") {
         throw "Removing all durable types without cleaning did not replace the old candidate with an empty manifest."
     }
 
@@ -222,7 +235,7 @@ try {
     Invoke-DotNet @(
         "build", $consumerProject, "--no-restore",
         "-p:DurableGraphPackageVersion=$packageVersion",
-        "-p:DurableGraphSnapshotHistoryDirectory=$history",
+        "-p:DurableGraphSchemaHistoryDirectory=$history",
         "-p:ProbeVersion=2",
         "-p:ContinuousIntegrationBuild=true"
     )
@@ -251,7 +264,7 @@ try {
         Invoke-DotNetExpectFailure -Arguments @(
             "build", $consumerProject, "--no-restore",
             "-p:DurableGraphPackageVersion=$packageVersion",
-            "-p:DurableGraphSnapshotHistoryDirectory=$history",
+            "-p:DurableGraphSchemaHistoryDirectory=$history",
             "-p:ProbeVersion=2",
             "-p:ContinuousIntegrationBuild=true"
         ) -ExpectedText "history is missing schema"
@@ -265,7 +278,7 @@ try {
     Invoke-DotNet @(
         "build", $consumerProject, "--no-restore",
         "-p:DurableGraphPackageVersion=$packageVersion",
-        "-p:DurableGraphSnapshotHistoryDirectory=$history",
+        "-p:DurableGraphSchemaHistoryDirectory=$history",
         "-p:ProbeVersion=2"
     )
 
@@ -282,7 +295,7 @@ try {
     Invoke-DotNet @(
         "build", $consumerProject, "--no-restore",
         "-p:DurableGraphPackageVersion=$packageVersion",
-        "-p:DurableGraphSnapshotHistoryDirectory=$bodyHistory",
+        "-p:DurableGraphSchemaHistoryDirectory=$bodyHistory",
         "-p:ProbeVersion=3"
     )
     Assert-HistoryCount $bodyHistory 7

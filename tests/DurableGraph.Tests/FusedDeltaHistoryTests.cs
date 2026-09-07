@@ -9,7 +9,7 @@ public sealed partial class DurableSchemaGeneratorTests {
     [Fact]
     public void FusedDeltaHistoricalLayoutsKeepExactAncestorAndDoNotMixVersions() {
         using AncestryHistoryDirectory files = new();
-        SnapshotHistoryTool publisher = new();
+        SchemaHistoryTool publisher = new();
         string initialSource = FusedDeltaPreamble + """
             [DurableType("fused.base", 1)]
             public abstract partial class OldBase : DurableBase {

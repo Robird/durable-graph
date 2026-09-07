@@ -36,7 +36,7 @@ public sealed partial class DurableSchemaGeneratorTests {
     [Fact]
     public void ScalarDtoNewTagsSurvivePublisherHistoryAndExactAncestorReplacement() {
         using AncestryHistoryDirectory files = new();
-        SnapshotHistoryTool publisher = new();
+        SchemaHistoryTool publisher = new();
         string initialSource = ScalarDtoSource.Replace("public sealed partial class Item", "public partial class Item") + """
 
             [DurableType("scalar.leaf", 1)]
@@ -86,7 +86,7 @@ public sealed partial class DurableSchemaGeneratorTests {
     [Fact]
     public void ScalarDtoSameVersionRetypeFailsAgainstPublishedHistory() {
         using AncestryHistoryDirectory files = new();
-        SnapshotHistoryTool publisher = new();
+        SchemaHistoryTool publisher = new();
         GeneratorTestRun initial = RunGenerator(ScalarDtoSource);
         AssertSchemaOnlyCompiles(initial);
         publisher.Publish(files.WriteManifest(initial), files.History);
@@ -98,15 +98,15 @@ public sealed partial class DurableSchemaGeneratorTests {
             ScalarDtoSource.Replace("private ushort _u16;", "private uint _u16;"));
         AssertSchemaOnlyCompiles(changedCandidate);
         string changedManifest = files.WriteManifest(changedCandidate);
-        Assert.Throws<SnapshotHistoryException>(() => publisher.Publish(changedManifest, files.History));
-        Assert.Throws<SnapshotHistoryException>(() => publisher.Verify(changedManifest, files.History));
+        Assert.Throws<SchemaHistoryException>(() => publisher.Publish(changedManifest, files.History));
+        Assert.Throws<SchemaHistoryException>(() => publisher.Verify(changedManifest, files.History));
     }
 
     [Theory]
     [InlineData(16)]
     [InlineData(999)]
     public void ScalarHistoryRejectsUnknownTagsInGeneratorAndPublisher(int tag) {
-        var history = SnapshotHistory("unknown.dgsnapshot", "unknown", 1, (1, tag));
+        var history = SchemaHistory("unknown.dgschema", "unknown", 1, (1, tag));
         GeneratorTestRun run = RunGenerator(ScalarDtoSource, history);
         Assert.Contains(run.GeneratorDiagnostics, diagnostic => diagnostic.Id == "DG0012");
         Assert.DoesNotContain(run.GeneratedSources, source => source.HintName == "DurableBinaryBodies.g.cs");
@@ -116,7 +116,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         GeneratorTestRun valid = RunGenerator(ScalarDtoSource);
         string manifest = files.WriteManifest(valid);
         File.WriteAllText(manifest, File.ReadAllText(manifest).Replace("// field:1|1", "// field:1|" + tag));
-        Assert.Throws<SnapshotHistoryException>(() => new SnapshotHistoryTool().Publish(manifest, files.History));
+        Assert.Throws<SchemaHistoryException>(() => new SchemaHistoryTool().Publish(manifest, files.History));
         Assert.False(Directory.Exists(files.History) && Directory.GetFiles(files.History).Length > 0);
     }
 

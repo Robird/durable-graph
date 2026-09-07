@@ -259,7 +259,7 @@ ObjectVersion 持久内容、Delta、H 恢复及 Save 接入仍按真实消费�
 [primitive tests](../../tests/DurableGraph.StateStore.Serialization.Tests/Serialization/BinaryPayloadPrimitiveTests.cs)、
 [string tests](../../tests/DurableGraph.StateStore.Serialization.Tests/Serialization/StringPayloadCodecTests.cs)、
 [生成器](../../src/DurableGraph.Generator/DurableSchemaGenerator.cs)、
-[历史解析器](../../src/DurableGraph.Build/SnapshotHistoryTool.cs)。
+[历史解析器](../../src/DurableGraph.Build/SchemaHistoryTool.cs)。
 
 ## 12. Robird 旧实现：本轮吸纳的经验
 

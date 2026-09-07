@@ -73,9 +73,9 @@ public sealed partial class DurableSchemaGeneratorTests {
     [InlineData("// base:/w==|1")]
     [InlineData("// base:|1")]
     public void SchemaOnlyRejectsMalformedBaseRecord(string baseRecord) {
-        string content = SnapshotHistory("bad.dgsnapshot", "base", 1).GetText()!.ToString()
+        string content = SchemaHistory("bad.dgschema", "base", 1).GetText()!.ToString()
             .Replace("// version:1\n", "// version:1\n" + baseRecord + "\n");
-        GeneratorTestRun run = RunGenerator(SchemaOnlyChain(1, 1, 1), new InMemoryAdditionalText("bad.dgsnapshot", content));
+        GeneratorTestRun run = RunGenerator(SchemaOnlyChain(1, 1, 1), new InMemoryAdditionalText("bad.dgschema", content));
         Assert.Contains(run.GeneratorDiagnostics, diagnostic => diagnostic.Id == "DG0012");
     }
 
@@ -83,9 +83,9 @@ public sealed partial class DurableSchemaGeneratorTests {
     [InlineData("// base:YmFzZQ==|1\n// base:YmFzZQ==|1\n// field:1|2\n")]
     [InlineData("// field:1|2\n// base:YmFzZQ==|1\n")]
     public void SchemaOnlyRejectsDuplicateOrMisplacedBaseRecord(string records) {
-        string content = SnapshotHistory("bad.dgsnapshot", "leaf", 1).GetText()!.ToString()
-            .Replace("// snapshot-end", records + "// snapshot-end");
-        GeneratorTestRun run = RunGenerator(SchemaOnlyChain(1, 1, 1), new InMemoryAdditionalText("bad.dgsnapshot", content));
+        string content = SchemaHistory("bad.dgschema", "leaf", 1).GetText()!.ToString()
+            .Replace("// schema-end", records + "// schema-end");
+        GeneratorTestRun run = RunGenerator(SchemaOnlyChain(1, 1, 1), new InMemoryAdditionalText("bad.dgschema", content));
         Assert.Contains(run.GeneratorDiagnostics, diagnostic => diagnostic.Id == "DG0012");
     }
 
@@ -237,8 +237,8 @@ public sealed partial class DurableSchemaGeneratorTests {
     ];
 
     private static AdditionalText SchemaOnlyHistory(string schemaId, int version, string? baseId = null, int baseVersion = 0) {
-        string path = $"{schemaId}-{version}-{baseVersion}.dgsnapshot";
-        string content = SnapshotHistory(path, schemaId, version, (1, 2)).GetText()!.ToString();
+        string path = $"{schemaId}-{version}-{baseVersion}.dgschema";
+        string content = SchemaHistory(path, schemaId, version, (1, 2)).GetText()!.ToString();
         if (baseId is not null) {
             string versionLine = $"// version:{version}\n";
             content = content.Replace(versionLine, versionLine +

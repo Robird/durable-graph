@@ -9,7 +9,7 @@ public sealed partial class DurableSchemaGeneratorTests {
     [InlineData(true)]
     public void StateDtoHistorySurvivesPublishRecompileAndRemovalOfOldClrAncestors(bool replaceChain) {
         using AncestryHistoryDirectory files = new();
-        SnapshotHistoryTool publisher = new();
+        SchemaHistoryTool publisher = new();
         GeneratorTestRun initial = RunGenerator(InitialStateDtoHistorySource);
         AssertSchemaOnlyCompiles(initial);
         byte[] originalBytes = EmitAndLoad(initial.OutputCompilation).GetType("DtoHistory.Host")!

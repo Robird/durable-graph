@@ -4,29 +4,29 @@ using System.Text;
 
 namespace Atelia.DurableGraph.Build;
 
-internal sealed class SnapshotHistoryTool {
-    private const string SnapshotExtension = ".dgsnapshot";
+internal sealed class SchemaHistoryTool {
+    private const string SchemaHistoryExtension = ".dgschema";
 
-    public SnapshotHistoryResult Publish(
+    public SchemaHistoryResult Publish(
         string manifestPath,
-        string historyDirectory) {
-        IReadOnlyList<SnapshotRecord> candidates = SnapshotDocument.ParseManifest(manifestPath);
+        string schemaHistoryDirectory) {
+        IReadOnlyList<SchemaHistoryRecord> candidates = SchemaHistoryDocument.ParseManifest(manifestPath);
 
-        if (candidates.Count == 0 && !Directory.Exists(historyDirectory)) {
-            return new SnapshotHistoryResult(
+        if (candidates.Count == 0 && !Directory.Exists(schemaHistoryDirectory)) {
+            return new SchemaHistoryResult(
                 "published 0 schema-history record(s); 0 already exact");
         }
 
-        Dictionary<SnapshotKey, ExistingSnapshot> existing = Directory.Exists(historyDirectory)
-            ? LoadHistory(historyDirectory)
-            : new Dictionary<SnapshotKey, ExistingSnapshot>();
-        Dictionary<SnapshotKey, SnapshotRecord> available = existing.ToDictionary(
-            pair => pair.Key, pair => pair.Value.Snapshot);
+        Dictionary<SchemaHistoryKey, ExistingSchemaHistoryRecord> existing = Directory.Exists(schemaHistoryDirectory)
+            ? LoadHistory(schemaHistoryDirectory)
+            : new Dictionary<SchemaHistoryKey, ExistingSchemaHistoryRecord>();
+        Dictionary<SchemaHistoryKey, SchemaHistoryRecord> available = existing.ToDictionary(
+            pair => pair.Key, pair => pair.Value.Record);
 
-        foreach (SnapshotRecord candidate in candidates) {
-            if (available.TryGetValue(candidate.Key, out SnapshotRecord? historical) &&
+        foreach (SchemaHistoryRecord candidate in candidates) {
+            if (available.TryGetValue(candidate.Key, out SchemaHistoryRecord? historical) &&
                 !candidate.ShapeEquals(historical)) {
-                throw new SnapshotHistoryException(
+                throw new SchemaHistoryException(
                     $"history conflicts with manifest for schema '{candidate.SchemaId}' version {candidate.Version}");
             }
 
@@ -34,114 +34,120 @@ internal sealed class SnapshotHistoryTool {
         }
 
         ValidateClosure(available);
-        List<PendingSnapshot> pending = new();
+        List<PendingSchemaHistoryRecord> pending = new();
         int unchangedCount = 0;
 
-        foreach (SnapshotRecord candidate in candidates) {
-            SnapshotKey key = candidate.Key;
+        foreach (SchemaHistoryRecord candidate in candidates) {
+            SchemaHistoryKey key = candidate.Key;
 
             if (existing.ContainsKey(key)) {
                 unchangedCount++;
                 continue;
             }
 
-            string canonicalContent = SnapshotDocument.RenderHistory(candidate);
-            string fileName = SnapshotDocument.GetHistoryFileName(candidate, canonicalContent);
-            string destinationPath = Path.Combine(historyDirectory, fileName);
+            string canonicalContent = SchemaHistoryDocument.RenderHistory(candidate);
+            string fileName = SchemaHistoryDocument.GetHistoryFileName(candidate, canonicalContent);
+            string destinationPath = Path.Combine(schemaHistoryDirectory, fileName);
 
             if (File.Exists(destinationPath)) {
-                throw new SnapshotHistoryException(
-                    $"history destination '{fileName}' already exists but was not a valid indexed snapshot");
+                throw new SchemaHistoryException(
+                    $"history destination '{fileName}' already exists but was not a valid indexed record");
             }
 
-            pending.Add(new PendingSnapshot(destinationPath, canonicalContent));
+            pending.Add(new PendingSchemaHistoryRecord(destinationPath, canonicalContent));
         }
 
-        Directory.CreateDirectory(historyDirectory);
+        Directory.CreateDirectory(schemaHistoryDirectory);
 
-        foreach (PendingSnapshot snapshot in pending) {
-            PublishCreateOnly(snapshot);
+        foreach (PendingSchemaHistoryRecord record in pending) {
+            PublishCreateOnly(record);
         }
 
-        return new SnapshotHistoryResult(
+        return new SchemaHistoryResult(
             $"published {pending.Count} schema-history record(s); {unchangedCount} already exact");
     }
 
-    public SnapshotHistoryResult Verify(
+    public SchemaHistoryResult Verify(
         string manifestPath,
-        string historyDirectory) {
-        IReadOnlyList<SnapshotRecord> candidates = SnapshotDocument.ParseManifest(manifestPath);
-        Dictionary<SnapshotKey, ExistingSnapshot> existing = Directory.Exists(historyDirectory)
-            ? LoadHistory(historyDirectory)
-            : new Dictionary<SnapshotKey, ExistingSnapshot>();
+        string schemaHistoryDirectory) {
+        IReadOnlyList<SchemaHistoryRecord> candidates = SchemaHistoryDocument.ParseManifest(manifestPath);
+        Dictionary<SchemaHistoryKey, ExistingSchemaHistoryRecord> existing = Directory.Exists(schemaHistoryDirectory)
+            ? LoadHistory(schemaHistoryDirectory)
+            : new Dictionary<SchemaHistoryKey, ExistingSchemaHistoryRecord>();
 
-        foreach (SnapshotRecord candidate in candidates) {
-            if (!existing.TryGetValue(candidate.Key, out ExistingSnapshot? historical)) {
-                throw new SnapshotHistoryException(
+        foreach (SchemaHistoryRecord candidate in candidates) {
+            if (!existing.TryGetValue(candidate.Key, out ExistingSchemaHistoryRecord? historical)) {
+                throw new SchemaHistoryException(
                     $"history is missing schema '{candidate.SchemaId}' version {candidate.Version}");
             }
 
-            if (!candidate.ShapeEquals(historical.Snapshot)) {
-                throw new SnapshotHistoryException(
+            if (!candidate.ShapeEquals(historical.Record)) {
+                throw new SchemaHistoryException(
                     $"history conflicts with manifest for schema '{candidate.SchemaId}' version {candidate.Version}");
             }
         }
 
-        return new SnapshotHistoryResult(
+        return new SchemaHistoryResult(
             $"verified {candidates.Count} current manifest candidate(s) against {existing.Count} schema-history record(s)");
     }
 
-    private static Dictionary<SnapshotKey, ExistingSnapshot> LoadHistory(
-        string historyDirectory) {
-        Dictionary<SnapshotKey, ExistingSnapshot> snapshots = new();
+    private static Dictionary<SchemaHistoryKey, ExistingSchemaHistoryRecord> LoadHistory(
+        string schemaHistoryDirectory) {
+        if (Directory.EnumerateFiles(schemaHistoryDirectory, "*.dgsnapshot", SearchOption.TopDirectoryOnly).Any()) {
+            throw new SchemaHistoryException(
+                "DurableGraph Schema-history directory contains legacy .dgsnapshot files; " +
+                "regenerate them as .dgschema because legacy history is not accepted.");
+        }
+
+        Dictionary<SchemaHistoryKey, ExistingSchemaHistoryRecord> records = new();
         string[] paths = Directory.GetFiles(
-            historyDirectory,
-            $"*{SnapshotExtension}",
+            schemaHistoryDirectory,
+            $"*{SchemaHistoryExtension}",
             SearchOption.TopDirectoryOnly);
         Array.Sort(paths, StringComparer.Ordinal);
 
         foreach (string path in paths) {
-            SnapshotRecord snapshot = SnapshotDocument.ParseHistory(path);
-            string canonicalContent = SnapshotDocument.RenderHistory(snapshot);
-            string expectedFileName = SnapshotDocument.GetHistoryFileName(snapshot, canonicalContent);
+            SchemaHistoryRecord record = SchemaHistoryDocument.ParseHistory(path);
+            string canonicalContent = SchemaHistoryDocument.RenderHistory(record);
+            string expectedFileName = SchemaHistoryDocument.GetHistoryFileName(record, canonicalContent);
             string actualFileName = Path.GetFileName(path);
 
             if (!StringComparer.Ordinal.Equals(actualFileName, expectedFileName)) {
-                throw new SnapshotHistoryException(
+                throw new SchemaHistoryException(
                     $"history file '{actualFileName}' must be named '{expectedFileName}'");
             }
 
-            if (snapshots.TryGetValue(snapshot.Key, out ExistingSnapshot? duplicate)) {
-                string conflict = snapshot.ShapeEquals(duplicate.Snapshot)
+            if (records.TryGetValue(record.Key, out ExistingSchemaHistoryRecord? duplicate)) {
+                string conflict = record.ShapeEquals(duplicate.Record)
                     ? "duplicates"
                     : "conflicts with";
-                throw new SnapshotHistoryException(
-                    $"history file '{actualFileName}' {conflict} '{duplicate.FileName}' for schema '{snapshot.SchemaId}' version {snapshot.Version}");
+                throw new SchemaHistoryException(
+                    $"history file '{actualFileName}' {conflict} '{duplicate.FileName}' for schema '{record.SchemaId}' version {record.Version}");
             }
 
-            snapshots.Add(
-                snapshot.Key,
-                new ExistingSnapshot(actualFileName, snapshot));
+            records.Add(
+                record.Key,
+                new ExistingSchemaHistoryRecord(actualFileName, record));
         }
 
         // Accepted history must close by itself. A current candidate cannot repair it.
-        ValidateClosure(snapshots.ToDictionary(pair => pair.Key, pair => pair.Value.Snapshot));
-        return snapshots;
+        ValidateClosure(records.ToDictionary(pair => pair.Key, pair => pair.Value.Record));
+        return records;
     }
 
-    private static void ValidateClosure(IReadOnlyDictionary<SnapshotKey, SnapshotRecord> snapshots) {
-        foreach (SnapshotRecord snapshot in snapshots.Values) {
-            HashSet<string> ancestors = new(StringComparer.Ordinal) { snapshot.SchemaId };
-            SnapshotRecord current = snapshot;
+    private static void ValidateClosure(IReadOnlyDictionary<SchemaHistoryKey, SchemaHistoryRecord> records) {
+        foreach (SchemaHistoryRecord record in records.Values) {
+            HashSet<string> ancestors = new(StringComparer.Ordinal) { record.SchemaId };
+            SchemaHistoryRecord current = record;
 
-            while (current.BaseSchema is SnapshotKey baseKey) {
+            while (current.BaseSchema is SchemaHistoryKey baseKey) {
                 if (!ancestors.Add(baseKey.SchemaId)) {
-                    throw new SnapshotHistoryException(
-                        $"schema '{snapshot.SchemaId}' version {snapshot.Version} repeats ancestor schema '{baseKey.SchemaId}'");
+                    throw new SchemaHistoryException(
+                        $"schema '{record.SchemaId}' version {record.Version} repeats ancestor schema '{baseKey.SchemaId}'");
                 }
 
-                if (!snapshots.TryGetValue(baseKey, out SnapshotRecord? baseSchema)) {
-                    throw new SnapshotHistoryException(
+                if (!records.TryGetValue(baseKey, out SchemaHistoryRecord? baseSchema)) {
+                    throw new SchemaHistoryException(
                         $"schema '{current.SchemaId}' version {current.Version} is missing base schema '{baseKey.SchemaId}' version {baseKey.Version}");
                 }
 
@@ -150,16 +156,16 @@ internal sealed class SnapshotHistoryTool {
         }
     }
 
-    private static void PublishCreateOnly(PendingSnapshot snapshot) {
-        string directory = Path.GetDirectoryName(snapshot.DestinationPath)
-            ?? throw new SnapshotHistoryException("history destination has no directory");
-        string fileName = Path.GetFileName(snapshot.DestinationPath);
+    private static void PublishCreateOnly(PendingSchemaHistoryRecord record) {
+        string directory = Path.GetDirectoryName(record.DestinationPath)
+            ?? throw new SchemaHistoryException("history destination has no directory");
+        string fileName = Path.GetFileName(record.DestinationPath);
         string temporaryPath = Path.Combine(
             directory,
             $".{fileName}.{Guid.NewGuid():N}.tmp");
 
         try {
-            byte[] bytes = SnapshotDocument.Utf8NoBom.GetBytes(snapshot.Content);
+            byte[] bytes = SchemaHistoryDocument.Utf8NoBom.GetBytes(record.Content);
 
             using (FileStream stream = new(
                 temporaryPath,
@@ -170,7 +176,7 @@ internal sealed class SnapshotHistoryTool {
                 stream.Flush(flushToDisk: true);
             }
 
-            File.Move(temporaryPath, snapshot.DestinationPath, overwrite: false);
+            File.Move(temporaryPath, record.DestinationPath, overwrite: false);
         } finally {
             if (File.Exists(temporaryPath)) {
                 File.Delete(temporaryPath);
@@ -178,16 +184,16 @@ internal sealed class SnapshotHistoryTool {
         }
     }
 
-    private sealed record ExistingSnapshot(string FileName, SnapshotRecord Snapshot);
+    private sealed record ExistingSchemaHistoryRecord(string FileName, SchemaHistoryRecord Record);
 
-    private sealed record PendingSnapshot(string DestinationPath, string Content);
+    private sealed record PendingSchemaHistoryRecord(string DestinationPath, string Content);
 }
 
-internal static class SnapshotDocument {
-    private const string ManifestHeader = "// durable-graph-snapshot-manifest:1";
-    private const string HistoryHeader = "// durable-graph-snapshot:1";
-    private const string SnapshotBegin = "// snapshot-begin";
-    private const string SnapshotEnd = "// snapshot-end";
+internal static class SchemaHistoryDocument {
+    private const string ManifestHeader = "// durable-graph-schema-history-manifest:1";
+    private const string HistoryHeader = "// durable-graph-schema-history:1";
+    private const string SchemaBegin = "// schema-begin";
+    private const string SchemaEnd = "// schema-end";
     private const string SchemaIdPrefix = "// schema-id-base64:";
     private const string VersionPrefix = "// version:";
     private const string BasePrefix = "// base:";
@@ -197,32 +203,32 @@ internal static class SnapshotDocument {
         encoderShouldEmitUTF8Identifier: false,
         throwOnInvalidBytes: true);
 
-    public static IReadOnlyList<SnapshotRecord> ParseManifest(string path) {
+    public static IReadOnlyList<SchemaHistoryRecord> ParseManifest(string path) {
         string text = ReadUtf8(path, allowByteOrderMark: true);
-        IReadOnlyList<SnapshotRecord> snapshots = Parse(
+        IReadOnlyList<SchemaHistoryRecord> records = Parse(
             path,
             text,
             ManifestHeader,
-            requireExactlyOneSnapshot: false);
-        Dictionary<SnapshotKey, SnapshotRecord> distinct = new();
+            requireExactlyOneRecord: false);
+        Dictionary<SchemaHistoryKey, SchemaHistoryRecord> distinct = new();
 
-        foreach (SnapshotRecord snapshot in snapshots) {
-            if (distinct.TryGetValue(snapshot.Key, out SnapshotRecord? duplicate)) {
-                string reason = snapshot.ShapeEquals(duplicate)
-                    ? "duplicates a snapshot"
+        foreach (SchemaHistoryRecord record in records) {
+            if (distinct.TryGetValue(record.Key, out SchemaHistoryRecord? duplicate)) {
+                string reason = record.ShapeEquals(duplicate)
+                    ? "duplicates a record"
                     : "has a conflicting shape";
                 throw Invalid(
                     path,
-                    $"schema '{snapshot.SchemaId}' version {snapshot.Version} {reason}");
+                    $"schema '{record.SchemaId}' version {record.Version} {reason}");
             }
 
-            distinct.Add(snapshot.Key, snapshot);
+            distinct.Add(record.Key, record);
         }
 
-        return snapshots;
+        return records;
     }
 
-    public static SnapshotRecord ParseHistory(string path) {
+    public static SchemaHistoryRecord ParseHistory(string path) {
         byte[] bytes;
 
         try {
@@ -233,52 +239,52 @@ internal static class SnapshotDocument {
         }
 
         string text = DecodeUtf8(path, bytes, allowByteOrderMark: false);
-        SnapshotRecord snapshot = Parse(
+        SchemaHistoryRecord record = Parse(
             path,
             text,
             HistoryHeader,
-            requireExactlyOneSnapshot: true)[0];
-        byte[] canonicalBytes = Utf8NoBom.GetBytes(RenderHistory(snapshot));
+            requireExactlyOneRecord: true)[0];
+        byte[] canonicalBytes = Utf8NoBom.GetBytes(RenderHistory(record));
 
         if (!bytes.AsSpan().SequenceEqual(canonicalBytes)) {
             throw Invalid(path, "content is not canonical UTF-8 with LF line endings");
         }
 
-        return snapshot;
+        return record;
     }
 
-    public static string RenderHistory(SnapshotRecord snapshot) {
+    public static string RenderHistory(SchemaHistoryRecord record) {
         StringBuilder builder = new();
         builder.AppendLine(HistoryHeader);
-        AppendSnapshot(builder, snapshot);
+        AppendSchemaRecord(builder, record);
         return builder.ToString().Replace("\r\n", "\n", StringComparison.Ordinal);
     }
 
     public static string GetHistoryFileName(
-        SnapshotRecord snapshot,
+        SchemaHistoryRecord record,
         string canonicalContent) {
-        string schemaHash = ToLowerHex(SHA256.HashData(Utf8NoBom.GetBytes(snapshot.SchemaId)));
+        string schemaHash = ToLowerHex(SHA256.HashData(Utf8NoBom.GetBytes(record.SchemaId)));
         string contentHash = ToLowerHex(SHA256.HashData(Utf8NoBom.GetBytes(canonicalContent)));
-        return $"snapshot.{schemaHash}.V{snapshot.Version.ToString(CultureInfo.InvariantCulture)}.{contentHash}.dgsnapshot";
+        return $"schema.{schemaHash}.V{record.Version.ToString(CultureInfo.InvariantCulture)}.{contentHash}.dgschema";
     }
 
-    private static IReadOnlyList<SnapshotRecord> Parse(
+    private static IReadOnlyList<SchemaHistoryRecord> Parse(
         string path,
         string text,
         string expectedHeader,
-        bool requireExactlyOneSnapshot) {
+        bool requireExactlyOneRecord) {
         string[] lines = SplitLines(path, text);
 
         if (lines.Length == 0 || !StringComparer.Ordinal.Equals(lines[0], expectedHeader)) {
             throw Invalid(path, $"expected header '{expectedHeader}'");
         }
 
-        List<SnapshotRecord> snapshots = new();
+        List<SchemaHistoryRecord> records = new();
         int index = 1;
 
         while (index < lines.Length) {
-            if (!StringComparer.Ordinal.Equals(lines[index], SnapshotBegin)) {
-                throw Invalid(path, $"line {index + 1} must be '{SnapshotBegin}'");
+            if (!StringComparer.Ordinal.Equals(lines[index], SchemaBegin)) {
+                throw Invalid(path, $"line {index + 1} must be '{SchemaBegin}'");
             }
 
             index++;
@@ -294,7 +300,7 @@ internal static class SnapshotDocument {
                 ref index,
                 VersionPrefix);
             int version = ParsePositiveCanonicalInt(path, versionText, "version");
-            SnapshotKey? baseSchema = null;
+            SchemaHistoryKey? baseSchema = null;
 
             if (index < lines.Length && lines[index].StartsWith(BasePrefix, StringComparison.Ordinal)) {
                 string baseText = lines[index].Substring(BasePrefix.Length);
@@ -304,13 +310,13 @@ internal static class SnapshotDocument {
                     throw Invalid(path, $"line {index + 1} has an invalid base entry");
                 }
 
-                baseSchema = new SnapshotKey(
+                baseSchema = new SchemaHistoryKey(
                     DecodeSchemaId(path, baseText.Substring(0, separator)),
                     ParsePositiveCanonicalInt(path, baseText.Substring(separator + 1), "base version"));
                 index++;
             }
 
-            List<SnapshotField> fields = new();
+            List<SchemaHistoryField> fields = new();
             int previousFieldId = 0;
 
             while (index < lines.Length &&
@@ -345,24 +351,24 @@ internal static class SnapshotDocument {
                     throw Invalid(path, $"line {index + 1} has an invalid nominal reference operand");
                 }
                 string? targetSchemaId = typeTag == 15 ? DecodeSchemaId(path, parts[2]) : null;
-                fields.Add(new SnapshotField(fieldId, typeTag, targetSchemaId));
+                fields.Add(new SchemaHistoryField(fieldId, typeTag, targetSchemaId));
                 previousFieldId = fieldId;
                 index++;
             }
 
-            if (index >= lines.Length || !StringComparer.Ordinal.Equals(lines[index], SnapshotEnd)) {
-                throw Invalid(path, $"snapshot for schema '{schemaId}' version {version} has no '{SnapshotEnd}'");
+            if (index >= lines.Length || !StringComparer.Ordinal.Equals(lines[index], SchemaEnd)) {
+                throw Invalid(path, $"record for schema '{schemaId}' version {version} has no '{SchemaEnd}'");
             }
 
             index++;
-            snapshots.Add(new SnapshotRecord(schemaId, schemaIdBase64, version, fields, baseSchema));
+            records.Add(new SchemaHistoryRecord(schemaId, schemaIdBase64, version, fields, baseSchema));
         }
 
-        if (requireExactlyOneSnapshot && snapshots.Count != 1) {
-            throw Invalid(path, $"history must contain exactly one snapshot block, found {snapshots.Count}");
+        if (requireExactlyOneRecord && records.Count != 1) {
+            throw Invalid(path, $"history must contain exactly one record block, found {records.Count}");
         }
 
-        return snapshots;
+        return records;
     }
 
     private static string[] SplitLines(string path, string text) {
@@ -485,22 +491,22 @@ internal static class SnapshotDocument {
         }
     }
 
-    private static void AppendSnapshot(
+    private static void AppendSchemaRecord(
         StringBuilder builder,
-        SnapshotRecord snapshot) {
-        builder.AppendLine(SnapshotBegin);
-        builder.Append(SchemaIdPrefix).AppendLine(snapshot.SchemaIdBase64);
+        SchemaHistoryRecord record) {
+        builder.AppendLine(SchemaBegin);
+        builder.Append(SchemaIdPrefix).AppendLine(record.SchemaIdBase64);
         builder.Append(VersionPrefix)
-            .AppendLine(snapshot.Version.ToString(CultureInfo.InvariantCulture));
+            .AppendLine(record.Version.ToString(CultureInfo.InvariantCulture));
 
-        if (snapshot.BaseSchema is SnapshotKey baseSchema) {
+        if (record.BaseSchema is SchemaHistoryKey baseSchema) {
             builder.Append(BasePrefix)
                 .Append(Convert.ToBase64String(Utf8NoBom.GetBytes(baseSchema.SchemaId)))
                 .Append('|')
                 .AppendLine(baseSchema.Version.ToString(CultureInfo.InvariantCulture));
         }
 
-        foreach (SnapshotField field in snapshot.Fields) {
+        foreach (SchemaHistoryField field in record.Fields) {
             builder.Append(FieldPrefix)
                 .Append(field.FieldId.ToString(CultureInfo.InvariantCulture))
                 .Append('|')
@@ -511,26 +517,26 @@ internal static class SnapshotDocument {
             builder.AppendLine();
         }
 
-        builder.AppendLine(SnapshotEnd);
+        builder.AppendLine(SchemaEnd);
     }
 
     private static string ToLowerHex(byte[] bytes) {
         return Convert.ToHexStringLower(bytes);
     }
 
-    private static SnapshotHistoryException Invalid(string path, string reason) {
-        return new SnapshotHistoryException(
-            $"snapshot file '{Path.GetFileName(path)}' is invalid: {reason}");
+    private static SchemaHistoryException Invalid(string path, string reason) {
+        return new SchemaHistoryException(
+            $"record file '{Path.GetFileName(path)}' is invalid: {reason}");
     }
 }
 
-internal sealed class SnapshotRecord {
-    public SnapshotRecord(
+internal sealed class SchemaHistoryRecord {
+    public SchemaHistoryRecord(
         string schemaId,
         string schemaIdBase64,
         int version,
-        IReadOnlyList<SnapshotField> fields,
-        SnapshotKey? baseSchema = null) {
+        IReadOnlyList<SchemaHistoryField> fields,
+        SchemaHistoryKey? baseSchema = null) {
         SchemaId = schemaId;
         SchemaIdBase64 = schemaIdBase64;
         Version = version;
@@ -544,25 +550,25 @@ internal sealed class SnapshotRecord {
 
     public int Version { get; }
 
-    public IReadOnlyList<SnapshotField> Fields { get; }
+    public IReadOnlyList<SchemaHistoryField> Fields { get; }
 
-    public SnapshotKey? BaseSchema { get; }
+    public SchemaHistoryKey? BaseSchema { get; }
 
-    public SnapshotKey Key => new(SchemaId, Version);
+    public SchemaHistoryKey Key => new(SchemaId, Version);
 
-    public bool ShapeEquals(SnapshotRecord other) {
+    public bool ShapeEquals(SchemaHistoryRecord other) {
         return BaseSchema == other.BaseSchema && Fields.SequenceEqual(other.Fields);
     }
 }
 
-internal readonly record struct SnapshotKey(string SchemaId, int Version);
+internal readonly record struct SchemaHistoryKey(string SchemaId, int Version);
 
-internal readonly record struct SnapshotField(int FieldId, int TypeTag, string? TargetSchemaId = null);
+internal readonly record struct SchemaHistoryField(int FieldId, int TypeTag, string? TargetSchemaId = null);
 
-internal readonly record struct SnapshotHistoryResult(string Message);
+internal readonly record struct SchemaHistoryResult(string Message);
 
-internal sealed class SnapshotHistoryException : Exception {
-    public SnapshotHistoryException(string message)
+internal sealed class SchemaHistoryException : Exception {
+    public SchemaHistoryException(string message)
         : base(message) {
     }
 }

@@ -29,10 +29,10 @@ string 成员不再 inline 写值。尚未授权实现这些新能力。
 | 能力 | 当前证据 | 对下一步的影响 |
 |---|---|---|
 | 版本化 Schema 描述 | [DurableSchema](../../src/DurableGraph/DurableSchema.cs)已有 SchemaId、Version、有序 FieldId/TypeTag 和结构相等 | 源码没有名为 VersionedSchema 的类型；不需要为了名字重建一层 |
-| 累积历史 shape 与生成类型 | [生成器](../../src/DurableGraph.Generator/DurableSchemaGenerator.cs)消费 .dgsnapshot；[build targets](../../src/DurableGraph/build/Atelia.DurableGraph.targets)与[发布工具](../../src/DurableGraph.Build/SnapshotHistoryTool.cs)已集成 Publish/Verify | SourceGeneratorHistoryProbe 的关键机制已进入主项目和 package；不应重新搬运 |
+| 累积历史 shape 与生成类型 | [生成器](../../src/DurableGraph.Generator/DurableSchemaGenerator.cs)消费 .dgsnapshot；[build targets](../../src/DurableGraph/build/Atelia.DurableGraph.targets)与[发布工具](../../src/DurableGraph.Build/SchemaHistoryTool.cs)已集成 Publish/Verify | SourceGeneratorHistoryProbe 的关键机制已进入主项目和 package；不应重新搬运 |
 | 相邻版本升级 | 生成器产生历史 Snapshot、必需的 partial Upgrade 声明及运行时相邻调用链 | 业务转换函数体仍需手写，不是自动推导领域升级逻辑 |
-| 历史读取 | [生成器测试](../../tests/DurableGraph.Tests/DurableSchemaGeneratorTests.cs)与[内存 Store 测试](../../tests/DurableGraph.Tests/InMemoryStateStoreTests.cs)已验证历史读取升级、失败和无隐式回写 | 不再把“运行时升级尚未实现”的早期记录作为当前施工清单 |
-| 现有对象序列化 | [IDurableSerializer](../../src/DurableGraph/IDurableSerializer.cs)使用 boxed 字段字典；[InMemoryStateStore](../../src/DurableGraph/InMemoryStateStore.cs)只保存 demo slot | 还没有对象二进制 Base/Delta |
+| 历史读取 | [生成器测试](../../tests/DurableGraph.Tests/DurableSchemaGeneratorTests.cs)与[当时的内存 Store 测试](https://github.com/Robird/durable-graph/blob/3f83dab70156927d854d82753a08fe2a419b8274/tests/DurableGraph.Tests/InMemoryStateStoreTests.cs)已验证历史读取升级、失败和无隐式回写 | 不再把“运行时升级尚未实现”的早期记录作为当前施工清单 |
+| 现有对象序列化 | [当时的 IDurableSerializer](https://github.com/Robird/durable-graph/blob/3f83dab70156927d854d82753a08fe2a419b8274/src/DurableGraph/IDurableSerializer.cs)使用 boxed 字段字典；[当时的 InMemoryStateStore](https://github.com/Robird/durable-graph/blob/3f83dab70156927d854d82753a08fe2a419b8274/src/DurableGraph/InMemoryStateStore.cs)只保存 demo slot | 还没有对象二进制 Base/Delta |
 | 图操作生成探索 | [DurableGraphOperationsProbeGenerator](../../src/DurableGraph.Generator/DurableGraphOperationsProbeGenerator.cs)是未注册的 internal probe，生成 capture/equality/reference visit | 位于 src 不等于默认生成器已经提供图序列化；没有 bytes codec |
 | 字节原语 | [Serialization](../../src/DurableGraph.StateStore.Serialization/Serialization/BinaryPayloadWriter.cs)已有整数、Boolean、字符串等读写 | 可复用编码语义，但当前均 internal |
 | 对象存储 | [StateRevisionWireWriter](../../src/DurableGraph.StateStore.Storage/StateRevisionWireWriter.cs)只写 membership；[StateRevisionStore](../../src/DurableGraph.StateStore.Storage/StateRevisionStore.cs)只重放 shallow heads | 真实 ObjectVersion 内容和 raw Base/Delta 链仍缺失 |

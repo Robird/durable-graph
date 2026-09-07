@@ -44,7 +44,7 @@ public sealed partial class DurableSchemaGeneratorTests {
     [Fact]
     public void PreparedBaseHistoricalOverloadsUseExactRemovedAncestorLayouts() {
         using AncestryHistoryDirectory files = new();
-        SnapshotHistoryTool publisher = new();
+        SchemaHistoryTool publisher = new();
         string initialSource = FusedDeltaPreamble + """
             [DurableType("prepared.base", 1)]
             public abstract partial class OldBase : DurableBase {

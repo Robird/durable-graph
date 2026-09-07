@@ -5,8 +5,8 @@ using Atelia.DurableGraph.Build;
 namespace Atelia.DurableGraph.Tests;
 
 public sealed partial class DurableSchemaGeneratorTests {
-    private const string NominalHistory = "// durable-graph-snapshot:1\n// snapshot-begin\n" +
-        "// schema-id-base64:QQ==\n// version:1\n// field:1|15|Qg==\n// snapshot-end\n";
+    private const string NominalHistory = "// durable-graph-schema-history:1\n// schema-begin\n" +
+        "// schema-id-base64:QQ==\n// version:1\n// field:1|15|Qg==\n// schema-end\n";
 
     [Fact]
     public void NominalReferenceSchemasAllowSelfAndMutualReferencesWithoutStaticCycles() {
@@ -26,8 +26,8 @@ public sealed partial class DurableSchemaGeneratorTests {
 
     [Fact]
     public void TargetVersionChangesDoNotPropagateButNominalFamilyChangesDo() {
-        var aHistory = new InMemoryAdditionalText("a.dgsnapshot", NominalHistory);
-        var bHistory = new InMemoryAdditionalText("b.dgsnapshot", NominalHistory
+        var aHistory = new InMemoryAdditionalText("a.dgschema", NominalHistory);
+        var bHistory = new InMemoryAdditionalText("b.dgschema", NominalHistory
             .Replace("schema-id-base64:QQ==", "schema-id-base64:Qg==")
             .Replace("// field:1|15|Qg==", "// field:1|15|QQ==\n// field:2|15|Qg=="));
         GeneratorTestRun updatedTarget = RunGenerator(NominalSource(2), aHistory, bHistory);
@@ -42,7 +42,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             using Atelia.DurableGraph;
             [DurableType("A", 2)]
             public partial class A : DurableBase { [DurableField(1)] public int Value; }
-            """, new InMemoryAdditionalText("a.dgsnapshot", NominalHistory));
+            """, new InMemoryAdditionalText("a.dgschema", NominalHistory));
         AssertSchemaOnlyCompiles(run);
         Type owner = EmitAndLoad(run.OutputCompilation).GetType("A")!;
         Assert.Equal(new DurableFieldInfo(1, TypeTag.DurableReference, "B"), Assert.Single(ReadSchemaOnly(owner, 1).Fields));
@@ -54,21 +54,21 @@ public sealed partial class DurableSchemaGeneratorTests {
         string directory = Path.Combine(Path.GetTempPath(), "durable-nominal-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(directory);
         try {
-            string file = Path.Combine(directory, "a.dgsnapshot");
+            string file = Path.Combine(directory, "a.dgschema");
             File.WriteAllText(file, NominalHistory, new UTF8Encoding(false));
-            SnapshotRecord record = SnapshotDocument.ParseHistory(file);
-            Assert.Equal(NominalHistory, SnapshotDocument.RenderHistory(record));
+            SchemaHistoryRecord record = SchemaHistoryDocument.ParseHistory(file);
+            Assert.Equal(NominalHistory, SchemaHistoryDocument.RenderHistory(record));
             Assert.Equal("B", Assert.Single(record.Fields).TargetSchemaId);
             string manifest = Path.Combine(directory, "manifest.g.cs");
-            File.WriteAllText(manifest, NominalHistory.Replace("// durable-graph-snapshot:1", "// durable-graph-snapshot-manifest:1"));
+            File.WriteAllText(manifest, NominalHistory.Replace("// durable-graph-schema-history:1", "// durable-graph-schema-history-manifest:1"));
             string history = Path.Combine(directory, "history");
-            SnapshotHistoryTool tool = new();
+            SchemaHistoryTool tool = new();
             tool.Publish(manifest, history);
             tool.Verify(manifest, history);
             string original = File.ReadAllText(Assert.Single(Directory.GetFiles(history)));
             File.WriteAllText(manifest, File.ReadAllText(manifest).Replace("|Qg==", "|Qw=="));
-            Assert.Throws<SnapshotHistoryException>(() => tool.Publish(manifest, history));
-            Assert.Throws<SnapshotHistoryException>(() => tool.Verify(manifest, history));
+            Assert.Throws<SchemaHistoryException>(() => tool.Publish(manifest, history));
+            Assert.Throws<SchemaHistoryException>(() => tool.Verify(manifest, history));
             Assert.Equal(original, File.ReadAllText(Assert.Single(Directory.GetFiles(history))));
         }
         finally {
@@ -89,12 +89,12 @@ public sealed partial class DurableSchemaGeneratorTests {
     [InlineData("1|16|Qg==")]
     public void BothHistoryParsersRejectMalformedNominalField(string field) {
         string malformed = NominalHistory.Replace("1|15|Qg==", field);
-        GeneratorTestRun run = RunGenerator(NominalSource(1), new InMemoryAdditionalText("bad.dgsnapshot", malformed));
+        GeneratorTestRun run = RunGenerator(NominalSource(1), new InMemoryAdditionalText("bad.dgschema", malformed));
         Assert.Contains(run.GeneratorDiagnostics, diagnostic => diagnostic.Id == "DG0012");
         string file = Path.GetTempFileName();
         try {
             File.WriteAllText(file, malformed, new UTF8Encoding(false));
-            Assert.Throws<SnapshotHistoryException>(() => SnapshotDocument.ParseHistory(file));
+            Assert.Throws<SchemaHistoryException>(() => SchemaHistoryDocument.ParseHistory(file));
         }
         finally { File.Delete(file); }
     }

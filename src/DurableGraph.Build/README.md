@@ -6,19 +6,19 @@ Source Generator and either publishes exact schema-history files or verifies
 that the current manifest candidates are already present.
 
 ```text
-DurableGraph.Build publish --manifest <generated.g.cs> --history <directory>
-DurableGraph.Build verify  --manifest <generated.g.cs> --history <directory>
+DurableGraph.Build publish --manifest <generated.g.cs> --schema-history <directory>
+DurableGraph.Build verify  --manifest <generated.g.cs> --schema-history <directory>
 ```
 
 The manifest format is strict:
 
 ```csharp
-// durable-graph-snapshot-manifest:1
-// snapshot-begin
+// durable-graph-schema-history-manifest:1
+// schema-begin
 // schema-id-base64:cHJvYmUuY2hhcmFjdGVy
 // version:1
 // field:1|4
-// snapshot-end
+// schema-end
 ```
 
 It may contain zero or more schema-history record blocks. Field IDs must be positive,
@@ -27,11 +27,12 @@ and two-column field records. Tag `15` is a durable reference and requires a
 third column containing its nominal target SchemaId in canonical UTF-8 Base64:
 `// field:2|15|cHJvYmUuaXRlbQ==`. It binds a family, without a target version
 or an exact target Schema dependency. Other tags prohibit a third column.
-This extends the vocabulary under the existing headers; older strict parsers
-reject reference records. Existing scalar/string history bytes and hashes stay unchanged.
+These field records retain their established meanings under the current
+Schema-history header. Legacy `.dgsnapshot` headers and record markers are rejected;
+because the canonical text changed, current content hashes differ from the legacy format.
 
-Each checked-in `*.dgsnapshot` uses the same single block with the header
-`// durable-graph-snapshot:1`. History is canonical UTF-8 without a byte-order
+Each checked-in `*.dgschema` uses the same single block with the header
+`// durable-graph-schema-history:1`. History is canonical UTF-8 without a byte-order
 mark, uses LF line endings, and ends in one LF. Its filename contains full
 SHA-256 hashes of the decoded SchemaId and canonical history content, plus the
 version; a SchemaId never becomes a path component.

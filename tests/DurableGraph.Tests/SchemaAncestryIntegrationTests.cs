@@ -9,7 +9,7 @@ public sealed partial class DurableSchemaGeneratorTests {
     [Fact]
     public void SchemaAncestrySurvivesGeneratePublishUpgradeAndReload() {
         using AncestryHistoryDirectory files = new();
-        SnapshotHistoryTool publisher = new();
+        SchemaHistoryTool publisher = new();
         GeneratorTestRun initial = RunGenerator(AncestrySource(1, 1, 1));
         AssertCompilesAncestry(initial);
         string manifest = files.WriteManifest(initial);
@@ -20,10 +20,10 @@ public sealed partial class DurableSchemaGeneratorTests {
         AdditionalText[] accepted = files.ReadAdditionalTexts();
         GeneratorTestRun missingMiddleBump = RunGenerator(AncestrySource(2, 1, 1), accepted);
         Assert.Contains(missingMiddleBump.GeneratorDiagnostics, diagnostic => diagnostic.Id == "DG0015");
-        Assert.Throws<SnapshotHistoryException>(() => publisher.Publish(files.WriteManifest(missingMiddleBump), files.History));
+        Assert.Throws<SchemaHistoryException>(() => publisher.Publish(files.WriteManifest(missingMiddleBump), files.History));
         GeneratorTestRun missingLeafBump = RunGenerator(AncestrySource(2, 2, 1), accepted);
         Assert.Contains(missingLeafBump.GeneratorDiagnostics, diagnostic => diagnostic.Id == "DG0015");
-        Assert.Throws<SnapshotHistoryException>(() => publisher.Publish(files.WriteManifest(missingLeafBump), files.History));
+        Assert.Throws<SchemaHistoryException>(() => publisher.Publish(files.WriteManifest(missingLeafBump), files.History));
         Assert.Equal(3, files.ReadContents().Count);
 
         GeneratorTestRun upgraded = RunGenerator(AncestrySource(2, 2, 2), accepted.Reverse().ToArray());
@@ -54,8 +54,8 @@ public sealed partial class DurableSchemaGeneratorTests {
 
         GeneratorTestRun reloaded = RunGenerator(AncestrySource(2, 2, 2), files.ReadAdditionalTexts());
         AssertCompilesAncestry(reloaded);
-        Assert.Equal(GeneratedSource(upgraded, "DurableGraphSnapshotCandidates.g.cs"),
-            GeneratedSource(reloaded, "DurableGraphSnapshotCandidates.g.cs"));
+        Assert.Equal(GeneratedSource(upgraded, "DurableGraphSchemaHistoryCandidates.g.cs"),
+            GeneratedSource(reloaded, "DurableGraphSchemaHistoryCandidates.g.cs"));
         Type reloadedLeaf = EmitAndLoad(reloaded.OutputCompilation).GetType("Ancestry.Leaf")!;
         Assert.Equal(oldLeaf, GetAncestrySchema(reloadedLeaf, 1));
         Assert.Equal(currentLeaf, GetAncestrySchema(reloadedLeaf, 2));
@@ -64,7 +64,7 @@ public sealed partial class DurableSchemaGeneratorTests {
     [Fact]
     public void SchemaAncestryHistoryDoesNotRequireTheOldClrBaseToRemainInSource() {
         using AncestryHistoryDirectory files = new();
-        SnapshotHistoryTool publisher = new();
+        SchemaHistoryTool publisher = new();
         GeneratorTestRun initial = RunGenerator(AncestrySource(1, 1, 1));
         AssertCompilesAncestry(initial);
         publisher.Publish(files.WriteManifest(initial), files.History);
@@ -129,16 +129,16 @@ public sealed partial class DurableSchemaGeneratorTests {
 
         public string WriteManifest(GeneratorTestRun run) {
             string path = Path.Combine(_root, "manifest.g.cs");
-            File.WriteAllText(path, GeneratedSource(run, "DurableGraphSnapshotCandidates.g.cs"), new UTF8Encoding(false));
+            File.WriteAllText(path, GeneratedSource(run, "DurableGraphSchemaHistoryCandidates.g.cs"), new UTF8Encoding(false));
             return path;
         }
 
-        public AdditionalText[] ReadAdditionalTexts() => Directory.GetFiles(History, "*.dgsnapshot")
+        public AdditionalText[] ReadAdditionalTexts() => Directory.GetFiles(History, "*.dgschema")
             .Order(StringComparer.Ordinal)
             .Select(path => (AdditionalText)new InMemoryAdditionalText(path, File.ReadAllText(path)))
             .ToArray();
 
-        public Dictionary<string, string> ReadContents() => Directory.GetFiles(History, "*.dgsnapshot")
+        public Dictionary<string, string> ReadContents() => Directory.GetFiles(History, "*.dgschema")
             .ToDictionary(path => Path.GetFileName(path), File.ReadAllText, StringComparer.Ordinal);
 
         public void Dispose() => Directory.Delete(_root, recursive: true);

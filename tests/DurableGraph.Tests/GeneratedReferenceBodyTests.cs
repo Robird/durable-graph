@@ -123,7 +123,7 @@ public sealed partial class DurableSchemaGeneratorTests {
     [Fact]
     public void GeneratedHistoricalReferencesRetainNominalConstraintsAfterOldClrTypesAreRemoved() {
         using AncestryHistoryDirectory files = new();
-        SnapshotHistoryTool publisher = new();
+        SchemaHistoryTool publisher = new();
         GeneratorTestRun initial = RunGenerator("""
             using Atelia.DurableGraph;
             namespace ReferenceBodies;

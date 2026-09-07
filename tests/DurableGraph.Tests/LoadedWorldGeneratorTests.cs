@@ -193,7 +193,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             }
             """);
         AssertSchemaOnlyCompiles(initial);
-        new SnapshotHistoryTool().Publish(history.WriteManifest(initial), history.History);
+        new SchemaHistoryTool().Publish(history.WriteManifest(initial), history.History);
         GeneratorTestRun current = RunGenerator(LoadedWorldCurrentSource, history.ReadAdditionalTexts());
         AssertSchemaOnlyCompiles(current);
         Assembly assembly = EmitAndLoad(current.OutputCompilation);

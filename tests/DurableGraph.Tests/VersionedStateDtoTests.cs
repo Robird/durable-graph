@@ -102,8 +102,8 @@ public sealed partial class DurableSchemaGeneratorTests {
                 }
             }
             """,
-            SnapshotHistory("v1.dgsnapshot", "state.history", 1, (1, 2), (9, 1)),
-            SnapshotHistory("v2.dgsnapshot", "state.history", 2, (1, 3), (4, 2)));
+            SchemaHistory("v1.dgschema", "state.history", 1, (1, 2), (9, 1)),
+            SchemaHistory("v2.dgschema", "state.history", 2, (1, 3), (4, 2)));
         AssertSchemaOnlyCompiles(run);
         Assembly assembly = EmitAndLoad(run.OutputCompilation);
         Assert.Equal<byte>([1, 1, 3, 5, 1], BinaryBodyDelegate<Func<byte[]>>(assembly, "RoundTripVersions")());
@@ -128,7 +128,7 @@ public sealed partial class DurableSchemaGeneratorTests {
     [InlineData(false)]
     [InlineData(true)]
     public void ReferenceCaptureStateDtoSupportsHistoricalStringIncludingRemovedAncestor(bool inAncestor) {
-        AdditionalText historical = SnapshotHistory("old.dgsnapshot", inAncestor ? "state.old-base" : "state.item", 1, (1, 4));
+        AdditionalText historical = SchemaHistory("old.dgschema", inAncestor ? "state.old-base" : "state.item", 1, (1, 4));
         AdditionalText[] history = inAncestor ? [
             historical,
             StateDtoHistory("state.item", 1, "state.old-base", 1),
@@ -154,7 +154,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             public abstract partial class Base : DurableBase { [DurableField(1)] private int _current; }
             [DurableType("state.leaf", 1)]
             public sealed partial class Leaf : Base { [DurableField(2)] private bool _flag; }
-            """, SnapshotHistory("base-v1.dgsnapshot", "state.base", 1, (1, 4)));
+            """, SchemaHistory("base-v1.dgschema", "state.base", 1, (1, 4)));
         AssertSchemaOnlyCompiles(run);
         Assembly assembly = EmitAndLoad(run.OutputCompilation);
         Type baseBody = assembly.GetType("Base")!.GetNestedType("__DurableBinaryBody", BindingFlags.NonPublic)!;
@@ -192,8 +192,8 @@ public sealed partial class DurableSchemaGeneratorTests {
     }
 
     private static AdditionalText StateDtoHistory(string schemaId, int version, string baseId, int baseVersion) {
-        string path = $"{schemaId}-{version}.dgsnapshot";
-        string content = SnapshotHistory(path, schemaId, version, (1, 2)).GetText()!.ToString();
+        string path = $"{schemaId}-{version}.dgschema";
+        string content = SchemaHistory(path, schemaId, version, (1, 2)).GetText()!.ToString();
         string versionLine = $"// version:{version}\n";
         content = content.Replace(versionLine, versionLine +
             $"// base:{Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(baseId))}|{baseVersion}\n");

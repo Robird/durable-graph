@@ -13,7 +13,7 @@ public sealed partial class DurableSchemaGeneratorTests {
     [Fact]
     public void DecodedRevisionColdReopenDispatchesMixedHistoricalModelsAndValidatesTheWholeTargetView() {
         using AncestryHistoryDirectory history = new();
-        SnapshotHistoryTool publisher = new();
+        SchemaHistoryTool publisher = new();
         GeneratorTestRun initial = RunGenerator(FusedDeltaPreamble + """
             [DurableType("decoded.base", 1)]
             public abstract partial class OldBase : DurableBase {

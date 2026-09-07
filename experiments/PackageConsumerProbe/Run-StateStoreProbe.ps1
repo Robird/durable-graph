@@ -49,13 +49,13 @@ try {
 
     $consumerProperties = @(
         "-p:DurableGraphPackageVersion=$packageVersion",
-        "-p:DurableGraphSnapshotHistoryDirectory=$history",
+        "-p:DurableGraphSchemaHistoryDirectory=$history",
         "-p:BaseIntermediateOutputPath=$intermediate",
         "-p:BaseOutputPath=$output"
     )
     Invoke-DotNet (@("restore", $consumerProject, "--source", $feed, "--packages", $packageCache) + $consumerProperties)
     Invoke-DotNet (@("build", $consumerProject, "--no-restore") + $consumerProperties)
-    $historyFiles = @(Get-ChildItem -LiteralPath $history -Filter *.dgsnapshot -File)
+    $historyFiles = @(Get-ChildItem -LiteralPath $history -Filter *.dgschema -File)
     if ($historyFiles.Count -ne 2) { throw "Expected two generated Schema history files, found $($historyFiles.Count)." }
 
     $consumerAssembly = Join-Path $output "Debug/net10.0/Atelia.StateStoreConsumer.dll"
@@ -68,11 +68,11 @@ try {
     # Publish V1 from source, then consume that real history while compiling the upgraded model.
     Invoke-DotNet (@("clean", $consumerProject, "-p:RestoreVersion=1") + $consumerProperties)
     Invoke-DotNet (@("build", $consumerProject, "--no-restore", "-p:RestoreVersion=1") + $consumerProperties)
-    $historyFiles = @(Get-ChildItem -LiteralPath $history -Filter *.dgsnapshot -File)
+    $historyFiles = @(Get-ChildItem -LiteralPath $history -Filter *.dgschema -File)
     if ($historyFiles.Count -ne 3) { throw "Expected original two plus World V1 history, found $($historyFiles.Count)." }
     Invoke-DotNet (@("clean", $consumerProject, "-p:RestoreVersion=2") + $consumerProperties)
     Invoke-DotNet (@("build", $consumerProject, "--no-restore", "-p:RestoreVersion=2") + $consumerProperties)
-    $historyFiles = @(Get-ChildItem -LiteralPath $history -Filter *.dgsnapshot -File)
+    $historyFiles = @(Get-ChildItem -LiteralPath $history -Filter *.dgschema -File)
     if ($historyFiles.Count -ne 8) { throw "Expected original two plus World V1/V2 and four graph model histories, found $($historyFiles.Count)." }
     $restoreOutput = (& dotnet $consumerAssembly (Join-Path $workRoot "upgraded-database") | Out-String).Trim().Replace("`r`n", "`n")
     $expectedRestore = $consumerOutput + "`nHistoricalUpgrade:True:ConstructorFree:True:ReadonlyHydrate:True:ForcedBase:True:UnchangedResave:True:NormalDelta:True:ReopenedWorld:True"

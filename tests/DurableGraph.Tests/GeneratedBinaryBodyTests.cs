@@ -192,7 +192,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             [DurableType("body.base", {{(missingHistory ? 2 : 1)}})]
             public sealed partial class Base : DurableBase { [DurableField(1)] private long _base; }
             """;
-        AdditionalText[] history = missingHistory ? [] : [SnapshotHistory("old.dgsnapshot", "body.base", 1, (1, 2))];
+        AdditionalText[] history = missingHistory ? [] : [SchemaHistory("old.dgschema", "body.base", 1, (1, 2))];
         GeneratorTestRun run = RunGenerator(source, history);
         Assert.Contains(run.GeneratorDiagnostics, IsError);
         Assert.DoesNotContain("static void Write(", BinaryBodyGeneratedText(run));
@@ -222,10 +222,10 @@ public sealed partial class DurableSchemaGeneratorTests {
     [InlineData(true, "DG0013")]
     public void BinaryBodyRejectsUnrelatedHistoryParseOrDuplicateConflict(bool duplicateConflict, string diagnosticId) {
         AdditionalText[] history = duplicateConflict ? [
-            SnapshotHistory("first.dgsnapshot", "unrelated", 1, (1, 2)),
-            SnapshotHistory("second.dgsnapshot", "unrelated", 1, (1, 3)),
+            SchemaHistory("first.dgschema", "unrelated", 1, (1, 2)),
+            SchemaHistory("second.dgschema", "unrelated", 1, (1, 3)),
         ] : [
-            new InMemoryAdditionalText("malformed.dgsnapshot", "// durable-graph-snapshot:1\n// not-a-snapshot\n"),
+            new InMemoryAdditionalText("malformed.dgschema", "// durable-graph-schema-history:1\n// not-schema-history\n"),
         ];
         GeneratorTestRun run = RunGenerator("""
             using Atelia.DurableGraph;
@@ -258,7 +258,7 @@ public sealed partial class DurableSchemaGeneratorTests {
                     return buffer.WrittenSpan.ToArray();
                 }
             }
-            """, SnapshotHistory("v1.dgsnapshot", "body.versioned", 1, (1, 2)));
+            """, SchemaHistory("v1.dgschema", "body.versioned", 1, (1, 2)));
         AssertSchemaOnlyCompiles(run);
         Assembly assembly = EmitAndLoad(run.OutputCompilation);
         Type type = assembly.GetType("BinaryBodies.Versioned")!;

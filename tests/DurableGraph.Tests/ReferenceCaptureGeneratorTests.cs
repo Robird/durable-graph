@@ -119,7 +119,7 @@ public sealed partial class DurableSchemaGeneratorTests {
     [InlineData(true)]
     public void ReferenceCaptureStringHistorySurvivesPublisherAndDeletedClrAncestor(bool replaceChain) {
         using AncestryHistoryDirectory files = new();
-        SnapshotHistoryTool publisher = new();
+        SchemaHistoryTool publisher = new();
         GeneratorTestRun initial = RunGenerator(ReferenceCaptureHistoryInitialSource);
         AssertSchemaOnlyCompiles(initial);
         byte[] original = EmitAndLoad(initial.OutputCompilation).GetType("ReferenceHistory.Host")!
@@ -155,7 +155,7 @@ public sealed partial class DurableSchemaGeneratorTests {
     [Fact]
     public void ReferenceCaptureStringLayoutChangeWithoutVersionBumpIsRejectedAfterPublish() {
         using AncestryHistoryDirectory files = new();
-        SnapshotHistoryTool publisher = new();
+        SchemaHistoryTool publisher = new();
         GeneratorTestRun initial = RunGenerator(ReferenceCaptureHistoryInitialSource);
         AssertSchemaOnlyCompiles(initial);
         publisher.Publish(files.WriteManifest(initial), files.History);
@@ -177,8 +177,8 @@ public sealed partial class DurableSchemaGeneratorTests {
         GeneratorTestRun changedCandidate = RunGenerator(changed);
         AssertSchemaOnlyCompiles(changedCandidate);
         string changedManifest = files.WriteManifest(changedCandidate);
-        Assert.Throws<SnapshotHistoryException>(() => publisher.Publish(changedManifest, files.History));
-        Assert.Throws<SnapshotHistoryException>(() => publisher.Verify(changedManifest, files.History));
+        Assert.Throws<SchemaHistoryException>(() => publisher.Publish(changedManifest, files.History));
+        Assert.Throws<SchemaHistoryException>(() => publisher.Verify(changedManifest, files.History));
     }
 
     private static T ReferenceCaptureDelegate<T>(Assembly assembly, string method) where T : Delegate =>

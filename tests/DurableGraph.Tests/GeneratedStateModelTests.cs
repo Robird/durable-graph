@@ -8,7 +8,7 @@ public sealed partial class DurableSchemaGeneratorTests {
     [Fact]
     public void GeneratedStateModelUpgradesAdjacentDtosOnceAndKeepsCurrentFastPathAndInput() {
         using AncestryHistoryDirectory files = new();
-        SnapshotHistoryTool publisher = new();
+        SchemaHistoryTool publisher = new();
         foreach (int version in new[] { 1, 2 }) {
             GeneratorTestRun previous = version == 1
                 ? RunGenerator(StateModelHistorySource(version))
@@ -63,7 +63,7 @@ public sealed partial class DurableSchemaGeneratorTests {
     [Fact]
     public void GeneratedStateModelMissingUpgradePreservesReadersAndOnlyRejectsAffectedOldVersions() {
         using AncestryHistoryDirectory files = new();
-        SnapshotHistoryTool publisher = new();
+        SchemaHistoryTool publisher = new();
         foreach (int version in new[] { 1, 2 }) {
             GeneratorTestRun previous = version == 1
                 ? RunGenerator(StateModelHistorySource(version))
@@ -100,7 +100,7 @@ public sealed partial class DurableSchemaGeneratorTests {
     [Fact]
     public void GeneratedStateModelLeafUpgradeOwnsExactAncestorLayoutWithoutRunningAncestorUpgrade() {
         using AncestryHistoryDirectory files = new();
-        SnapshotHistoryTool publisher = new();
+        SchemaHistoryTool publisher = new();
         GeneratorTestRun initial = RunGenerator("""
             using Atelia.DurableGraph;
             namespace StateModels;
@@ -231,7 +231,7 @@ public sealed partial class DurableSchemaGeneratorTests {
     public void GeneratedStateModelRejectsMalformedDeclaredUpgrade(string method) {
         using AncestryHistoryDirectory files = new();
         GeneratorTestRun initial = RunGenerator(StateModelHistorySource(1));
-        new SnapshotHistoryTool().Publish(files.WriteManifest(initial), files.History);
+        new SchemaHistoryTool().Publish(files.WriteManifest(initial), files.History);
         GeneratorTestRun run = RunGenerator(StateModelHistorySource(2) + "public partial class Item { " + method + " }", files.ReadAdditionalTexts());
         Assert.Contains(run.GeneratorDiagnostics, diagnostic => diagnostic.Id == "DG0020");
     }
@@ -240,7 +240,7 @@ public sealed partial class DurableSchemaGeneratorTests {
     public void GeneratedStateModelCompilerChecksExactDtoTypesAndOutAssignment() {
         using AncestryHistoryDirectory files = new();
         GeneratorTestRun initial = RunGenerator(StateModelHistorySource(1));
-        new SnapshotHistoryTool().Publish(files.WriteManifest(initial), files.History);
+        new SchemaHistoryTool().Publish(files.WriteManifest(initial), files.History);
         foreach (string method in new[] {
             "private static void UpgradeStateV1ToV2(in __DurableBinaryBody.V2 old, out __DurableBinaryBody.V2 next) => next = old;",
             "private static void UpgradeStateV1ToV2(in __DurableBinaryBody.V1 old, out __DurableBinaryBody.V2 next) { }",
@@ -255,7 +255,7 @@ public sealed partial class DurableSchemaGeneratorTests {
     [InlineData(true)]
     public void GeneratedStateModelChecksEveryDeclaredUpgradeEvenWhenLaterEdgeIsMissing(bool wrongPriorType) {
         using AncestryHistoryDirectory files = new();
-        SnapshotHistoryTool publisher = new();
+        SchemaHistoryTool publisher = new();
         GeneratorTestRun first = RunGenerator(StateModelHistorySource(1));
         AssertSchemaOnlyCompiles(first);
         publisher.Publish(files.WriteManifest(first), files.History);

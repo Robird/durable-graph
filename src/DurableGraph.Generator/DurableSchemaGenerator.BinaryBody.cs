@@ -23,11 +23,11 @@ public sealed partial class DurableSchemaGenerator {
         SourceProductionContext context,
         List<DurableTypeModel> types,
         List<DurableTypeModel> validatedSchemaOnlyTypes,
-        List<SnapshotHistoryModel> history,
+        List<SchemaHistoryModel> history,
         bool historyParsedSuccessfully) {
         // The metadata generator has already validated contiguous own versions and exact ancestry.
         // Historical layouts below must still resolve exclusively from accepted history.
-        List<SnapshotHistoryModel> available = new(history);
+        List<SchemaHistoryModel> available = new(history);
         foreach (DurableTypeModel type in types) {
             available.RemoveAll(entry => entry.SchemaId == type.SchemaId && entry.Version == type.Version);
             available.Add(CurrentShape(type));
@@ -65,7 +65,7 @@ public sealed partial class DurableSchemaGenerator {
                 List<BinaryVersionModel> versions = new();
                 for (int version = 1; version <= type.Version; version++) {
                     bool isCurrent = version == type.Version;
-                    SnapshotHistoryModel shape = isCurrent
+                    SchemaHistoryModel shape = isCurrent
                         ? CurrentShape(type)
                         : FindHistory(history, type.SchemaId, version)[0];
                     List<BinaryFieldModel> fields = new();
@@ -522,14 +522,14 @@ public sealed partial class DurableSchemaGenerator {
     }
 
     private static int AppendBinaryFields(
-        SnapshotHistoryModel shape, List<SnapshotHistoryModel> available, List<BinaryFieldModel> fields, int segment) {
+        SchemaHistoryModel shape, List<SchemaHistoryModel> available, List<BinaryFieldModel> fields, int segment) {
         if (shape.BaseSchema.HasValue) {
             SchemaReference reference = shape.BaseSchema.Value;
             segment = AppendBinaryFields(FindHistory(available, reference.SchemaId, reference.Version)[0],
                 available, fields, segment);
         }
 
-        foreach (SnapshotFieldModel field in shape.Fields) {
+        foreach (SchemaHistoryFieldModel field in shape.Fields) {
             fields.Add(new BinaryFieldModel(segment, field.FieldId, field.TypeTagValue, field.TargetSchemaId));
         }
 

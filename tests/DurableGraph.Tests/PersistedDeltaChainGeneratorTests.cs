@@ -139,7 +139,7 @@ public sealed partial class DurableSchemaGeneratorTests {
     [Fact]
     public void PersistedHistoricalDeltaChainUsesRemovedAncestorLayoutAndPersistedExactSchema() {
         using AncestryHistoryDirectory files = new();
-        SnapshotHistoryTool publisher = new();
+        SchemaHistoryTool publisher = new();
         GeneratorTestRun initial = RunGenerator(FusedDeltaPreamble + """
             [DurableType("persisted.base", 1)]
             public abstract partial class OldBase : DurableBase { [DurableField(99)] private int _number; }

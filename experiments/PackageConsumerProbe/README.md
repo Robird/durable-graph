@@ -16,7 +16,8 @@ Run from the repository root:
 
 The probe packs a unique local package, uses an isolated package cache and Schema-history
 directory under this experiment's ignored `obj` directory, and exercises local publish plus
-CI-style read-only verification. Its V1/V2 lane proves that bare `[DurableType]` emits exact
+CI-style read-only verification. It also proves that the packaged build target rejects legacy
+`.dgsnapshot` files instead of silently ignoring them. Its V1/V2 lane proves that bare `[DurableType]` emits exact
 Schema history and versioned State DTOs, including a compile-checked adjacent upgrade shape.
 
 The feed also contains the runtime's Serialization dependency. A final consumer captures private

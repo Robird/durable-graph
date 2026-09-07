@@ -65,7 +65,7 @@ public sealed partial class DurableSchemaGeneratorTests {
 
         foreach (string hintName in new[] {
             "DurableSchemas.g.cs",
-            "DurableGraphSnapshotCandidates.g.cs",
+            "DurableGraphSchemaHistoryCandidates.g.cs",
             "DurableBinaryBodies.g.cs",
         }) {
             string firstGenerated = GeneratedSource(first, hintName);
@@ -89,7 +89,7 @@ public sealed partial class DurableSchemaGeneratorTests {
 
         foreach (string hintName in new[] {
             "DurableSchemas.g.cs",
-            "DurableGraphSnapshotCandidates.g.cs",
+            "DurableGraphSchemaHistoryCandidates.g.cs",
             "DurableBinaryBodies.g.cs",
         }) {
             string firstGenerated = GeneratedSource(first, hintName);
@@ -106,8 +106,8 @@ public sealed partial class DurableSchemaGeneratorTests {
 
         Assert.DoesNotContain(run.GeneratorDiagnostics, IsError);
         Assert.Equal(
-            "// durable-graph-snapshot-manifest:1\n",
-            GeneratedSource(run, "DurableGraphSnapshotCandidates.g.cs"));
+            "// durable-graph-schema-history-manifest:1\n",
+            GeneratedSource(run, "DurableGraphSchemaHistoryCandidates.g.cs"));
         Assert.DoesNotContain(
             run.GeneratedSources,
             source => source.HintName == "DurableSnapshots.g.cs");
@@ -120,7 +120,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             DurableTypeSource(
                 "[DurableField(1)] private int _value;",
                 durableTypeArguments: "\"samples.example\", 3"),
-            SnapshotHistory("example-v1.dgsnapshot", "samples.example", 1, (1, 2)));
+            SchemaHistory("example-v1.dgschema", "samples.example", 1, (1, 2)));
 
         Diagnostic diagnostic = Assert.Single(
             run.GeneratorDiagnostics,
@@ -132,18 +132,18 @@ public sealed partial class DurableSchemaGeneratorTests {
     }
 
     [Fact]
-    public void MalformedSnapshotHistoryFailsClosed() {
+    public void MalformedSchemaHistoryFailsClosed() {
         GeneratorTestRun run = RunGenerator(
             DurableTypeSource("[DurableField(1)] private int _value;"),
             new InMemoryAdditionalText(
-                "broken.dgsnapshot",
-                "// durable-graph-snapshot:1\n// not-a-snapshot\n"));
+                "broken.dgschema",
+                "// durable-graph-schema-history:1\n// not-schema-history\n"));
 
         Diagnostic diagnostic = Assert.Single(
             run.GeneratorDiagnostics,
             candidate => candidate.Id == "DG0012");
         Assert.Equal(DiagnosticSeverity.Error, diagnostic.Severity);
-        Assert.Equal("broken.dgsnapshot", diagnostic.Location.GetLineSpan().Path);
+        Assert.Equal("broken.dgschema", diagnostic.Location.GetLineSpan().Path);
     }
 
     [Fact]
@@ -151,18 +151,35 @@ public sealed partial class DurableSchemaGeneratorTests {
         GeneratorTestRun run = RunGenerator(
             DurableTypeSource("[DurableField(1)] private int _value;"),
             new InMemoryAdditionalText(
-                "candidate.dgsnapshot",
-                "// durable-graph-snapshot-manifest:1\n" +
-                "// snapshot-begin\n" +
+                "candidate.dgschema",
+                "// durable-graph-schema-history-manifest:1\n" +
+                "// schema-begin\n" +
                 "// schema-id-base64:c2FtcGxlcy5leGFtcGxl\n" +
                 "// version:1\n" +
                 "// field:1|2\n" +
-                "// snapshot-end\n"));
+                "// schema-end\n"));
 
         Diagnostic diagnostic = Assert.Single(
             run.GeneratorDiagnostics,
             candidate => candidate.Id == "DG0012");
         Assert.Equal(DiagnosticSeverity.Error, diagnostic.Severity);
+    }
+
+    [Theory]
+    [InlineData(
+        "// durable-graph-snapshot:1\n// schema-begin\n// schema-id-base64:c2FtcGxlcy5leGFtcGxl\n// version:1\n// field:1|2\n// schema-end\n")]
+    [InlineData(
+        "// durable-graph-schema-history:1\n// snapshot-begin\n// schema-id-base64:c2FtcGxlcy5leGFtcGxl\n// version:1\n// field:1|2\n// snapshot-end\n")]
+    public void DgschemaRejectsLegacyHeaderOrRecordMarkers(string legacyContent) {
+        GeneratorTestRun run = RunGenerator(
+            DurableTypeSource("[DurableField(1)] private int _value;"),
+            new InMemoryAdditionalText("legacy.dgschema", legacyContent));
+
+        Diagnostic diagnostic = Assert.Single(
+            run.GeneratorDiagnostics,
+            candidate => candidate.Id == "DG0012");
+        Assert.Equal(DiagnosticSeverity.Error, diagnostic.Severity);
+        Assert.Equal("legacy.dgschema", diagnostic.Location.GetLineSpan().Path);
     }
 
     [Fact]
@@ -171,8 +188,8 @@ public sealed partial class DurableSchemaGeneratorTests {
             DurableTypeSource(
                 "[DurableField(1)] private int _value;",
                 durableTypeArguments: "\"samples.example\", 2"),
-            SnapshotHistory("first.dgsnapshot", "samples.example", 1, (1, 2)),
-            SnapshotHistory("second.dgsnapshot", "samples.example", 1, (1, 3)));
+            SchemaHistory("first.dgschema", "samples.example", 1, (1, 2)),
+            SchemaHistory("second.dgschema", "samples.example", 1, (1, 3)));
 
         Assert.Contains(
             run.GeneratorDiagnostics,
@@ -186,7 +203,7 @@ public sealed partial class DurableSchemaGeneratorTests {
     public void CurrentHistoryMustExactlyMatchCurrentFields() {
         GeneratorTestRun run = RunGenerator(
             DurableTypeSource("[DurableField(1)] private int _value;"),
-            SnapshotHistory("current.dgsnapshot", "samples.example", 1, (1, 3)));
+            SchemaHistory("current.dgschema", "samples.example", 1, (1, 3)));
 
         Diagnostic diagnostic = Assert.Single(
             run.GeneratorDiagnostics,
@@ -366,14 +383,14 @@ public sealed partial class DurableSchemaGeneratorTests {
             source => source.HintName == hintName).SourceText.ToString();
     }
 
-    private static AdditionalText SnapshotHistory(
+    private static AdditionalText SchemaHistory(
         string path,
         string schemaId,
         int version,
         params (int FieldId, int TypeTag)[] fields) {
         string content =
-            "// durable-graph-snapshot:1\n" +
-            "// snapshot-begin\n" +
+            "// durable-graph-schema-history:1\n" +
+            "// schema-begin\n" +
             "// schema-id-base64:" +
             Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(schemaId)) +
             "\n// version:" + version.ToString(System.Globalization.CultureInfo.InvariantCulture) +
@@ -387,7 +404,7 @@ public sealed partial class DurableSchemaGeneratorTests {
                 "\n";
         }
 
-        content += "// snapshot-end\n";
+        content += "// schema-end\n";
         return new InMemoryAdditionalText(path, content);
     }
 

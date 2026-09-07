@@ -163,7 +163,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         using AncestryHistoryDirectory history = new();
         GeneratorTestRun oldRun = RunGenerator(ReferenceHistorySource(1));
         AssertSchemaOnlyCompiles(oldRun);
-        new SnapshotHistoryTool().Publish(history.WriteManifest(oldRun), history.History);
+        new SchemaHistoryTool().Publish(history.WriteManifest(oldRun), history.History);
         ReferenceGraphFixture old = new(EmitAndLoad(oldRun.OutputCompilation));
         GeneratorTestRun currentRun = RunGenerator(ReferenceHistorySource(2), history.ReadAdditionalTexts());
         AssertSchemaOnlyCompiles(currentRun);

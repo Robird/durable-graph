@@ -7,42 +7,42 @@ public sealed class SchemaAncestryHistoryTests {
     [Fact]
     public void BaseRecordHasCanonicalGoldenBytesAndRoundTrips() {
         using Fixture fixture = new();
-        SnapshotRecord snapshot = Record("Leaf", 2, new("基类", 3));
-        string expected = "// durable-graph-snapshot:1\n// snapshot-begin\n" +
+        SchemaHistoryRecord record = Record("Leaf", 2, new("基类", 3));
+        string expected = "// durable-graph-schema-history:1\n// schema-begin\n" +
             "// schema-id-base64:TGVhZg==\n// version:2\n// base:5Z+657G7|3\n" +
-            "// field:1|2\n// snapshot-end\n";
+            "// field:1|2\n// schema-end\n";
 
-        Assert.Equal(expected, SnapshotDocument.RenderHistory(snapshot));
-        SnapshotRecord parsed = SnapshotDocument.ParseHistory(fixture.Write("record.dgsnapshot", expected));
-        Assert.Equal(snapshot.Key, parsed.Key);
-        Assert.True(snapshot.ShapeEquals(parsed));
-        Assert.Equal(new SnapshotKey("基类", 3), parsed.BaseSchema);
+        Assert.Equal(expected, SchemaHistoryDocument.RenderHistory(record));
+        SchemaHistoryRecord parsed = SchemaHistoryDocument.ParseHistory(fixture.Write("record.dgschema", expected));
+        Assert.Equal(record.Key, parsed.Key);
+        Assert.True(record.ShapeEquals(parsed));
+        Assert.Equal(new SchemaHistoryKey("基类", 3), parsed.BaseSchema);
     }
 
     [Fact]
     public void NoBaseRecordRetainsOriginalBytes() {
         Assert.Equal(
-            "// durable-graph-snapshot:1\n// snapshot-begin\n// schema-id-base64:QmFzZQ==\n" +
-            "// version:1\n// field:1|2\n// snapshot-end\n",
-            SnapshotDocument.RenderHistory(Record("Base", 1)));
+            "// durable-graph-schema-history:1\n// schema-begin\n// schema-id-base64:QmFzZQ==\n" +
+            "// version:1\n// field:1|2\n// schema-end\n",
+            SchemaHistoryDocument.RenderHistory(Record("Base", 1)));
     }
 
     [Fact]
     public void ThreeLevelsRequireExplicitVersionPropagationAndKeepHistoricalBindings() {
         using Fixture fixture = new();
-        SnapshotRecord base1 = Record("Base", 1);
-        SnapshotRecord middle1 = Record("Middle", 1, base1.Key);
-        SnapshotRecord leaf1 = Record("Leaf", 1, middle1.Key);
+        SchemaHistoryRecord base1 = Record("Base", 1);
+        SchemaHistoryRecord middle1 = Record("Middle", 1, base1.Key);
+        SchemaHistoryRecord leaf1 = Record("Leaf", 1, middle1.Key);
         fixture.Publish(leaf1, middle1, base1);
         string[] initial = fixture.HistoryContents();
-        SnapshotRecord base2 = Record("Base", 2, fieldType: 3);
-        SnapshotRecord middle2 = Record("Middle", 2, base2.Key);
-        SnapshotRecord leaf2 = Record("Leaf", 2, middle2.Key);
+        SchemaHistoryRecord base2 = Record("Base", 2, fieldType: 3);
+        SchemaHistoryRecord middle2 = Record("Middle", 2, base2.Key);
+        SchemaHistoryRecord leaf2 = Record("Leaf", 2, middle2.Key);
 
-        Assert.Throws<SnapshotHistoryException>(() => fixture.Publish(
+        Assert.Throws<SchemaHistoryException>(() => fixture.Publish(
             base2, Record("Middle", 1, base2.Key), leaf1));
         Assert.Equal(initial, fixture.HistoryContents());
-        Assert.Throws<SnapshotHistoryException>(() => fixture.Publish(
+        Assert.Throws<SchemaHistoryException>(() => fixture.Publish(
             base2, middle2, Record("Leaf", 1, middle2.Key)));
         Assert.Equal(initial, fixture.HistoryContents());
 
@@ -50,7 +50,7 @@ public sealed class SchemaAncestryHistoryTests {
         Assert.Equal("published 0 schema-history record(s); 3 already exact", fixture.Publish(base2, middle2, leaf2).Message);
         Assert.Equal("verified 3 current manifest candidate(s) against 6 schema-history record(s)",
             fixture.Verify(leaf2, base2, middle2).Message);
-        SnapshotRecord[] accepted = Directory.GetFiles(fixture.History).Select(SnapshotDocument.ParseHistory).ToArray();
+        SchemaHistoryRecord[] accepted = Directory.GetFiles(fixture.History).Select(SchemaHistoryDocument.ParseHistory).ToArray();
         Assert.Equal(base1.Key, Assert.Single(accepted, row => row.Key == middle1.Key).BaseSchema);
         Assert.Equal(middle1.Key, Assert.Single(accepted, row => row.Key == leaf1.Key).BaseSchema);
     }
@@ -58,9 +58,9 @@ public sealed class SchemaAncestryHistoryTests {
     [Fact]
     public void CandidateCanReferenceAcceptedBaseWithoutRepeatingItInManifest() {
         using Fixture fixture = new();
-        SnapshotRecord base1 = Record("Base", 1);
+        SchemaHistoryRecord base1 = Record("Base", 1);
         fixture.Publish(base1);
-        SnapshotRecord leaf = Record("Leaf", 1, base1.Key);
+        SchemaHistoryRecord leaf = Record("Leaf", 1, base1.Key);
 
         Assert.Equal("published 1 schema-history record(s); 0 already exact", fixture.Publish(leaf).Message);
         Assert.Equal("verified 1 current manifest candidate(s) against 2 schema-history record(s)", fixture.Verify(leaf).Message);
@@ -73,20 +73,20 @@ public sealed class SchemaAncestryHistoryTests {
     public void SameVersionCannotAddRemoveOrChangeBaseBinding(int? oldBaseVersion, int? newBaseVersion) {
         using Fixture fixture = new();
         fixture.Publish(Record("Base", 1), Record("Base", 2), Record("Leaf", 1,
-            oldBaseVersion is int oldVersion ? new SnapshotKey("Base", oldVersion) : null));
-        SnapshotRecord changed = Record("Leaf", 1,
-            newBaseVersion is int newVersion ? new SnapshotKey("Base", newVersion) : null);
+            oldBaseVersion is int oldVersion ? new SchemaHistoryKey("Base", oldVersion) : null));
+        SchemaHistoryRecord changed = Record("Leaf", 1,
+            newBaseVersion is int newVersion ? new SchemaHistoryKey("Base", newVersion) : null);
         string[] before = fixture.HistoryContents();
 
-        Assert.Throws<SnapshotHistoryException>(() => fixture.Publish(Record("Independent", 1), changed));
-        Assert.Throws<SnapshotHistoryException>(() => fixture.Verify(changed));
+        Assert.Throws<SchemaHistoryException>(() => fixture.Publish(Record("Independent", 1), changed));
+        Assert.Throws<SchemaHistoryException>(() => fixture.Verify(changed));
         Assert.Equal(before, fixture.HistoryContents());
     }
 
     [Fact]
     public void MissingCandidateAncestorFailsBeforeAnyFilesAreCreated() {
         using Fixture fixture = new();
-        SnapshotHistoryException exception = Assert.Throws<SnapshotHistoryException>(() => fixture.Publish(
+        SchemaHistoryException exception = Assert.Throws<SchemaHistoryException>(() => fixture.Publish(
             Record("Independent", 1), Record("Leaf", 1, new("Missing", 7))));
 
         Assert.Contains("missing base schema 'Missing' version 7", exception.Message);
@@ -98,12 +98,12 @@ public sealed class SchemaAncestryHistoryTests {
     [InlineData(true)]
     public void CandidateCannotRepairIncompleteAcceptedHistory(bool verify) {
         using Fixture fixture = new();
-        SnapshotRecord missingBase = Record("Base", 1);
-        SnapshotRecord leaf = Record("Leaf", 1, missingBase.Key);
+        SchemaHistoryRecord missingBase = Record("Base", 1);
+        SchemaHistoryRecord leaf = Record("Leaf", 1, missingBase.Key);
         fixture.WriteAccepted(leaf);
         string[] before = fixture.HistoryContents();
 
-        SnapshotHistoryException exception = Assert.Throws<SnapshotHistoryException>(() => {
+        SchemaHistoryException exception = Assert.Throws<SchemaHistoryException>(() => {
             if (verify) {
                 fixture.Verify(missingBase, leaf);
             } else {
@@ -122,23 +122,23 @@ public sealed class SchemaAncestryHistoryTests {
     [InlineData(true, true)]
     public void RepeatedAncestorIdentityIsRejectedEvenAcrossVersions(bool accepted, bool differentVersions) {
         using Fixture fixture = new();
-        SnapshotRecord first = Record("First", 1, new("Second", 1));
-        SnapshotRecord second = Record("Second", 1, new("First", differentVersions ? 2 : 1));
-        SnapshotRecord[] records = differentVersions ? [first, second, Record("First", 2)] : [first, second];
+        SchemaHistoryRecord first = Record("First", 1, new("Second", 1));
+        SchemaHistoryRecord second = Record("Second", 1, new("First", differentVersions ? 2 : 1));
+        SchemaHistoryRecord[] records = differentVersions ? [first, second, Record("First", 2)] : [first, second];
 
         if (accepted) {
-            foreach (SnapshotRecord record in records) {
+            foreach (SchemaHistoryRecord record in records) {
                 fixture.WriteAccepted(record);
             }
         }
 
         string[] before = fixture.HistoryContents();
-        SnapshotHistoryException exception = Assert.Throws<SnapshotHistoryException>(() => fixture.Publish(records));
+        SchemaHistoryException exception = Assert.Throws<SchemaHistoryException>(() => fixture.Publish(records));
         Assert.Contains("repeats ancestor schema", exception.Message);
         Assert.Equal(before, fixture.HistoryContents());
 
         if (accepted) {
-            Assert.Throws<SnapshotHistoryException>(() => fixture.Verify(records));
+            Assert.Throws<SchemaHistoryException>(() => fixture.Verify(records));
         }
     }
 
@@ -162,7 +162,7 @@ public sealed class SchemaAncestryHistoryTests {
             "// version:1\n", $"// version:1\n// base:{entry}\n", StringComparison.Ordinal);
         string path = fixture.Write("invalid.g.cs", text);
 
-        Assert.Throws<SnapshotHistoryException>(() => SnapshotDocument.ParseManifest(path));
+        Assert.Throws<SchemaHistoryException>(() => SchemaHistoryDocument.ParseManifest(path));
     }
 
     [Theory]
@@ -172,22 +172,22 @@ public sealed class SchemaAncestryHistoryTests {
         using Fixture fixture = new();
         string text = Manifest(Record("Leaf", 1)).Replace("// field:1|2\n", body, StringComparison.Ordinal);
 
-        Assert.Throws<SnapshotHistoryException>(() => SnapshotDocument.ParseManifest(fixture.Write("invalid.g.cs", text)));
+        Assert.Throws<SchemaHistoryException>(() => SchemaHistoryDocument.ParseManifest(fixture.Write("invalid.g.cs", text)));
     }
 
-    private static SnapshotRecord Record(string id, int version, SnapshotKey? baseSchema = null, int fieldType = 2) {
-        return new SnapshotRecord(id, Convert.ToBase64String(Encoding.UTF8.GetBytes(id)), version,
-            [new SnapshotField(1, fieldType)], baseSchema);
+    private static SchemaHistoryRecord Record(string id, int version, SchemaHistoryKey? baseSchema = null, int fieldType = 2) {
+        return new SchemaHistoryRecord(id, Convert.ToBase64String(Encoding.UTF8.GetBytes(id)), version,
+            [new SchemaHistoryField(1, fieldType)], baseSchema);
     }
 
-    private static string Manifest(params SnapshotRecord[] records) {
-        return "// durable-graph-snapshot-manifest:1\n" + string.Concat(records.Select(record =>
-            SnapshotDocument.RenderHistory(record).Replace("// durable-graph-snapshot:1\n", "", StringComparison.Ordinal)));
+    private static string Manifest(params SchemaHistoryRecord[] records) {
+        return "// durable-graph-schema-history-manifest:1\n" + string.Concat(records.Select(record =>
+            SchemaHistoryDocument.RenderHistory(record).Replace("// durable-graph-schema-history:1\n", "", StringComparison.Ordinal)));
     }
 
     private sealed class Fixture : IDisposable {
         private readonly string _root = Path.Combine(Path.GetTempPath(), "Atelia.DurableGraph.Tests", Guid.NewGuid().ToString("N"));
-        private readonly SnapshotHistoryTool _tool = new();
+        private readonly SchemaHistoryTool _tool = new();
 
         public Fixture() => Directory.CreateDirectory(_root);
 
@@ -195,18 +195,18 @@ public sealed class SchemaAncestryHistoryTests {
 
         public string Write(string name, string text) {
             string path = Path.Combine(_root, name);
-            File.WriteAllText(path, text, SnapshotDocument.Utf8NoBom);
+            File.WriteAllText(path, text, SchemaHistoryDocument.Utf8NoBom);
             return path;
         }
 
-        public SnapshotHistoryResult Publish(params SnapshotRecord[] records) => _tool.Publish(Write("manifest.g.cs", Manifest(records)), History);
+        public SchemaHistoryResult Publish(params SchemaHistoryRecord[] records) => _tool.Publish(Write("manifest.g.cs", Manifest(records)), History);
 
-        public SnapshotHistoryResult Verify(params SnapshotRecord[] records) => _tool.Verify(Write("manifest.g.cs", Manifest(records)), History);
+        public SchemaHistoryResult Verify(params SchemaHistoryRecord[] records) => _tool.Verify(Write("manifest.g.cs", Manifest(records)), History);
 
-        public void WriteAccepted(SnapshotRecord record) {
+        public void WriteAccepted(SchemaHistoryRecord record) {
             Directory.CreateDirectory(History);
-            string content = SnapshotDocument.RenderHistory(record);
-            File.WriteAllText(Path.Combine(History, SnapshotDocument.GetHistoryFileName(record, content)), content, SnapshotDocument.Utf8NoBom);
+            string content = SchemaHistoryDocument.RenderHistory(record);
+            File.WriteAllText(Path.Combine(History, SchemaHistoryDocument.GetHistoryFileName(record, content)), content, SchemaHistoryDocument.Utf8NoBom);
         }
 
         public string[] HistoryContents() => Directory.Exists(History)

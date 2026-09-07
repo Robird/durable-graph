@@ -5,14 +5,15 @@ Its public API, Schema-history format, and build workflow are not stable yet.
 
 A direct package reference supplies the runtime library, Source Generator, and the current
 Schema-history build integration. By default, each successful local `CoreCompile` appends exact
-snapshot metadata under `DurableGraphSnapshots/`; a later unrelated build phase can still fail.
+Schema records under `DurableGraphSchemaHistory/`; a later unrelated build phase can still fail.
 Builds with `ContinuousIntegrationBuild=true` verify that the current metadata is already present
 without writing it.
 
-The history directory and mode can be configured with `DurableGraphSnapshotHistoryDirectory`
-and `DurableGraphHistoryMode` (`Publish`, `Verify`, or `Off`). Keep generated `.dgsnapshot` files
+The history directory and mode can be configured with `DurableGraphSchemaHistoryDirectory`
+and `DurableGraphSchemaHistoryMode` (`Publish`, `Verify`, or `Off`). Keep generated `.dgschema` files
 under source control. `Off` is intended only for diagnostics and isolated experiments because it
-removes the automatic history gate.
+removes the automatic history gate. Legacy `.dgsnapshot` files are rejected rather than read or
+silently ignored; regenerate their Schema history with the current package.
 
 In the default serializer mode, when a durable type advances beyond version 1, the Generator emits required private partial
 adjacent handlers such as `UpgradeV1ToV2(in oldValue, out newValue)`. Generated deserialization
@@ -36,7 +37,7 @@ class in a SchemaOnly domain chain. This provisional slice accepts the 13 scalar
 above and string in current and historical layouts, including ancestor fields. String fields
 become uint reference slots in DTOs; their Schema type remains String. The assembly-internal nested `__DurableBinaryBody`
 contains readonly structs `V1` through the current version, each paired with `GetSchema(n)` by
-its static `Schema` property. DTOs are regenerated from accepted `.dgsnapshot` history and the
+its static `Schema` property. DTOs are regenerated from accepted `.dgschema` history and the
 current definition; there is no separate DTO source history to maintain.
 
 Each DTO physically flattens the exact ancestor chain into fields such as `Segment0Field1`:
@@ -126,12 +127,13 @@ it is not a persistent graph format. Domain restoration, Durable reference field
 stored-schema dispatch, DTO upgrades and StateStore Save remain outside this slice.
 
 Changing an exact base binding requires an explicit version increase in its derived class and then
-in each affected descendant. Accepted `.dgsnapshot` history retains the old base binding. Generator
+in each affected descendant. Accepted `.dgschema` history retains the old base binding. Generator
 and publisher both validate that history has a complete, conflict-free ancestor chain. History v1
 records may include a canonical `// base:<base64-schema-id>|<version>` line after the version line;
 records without a base retain their existing representation. This is a provisional metadata format,
 not the object graph payload format.
 
-Schema TypeTags 1–4 retain their meanings; the new scalar tags occupy 5–14. History text syntax
-is unchanged, but older tools reject new tags: update the runtime, Generator and bundled history
-tool together by updating the package. These tags do not define the future graph TypeCodec.
+Schema TypeTags 1–4 retain their meanings; the new scalar tags occupy 5–14. The `.dgschema`
+header and record markers belong to the current Schema-history format; update the runtime,
+Generator and bundled history tool together by updating the package. These tags do not define
+the future graph TypeCodec.

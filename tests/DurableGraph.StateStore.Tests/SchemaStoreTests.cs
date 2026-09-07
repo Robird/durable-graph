@@ -29,9 +29,18 @@ public sealed class SchemaStoreTests : IDisposable {
             var store = new SchemaStore(file);
             Assert.Equal(leaf, store.GetRequired("Leaf", 4));
             Assert.Same(store.GetRequired("Base", 2), store.GetRequired("Leaf", 4).BaseSchema);
-            Assert.Throws<SchemaNotFoundException>(() => store.GetRequired("Leaf", 3));
+            SchemaNotFoundException missing = Assert.Throws<SchemaNotFoundException>(
+                () => store.GetRequired("Leaf", 3));
+            Assert.Equal("Leaf", missing.SchemaId);
+            Assert.Equal(3, missing.Version);
             long tail = file.TailOffset;
-            Assert.Throws<SchemaConflictException>(() => store.Register(new("Leaf", 4, [], ancestor)));
+            DurableSchema conflicting = new("Leaf", 4, [], ancestor);
+            SchemaConflictException conflict = Assert.Throws<SchemaConflictException>(
+                () => store.Register(conflicting));
+            Assert.Same(store.GetRequired("Leaf", 4), conflict.RegisteredSchema);
+            Assert.Same(conflicting, conflict.ConflictingSchema);
+            Assert.Equal("Leaf", conflict.SchemaId);
+            Assert.Equal(4, conflict.Version);
             Assert.Throws<SchemaConflictException>(() => store.Register(new("Leaf", 4, [new(2, TypeTag.String)], new("Base", 3))));
             Assert.Equal(tail, file.TailOffset);
             Assert.False(store.IsFaulted);

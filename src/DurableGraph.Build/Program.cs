@@ -6,11 +6,11 @@ internal static class Program {
     public static int Main(string[] args) {
         try {
             Command command = Command.Parse(args);
-            SnapshotHistoryTool tool = new();
+            SchemaHistoryTool tool = new();
 
-            SnapshotHistoryResult result = command.Name switch {
-                "publish" => tool.Publish(command.ManifestPath, command.HistoryDirectory),
-                "verify" => tool.Verify(command.ManifestPath, command.HistoryDirectory),
+            SchemaHistoryResult result = command.Name switch {
+                "publish" => tool.Publish(command.ManifestPath, command.SchemaHistoryDirectory),
+                "verify" => tool.Verify(command.ManifestPath, command.SchemaHistoryDirectory),
                 _ => throw new CommandLineException($"unknown command '{command.Name}'"),
             };
 
@@ -20,7 +20,7 @@ internal static class Program {
             WriteError(exception.Message);
             WriteUsage();
             return InvalidInputExitCode;
-        } catch (SnapshotHistoryException exception) {
+        } catch (SchemaHistoryException exception) {
             WriteError(exception.Message);
             return InvalidInputExitCode;
         } catch (Exception exception) {
@@ -35,13 +35,13 @@ internal static class Program {
 
     private static void WriteUsage() {
         Console.Error.WriteLine(
-            "usage: DurableGraph.Build <publish|verify> --manifest <generated.g.cs> --history <directory>");
+            "usage: DurableGraph.Build <publish|verify> --manifest <generated.g.cs> --schema-history <directory>");
     }
 
     private sealed record Command(
         string Name,
         string ManifestPath,
-        string HistoryDirectory) {
+        string SchemaHistoryDirectory) {
         public static Command Parse(string[] args) {
             if (args.Length == 0) {
                 throw new CommandLineException("a command is required");
@@ -54,7 +54,7 @@ internal static class Program {
             }
 
             string? manifestPath = null;
-            string? historyDirectory = null;
+            string? schemaHistoryDirectory = null;
 
             for (int index = 1; index < args.Length; index += 2) {
                 if (index + 1 >= args.Length) {
@@ -72,11 +72,11 @@ internal static class Program {
                     case "--manifest" when manifestPath is null:
                         manifestPath = value;
                         break;
-                    case "--history" when historyDirectory is null:
-                        historyDirectory = value;
+                    case "--schema-history" when schemaHistoryDirectory is null:
+                        schemaHistoryDirectory = value;
                         break;
                     case "--manifest":
-                    case "--history":
+                    case "--schema-history":
                         throw new CommandLineException($"option '{option}' was specified more than once");
                     default:
                         throw new CommandLineException($"unknown option '{option}'");
@@ -87,11 +87,11 @@ internal static class Program {
                 throw new CommandLineException("option '--manifest' is required");
             }
 
-            if (historyDirectory is null) {
-                throw new CommandLineException("option '--history' is required");
+            if (schemaHistoryDirectory is null) {
+                throw new CommandLineException("option '--schema-history' is required");
             }
 
-            return new Command(name, manifestPath, historyDirectory);
+            return new Command(name, manifestPath, schemaHistoryDirectory);
         }
     }
 }

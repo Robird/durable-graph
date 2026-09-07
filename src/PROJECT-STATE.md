@@ -22,7 +22,10 @@
 完整提交/发布仍未实现；Append 后重新 Load 建立新基线。
 活跃文档、当前源码注释和测试见证已按[项目术语表](../docs/DurableGraph-glossary.md)
 完成一轮语境化一致；内部 B/D/H 输入现分别命名为精确 Base payload、Delta payload 上界和
-重建链 payload。公开 API、生成 ABI、持久格式与明确 legacy/Probe 词汇未做机械改名；后续触发见[路线图](../docs/DurableGraph-research-roadmap.md#2-已采纳方向中的未完成能力)。
+重建链 payload。[DB-035](../docs/design-branches/0035-public-contract-terminology-migration.md)
+Wave 1 已删除 legacy 生成路径并把裸 `[DurableType]` 收敛为唯一 State model；Wave 2 已将构建期
+Schema history 原子迁移为 `.dgschema`、`SchemaHistory` tool/manifest 和对应 MSBuild 合同，并明确拒绝
+旧 `.dgsnapshot`。生成 ABI、对象状态/body 品牌和 Storage API 的后续 Wave 仍未实施。
 自定义 struct、有限数组对象和泛型闭合待后续分别选片；本批不自动进入下一片。
 持久 World 根、Commit/Ref 和其他类型扩展继续按[路线图](../docs/DurableGraph-research-roadmap.md)独立排期。
 未来联合 Commit/Ref 及内建类型自举的 SchemaStore 复用路线见
@@ -33,7 +36,7 @@
 | 层 | 已验证能力 | 尚未闭合的边界 |
 |---|---|---|
 | [DurableGraph](DurableGraph/DurableGraph.csproj) | immutable Schema、exact BaseSchema、nominal 引用；显式模型目录、队列 Capture、string 身份；refs-only 遍历/目录验证、ObjectReadTable；统一 Prepare/typed 整链读取 | 无工作会话 Commit；复合值和一般类型组合待扩展 |
-| [Generator](DurableGraph.Generator/DurableGraph.Generator.csproj) / [Build](DurableGraph.Build/DurableGraph.Build.csproj) | 各版 readonly DTO、标量/引用 ID 静态 body、Capture/引用遍历、历史 reader/model、相邻 DTO Upgrade、无构造器/readonly Hydrate；Schema/history 含 nominal family | struct、泛型、数组/BCL 尚无对象生成；legacy boxed Snapshot 路径独立保留 |
+| [Generator](DurableGraph.Generator/DurableGraph.Generator.csproj) / [Build](DurableGraph.Build/DurableGraph.Build.csproj) | 裸 `[DurableType]` 生成各版 readonly DTO、标量/引用 ID 静态 body、Capture/引用遍历、历史 reader/model、相邻 DTO Upgrade、无构造器/readonly Hydrate；`.dgschema` Schema history 含 nominal family | struct、泛型、数组/BCL 尚无对象生成 |
 | [StateStore](DurableGraph.StateStore/DurableGraph.StateStore.csproj) | 持久 Schema、Base 类型头；完整 stored/current 引用验证、可达图两阶段恢复；公开 PrepareNew、fixed-Parent Prepare、升级强制 Base/不可达 Remove | 无持久 roots、原地 Accept/Commit 或发布 |
 | [Storage](DurableGraph.StateStore.Storage/DurableGraph.StateStore.Storage.csproj) | local Base/Delta records、wire v3、exact Revision live map、Parent/prior 校验、object-first 原始重建链及实际 payload H；v3 Base 精确/Delta 上界计量；真实 Segment/RBF 冷重开 | 不解码 typed body；不拥有持久 roots、类型目录或发布 head；重复读取暂未缓存 |
 | [Serialization](DurableGraph.StateStore.Serialization/DurableGraph.StateStore.Serialization.csproj) | 字节原语、string 内容 codec、拥有自有 bytes 的 PreparedBase/PreparedDelta、预制 string PrepareBase、显式 body 的 typed slot、SZ/rank-2 元素 ref 循环 | 无数组对象 envelope、一般 struct 生成器或通用泛型 codec |
@@ -41,9 +44,9 @@
 容易混淆的限制：
 
 - SG DTO/body 支持 13 种标量：bool、byte/sbyte、short/ushort、int/uint、long/ulong、char、Half、float、double；string 和受支持 durable class 字段保存 UInt32 ID。
-  SchemaOnly + GenerateBinaryBody 仍限同编译、顶层、非泛型、非 record 的 partial class 链；
+  裸 `[DurableType]` 仍限同编译、顶层、非泛型、非 record 的 partial class 链；
   支持 readonly 持久字段和没有无参构造器的领域类。RuntimeHelpers 分配、SG Hydrate/声明层 UnsafeAccessor
-  不执行实例构造器或字段初始化表达式；Transient 由用户交付后重建。legacy readonly 拒绝诊断保留。
+  不执行实例构造器或字段初始化表达式；Transient 由用户交付后重建。
 - AddRoot 登记根；BeginCapture(models) 冻结 exact CLR Type/model 目录，CaptureDurable 逐边校验 nominal 约束，
   先分配 ID/登记再排队；Seal 用增长队列捕获可达对象，子对象不加入根列表。未知实际派生类型明确拒绝。
   Accept/Discard 只是内存候选协议。ID 单调分配、失败可烧号；退役实例映射清理不回收数字。
@@ -83,7 +86,7 @@
   ApplyDeltaVn 只处理同 Vn；不证明 prior 身份，之后仍须对完整 DTO 验证引用。
 - SchemaStore 借用独占的专用 IRbfFile；完整祖先闭包与同 key 冲突预检后，一批次一帧追加/flush，等价注册不写。
   tag15 DurableReference 只携带稳定 TargetSchemaId，不绑定目标版本或形成 exact 注册依赖；
-  nominal 自环/互环无 Schema 初始化环。SchemaBatch/history 在原 headers 下扩充字段词汇，旧 1–14 不变；
+  nominal 自环/互环无 Schema 初始化环。SchemaBatch 与 `.dgschema` history 各自维护冻结格式，字段 type tag 的旧 1–14 不变；
   nominal 约束改变属于 owner Schema 改变，目标自身升版则不传播 owner 版本。
   严格重放全部帧/CRC；坏尾、tombstone、未知格式拒绝且不自动截断。写入不确定后 faulted，须重开；
   可写非空重开先 flush 再交付，readonly 不确认新屏障。尚无 Schema 分段、联合版本目录或自动修复。

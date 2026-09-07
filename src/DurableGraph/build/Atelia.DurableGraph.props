@@ -1,6 +1,6 @@
 <Project>
   <PropertyGroup>
-    <DurableGraphSnapshotHistoryDirectory Condition="'$(DurableGraphSnapshotHistoryDirectory)' == ''">$(MSBuildProjectDirectory)/DurableGraphSnapshots</DurableGraphSnapshotHistoryDirectory>
+    <DurableGraphSchemaHistoryDirectory Condition="'$(DurableGraphSchemaHistoryDirectory)' == ''">$(MSBuildProjectDirectory)/DurableGraphSchemaHistory</DurableGraphSchemaHistoryDirectory>
     <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
   </PropertyGroup>
 </Project>

@@ -74,7 +74,7 @@ public sealed partial class DurableSchemaGeneratorTests {
     [InlineData(true)]
     public void StringReferenceValidationUsesExactPublishedHistoryAfterStringBecomesUInt32AndClrAncestorDisappears(bool replaceChain) {
         using AncestryHistoryDirectory files = new();
-        SnapshotHistoryTool publisher = new();
+        SchemaHistoryTool publisher = new();
         GeneratorTestRun initial = RunGenerator(ReferenceCaptureHistoryInitialSource);
         AssertSchemaOnlyCompiles(initial);
         byte[] original = EmitAndLoad(initial.OutputCompilation).GetType("ReferenceHistory.Host")!
