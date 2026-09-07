@@ -177,6 +177,31 @@ try {
     Remove-Item -LiteralPath $legacyHistoryFile
     Assert-HistoryCount $history 0
 
+    Invoke-DotNetExpectFailure -Arguments @(
+        "build", $consumerProject, "--no-restore",
+        "-p:DurableGraphPackageVersion=$packageVersion",
+        "-p:DurableGraphSchemaHistoryDirectory=$history",
+        "-p:DurableGraphSnapshotHistoryDirectory=$history",
+        "-p:ProbeVersion=1"
+    ) -ExpectedText "DurableGraphSnapshotHistoryDirectory has been removed; use DurableGraphSchemaHistoryDirectory and .dgschema files."
+
+    $legacyDefaultDirectory = Join-Path $probeRoot "Consumer/DurableGraphSnapshots"
+    $legacyDefaultFile = Join-Path $legacyDefaultDirectory "legacy.dgsnapshot"
+    New-Item -ItemType Directory -Path $legacyDefaultDirectory | Out-Null
+    Set-Content -LiteralPath $legacyDefaultFile -Value "legacy default Schema-history fixture" -NoNewline
+    try {
+        Invoke-DotNetExpectFailure -Arguments @(
+            "build", $consumerProject, "--no-restore",
+            "-p:DurableGraphPackageVersion=$packageVersion",
+            "-p:DurableGraphSchemaHistoryDirectory=$history",
+            "-p:ProbeVersion=1"
+        ) -ExpectedText "The legacy default DurableGraphSnapshots directory contains .dgsnapshot files; move regenerated .dgschema history to DurableGraphSchemaHistory."
+    }
+    finally {
+        Remove-Item -LiteralPath $legacyDefaultFile -ErrorAction SilentlyContinue
+        Remove-Item -LiteralPath $legacyDefaultDirectory -ErrorAction SilentlyContinue
+    }
+
     Invoke-ConsumerClean $consumerProject $packageVersion $history 1
     Invoke-DotNet @(
         "build", $consumerProject, "--no-restore",

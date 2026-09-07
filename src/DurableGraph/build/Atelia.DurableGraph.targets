@@ -5,6 +5,7 @@
     <_DurableGraphBuildTool>$(MSBuildThisFileDirectory)../tools/net10.0/Atelia.DurableGraph.Build.dll</_DurableGraphBuildTool>
     <_DurableGraphDotNetHost Condition="'$(DotNetHostPath)' != ''">$(DotNetHostPath)</_DurableGraphDotNetHost>
     <_DurableGraphDotNetHost Condition="'$(_DurableGraphDotNetHost)' == ''">dotnet</_DurableGraphDotNetHost>
+    <_DurableGraphLegacyDefaultSchemaHistoryDirectory>$(MSBuildProjectDirectory)/DurableGraphSnapshots</_DurableGraphLegacyDefaultSchemaHistoryDirectory>
   </PropertyGroup>
 
   <ItemGroup Condition="Exists('$(DurableGraphSchemaHistoryDirectory)')">
@@ -14,15 +15,19 @@
 
   <Target Name="DurableGraphRejectLegacySchemaHistory"
           BeforeTargets="CoreCompile"
-          Condition="Exists('$(DurableGraphSchemaHistoryDirectory)')
-                     and '$(DesignTimeBuild)' != 'true'
+          Condition="'$(DesignTimeBuild)' != 'true'
                      and '$(BuildingProject)' == 'true'
                      and '$(Language)' == 'C#'">
     <ItemGroup>
       <_DurableGraphLegacySchemaHistory Include="$(DurableGraphSchemaHistoryDirectory)/*.dgsnapshot" />
+      <_DurableGraphLegacyDefaultSchemaHistory Include="$(_DurableGraphLegacyDefaultSchemaHistoryDirectory)/*.dgsnapshot" />
     </ItemGroup>
+    <Error Condition="'$(DurableGraphSnapshotHistoryDirectory)' != ''"
+           Text="DurableGraphSnapshotHistoryDirectory has been removed; use DurableGraphSchemaHistoryDirectory and .dgschema files." />
     <Error Condition="'@(_DurableGraphLegacySchemaHistory->Count())' != '0'"
            Text="DurableGraph Schema-history directory contains legacy .dgsnapshot files; regenerate them as .dgschema because legacy history is not accepted." />
+    <Error Condition="'@(_DurableGraphLegacyDefaultSchemaHistory->Count())' != '0'"
+           Text="The legacy default DurableGraphSnapshots directory contains .dgsnapshot files; move regenerated .dgschema history to DurableGraphSchemaHistory." />
   </Target>
 
   <Target Name="DurableGraphProcessSchemaHistory"

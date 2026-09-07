@@ -31,6 +31,11 @@ These field records retain their established meanings under the current
 Schema-history header. Legacy `.dgsnapshot` headers and record markers are rejected;
 because the canonical text changed, current content hashes differ from the legacy format.
 
+The Source Generator validates the Schema shapes needed to compile generated code. The Build tool is
+the canonical file authority: after `CoreCompile` it additionally rejects duplicate keys,
+noncanonical filenames, BOM/CRLF bytes, and other representations that cannot be published as exact
+history. A project build succeeds only when both layers accept the inputs.
+
 Each checked-in `*.dgschema` uses the same single block with the header
 `// durable-graph-schema-history:1`. History is canonical UTF-8 without a byte-order
 mark, uses LF line endings, and ends in one LF. Its filename contains full

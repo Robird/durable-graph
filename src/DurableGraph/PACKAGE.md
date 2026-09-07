@@ -8,7 +8,9 @@ build integration. Each successful local `CoreCompile` publishes exact Schema re
 `DurableGraphSchemaHistory/`; `ContinuousIntegrationBuild=true` verifies that the current records
 already exist without writing them. Configure this with `DurableGraphSchemaHistoryDirectory` and
 `DurableGraphSchemaHistoryMode` (`Publish`, `Verify`, or `Off`). Keep `.dgschema` files under source
-control. Legacy `.dgsnapshot` history is rejected rather than consumed as the current format.
+control. `Off` disables Publish/Verify but does not make legacy history valid. The removed
+`DurableGraphSnapshotHistoryDirectory` property, the old default `DurableGraphSnapshots/` directory,
+and legacy `.dgsnapshot` files are rejected rather than silently ignored or consumed.
 
 ## Generated Schema and state
 
