@@ -1,0 +1,166 @@
+using System.Collections.Generic;
+using System.Globalization;
+using System.Text;
+using Microsoft.CodeAnalysis;
+
+namespace Atelia.DurableGraph.Generator;
+
+public sealed partial class DurableSchemaGenerator {
+    private static string BinaryUpgradeName(int version) =>
+        "UpgradeStateV" + version.ToString(CultureInfo.InvariantCulture) + "ToV" +
+        (version + 1).ToString(CultureInfo.InvariantCulture);
+
+    private static bool ValidateBinaryUpgradeMethods(SourceProductionContext context, DurableTypeModel type) {
+        bool valid = true;
+        for (int version = 1; version < type.Version; version++) {
+            string name = BinaryUpgradeName(version);
+            var members = type.Symbol.GetMembers(name);
+            if (members.IsEmpty) {
+                continue; // Historical readers do not require an editable-loading upgrade path.
+            }
+            if (members.Length != 1 || members[0] is not IMethodSymbol method ||
+                !method.IsStatic || !method.ReturnsVoid || method.Arity != 0 ||
+                method.Parameters.Length != 2 || method.Parameters[0].RefKind != RefKind.In ||
+                method.Parameters[1].RefKind != RefKind.Out) {
+                ReportInvalidBinaryBody(context, type.Symbol,
+                    name + " must be one static void method with an in prior DTO and out next DTO");
+                valid = false;
+            }
+            // DTO symbols are generated in this pass. The emitted typed call lets the compiler
+            // check their exact types and the user's out definite assignment after generation.
+        }
+        return valid;
+    }
+
+    private static void AppendBinaryStateModel(
+        StringBuilder source, DurableTypeModel type, List<BinaryVersionModel> versions,
+        string indent, bool hasDomainBase) {
+        BinaryVersionModel current = versions[versions.Count - 1];
+        string domain = type.Symbol.ToDisplayString(FullyQualifiedNameFormat);
+        source.Append(indent).Append("private static readonly global::Atelia.DurableGraph.CapturedStatePreparation<")
+            .Append(current.Name).Append("> Preparation = new(").Append(current.Name)
+            .AppendLine(".Schema, PrepareBase, PrepareDelta);");
+        AppendBinaryUpgradeEdges(source, type, indent);
+        AppendBinaryNormalize(source, type, versions, indent);
+        AppendBinaryHydrate(source, type, current, indent, hasDomainBase);
+        source.Append(indent).Append("internal static ").Append(domain).AppendLine(" Allocate() {");
+        if (type.Symbol.IsAbstract) {
+            source.Append(indent).AppendLine("    throw new global::System.InvalidOperationException(\"An abstract durable model cannot be allocated.\");");
+        } else {
+            source.Append(indent).Append("    return (").Append(domain)
+                .Append(")global::System.Runtime.CompilerServices.RuntimeHelpers.GetUninitializedObject(typeof(")
+                .Append(domain).AppendLine("));");
+        }
+        source.Append(indent).AppendLine("}");
+        source.Append(indent).Append("internal static readonly global::Atelia.DurableGraph.StateModelBinding<")
+            .Append(domain).Append(", ").Append(current.Name).AppendLine("> Model = new(");
+        source.Append(indent).Append("    Preparation, new global::Atelia.DurableGraph.StateReaderBinding[] { ");
+        for (int index = 0; index < versions.Count; index++) {
+            if (index != 0) source.Append(", ");
+            source.Append("Reader").Append(versions[index].Name);
+        }
+        source.AppendLine(" }, Normalize, Allocate, Hydrate,");
+        source.Append(indent).Append("    static (value, context) => Capture(value");
+        if (current.HasStringReferences) source.Append(", context");
+        source.AppendLine("), ValidateStringReferences);");
+        source.Append(indent).AppendLine("internal static void RegisterModel(global::Atelia.DurableGraph.IStateModelRegistration models) {");
+        source.Append(indent).AppendLine("    global::System.ArgumentNullException.ThrowIfNull(models);");
+        source.Append(indent).AppendLine("    models.Register(Model);");
+        source.Append(indent).AppendLine("}");
+    }
+
+    private static void AppendBinaryUpgradeEdges(StringBuilder source, DurableTypeModel type, string indent) {
+        // Validate each declared edge even when another missing edge makes its path unusable.
+        // Generated DTO symbols do not yet exist during the initial Roslyn symbol inspection.
+        for (int version = 1; version < type.Version; version++) {
+            string name = BinaryUpgradeName(version);
+            if (type.Symbol.GetMembers(name).IsEmpty) continue;
+            string from = "V" + version.ToString(CultureInfo.InvariantCulture);
+            string to = "V" + (version + 1).ToString(CultureInfo.InvariantCulture);
+            source.Append(indent).Append("private static ").Append(to).Append(" UpgradeEdge").Append(from)
+                .Append("(in ").Append(from).AppendLine(" prior) {");
+            source.Append(indent).Append("    ").Append(type.Symbol.ToDisplayString(FullyQualifiedNameFormat))
+                .Append('.').Append(name).Append("(in prior, out ").Append(to).AppendLine(" next);");
+            source.Append(indent).AppendLine("    return next;");
+            source.Append(indent).AppendLine("}");
+        }
+    }
+
+    private static void AppendBinaryNormalize(
+        StringBuilder source, DurableTypeModel type, List<BinaryVersionModel> versions, string indent) {
+        BinaryVersionModel current = versions[versions.Count - 1];
+        source.Append(indent).Append("internal static ").Append(current.Name)
+            .AppendLine(" Normalize(global::Atelia.DurableGraph.CapturedObject item) {");
+        source.Append(indent).AppendLine("    global::System.ArgumentNullException.ThrowIfNull(item);");
+        foreach (BinaryVersionModel version in versions) {
+            source.Append(indent).Append("    if (").Append(version.Name).AppendLine(".Schema.Equals(item.Schema)) {");
+            int missing = 0;
+            for (int step = version.Version; step < current.Version; step++) {
+                if (type.Symbol.GetMembers(BinaryUpgradeName(step)).IsEmpty) { missing = step; break; }
+            }
+            if (missing != 0) {
+                source.Append(indent).Append("        throw new global::System.IO.InvalidDataException(\"Missing single-object upgrade ")
+                    .Append(BinaryUpgradeName(missing)).AppendLine(".\");");
+            } else {
+                source.Append(indent).Append("        var state").Append(version.Name)
+                    .Append(" = item.GetState<").Append(version.Name).AppendLine(">();");
+                for (int step = version.Version; step < current.Version; step++) {
+                    string from = "V" + step.ToString(CultureInfo.InvariantCulture);
+                    string to = "V" + (step + 1).ToString(CultureInfo.InvariantCulture);
+                    source.Append(indent).Append("        var state").Append(to).Append(" = UpgradeEdge")
+                        .Append(from).Append("(in state").Append(from).AppendLine(");");
+                }
+                source.Append(indent).Append("        return state").Append(current.Name).AppendLine(";");
+            }
+            source.Append(indent).AppendLine("    }");
+        }
+        source.Append(indent).AppendLine("    throw new global::System.IO.InvalidDataException(\"The object does not match an exact Schema in this model family.\");");
+        source.Append(indent).AppendLine("}");
+    }
+
+    private static void AppendBinaryHydrate(
+        StringBuilder source, DurableTypeModel type, BinaryVersionModel current, string indent, bool hasDomainBase) {
+        string domain = type.Symbol.ToDisplayString(FullyQualifiedNameFormat);
+        for (int index = 0; index < type.Fields.Count; index++) {
+            DurableFieldModel field = type.Fields[index];
+            if (!field.Symbol.IsReadOnly) continue;
+            source.Append(indent).Append("[global::System.Runtime.CompilerServices.UnsafeAccessor(global::System.Runtime.CompilerServices.UnsafeAccessorKind.Field, Name = \"")
+                .Append(field.Symbol.Name).AppendLine("\")]");
+            source.Append(indent).Append("private static extern ref ").Append(field.FieldTypeName)
+                .Append(" ReadonlyField").Append(index.ToString(CultureInfo.InvariantCulture))
+                .Append('(').Append(domain).AppendLine(" value);");
+        }
+        source.Append(indent).Append("internal static void Hydrate(").Append(domain).Append(" value, in ")
+            .Append(current.Name).AppendLine(" state, global::Atelia.DurableGraph.StringReadTable strings) {");
+        source.Append(indent).AppendLine("    global::System.ArgumentNullException.ThrowIfNull(value);");
+        source.Append(indent).AppendLine("    ValidateStringReferences(in state, strings);");
+        int inheritedCount = current.Fields.Count - type.Fields.Count;
+        if (hasDomainBase) {
+            SchemaReference reference = GetCurrentBaseReference(type.Symbol)!.Value;
+            string baseBody = type.Symbol.BaseType!.ToDisplayString(FullyQualifiedNameFormat) + "." + BinaryBodyTypeName;
+            source.Append(indent).Append("    var baseState = new ").Append(baseBody).Append(".V")
+                .Append(reference.Version.ToString(CultureInfo.InvariantCulture)).Append('(');
+            for (int index = 0; index < inheritedCount; index++) {
+                if (index != 0) source.Append(", ");
+                source.Append("state.").Append(current.Fields[index].Name);
+            }
+            source.AppendLine(");");
+            source.Append(indent).Append("    ").Append(baseBody).AppendLine(".Hydrate(value, in baseState, strings);");
+        }
+        for (int index = 0; index < type.Fields.Count; index++) {
+            DurableFieldModel field = type.Fields[index];
+            source.Append(indent).Append("    ");
+            if (field.Symbol.IsReadOnly) {
+                source.Append("ReadonlyField").Append(index.ToString(CultureInfo.InvariantCulture)).Append("(value)");
+            } else {
+                source.Append("value.").Append(EscapeIdentifier(field.Symbol.Name));
+            }
+            source.Append(" = ");
+            if (field.TypeTagValue == 4) source.Append("strings.ResolveString(");
+            source.Append("state.").Append(current.Fields[inheritedCount + index].Name);
+            if (field.TypeTagValue == 4) source.Append(")!");
+            source.AppendLine(";");
+        }
+        source.Append(indent).AppendLine("}");
+    }
+}

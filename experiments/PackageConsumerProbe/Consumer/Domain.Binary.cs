@@ -6,10 +6,12 @@ namespace PackageConsumerProbe;
 
 [DurableType("package.body-base", 1, SchemaOnly = true, GenerateBinaryBody = true)]
 public abstract partial class BinaryBase : DurableBase {
-    [DurableField(7)] private int _count;
-    [DurableField(1)] private bool _enabled;
+    [DurableField(7)] private readonly int _count;
+    [DurableField(1)] private readonly bool _enabled;
+    internal static int BaseConstructorCalls;
 
     protected BinaryBase(bool enabled, int count) {
+        BaseConstructorCalls++;
         _enabled = enabled;
         _count = count;
     }
@@ -20,9 +22,11 @@ public abstract partial class BinaryBase : DurableBase {
 [DurableType("package.body-leaf", 1, SchemaOnly = true, GenerateBinaryBody = true)]
 public sealed partial class Character : BinaryBase {
     [DurableField(1)] private long _total;
-    [Transient] private int _sentinel;
+    [Transient] private int _sentinel = 41;
+    private static int _constructorCalls;
 
     private Character(bool enabled, int count, long total, int sentinel) : base(enabled, count) {
+        _constructorCalls++;
         _total = total;
         _sentinel = sentinel;
     }
@@ -44,6 +48,7 @@ public sealed partial class Character : BinaryBase {
         }
         Character source = new(true, -17, 42, 8);
         var captured = __DurableBinaryBody.Capture(source);
+        ExerciseGeneratedModel(source);
         source._total = 999;
         ArrayBufferWriter<byte> buffer = new();
         BinaryPayloadWriter writer = new(buffer);
@@ -70,7 +75,36 @@ public sealed partial class Character : BinaryBase {
         bool valid = restored.Segment0Field1 && restored.Segment0Field7 == -17 &&
             restored.Segment1Field1 == 42 && source._total == 1001 && source._sentinel == 8 &&
             source.HasExpectedBase && ReferenceEquals(__DurableBinaryBody.V1.Schema, Schema);
-        return $"BinaryBody:{Convert.ToHexString(buffer.WrittenSpan)}:{valid}:ReferenceCapture:True:StringDecoding:True:PreparedDelta:True:PreparedBase:True:CapturePreparation:True:GeneratedReaders:True";
+        return $"BinaryBody:{Convert.ToHexString(buffer.WrittenSpan)}:{valid}:ReferenceCapture:True:StringDecoding:True:PreparedDelta:True:PreparedBase:True:CapturePreparation:True:GeneratedReaders:True:GeneratedModel:True:ReadonlyRestore:True";
+    }
+
+    private static void ExerciseGeneratedModel(Character source) {
+        ModelSink sink = new();
+        __DurableBinaryBody.RegisterModel(sink);
+        __DurableBinaryBody.RegisterModel(sink);
+        if (sink.Models.Count != 2 || !ReferenceEquals(sink.Models[0], sink.Models[1]) ||
+            !ReferenceEquals(sink.Models[0], __DurableBinaryBody.Model) ||
+            sink.Models[0].DomainType != typeof(Character) || !sink.Models[0].CurrentSchema.Equals(Schema)) {
+            throw new InvalidOperationException("Runtime-only model registration lost its stable binding.");
+        }
+        CaptureSession session = new();
+        CaptureContext context = session.BeginCapture();
+        uint id = __DurableBinaryBody.AddRoot(context, source);
+        CapturedGraph graph = context.Seal();
+        var state = __DurableBinaryBody.Normalize(graph.Objects.Single(row => row.Id == id));
+        int constructors = _constructorCalls, baseConstructors = BaseConstructorCalls;
+        Character restored = __DurableBinaryBody.Allocate();
+        __DurableBinaryBody.Hydrate(restored, in state, StringReadTable.Decode([]));
+        if (ReferenceEquals(source, restored) || !restored.HasExpectedBase || restored._total != 42 ||
+            restored._sentinel != 0 || _constructorCalls != constructors || BaseConstructorCalls != baseConstructors) {
+            throw new InvalidOperationException("Generated allocation/hydration ran constructors or lost private readonly base fields.");
+        }
+        session.Discard(graph);
+    }
+
+    private sealed class ModelSink : IStateModelRegistration {
+        internal List<StateModelBinding> Models { get; } = [];
+        public void Register(StateModelBinding model) => Models.Add(model);
     }
 
     // This sink needs only the Runtime package. StateStore owns registry policy and persistence.

@@ -101,7 +101,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             Assert.DoesNotContain(forbidden, generated);
         }
         Type baseBody = assembly.GetType("FusedDelta.Base")!.GetNestedType("__DurableBinaryBody", BindingFlags.NonPublic)!;
-        Assert.Null(baseBody.GetField("Preparation", BindingFlags.NonPublic | BindingFlags.Static));
+        Assert.True(baseBody.GetField("Preparation", BindingFlags.NonPublic | BindingFlags.Static)!.IsInitOnly);
         Type leafBody = assembly.GetType("FusedDelta.Leaf")!.GetNestedType("__DurableBinaryBody", BindingFlags.NonPublic)!;
         FieldInfo binding = leafBody.GetField("Preparation", BindingFlags.NonPublic | BindingFlags.Static)!;
         Assert.True(binding.IsPrivate && binding.IsInitOnly);

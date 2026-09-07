@@ -793,7 +793,7 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
                 continue;
             }
 
-            if (field.IsReadOnly) {
+            if (field.IsReadOnly && !(IsSchemaOnly(type) && RequestsBinaryBody(type))) {
                 context.ReportDiagnostic(Diagnostic.Create(
                     ReadOnlyDurableField,
                     GetSourceLocation(field),

@@ -7,11 +7,10 @@
 
 ## 1. 下一个分片如何选择
 
-[DB-032](design-branches/0032-exact-revision-decoding-slice.md) 已接通完整 stored-exact DTO 目录冷读。
-下一轮推荐 [DB-033 多步骤施工计划](design-branches/0033-upgrade-restore-resave-batch.md)（Proposed，未实施）：
-连续完成 current DTO 升级、readonly Restore、加载基线/身份导入、保存准备和 Append 后重新冷加载。
-本批只用现有标量/string、显式 WorldId；不做原会话就地推进、持久根或 Commit/Ref 发布。
-具体 gate、身份选择、验收与后续 agent 任务文本只维护在该计划。
+[DB-033](design-branches/0033-upgrade-restore-resave-batch.md) 已完成标量/string 的 current DTO 升级、
+readonly Restore、受控加载基线与 Append 后重新 Load；最终范围和证据集中在分片账本。
+后续可选择一般 durable 引用或自定义 struct，以最小可观察分片扩大模型表达；也可另片定义
+持久 World 根与 Repository 会话。尚未选择下一项，不把这些方向自动合并为连续施工授权。
 MVP 库内加载顺序为 exact 重建 → 单对象 Upgrade → 分配实例 → 填充/连接引用 → 完整交付 World；
 Transient 由用户在交付后处理，约束维护在[目标设计](DurableGraph-target-design-v0.md#恢复transient-与宿主边界)。
 数组形状、升级、单根、Transient hook、boxed value，以及无需无参构造器/readonly 字段的支持选择见
@@ -19,7 +18,7 @@ Transient 由用户在交付后处理，约束维护在[目标设计](DurableGra
 WorkingTree/GraphSession 的职责方向已采纳；发布/故障裁决尚未实现。不要把内存 Current、Schema
 注册成功或 State Append 返回地址直接当作已发布基线。Schema 严格坏尾拒绝合同见 DB-031 §8。
 
-current 领域 Restore、自定义 struct 和一般 durable 引用可以独立成片。
+自定义 struct、一般 durable 引用与持久根/会话可以独立成片。
 它们与存储推进的穿插顺序尚未冻结；不要恢复旧 R4 → R5 → R6 或 P0–P7 为强制流水线。
 选片时给出一个可观察成功/失败判据，若触及 durable format 或 publication 则先记录设计裁决。
 
@@ -30,15 +29,13 @@ B/D/H 分别指 Base 写入字节、Delta 写入字节、当前对象重建字�
 
 | 工作项 | 最小应回答的问题 | 设计或证据入口 |
 |---|---|---|
-| 工作会话与 exact Parent baseline | 已选 Repository 受控创建/加载的 WorkingTree/GraphSession；如何建立、安装、冷重建 Parent / DTO / 实例身份绑定，收敛 Commit API 与失败行为 | [目标约束](DurableGraph-target-design-v0.md#单一发布权威与明确故障结果)、[DB-030 接缝](design-branches/0030-captured-object-preparation-slice.md#4-exact-parent-接缝明确留到后片) |
+| 工作会话与 exact Parent baseline | 已选 Repository 受控创建/加载的 WorkingTree/GraphSession；现有 LoadedWorld 固定 Parent、DTO 与实例身份并在 Append 后重新 Load；后续定义发布后安装、Commit API 与故障裁决 | [目标约束](DurableGraph-target-design-v0.md#单一发布权威与明确故障结果)、[DB-030 接缝](design-branches/0030-captured-object-preparation-slice.md#4-exact-parent-接缝明确留到后片) |
 | TypeCodec 与 exact Schema 绑定 | 一般类型组合、nominal 引用约束、内建复合类型的 codec；已登记模型族的 exact reader 分派不等于一般 TypeCodec，也不自动复活已删除模型族 | [DB-032 接缝](design-branches/0032-exact-revision-decoding-slice.md)、[DB-018](design-branches/0018-generated-graph-codec-shape.md)、[DB-001](design-branches/0001-schema-authority-and-runtime-representation.md) |
-| DTO 升级与领域 Restore | 通过单对象字段转换形成 current DTO、保留重写义务，再构造领域对象；失败时不交付半成品，不带入跨对象迁移 | [DB-032 读取输入](design-branches/0032-exact-revision-decoding-slice.md)、[DB-022](design-branches/0022-versioned-state-dto-capture.md)、[DB-002](design-branches/0002-read-time-version-upgrade-pipeline.md) |
-| 无构造器分配与 readonly Hydrate | 落实已选 RuntimeHelpers 分配、SG 普通字段赋值及 readonly UnsafeAccessor；解除现有字段诊断限制并贯通 Capture/body/Restore，验证 private 基类字段、构造器未运行及循环引用 | [目标约束](DurableGraph-target-design-v0.md#恢复transient-与宿主边界)、[机制证据](DurableGraph-lab-notebook.md#2026-09-07无构造器分配与-readonly-实例字段写入) |
+| 复合类型的 DTO 升级与恢复 | 将已接通的标量/string 单对象 Upgrade/Restore 扩展到一般引用与复合值；保持完整源目录、强制 Base 和失败不交付 | [DB-033](design-branches/0033-upgrade-restore-resave-batch.md)、[DB-018](design-branches/0018-generated-graph-codec-shape.md) |
 | 自定义泛型 Schema/DTO | 保留 SG 开放模板 + 首次运行时闭合/缓存方向；领域 T 与冻结表示参数分离，接通泛型定义/实参身份及历史 exact reader；现有手写 body 见证不等于 SG 已支持 | [泛型 DTO 技术备忘](design-branches/0018-generic-dto-binding-followup.md)，扩充 Schema 类型表达或泛型 Capture 时重访 |
 | 一般 durable 引用图 | 递归登记、共享/循环、nominal 约束、多态实际类型、完整目录及 roots 可达闭包如何共同成立 | [DB-018](design-branches/0018-generated-graph-codec-shape.md)、[DB-024](design-branches/0024-reference-capture-and-reusable-object-ids.md) |
 | 自定义 struct | exact inline Schema/history 与 owner 升版，嵌套 DTO/布局及字段和数组元素的 ref body 复用 | [DB-024 struct TODO](design-branches/0024-reference-capture-and-reusable-object-ids.md)、[DB-020](design-branches/0020-typed-slot-array-binding-slice.md) |
 | 完整数组对象 | 在已选零下界 SZ/有限多维 rank 范围内，实现 identity、shape、分配与元素循环，并拒绝不支持的形状；不能把现有元素模板视为完整数组支持 | [MVP 边界](DurableGraph-target-design-v0.md#mvp-功能边界)、[DB-020](design-branches/0020-typed-slot-array-binding-slice.md) |
-| reopen 后身份接续 | 加载实例怎样绑定到所选 Revision 的 ID；如何恢复分配高水位及隔离失败候选 | [DB-024](design-branches/0024-reference-capture-and-reusable-object-ids.md) |
 
 ## 3. 尚待裁决的机制
 
@@ -46,17 +43,16 @@ B/D/H 分别指 Base 写入字节、Delta 写入字节、当前对象重建字�
 |---|---|
 | 对象版本解释与保存来源 | 已登记模型族可按 Base exact Schema 自动读取；完整 head map 的 external heads 来源、候选对象身份连续性仍需产品 Save/Load 合同，不能由 Parent 声明一致推导全局身份认证 |
 | 保存相等性与真实估算 | 同版标量 DTO 的浮点按位、引用槽按 ID 已采纳；未来复合值/容器相等性另定。已准备 body 与当前 v3 envelope 计量见 [DB-029](design-branches/0029-prepared-object-revision-planning-slice.md)；Base 类型头已计入 B/H。未来新增类型头/容器布局时继续按实际对象 payload 计量 |
-| 历史升级后的比较和重写 | DB-006/R3 已见证 normalized baseline 与 RequiresRewrite；产品同版重建接缝已就绪；升级须先按 Base Schema 完整还原旧链再进行，仍 live 的升级对象即使值未变也必须 BaseOnlyUpdate。新 DTO 自动升级、义务导入/发布后清除与删边清理尚未接通，读取不回写 |
-| 完整 source 目录与 current 可达集合 | 升级可能删边。研究见证保留 source rows，再由 Save 移除不可达项；产品保存视图怎样表达需与候选/Parent 衔接 |
+| 发布后基线安装 | DB-033 通过 Append 后重新 Load 建立新基线并清除已落盘升级重写义务；后续若增加就地推进，须证明它与真实发布状态绑定，不能任意 Accept(address) |
+| 一般图的 current 可达集合 | 标量/string 已保留完整 source，下一 Capture 由差集输出 Removes；扩展一般对象图时须定义递归可达闭包与实例分配范围，不绕过不可达 source 的版本校验 |
 | Schema 规范表示和持久引用 | canonical 注册批次与逻辑 SchemaKey 已闭合；未来 SchemaHash、紧凑引用及一般类型家族约束随消费者裁决，不用 GetHashCode 作持久身份 |
-| Restore 的加载协调 | 无需无参构造器及 readonly 实例持久字段已纳入 MVP，分配/Hydrate 技术方向已选；剩余为 current DTO 到实例绑定、升级后可达集合、引用连接及失败时不交付的产品合同。MVP 无 Transient hook |
+| 一般图 Restore 的加载协调 | 标量/string 的 current DTO 到 World 恢复已接通；一般对象互引还需完整实例表、两阶段连接与循环验证。MVP 无 Transient hook |
 | 开放泛型/数组组合绑定 | 已有 static-T 缓存与 typed ref 运行时组合证据；剩余为领域/DTO 表示参数闭合、版本缓存边界及注册初始化协议，不要求全面切换 DynamicMethod。摘要、取舍与首个 SG 验证见[技术备忘](design-branches/0018-generic-dto-binding-followup.md) |
 | 跨程序集与一般类型形状 | 继承 helper 可见性、外部历史祖先、enum/nullable/decimal/native int 等支持范围；自定义泛型的具体形状/约束仍须分片确定，技术方向见上项；boxed value identity 已排除 MVP |
 | 多态与运行时注册 | exact runtime 类型到 Schema/DTO/codec 的绑定、nominal assignability、未知实现 fail closed；不为尚无消费者的插件体系预制完整注册框架 |
 | 捕获复合值的所有权 | 含引用 struct/数组/容器如何真正冻结候选，不能从 scalar readonly DTO 推导浅复制足够 |
 | 数组完整形状与分配 | 非零下界与非 SZ rank-1 已明确不支持；实施时在 rank 上界 3/4 中选择，确定有限 tag、元素类型和各维长度编码、分配及按 ref 遍历 |
 | 根与持久目录 | 单 World 根如何与 Revision 持久绑定、恢复可达图及表达空值/清空；已有目录读取不能替代持久根引用或联合 manifest，无需多根产品 API |
-| 多个空串 ID 的会话导入 | 读取允许多个 ID 解析到同一个 Empty；reopen 后如何绑定/合并别名及接续保存尚待裁决，不重开独立空串实例分配 |
 
 设计证据：[DB-006](design-branches/0006-flat-graph-delta-prototype.md)、
 [旧路线图 R3/R4](archive/2026-09-06/DurableGraph-research-roadmap.md)、

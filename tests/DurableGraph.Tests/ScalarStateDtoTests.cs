@@ -30,7 +30,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             Assert.Contains("reader.Read" + method + "()", generated);
         }
         Assert.DoesNotContain("ValueSlotCodec", generated);
-        Assert.DoesNotContain("typeof(", generated);
+        AssertGeneratedBodiesRemainStaticallyBound(generated);
     }
 
     [Fact]

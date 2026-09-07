@@ -74,6 +74,8 @@ public sealed partial class DurableSchemaGenerator {
                 }
             }
 
+            valid &= ValidateBinaryUpgradeMethods(context, type);
+
             if (valid && validatedSchemaOnlyTypes.Exists(candidate =>
                 SymbolEqualityComparer.Default.Equals(candidate.Symbol, type.Symbol))) {
                 // Parsing conflicts suppress all bodies before any accepted entry is selected.
@@ -189,6 +191,7 @@ public sealed partial class DurableSchemaGenerator {
 
         BinaryVersionModel current = versions[versions.Count - 1];
         AppendBinaryCapture(source, type, current, bodyIndent, hasDomainBase);
+        AppendBinaryStateModel(source, type, versions, bodyIndent, hasDomainBase);
         if (!type.Symbol.IsAbstract) {
             AppendBinaryAddRoot(source, type, current, bodyIndent);
         }
@@ -276,9 +279,6 @@ public sealed partial class DurableSchemaGenerator {
     private static void AppendBinaryAddRoot(
         StringBuilder source, DurableTypeModel type, BinaryVersionModel version, string indent) {
         string domainType = type.Symbol.ToDisplayString(FullyQualifiedNameFormat);
-        source.Append(indent).Append("private static readonly global::Atelia.DurableGraph.CapturedStatePreparation<")
-            .Append(version.Name).Append("> Preparation = new(").Append(version.Name)
-            .AppendLine(".Schema, PrepareBase, PrepareDelta);");
         source.Append(indent).Append("internal static uint AddRoot(global::Atelia.DurableGraph.CaptureContext context, ")
             .Append(domainType).AppendLine("? value) {");
         source.Append(indent).AppendLine("    global::System.ArgumentNullException.ThrowIfNull(context);");

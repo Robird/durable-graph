@@ -18,6 +18,14 @@ public static class RevisionDecoder {
         ArgumentNullException.ThrowIfNull(schemas);
         ArgumentNullException.ThrowIfNull(readers);
         Dictionary<SchemaKey, StateReaderBinding> bindings = readers.Snapshot();
+        return ReadSnapshot(store, schemas, revisionAddress, bindings);
+    }
+
+    internal static DecodedRevision ReadSnapshot(
+        StateRevisionStore store,
+        SchemaStore schemas,
+        FrameAddress revisionAddress,
+        IReadOnlyDictionary<SchemaKey, StateReaderBinding> bindings) {
         List<CapturedObject> objects = [];
         List<(CapturedObject Row, StateReaderBinding Binding)> durableRows = [];
         List<(uint Id, string Value)> strings = [];

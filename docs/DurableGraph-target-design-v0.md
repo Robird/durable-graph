@@ -236,7 +236,12 @@ MVP 库内加载采用以下阶段顺序；这是目标流程，不表示各阶�
 
 内建引用类型使用预制适配；这些阶段不要求 string 重新复制。升级可能删除引用，须区分完整
 source 目录与升级后 World 可达集合，不能假定两者始终一一对应。领域分配、引用连接和后继保存
-如何处理这一差异由加载分片落实，不因完成历史 DTO 读取就自动建立可编辑基线。
+应保留 source membership 与 stored Schema 来源，只维护一份归一化 DTO 比较基线；下一次 Capture
+决定 current 可达集合，并由差集产生 Removes，不通过重新 Capture 已恢复对象猜测基线。
+Empty 多 ID 的反向绑定确定选择最小 source ID，但基线引用槽保留原 ID，让下一 Capture 产生
+实际引用差异。新加载会话从完整 source live max+1 开始分配，只承诺会话内单调；uint 耗尽仅阻止
+新增 ID，不阻止加载或已有对象保存。固定 Parent 的 Prepare 不就地接受新地址，Append 后重新 Load
+是发布协议尚未实现时的基线接续方式。
 
 Hydrate 普通字段由 SG 直接赋值；readonly 实例字段优先由 SG 生成返回字段可写 ref 的
 `UnsafeAccessor`，再进行强类型赋值。访问器按字段的声明类型绑定，基类 private 字段不通过
@@ -247,7 +252,8 @@ DynamicMethod 保留为有具体需要时的备选，不为该能力引入第二
 不能填充已登记的占位对象，无法直接闭合一般循环引用；特殊构造器调用还会带入基类构造链及
 字段初始化表达式，增加恢复语义。现有 Probe 与 .NET 10 机制验证见
 [无构造器分配与 readonly 写入证据](DurableGraph-lab-notebook.md#2026-09-07无构造器分配与-readonly-实例字段写入)。
-这些验证支持所选技术方向，不等于 SG Hydrate 或完整产品 Restore 已实现。
+标量/string 的 SG Hydrate 与升级续写实现范围见 [DB-033](design-branches/0033-upgrade-restore-resave-batch.md)；
+一般对象互引与循环恢复仍须后续分片验证。
 
 Transient 指索引、缓存、反向查找等非持久内存状态；排除这些字段的持久化仍是产品职责。
 建议宿主重建保持便宜、确定、幂等；昂贵的 LLM 摘要或 embedding 属于 Derived builder 的目标场景，

@@ -1,9 +1,9 @@
 # DB-033：升级、领域恢复与增量续写的连续施工计划
 
-状态：**Proposed / 可供下一轮审阅授权的多步骤计划**；2026-09-07。
-用户要求规划较大的连续施工范围，本轮仅写计划，不实施代码或启动 Goal。
-主干产品约束已采纳；本批终点与下列收窄选择是本轮推荐，不由本文自行获得实施授权。
-规划基线 `1c0557f`，工作区干净；产品事实入口：[PROJECT-STATE](../../src/PROJECT-STATE.md)。
+状态：**Chosen / Implemented，G0–G6 全部验收通过**；2026-09-07。
+本批经用户 Goal 授权实施，交付范围限下述标量/string 升级恢复与续写闭环。
+规划基线 `1c0557f`，实施前规划提交 `fb85313`；实际实现与验收见 §10。
+产品事实入口：[PROJECT-STATE](../../src/PROJECT-STATE.md)。
 
 ## 1. 一个可观察的总目标
 
@@ -223,7 +223,7 @@ focused 测试名由实际实现决定并在账本记录，不预造不存在的
 
 ## 8. 给下一轮 coding agent 的任务文本
 
-以下是用户审阅本批范围后可发送的实施请求草稿；本文件中的文本不自行授权当前会话实施：
+以下保留原实施请求草稿作为计划来源；后续用户已通过 Goal 授权本批，完成证据见 §10：
 
 ```text
 请按 docs/design-branches/0033-upgrade-restore-resave-batch.md 实施 G0–G6，完成现有标量/string
@@ -239,13 +239,84 @@ Load/Prepare 不就地 Accept 新地址；由宿主用既有 Storage.Append，�
 遇到必须越出本文范围的真实障碍，先记录证据和最小选择，不擅自扩大，也不把局部完成当作全批完成。
 ```
 
-## 9. 本轮规划核对
+## 9. 规划阶段核对（实施前）
 
 主代理核对产品读取、Capture/Prepare、迁移分类与原始 Append 接缝，三位 subagent 分别从需求、
 最小架构及语义反例审视 A（Upgrade/Restore）、B（再接增量续写）、C（再加一般引用）三种终点。
 交叉讨论后推荐 B：A 留下重写义务无消费者，C 引入新的引用 Schema/格式范围。
 撤回为“跨会话不复用”扫描祖先高水位的建议，因为现有约束仅承诺会话内单调。
 明确采用 Empty 原基线槽保留、下一 Capture 自然归一化，以及 Append 后重新 Load 的边界。
-本轮只规划和核对文档，没有执行新的产品 build/tests，不把历史 800/800 算成本轮验证。
+该规划阶段只核对文档，没有执行新的产品 build/tests；其后的实施验证另见 §10。
 草稿经独立语义复审，无阻塞项；补清耗尽游标不阻止 Load/已有对象 Prepare 的边界。
 4 份 Markdown 的 137 个本地链接及引用锚点有效，UTF-8/LF 与 Git diff 检查通过。
+
+
+## 10. 实施合同与验收账本
+
+2026-09-07 用户通过 Goal 授权完整 G0–G6，主代理按 spec-driven-implementation 组织分工与集成。
+范围和停止条件沿用 §2、§4、§7，不新增格式、类型或发布协议。
+
+G0 基线：工作区干净；根 build 0 warning/error；根 tests 800/800（397 + 145 + 155 + 103）。
+升级创作选择显式普通静态 `UpgradeStateVnToVnPlus1(in old, out next)`，不同于 legacy Snapshot；
+缺方法仅 current 归一化失败，reader-only 不被迫实现迁移，生成调用交由编译器检查 DTO/out 类型。
+Runtime 的稳定 `StateModelBinding<TDomain,TState>` 集合 exact readers、current preparation、
+归一化和 Allocate/Hydrate/Capture；SG 发出静态 Model，StateStore 注册并快照能力目录。
+抽象模型保留归一化能力，但不能 Allocate。Runtime 不引用 Storage。
+LoadedWorld 只导入 CaptureSession 的实例身份和 ulong 游标，不伪造 Current/CapturedGraph；
+完整 source membership/Schema 摘要与唯一 current DTO 比较基线由受控 owner 持有。
+反向身份表可持有完整 source 的 string 实例（这些实例本来就属于基线），最小 Empty ID 优先；
+实际下次 Capture 决定 current 可达集合，不为筛掉表项另行 recapture 基线。
+
+| 需求 | 状态 | 实现归属 | 验收证据 |
+|---|---|---|---|
+| G0 基线、跨层契约及创作协议 | verified | 主代理 Runtime / SG / StateStore 接缝审议 | 上述基线及接口清单 |
+| G1 相邻强类型升级、缺路径及历史继承 | verified | [SG StateModel](../../src/DurableGraph.Generator/DurableSchemaGenerator.StateModel.cs) | [GeneratedStateModelTests](../../tests/DurableGraph.Tests/GeneratedStateModelTests.cs)：V1→V2→V3、current 快路、每声明边签名/缺边/异常、旧祖先删除及 leaf 独占升级 |
+| G2 完整归一化、source/current 边界 | verified | [NormalizedRevision](../../src/DurableGraph.StateStore/NormalizedRevision.cs) | [LoadedWorldTests](../../tests/DurableGraph.StateStore.Tests/LoadedWorldTests.cs)：完整多 Delta 后升级、混合 current/history、不可达 source 失败、错误引用及零写入 |
+| G3 readonly / 无构造器 Hydrate | verified | SG StateModel + [Runtime binding](../../src/DurableGraph/StateModelBinding.cs) | GeneratedStateModelTests、[全部 13 标量位模式](../../tests/DurableGraph.Tests/LoadedScalarHydrateTests.cs)：private 基类/叶类、初始值不执行、string 共享/独立/Empty/null、再次 Capture/Base/Delta/Read |
+| G4 Loaded owner 与身份导入 | verified | [LoadedWorld](../../src/DurableGraph.StateStore/LoadedWorld.cs)、[CaptureSession](../../src/DurableGraph/CaptureSession.cs) | LoadedWorldTests + [LoadedCaptureIdentityTests](../../tests/DurableGraph.Tests/LoadedCaptureIdentityTests.cs)：保留原 Empty 槽、完整 source max+1、耗尽已有对象可保存、错误根/类型、无伪造 Current |
+| G5 固定 Parent Prepare 与强制 Base | verified | [LoadedRevisionPlanner](../../src/DurableGraph.StateStore/LoadedRevisionPlanner.cs) | LoadedWorldTests：强制 Base、真实 Remove、冻结/repeat、编码/重入/Schema 冲突、确定 Append 失败不推进基线；原 Capture/策略回归保持 |
+| G6 冷重开、包交付、独立审查 | verified | 主代理集成与独立 reviewer | [LoadedWorldGeneratorTests](../../tests/DurableGraph.Tests/LoadedWorldGeneratorTests.cs) 两项真实历史/RBF/Segment 冷重开；两个 [PackageConsumerProbe](../../experiments/PackageConsumerProbe/README.md)；独立复审无未解决阻塞项 |
+
+### 实际 API 与所有权
+
+```csharp
+var models = new StateModelRegistry();
+World.__DurableBinaryBody.RegisterModel(models); // 在领域类型所在编译中使用生成 helper。
+var loaded = LoadedWorld.Load<World>(store, schemas, oldAddress, worldId, models);
+// 宿主初始化 Transient，再按业务需要修改 loaded.World。
+var plan = loaded.Prepare(new ReadAmplificationBaseBudgetParameters(3, 5));
+var nextAddress = store.Append(plan.Revision);
+var next = LoadedWorld.Load<World>(store, schemas, nextAddress, plan.WorldId, models);
+```
+
+`PreparedWorldRevision` 无公共构造器/可写 Parent；`LoadedWorld<T>` 无 Accept/Commit/替换根接口。
+相邻升级方法声明在领域类，参数是生成的 readonly DTO，通过其构造器产生 next。
+每条已声明边都有独立 typed wrapper，即使后续缺边，也不能逃过 DTO 类型与 out 赋值检查。
+Runtime current binding 将归一化 DTO 与稳定 Preparation 配对；抽象类型保留 reader/归一化及声明层
+Hydrate，但不能分配为 World。内部来源元数据与比较索引引用同一 current DTO 行，不另复制旧 DTO 基线。
+
+### 集成验证与已处理审查项
+
+- 根 `dotnet build DurableGraph.slnx --verbosity quiet`：0 warning/error。
+- focused：SG/Runtime 初轮 10/10、StateStore 20/20、生成持久闭环 2/2；随后补入两项签名缺边
+  回归及一项全部标量 readonly 恢复，并纳入最终完整回归。
+- 最终 `dotnet test DurableGraph.slnx --no-build --verbosity quiet --logger "trx;LogFilePrefix=db033-verified"`：
+  **835/835**，0 skipped（Runtime/SG 412 + StateStore 165 + Storage 155 + Serialization 103）。
+  TRX 位于各测试项目忽略的 TestResults，前缀 `db033-verified`。
+- `./experiments/PackageConsumerProbe/Run-Probe.ps1` 通过：原 marker + GeneratedModel/ReadonlyRestore，
+  7 history；最终产物 `experiments/PackageConsumerProbe/obj/run-20260907044456-30888`。
+- `./experiments/PackageConsumerProbe/Run-StateStoreProbe.ps1` 通过：保留原 7 marker，新增
+  HistoricalUpgrade/ConstructorFree/ReadonlyHydrate/ForcedBase/UnchangedResave/NormalDelta/ReopenedWorld，
+  World V1/V2 来自实际 history 发布（总数 3→4）；产物
+  `experiments/PackageConsumerProbe/obj/state-store-run-20260907044341-15080-70e0e720`。
+- 独立审查发现“后续缺边隐藏前面错误升级签名”，已修复并复审关闭。首次全量测试的 5 个失败
+  是旧 helper 全局禁止 typeof/Upgrade 的范围断言；现在用 Roslyn 逐方法检查：typeof 只允许
+  Allocate 中的 GetUninitializedObject，所有 body 仍禁止类型查找、Upgrade、反射与 registry 分派。
+  初轮夹具的 history 目录初始化和 readonly DTO 构造方式错误也已修复，最终无遗留失败。
+- 没有新增 wire 格式、程序集、Runtime→Storage 依赖或策略算法分支；Storage/Serialization 产品代码未改。
+  Prepare 已有和新增的失败清理、完整来源预检、浮点位模式及 Empty 真正落盘差异均有直接行为证据。
+- 文档/工作区检查：36 份修改文件 UTF-8/LF，6 份 Markdown 中 170 个本地链接及锚点有效；
+  主代理审阅整体 diff，`git diff --check` 通过。
+
+本批在这里停止。一般引用图、复合值/数组/泛型、持久 World 根、Commit/Ref/发布恢复与 ID 回收
+仍按[路线图](../DurableGraph-research-roadmap.md)另片推进；保留的性能 TODO 不影响本批语义验收。

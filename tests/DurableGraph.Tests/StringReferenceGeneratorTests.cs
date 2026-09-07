@@ -15,7 +15,8 @@ public sealed partial class DurableSchemaGeneratorTests {
         Assert.Contains("table.ResolveString(state.Segment0Field1);", generated);
         Assert.Contains("table.ResolveString(state.Segment1Field2);", generated);
         Assert.DoesNotContain("table.ResolveString(state.Segment1Field1)", generated);
-        foreach (string forbidden in new[] { "ValueSlotCodec", "PrimitiveSlotCodecs", "typeof(", "System.Reflection", "Dictionary<", "DynamicInvoke" }) {
+        AssertGeneratedBodiesRemainStaticallyBound(generated);
+        foreach (string forbidden in new[] { "ValueSlotCodec", "PrimitiveSlotCodecs", "System.Reflection", "Dictionary<", "DynamicInvoke" }) {
             Assert.DoesNotContain(forbidden, generated);
         }
     }

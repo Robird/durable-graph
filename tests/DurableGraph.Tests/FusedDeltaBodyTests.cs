@@ -60,7 +60,8 @@ public sealed partial class DurableSchemaGeneratorTests {
         Assert.Equal(priorCopy, prior);
 
         string generated = GeneratedSource(run, "DurableBinaryBodies.g.cs");
-        foreach (string forbidden in new[] { "StateEquals(", "WriteDelta(", "EstimateDelta(", "ValueSlotCodec", "PrimitiveSlotCodecs", "typeof(", "System.Reflection" }) {
+        AssertGeneratedBodiesRemainStaticallyBound(generated);
+        foreach (string forbidden in new[] { "StateEquals(", "WriteDelta(", "EstimateDelta(", "ValueSlotCodec", "PrimitiveSlotCodecs", "System.Reflection" }) {
             Assert.DoesNotContain(forbidden, generated);
         }
     }

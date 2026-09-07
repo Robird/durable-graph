@@ -20,6 +20,22 @@ public sealed class CaptureSession {
         _nextObjectId = firstObjectId;
     }
 
+    // Identity-only import for the controlled loader. Does not fabricate Capture provenance.
+    internal CaptureSession(ulong firstObjectId, IReadOnlyDictionary<object, uint> bindings) {
+        ArgumentNullException.ThrowIfNull(bindings);
+        if (firstObjectId == 0 || firstObjectId > (ulong)uint.MaxValue + 1) {
+            throw new ArgumentOutOfRangeException(nameof(firstObjectId));
+        }
+        HashSet<uint> ids = [];
+        foreach ((object instance, uint id) in bindings) {
+            if (id == 0 || id >= firstObjectId || !ids.Add(id)) {
+                throw new ArgumentException("Imported IDs must be unique, nonzero and below the allocation cursor.", nameof(bindings));
+            }
+            _bindings.Add(instance, id);
+        }
+        _nextObjectId = firstObjectId;
+    }
+
     public CapturedGraph? Current { get; private set; }
 
     /// <summary>
@@ -33,28 +49,46 @@ public sealed class CaptureSession {
             CapturedGraph? previous = Current;
             Dictionary<uint, CapturedObject> priorObjects = previous?.Objects.ToDictionary(static item => item.Id) ?? [];
 
-            // Validate the entire comparison set before invoking any user body operation.
-            foreach (CapturedObject current in candidate.Objects) {
-                priorObjects.TryGetValue(current.Id, out CapturedObject? prior);
-                ValidatePreparation(current, prior);
-            }
-
-            List<PreparedCapturedObject> objects = new(candidate.Objects.Count);
-            foreach (CapturedObject current in candidate.Objects) {
-                priorObjects.TryGetValue(current.Id, out CapturedObject? prior);
-                PreparedBase body = current.Kind == CapturedObjectKind.String
-                    ? StringPayloadCodec.PrepareBase(current.StringContent)
-                    : current.Preparation!.PrepareBase(current);
-                PreparedDelta? delta = prior is not null && current.Kind == CapturedObjectKind.Durable
-                    ? current.Preparation!.PrepareDelta(prior, current)
-                    : null;
-                objects.Add(new PreparedCapturedObject(current, prior, body, delta));
-            }
-            return new PreparedCapturedGraph(previous, candidate, objects);
+            return new PreparedCapturedGraph(previous, candidate, PrepareObjects(candidate, priorObjects));
         }
         finally {
             _preparing = false;
         }
+    }
+
+    // Loaded baselines describe source-live rows, not a previously captured graph.
+    internal IReadOnlyList<PreparedCapturedObject> PrepareAgainst(
+        CapturedGraph candidate, IReadOnlyDictionary<uint, CapturedObject> previous) {
+        RequireCandidate(candidate);
+        ArgumentNullException.ThrowIfNull(previous);
+        _preparing = true;
+        try {
+            return PrepareObjects(candidate, previous);
+        }
+        finally {
+            _preparing = false;
+        }
+    }
+
+    private static List<PreparedCapturedObject> PrepareObjects(
+        CapturedGraph candidate, IReadOnlyDictionary<uint, CapturedObject> previous) {
+        // Validate the entire comparison set before invoking any user body operation.
+        foreach (CapturedObject current in candidate.Objects) {
+            previous.TryGetValue(current.Id, out CapturedObject? prior);
+            ValidatePreparation(current, prior);
+        }
+        List<PreparedCapturedObject> objects = new(candidate.Objects.Count);
+        foreach (CapturedObject current in candidate.Objects) {
+            previous.TryGetValue(current.Id, out CapturedObject? prior);
+            PreparedBase body = current.Kind == CapturedObjectKind.String
+                ? StringPayloadCodec.PrepareBase(current.StringContent)
+                : current.Preparation!.PrepareBase(current);
+            PreparedDelta? delta = prior is not null && current.Kind == CapturedObjectKind.Durable
+                ? current.Preparation!.PrepareDelta(prior, current)
+                : null;
+            objects.Add(new PreparedCapturedObject(current, prior, body, delta));
+        }
+        return objects;
     }
 
     public CaptureContext BeginCapture() {

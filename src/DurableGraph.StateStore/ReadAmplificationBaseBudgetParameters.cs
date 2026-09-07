@@ -5,6 +5,6 @@ namespace Atelia.DurableGraph.StateStore;
 /// (1 through 100). For example, (3, 5) means 3 times and 5 percent.
 /// The budget is soft and does not cap total or physical write bytes.
 /// </summary>
-internal readonly record struct ReadAmplificationBaseBudgetParameters(
+public readonly record struct ReadAmplificationBaseBudgetParameters(
     int ReadAmplificationLimit,
     int BaseBudgetPercent);

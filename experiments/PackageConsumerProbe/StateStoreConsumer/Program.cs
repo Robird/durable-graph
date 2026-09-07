@@ -12,6 +12,10 @@ internal static class Program {
         if (args.Length != 1) { throw new ArgumentException("Pass one unused artifact directory."); }
         Character.Exercise(Path.GetFullPath(args[0]));
         Console.WriteLine("PersistedSchema:True:BaseTypeReference:True:RawDelta:True:ColdTypedRead:True:SharedString:True:ConflictBeforeAppend:True:DecodedRevision:True");
+#if RESTORE_V2
+        World.Exercise(Path.Combine(Path.GetFullPath(args[0]), "restore"));
+        Console.WriteLine("HistoricalUpgrade:True:ConstructorFree:True:ReadonlyHydrate:True:ForcedBase:True:UnchangedResave:True:NormalDelta:True:ReopenedWorld:True");
+#endif
     }
 }
 

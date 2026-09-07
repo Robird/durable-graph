@@ -18,9 +18,7 @@
 
 ## 当前规划
 
-| 文档 | 状态 | 推荐范围 |
-|---|---|---|
-| [DB-033 升级、领域恢复与增量续写连续计划](0033-upgrade-restore-resave-batch.md) | Proposed | G0–G6：单对象 DTO Upgrade、readonly Restore、受控 loaded baseline、冻结保存计划与 Append 后重新 Load；未实施，不含一般引用/类型扩展或 Commit 发布 |
+DB-033 已验收，当前无待执行的批次；下一分片从路线图选择。完成范围见下表与 DB-033 账本。
 
 ## 按任务查阅的混合决策
 
@@ -59,6 +57,7 @@
 | [DB-030 异构 Capture 图统一准备内容](0030-captured-object-preparation-slice.md) | Chosen / Implemented | SG 对象级 binding、Runtime 完整 prepared 内容；作为未来工作会话内部组件，不含 exact Parent baseline、持久类型或 Save/发布 |
 | [DB-031 持久 Schema 注册与 Base 类型引用](0031-persisted-object-type-envelope-slice.md) | Chosen / Implemented | 单调持久注册、严格恢复、Base exact 引用、同版 typed 冷读及保存桥接；不含自动修复、Upgrade/Restore 或 Commit |
 | [DB-032 完整 exact-version 对象目录冷读](0032-exact-revision-decoding-slice.md) | Chosen / Implemented | SG 历史 reader 登记、局部目录与完整 Revision 自动读取、目标视图 string 引用验证；不含 Upgrade/roots/Restore/Commit |
+| [DB-033 升级、领域恢复与增量续写](0033-upgrade-restore-resave-batch.md) | Chosen / Implemented | G0–G6：标量/string 单对象 DTO Upgrade、无构造器/readonly Restore、受控 LoadedWorld、冻结 Prepare 与 Append 后重新 Load；不含一般类型扩展、持久 roots 或 Commit 发布 |
 
 ## 隔离研究与技术储备
 

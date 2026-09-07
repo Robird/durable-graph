@@ -113,7 +113,8 @@ public sealed partial class DurableSchemaGeneratorTests {
         Assert.Equal<byte>([1, 1], BinaryBodyDelegate<Func<byte[]>>(assembly, "WriteBaseOfDerived")());
 
         string generated = BinaryBodyGeneratedText(run);
-        foreach (string forbidden in new[] { "ValueSlotCodec", "PrimitiveSlotCodecs", "typeof(", "DynamicInvoke", "delegate", "(object)", "System.Reflection" }) {
+        AssertGeneratedBodiesRemainStaticallyBound(generated);
+        foreach (string forbidden in new[] { "ValueSlotCodec", "PrimitiveSlotCodecs", "DynamicInvoke", "delegate", "(object)", "System.Reflection" }) {
             Assert.DoesNotContain(forbidden, generated);
         }
         Assert.Contains("global::BinaryBodies.Base.__DurableBinaryBody.Capture(value)", generated);
@@ -309,9 +310,9 @@ public sealed partial class DurableSchemaGeneratorTests {
         Assert.Equal<byte>([0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 1],
             BinaryBodyDelegate<Func<byte[]>>(assembly, "Write")());
         Type body = type.GetNestedType("__DurableBinaryBody", BindingFlags.NonPublic)!;
-        Assert.Equal(new[] { "AddRoot", "ApplyDeltaV1", "ApplyDeltaV2", "Capture", "PrepareBase", "PrepareBase", "PrepareDelta", "PrepareDelta", "ReadV1", "ReadV2", "RegisterReaders", "ValidateStringReferences", "ValidateStringReferences", "Write", "Write" }, body.GetMethods(BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.DeclaredOnly)
+        Assert.Equal(new[] { "AddRoot", "Allocate", "ApplyDeltaV1", "ApplyDeltaV2", "Capture", "Hydrate", "Normalize", "PrepareBase", "PrepareBase", "PrepareDelta", "PrepareDelta", "ReadV1", "ReadV2", "RegisterModel", "RegisterReaders", "ValidateStringReferences", "ValidateStringReferences", "Write", "Write" }, body.GetMethods(BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.DeclaredOnly)
             .Select(method => method.Name).OrderBy(name => name).ToArray());
-        Assert.DoesNotContain("Upgrade", BinaryBodyGeneratedText(run));
+        AssertGeneratedBodiesRemainStaticallyBound(BinaryBodyGeneratedText(run));
         Assert.DoesNotContain("__DurableSnapshot", BinaryBodyGeneratedText(run));
     }
 

@@ -5,9 +5,12 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <DefineConstants Condition="'$(RestoreVersion)' == '2'">$(DefineConstants);RESTORE_V2</DefineConstants>
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="Program.cs" />
+    <Compile Include="World.V1.cs" Condition="'$(RestoreVersion)' == '1'" />
+    <Compile Include="World.V2.cs" Condition="'$(RestoreVersion)' == '2'" />
     <PackageReference Include="Atelia.DurableGraph" Version="$(DurableGraphPackageVersion)" />
     <PackageReference Include="Atelia.DurableGraph.StateStore" Version="$(DurableGraphPackageVersion)" />
   </ItemGroup>

@@ -58,6 +58,13 @@ from Runtime alone. Two calls supply the same stable reader binding and its exac
 the script requires `GeneratedReaders:True`. This verifies the generator's registration seam
 without adding a StateStore package dependency or assigning registry policy to the sink.
 
+The Runtime-only consumer also registers the stable generated `Model` through a consumer-owned
+`IStateModelRegistration` sink, normalizes a current captured row, then calls generated `Allocate`
+and `Hydrate`. Its private readonly base fields survive; neither the leaf/base constructors nor
+the transient field initializer executes. The script additionally requires `GeneratedModel:True`
+and `ReadonlyRestore:True`. This verifies generated restoration helpers without adding StateStore
+to the Runtime package or implementing a consumer-owned persistence coordinator.
+
 The final consumer also captures two concrete roots with shared strings, distinct equal strings,
 null/empty/surrogate content, and private base fields through generated AddRoot adapters. It checks
 the closed ID DTO list, static ID-body golden bytes, mutation isolation, accept/discard, stable live
@@ -104,6 +111,21 @@ all live rows, selected Revision addresses, unchanged owners, and the same strin
 result row and reference table. Repeating generated registration is idempotent. Only Base carries
 a type header; string has no SchemaStore dependency. The script requires the original six output
 markers plus `DecodedRevision:True` and retains artifacts under its unique ignored `obj`
-directory. It does not test the internal representation policy, publish a head, upgrade DTOs,
-discover CLR types, or restore domain instances. Mixed historical model families are covered by
-the product integration tests; this package witness stays with two owners of the same Schema.
+directory. This first phase retains its two-owner stored-exact witness and two history files.
+
+The script then builds a separate `World` model at V1 and V2 against the same actual packages,
+publishing and consuming real generated history (three then four total history files). The V2
+consumer writes a historical Base plus two Deltas and closes the files. After writable reopening,
+public `LoadedWorld.Load<World>` upgrades the complete old DTO, allocates without a constructor,
+and hydrates private readonly scalar/string fields. `Prepare` forces an unchanged upgraded object
+to current Base; a later domain mutation cannot change that prepared content. The host explicitly
+appends and loads a new owner, whose unchanged plan contains no object writes and whose next edit
+uses ordinary Delta. A second cold reopening restores that Base/Delta pair and still reads the
+original historical revision. No fixture-owned DTO migration or planning coordinator substitutes
+for the public loading/preparation APIs.
+
+Additional required markers are `HistoricalUpgrade`, `ConstructorFree`, `ReadonlyHydrate`,
+`ForcedBase`, `UnchangedResave`, `NormalDelta`, and `ReopenedWorld`, each followed by `True`.
+The witness supplies the explicit World ID and does not publish a head, discover roots/CLR types,
+invoke transient hooks, or claim general reference-graph support. Mixed historical model families
+and failure boundaries remain covered by product integration tests.
