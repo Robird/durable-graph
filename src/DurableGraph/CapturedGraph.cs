@@ -2,16 +2,16 @@ namespace Atelia.DurableGraph;
 
 /// <summary>A sealed capture result, independent of mutable domain instances and session bindings.</summary>
 public sealed class CapturedGraph {
-    internal CapturedGraph(IEnumerable<uint> rootIds, IEnumerable<CapturedObject> objects) {
+    internal CapturedGraph(IEnumerable<uint> rootIds, IEnumerable<ObjectStateRecord> objects) {
         RootIds = new FrozenList<uint>(rootIds);
-        Objects = new FrozenList<CapturedObject>(objects.OrderBy(static item => item.Id));
+        Objects = new FrozenList<ObjectStateRecord>(objects.OrderBy(static item => item.Id));
     }
 
     /// <summary>Root IDs in registration order, including duplicates and zero for null roots.</summary>
     public IReadOnlyList<uint> RootIds { get; }
 
     /// <summary>The complete candidate object set in ascending ID order.</summary>
-    public IReadOnlyList<CapturedObject> Objects { get; }
+    public IReadOnlyList<ObjectStateRecord> Objects { get; }
 
     // Array.AsReadOnly leaks its backing array through ICollection.SyncRoot.
     // Expose only the read operations, with no non-generic collection side channel.

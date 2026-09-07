@@ -62,10 +62,16 @@ Revision 地址与 B/D/H 计量边界，同时保持 StateStore Storage wire v3 
 |---|---|---|---|
 | 删除 legacy，裸 attribute 生成唯一 State model | verified | Runtime / Generator / generator tests / package probe | generator/full tests；两项 package probe |
 | 原子迁移 Schema history 与 `.dgschema` | verified | Generator / Build / MSBuild assets / history tests | 42 项聚焦测试；839 项根套件；Publish/Verify、旧扩展与旧 header 拒绝；两项 package probe |
-| 迁移生成 ABI、对象状态行与 prepared-body 品牌 | pending | Generator / Runtime / Serialization / StateStore | generated/runtime/StateStore focused tests、package probe |
+| 迁移生成 ABI、对象状态行与 prepared-body 品牌 | verified | Generator / Runtime / Serialization / StateStore / PackageConsumerProbe | Serialization 103/103；Generator 175/175；StateStore 191/191；根套件 840/840；两项 package probe |
 | 清理 Storage API 且 wire bytes 不变 | pending | Storage / StateStore consumers | Storage literal golden tests、StateStore tests、package probe |
 | 活跃文档与交付面一致 | pending | glossary / PROJECT-STATE / roadmap / package docs | links、检索、diff review |
 | 独立审查与仓库级验证 | pending | review lane / main integrator | root build、889-test baseline successors、两项 package probes、`git diff --check` |
 
 跨切面不变量：生成的历史 DTO 必须继续由 accepted exact Schema/history 决定；typed Base 只能包装一次
 类型头；Storage 不解释 typed header；State v3 golden bytes 是本批不可修改的基准。
+
+Wave 3 的已验证落点：SG 生成 `__DurableState` 与 `DurableStates.g.cs`，公开 raw body 为
+`PreparedBaseBody` / `PreparedDeltaBody`，candidate/stored/current 共用 `ObjectStateRecord`；
+StateStore 内部 `EncodedBaseObjectBody` 是 typed planner 接受的唯一 Base 输入。PackageConsumer 的 V1
+进程通过公开 Prepare/Load 写出真实 Base + 两段 Delta，并把 exact Revision/WorldId 交给 V2 冷重开；
+不再由外部手工调用 Base 类型头 codec。Storage 项目及其 wire tests 在本 Wave 无 diff。

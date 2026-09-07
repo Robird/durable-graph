@@ -3,137 +3,121 @@
 DurableGraph is an exploratory .NET 10 prototype for versioned durable object graphs.
 Its public API, Schema-history format, and build workflow are not stable yet.
 
-A direct package reference supplies the runtime library, Source Generator, and the current
-Schema-history build integration. By default, each successful local `CoreCompile` appends exact
-Schema records under `DurableGraphSchemaHistory/`; a later unrelated build phase can still fail.
-Builds with `ContinuousIntegrationBuild=true` verify that the current metadata is already present
-without writing it.
+A direct package reference supplies the runtime library, Source Generator, and Schema-history
+build integration. Each successful local `CoreCompile` publishes exact Schema records under
+`DurableGraphSchemaHistory/`; `ContinuousIntegrationBuild=true` verifies that the current records
+already exist without writing them. Configure this with `DurableGraphSchemaHistoryDirectory` and
+`DurableGraphSchemaHistoryMode` (`Publish`, `Verify`, or `Off`). Keep `.dgschema` files under source
+control. Legacy `.dgsnapshot` history is rejected rather than consumed as the current format.
 
-The history directory and mode can be configured with `DurableGraphSchemaHistoryDirectory`
-and `DurableGraphSchemaHistoryMode` (`Publish`, `Verify`, or `Off`). Keep generated `.dgschema` files
-under source control. `Off` is intended only for diagnostics and isolated experiments because it
-removes the automatic history gate. Legacy `.dgsnapshot` files are rejected rather than read or
-silently ignored; regenerate their Schema history with the current package.
+## Generated Schema and state
 
-In the default serializer mode, when a durable type advances beyond version 1, the Generator emits required private partial
-adjacent handlers such as `UpgradeV1ToV2(in oldValue, out newValue)`. Generated deserialization
-can read a known historical version, validate its exact Schema, run the static adjacent chain, and
-return the current object. Loading does not rewrite stored state; only a later explicit Save does.
+Annotate each durable partial class with `[DurableType("example.character", 1)]`; the root of a
+durable inheritance chain derives from `DurableBase`. This is the only generation mode. The
+Generator emits exact Schema/history, readonly versioned state DTOs, raw Base/Delta body operations,
+Capture, reader/model registration, Normalize, Allocate, and Hydrate. Unsupported type shapes or
+field types are diagnostics rather than a metadata-only fallback.
 
-For schema metadata without a serializer, opt in with `[DurableType("example.base", 1, SchemaOnly = true)]`.
-This mode supports a same-compilation inheritance chain of top-level, non-generic partial classes,
-including abstract classes. Every domain class in the chain must opt in, with the root deriving
-directly from `DurableBase`. Each declaration owns its own FieldId space. `Schema.Fields` describes
-that declaration; `Schema.BaseSchema` binds its exact immutable ancestor layout.
+The generated `Schema` property is the current exact Schema. `GetSchema(int version)` returns cached
+metadata for versions 1 through the current version, including each version's exact historical base
+chain; other versions throw `ArgumentOutOfRangeException`. Each declaration owns its own FieldId
+space. `Schema.Fields` describes that declaration while `Schema.BaseSchema` binds its exact immutable
+ancestor layout.
 
-The Generator supplies `Schema` and `GetSchema(int version)` in this mode. The latter returns cached
-metadata for versions 1 through the current version, including the historical base chain; other
-versions throw `ArgumentOutOfRangeException`. It does not generate a `Serializer`, payload snapshots,
-or upgrade handlers. Supported field kinds are bool, byte/sbyte, short/ushort, int/uint,
-long/ulong, char, Half, float, double, and string.
+The assembly-internal nested `__DurableState` contains readonly structs `V1` through the current
+version. Each DTO's static `Schema` property is the same cached exact definition returned by
+`GetSchema(n)`. DTOs are regenerated from accepted `.dgschema` history and the current definition;
+there is no separate DTO source history to maintain. Current and historical layouts support bool,
+byte/sbyte, short/ushort, int/uint, long/ulong, char, Half, float, double, string, and supported
+durable references. Reference fields become UInt32 ObjectId slots while their Schema type retains
+String or its nominal durable target.
 
-For versioned state DTOs and binary bodies, additionally set `GenerateBinaryBody = true` on every
-class in a SchemaOnly domain chain. This provisional slice accepts the 13 scalar kinds listed
-above and string in current and historical layouts, including ancestor fields. String fields
-become uint reference slots in DTOs; their Schema type remains String. The assembly-internal nested `__DurableBinaryBody`
-contains readonly structs `V1` through the current version, each paired with `GetSchema(n)` by
-its static `Schema` property. DTOs are regenerated from accepted `.dgschema` history and the
-current definition; there is no separate DTO source history to maintain.
-
-Each DTO physically flattens the exact ancestor chain into fields such as `Segment0Field1`:
-base declarations first, then each declaration's fields in FieldId order. Schema metadata remains
+Each DTO physically flattens the exact ancestor chain into fields such as `Segment0Field1`: base
+declarations first, then each declaration's fields in FieldId order. Schema metadata remains
 segmented. Historical DTOs do not depend on old CLR base definitions remaining in source.
-For scalar-only current layouts, `Capture(T value)` copies current domain fields into the current DTO,
-using the base class's Capture for its private fields. Layouts containing string instead require
-`Capture(T value, CaptureContext context)`, called during a session's Seal operation. Transient fields
-are omitted. The caller supplies a stable view during capture; later domain mutations cannot change
-the captured values.
 
-`Write(ref BinaryPayloadWriter writer, in Vn state)` overloads encode DTO values directly;
-`ReadVn(ref BinaryPayloadReader reader)` returns a completed DTO. For example, in the consumer assembly:
+For a scalar-only layout:
 
 ```csharp
-// For a scalar-only Character layout:
-var state = Character.__DurableBinaryBody.Capture(character);
-Character.__DurableBinaryBody.Write(ref writer, in state);
-var restoredState = Character.__DurableBinaryBody.ReadV1(ref reader);
+var state = Character.__DurableState.Capture(character);
+var prepared = Character.__DurableState.PrepareBaseBody(in state);
+
+var reader = new BinaryPayloadReader(prepared.Body);
+var restoredState = Character.__DurableState.ReadBaseBodyV1(ref reader);
 reader.EnsureFullyConsumed();
 ```
 
-Select the ReadVn matching the stored layout. There are no domain-object Read/Write overloads.
+`WriteBaseBody(ref writer, in Vn)` writes a raw Base body. `PrepareBaseBody(in Vn)` owns those bytes
+for reuse. `PrepareDeltaBody(in prior, in current)` owns its change decision and raw Delta body;
+`ApplyDeltaBodyVn` applies it to the exact same-version prior DTO. The public containers are
+`PreparedBaseBody` and `PreparedDeltaBody`, and expose immutable bytes as `Body`. They contain
+neither the StateStore Base type header nor the Storage ObjectVersion envelope.
 
-The Serialization library is a transitive package dependency. Its Reader/Writer constructors,
-all 13 scalar operations, non-null string content ReadString/WriteString, and Reader boundary checks
-are public for generated-code consumers. Nullable string and raw block helpers remain internal.
-Char uses canonical UInt16 encoding of a UTF-16 code unit, including isolated surrogates.
-Half/float/double use fixed-width little-endian bytes preserving negative zero and NaN payload bits.
-Bodies do not restore domain instances, dispatch on runtime types/stored schemas, upgrade DTOs,
-or encode a type/version header. GetSchema remains a metadata query; callers explicitly choose
-the typed body. Failed ReadVn may leave the Reader advanced, but returns no partial DTO; a failed
-Write does not roll back prior output. Capture rejects null before reading fields. The final payload
-boundary is caller-owned. This is not yet the graph Save/Load API or StateStore baseline cache.
+The Serialization library is a transitive dependency. Its Reader/Writer constructors, scalar
+operations, non-null string content codec, and boundary checks are public for generated-code
+consumers. Char preserves a UTF-16 code unit; Half/float/double preserve their fixed-width bit
+patterns. Failed reads return no partial DTO but may leave the Reader advanced; failed writes do
+not roll back earlier output.
 
-For a complete in-memory capture of scalar/string roots, concrete classes also receive an internal
-`AddRoot(CaptureContext, T?)` adapter. It pairs the exact concrete domain type, current Schema,
-DTO and Capture function. In the same consumer assembly:
+When a model advances, user code supplies any required adjacent single-object conversion:
+
+```csharp
+private static void UpgradeStateV1ToV2(
+    in __DurableState.V1 oldValue,
+    out __DurableState.V2 newValue) {
+    newValue = new(oldValue.Segment0Field1, default);
+}
+```
+
+Historical readers do not require an upgrade path, but loading an old DTO into the current editable
+model does. Loading itself does not rewrite State; a surviving upgraded object is emitted as a new
+Base by a later explicit Prepare.
+
+## Capture and object-state rows
+
+Layouts containing references capture through a `CaptureContext`. Generated `AddRoot` supplies the
+exact model binding:
 
 ```csharp
 var session = new CaptureSession();
 using var capture = session.BeginCapture();
-uint rootId = Character.__DurableBinaryBody.AddRoot(capture, character);
+uint rootId = Character.__DurableState.AddRoot(capture, character);
 var candidate = capture.Seal();
 session.Accept(candidate); // Or session.Discard(candidate).
 ```
 
-AddRoot registers identity; Seal reads the fields. Keep the domain view stable from registration
-through Seal. Multiple concrete roots share one context. Root IDs are allocated before strings are
-discovered, in root order and then base-first/FieldId order. Repeated/null roots remain in RootIds,
-with zero representing null; Objects is the complete immutable live list ordered by ID. Equal-content
-nonempty strings with different CLR identities remain separate string entries. Empty strings are
-explicitly normalized to string.Empty before identity lookup and share one live ID. This normalization
-does not mutate domain fields or reserve a global ID; retirement and reentry use the usual lifecycle.
-A string entry exposes its
-immutable StringContent; a durable entry exposes its exact Schema and `GetState<TState>()` by value.
-The stored DTO box is private, and `TState : unmanaged` prevents managed references in DTO slots.
+Keep the domain graph stable from registration through Seal. Capture uses CLR reference identity,
+allocates nonzero UInt32 ObjectIds, freezes DTO values, and lists the complete candidate rows in
+ascending ID order. `ObjectStateRecord` is the common immutable carrier for a durable exact DTO or
+string content; its enclosing `CapturedGraph`, `DecodedRevision`, or normalized view supplies the
+stage meaning. Empty strings normalize to `string.Empty`; distinct nonempty string instances retain
+distinct identity.
 
-The session admits one pending capture, including a sealed candidate awaiting accept/discard.
-Accept installs that exact candidate without rereading the domain. Discard, Dispose, and capture
-failure preserve the accepted parent; allocated nonzero uint IDs remain consumed. Continuously live
-instances keep their IDs, while instances retired by Accept lose their bindings and receive fresh
-IDs if reintroduced. Exhaustion throws rather than wrapping. Monotonic allocation is local to this
-in-memory session, with no reopen/import or ID recycling. Retaining an old CapturedGraph does not
-retain its mutable source objects. Disposing an unresolved context discards its candidate.
+`CaptureSession.Accept` installs only an in-memory candidate and its bindings. It is not State
+append, Commit, or publication. Discard, failure, and disposing an unresolved context preserve the
+accepted graph, although allocated numeric IDs can remain consumed.
 
-The public generic AddRoot method is a generated-code seam: hand-written callers must pair Schema,
-DTO and callback correctly. Passing a derived instance to a base root binding is rejected; base
-segment Capture remains valid on derived instances. No global registry or automatic polymorphic
-root dispatch is provided. Reference bodies write/read UInt32 IDs only; ReadVn does not resolve or
-validate their targets. Each generated Vn now also has a separate internal
-`ValidateStringReferences(in Vn state, StringReadTable table)` method. It checks only Schema String
-fields, including historical ancestor fields; ordinary UInt32 fields remain numbers.
+## Typed StateStore path
 
-Use public `StringReadTable.Decode(IEnumerable<(uint Id, ReadOnlyMemory<byte> Body)>)` to decode
-complete canonical non-null string bodies for one loading view. It consumes inputs synchronously,
-retains no input buffers and returns only after all records succeed. Zero or duplicate record IDs,
-malformed content and trailing bytes are rejected. `ResolveString(0)` returns null; any other ID
-absent from this table throws InvalidDataException. Different nonempty string IDs retain distinct
-instances; empty bodies at different IDs intentionally resolve to the same string.Empty singleton.
-No nonpublic runtime allocation hook or content interning of nonempty strings is used.
+Product loading registers generated readers and models with `StateReaderRegistry` and
+`StateModelRegistry`. `RevisionDecoder` reconstructs a complete stored-exact DTO/string directory.
+`LoadedWorld.Load` then validates, upgrades, allocates all reachable objects, and hydrates references
+before exposing the single World root. It uses `RuntimeHelpers.GetUninitializedObject`; constructors,
+field initializers, and Transient rebuild hooks do not run. User code rebuilds Transient state after
+delivery.
 
-The table validates string records only. Callers still pair exact schemas with typed DTO bodies,
-validate the complete heterogeneous object directory and roots, and check all DTO reference slots
-before exposing their result. The package probe demonstrates that organization with owned bytes;
-it is not a persistent graph format. Domain restoration, Durable reference fields/cycles, general
-stored-schema dispatch, DTO upgrades and StateStore Save remain outside this slice.
+For a new graph, use `LoadedWorld.PrepareNew`. For an explicitly selected Revision and WorldId, use
+`LoadedWorld.Load`, mutate `World`, and call `Prepare`. Prepare may persist Schema registrations but
+does not append State, publish a head, or advance the loaded Parent. The host appends the returned
+`StateRevision` and currently reloads its exact address to establish the next baseline.
 
-Changing an exact base binding requires an explicit version increase in its derived class and then
-in each affected descendant. Accepted `.dgschema` history retains the old base binding. Generator
-and publisher both validate that history has a complete, conflict-free ancestor chain. History v1
-records may include a canonical `// base:<base64-schema-id>|<version>` line after the version line;
-records without a base retain their existing representation. This is a provisional metadata format,
-not the object graph payload format.
+The Base type-header codec is internal to StateStore. Public generated bodies are raw;
+`EncodedBaseObjectBody` brands the internal `[type header | raw Base body]` result so the typed
+planner cannot omit or apply that header twice. Storage continues to accept opaque body bytes and
+does not interpret this brand. Neither raw body access nor `StateRevisionStore.Append` constitutes
+Commit or publication.
 
-Schema TypeTags 1–4 retain their meanings; the new scalar tags occupy 5–14. The `.dgschema`
-header and record markers belong to the current Schema-history format; update the runtime,
-Generator and bundled history tool together by updating the package. These tags do not define
-the future graph TypeCodec.
+Changing an exact base binding requires an explicit version increase in the derived class and every
+affected descendant. Accepted `.dgschema` history retains the old binding. Generator and publisher
+validate complete, conflict-free ancestry. The Schema-history syntax is a build-time metadata format,
+not the object-graph payload or runtime SchemaStore wire format.

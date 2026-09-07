@@ -19,20 +19,20 @@ public sealed partial class DurableSchemaGeneratorTests {
         Dictionary<string, string> before = files.ReadContents();
         GeneratorTestRun run = RunGenerator(StateModelHistorySource(3) + """
             public partial class Item {
-                private static void UpgradeStateV1ToV2(in __DurableBinaryBody.V1 prior, out __DurableBinaryBody.V2 next) {
+                private static void UpgradeStateV1ToV2(in __DurableState.V1 prior, out __DurableState.V2 next) {
                     if (prior.Segment0Field1 < 0) throw new System.InvalidOperationException("user upgrade failure");
                     next = new(prior.Segment0Field1 + 1, 9);
                 }
-                private static void UpgradeStateV2ToV3(in __DurableBinaryBody.V2 prior, out __DurableBinaryBody.V3 next) {
+                private static void UpgradeStateV2ToV3(in __DurableState.V2 prior, out __DurableState.V3 next) {
                     next = new(prior.Segment0Field1 * 2, prior.Segment0Field2, true);
                 }
             }
             public static class Host {
-                public static StateModelBinding Model() => Item.__DurableBinaryBody.Model;
+                public static StateModelBinding Model() => Item.__DurableState.Model;
                 public static object State(int version, int value) => version switch {
-                    1 => new Item.__DurableBinaryBody.V1(value),
-                    2 => new Item.__DurableBinaryBody.V2(value, 9),
-                    _ => new Item.__DurableBinaryBody.V3(value, 4, false),
+                    1 => new Item.__DurableState.V1(value),
+                    2 => new Item.__DurableState.V2(value, 9),
+                    _ => new Item.__DurableState.V3(value, 4, false),
                 };
             }
             """, files.ReadAdditionalTexts());
@@ -40,8 +40,8 @@ public sealed partial class DurableSchemaGeneratorTests {
         Type host = EmitAndLoad(run.OutputCompilation).GetType("StateModels.Host")!;
         StateModelBinding model = host.GetMethod("Model")!.CreateDelegate<Func<StateModelBinding>>()();
         var state = host.GetMethod("State")!.CreateDelegate<Func<int, int, object>>();
-        CapturedObject old = new(23, model.Readers[0].Schema, state(1, 5));
-        CapturedObject normalized = model.Normalize(old);
+        ObjectStateRecord old = new(23, model.Readers[0].Schema, state(1, 5));
+        ObjectStateRecord normalized = model.Normalize(old);
         Assert.Equal(23u, normalized.Id);
         Assert.Equal(3, normalized.Schema!.Version);
         Assert.Equal(12, StateModelField(normalized, "Segment0Field1"));
@@ -50,7 +50,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         Assert.Equal(5, StateModelField(old, "Segment0Field1"));
         Assert.Null(old.Preparation);
         Assert.NotNull(normalized.Preparation);
-        CapturedObject current = model.Normalize(new(23, model.CurrentSchema, state(3, 42)));
+        ObjectStateRecord current = model.Normalize(new(23, model.CurrentSchema, state(3, 42)));
         Assert.Equal(42, StateModelField(current, "Segment0Field1"));
         Assert.Equal(false, StateModelField(current, "Segment0Field3"));
         Assert.Same(normalized.Preparation, current.Preparation);
@@ -73,17 +73,17 @@ public sealed partial class DurableSchemaGeneratorTests {
         }
         GeneratorTestRun run = RunGenerator(StateModelHistorySource(3) + """
             public partial class Item {
-                private static void UpgradeStateV2ToV3(in __DurableBinaryBody.V2 prior, out __DurableBinaryBody.V3 next) {
+                private static void UpgradeStateV2ToV3(in __DurableState.V2 prior, out __DurableState.V3 next) {
                     next = new(prior.Segment0Field1, prior.Segment0Field2, true);
                 }
             }
             public static class Host {
-                public static StateModelBinding Model() => Item.__DurableBinaryBody.Model;
+                public static StateModelBinding Model() => Item.__DurableState.Model;
                 public static object State(int version) => version == 1
-                    ? (object)new Item.__DurableBinaryBody.V1(8) : new Item.__DurableBinaryBody.V2(8, 2);
+                    ? (object)new Item.__DurableState.V1(8) : new Item.__DurableState.V2(8, 2);
                 public static int ReadOld() {
                     var reader = new Atelia.DurableGraph.StateStore.Serialization.BinaryPayloadReader(new byte[] { 16 });
-                    return Item.__DurableBinaryBody.ReadV1(ref reader).Segment0Field1;
+                    return Item.__DurableState.ReadBaseBodyV1(ref reader).Segment0Field1;
                 }
             }
             """, files.ReadAdditionalTexts());
@@ -117,18 +117,18 @@ public sealed partial class DurableSchemaGeneratorTests {
             [DurableType("state.base", 2)]
             public abstract partial class NewBase : DurableBase {
                 [DurableField(9)] private readonly byte _small;
-                private static void UpgradeStateV1ToV2(in __DurableBinaryBody.V1 prior, out __DurableBinaryBody.V2 next)
+                private static void UpgradeStateV1ToV2(in __DurableState.V1 prior, out __DurableState.V2 next)
                     => throw new System.Exception("Must not independently upgrade ancestor");
             }
             [DurableType("state.leaf", 2)]
             public sealed partial class Leaf : NewBase {
                 [DurableField(1)] private readonly string? _name;
-                private static void UpgradeStateV1ToV2(in __DurableBinaryBody.V1 prior, out __DurableBinaryBody.V2 next)
+                private static void UpgradeStateV1ToV2(in __DurableState.V1 prior, out __DurableState.V2 next)
                     => next = new((byte)(prior.Segment0Field4 + 1), prior.Segment1Field1);
             }
             public static class Host {
-                public static StateModelBinding Model() => Leaf.__DurableBinaryBody.Model;
-                public static object Old() => new Leaf.__DurableBinaryBody.V1(7, 99);
+                public static StateModelBinding Model() => Leaf.__DurableState.Model;
+                public static object Old() => new Leaf.__DurableState.V1(7, 99);
             }
             """, files.ReadAdditionalTexts());
         AssertSchemaOnlyCompiles(run);
@@ -137,7 +137,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         Type host = assembly.GetType("StateModels.Host")!;
         StateModelBinding model = host.GetMethod("Model")!.CreateDelegate<Func<StateModelBinding>>()();
         object old = host.GetMethod("Old")!.CreateDelegate<Func<object>>()();
-        CapturedObject current = model.Normalize(new(1, model.Readers[0].Schema, old));
+        ObjectStateRecord current = model.Normalize(new(1, model.Readers[0].Schema, old));
         Assert.Equal((byte)8, StateModelField(current, "Segment0Field9"));
         Assert.Equal(99u, StateModelField(current, "Segment1Field1"));
         DurableBase domain = model.Allocate();
@@ -171,15 +171,15 @@ public sealed partial class DurableSchemaGeneratorTests {
                 public Leaf(string name) : base(name) { Calls++; _shared = name; }
             }
             public static class Host {
-                public static StateModelBinding Model() => Leaf.__DurableBinaryBody.Model;
-                public static object State() => new Leaf.__DurableBinaryBody.V1(17, 7, 7, 8, 9, 10, 0, 91);
+                public static StateModelBinding Model() => Leaf.__DurableState.Model;
+                public static object State() => new Leaf.__DurableState.V1(17, 7, 7, 8, 9, 10, 0, 91);
             }
             """);
         AssertSchemaOnlyCompiles(run);
         Assembly assembly = EmitAndLoad(run.OutputCompilation);
         Type host = assembly.GetType("StateModels.Host")!;
         StateModelBinding model = host.GetMethod("Model")!.CreateDelegate<Func<StateModelBinding>>()();
-        CapturedObject current = model.Normalize(new(1, model.CurrentSchema, host.GetMethod("State")!.CreateDelegate<Func<object>>()()));
+        ObjectStateRecord current = model.Normalize(new(1, model.CurrentSchema, host.GetMethod("State")!.CreateDelegate<Func<object>>()()));
         DurableBase domain = model.Allocate();
         Type leaf = domain.GetType(), parent = leaf.BaseType!;
         const BindingFlags fields = BindingFlags.Instance | BindingFlags.NonPublic;
@@ -188,7 +188,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         Assert.Equal(0, leaf.GetField("_mutable", fields)!.GetValue(domain));
         // Loading validates the complete DTO view before allocating or hydrating any domain instance.
         Assert.Throws<InvalidDataException>(() => model.VisitReferences(current,
-            new StateReferenceValidator(new Dictionary<uint, CapturedObject>())));
+            new StateReferenceValidator(new Dictionary<uint, ObjectStateRecord>())));
         Assert.Equal(0, parent.GetField("_number", fields)!.GetValue(domain));
         string first = new(new[] { 'S' }), second = new(new[] { 'S' });
         model.Hydrate(domain, current, new ObjectReadTable(StringReadTable.FromDecoded([(7, first), (8, second), (9, ""), (10, "")]), new Dictionary<uint, DurableBase>()));
@@ -216,18 +216,18 @@ public sealed partial class DurableSchemaGeneratorTests {
         model.AddRoot(nextCapture, domain);
         CapturedGraph nextGraph = nextCapture.Seal();
         PreparedCapturedGraph changed = session.Prepare(nextGraph);
-        Assert.True(changed.Objects[0].DeltaContent!.HasChanges);
-        CapturedObject replayed = model.Readers[0].Read(1, new StateModelBodySource(
-            prepared.Objects[0].BaseContent.Payload.ToArray(), changed.Objects[0].DeltaContent!.Payload.ToArray()));
+        Assert.True(changed.Objects[0].DeltaBody!.HasChanges);
+        ObjectStateRecord replayed = model.Readers[0].Read(1, new StateModelBodySource(
+            prepared.Objects[0].BaseBody.Body.ToArray(), changed.Objects[0].DeltaBody!.Body.ToArray()));
         Assert.Equal(92, StateModelField(replayed, "Segment1Field6"));
         Assert.Equal(StateModelField(nextGraph.Objects[0], "Segment0Field2"), StateModelField(replayed, "Segment0Field2"));
         session.Discard(nextGraph);
     }
 
     [Theory]
-    [InlineData("private void UpgradeStateV1ToV2(in __DurableBinaryBody.V1 old, out __DurableBinaryBody.V2 next) => next = default;")]
-    [InlineData("private static void UpgradeStateV1ToV2(__DurableBinaryBody.V1 old, out __DurableBinaryBody.V2 next) => next = default;")]
-    [InlineData("private static int UpgradeStateV1ToV2(in __DurableBinaryBody.V1 old, out __DurableBinaryBody.V2 next) { next = default; return 0; }")]
+    [InlineData("private void UpgradeStateV1ToV2(in __DurableState.V1 old, out __DurableState.V2 next) => next = default;")]
+    [InlineData("private static void UpgradeStateV1ToV2(__DurableState.V1 old, out __DurableState.V2 next) => next = default;")]
+    [InlineData("private static int UpgradeStateV1ToV2(in __DurableState.V1 old, out __DurableState.V2 next) { next = default; return 0; }")]
     public void GeneratedStateModelRejectsMalformedDeclaredUpgrade(string method) {
         using AncestryHistoryDirectory files = new();
         GeneratorTestRun initial = RunGenerator(StateModelHistorySource(1));
@@ -242,8 +242,8 @@ public sealed partial class DurableSchemaGeneratorTests {
         GeneratorTestRun initial = RunGenerator(StateModelHistorySource(1));
         new SchemaHistoryTool().Publish(files.WriteManifest(initial), files.History);
         foreach (string method in new[] {
-            "private static void UpgradeStateV1ToV2(in __DurableBinaryBody.V2 old, out __DurableBinaryBody.V2 next) => next = old;",
-            "private static void UpgradeStateV1ToV2(in __DurableBinaryBody.V1 old, out __DurableBinaryBody.V2 next) { }",
+            "private static void UpgradeStateV1ToV2(in __DurableState.V2 old, out __DurableState.V2 next) => next = old;",
+            "private static void UpgradeStateV1ToV2(in __DurableState.V1 old, out __DurableState.V2 next) { }",
         }) {
             GeneratorTestRun run = RunGenerator(StateModelHistorySource(2) + "public partial class Item { " + method + " }", files.ReadAdditionalTexts());
             Assert.Contains(run.OutputCompilation.GetDiagnostics(), diagnostic => diagnostic.Severity == DiagnosticSeverity.Error);
@@ -265,14 +265,14 @@ public sealed partial class DurableSchemaGeneratorTests {
         string prior = wrongPriorType ? "V2" : "V1";
         GeneratorTestRun run = RunGenerator(StateModelHistorySource(3) + $$"""
             public partial class Item {
-                private static void UpgradeStateV1ToV2(in __DurableBinaryBody.{{prior}} prior, out __DurableBinaryBody.V2 next)
+                private static void UpgradeStateV1ToV2(in __DurableState.{{prior}} prior, out __DurableState.V2 next)
                     => next = new(prior.Segment0Field1, 9);
             }
             public static class Host {
-                public static StateModelBinding Model() => Item.__DurableBinaryBody.Model;
+                public static StateModelBinding Model() => Item.__DurableState.Model;
                 public static object Old() {
                     var reader = new Atelia.DurableGraph.StateStore.Serialization.BinaryPayloadReader(new byte[] { 16 });
-                    return Item.__DurableBinaryBody.ReadV1(ref reader);
+                    return Item.__DurableState.ReadBaseBodyV1(ref reader);
                 }
             }
             """, files.ReadAdditionalTexts());
@@ -283,7 +283,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         AssertSchemaOnlyCompiles(run);
         Type host = EmitAndLoad(run.OutputCompilation).GetType("StateModels.Host")!;
         StateModelBinding model = host.GetMethod("Model")!.CreateDelegate<Func<StateModelBinding>>()();
-        CapturedObject old = new(1, model.Readers[0].Schema, host.GetMethod("Old")!.CreateDelegate<Func<object>>()());
+        ObjectStateRecord old = new(1, model.Readers[0].Schema, host.GetMethod("Old")!.CreateDelegate<Func<object>>()());
         Assert.Equal(8, StateModelField(old, "Segment0Field1"));
         Assert.Contains("UpgradeStateV2ToV3", Assert.Throws<InvalidDataException>(() => model.Normalize(old)).Message);
     }
@@ -296,8 +296,8 @@ public sealed partial class DurableSchemaGeneratorTests {
         (version >= 2 ? "[DurableField(2)] private byte _small; " : "") +
         (version >= 3 ? "[DurableField(3)] private bool _flag; " : "") + "}\n";
 
-    private static object? StateModelField(CapturedObject row, string name) {
-        object value = typeof(CapturedObject).GetField("_content", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(row)!;
+    private static object? StateModelField(ObjectStateRecord row, string name) {
+        object value = typeof(ObjectStateRecord).GetField("_content", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(row)!;
         return value.GetType().GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(value);
     }
 

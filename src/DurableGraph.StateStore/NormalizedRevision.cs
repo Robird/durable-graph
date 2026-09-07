@@ -16,8 +16,8 @@ internal sealed class NormalizedRevision {
 
     internal static NormalizedRevision Create(DecodedRevision source, StateModelSnapshot models) {
         Dictionary<uint, NormalizedObject> normalized = [];
-        foreach (CapturedObject row in source.Objects) {
-            if (row.Kind == CapturedObjectKind.String) {
+        foreach (ObjectStateRecord row in source.Objects) {
+            if (row.Kind == ObjectStateKind.String) {
                 normalized.Add(row.Id, new(row, null, false, null));
                 continue;
             }
@@ -25,8 +25,8 @@ internal sealed class NormalizedRevision {
             if (!models.Models.TryGetValue(storedSchema.SchemaId, out StateModelBinding? model)) {
                 throw new InvalidDataException($"No current model is registered for {storedSchema.SchemaId}.");
             }
-            CapturedObject current = model.Normalize(row);
-            if (current.Id != row.Id || current.Kind != CapturedObjectKind.Durable ||
+            ObjectStateRecord current = model.Normalize(row);
+            if (current.Id != row.Id || current.Kind != ObjectStateKind.Durable ||
                 !model.CurrentSchema.Equals(current.Schema)) {
                 throw new InvalidDataException("Normalization must preserve object identity and produce the exact current Schema.");
             }
@@ -43,7 +43,7 @@ internal sealed class NormalizedRevision {
 }
 
 internal sealed record NormalizedObject(
-    CapturedObject Current,
+    ObjectStateRecord Current,
     DurableSchema? SourceSchema,
     bool RequiresRewrite,
     StateModelBinding? Model);

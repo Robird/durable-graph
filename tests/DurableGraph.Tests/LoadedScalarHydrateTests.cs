@@ -22,11 +22,11 @@ public sealed partial class DurableSchemaGeneratorTests {
                 [DurableField(11)] private readonly Half _half = BitConverter.Int16BitsToHalf(unchecked((short)0xFE01));
                 [DurableField(12)] private readonly float _float = BitConverter.Int32BitsToSingle(unchecked((int)0x80000000));
                 [DurableField(13)] private readonly double _double = BitConverter.Int64BitsToDouble(unchecked((long)0xFFF8000000000001));
-                public static StateModelBinding Binding => __DurableBinaryBody.Model;
+                public static StateModelBinding Binding => __DurableState.Model;
                 public static CapturedGraph Seed() {
                     var session = new CaptureSession();
                     using var context = session.BeginCapture();
-                    __DurableBinaryBody.AddRoot(context, new World());
+                    __DurableState.AddRoot(context, new World());
                     return context.Seal();
                 }
             }
@@ -35,16 +35,16 @@ public sealed partial class DurableSchemaGeneratorTests {
         Type type = EmitAndLoad(run.OutputCompilation).GetType("ScalarRestore.World")!;
         StateModelBinding model = (StateModelBinding)type.GetProperty("Binding")!.GetValue(null)!;
         CapturedGraph seed = type.GetMethod("Seed")!.CreateDelegate<Func<CapturedGraph>>()();
-        CapturedObject expected = Assert.Single(seed.Objects);
+        ObjectStateRecord expected = Assert.Single(seed.Objects);
         DurableBase instance = model.Allocate();
         model.Hydrate(instance, model.Normalize(expected), new ObjectReadTable(StringReadTable.FromDecoded([]), new Dictionary<uint, DurableBase>()));
         CaptureSession session = new();
         using CaptureContext context = session.BeginCapture();
         model.AddRoot(context, instance);
         CapturedGraph captured = context.Seal();
-        CapturedObject actual = Assert.Single(captured.Objects);
-        Assert.Equal(expected.Preparation!.PrepareBase(expected).Payload.ToArray(),
-            actual.Preparation!.PrepareBase(actual).Payload.ToArray());
+        ObjectStateRecord actual = Assert.Single(captured.Objects);
+        Assert.Equal(expected.Preparation!.PrepareBase(expected).Body.ToArray(),
+            actual.Preparation!.PrepareBase(actual).Body.ToArray());
         Assert.False(actual.Preparation.PrepareDelta(expected, actual).HasChanges);
     }
 }

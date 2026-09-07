@@ -161,10 +161,10 @@ public sealed partial class DurableSchemaGeneratorTests {
                 var session = new CaptureSession();
                 CapturedGraph CaptureOwners() {
                     var context = session.BeginCapture();
-                    Owner.__DurableBinaryBody.AddRoot(context, first);
-                    Owner.__DurableBinaryBody.AddRoot(context, second);
-                    Owner.__DurableBinaryBody.AddRoot(context, first);
-                    Owner.__DurableBinaryBody.AddRoot(context, null);
+                    Owner.__DurableState.AddRoot(context, first);
+                    Owner.__DurableState.AddRoot(context, second);
+                    Owner.__DurableState.AddRoot(context, first);
+                    Owner.__DurableState.AddRoot(context, null);
                     return context.Seal();
                 }
                 var firstGraph = CaptureOwners();
@@ -184,12 +184,12 @@ public sealed partial class DurableSchemaGeneratorTests {
                 return graph.Objects.Select(entry => {
                     var buffer = new ArrayBufferWriter<byte>();
                     var writer = new BinaryPayloadWriter(buffer);
-                    bool isString = entry.Kind == CapturedObjectKind.String;
+                    bool isString = entry.Kind == ObjectStateKind.String;
                     if (isString) {
                         writer.WriteString(entry.StringContent);
                     } else {
-                        var state = entry.GetState<Owner.__DurableBinaryBody.V1>();
-                        Owner.__DurableBinaryBody.Write(ref writer, in state);
+                        var state = entry.GetState<Owner.__DurableState.V1>();
+                        Owner.__DurableState.WriteBaseBody(ref writer, in state);
                     }
                     return (entry.Id, isString, entry.Schema, buffer.WrittenSpan.ToArray());
                 }).ToArray();
@@ -204,7 +204,7 @@ public sealed partial class DurableSchemaGeneratorTests {
                 foreach (var entry in metadata) {
                     if (entry.Id == 0 || !directory.TryAdd(entry.Id, entry.IsString) || !bodies.ContainsKey(entry.Id))
                         throw new InvalidDataException("Invalid fixture directory.");
-                    if (entry.IsString ? entry.Schema is not null : !Owner.__DurableBinaryBody.V1.Schema.Equals(entry.Schema))
+                    if (entry.IsString ? entry.Schema is not null : !Owner.__DurableState.V1.Schema.Equals(entry.Schema))
                         throw new InvalidDataException("Typed decoding requires exact Schema metadata.");
                 }
                 if (directory.Count != bodies.Count) throw new InvalidDataException("Directory must cover every body.");
@@ -214,12 +214,12 @@ public sealed partial class DurableSchemaGeneratorTests {
                 }
                 var strings = StringReadTable.Decode(metadata.Where(entry => entry.IsString)
                     .Select(entry => (entry.Id, (ReadOnlyMemory<byte>)bodies[entry.Id])));
-                var owners = new Dictionary<uint, Owner.__DurableBinaryBody.V1>();
+                var owners = new Dictionary<uint, Owner.__DurableState.V1>();
                 foreach (var entry in metadata.Where(entry => !entry.IsString)) {
                     var reader = new BinaryPayloadReader(bodies[entry.Id]);
-                    var state = Owner.__DurableBinaryBody.ReadV1(ref reader);
+                    var state = Owner.__DurableState.ReadBaseBodyV1(ref reader);
                     reader.EnsureFullyConsumed();
-                    Owner.__DurableBinaryBody.ValidateStringReferences(in state, strings);
+                    Owner.__DurableState.ValidateStringReferences(in state, strings);
                     owners.Add(entry.Id, state);
                 }
                 var first = owners[roots[0]];

@@ -47,14 +47,14 @@ internal static class ObjectRevisionPlanner {
         for (int index = 0; index < rows.Length; index++) {
             PreparedObject row = rows[index];
             long? deltaBytes = row.ChangeKind == ObjectSaveChangeKind.Update
-                ? ObjectVersionPayloadSize.EstimateDeltaBytes(row.DeltaContent!.Payload.Length, row.PriorAddress!.Value)
+                ? ObjectVersionPayloadSize.EstimateDeltaBytes(row.DeltaBody!.Body.Length, row.PriorAddress!.Value)
                 : null;
             // TODO(DB-029): Measure repeated object-chain reads before adding batch/cache support.
             long? reconstructionBytes = row.ChangeKind is ObjectSaveChangeKind.Update or ObjectSaveChangeKind.NoChange
                 ? store.ReadObjectVersionChain(parentRevisionAddress!.Value, row.ObjectId).ReconstructionBytes
                 : null;
             estimates[index] = new(row.ObjectId, row.ChangeKind,
-                ObjectVersionPayloadSize.GetBaseBytes(row.BaseContent.Payload.Length), deltaBytes, reconstructionBytes);
+                ObjectVersionPayloadSize.GetBaseBytes(row.EncodedBaseBody.Body.Length), deltaBytes, reconstructionBytes);
         }
 
         ObjectRepresentationPlan plan = ReadAmplificationBaseBudgetPolicy.Plan(estimates, parameters);
@@ -62,8 +62,8 @@ internal static class ObjectRevisionPlanner {
         foreach (ObjectWriteDecision decision in plan.Writes) {
             PreparedObject row = byId[decision.ObjectId];
             records.Add(decision.Mode == ObjectRepresentationMode.Base
-                ? ObjectVersionRecord.CreateBase(row.ObjectId, row.BaseContent.Payload)
-                : ObjectVersionRecord.CreateDelta(row.ObjectId, row.PriorAddress!.Value, row.DeltaContent!.Payload));
+                ? ObjectVersionRecord.CreateBase(row.ObjectId, row.EncodedBaseBody.Body)
+                : ObjectVersionRecord.CreateDelta(row.ObjectId, row.PriorAddress!.Value, row.DeltaBody!.Body));
         }
 
         StateRevision revision = parentRevisionAddress is { } exactParent

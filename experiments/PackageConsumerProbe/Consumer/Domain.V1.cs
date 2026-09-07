@@ -8,7 +8,7 @@ internal sealed partial class Character : DurableBase {
     private int _score;
 
     public static string ExerciseGeneratedState() {
-        __DurableBinaryBody.V1 state = new(7);
+        __DurableState.V1 state = new(7);
         return state.Segment0Field1.ToString();
     }
 }

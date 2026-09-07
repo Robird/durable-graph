@@ -20,12 +20,12 @@ public static class TypedObjectVersionReader {
         ArgumentNullException.ThrowIfNull(expectedSchema);
         ArgumentNullException.ThrowIfNull(readBase);
         ArgumentNullException.ThrowIfNull(applyDelta);
-        BaseObjectPayload payload = DecodeBase(chain);
-        if (payload.Kind != CapturedObjectKind.Durable || payload.SchemaKey is not SchemaKey key) {
+        DecodedBaseObjectBody body = DecodeBase(chain);
+        if (body.Kind != ObjectStateKind.Durable || body.SchemaKey is not SchemaKey key) {
             throw new InvalidDataException("A durable reader requires a durable Base type header.");
         }
         MatchSchema(schemas, key, expectedSchema);
-        return StateBodyDecoder.Read(CreateBodySource(chain, payload), readBase, applyDelta);
+        return StateBodyDecoder.Read(CreateBodySource(chain, body), readBase, applyDelta);
     }
 
     /// <summary>
@@ -33,26 +33,26 @@ public static class TypedObjectVersionReader {
     /// reference identity across ObjectIds; each independent nonempty decode creates content.
     /// </summary>
     public static string ReadString(ObjectVersionChain chain) {
-        BaseObjectPayload payload = DecodeBase(chain);
-        return ReadString(chain, payload);
+        DecodedBaseObjectBody body = DecodeBase(chain);
+        return ReadString(chain, body);
     }
 
-    internal static string ReadString(ObjectVersionChain chain, BaseObjectPayload payload) {
+    internal static string ReadString(ObjectVersionChain chain, DecodedBaseObjectBody body) {
         if (chain.Records.Count != 1) {
             throw new InvalidDataException("An immutable string object cannot have Delta records.");
         }
-        if (payload.Kind != CapturedObjectKind.String) {
+        if (body.Kind != ObjectStateKind.String) {
             throw new InvalidDataException("A string reader requires a string Base type header.");
         }
-        BinaryPayloadReader reader = new(payload.Body);
+        BinaryPayloadReader reader = new(body.Body);
         string value = reader.ReadString();
         reader.EnsureFullyConsumed();
         return value;
     }
 
-    internal static BaseObjectPayload DecodeBase(ObjectVersionChain chain) {
+    internal static DecodedBaseObjectBody DecodeBase(ObjectVersionChain chain) {
         ValidateShape(chain);
-        return BaseObjectPayloadCodec.Decode(chain.Records[0].Record.Body);
+        return BaseObjectBodyCodec.Decode(chain.Records[0].Record.Body);
     }
 
     internal static void MatchSchema(SchemaStore schemas, SchemaKey key, DurableSchema expectedSchema) {
@@ -62,13 +62,13 @@ public static class TypedObjectVersionReader {
         }
     }
 
-    internal static IStateBodySource CreateBodySource(ObjectVersionChain chain, BaseObjectPayload payload) =>
-        new ChainBodySource(chain, payload);
+    internal static IStateBodySource CreateBodySource(ObjectVersionChain chain, DecodedBaseObjectBody body) =>
+        new ChainBodySource(chain, body);
 
     // Borrow the owned chain for this synchronous read; Delta bodies do not need another copy.
-    private sealed class ChainBodySource(ObjectVersionChain chain, BaseObjectPayload payload) : IStateBodySource {
+    private sealed class ChainBodySource(ObjectVersionChain chain, DecodedBaseObjectBody body) : IStateBodySource {
         public int Count => chain.Records.Count;
-        public ReadOnlySpan<byte> GetBody(int index) => index == 0 ? payload.Body : chain.Records[index].Record.Body;
+        public ReadOnlySpan<byte> GetBody(int index) => index == 0 ? body.Body : chain.Records[index].Record.Body;
     }
 
     private static void ValidateShape(ObjectVersionChain chain) {

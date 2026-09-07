@@ -13,12 +13,12 @@ public sealed partial class DurableSchemaGeneratorTests {
     [Fact]
     public void LoadedWorldGeneratedHistoricalChainUpgradesRestoresAndResavesAcrossColdReopens() {
         var fixture = CompileLoadedWorldFixture();
-        var prepareDelta = fixture.Host.GetMethod("Prepare1")!.CreateDelegate<Func<byte[], byte[], PreparedDelta>>();
+        var prepareDelta = fixture.Host.GetMethod("Prepare1")!.CreateDelegate<Func<byte[], byte[], PreparedDeltaBody>>();
         byte[] original = [20, 2, 10, 11, 10, 12, 12];
         byte[] middle = [20, 4, 10, 11, 10, 12, 12];
         byte[] latest = [20, 6, 10, 11, 10, 12, 12];
-        PreparedDelta delta1 = prepareDelta(original, middle);
-        PreparedDelta delta2 = prepareDelta(middle, latest);
+        PreparedDeltaBody delta1 = prepareDelta(original, middle);
+        PreparedDeltaBody delta2 = prepareDelta(middle, latest);
         using RawBaseDirectory directory = new();
         using RawBaseDirectory schemaDirectory = new();
         Directory.CreateDirectory(schemaDirectory.Path);
@@ -35,9 +35,9 @@ public sealed partial class DurableSchemaGeneratorTests {
                 LoadedText(11, "same"), LoadedText(12, ""), LoadedText(20, "retired ancestor field"),
             ], []));
             second = store.Append(StateRevision.CreateDelta(first,
-                [ObjectVersionRecord.CreateDelta(1, first, delta1.Payload)], []));
+                [ObjectVersionRecord.CreateDelta(1, first, delta1.Body)], []));
             third = store.Append(StateRevision.CreateDelta(second,
-                [ObjectVersionRecord.CreateDelta(1, second, delta2.Payload)], []));
+                [ObjectVersionRecord.CreateDelta(1, second, delta2.Body)], []));
         }
         Assert.NotEqual(first.FileNumber, third.FileNumber);
         Array.Clear(original);
@@ -60,7 +60,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             ObjectVersionRecord rewrite = Assert.Single(plan.Revision.LocalObjects);
             Assert.Equal(ObjectVersionKind.Base, rewrite.Kind);
             Assert.Equal(1u, rewrite.ObjectId);
-            BaseObjectPayload envelope = BaseObjectPayloadCodec.Decode(rewrite.Body);
+            DecodedBaseObjectBody envelope = BaseObjectBodyCodec.Decode(rewrite.Body);
             Assert.Equal(fixture.CurrentSchema.Version, envelope.SchemaKey!.Value.Version);
             Assert.Equal<byte>([7, 10, 6, 10, 11, 10, 12, 12], envelope.Body.ToArray());
             fixture.Change(loaded, 99); // Frozen output cannot follow later domain mutation.
@@ -172,10 +172,10 @@ public sealed partial class DurableSchemaGeneratorTests {
     }
 
     private static ObjectVersionRecord LoadedDurable(uint id, DurableSchema schema, byte[] body) =>
-        ObjectVersionRecord.CreateBase(id, BaseObjectPayloadCodec.EncodeDurable(schema, new(body)).Payload);
+        ObjectVersionRecord.CreateBase(id, BaseObjectBodyCodec.EncodeDurable(schema, new(body)).Body);
 
     private static ObjectVersionRecord LoadedText(uint id, string text) =>
-        ObjectVersionRecord.CreateBase(id, BaseObjectPayloadCodec.EncodeString(StringPayloadCodec.PrepareBase(text)).Payload);
+        ObjectVersionRecord.CreateBase(id, BaseObjectBodyCodec.EncodeString(StringPayloadCodec.PrepareBase(text)).Body);
 
     private static LoadedWorldFixture CompileLoadedWorldFixture() {
         using AncestryHistoryDirectory history = new();
@@ -247,9 +247,9 @@ public sealed partial class DurableSchemaGeneratorTests {
                     !ReferenceEquals(_empty, string.Empty) || !ReferenceEquals(_emptyAgain, string.Empty))
                     throw new Exception("Shared/distinct string identity or Empty normalization changed.");
             }
-            private static void UpgradeStateV1ToV2(in __DurableBinaryBody.V1 old, out __DurableBinaryBody.V2 next) {
+            private static void UpgradeStateV1ToV2(in __DurableState.V1 old, out __DurableState.V2 next) {
                 Upgrades++;
-                next = new __DurableBinaryBody.V2(7, old.Segment1Field2,
+                next = new __DurableState.V2(7, old.Segment1Field2,
                     old.Segment1Field1, old.Segment1Field2, old.Segment1Field3,
                     old.Segment1Field4, old.Segment1Field5, old.Segment1Field6);
             }
@@ -259,7 +259,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             public static object Load(Atelia.DurableGraph.StateStore.Storage.StateRevisionStore store,
                 Atelia.DurableGraph.StateStore.SchemaStore schemas, Atelia.DurableGraph.StateStore.Storage.FrameAddress revision) {
                 var models = new Atelia.DurableGraph.StateStore.StateModelRegistry();
-                Leaf.__DurableBinaryBody.RegisterModel(models);
+                Leaf.__DurableState.RegisterModel(models);
                 return Atelia.DurableGraph.StateStore.LoadedWorld.Load<Leaf>(store, schemas, revision, 1, models);
             }
             public static Atelia.DurableGraph.StateStore.PreparedWorldRevision Prepare(object loaded) =>
@@ -272,10 +272,10 @@ public sealed partial class DurableSchemaGeneratorTests {
             public static byte[] ReadStored(Atelia.DurableGraph.StateStore.Storage.StateRevisionStore store,
                 Atelia.DurableGraph.StateStore.SchemaStore schemas, Atelia.DurableGraph.StateStore.Storage.FrameAddress revision) {
                 var readers = new Atelia.DurableGraph.StateStore.StateReaderRegistry();
-                Leaf.__DurableBinaryBody.RegisterReaders(readers);
+                Leaf.__DurableState.RegisterReaders(readers);
                 var decoded = Atelia.DurableGraph.StateStore.RevisionDecoder.Read(store, schemas, revision, readers);
-                var old = decoded.GetRequired(1).GetState<Leaf.__DurableBinaryBody.V1>();
-                return Leaf.__DurableBinaryBody.PrepareBase(in old).Payload.ToArray();
+                var old = decoded.GetRequired(1).GetState<Leaf.__DurableState.V1>();
+                return Leaf.__DurableState.PrepareBaseBody(in old).Body.ToArray();
             }
         }
         """;

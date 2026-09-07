@@ -82,7 +82,7 @@ public static class LoadedWorld {
         // Retain lookup entries for source strings already owned by the normalized baseline.
         // Capture still emits only reachable strings; this map is not post-save membership.
         foreach (NormalizedObject row in normalized.Objects.Values.OrderBy(static row => row.Current.Id)) {
-            if (row.Current.Kind == CapturedObjectKind.String) {
+            if (row.Current.Kind == ObjectStateKind.String) {
                 // Distinct Empty IDs have one CLR instance. Choose the smallest ID, but never
                 // rewrite the baseline DTO's original ID slots; Capture must observe the change.
                 bindings.TryAdd(row.Current.StringContent, row.Current.Id);
@@ -128,7 +128,7 @@ public sealed class LoadedWorld<TWorld> where TWorld : DurableBase {
     private readonly StateModelBinding _model;
     private readonly StateModelSnapshot _models;
     private readonly NormalizedRevision _baseline;
-    private readonly IReadOnlyDictionary<uint, CapturedObject> _baselineCurrentDtos;
+    private readonly IReadOnlyDictionary<uint, ObjectStateRecord> _baselineCurrentDtos;
     private readonly CaptureSession _capture;
     private bool _preparing;
 

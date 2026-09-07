@@ -332,7 +332,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         GeneratorTestRun run = RunGenerator(SingleReferenceNodeSource());
 
         Assert.DoesNotContain(run.GeneratorDiagnostics, IsError);
-        Assert.Contains(run.GeneratedSources, source => source.HintName == "DurableBinaryBodies.g.cs");
+        Assert.Contains(run.GeneratedSources, source => source.HintName == "DurableStates.g.cs");
         Assert.DoesNotContain(
             run.GeneratedSources,
             source => source.HintName == GraphOperationsHintName);

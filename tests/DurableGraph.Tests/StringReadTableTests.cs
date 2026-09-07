@@ -192,11 +192,11 @@ public sealed class StringReadTableTests {
             (2u, new byte[] { 0x03, 0x41 }), (3u, new byte[] { 0x00, 0x41 })]));
         Assert.Null(failed);
         Assert.Same(parent, session.Current);
-        Assert.Equal("parent", parent.Objects.Single(item => item.Kind == CapturedObjectKind.String).StringContent);
+        Assert.Equal("parent", parent.Objects.Single(item => item.Kind == ObjectStateKind.String).StringContent);
         session.Accept(candidate);
         Assert.Same(candidate, session.Current);
         Assert.Equal(parent.RootIds[0], candidate.RootIds[0]);
-        Assert.Equal("pending", candidate.Objects.Single(item => item.Kind == CapturedObjectKind.String).StringContent);
+        Assert.Equal("pending", candidate.Objects.Single(item => item.Kind == ObjectStateKind.String).StringContent);
     }
 
     private sealed class Domain : DurableBase {

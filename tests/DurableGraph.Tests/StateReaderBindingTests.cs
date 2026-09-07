@@ -10,12 +10,12 @@ public sealed class StateReaderBindingTests {
     public void ReaderReconstructsTypedChainAndReturnsIndependentStateCopies() {
         BodySource source = new([10, 7], [1, 11], [2, 9], [1, 12]);
         StateReaderBinding<State> binding = new(Schema, ReadBase, ApplyDelta, ValidateStrings);
-        CapturedObject row = binding.Read(3, source);
+        ObjectStateRecord row = binding.Read(3, source);
 
         Assert.Equal(new[] { 0, 1, 2, 3 }, source.Requests);
         Assert.Equal(3u, row.Id);
         Assert.Same(Schema, row.Schema);
-        Assert.Equal(CapturedObjectKind.Durable, row.Kind);
+        Assert.Equal(ObjectStateKind.Durable, row.Kind);
         Assert.Null(row.Preparation);
         State copy = row.GetState<State>();
         Assert.Equal((byte)12, copy.Value);
@@ -25,16 +25,16 @@ public sealed class StateReaderBindingTests {
         Assert.Equal((byte)12, row.GetState<State>().Value);
         Assert.Equal(9u, row.GetState<State>().Text);
         // Only the final DTO is validated: string 7 is no longer referenced.
-        binding.VisitReferences(row, new StateReferenceValidator(new Dictionary<uint, CapturedObject> { [9] = new(9, "current") }));
-        Assert.Throws<InvalidDataException>(() => binding.VisitReferences(row, new StateReferenceValidator(new Dictionary<uint, CapturedObject>())));
+        binding.VisitReferences(row, new StateReferenceValidator(new Dictionary<uint, ObjectStateRecord> { [9] = new(9, "current") }));
+        Assert.Throws<InvalidDataException>(() => binding.VisitReferences(row, new StateReferenceValidator(new Dictionary<uint, ObjectStateRecord>())));
     }
 
     [Fact]
     public void ReaderAcceptsBaseOnlyAndNullStringReference() {
         StateReaderBinding<State> binding = new(Schema, ReadBase, ApplyDelta, ValidateStrings);
-        CapturedObject row = binding.Read(uint.MaxValue, new BodySource([5, 0]));
+        ObjectStateRecord row = binding.Read(uint.MaxValue, new BodySource([5, 0]));
         Assert.Equal((byte)5, row.GetState<State>().Value);
-        binding.VisitReferences(row, new StateReferenceValidator(new Dictionary<uint, CapturedObject>()));
+        binding.VisitReferences(row, new StateReferenceValidator(new Dictionary<uint, ObjectStateRecord>()));
     }
 
     [Theory]
@@ -45,7 +45,7 @@ public sealed class StateReaderBindingTests {
             ? new([10, 0, 99], [1, 12])
             : new([10, 0], [1, 12, 99], [1, 13]);
         StateReaderBinding<State> binding = new(Schema, ReadBase, ApplyDelta, ValidateStrings);
-        CapturedObject? result = null;
+        ObjectStateRecord? result = null;
         Assert.Throws<InvalidDataException>(() => result = binding.Read(1, source));
         Assert.Null(result);
         Assert.Equal(inBase ? new[] { 0 } : new[] { 0, 1 }, source.Requests);
@@ -54,7 +54,7 @@ public sealed class StateReaderBindingTests {
     [Fact]
     public void TruncatedDeltaPropagatesWithoutReturningAPartialDto() {
         StateReaderBinding<State> binding = new(Schema, ReadBase, ApplyDelta, ValidateStrings);
-        CapturedObject? result = null;
+        ObjectStateRecord? result = null;
         Assert.Throws<EndOfStreamException>(() => result = binding.Read(1, new BodySource([10, 0], [1])));
         Assert.Null(result);
     }
@@ -76,26 +76,26 @@ public sealed class StateReaderBindingTests {
         int calls = 0;
         StateReaderBinding<State> binding = new(Schema, ReadBase, ApplyDelta,
             (in State state, IStateReferenceVisitor visitor) => calls++);
-        StateReferenceValidator table = new(new Dictionary<uint, CapturedObject>());
+        StateReferenceValidator table = new(new Dictionary<uint, ObjectStateRecord>());
         DurableSchema wrongFields = new(Schema.SchemaId, Schema.Version,
             new DurableFieldInfo(1, TypeTag.UInt32), new DurableFieldInfo(2, TypeTag.String));
         DurableSchema wrongVersion = new(Schema.SchemaId, 2, Schema.Fields.ToArray());
         DurableSchema wrongAncestor = new(Schema.SchemaId, Schema.Version, Schema.Fields.ToArray(),
             new DurableSchema("reader.ancestor", 1));
-        CapturedObject[] invalidRows = [
+        ObjectStateRecord[] invalidRows = [
             new(1, "text"),
             new(1, wrongFields, new State()),
             new(1, wrongVersion, new State()),
             new(1, wrongAncestor, new State()),
             new(1, Schema, 123u),
         ];
-        foreach (CapturedObject row in invalidRows) {
+        foreach (ObjectStateRecord row in invalidRows) {
             Assert.Throws<InvalidDataException>(() => binding.VisitReferences(row, table));
         }
         Assert.Equal(0, calls);
         // Equivalent immutable definitions need not be the same CLR instance.
         DurableSchema equal = new(Schema.SchemaId, Schema.Version, Schema.Fields.ToArray());
-        binding.VisitReferences(new CapturedObject(1, equal, new State()), table);
+        binding.VisitReferences(new ObjectStateRecord(1, equal, new State()), table);
         Assert.Equal(1, calls);
     }
 

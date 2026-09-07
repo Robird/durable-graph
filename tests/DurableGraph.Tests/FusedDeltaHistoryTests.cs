@@ -53,19 +53,19 @@ public sealed partial class DurableSchemaGeneratorTests {
             (Version: 1, Prior: "020003", Current: "040003", Delta: "0104"),
             (Version: 2, Prior: "0100", Current: "028001", Delta: "03028001"),
         }) {
-            var prepare = host.GetMethod("Prepare" + sample.Version)!.CreateDelegate<Func<byte[], byte[], PreparedDelta>>();
+            var prepare = host.GetMethod("Prepare" + sample.Version)!.CreateDelegate<Func<byte[], byte[], PreparedDeltaBody>>();
             var apply = host.GetMethod("Apply" + sample.Version)!.CreateDelegate<Func<byte[], byte[], byte[]>>();
             byte[] prior = Convert.FromHexString(sample.Prior);
             byte[] target = Convert.FromHexString(sample.Current);
-            PreparedDelta delta = prepare(prior, target);
+            PreparedDeltaBody delta = prepare(prior, target);
             Assert.True(delta.HasChanges);
-            Assert.Equal(Convert.FromHexString(sample.Delta), delta.Payload.ToArray());
-            Assert.Equal(target, apply(prior, delta.Payload.ToArray()));
+            Assert.Equal(Convert.FromHexString(sample.Delta), delta.Body.ToArray());
+            Assert.Equal(target, apply(prior, delta.Body.ToArray()));
             Assert.False(prepare(target, target).HasChanges);
         }
-        Type body = leaf.GetNestedType("__DurableBinaryBody", BindingFlags.NonPublic)!;
+        Type body = leaf.GetNestedType("__DurableState", BindingFlags.NonPublic)!;
         MethodInfo[] prepares = body.GetMethods(BindingFlags.Static | BindingFlags.NonPublic)
-            .Where(method => method.Name == "PrepareDelta").ToArray();
+            .Where(method => method.Name == "PrepareDeltaBody").ToArray();
         Assert.Equal(2, prepares.Length);
         Assert.All(prepares, method => Assert.Equal(method.GetParameters()[0].ParameterType, method.GetParameters()[1].ParameterType));
 
@@ -73,9 +73,9 @@ public sealed partial class DurableSchemaGeneratorTests {
 
             public static class InvalidMixedVersion {
                 public static void Try() {
-                    var old = default(Leaf.__DurableBinaryBody.V1);
-                    var current = default(Leaf.__DurableBinaryBody.V2);
-                    Leaf.__DurableBinaryBody.PrepareDelta(in old, in current);
+                    var old = default(Leaf.__DurableState.V1);
+                    var current = default(Leaf.__DurableState.V2);
+                    Leaf.__DurableState.PrepareDeltaBody(in old, in current);
                 }
             }
             """;
@@ -88,7 +88,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         }
         GeneratorTestRun reloaded = RunGenerator(currentSource, files.ReadAdditionalTexts());
         AssertSchemaOnlyCompiles(reloaded);
-        Assert.Equal(GeneratedSource(current, "DurableBinaryBodies.g.cs"), GeneratedSource(reloaded, "DurableBinaryBodies.g.cs"));
+        Assert.Equal(GeneratedSource(current, "DurableStates.g.cs"), GeneratedSource(reloaded, "DurableStates.g.cs"));
     }
 
     [Fact]
@@ -126,10 +126,10 @@ public sealed partial class DurableSchemaGeneratorTests {
             }
         }
         public static class Host {
-            private static byte[] Write(in Leaf.__DurableBinaryBody.V1 value) {
+            private static byte[] Write(in Leaf.__DurableState.V1 value) {
                 var buffer = new ArrayBufferWriter<byte>();
                 var writer = new BinaryPayloadWriter(buffer);
-                Leaf.__DurableBinaryBody.Write(ref writer, in value);
+                Leaf.__DurableState.WriteBaseBody(ref writer, in value);
                 return buffer.WrittenSpan.ToArray();
             }
             private static byte[] Content(string text) {
@@ -138,14 +138,14 @@ public sealed partial class DurableSchemaGeneratorTests {
                 writer.WriteString(text);
                 return buffer.WrittenSpan.ToArray();
             }
-            private static Leaf.__DurableBinaryBody.V1 Apply(in Leaf.__DurableBinaryBody.V1 prior, PreparedDelta delta) {
-                var reader = new BinaryPayloadReader(delta.Payload);
-                var result = Leaf.__DurableBinaryBody.ApplyDeltaV1(ref reader, in prior);
+            private static Leaf.__DurableState.V1 Apply(in Leaf.__DurableState.V1 prior, PreparedDeltaBody delta) {
+                var reader = new BinaryPayloadReader(delta.Body);
+                var result = Leaf.__DurableState.ApplyDeltaBodyV1(ref reader, in prior);
                 reader.EnsureFullyConsumed();
                 return result;
             }
-            private static bool Rejects(in Leaf.__DurableBinaryBody.V1 state, StringReadTable table) {
-                try { Leaf.__DurableBinaryBody.ValidateStringReferences(in state, table); return false; }
+            private static bool Rejects(in Leaf.__DurableState.V1 state, StringReadTable table) {
+                try { Leaf.__DurableState.ValidateStringReferences(in state, table); return false; }
                 catch (InvalidDataException) { return true; }
             }
             public static bool Run() {
@@ -156,14 +156,14 @@ public sealed partial class DurableSchemaGeneratorTests {
                 var session = new CaptureSession();
                 CapturedGraph Capture() {
                     var context = session.BeginCapture();
-                    Leaf.__DurableBinaryBody.AddRoot(context, owner);
+                    Leaf.__DurableState.AddRoot(context, owner);
                     return context.Seal();
                 }
                 var before = Capture();
                 owner.Rename("mutation after first Seal");
                 owner.Change("mutation", "mutation", 90);
-                var prior = before.Objects.Single(entry => entry.Kind == CapturedObjectKind.Durable)
-                    .GetState<Leaf.__DurableBinaryBody.V1>();
+                var prior = before.Objects.Single(entry => entry.Kind == ObjectStateKind.Durable)
+                    .GetState<Leaf.__DurableState.V1>();
                 session.Accept(before); // In-memory candidate baseline only, not durable commit.
                 owner.Rename(shared);
                 owner.Change(equal, string.Empty, 2);
@@ -171,11 +171,11 @@ public sealed partial class DurableSchemaGeneratorTests {
                 var after = Capture();
                 owner.Rename("mutation after second Seal");
                 owner.Change("mutation", null, 91);
-                var current = after.Objects.Single(entry => entry.Kind == CapturedObjectKind.Durable)
-                    .GetState<Leaf.__DurableBinaryBody.V1>();
-                var delta = Leaf.__DurableBinaryBody.PrepareDelta(in prior, in current);
-                var same = Leaf.__DurableBinaryBody.PrepareDelta(in prior, in prior);
-                if (same.HasChanges || same.Payload[0] != 0 || !delta.HasChanges || delta.Payload[0] != 0x16)
+                var current = after.Objects.Single(entry => entry.Kind == ObjectStateKind.Durable)
+                    .GetState<Leaf.__DurableState.V1>();
+                var delta = Leaf.__DurableState.PrepareDeltaBody(in prior, in current);
+                var same = Leaf.__DurableState.PrepareDeltaBody(in prior, in prior);
+                if (same.HasChanges || same.Body[0] != 0 || !delta.HasChanges || delta.Body[0] != 0x16)
                     throw new Exception("Only alias, optional and score changed.");
                 if (prior.Segment0Field1 != prior.Segment1Field1 || prior.Segment0Field1 != current.Segment0Field1 ||
                     current.Segment0Field1 == current.Segment1Field1 || prior.Segment1Field9 != 0 ||
@@ -184,10 +184,10 @@ public sealed partial class DurableSchemaGeneratorTests {
                     throw new Exception("Frozen candidate identity or values.");
                 var restored = Apply(in prior, delta);
                 if (!Write(in current).AsSpan().SequenceEqual(Write(in restored))) throw new Exception("Reconstruction.");
-                var records = after.Objects.Where(entry => entry.Kind == CapturedObjectKind.String)
+                var records = after.Objects.Where(entry => entry.Kind == ObjectStateKind.String)
                     .Select(entry => (entry.Id, (ReadOnlyMemory<byte>)Content(entry.StringContent))).ToArray();
                 var table = StringReadTable.Decode(records);
-                Leaf.__DurableBinaryBody.ValidateStringReferences(in restored, table);
+                Leaf.__DurableState.ValidateStringReferences(in restored, table);
                 if (table.ResolveString(restored.Segment0Field1) != table.ResolveString(restored.Segment1Field1) ||
                     ReferenceEquals(table.ResolveString(restored.Segment0Field1), table.ResolveString(restored.Segment1Field1)) ||
                     !ReferenceEquals(string.Empty, table.ResolveString(restored.Segment1Field9)))
@@ -200,17 +200,17 @@ public sealed partial class DurableSchemaGeneratorTests {
 
                 // A durable owner's ID in that same unchanged slot is not a string target.
                 uint ownerId = after.RootIds[0];
-                var wrongPrior = new Leaf.__DurableBinaryBody.V1(ownerId, prior.Segment1Field1,
+                var wrongPrior = new Leaf.__DurableState.V1(ownerId, prior.Segment1Field1,
                     prior.Segment1Field9, prior.Segment1Field10, prior.Segment1Field20);
-                var wrongCurrent = new Leaf.__DurableBinaryBody.V1(ownerId, current.Segment1Field1,
+                var wrongCurrent = new Leaf.__DurableState.V1(ownerId, current.Segment1Field1,
                     current.Segment1Field9, current.Segment1Field10, current.Segment1Field20);
-                var wrongDelta = Leaf.__DurableBinaryBody.PrepareDelta(in wrongPrior, in wrongCurrent);
-                if (wrongDelta.Payload[0] != 0x16) throw new Exception("Wrong-kind slot should remain unchanged in Delta.");
+                var wrongDelta = Leaf.__DurableState.PrepareDeltaBody(in wrongPrior, in wrongCurrent);
+                if (wrongDelta.Body[0] != 0x16) throw new Exception("Wrong-kind slot should remain unchanged in Delta.");
                 var wrongRestored = Apply(in wrongPrior, wrongDelta);
                 if (!Rejects(in wrongRestored, table)) throw new Exception("Non-string inherited target accepted.");
                 session.Discard(after);
                 var repeated = Apply(in prior, delta);
-                Leaf.__DurableBinaryBody.ValidateStringReferences(in repeated, table);
+                Leaf.__DurableState.ValidateStringReferences(in repeated, table);
                 return Write(in current).AsSpan().SequenceEqual(Write(in repeated));
             }
         }

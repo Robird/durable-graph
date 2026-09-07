@@ -13,11 +13,11 @@ internal sealed partial class Character : DurableBase {
     private static int UpgradeCalls { get; set; }
 
     public static string ExerciseGeneratedState() {
-        __DurableBinaryBody.V1 old = new(7);
-        UpgradeStateV1ToV2(in old, out __DurableBinaryBody.V2 first);
-        UpgradeStateV1ToV2(in old, out __DurableBinaryBody.V2 second);
-        if (!ReferenceEquals(__DurableBinaryBody.V1.Schema, GetSchema(1)) ||
-            !ReferenceEquals(__DurableBinaryBody.V2.Schema, Schema) ||
+        __DurableState.V1 old = new(7);
+        UpgradeStateV1ToV2(in old, out __DurableState.V2 first);
+        UpgradeStateV1ToV2(in old, out __DurableState.V2 second);
+        if (!ReferenceEquals(__DurableState.V1.Schema, GetSchema(1)) ||
+            !ReferenceEquals(__DurableState.V2.Schema, Schema) ||
             first.Segment0Field1 != 7 || !first.Segment0Field2 ||
             !first.Equals(second)) {
             throw new InvalidOperationException("Generated State history or explicit upgrade shape is invalid.");
@@ -27,9 +27,9 @@ internal sealed partial class Character : DurableBase {
     }
 
     private static void UpgradeStateV1ToV2(
-        in __DurableBinaryBody.V1 oldValue,
-        out __DurableBinaryBody.V2 newValue) {
+        in __DurableState.V1 oldValue,
+        out __DurableState.V2 newValue) {
         UpgradeCalls++;
-        newValue = new __DurableBinaryBody.V2(oldValue.Segment0Field1, true);
+        newValue = new __DurableState.V2(oldValue.Segment0Field1, true);
     }
 }

@@ -235,7 +235,7 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
 
         if (validTypes.Count > 0) {
             List<DurableTypeModel> schemaTypes = GenerateSchemas(context, validTypes, history);
-            GenerateBinaryBodies(context, validTypes, schemaTypes, history, historyParsedSuccessfully);
+            GenerateStates(context, validTypes, schemaTypes, history, historyParsedSuccessfully);
         }
     }
 

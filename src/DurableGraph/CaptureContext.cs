@@ -14,7 +14,7 @@ public sealed class CaptureContext : IDisposable {
     private readonly IReadOnlyDictionary<Type, StateModelBinding> _models;
     private readonly List<RootCapture> _queue = [];
     private readonly List<uint> _rootIds = [];
-    private readonly List<CapturedObject> _objects = [];
+    private readonly List<ObjectStateRecord> _objects = [];
 
     internal CaptureContext(CaptureSession session, IReadOnlyDictionary<Type, StateModelBinding> models) {
         _session = session;
@@ -146,7 +146,7 @@ public sealed class CaptureContext : IDisposable {
             }
             id = _session!.GetOrAllocateId(value);
             _bindings.Add(value, id);
-            _objects.Add(new CapturedObject(id, value));
+            _objects.Add(new ObjectStateRecord(id, value));
             return id;
         }
         catch {
@@ -161,7 +161,7 @@ public sealed class CaptureContext : IDisposable {
             RequirePhase(Phase.Registering);
             _phase = Phase.Capturing;
             for (int index = 0; index < _queue.Count; index++) {
-                CapturedObject item = _queue[index].Invoke(this);
+                ObjectStateRecord item = _queue[index].Invoke(this);
                 // A callback may catch an illegal reentrant call. Such a failure still aborts the build.
                 RequirePhase(Phase.Capturing);
                 _objects.Add(item);
@@ -218,7 +218,7 @@ public sealed class CaptureContext : IDisposable {
 
     private abstract class RootCapture(uint id) {
         public uint Id { get; } = id;
-        public abstract CapturedObject Invoke(CaptureContext context);
+        public abstract ObjectStateRecord Invoke(CaptureContext context);
         public abstract bool Matches(StateModelBinding model);
     }
 
@@ -232,14 +232,14 @@ public sealed class CaptureContext : IDisposable {
         public Func<TDomain, CaptureContext, TState> Capture { get; } = capture;
         public CapturedStatePreparation<TState>? Preparation { get; } = preparation;
 
-        public override CapturedObject Invoke(CaptureContext context) =>
+        public override ObjectStateRecord Invoke(CaptureContext context) =>
             new(Id, Schema, Capture(source, context), Preparation);
 
         public override bool Matches(StateModelBinding model) => model.MatchesCapture(Schema, Capture, Preparation);
     }
 
     private sealed class ModelCapture(uint id, DurableBase source, StateModelBinding model) : RootCapture(id) {
-        public override CapturedObject Invoke(CaptureContext context) => model.Capture(Id, source, context);
+        public override ObjectStateRecord Invoke(CaptureContext context) => model.Capture(Id, source, context);
         public override bool Matches(StateModelBinding other) => ReferenceEquals(model, other);
     }
 }

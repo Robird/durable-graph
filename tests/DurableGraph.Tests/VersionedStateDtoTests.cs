@@ -24,13 +24,13 @@ public sealed partial class DurableSchemaGeneratorTests {
             public static class Host {
                 public static byte[] CaptureThenMutate() {
                     var domain = new Item();
-                    var captured = Item.__DurableBinaryBody.Capture(domain);
+                    var captured = Item.__DurableState.Capture(domain);
                     domain.Mutate();
                     var buffer = new ArrayBufferWriter<byte>();
                     var writer = new BinaryPayloadWriter(buffer);
-                    Item.__DurableBinaryBody.Write(ref writer, in captured);
-                    var current = Item.__DurableBinaryBody.Capture(domain);
-                    Item.__DurableBinaryBody.Write(ref writer, in current);
+                    Item.__DurableState.WriteBaseBody(ref writer, in captured);
+                    var current = Item.__DurableState.Capture(domain);
+                    Item.__DurableState.WriteBaseBody(ref writer, in current);
                     return buffer.WrittenSpan.ToArray();
                 }
             }
@@ -38,9 +38,9 @@ public sealed partial class DurableSchemaGeneratorTests {
         AssertSchemaOnlyCompiles(run);
         Assembly assembly = EmitAndLoad(run.OutputCompilation);
         Assert.Equal<byte>([1, 1, 3, 0xC8, 1, 0, 0x88, 0x0E],
-            BinaryBodyDelegate<Func<byte[]>>(assembly, "CaptureThenMutate")());
+            GeneratedStateDelegate<Func<byte[]>>(assembly, "CaptureThenMutate")());
         Type domain = assembly.GetType("BinaryBodies.Item")!;
-        Type body = domain.GetNestedType("__DurableBinaryBody", BindingFlags.NonPublic)!;
+        Type body = domain.GetNestedType("__DurableState", BindingFlags.NonPublic)!;
         Type dto = body.GetNestedType("V1", BindingFlags.NonPublic)!;
         Assert.True(dto.IsValueType);
         Assert.NotNull(dto.GetCustomAttribute<IsReadOnlyAttribute>());
@@ -49,24 +49,24 @@ public sealed partial class DurableSchemaGeneratorTests {
         Assert.All(fields, field => Assert.True(field.IsInitOnly));
         Assert.All(fields, field => Assert.True(field.FieldType.IsValueType));
         Assert.Same(ReadSchemaOnly(domain, 1), dto.GetProperty("Schema", BindingFlags.Static | BindingFlags.NonPublic)!.GetValue(null));
-        MethodInfo write = body.GetMethod("Write", BindingFlags.Static | BindingFlags.NonPublic)!;
+        MethodInfo write = body.GetMethod("WriteBaseBody", BindingFlags.Static | BindingFlags.NonPublic)!;
         ParameterInfo stateParameter = write.GetParameters()[1];
         Assert.Equal(dto.MakeByRefType(), stateParameter.ParameterType);
         Assert.True(stateParameter.IsIn);
         Assert.Null(body.GetMethod("Read", BindingFlags.Static | BindingFlags.NonPublic));
-        Assert.Equal(dto, body.GetMethod("ReadV1", BindingFlags.Static | BindingFlags.NonPublic)!.ReturnType);
-        MethodInfo prepare = body.GetMethod("PrepareDelta", BindingFlags.Static | BindingFlags.NonPublic)!;
-        Assert.Equal(typeof(Atelia.DurableGraph.StateStore.Serialization.PreparedDelta), prepare.ReturnType);
+        Assert.Equal(dto, body.GetMethod("ReadBaseBodyV1", BindingFlags.Static | BindingFlags.NonPublic)!.ReturnType);
+        MethodInfo prepare = body.GetMethod("PrepareDeltaBody", BindingFlags.Static | BindingFlags.NonPublic)!;
+        Assert.Equal(typeof(Atelia.DurableGraph.StateStore.Serialization.PreparedDeltaBody), prepare.ReturnType);
         Assert.All(prepare.GetParameters(), parameter => {
             Assert.Equal(dto.MakeByRefType(), parameter.ParameterType);
             Assert.True(parameter.IsIn);
         });
-        MethodInfo prepareBase = body.GetMethod("PrepareBase", BindingFlags.Static | BindingFlags.NonPublic)!;
-        Assert.Equal(typeof(Atelia.DurableGraph.StateStore.Serialization.PreparedBase), prepareBase.ReturnType);
+        MethodInfo prepareBase = body.GetMethod("PrepareBaseBody", BindingFlags.Static | BindingFlags.NonPublic)!;
+        Assert.Equal(typeof(Atelia.DurableGraph.StateStore.Serialization.PreparedBaseBody), prepareBase.ReturnType);
         ParameterInfo baseParameter = Assert.Single(prepareBase.GetParameters());
         Assert.Equal(dto.MakeByRefType(), baseParameter.ParameterType);
         Assert.True(baseParameter.IsIn);
-        Assert.Equal(new[] { "AddRoot", "Allocate", "ApplyDeltaV1", "Capture", "Hydrate", "Normalize", "PrepareBase", "PrepareDelta", "ReadV1", "RegisterModel", "RegisterReaders", "ValidateStringReferences", "VisitReferences", "Write" },
+        Assert.Equal(new[] { "AddRoot", "Allocate", "ApplyDeltaBodyV1", "Capture", "Hydrate", "Normalize", "PrepareBaseBody", "PrepareDeltaBody", "ReadBaseBodyV1", "RegisterModel", "RegisterReaders", "ValidateStringReferences", "VisitReferences", "WriteBaseBody" },
             body.GetMethods(BindingFlags.Static | BindingFlags.NonPublic).Select(method => method.Name).Order().ToArray());
     }
 
@@ -85,9 +85,9 @@ public sealed partial class DurableSchemaGeneratorTests {
             public static class Host {
                 public static byte[] RoundTripVersions() {
                     var reader = new BinaryPayloadReader(new byte[] { 1, 1, 3, 5, 1 });
-                    var v1 = Item.__DurableBinaryBody.ReadV1(ref reader);
-                    var v2 = Item.__DurableBinaryBody.ReadV2(ref reader);
-                    var v3 = Item.__DurableBinaryBody.ReadV3(ref reader);
+                    var v1 = Item.__DurableState.ReadBaseBodyV1(ref reader);
+                    var v2 = Item.__DurableState.ReadBaseBodyV2(ref reader);
+                    var v3 = Item.__DurableState.ReadBaseBodyV3(ref reader);
                     reader.EnsureFullyConsumed();
                     if (v1.Segment0Field1 != -1 || !v1.Segment0Field9 ||
                         v2.Segment0Field1 != -2L || v2.Segment0Field4 != -3 || !v3.Segment0Field7) {
@@ -95,9 +95,9 @@ public sealed partial class DurableSchemaGeneratorTests {
                     }
                     var buffer = new ArrayBufferWriter<byte>();
                     var writer = new BinaryPayloadWriter(buffer);
-                    Item.__DurableBinaryBody.Write(ref writer, in v1);
-                    Item.__DurableBinaryBody.Write(ref writer, in v2);
-                    Item.__DurableBinaryBody.Write(ref writer, in v3);
+                    Item.__DurableState.WriteBaseBody(ref writer, in v1);
+                    Item.__DurableState.WriteBaseBody(ref writer, in v2);
+                    Item.__DurableState.WriteBaseBody(ref writer, in v3);
                     return buffer.WrittenSpan.ToArray();
                 }
             }
@@ -106,9 +106,9 @@ public sealed partial class DurableSchemaGeneratorTests {
             SchemaHistory("v2.dgschema", "state.history", 2, (1, 3), (4, 2)));
         AssertSchemaOnlyCompiles(run);
         Assembly assembly = EmitAndLoad(run.OutputCompilation);
-        Assert.Equal<byte>([1, 1, 3, 5, 1], BinaryBodyDelegate<Func<byte[]>>(assembly, "RoundTripVersions")());
+        Assert.Equal<byte>([1, 1, 3, 5, 1], GeneratedStateDelegate<Func<byte[]>>(assembly, "RoundTripVersions")());
         Type domain = assembly.GetType("BinaryBodies.Item")!;
-        Type body = domain.GetNestedType("__DurableBinaryBody", BindingFlags.NonPublic)!;
+        Type body = domain.GetNestedType("__DurableState", BindingFlags.NonPublic)!;
         for (int version = 1; version <= 3; version++) {
             Type dto = body.GetNestedType("V" + version, BindingFlags.NonPublic)!;
             Assert.Same(ReadSchemaOnly(domain, version), dto.GetProperty("Schema", BindingFlags.Static | BindingFlags.NonPublic)!.GetValue(null));
@@ -140,7 +140,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             """, history);
         AssertSchemaOnlyCompiles(run);
         Type body = EmitAndLoad(run.OutputCompilation).GetType("Item")!
-            .GetNestedType("__DurableBinaryBody", BindingFlags.NonPublic)!;
+            .GetNestedType("__DurableState", BindingFlags.NonPublic)!;
         Assert.Equal(typeof(uint), body.GetNestedType("V1", BindingFlags.NonPublic)!
             .GetField("Segment0Field1", BindingFlags.Instance | BindingFlags.NonPublic)!.FieldType);
         Assert.Single(body.GetMethod("Capture", BindingFlags.Static | BindingFlags.NonPublic)!.GetParameters());
@@ -157,10 +157,10 @@ public sealed partial class DurableSchemaGeneratorTests {
             """, SchemaHistory("base-v1.dgschema", "state.base", 1, (1, 4)));
         AssertSchemaOnlyCompiles(run);
         Assembly assembly = EmitAndLoad(run.OutputCompilation);
-        Type baseBody = assembly.GetType("Base")!.GetNestedType("__DurableBinaryBody", BindingFlags.NonPublic)!;
+        Type baseBody = assembly.GetType("Base")!.GetNestedType("__DurableState", BindingFlags.NonPublic)!;
         Assert.Equal(typeof(uint), baseBody.GetNestedType("V1", BindingFlags.NonPublic)!
             .GetField("Segment0Field1", BindingFlags.Instance | BindingFlags.NonPublic)!.FieldType);
-        Type leafBody = assembly.GetType("Leaf")!.GetNestedType("__DurableBinaryBody", BindingFlags.NonPublic)!;
+        Type leafBody = assembly.GetType("Leaf")!.GetNestedType("__DurableState", BindingFlags.NonPublic)!;
         Assert.Single(leafBody.GetMethod("Capture", BindingFlags.Static | BindingFlags.NonPublic)!.GetParameters());
     }
 
@@ -177,18 +177,18 @@ public sealed partial class DurableSchemaGeneratorTests {
             public static class Host {
                 public static int[] RoundTrip() {
                     var reader = new BinaryPayloadReader(new byte[] { 99 });
-                    var state = Item.__DurableBinaryBody.ReadV1(ref reader);
+                    var state = Item.__DurableState.ReadBaseBodyV1(ref reader);
                     var buffer = new ArrayBufferWriter<byte>();
                     var writer = new BinaryPayloadWriter(buffer);
-                    Item.__DurableBinaryBody.Write(ref writer, in state);
-                    var captured = Item.__DurableBinaryBody.Capture(new Item());
-                    Item.__DurableBinaryBody.Write(ref writer, in captured);
+                    Item.__DurableState.WriteBaseBody(ref writer, in state);
+                    var captured = Item.__DurableState.Capture(new Item());
+                    Item.__DurableState.WriteBaseBody(ref writer, in captured);
                     return [reader.ConsumedCount, reader.RemainingCount, buffer.WrittenCount];
                 }
             }
             """);
         AssertSchemaOnlyCompiles(run);
-        Assert.Equal<int>([0, 1, 0], BinaryBodyDelegate<Func<int[]>>(EmitAndLoad(run.OutputCompilation), "RoundTrip")());
+        Assert.Equal<int>([0, 1, 0], GeneratedStateDelegate<Func<int[]>>(EmitAndLoad(run.OutputCompilation), "RoundTrip")());
     }
 
     private static AdditionalText StateDtoHistory(string schemaId, int version, string baseId, int baseVersion) {

@@ -16,11 +16,11 @@ internal static class LoadedRevisionPlanner {
         // TODO(DB-033): Measure these repeated chain reads before sharing a scoped cache with planning.
         foreach ((uint id, NormalizedObject row) in source.Objects) {
             ObjectVersionChain chain = store.ReadObjectVersionChain(source.RevisionAddress, id);
-            BaseObjectPayload stored = BaseObjectPayloadCodec.Decode(chain.Records[0].Record.Body);
+            DecodedBaseObjectBody stored = BaseObjectBodyCodec.Decode(chain.Records[0].Record.Body);
             if (stored.Kind != row.Current.Kind) {
                 throw new InvalidDataException($"Loaded object {id} no longer has its source kind.");
             }
-            if (stored.Kind == CapturedObjectKind.String) {
+            if (stored.Kind == ObjectStateKind.String) {
                 if (chain.Records.Count != 1 || row.SourceSchema is not null || row.RequiresRewrite) {
                     throw new InvalidDataException("String source provenance is invalid.");
                 }
@@ -42,21 +42,21 @@ internal static class LoadedRevisionPlanner {
                 throw new InvalidDataException("Prepared contents do not match the controlled normalized baseline.");
             }
         }
-        schemas.RegisterBatch(contents.Where(static row => row.Current.Kind == CapturedObjectKind.Durable)
+        schemas.RegisterBatch(contents.Where(static row => row.Current.Kind == ObjectStateKind.Durable)
             .Select(static row => row.Current.Schema!));
         List<PreparedObject> rows = [];
         foreach (PreparedCapturedObject row in contents) {
-            var body = row.Current.Kind == CapturedObjectKind.String
-                ? BaseObjectPayloadCodec.EncodeString(row.BaseContent)
-                : BaseObjectPayloadCodec.EncodeDurable(row.Current.Schema!, row.BaseContent);
+            EncodedBaseObjectBody encodedBaseBody = row.Current.Kind == ObjectStateKind.String
+                ? BaseObjectBodyCodec.EncodeString(row.BaseBody)
+                : BaseObjectBodyCodec.EncodeDurable(row.Current.Schema!, row.BaseBody);
             if (row.Previous is null) {
-                rows.Add(PreparedObject.New(row.Current.Id, body));
+                rows.Add(PreparedObject.New(row.Current.Id, encodedBaseBody));
             } else if (source.Objects[row.Current.Id].RequiresRewrite) {
-                rows.Add(PreparedObject.BaseOnlyUpdate(row.Current.Id, heads[row.Current.Id], body));
+                rows.Add(PreparedObject.BaseOnlyUpdate(row.Current.Id, heads[row.Current.Id], encodedBaseBody));
             } else {
-                rows.Add(row.DeltaContent is null
-                    ? PreparedObject.Unchanged(row.Current.Id, heads[row.Current.Id], body)
-                    : PreparedObject.Compared(row.Current.Id, heads[row.Current.Id], body, row.DeltaContent));
+                rows.Add(row.DeltaBody is null
+                    ? PreparedObject.Unchanged(row.Current.Id, heads[row.Current.Id], encodedBaseBody)
+                    : PreparedObject.Compared(row.Current.Id, heads[row.Current.Id], encodedBaseBody, row.DeltaBody));
             }
         }
         // Existing planner derives Removes from complete Parent membership minus these live rows.

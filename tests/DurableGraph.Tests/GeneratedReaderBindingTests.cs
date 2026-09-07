@@ -36,16 +36,16 @@ public sealed partial class DurableSchemaGeneratorTests {
             }
             public static class Host {
                 public static void Register(IStateReaderRegistration readers) {
-                    Leaf.__DurableBinaryBody.RegisterReaders(readers);
+                    Leaf.__DurableState.RegisterReaders(readers);
                 }
                 public static void RegisterBase(IStateReaderRegistration readers) {
-                    CurrentBase.__DurableBinaryBody.RegisterReaders(readers);
+                    CurrentBase.__DurableState.RegisterReaders(readers);
                 }
                 public static byte[] Historical() {
                     var reader = new BinaryPayloadReader(new byte[] { 0x21, 0x03 });
-                    var state = Leaf.__DurableBinaryBody.ReadV1(ref reader);
+                    var state = Leaf.__DurableState.ReadBaseBodyV1(ref reader);
                     reader.EnsureFullyConsumed();
-                    return Leaf.__DurableBinaryBody.PrepareBase(in state).Payload.ToArray();
+                    return Leaf.__DurableState.PrepareBaseBody(in state).Body.ToArray();
                 }
             }
             """;
@@ -74,7 +74,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         Assert.Equal(new[] { 1, 2 }, sink.Bindings.Skip(4).Select(binding => binding.Schema.Version));
         Assert.Equal<byte>([0x21, 0x03], host.GetMethod("Historical")!.CreateDelegate<Func<byte[]>>()());
 
-        Type body = assembly.GetType("ReaderHistory.Leaf")!.GetNestedType("__DurableBinaryBody", BindingFlags.NonPublic)!;
+        Type body = assembly.GetType("ReaderHistory.Leaf")!.GetNestedType("__DurableState", BindingFlags.NonPublic)!;
         foreach (int version in new[] { 1, 2 }) {
             FieldInfo field = body.GetField("ReaderV" + version, BindingFlags.Static | BindingFlags.NonPublic)!;
             Assert.True(field.IsPrivate && field.IsInitOnly);
@@ -82,7 +82,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         }
         GeneratorTestRun ordered = RunGenerator(currentSource, files.ReadAdditionalTexts());
         AssertSchemaOnlyCompiles(ordered);
-        Assert.Equal(GeneratedSource(current, "DurableBinaryBodies.g.cs"), GeneratedSource(ordered, "DurableBinaryBodies.g.cs"));
+        Assert.Equal(GeneratedSource(current, "DurableStates.g.cs"), GeneratedSource(ordered, "DurableStates.g.cs"));
     }
 
     [Fact]
@@ -96,8 +96,8 @@ public sealed partial class DurableSchemaGeneratorTests {
             }
             """);
         AssertSchemaOnlyCompiles(run);
-        string generated = GeneratedSource(run, "DurableBinaryBodies.g.cs");
-        Assert.Contains("StateReaderBinding<V1> ReaderV1 = new(V1.Schema, ReadV1, ApplyDeltaV1, VisitReferences);", generated);
+        string generated = GeneratedSource(run, "DurableStates.g.cs");
+        Assert.Contains("StateReaderBinding<V1> ReaderV1 = new(V1.Schema, ReadBaseBodyV1, ApplyDeltaBodyV1, VisitReferences);", generated);
         Assert.Contains("writer.WriteInt32(value.Segment0Field1);", generated);
         Assert.Contains("writer.WriteUInt32(value.Segment0Field2);", generated);
         Assert.Contains("reader.ReadInt32();", generated);
@@ -113,10 +113,10 @@ public sealed partial class DurableSchemaGeneratorTests {
         GeneratorTestRun run = RunGenerator("""
             using Atelia.DurableGraph;
             [DurableType("reader.invalid", 1)]
-            public sealed partial class Invalid : DurableBase { private static class __DurableBinaryBody { } }
+            public sealed partial class Invalid : DurableBase { private static class __DurableState { } }
             """);
         Assert.Contains(run.GeneratorDiagnostics, diagnostic => diagnostic.Id == "DG0020");
-        string generated = BinaryBodyGeneratedText(run);
+        string generated = GeneratedStateText(run);
         Assert.DoesNotContain("RegisterReaders", generated);
         Assert.DoesNotContain("StateReaderBinding", generated);
     }

@@ -23,10 +23,10 @@ public sealed partial class DurableSchemaGeneratorTests {
         AdditionalText[] accepted = files.ReadAdditionalTexts();
         GeneratorTestRun updated = RunGenerator(source, accepted.Reverse().ToArray());
         AssertSchemaOnlyCompiles(updated);
-        string generated = GeneratedSource(updated, "DurableBinaryBodies.g.cs");
+        string generated = GeneratedSource(updated, "DurableStates.g.cs");
         Assert.DoesNotContain("OldBase", generated);
         Assert.DoesNotContain("OldMiddle", generated);
-        Assert.Equal(generated, GeneratedSource(RunGenerator(source, accepted), "DurableBinaryBodies.g.cs"));
+        Assert.Equal(generated, GeneratedSource(RunGenerator(source, accepted), "DurableStates.g.cs"));
 
         var assembly = EmitAndLoad(updated.OutputCompilation);
         Assert.Null(assembly.GetType("DtoHistory.OldBase"));
@@ -46,7 +46,7 @@ public sealed partial class DurableSchemaGeneratorTests {
 
         GeneratorTestRun reloaded = RunGenerator(source, files.ReadAdditionalTexts());
         AssertSchemaOnlyCompiles(reloaded);
-        Assert.Equal(generated, GeneratedSource(reloaded, "DurableBinaryBodies.g.cs"));
+        Assert.Equal(generated, GeneratedSource(reloaded, "DurableStates.g.cs"));
         Type reloadedHost = EmitAndLoad(reloaded.OutputCompilation).GetType("DtoHistory.Host")!;
         Assert.Equal(originalBytes, reloadedHost.GetMethod("RoundTripV1")!
             .CreateDelegate<Func<byte[], byte[]>>()(originalBytes));
@@ -71,10 +71,10 @@ public sealed partial class DurableSchemaGeneratorTests {
         }
         public static class Host {
             public static byte[] Capture() {
-                var state = Leaf.__DurableBinaryBody.Capture(new Leaf());
+                var state = Leaf.__DurableState.Capture(new Leaf());
                 var buffer = new ArrayBufferWriter<byte>();
                 var writer = new BinaryPayloadWriter(buffer);
-                Leaf.__DurableBinaryBody.Write(ref writer, in state);
+                Leaf.__DurableState.WriteBaseBody(ref writer, in state);
                 return buffer.WrittenSpan.ToArray();
             }
         }
@@ -111,28 +111,28 @@ public sealed partial class DurableSchemaGeneratorTests {
             public static class Host {
                 public static byte[] Capture() {
                     var value = new Leaf();
-                    var state = Leaf.__DurableBinaryBody.Capture(value);
+                    var state = Leaf.__DurableState.Capture(value);
                     value.Mutate();
-                    if (!ReferenceEquals(Leaf.__DurableBinaryBody.V2.Schema, Leaf.Schema)) {
+                    if (!ReferenceEquals(Leaf.__DurableState.V2.Schema, Leaf.Schema)) {
                         throw new Exception("Current DTO schema mismatch.");
                     }
                     var buffer = new ArrayBufferWriter<byte>();
                     var writer = new BinaryPayloadWriter(buffer);
-                    Leaf.__DurableBinaryBody.Write(ref writer, in state);
+                    Leaf.__DurableState.WriteBaseBody(ref writer, in state);
                     return buffer.WrittenSpan.ToArray();
                 }
                 public static byte[] RoundTripV1(byte[] bytes) {
                     var reader = new BinaryPayloadReader(bytes);
-                    var state = Leaf.__DurableBinaryBody.ReadV1(ref reader);
+                    var state = Leaf.__DurableState.ReadBaseBodyV1(ref reader);
                     reader.EnsureFullyConsumed();
                     if (state.Segment0Field1 != -17 || !state.Segment1Field1 || state.Segment2Field1 != 42 ||
-                        !ReferenceEquals(Leaf.__DurableBinaryBody.V1.Schema, Leaf.GetSchema(1)) ||
-                        Leaf.__DurableBinaryBody.V1.Schema.BaseSchema!.BaseSchema!.SchemaId != "dto-history.base") {
+                        !ReferenceEquals(Leaf.__DurableState.V1.Schema, Leaf.GetSchema(1)) ||
+                        Leaf.__DurableState.V1.Schema.BaseSchema!.BaseSchema!.SchemaId != "dto-history.base") {
                         throw new Exception("Historical DTO or exact ancestry mismatch.");
                     }
                     var buffer = new ArrayBufferWriter<byte>();
                     var writer = new BinaryPayloadWriter(buffer);
-                    Leaf.__DurableBinaryBody.Write(ref writer, in state);
+                    Leaf.__DurableState.WriteBaseBody(ref writer, in state);
                     return buffer.WrittenSpan.ToArray();
                 }
             }

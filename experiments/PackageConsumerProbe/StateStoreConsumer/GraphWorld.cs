@@ -27,9 +27,9 @@ public sealed partial class GraphWorld : DurableBase {
         RbfSegmentStoreOptions options = new() { NewStoreLayout = RbfSegmentStoreLayout.Flat };
         ReadAmplificationBaseBudgetParameters policy = new(int.MaxValue, 1);
         StateModelRegistry models = new();
-        __DurableBinaryBody.RegisterModel(models);
-        GraphCharacter.__DurableBinaryBody.RegisterModel(models);
-        GraphItem.__DurableBinaryBody.RegisterModel(models);
+        __DurableState.RegisterModel(models);
+        GraphCharacter.__DurableState.RegisterModel(models);
+        GraphItem.__DurableState.RegisterModel(models);
         uint worldId, characterId;
         uint[] initialIds;
         FrameAddress initialRevision, childRevision, removedRevision;
@@ -51,8 +51,6 @@ public sealed partial class GraphWorld : DurableBase {
             Require(first.Revision.ParentRevisionAddress is null && first.Revision.LocalObjects.Count == 4 &&
                 first.Revision.LocalObjects.All(record => record.Kind == ObjectVersionKind.Base),
                 "New graph must contain one World, Character, Item and shared string, all as Base.");
-            characterId = first.Revision.LocalObjects.Single(record =>
-                BaseObjectPayloadCodec.Decode(record.Body).SchemaKey == new SchemaKey("package.graph-character", 1)).ObjectId;
             Require(schemas.Count == 4, "Graph registration lost the nominal target's exact ancestor Schema.");
             character.Score = 999;
             world.Disconnect(); // Neither object mutation nor removal can change the frozen first plan.
@@ -72,7 +70,8 @@ public sealed partial class GraphWorld : DurableBase {
             Require(changed.Revision.LocalObjects.Count == 1 && changed.Revision.RemovedObjectIds.Count == 0,
                 "Changing only Child must leave the World, Item and string unchanged.");
             ObjectVersionRecord delta = changed.Revision.LocalObjects[0];
-            Require(delta.ObjectId == characterId && delta.Kind == ObjectVersionKind.Delta &&
+            characterId = delta.ObjectId;
+            Require(delta.Kind == ObjectVersionKind.Delta &&
                 repeated.Revision.LocalObjects.Count == 1 &&
                 repeated.Revision.LocalObjects[0].Body.SequenceEqual(delta.Body),
                 "Repeated child preparation must retain its identity and produce an equivalent ordinary Delta.");

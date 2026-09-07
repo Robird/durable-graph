@@ -10,8 +10,8 @@ public sealed class LoadedCaptureIdentityTests {
     private readonly record struct State(uint Text);
     private static readonly DurableSchema Schema = new("loaded.identity", 1, new DurableFieldInfo(1, TypeTag.String));
     private static readonly CapturedStatePreparation<State> Preparation = new(Schema,
-        static (in State state) => new PreparedBase([(byte)state.Text]),
-        static (in State prior, in State current) => new PreparedDelta(prior != current, [(byte)current.Text]));
+        static (in State state) => new PreparedBaseBody([(byte)state.Text]),
+        static (in State prior, in State current) => new PreparedDeltaBody(prior != current, [(byte)current.Text]));
 
     [Fact]
     public void ImportedIdentityKeepsOriginalBaselineSlotsAndDoesNotFabricateCurrent() {
@@ -19,7 +19,7 @@ public sealed class LoadedCaptureIdentityTests {
         Dictionary<object, uint> map = new(ReferenceEqualityComparer.Instance) { [world] = 1, [string.Empty] = 3 };
         CaptureSession session = new(10, map);
         map.Clear(); // The caller's map cannot alter the imported identity set.
-        Dictionary<uint, CapturedObject> baseline = new() {
+        Dictionary<uint, ObjectStateRecord> baseline = new() {
             [1] = new(1, Schema, new State(9), Preparation),
             [3] = new(3, string.Empty),
             [9] = new(9, string.Empty),
@@ -32,7 +32,7 @@ public sealed class LoadedCaptureIdentityTests {
         Assert.Null(session.Current);
         Assert.Equal<uint>([1, 3], candidate.Objects.Select(row => row.Id));
         Assert.Equal(9u, baseline[1].GetState<State>().Text);
-        Assert.True(prepared[0].DeltaContent!.HasChanges);
+        Assert.True(prepared[0].DeltaBody!.HasChanges);
         Assert.Equal(3u, prepared[0].Current.GetState<State>().Text);
         session.Discard(candidate);
         Assert.Null(session.Current);

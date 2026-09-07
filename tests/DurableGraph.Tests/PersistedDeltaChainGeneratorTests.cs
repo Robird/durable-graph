@@ -29,8 +29,8 @@ public sealed partial class DurableSchemaGeneratorTests {
         Assert.Equal(expected[0], input.Base);
         Assert.True(input.First.HasChanges);
         Assert.True(input.Second.HasChanges);
-        Assert.Equal<byte>([0x0A, checked((byte)aliasId), 4], input.First.Payload.ToArray());
-        Assert.Equal<byte>([0x08, 6], input.Second.Payload.ToArray());
+        Assert.Equal<byte>([0x0A, checked((byte)aliasId), 4], input.First.Body.ToArray());
+        Assert.Equal<byte>([0x08, 6], input.Second.Body.ToArray());
 
         using RawBaseDirectory directory = new();
         using RawBaseDirectory schemaDirectory = new();
@@ -44,22 +44,22 @@ public sealed partial class DurableSchemaGeneratorTests {
             StateRevisionStore store = new(segments);
             schemas.RegisterBatch([schema]);
             first = store.Append(StateRevision.CreateBase(null,
-                input.Strings.Where(item => item.Id != aliasId).Select(item => ObjectVersionRecord.CreateBase(item.Id, BaseObjectPayloadCodec.EncodeString(new(item.Body)).Payload))
-                    .Append(ObjectVersionRecord.CreateBase(ownerId, BaseObjectPayloadCodec.EncodeDurable(schema, new(input.Base)).Payload)), []));
+                input.Strings.Where(item => item.Id != aliasId).Select(item => ObjectVersionRecord.CreateBase(item.Id, BaseObjectBodyCodec.EncodeString(new(item.Body)).Body))
+                    .Append(ObjectVersionRecord.CreateBase(ownerId, BaseObjectBodyCodec.EncodeDurable(schema, new(input.Base)).Body)), []));
             second = store.Append(StateRevision.CreateDelta(first,
-                [ObjectVersionRecord.CreateDelta(ownerId, first, input.First.Payload),
-                    ObjectVersionRecord.CreateBase(aliasId, BaseObjectPayloadCodec.EncodeString(new(input.Strings.Single(item => item.Id == aliasId).Body)).Payload)], []));
+                [ObjectVersionRecord.CreateDelta(ownerId, first, input.First.Body),
+                    ObjectVersionRecord.CreateBase(aliasId, BaseObjectBodyCodec.EncodeString(new(input.Strings.Single(item => item.Id == aliasId).Body)).Body)], []));
             third = store.Append(StateRevision.CreateDelta(second,
-                [ObjectVersionRecord.CreateDelta(ownerId, second, input.Second.Payload)], []));
+                [ObjectVersionRecord.CreateDelta(ownerId, second, input.Second.Body)], []));
 
             // Reuse the same prepared bytes on another branch; no serialization is repeated.
             repeated = store.Append(StateRevision.CreateDelta(first,
-                [ObjectVersionRecord.CreateDelta(ownerId, first, input.First.Payload),
-                    ObjectVersionRecord.CreateBase(aliasId, BaseObjectPayloadCodec.EncodeString(new(input.Strings.Single(item => item.Id == aliasId).Body)).Payload)], []));
-            Assert.Equal(input.First.Payload.ToArray(), store.ReadObjectVersionChain(repeated, ownerId).Records[^1].Record.Body.ToArray());
+                [ObjectVersionRecord.CreateDelta(ownerId, first, input.First.Body),
+                    ObjectVersionRecord.CreateBase(aliasId, BaseObjectBodyCodec.EncodeString(new(input.Strings.Single(item => item.Id == aliasId).Body)).Body)], []));
+            Assert.Equal(input.First.Body.ToArray(), store.ReadObjectVersionChain(repeated, ownerId).Records[^1].Record.Body.ToArray());
             missingString = store.Append(StateRevision.CreateDelta(third, [], [nameId]));
             wrongKind = store.Append(StateRevision.CreateDelta(third,
-                [ObjectVersionRecord.CreateBase(nameId, BaseObjectPayloadCodec.EncodeDurable(schema, new(expected[2])).Payload)], []));
+                [ObjectVersionRecord.CreateBase(nameId, BaseObjectBodyCodec.EncodeDurable(schema, new(expected[2])).Body)], []));
             malformed = store.Append(StateRevision.CreateDelta(third,
                 [ObjectVersionRecord.CreateDelta(ownerId, third, new byte[] { 8, 8, 0 })], []));
         }
@@ -78,8 +78,8 @@ public sealed partial class DurableSchemaGeneratorTests {
             Dictionary<uint, byte[]> strings = [];
             foreach ((uint id, FrameAddress address) in cold.ReadLiveObjectHeads(revision)) {
                 var objectChain = cold.ReadObjectVersionChain(revision, id);
-                var stored = BaseObjectPayloadCodec.Decode(objectChain.Records[0].Record.Body);
-                if (stored.Kind == CapturedObjectKind.String) {
+                var stored = BaseObjectBodyCodec.Decode(objectChain.Records[0].Record.Body);
+                if (stored.Kind == ObjectStateKind.String) {
                     TypedObjectVersionReader.ReadString(objectChain);
                     strings.Add(id, stored.Body.ToArray());
                 }
@@ -156,15 +156,15 @@ public sealed partial class DurableSchemaGeneratorTests {
             public static class Host {
             """ + FusedDeltaHostMethods("Leaf", 1) + FusedDeltaHostMethods("Leaf", 2) + """
             public static int DecodeCalls;
-            private static Leaf.__DurableBinaryBody.V1 ReadOld(ref BinaryPayloadReader reader) {
+            private static Leaf.__DurableState.V1 ReadOld(ref BinaryPayloadReader reader) {
                 DecodeCalls++;
-                return Leaf.__DurableBinaryBody.ReadV1(ref reader);
+                return Leaf.__DurableState.ReadBaseBodyV1(ref reader);
             }
             public static byte[] DecodeStored(Atelia.DurableGraph.StateStore.Storage.ObjectVersionChain chain,
                 Atelia.DurableGraph.StateStore.SchemaStore schemas, DurableSchema expected) {
                 var state = Atelia.DurableGraph.StateStore.TypedObjectVersionReader.ReadDurable(
-                    chain, schemas, expected, ReadOld, Leaf.__DurableBinaryBody.ApplyDeltaV1);
-                return Leaf.__DurableBinaryBody.PrepareBase(in state).Payload.ToArray();
+                    chain, schemas, expected, ReadOld, Leaf.__DurableState.ApplyDeltaBodyV1);
+                return Leaf.__DurableState.PrepareBaseBody(in state).Body.ToArray();
             }
             }
             """;
@@ -178,13 +178,13 @@ public sealed partial class DurableSchemaGeneratorTests {
         Assert.Equal(TypeTag.Int32, Assert.Single(oldSchema.BaseSchema!.Fields).TypeTag);
         Assert.Equal(TypeTag.Byte, Assert.Single(newSchema.BaseSchema!.Fields).TypeTag);
         Type host = assembly.GetType("FusedDelta.Host")!;
-        var prepare = host.GetMethod("Prepare1")!.CreateDelegate<Func<byte[], byte[], PreparedDelta>>();
+        var prepare = host.GetMethod("Prepare1")!.CreateDelegate<Func<byte[], byte[], PreparedDeltaBody>>();
         var decode = host.GetMethod("DecodeStored")!.CreateDelegate<Func<ObjectVersionChain, SchemaStore, DurableSchema, byte[]>>();
         byte[] baseBytes = [2, 0]; // Old ancestor int=1, leaf bool=false.
-        PreparedDelta delta1 = prepare(baseBytes, [2, 1]);
-        PreparedDelta delta2 = prepare([2, 1], [4, 1]);
-        Assert.Equal<byte>([2, 1], delta1.Payload.ToArray());
-        Assert.Equal<byte>([1, 4], delta2.Payload.ToArray());
+        PreparedDeltaBody delta1 = prepare(baseBytes, [2, 1]);
+        PreparedDeltaBody delta2 = prepare([2, 1], [4, 1]);
+        Assert.Equal<byte>([2, 1], delta1.Body.ToArray());
+        Assert.Equal<byte>([1, 4], delta2.Body.ToArray());
         using RawBaseDirectory directory = new();
         using RawBaseDirectory schemaDirectory = new();
         Directory.CreateDirectory(schemaDirectory.Path);
@@ -197,9 +197,9 @@ public sealed partial class DurableSchemaGeneratorTests {
             StateRevisionStore store = new(segments);
             schemas.RegisterBatch([oldSchema, newSchema]);
             first = store.Append(StateRevision.CreateBase(null, [ObjectVersionRecord.CreateBase(1,
-                BaseObjectPayloadCodec.EncodeDurable(oldSchema, new(baseBytes)).Payload)], []));
-            second = store.Append(StateRevision.CreateDelta(first, [ObjectVersionRecord.CreateDelta(1, first, delta1.Payload)], []));
-            third = store.Append(StateRevision.CreateDelta(second, [ObjectVersionRecord.CreateDelta(1, second, delta2.Payload)], []));
+                BaseObjectBodyCodec.EncodeDurable(oldSchema, new(baseBytes)).Body)], []));
+            second = store.Append(StateRevision.CreateDelta(first, [ObjectVersionRecord.CreateDelta(1, first, delta1.Body)], []));
+            third = store.Append(StateRevision.CreateDelta(second, [ObjectVersionRecord.CreateDelta(1, second, delta2.Body)], []));
         }
         Array.Clear(baseBytes);
         delta1 = null!;
@@ -234,7 +234,7 @@ public sealed partial class DurableSchemaGeneratorTests {
     }
 
     private delegate (uint Owner, uint Name, uint Alias, uint Empty, DurableSchema Schema,
-        (uint Id, byte[] Body)[] Strings, byte[] Base, PreparedDelta First, PreparedDelta Second) PersistedCapture();
+        (uint Id, byte[] Body)[] Strings, byte[] Base, PreparedDeltaBody First, PreparedDeltaBody Second) PersistedCapture();
     private delegate byte[] PersistedDecode(ObjectVersionChain chain, SchemaStore schemas, DurableSchema expected, Dictionary<uint, byte[]> strings);
 
     private const string PersistedDeltaCaptureSource = """
@@ -264,14 +264,14 @@ public sealed partial class DurableSchemaGeneratorTests {
         }
         public static class Host {
             public static int DecodeCalls;
-            private static byte[] Write(in Leaf.__DurableBinaryBody.V1 state) {
+            private static byte[] Write(in Leaf.__DurableState.V1 state) {
                 var buffer = new ArrayBufferWriter<byte>();
                 var writer = new BinaryPayloadWriter(buffer);
-                Leaf.__DurableBinaryBody.Write(ref writer, in state);
+                Leaf.__DurableState.WriteBaseBody(ref writer, in state);
                 return buffer.WrittenSpan.ToArray();
             }
             public static (uint Owner, uint Name, uint Alias, uint Empty, DurableSchema Schema,
-                (uint Id, byte[] Body)[] Strings, byte[] Base, PreparedDelta First, PreparedDelta Second) Capture() {
+                (uint Id, byte[] Body)[] Strings, byte[] Base, PreparedDeltaBody First, PreparedDeltaBody Second) Capture() {
                 string shared = new string(new[] { 'x' });
                 string equal = new string(new[] { 'x' });
                 if (ReferenceEquals(shared, equal)) throw new Exception("Distinct fixture strings.");
@@ -279,25 +279,25 @@ public sealed partial class DurableSchemaGeneratorTests {
                 var session = new CaptureSession();
                 CapturedGraph Capture() {
                     var context = session.BeginCapture();
-                    Leaf.__DurableBinaryBody.AddRoot(context, owner);
+                    Leaf.__DurableState.AddRoot(context, owner);
                     return context.Seal();
                 }
                 var first = Capture();
                 owner.Rename("mutation after Seal"); owner.Change("mutation", 90);
-                var prior = first.Objects.Single(item => item.Kind == CapturedObjectKind.Durable).GetState<Leaf.__DurableBinaryBody.V1>();
+                var prior = first.Objects.Single(item => item.Kind == ObjectStateKind.Durable).GetState<Leaf.__DurableState.V1>();
                 session.Accept(first); // Fixture's in-memory baseline only; not a durable publication.
                 owner.Rename(shared); owner.Change(equal, 2);
                 var second = Capture();
                 owner.Rename("mutation after Seal"); owner.Change("mutation", 91);
-                var middle = second.Objects.Single(item => item.Kind == CapturedObjectKind.Durable).GetState<Leaf.__DurableBinaryBody.V1>();
-                var delta1 = Leaf.__DurableBinaryBody.PrepareDelta(in prior, in middle);
+                var middle = second.Objects.Single(item => item.Kind == ObjectStateKind.Durable).GetState<Leaf.__DurableState.V1>();
+                var delta1 = Leaf.__DurableState.PrepareDeltaBody(in prior, in middle);
                 session.Accept(second);
                 owner.Rename(shared); owner.Change(equal, 3);
                 var third = Capture();
                 owner.Rename("mutation after Seal"); owner.Change("mutation", 92);
-                var current = third.Objects.Single(item => item.Kind == CapturedObjectKind.Durable).GetState<Leaf.__DurableBinaryBody.V1>();
-                var delta2 = Leaf.__DurableBinaryBody.PrepareDelta(in middle, in current);
-                var strings = third.Objects.Where(item => item.Kind == CapturedObjectKind.String).Select(item => {
+                var current = third.Objects.Single(item => item.Kind == ObjectStateKind.Durable).GetState<Leaf.__DurableState.V1>();
+                var delta2 = Leaf.__DurableState.PrepareDeltaBody(in middle, in current);
+                var strings = third.Objects.Where(item => item.Kind == ObjectStateKind.String).Select(item => {
                     var buffer = new ArrayBufferWriter<byte>();
                     var writer = new BinaryPayloadWriter(buffer);
                     writer.WriteString(item.StringContent);
@@ -305,18 +305,18 @@ public sealed partial class DurableSchemaGeneratorTests {
                 }).ToArray();
                 session.Discard(third);
                 return (first.RootIds[0], prior.Segment0Field1, middle.Segment1Field1, prior.Segment1Field9,
-                    Leaf.__DurableBinaryBody.V1.Schema, strings, Write(in prior), delta1, delta2);
+                    Leaf.__DurableState.V1.Schema, strings, Write(in prior), delta1, delta2);
             }
-            private static Leaf.__DurableBinaryBody.V1 ReadBase(ref BinaryPayloadReader reader) {
+            private static Leaf.__DurableState.V1 ReadBase(ref BinaryPayloadReader reader) {
                 DecodeCalls++;
-                return Leaf.__DurableBinaryBody.ReadV1(ref reader);
+                return Leaf.__DurableState.ReadBaseBodyV1(ref reader);
             }
             public static byte[] Decode(ObjectVersionChain chain, SchemaStore schemas, DurableSchema expected,
                 Dictionary<uint, byte[]> stringBodies) {
                 var state = TypedObjectVersionReader.ReadDurable(chain, schemas, expected,
-                    ReadBase, Leaf.__DurableBinaryBody.ApplyDeltaV1);
+                    ReadBase, Leaf.__DurableState.ApplyDeltaBodyV1);
                 var strings = StringReadTable.Decode(stringBodies.Select(item => (item.Key, (ReadOnlyMemory<byte>)item.Value)));
-                Leaf.__DurableBinaryBody.ValidateStringReferences(in state, strings);
+                Leaf.__DurableState.ValidateStringReferences(in state, strings);
                 string name = strings.ResolveString(state.Segment0Field1)!;
                 string alias = strings.ResolveString(state.Segment1Field1)!;
                 if (name != "x" || alias != "x" || ReferenceEquals(name, alias) != (state.Segment1Field20 == 1) ||

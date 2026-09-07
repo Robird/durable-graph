@@ -17,12 +17,12 @@ public sealed partial class DurableSchemaGeneratorTests {
         }
 
         MethodDeclarationSyntax[] bodies = root.DescendantNodes().OfType<MethodDeclarationSyntax>()
-            .Where(method => method.Identifier.ValueText is "Write" or "PrepareBase" or "PrepareDelta" ||
-                method.Identifier.ValueText.StartsWith("ReadV", StringComparison.Ordinal) ||
-                method.Identifier.ValueText.StartsWith("ApplyDeltaV", StringComparison.Ordinal)).ToArray();
+            .Where(method => method.Identifier.ValueText is "WriteBaseBody" or "PrepareBaseBody" or "PrepareDeltaBody" ||
+                method.Identifier.ValueText.StartsWith("ReadBaseBodyV", StringComparison.Ordinal) ||
+                method.Identifier.ValueText.StartsWith("ApplyDeltaBodyV", StringComparison.Ordinal)).ToArray();
         Assert.NotEmpty(bodies);
-        Assert.Contains(bodies, method => method.Identifier.ValueText == "Write");
-        Assert.Contains(bodies, method => method.Identifier.ValueText.StartsWith("ReadV", StringComparison.Ordinal));
+        Assert.Contains(bodies, method => method.Identifier.ValueText == "WriteBaseBody");
+        Assert.Contains(bodies, method => method.Identifier.ValueText.StartsWith("ReadBaseBodyV", StringComparison.Ordinal));
         foreach (MethodDeclarationSyntax method in bodies) {
             string body = method.ToString();
             foreach (string forbidden in new[] {

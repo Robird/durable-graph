@@ -48,7 +48,7 @@ public sealed class CaptureSession {
         _preparing = true;
         try {
             CapturedGraph? previous = Current;
-            Dictionary<uint, CapturedObject> priorObjects = previous?.Objects.ToDictionary(static item => item.Id) ?? [];
+            Dictionary<uint, ObjectStateRecord> priorObjects = previous?.Objects.ToDictionary(static item => item.Id) ?? [];
 
             return new PreparedCapturedGraph(previous, candidate, PrepareObjects(candidate, priorObjects));
         }
@@ -59,7 +59,7 @@ public sealed class CaptureSession {
 
     // Loaded baselines describe source-live rows, not a previously captured graph.
     internal IReadOnlyList<PreparedCapturedObject> PrepareAgainst(
-        CapturedGraph candidate, IReadOnlyDictionary<uint, CapturedObject> previous) {
+        CapturedGraph candidate, IReadOnlyDictionary<uint, ObjectStateRecord> previous) {
         RequireCandidate(candidate);
         ArgumentNullException.ThrowIfNull(previous);
         _preparing = true;
@@ -72,19 +72,19 @@ public sealed class CaptureSession {
     }
 
     private static List<PreparedCapturedObject> PrepareObjects(
-        CapturedGraph candidate, IReadOnlyDictionary<uint, CapturedObject> previous) {
+        CapturedGraph candidate, IReadOnlyDictionary<uint, ObjectStateRecord> previous) {
         // Validate the entire comparison set before invoking any user body operation.
-        foreach (CapturedObject current in candidate.Objects) {
-            previous.TryGetValue(current.Id, out CapturedObject? prior);
+        foreach (ObjectStateRecord current in candidate.Objects) {
+            previous.TryGetValue(current.Id, out ObjectStateRecord? prior);
             ValidatePreparation(current, prior);
         }
         List<PreparedCapturedObject> objects = new(candidate.Objects.Count);
-        foreach (CapturedObject current in candidate.Objects) {
-            previous.TryGetValue(current.Id, out CapturedObject? prior);
-            PreparedBase body = current.Kind == CapturedObjectKind.String
+        foreach (ObjectStateRecord current in candidate.Objects) {
+            previous.TryGetValue(current.Id, out ObjectStateRecord? prior);
+            PreparedBaseBody body = current.Kind == ObjectStateKind.String
                 ? StringPayloadCodec.PrepareBase(current.StringContent)
                 : current.Preparation!.PrepareBase(current);
-            PreparedDelta? delta = prior is not null && current.Kind == CapturedObjectKind.Durable
+            PreparedDeltaBody? delta = prior is not null && current.Kind == ObjectStateKind.Durable
                 ? current.Preparation!.PrepareDelta(prior, current)
                 : null;
             objects.Add(new PreparedCapturedObject(current, prior, body, delta));
@@ -157,11 +157,11 @@ public sealed class CaptureSession {
         }
     }
 
-    private static void ValidatePreparation(CapturedObject current, CapturedObject? prior) {
+    private static void ValidatePreparation(ObjectStateRecord current, ObjectStateRecord? prior) {
         if (prior is not null && current.Kind != prior.Kind) {
             throw new InvalidOperationException("An existing captured ID changed content kind.");
         }
-        if (current.Kind == CapturedObjectKind.String) {
+        if (current.Kind == ObjectStateKind.String) {
             if (prior is not null && !ReferenceEquals(current.StringContent, prior.StringContent)) {
                 throw new InvalidOperationException("An existing string ID changed reference identity.");
             }

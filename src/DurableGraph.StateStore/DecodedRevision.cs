@@ -9,21 +9,21 @@ namespace Atelia.DurableGraph.StateStore;
 /// after its stores close; the address identifies the queried view, not a published branch.
 /// </remarks>
 public sealed class DecodedRevision {
-    private readonly Dictionary<uint, CapturedObject> _objects;
+    private readonly Dictionary<uint, ObjectStateRecord> _objects;
 
-    internal DecodedRevision(FrameAddress revisionAddress, IEnumerable<CapturedObject> objects, StringReadTable strings) {
+    internal DecodedRevision(FrameAddress revisionAddress, IEnumerable<ObjectStateRecord> objects, StringReadTable strings) {
         RevisionAddress = revisionAddress;
-        Objects = new FrozenList<CapturedObject>(objects.OrderBy(static row => row.Id));
+        Objects = new FrozenList<ObjectStateRecord>(objects.OrderBy(static row => row.Id));
         _objects = Objects.ToDictionary(static row => row.Id);
         Strings = strings;
     }
 
     public FrameAddress RevisionAddress { get; }
-    public IReadOnlyList<CapturedObject> Objects { get; }
+    public IReadOnlyList<ObjectStateRecord> Objects { get; }
     public StringReadTable Strings { get; }
 
     /// <summary>Returns the exact content for a live ID; zero and absent IDs are invalid.</summary>
-    public CapturedObject GetRequired(uint objectId) => _objects.TryGetValue(objectId, out CapturedObject? row)
+    public ObjectStateRecord GetRequired(uint objectId) => _objects.TryGetValue(objectId, out ObjectStateRecord? row)
         ? row
         : throw new InvalidDataException($"Object ID {objectId} is not live in this decoded Revision.");
 

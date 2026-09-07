@@ -22,7 +22,7 @@ public sealed class TypedObjectVersionReaderTests : IDisposable {
             SchemaStore schemas = new(file);
             schemas.RegisterBatch([old, current]);
         }
-        ObjectVersionChain chain = Chain(BaseObjectPayloadCodec.EncodeDurable(old, new([21])), [1, 25], [1, 26]);
+        ObjectVersionChain chain = Chain(BaseObjectBodyCodec.EncodeDurable(old, new([21])), [1, 25], [1, 26]);
         Assert.Equal(new byte[] { 1, 25 }, chain.Records[1].Record.Body.ToArray());
         Assert.Equal(new byte[] { 1, 26 }, chain.Records[2].Record.Body.ToArray());
         using IRbfFile reopened = RbfFile.OpenReadOnlyExisting(path);
@@ -58,7 +58,7 @@ public sealed class TypedObjectVersionReaderTests : IDisposable {
         using IRbfFile file = RbfFile.CreateNew(NextPath());
         SchemaStore schemas = new(file);
         schemas.RegisterBatch([stored]);
-        ObjectVersionChain chain = Chain(BaseObjectPayloadCodec.EncodeDurable(stored, new([])), Array.Empty<byte>());
+        ObjectVersionChain chain = Chain(BaseObjectBodyCodec.EncodeDurable(stored, new([])), Array.Empty<byte>());
         int calls = 0;
         int Read(ref BinaryPayloadReader reader) { calls++; return 0; }
         int Apply(ref BinaryPayloadReader reader, in int prior) { calls++; return prior; }
@@ -71,8 +71,8 @@ public sealed class TypedObjectVersionReaderTests : IDisposable {
         DurableSchema schema = new("A", 1);
         using IRbfFile file = RbfFile.CreateNew(NextPath());
         SchemaStore schemas = new(file);
-        ObjectVersionChain missing = Chain(BaseObjectPayloadCodec.EncodeDurable(schema, new([7])));
-        ObjectVersionChain text = Chain(BaseObjectPayloadCodec.EncodeString(new([0])));
+        ObjectVersionChain missing = Chain(BaseObjectBodyCodec.EncodeDurable(schema, new([7])));
+        ObjectVersionChain text = Chain(BaseObjectBodyCodec.EncodeString(new([0])));
         ObjectVersionChain opaque = Chain(new([7]));
         int calls = 0;
         int Read(ref BinaryPayloadReader reader) { calls++; return 0; }
@@ -92,7 +92,7 @@ public sealed class TypedObjectVersionReaderTests : IDisposable {
         SchemaStore schemas = new(file);
         schemas.RegisterBatch([schema]);
         ObjectVersionChain chain = Chain(
-            BaseObjectPayloadCodec.EncodeDurable(schema, new(trailingBase ? new byte[] { 1, 2 } : new byte[] { 1 })),
+            BaseObjectBodyCodec.EncodeDurable(schema, new(trailingBase ? new byte[] { 1, 2 } : new byte[] { 1 })),
             trailingBase ? new byte[] { 1, 3 } : new byte[] { 1, 3, 4 });
         int deltaCalls = 0;
         byte Read(ref BinaryPayloadReader reader) => reader.ReadByte();
@@ -107,22 +107,22 @@ public sealed class TypedObjectVersionReaderTests : IDisposable {
 
     [Fact]
     public void BuiltInStringNeedsNoSchemaStoreAndEmptyIsCanonical() {
-        ObjectVersionChain text = Chain(BaseObjectPayloadCodec.EncodeString(StringPayloadCodec.PrepareBase("hello")));
+        ObjectVersionChain text = Chain(BaseObjectBodyCodec.EncodeString(StringPayloadCodec.PrepareBase("hello")));
         string first = TypedObjectVersionReader.ReadString(text);
         string second = TypedObjectVersionReader.ReadString(text);
         Assert.Equal("hello", first);
         Assert.Equal(first, second);
         Assert.NotSame(first, second);
-        Assert.Same(string.Empty, TypedObjectVersionReader.ReadString(Chain(BaseObjectPayloadCodec.EncodeString(new([0])))));
-        Assert.Throws<InvalidDataException>(() => TypedObjectVersionReader.ReadString(Chain(BaseObjectPayloadCodec.EncodeString(new([0])), Array.Empty<byte>())));
-        Assert.Throws<InvalidDataException>(() => TypedObjectVersionReader.ReadString(Chain(BaseObjectPayloadCodec.EncodeString(new([0, 1])))));
-        Assert.Throws<InvalidDataException>(() => TypedObjectVersionReader.ReadString(Chain(BaseObjectPayloadCodec.EncodeDurable(new("A", 1), new([0])))));
+        Assert.Same(string.Empty, TypedObjectVersionReader.ReadString(Chain(BaseObjectBodyCodec.EncodeString(new([0])))));
+        Assert.Throws<InvalidDataException>(() => TypedObjectVersionReader.ReadString(Chain(BaseObjectBodyCodec.EncodeString(new([0])), Array.Empty<byte>())));
+        Assert.Throws<InvalidDataException>(() => TypedObjectVersionReader.ReadString(Chain(BaseObjectBodyCodec.EncodeString(new([0, 1])))));
+        Assert.Throws<InvalidDataException>(() => TypedObjectVersionReader.ReadString(Chain(BaseObjectBodyCodec.EncodeDurable(new("A", 1), new([0])))));
     }
 
-    private ObjectVersionChain Chain(PreparedBase content, params byte[][] deltas) {
+    private ObjectVersionChain Chain(EncodedBaseObjectBody encodedBaseBody, params byte[][] deltas) {
         using SegmentStore segments = SegmentStore.CreateNew(NextPath(), new() { NewStoreLayout = RbfSegmentStoreLayout.Flat });
         StateRevisionStore store = new(segments);
-        FrameAddress address = store.Append(StateRevision.CreateBase(null, [ObjectVersionRecord.CreateBase(1, content.Payload)], []));
+        FrameAddress address = store.Append(StateRevision.CreateBase(null, [ObjectVersionRecord.CreateBase(1, encodedBaseBody.Body)], []));
         foreach (byte[] delta in deltas) {
             address = store.Append(StateRevision.CreateDelta(address, [ObjectVersionRecord.CreateDelta(1, address, delta)], []));
         }

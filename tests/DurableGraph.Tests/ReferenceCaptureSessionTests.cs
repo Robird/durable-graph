@@ -186,13 +186,13 @@ public sealed class ReferenceCaptureSessionTests {
         CaptureSession session = new();
         CapturedGraph graph = CaptureGraph(session, new Domain { First = "value" });
         Assert.False(graph.RootIds is uint[]);
-        Assert.False(graph.Objects is CapturedObject[]);
+        Assert.False(graph.Objects is ObjectStateRecord[]);
         // ReadOnlyCollection over an array exposes that array through ICollection.SyncRoot.
         // A sealed result must not expose this mutation path either.
         Assert.False(graph.RootIds is ICollection);
         Assert.False(graph.Objects is ICollection);
         Assert.False(graph.RootIds is IList<uint>);
-        Assert.False(graph.Objects is IList<CapturedObject>);
+        Assert.False(graph.Objects is IList<ObjectStateRecord>);
         Assert.Throws<InvalidOperationException>(() => graph.Objects[0].GetState<long>());
         Assert.Throws<InvalidOperationException>(() => graph.Objects[1].GetState<State>());
         Assert.Throws<InvalidOperationException>(() => graph.Objects[0].StringContent);

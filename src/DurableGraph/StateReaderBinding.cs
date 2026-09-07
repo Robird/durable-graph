@@ -27,8 +27,8 @@ public abstract class StateReaderBinding {
 
     public DurableSchema Schema { get; }
 
-    internal abstract CapturedObject Read(uint objectId, IStateBodySource source);
-    internal abstract void VisitReferences(CapturedObject item, IStateReferenceVisitor visitor);
+    internal abstract ObjectStateRecord Read(uint objectId, IStateBodySource source);
+    internal abstract void VisitReferences(ObjectStateRecord item, IStateReferenceVisitor visitor);
 }
 
 /// <summary>Reconstructs one exact-version unmanaged DTO before boxing the completed value once.</summary>
@@ -51,18 +51,18 @@ public sealed class StateReaderBinding<TState> : StateReaderBinding where TState
         _visitReferences = visitReferences;
     }
 
-    internal override CapturedObject Read(uint objectId, IStateBodySource source) {
+    internal override ObjectStateRecord Read(uint objectId, IStateBodySource source) {
         if (objectId == 0) {
             throw new InvalidDataException("A durable object ID must be nonzero.");
         }
         TState state = StateBodyDecoder.Read(source, _readBase, _applyDelta);
-        return new CapturedObject(objectId, Schema, state);
+        return new ObjectStateRecord(objectId, Schema, state);
     }
 
-    internal override void VisitReferences(CapturedObject item, IStateReferenceVisitor visitor) {
+    internal override void VisitReferences(ObjectStateRecord item, IStateReferenceVisitor visitor) {
         ArgumentNullException.ThrowIfNull(item);
         ArgumentNullException.ThrowIfNull(visitor);
-        if (item.Kind != CapturedObjectKind.Durable || !Schema.Equals(item.Schema)) {
+        if (item.Kind != ObjectStateKind.Durable || !Schema.Equals(item.Schema)) {
             throw new InvalidDataException("The object does not match this reader's exact Schema.");
         }
         TState state;

@@ -32,9 +32,9 @@ public sealed class LoadedWorldTests : IDisposable {
         FrameAddress first = _store.Append(StateRevision.CreateBase(null,
             [Durable(1, Old, new(2, 8, 0)), Text(8, "removed by upgrade")], []));
         FrameAddress second = _store.Append(StateRevision.CreateDelta(first,
-            [ObjectVersionRecord.CreateDelta(1, first, Delta(new(2, 8, 0), new(3, 8, 0)).Payload)], []));
+            [ObjectVersionRecord.CreateDelta(1, first, Delta(new(2, 8, 0), new(3, 8, 0)).Body)], []));
         FrameAddress third = _store.Append(StateRevision.CreateDelta(second,
-            [ObjectVersionRecord.CreateDelta(1, second, Delta(new(3, 8, 0), new(4, 8, 0)).Payload)], []));
+            [ObjectVersionRecord.CreateDelta(1, second, Delta(new(3, 8, 0), new(4, 8, 0)).Body)], []));
         StateModelRegistry models = Registry(Model(upgrade: state => state with { Value = (byte)(state.Value + 10), TextId = 0 }));
         StateModelSnapshot snapshot = models.Snapshot();
         DecodedRevision decoded = RevisionDecoder.ReadSnapshot(_store, _schemas, third, snapshot.Readers);
@@ -355,10 +355,10 @@ public sealed class LoadedWorldTests : IDisposable {
         return _store.Append(StateRevision.CreateBase(null, new[] { Durable(1, schema, state) }.Concat(strings), []));
     }
     private static ObjectVersionRecord Durable(uint id, DurableSchema schema, State state) =>
-        ObjectVersionRecord.CreateBase(id, BaseObjectPayloadCodec.EncodeDurable(schema, Base(state)).Payload);
+        ObjectVersionRecord.CreateBase(id, BaseObjectBodyCodec.EncodeDurable(schema, Base(state)).Body);
     private static ObjectVersionRecord Text(uint id, string value) =>
-        ObjectVersionRecord.CreateBase(id, BaseObjectPayloadCodec.EncodeString(StringPayloadCodec.PrepareBase(value)).Payload);
-    private static PreparedBase Base(State state) {
+        ObjectVersionRecord.CreateBase(id, BaseObjectBodyCodec.EncodeString(StringPayloadCodec.PrepareBase(value)).Body);
+    private static PreparedBaseBody Base(State state) {
         ArrayBufferWriter<byte> bytes = new();
         BinaryPayloadWriter writer = new(bytes);
         writer.WriteByte(state.Value);
@@ -367,7 +367,7 @@ public sealed class LoadedWorldTests : IDisposable {
         return new(bytes.WrittenSpan);
     }
     private static State Read(ref BinaryPayloadReader reader) => new(reader.ReadByte(), reader.ReadUInt32(), reader.ReadUInt32());
-    private static PreparedDelta Delta(State prior, State next) {
+    private static PreparedDeltaBody Delta(State prior, State next) {
         byte mask = (byte)((prior.Value != next.Value ? 1 : 0) | (prior.TextId != next.TextId ? 2 : 0) | (prior.AliasId != next.AliasId ? 4 : 0));
         ArrayBufferWriter<byte> bytes = new();
         BinaryPayloadWriter writer = new(bytes);

@@ -47,11 +47,11 @@ internal static class CapturedRevisionPlanner {
             // TODO(DB-031): Measure duplicate chain reads here and in the policy
             // planner before introducing an operation-scoped cache.
             ObjectVersionChain chain = store.ReadObjectVersionChain(parentRevisionAddress!.Value, row.Current.Id);
-            BaseObjectPayload stored = BaseObjectPayloadCodec.Decode(chain.Records[0].Record.Body);
+            DecodedBaseObjectBody stored = BaseObjectBodyCodec.Decode(chain.Records[0].Record.Body);
             if (stored.Kind != row.Current.Kind) {
                 throw new InvalidDataException($"Object {row.Current.Id} changed its stored type kind.");
             }
-            if (stored.Kind == CapturedObjectKind.String) {
+            if (stored.Kind == ObjectStateKind.String) {
                 if (chain.Records.Count != 1) {
                     throw new InvalidDataException("String objects cannot have Delta records.");
                 }
@@ -67,20 +67,20 @@ internal static class CapturedRevisionPlanner {
         // Register the complete current schema closure even if no body changed.
         // SchemaStore preflights the entire batch before its first append.
         schemas.RegisterBatch(input.Objects
-            .Where(static row => row.Current.Kind == CapturedObjectKind.Durable)
+            .Where(static row => row.Current.Kind == ObjectStateKind.Durable)
             .Select(static row => row.Current.Schema!));
 
         PreparedObject[] rows = input.Objects.Select(row => {
-            var content = row.Current.Kind == CapturedObjectKind.String
-                ? BaseObjectPayloadCodec.EncodeString(row.BaseContent)
-                : BaseObjectPayloadCodec.EncodeDurable(row.Current.Schema!, row.BaseContent);
+            EncodedBaseObjectBody encodedBaseBody = row.Current.Kind == ObjectStateKind.String
+                ? BaseObjectBodyCodec.EncodeString(row.BaseBody)
+                : BaseObjectBodyCodec.EncodeDurable(row.Current.Schema!, row.BaseBody);
             if (row.Previous is null) {
-                return PreparedObject.New(row.Current.Id, content);
+                return PreparedObject.New(row.Current.Id, encodedBaseBody);
             }
             FrameAddress prior = parentHeads[row.Current.Id];
-            return row.DeltaContent is null
-                ? PreparedObject.Unchanged(row.Current.Id, prior, content)
-                : PreparedObject.Compared(row.Current.Id, prior, content, row.DeltaContent);
+            return row.DeltaBody is null
+                ? PreparedObject.Unchanged(row.Current.Id, prior, encodedBaseBody)
+                : PreparedObject.Compared(row.Current.Id, prior, encodedBaseBody, row.DeltaBody);
         }).ToArray();
         return ObjectRevisionPlanner.PrepareRevision(store, parentRevisionAddress, rows, parameters);
     }

@@ -9,10 +9,10 @@ public sealed class RuntimeReferenceGraphTests {
         DurableSchema newBase = new("new-base", 1);
         DurableSchema oldDerived = new("derived", 1, [], oldBase);
         DurableSchema newDerived = new("derived", 2, [], newBase);
-        StateReferenceValidator stored = new(new Dictionary<uint, CapturedObject> {
+        StateReferenceValidator stored = new(new Dictionary<uint, ObjectStateRecord> {
             [1] = new(1, oldDerived, 0), [2] = new(2, "text"),
         });
-        StateReferenceValidator current = new(new Dictionary<uint, CapturedObject> {
+        StateReferenceValidator current = new(new Dictionary<uint, ObjectStateRecord> {
             [1] = new(1, newDerived, 0), [2] = new(2, "text"),
         });
         stored.VisitDurable(1, "old-base");

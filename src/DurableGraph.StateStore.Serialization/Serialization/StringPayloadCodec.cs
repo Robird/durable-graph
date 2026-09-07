@@ -17,11 +17,11 @@ public static class StringPayloadCodec {
     );
 
     /// <summary>Prepares owned canonical non-null string content; reference slots encode ObjectId separately.</summary>
-    public static PreparedBase PrepareBase(string value) {
+    public static PreparedBaseBody PrepareBase(string value) {
         ArgumentNullException.ThrowIfNull(value);
         ArrayBufferWriter<byte> buffer = new();
         Write(buffer, value);
-        return new PreparedBase(buffer.WrittenSpan);
+        return new PreparedBaseBody(buffer.WrittenSpan);
     }
 
     /// <summary>

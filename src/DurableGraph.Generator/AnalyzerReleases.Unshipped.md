@@ -21,4 +21,4 @@ DG0015 | DurableGraph.Generator | Error | Current schema-history candidate misma
 DG0016 | DurableGraph.Generator | Error | Reserved Schema-support member collision
 DG0017 | DurableGraph.Generator | Error | Duplicate durable schema ID
 DG0019 | DurableGraph.Generator | Error | Invalid durable schema ancestry
-DG0020 | DurableGraph.Generator | Error | Invalid durable binary body
+DG0020 | DurableGraph.Generator | Error | Invalid generated durable state

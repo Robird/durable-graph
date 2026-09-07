@@ -21,8 +21,8 @@ CI-style read-only verification. It also proves that the packaged build target r
 Schema history and versioned State DTOs, including a compile-checked adjacent upgrade shape.
 
 The feed also contains the runtime's Serialization dependency. A final consumer captures private
-base/derived fields into a readonly versioned DTO,
-then mutates the domain instance. Static DTO byte calls verify the original golden bytes,
+base/derived fields into a readonly versioned DTO through generated `__DurableState`,
+then mutates the domain instance. Static DTO body calls verify the original golden bytes,
 DTO/Schema pairing and domain isolation. It still has just one PackageReference;
 Serialization is supplied transitively, with no friend access or manual analyzer wiring.
 
@@ -32,17 +32,17 @@ This validates the public primitive API and publication of the extended Schema t
 
 The same consumer prepares a Delta between frozen base/derived DTOs after mutating
 their source objects. It checks independent bitmap/value golden bytes, the actual Delta length,
-and a no-change result whose zero bitmap is nonempty. The public `PreparedDelta` comes from the
-transitive Serialization package; its owned payload is reused directly for repeated generated
+and a no-change result whose zero bitmap is nonempty. The public `PreparedDeltaBody` comes from the
+transitive Serialization package; its owned `Body` is reused directly for repeated generated
 Apply calls, with complete body consumption and golden Base reconstruction. An invalid padding
-bit must fail. The script requires the `PreparedDelta:True` marker in addition to the existing
+bit must fail. The script requires the `PreparedDeltaBody:True` marker in addition to the existing
 markers. This covers the same-Schema body API, not persisted Delta records or prior-chain validation.
 
-The consumer also calls generated `PrepareBase(in V1)` on the frozen inherited DTO and the prebuilt
+The consumer also calls generated `PrepareBaseBody(in V1)` on the frozen inherited DTO and the prebuilt
 `StringPayloadCodec.PrepareBase(string)` for nonempty and empty string content. The public
-`PreparedBase` and string helper arrive through the same transitive Serialization package.
-Golden bytes, later domain mutation and changes to external payload copies verify reusable owned
-body content. The script additionally requires `PreparedBase:True`; this is body preparation,
+`PreparedBaseBody` and string helper arrive through the same transitive Serialization package.
+Golden bytes, later domain mutation and changes to external body copies verify reusable owned
+body content. The script additionally requires `PreparedBaseBody:True`; this is body preparation,
 not Storage envelope sizing or a complete Save operation.
 
 Generated AddRoot also supplies a stable preparation binding. The same single-package consumer
@@ -100,23 +100,28 @@ Base-only type references through actual packages:
 This independent script packs the eight local dependency packages into an isolated feed/cache,
 including the unmodified sibling `atelia` substrate projects. Its consumer explicitly references
 `Atelia.DurableGraph` for generator/build assets and `Atelia.DurableGraph.StateStore` for storage
-operations, with no manual analyzer, import or project-reference wiring. Generated capture freezes
-two inherited owners sharing a string. Schema registration persists the ancestor closure, is
-idempotent, and rejects a conflicting batch before append. Manually selected Base then raw Delta
-records are written to real segments; read-only reopening recovers exact Schema definitions and
+operations, with no manual analyzer, import or project-reference wiring. Public
+`LoadedWorld.PrepareNew` freezes an inherited Character whose base and leaf fields share a string,
+registers the complete Schema closure, and produces its no-Parent Base plan. Registration is
+idempotent and rejects a conflicting batch before append. Loading that Revision and editing the
+domain object produces an ordinary raw Delta through `LoadedWorld.Prepare`; read-only reopening recovers exact Schema definitions and
 uses generated `RegisterReaders` with the public `StateReaderRegistry` and `RevisionDecoder.Read`
 to reconstruct complete stored-exact DTO/string directories for both revisions. No per-object
-reader selection or manual string-table construction coordinates decoding. The consumer checks
-all live rows, selected Revision addresses, unchanged owners, and the same string instance in the
-result row and reference table. Repeating generated registration is idempotent. Only Base carries
-a type header; string has no SchemaStore dependency. The script requires the original six output
-markers plus `DecodedRevision:True` and retains artifacts under its unique ignored `obj`
-directory. This first phase retains its two-owner stored-exact witness and two history files.
+reader selection, Base-envelope codec, or manual string-table construction coordinates decoding.
+The consumer checks all live rows, selected Revision addresses, the frozen pre-mutation Base, the
+raw Delta bytes, and shared string identity across inherited fields. Repeating generated registration
+is idempotent. The script requires `PersistedSchema`, `PreparedWorld`, `RawDelta`, `ColdTypedRead`,
+`SharedString`, `ConflictBeforeAppend`, and `DecodedRevision` markers and retains artifacts under its
+unique ignored `obj` directory. This first phase retains its inherited stored-exact witness and two
+history files.
 
-The script then builds a separate `World` model at V1 and V2 against the same actual packages,
-publishing and consuming real generated history (three history files after V1; eight after V2,
+The script then builds and runs a separate `World` model at V1, then builds and runs V2 against the
+same actual packages and V1-created database. It publishes and consumes real generated history
+(three history files after V1; eight after V2,
 including the four reference-graph models described below). The V2
-consumer writes a historical Base plus two Deltas and closes the files. After writable reopening,
+consumer receives the V1 process's exact Revision address and World ID through a probe-owned sidecar.
+The V1 process writes its Base plus two Deltas through `PrepareNew`, `Load`, and `Prepare`, then closes
+the files. After writable reopening,
 public `LoadedWorld.Load<World>` upgrades the complete old DTO, allocates without a constructor,
 and hydrates private readonly scalar/string fields. `Prepare` forces an unchanged upgraded object
 to a Base for the current-version DTO; a later domain mutation cannot change that prepared content. The host explicitly
@@ -127,8 +132,8 @@ for the public loading/preparation APIs.
 
 Additional required markers are `HistoricalUpgrade`, `ConstructorFree`, `ReadonlyHydrate`,
 `ForcedBase`, `UnchangedResave`, `NormalDelta`, and `ReopenedWorld`, each followed by `True`.
-The historical witness supplies the explicit World ID and does not publish a head, discover roots/CLR types,
-or invoke transient hooks. Mixed historical model families
+The historical witness supplies the explicit World ID and exact Revision address; it does not publish
+a head, discover roots/CLR types, hand-build old DTO bodies, or invoke transient hooks. Mixed historical model families
 and failure boundaries remain covered by product integration tests.
 
 The V2 consumer additionally constructs an ordinary `GraphWorld` with a shared derived

@@ -13,15 +13,15 @@ public delegate void StateReferenceVisitor<TState>(in TState state, IStateRefere
 /// <summary>Validates references against one complete stored or current DTO directory.</summary>
 /// <remarks>Keep the directory stable while visiting. Schema ancestry comes from this view, never current CLR ancestry.</remarks>
 public sealed class StateReferenceValidator : IStateReferenceVisitor {
-    private readonly IReadOnlyDictionary<uint, CapturedObject> _objects;
+    private readonly IReadOnlyDictionary<uint, ObjectStateRecord> _objects;
 
-    public StateReferenceValidator(IReadOnlyDictionary<uint, CapturedObject> objects) {
+    public StateReferenceValidator(IReadOnlyDictionary<uint, ObjectStateRecord> objects) {
         ArgumentNullException.ThrowIfNull(objects);
         _objects = objects;
     }
 
     public void VisitString(uint id) {
-        if (id != 0 && (!_objects.TryGetValue(id, out CapturedObject? item) || item.Kind != CapturedObjectKind.String)) {
+        if (id != 0 && (!_objects.TryGetValue(id, out ObjectStateRecord? item) || item.Kind != ObjectStateKind.String)) {
             throw new InvalidDataException($"Object ID {id} is not a string in this DTO view.");
         }
     }
@@ -31,7 +31,7 @@ public sealed class StateReferenceValidator : IStateReferenceVisitor {
         if (id == 0) {
             return;
         }
-        if (!_objects.TryGetValue(id, out CapturedObject? item) || item.Kind != CapturedObjectKind.Durable ||
+        if (!_objects.TryGetValue(id, out ObjectStateRecord? item) || item.Kind != ObjectStateKind.Durable ||
             !Accepts(item.Schema!, nominalSchemaId)) {
             throw new InvalidDataException($"Object ID {id} does not satisfy nominal Schema {nominalSchemaId} in this DTO view.");
         }

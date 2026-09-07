@@ -24,7 +24,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         DurableSchema schema = ReadSchemaOnly(assembly.GetType("ScalarDtos.Item")!, 1);
         Assert.Equal<int>([1, 5, 6, 7, 8, 2, 9, 3, 10, 11, 12, 13, 14],
             schema.Fields.Select(field => (int)field.TypeTag));
-        string generated = GeneratedSource(run, "DurableBinaryBodies.g.cs");
+        string generated = GeneratedSource(run, "DurableStates.g.cs");
         foreach (string method in new[] { "Boolean", "Byte", "SByte", "Int16", "UInt16", "Int32", "UInt32", "Int64", "UInt64", "Char", "Half", "Single", "Double" }) {
             Assert.Contains("writer.Write" + method + "(", generated);
             Assert.Contains("reader.Read" + method + "()", generated);
@@ -46,10 +46,10 @@ public sealed partial class DurableSchemaGeneratorTests {
             }
             public static class LeafHost {
                 public static byte[] Capture() {
-                    var value = Leaf.__DurableBinaryBody.Capture(new Leaf());
+                    var value = Leaf.__DurableState.Capture(new Leaf());
                     var buffer = new ArrayBufferWriter<byte>();
                     var writer = new BinaryPayloadWriter(buffer);
-                    Leaf.__DurableBinaryBody.Write(ref writer, in value);
+                    Leaf.__DurableState.WriteBaseBody(ref writer, in value);
                     return buffer.WrittenSpan.ToArray();
                 }
             }
@@ -80,7 +80,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         }
         GeneratorTestRun reloaded = RunGenerator(ScalarHistoryCurrentSource, files.ReadAdditionalTexts());
         AssertSchemaOnlyCompiles(reloaded);
-        Assert.Equal(GeneratedSource(updated, "DurableBinaryBodies.g.cs"), GeneratedSource(reloaded, "DurableBinaryBodies.g.cs"));
+        Assert.Equal(GeneratedSource(updated, "DurableStates.g.cs"), GeneratedSource(reloaded, "DurableStates.g.cs"));
     }
 
     [Fact]
@@ -93,7 +93,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         GeneratorTestRun changed = RunGenerator(
             ScalarDtoSource.Replace("private ushort _u16;", "private uint _u16;"), files.ReadAdditionalTexts());
         Assert.Contains(changed.GeneratorDiagnostics, diagnostic => diagnostic.Id == "DG0015");
-        Assert.DoesNotContain(changed.GeneratedSources, source => source.HintName == "DurableBinaryBodies.g.cs");
+        Assert.DoesNotContain(changed.GeneratedSources, source => source.HintName == "DurableStates.g.cs");
         GeneratorTestRun changedCandidate = RunGenerator(
             ScalarDtoSource.Replace("private ushort _u16;", "private uint _u16;"));
         AssertSchemaOnlyCompiles(changedCandidate);
@@ -109,7 +109,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         var history = SchemaHistory("unknown.dgschema", "unknown", 1, (1, tag));
         GeneratorTestRun run = RunGenerator(ScalarDtoSource, history);
         Assert.Contains(run.GeneratorDiagnostics, diagnostic => diagnostic.Id == "DG0012");
-        Assert.DoesNotContain(run.GeneratedSources, source => source.HintName == "DurableBinaryBodies.g.cs");
+        Assert.DoesNotContain(run.GeneratedSources, source => source.HintName == "DurableStates.g.cs");
         Assert.Throws<ArgumentOutOfRangeException>(() => new DurableFieldInfo(1, (TypeTag)tag));
 
         using AncestryHistoryDirectory files = new();
@@ -134,7 +134,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             """);
         Assert.Contains(run.GeneratorDiagnostics, diagnostic => diagnostic.Id == "DG0007");
         Assert.DoesNotContain(run.GeneratorDiagnostics, diagnostic => diagnostic.Id == "CS8785");
-        Assert.DoesNotContain(run.GeneratedSources, source => source.HintName == "DurableBinaryBodies.g.cs");
+        Assert.DoesNotContain(run.GeneratedSources, source => source.HintName == "DurableStates.g.cs");
     }
 
     [Theory]
@@ -157,7 +157,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             """);
         Assert.Contains(run.GeneratorDiagnostics, diagnostic => diagnostic.Id == "DG0007");
         Assert.DoesNotContain(run.GeneratorDiagnostics, diagnostic => diagnostic.Id == "CS8785");
-        Assert.DoesNotContain(run.GeneratedSources, source => source.HintName == "DurableBinaryBodies.g.cs");
+        Assert.DoesNotContain(run.GeneratedSources, source => source.HintName == "DurableStates.g.cs");
     }
 
     private const string ScalarDtoSource = """
@@ -196,13 +196,13 @@ public sealed partial class DurableSchemaGeneratorTests {
         public static class Host {
             public static byte[] RoundTrip(bool high) {
                 var domain = new Item(high);
-                var original = Item.__DurableBinaryBody.Capture(domain);
+                var original = Item.__DurableState.Capture(domain);
                 domain.Mutate();
                 var buffer = new ArrayBufferWriter<byte>();
                 var writer = new BinaryPayloadWriter(buffer);
-                Item.__DurableBinaryBody.Write(ref writer, in original);
+                Item.__DurableState.WriteBaseBody(ref writer, in original);
                 var reader = new BinaryPayloadReader(buffer.WrittenSpan);
-                var value = Item.__DurableBinaryBody.ReadV1(ref reader);
+                var value = Item.__DurableState.ReadBaseBodyV1(ref reader);
                 reader.EnsureFullyConsumed();
                 if (value.Segment0Field1 != original.Segment0Field1 || value.Segment0Field2 != original.Segment0Field2 ||
                     value.Segment0Field3 != original.Segment0Field3 || value.Segment0Field4 != original.Segment0Field4 ||
@@ -236,7 +236,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         public static class Host {
             public static byte[] RoundTripV1(byte[] bytes) {
                 var reader = new BinaryPayloadReader(bytes);
-                var historical = Leaf.__DurableBinaryBody.ReadV1(ref reader);
+                var historical = Leaf.__DurableState.ReadBaseBodyV1(ref reader);
                 reader.EnsureFullyConsumed();
                 if (historical.Segment1Field1 != 128u || historical.Segment0Field10 != '\uD800' ||
                     BitConverter.HalfToUInt16Bits(historical.Segment0Field11) != 0x8000 ||
@@ -246,7 +246,7 @@ public sealed partial class DurableSchemaGeneratorTests {
                 }
                 var buffer = new ArrayBufferWriter<byte>();
                 var writer = new BinaryPayloadWriter(buffer);
-                Leaf.__DurableBinaryBody.Write(ref writer, in historical);
+                Leaf.__DurableState.WriteBaseBody(ref writer, in historical);
                 return buffer.WrittenSpan.ToArray();
             }
         }

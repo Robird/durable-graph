@@ -8,18 +8,18 @@ using Microsoft.CodeAnalysis.Text;
 namespace Atelia.DurableGraph.Generator;
 
 public sealed partial class DurableSchemaGenerator {
-    private const string BinaryBodyTypeName = "__DurableBinaryBody";
+    private const string GeneratedStateTypeName = "__DurableState";
     private const string PayloadNamespace = "global::Atelia.DurableGraph.StateStore.Serialization.";
 
-    private static readonly DiagnosticDescriptor InvalidBinaryBody = new(
+    private static readonly DiagnosticDescriptor InvalidGeneratedState = new(
         id: "DG0020",
-        title: "Invalid durable binary body",
-        messageFormat: "Binary body for '{0}' cannot be generated: {1}",
+        title: "Invalid generated durable state",
+        messageFormat: "Generated state for '{0}' cannot be emitted: {1}",
         category: "DurableGraph.Generator",
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true);
 
-    private static void GenerateBinaryBodies(
+    private static void GenerateStates(
         SourceProductionContext context,
         List<DurableTypeModel> types,
         List<DurableTypeModel> validatedSchemaOnlyTypes,
@@ -37,16 +37,16 @@ public sealed partial class DurableSchemaGenerator {
         Dictionary<ISymbol, List<BinaryVersionModel>> layouts = new(SymbolEqualityComparer.Default);
         foreach (DurableTypeModel type in types) {
             bool valid = true;
-            var members = type.Symbol.GetMembers(BinaryBodyTypeName);
-            if (type.Symbol.Name == BinaryBodyTypeName || !members.IsEmpty) {
-                ReportInvalidBinaryBody(context, type.Symbol,
-                    "the generated helper name '" + BinaryBodyTypeName + "' is reserved");
+            var members = type.Symbol.GetMembers(GeneratedStateTypeName);
+            if (type.Symbol.Name == GeneratedStateTypeName || !members.IsEmpty) {
+                ReportInvalidGeneratedState(context, type.Symbol,
+                    "the generated helper name '" + GeneratedStateTypeName + "' is reserved");
                 valid = false;
             }
 
             foreach (DurableFieldModel field in type.Fields) {
                 if (!IsBinaryField(field.TypeTagValue)) {
-                    ReportInvalidBinaryBody(context, type.Symbol,
+                    ReportInvalidGeneratedState(context, type.Symbol,
                         "field '" + field.Symbol.Name + "' is not a supported scalar or reference",
                         GetSourceLocation(field.Symbol));
                     valid = false;
@@ -72,7 +72,7 @@ public sealed partial class DurableSchemaGenerator {
                     AppendBinaryFields(shape, isCurrent ? available : history, fields, 0);
                     foreach (BinaryFieldModel field in fields) {
                         if (!IsBinaryField(field.TypeTagValue)) {
-                            ReportInvalidBinaryBody(context, type.Symbol,
+                            ReportInvalidGeneratedState(context, type.Symbol,
                                 "version " + version.ToString(CultureInfo.InvariantCulture) +
                                 " field '" + field.Name +
                                 "' is not a supported scalar or reference");
@@ -109,8 +109,8 @@ public sealed partial class DurableSchemaGenerator {
             bool valid = true;
             while (!HasMetadataName(ancestor, DurableBaseMetadataName)) {
                 if (ancestor is null || !eligible.Contains(ancestor)) {
-                    ReportInvalidBinaryBody(context, type.Symbol,
-                        "every domain ancestor must pass metadata, history and binary body validation");
+                    ReportInvalidGeneratedState(context, type.Symbol,
+                        "every domain ancestor must pass metadata, history and generated-state validation");
                     valid = false;
                     break;
                 }
@@ -119,13 +119,13 @@ public sealed partial class DurableSchemaGenerator {
             }
 
             if (valid) {
-                AppendBinaryBodyType(source, type, layouts[type.Symbol]);
+                AppendGeneratedStateType(source, type, layouts[type.Symbol]);
                 emitted = true;
             }
         }
 
         if (emitted) {
-            context.AddSource("DurableBinaryBodies.g.cs",
+            context.AddSource("DurableStates.g.cs",
                 SourceText.From(source.ToString().Replace("\r\n", "\n"), Encoding.UTF8));
         }
     }
@@ -138,13 +138,13 @@ public sealed partial class DurableSchemaGenerator {
 
     private static bool IsBinaryReference(int typeTagValue) => typeTagValue == 4 || typeTagValue == 15;
 
-    private static void ReportInvalidBinaryBody(
+    private static void ReportInvalidGeneratedState(
         SourceProductionContext context, INamedTypeSymbol type, string message, Location? location = null) {
-        context.ReportDiagnostic(Diagnostic.Create(InvalidBinaryBody,
+        context.ReportDiagnostic(Diagnostic.Create(InvalidGeneratedState,
             location ?? GetSourceLocation(type), type.ToDisplayString(QualifiedNameFormat), message));
     }
 
-    private static void AppendBinaryBodyType(
+    private static void AppendGeneratedStateType(
         StringBuilder source, DurableTypeModel type, List<BinaryVersionModel> versions) {
         bool hasNamespace = !type.Symbol.ContainingNamespace.IsGlobalNamespace;
         if (hasNamespace) {
@@ -156,7 +156,7 @@ public sealed partial class DurableSchemaGenerator {
         bool hasDomainBase = GetCurrentBaseReference(type.Symbol).HasValue;
         source.Append(indent).Append("partial class ").Append(EscapeIdentifier(type.Symbol.Name)).AppendLine(" {");
         source.Append(member).Append("internal ").Append(hasDomainBase ? "new " : string.Empty)
-            .Append("static class ").Append(BinaryBodyTypeName).AppendLine(" {");
+            .Append("static class ").Append(GeneratedStateTypeName).AppendLine(" {");
         string bodyIndent = member + "    ";
         foreach (BinaryVersionModel version in versions) {
             AppendBinaryDto(source, type, version, bodyIndent);
@@ -190,7 +190,7 @@ public sealed partial class DurableSchemaGenerator {
         foreach (BinaryVersionModel version in versions) {
             source.Append(indent).Append("private static readonly global::Atelia.DurableGraph.StateReaderBinding<")
                 .Append(version.Name).Append("> Reader").Append(version.Name).Append(" = new(")
-                .Append(version.Name).Append(".Schema, Read").Append(version.Name).Append(", ApplyDelta")
+                .Append(version.Name).Append(".Schema, ReadBaseBody").Append(version.Name).Append(", ApplyDeltaBody")
                 .Append(version.Name).AppendLine(", VisitReferences);");
         }
 
@@ -222,7 +222,7 @@ public sealed partial class DurableSchemaGenerator {
         if (hasDomainBase) {
             source.Append(indent).Append("    var baseState = ")
                 .Append(type.Symbol.BaseType!.ToDisplayString(FullyQualifiedNameFormat))
-                .Append('.').Append(BinaryBodyTypeName).Append(".Capture(value");
+                .Append('.').Append(GeneratedStateTypeName).Append(".Capture(value");
             for (int index = 0; index < inheritedCount; index++) {
                 if (IsBinaryReference(version.Fields[index].TypeTagValue)) {
                     source.Append(", context");
@@ -315,7 +315,7 @@ public sealed partial class DurableSchemaGenerator {
     }
 
     private static void AppendBinaryDtoWrite(StringBuilder source, BinaryVersionModel version, string indent) {
-        source.Append(indent).Append("internal static void Write(ref ").Append(PayloadNamespace)
+        source.Append(indent).Append("internal static void WriteBaseBody(ref ").Append(PayloadNamespace)
             .Append("BinaryPayloadWriter writer, in ").Append(version.Name).AppendLine(" value) {");
         foreach (BinaryFieldModel field in version.Fields) {
             source.Append(indent).Append("    writer.Write").Append(GetTypeTagName(GetBinarySlotTypeTag(field.TypeTagValue)))
@@ -327,19 +327,19 @@ public sealed partial class DurableSchemaGenerator {
 
     private static void AppendBinaryPrepareBase(StringBuilder source, BinaryVersionModel version, string indent) {
         source.Append(indent).Append("internal static ").Append(PayloadNamespace)
-            .Append("PreparedBase PrepareBase(in ").Append(version.Name).AppendLine(" current) {");
+            .Append("PreparedBaseBody PrepareBaseBody(in ").Append(version.Name).AppendLine(" current) {");
         // TODO(DB-029): Measure temporary buffers and owned-copy costs after MVP before adding pooling.
         source.Append(indent).AppendLine("    var buffer = new global::System.Buffers.ArrayBufferWriter<byte>();");
         source.Append(indent).Append("    var writer = new ").Append(PayloadNamespace)
             .AppendLine("BinaryPayloadWriter(buffer);");
-        source.Append(indent).AppendLine("    Write(ref writer, in current);");
+        source.Append(indent).AppendLine("    WriteBaseBody(ref writer, in current);");
         source.Append(indent).Append("    return new ").Append(PayloadNamespace)
-            .AppendLine("PreparedBase(buffer.WrittenSpan);");
+            .AppendLine("PreparedBaseBody(buffer.WrittenSpan);");
         source.Append(indent).AppendLine("}");
     }
 
     private static void AppendBinaryDtoRead(StringBuilder source, BinaryVersionModel version, string indent) {
-        source.Append(indent).Append("internal static ").Append(version.Name).Append(" Read").Append(version.Name)
+        source.Append(indent).Append("internal static ").Append(version.Name).Append(" ReadBaseBody").Append(version.Name)
             .Append("(ref ").Append(PayloadNamespace).AppendLine("BinaryPayloadReader reader) {");
         foreach (BinaryFieldModel field in version.Fields) {
             source.Append(indent).Append("    var ").Append(field.ParameterName).Append(" = reader.Read")
@@ -361,11 +361,11 @@ public sealed partial class DurableSchemaGenerator {
 
     private static void AppendBinaryPrepareDelta(StringBuilder source, BinaryVersionModel version, string indent) {
         source.Append(indent).Append("internal static ").Append(PayloadNamespace)
-            .Append("PreparedDelta PrepareDelta(in ").Append(version.Name).Append(" prior, in ")
+            .Append("PreparedDeltaBody PrepareDeltaBody(in ").Append(version.Name).Append(" prior, in ")
             .Append(version.Name).AppendLine(" current) {");
         if (version.Fields.Count == 0) {
             source.Append(indent).Append("    return new ").Append(PayloadNamespace)
-                .AppendLine("PreparedDelta(false, global::System.ReadOnlySpan<byte>.Empty);");
+                .AppendLine("PreparedDeltaBody(false, global::System.ReadOnlySpan<byte>.Empty);");
             source.Append(indent).AppendLine("}");
             return;
         }
@@ -410,12 +410,12 @@ public sealed partial class DurableSchemaGenerator {
         }
 
         source.Append(indent).Append("    return new ").Append(PayloadNamespace)
-            .AppendLine("PreparedDelta(hasChanges, buffer.WrittenSpan);");
+            .AppendLine("PreparedDeltaBody(hasChanges, buffer.WrittenSpan);");
         source.Append(indent).AppendLine("}");
     }
 
     private static void AppendBinaryApplyDelta(StringBuilder source, BinaryVersionModel version, string indent) {
-        source.Append(indent).Append("internal static ").Append(version.Name).Append(" ApplyDelta")
+        source.Append(indent).Append("internal static ").Append(version.Name).Append(" ApplyDeltaBody")
             .Append(version.Name).Append("(ref ").Append(PayloadNamespace)
             .Append("BinaryPayloadReader reader, in ").Append(version.Name).AppendLine(" prior) {");
         int maskCount = version.Fields.Count / 8 + (version.Fields.Count % 8 == 0 ? 0 : 1);

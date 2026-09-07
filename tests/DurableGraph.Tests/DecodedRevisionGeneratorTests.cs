@@ -40,19 +40,19 @@ public sealed partial class DurableSchemaGeneratorTests {
         Type host = assembly.GetType("FusedDelta.Host")!;
         var register = host.GetMethod("Register")!.CreateDelegate<Func<bool, StateReaderRegistry>>();
         var check = host.GetMethod("Check")!.CreateDelegate<Action<DecodedRevision, int>>();
-        var prepare = host.GetMethod("Prepare1")!.CreateDelegate<Func<byte[], byte[], PreparedDelta>>();
+        var prepare = host.GetMethod("Prepare1")!.CreateDelegate<Func<byte[], byte[], PreparedDeltaBody>>();
 
         // Independent raw values seed the stored bodies; generated typed code prepares Deltas.
         // Stored IDs are fixture data only. The read API receives neither IDs nor per-object readers.
         byte[] original = [10, 2, 11]; // Old ancestor string ID 10; int 1; alias ID 11.
-        PreparedDelta firstDelta = prepare(original, [10, 4, 11]);
-        PreparedDelta secondDelta = prepare([10, 4, 11], [10, 4, 10]);
-        Assert.Equal<byte>([2, 4], firstDelta.Payload.ToArray());
-        Assert.Equal<byte>([4, 10], secondDelta.Payload.ToArray());
+        PreparedDeltaBody firstDelta = prepare(original, [10, 4, 11]);
+        PreparedDeltaBody secondDelta = prepare([10, 4, 11], [10, 4, 10]);
+        Assert.Equal<byte>([2, 4], firstDelta.Body.ToArray());
+        Assert.Equal<byte>([4, 10], secondDelta.Body.ToArray());
         static ObjectVersionRecord Durable(uint id, DurableSchema schema, byte[] body) =>
-            ObjectVersionRecord.CreateBase(id, BaseObjectPayloadCodec.EncodeDurable(schema, new(body)).Payload);
+            ObjectVersionRecord.CreateBase(id, BaseObjectBodyCodec.EncodeDurable(schema, new(body)).Body);
         static ObjectVersionRecord Text(uint id, string value) =>
-            ObjectVersionRecord.CreateBase(id, BaseObjectPayloadCodec.EncodeString(StringPayloadCodec.PrepareBase(value)).Payload);
+            ObjectVersionRecord.CreateBase(id, BaseObjectBodyCodec.EncodeString(StringPayloadCodec.PrepareBase(value)).Body);
 
         using RawBaseDirectory directory = new();
         using RawBaseDirectory schemaDirectory = new();
@@ -72,9 +72,9 @@ public sealed partial class DurableSchemaGeneratorTests {
                 Durable(99, otherSchema, [11, 18, 13]),
             ], []));
             second = store.Append(StateRevision.CreateDelta(first,
-                [ObjectVersionRecord.CreateDelta(1, first, firstDelta.Payload)], []));
+                [ObjectVersionRecord.CreateDelta(1, first, firstDelta.Body)], []));
             third = store.Append(StateRevision.CreateDelta(second,
-                [ObjectVersionRecord.CreateDelta(1, second, secondDelta.Payload)], []));
+                [ObjectVersionRecord.CreateDelta(1, second, secondDelta.Body)], []));
             newBase = store.Append(StateRevision.CreateDelta(third,
                 [Durable(1, oldSchema, [11, 6, 12])], []));
 
@@ -151,24 +151,24 @@ public sealed partial class DurableSchemaGeneratorTests {
         """ + FusedDeltaHostMethods("Leaf", 1) + """
             public static Atelia.DurableGraph.StateStore.StateReaderRegistry Register(bool includeOther) {
                 var readers = new Atelia.DurableGraph.StateStore.StateReaderRegistry();
-                Leaf.__DurableBinaryBody.RegisterReaders(readers);
-                Leaf.__DurableBinaryBody.RegisterReaders(readers); // Stable generated bindings are idempotent.
-                if (includeOther) Other.__DurableBinaryBody.RegisterReaders(readers);
+                Leaf.__DurableState.RegisterReaders(readers);
+                Leaf.__DurableState.RegisterReaders(readers); // Stable generated bindings are idempotent.
+                if (includeOther) Other.__DurableState.RegisterReaders(readers);
                 return readers;
             }
             public static void Check(Atelia.DurableGraph.StateStore.DecodedRevision view, int stage) {
-                var old = view.GetRequired(1).GetState<Leaf.__DurableBinaryBody.V1>();
-                var current = view.GetRequired(2).GetState<Leaf.__DurableBinaryBody.V2>();
-                var other = view.GetRequired(99).GetState<Other.__DurableBinaryBody.V1>();
+                var old = view.GetRequired(1).GetState<Leaf.__DurableState.V1>();
+                var current = view.GetRequired(2).GetState<Leaf.__DurableState.V2>();
+                var other = view.GetRequired(99).GetState<Other.__DurableState.V1>();
                 if (old.Segment0Field9 != (stage == 3 ? 11u : 10u) ||
                     old.Segment1Field3 != (stage == 0 ? 1 : stage == 3 ? 3 : 2) ||
                     old.Segment1Field8 != (stage < 2 ? 11u : stage == 2 ? 10u : 12u) ||
                     current.Segment0Field2 != 7 || current.Segment1Field1 != 8 || current.Segment1Field8 != 12 ||
                     other.Segment0Field1 != 11 || other.Segment0Field2 != 9 || other.Segment0Field3 != 13)
                     throw new Exception("Stored exact DTO values or dispatch differ.");
-                if (!view.GetRequired(1).Schema.Equals(Leaf.__DurableBinaryBody.V1.Schema) ||
-                    !view.GetRequired(2).Schema.Equals(Leaf.__DurableBinaryBody.V2.Schema) ||
-                    !view.GetRequired(99).Schema.Equals(Other.__DurableBinaryBody.V1.Schema))
+                if (!view.GetRequired(1).Schema.Equals(Leaf.__DurableState.V1.Schema) ||
+                    !view.GetRequired(2).Schema.Equals(Leaf.__DurableState.V2.Schema) ||
+                    !view.GetRequired(99).Schema.Equals(Other.__DurableState.V1.Schema))
                     throw new Exception("The stored exact Schema was replaced.");
                 string shared = view.Strings.ResolveString(10);
                 string equal = view.Strings.ResolveString(11);
@@ -181,7 +181,7 @@ public sealed partial class DurableSchemaGeneratorTests {
                     if (!ReferenceEquals(view.GetRequired(id).StringContent, view.Strings.ResolveString(id)))
                         throw new Exception("Rows and the reference table decoded different instances.");
                 old = default; // GetState returns a copy; changing the local cannot alter the retained row.
-                if (view.GetRequired(1).GetState<Leaf.__DurableBinaryBody.V1>().Segment0Field9 == 0)
+                if (view.GetRequired(1).GetState<Leaf.__DurableState.V1>().Segment0Field9 == 0)
                     throw new Exception("A returned DTO copy changed the stored state.");
             }
         }

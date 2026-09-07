@@ -3,10 +3,10 @@ using Atelia.DurableGraph.StateStore.Serialization;
 namespace Atelia.DurableGraph;
 
 /// <summary>Prepares an owned Base body from a frozen DTO.</summary>
-public delegate PreparedBase StateBasePreparer<TState>(in TState state) where TState : unmanaged;
+public delegate PreparedBaseBody StateBasePreparer<TState>(in TState state) where TState : unmanaged;
 
 /// <summary>Prepares one fused change decision and Delta body from frozen DTOs.</summary>
-public delegate PreparedDelta StateDeltaPreparer<TState>(in TState prior, in TState current) where TState : unmanaged;
+public delegate PreparedDeltaBody StateDeltaPreparer<TState>(in TState prior, in TState current) where TState : unmanaged;
 
 /// <summary>Pairs an exact Schema and DTO with its statically bound body operations.</summary>
 /// <remarks>
@@ -31,19 +31,19 @@ public sealed class CapturedStatePreparation<TState> : ICapturedStatePreparation
 
     public DurableSchema Schema { get; }
 
-    void ICapturedStatePreparation.Validate(CapturedObject item) {
-        if (item.Kind != CapturedObjectKind.Durable || !Schema.Equals(item.Schema)) {
+    void ICapturedStatePreparation.Validate(ObjectStateRecord item) {
+        if (item.Kind != ObjectStateKind.Durable || !Schema.Equals(item.Schema)) {
             throw new InvalidOperationException("The preparation binding requires its exact durable Schema.");
         }
         _ = item.GetState<TState>();
     }
 
-    PreparedBase ICapturedStatePreparation.PrepareBase(CapturedObject current) {
+    PreparedBaseBody ICapturedStatePreparation.PrepareBase(ObjectStateRecord current) {
         TState state = current.GetState<TState>();
         return _prepareBase(in state) ?? throw new InvalidOperationException("Base preparation returned null.");
     }
 
-    PreparedDelta ICapturedStatePreparation.PrepareDelta(CapturedObject previous, CapturedObject current) {
+    PreparedDeltaBody ICapturedStatePreparation.PrepareDelta(ObjectStateRecord previous, ObjectStateRecord current) {
         TState prior = previous.GetState<TState>();
         TState state = current.GetState<TState>();
         return _prepareDelta(in prior, in state) ?? throw new InvalidOperationException("Delta preparation returned null.");
@@ -51,7 +51,7 @@ public sealed class CapturedStatePreparation<TState> : ICapturedStatePreparation
 }
 
 internal interface ICapturedStatePreparation {
-    void Validate(CapturedObject item);
-    PreparedBase PrepareBase(CapturedObject current);
-    PreparedDelta PrepareDelta(CapturedObject previous, CapturedObject current);
+    void Validate(ObjectStateRecord item);
+    PreparedBaseBody PrepareBase(ObjectStateRecord current);
+    PreparedDeltaBody PrepareDelta(ObjectStateRecord previous, ObjectStateRecord current);
 }

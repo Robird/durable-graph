@@ -11,7 +11,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         Assembly assembly = EmitAndLoad(run.OutputCompilation);
         Assert.True(StringValidationDelegate<Func<bool>>(assembly, "RoundTrip")());
 
-        string generated = GeneratedSource(run, "DurableBinaryBodies.g.cs");
+        string generated = GeneratedSource(run, "DurableStates.g.cs");
         Assert.Contains("table.ResolveString(state.Segment0Field1);", generated);
         Assert.Contains("table.ResolveString(state.Segment1Field2);", generated);
         Assert.DoesNotContain("table.ResolveString(state.Segment1Field1)", generated);
@@ -51,14 +51,14 @@ public sealed partial class DurableSchemaGeneratorTests {
             public static class Host {
                 public static bool Check() {
                     var table = StringReadTable.Decode(Array.Empty<(uint, ReadOnlyMemory<byte>)>());
-                    var empty = Empty.__DurableBinaryBody.Capture(new Empty());
-                    var scalar = Scalar.__DurableBinaryBody.Capture(new Scalar());
-                    Empty.__DurableBinaryBody.ValidateStringReferences(in empty, table);
-                    Scalar.__DurableBinaryBody.ValidateStringReferences(in scalar, table);
+                    var empty = Empty.__DurableState.Capture(new Empty());
+                    var scalar = Scalar.__DurableState.Capture(new Scalar());
+                    Empty.__DurableState.ValidateStringReferences(in empty, table);
+                    Scalar.__DurableState.ValidateStringReferences(in scalar, table);
                     int rejected = 0;
-                    try { Empty.__DurableBinaryBody.ValidateStringReferences(in empty, null!); }
+                    try { Empty.__DurableState.ValidateStringReferences(in empty, null!); }
                     catch (ArgumentNullException exception) { if (exception.ParamName == "table") rejected++; }
-                    try { Scalar.__DurableBinaryBody.ValidateStringReferences(in scalar, null!); }
+                    try { Scalar.__DurableState.ValidateStringReferences(in scalar, null!); }
                     catch (ArgumentNullException exception) { if (exception.ParamName == "table") rejected++; }
                     return rejected == 2 && scalar.Segment0Field1 == uint.MaxValue;
                 }
@@ -66,7 +66,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             """);
         AssertSchemaOnlyCompiles(run);
         Assert.True(StringValidationDelegate<Func<bool>>(EmitAndLoad(run.OutputCompilation), "Check")());
-        Assert.DoesNotContain("table.ResolveString", GeneratedSource(run, "DurableBinaryBodies.g.cs"));
+        Assert.DoesNotContain("table.ResolveString", GeneratedSource(run, "DurableStates.g.cs"));
     }
 
     [Theory]
@@ -96,7 +96,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         Assert.False(validateOld(original, 3)); // Same FieldId 2 is String only in V1.
         Assert.True(assembly.GetType("ReferenceHistory.ValidationHost")!.GetMethod("ValidateCurrent")!
             .CreateDelegate<Func<bool>>()());
-        Type body = assembly.GetType("ReferenceHistory.Leaf")!.GetNestedType("__DurableBinaryBody", BindingFlags.NonPublic)!;
+        Type body = assembly.GetType("ReferenceHistory.Leaf")!.GetNestedType("__DurableState", BindingFlags.NonPublic)!;
         Assert.Equal(2, body.GetMethods(BindingFlags.NonPublic | BindingFlags.Static)
             .Count(method => method.Name == "ValidateStringReferences"));
         Assert.Equal(TypeTag.String, ReadSchemaOnly(assembly.GetType("ReferenceHistory.Leaf")!, 1).Fields[1].TypeTag);
@@ -109,7 +109,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         }
         GeneratorTestRun reloaded = RunGenerator(source, files.ReadAdditionalTexts());
         AssertSchemaOnlyCompiles(reloaded);
-        Assert.Equal(GeneratedSource(current, "DurableBinaryBodies.g.cs"), GeneratedSource(reloaded, "DurableBinaryBodies.g.cs"));
+        Assert.Equal(GeneratedSource(current, "DurableStates.g.cs"), GeneratedSource(reloaded, "DurableStates.g.cs"));
     }
 
     private static T StringValidationDelegate<T>(Assembly assembly, string method) where T : Delegate =>
@@ -143,9 +143,9 @@ public sealed partial class DurableSchemaGeneratorTests {
                 writer.WriteString(value);
                 return buffer.WrittenSpan.ToArray();
             }
-            private static Leaf.__DurableBinaryBody.V1 Read(byte[] bytes) {
+            private static Leaf.__DurableState.V1 Read(byte[] bytes) {
                 var reader = new BinaryPayloadReader(bytes);
-                var state = Leaf.__DurableBinaryBody.ReadV1(ref reader);
+                var state = Leaf.__DurableState.ReadBaseBodyV1(ref reader);
                 reader.EnsureFullyConsumed();
                 return state;
             }
@@ -156,25 +156,25 @@ public sealed partial class DurableSchemaGeneratorTests {
                 var second = new Leaf(equal, shared);
                 var session = new CaptureSession();
                 using var capture = session.BeginCapture();
-                Leaf.__DurableBinaryBody.AddRoot(capture, first);
-                Leaf.__DurableBinaryBody.AddRoot(capture, second);
+                Leaf.__DurableState.AddRoot(capture, first);
+                Leaf.__DurableState.AddRoot(capture, second);
                 var graph = capture.Seal();
                 first.Mutate("changed");
                 second.Mutate("changed");
-                byte[][] owners = graph.Objects.Where(entry => entry.Kind == CapturedObjectKind.Durable).Select(entry => {
-                    var state = entry.GetState<Leaf.__DurableBinaryBody.V1>();
+                byte[][] owners = graph.Objects.Where(entry => entry.Kind == ObjectStateKind.Durable).Select(entry => {
+                    var state = entry.GetState<Leaf.__DurableState.V1>();
                     var buffer = new ArrayBufferWriter<byte>();
                     var writer = new BinaryPayloadWriter(buffer);
-                    Leaf.__DurableBinaryBody.Write(ref writer, in state);
+                    Leaf.__DurableState.WriteBaseBody(ref writer, in state);
                     return buffer.WrittenSpan.ToArray();
                 }).ToArray();
-                var records = graph.Objects.Where(entry => entry.Kind == CapturedObjectKind.String)
+                var records = graph.Objects.Where(entry => entry.Kind == ObjectStateKind.String)
                     .Select(entry => (entry.Id, (ReadOnlyMemory<byte>)Content(entry.StringContent))).Reverse().ToArray();
                 var table = StringReadTable.Decode(records);
                 var a = Read(owners[0]);
                 var b = Read(owners[1]);
-                Leaf.__DurableBinaryBody.ValidateStringReferences(in a, table);
-                Leaf.__DurableBinaryBody.ValidateStringReferences(in b, table);
+                Leaf.__DurableState.ValidateStringReferences(in a, table);
+                Leaf.__DurableState.ValidateStringReferences(in b, table);
                 return a.Segment1Field1 == uint.MaxValue && b.Segment1Field1 == uint.MaxValue &&
                     table.ResolveString(a.Segment0Field1) == "x" && table.ResolveString(b.Segment0Field1) == "x" &&
                     ReferenceEquals(table.ResolveString(a.Segment0Field1), table.ResolveString(a.Segment1Field2)) &&
@@ -192,12 +192,12 @@ public sealed partial class DurableSchemaGeneratorTests {
                 if (state.Segment0Field1 != inherited || state.Segment1Field1 != number || state.Segment1Field2 != own)
                     throw new Exception("Body read must remain ID-only.");
                 var table = StringReadTable.Decode(new[] { (3u, (ReadOnlyMemory<byte>)Content("x")) });
-                try { Leaf.__DurableBinaryBody.ValidateStringReferences(in state, table); return true; }
+                try { Leaf.__DurableState.ValidateStringReferences(in state, table); return true; }
                 catch (InvalidDataException) { return false; }
             }
             public static bool RejectNullTable() {
                 var state = Read(new byte[] { 0, 0, 0 });
-                try { Leaf.__DurableBinaryBody.ValidateStringReferences(in state, null!); }
+                try { Leaf.__DurableState.ValidateStringReferences(in state, null!); }
                 catch (ArgumentNullException exception) { return exception.ParamName == "table"; }
                 return false;
             }
@@ -219,21 +219,21 @@ public sealed partial class DurableSchemaGeneratorTests {
             }
             public static bool ValidateOld(byte[] bytes, uint omit) {
                 var reader = new BinaryPayloadReader(bytes);
-                var state = Leaf.__DurableBinaryBody.ReadV1(ref reader);
+                var state = Leaf.__DurableState.ReadBaseBodyV1(ref reader);
                 reader.EnsureFullyConsumed();
-                try { Leaf.__DurableBinaryBody.ValidateStringReferences(in state, Table(omit)); return true; }
+                try { Leaf.__DurableState.ValidateStringReferences(in state, Table(omit)); return true; }
                 catch (System.IO.InvalidDataException) { return false; }
             }
             public static bool ValidateCurrent() {
-                var state = Leaf.__DurableBinaryBody.Capture(new Leaf());
+                var state = Leaf.__DurableState.Capture(new Leaf());
                 var buffer = new ArrayBufferWriter<byte>();
                 var writer = new BinaryPayloadWriter(buffer);
-                Leaf.__DurableBinaryBody.Write(ref writer, in state);
+                Leaf.__DurableState.WriteBaseBody(ref writer, in state);
                 var reader = new BinaryPayloadReader(buffer.WrittenSpan);
-                state = Leaf.__DurableBinaryBody.ReadV2(ref reader);
+                state = Leaf.__DurableState.ReadBaseBodyV2(ref reader);
                 reader.EnsureFullyConsumed();
                 var table = StringReadTable.Decode(Array.Empty<(uint, ReadOnlyMemory<byte>)>());
-                Leaf.__DurableBinaryBody.ValidateStringReferences(in state, table);
+                Leaf.__DurableState.ValidateStringReferences(in state, table);
                 return state.Segment1Field2 == uint.MaxValue;
             }
         }

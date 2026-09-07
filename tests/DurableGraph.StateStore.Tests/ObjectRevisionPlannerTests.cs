@@ -263,7 +263,7 @@ public sealed class ObjectRevisionPlannerTests : IDisposable {
         IEnumerable<PreparedObject> rows, int limit = 10, int percent = 25) =>
         ObjectRevisionPlanner.PrepareRevision(store, parent, rows, new(limit, percent));
 
-    private static PreparedBase Base(int length) => new(new byte[length]);
+    private static EncodedBaseObjectBody Base(int length) => new(new byte[length]);
     private static ObjectVersionRecord B(uint id, byte[] body) => ObjectVersionRecord.CreateBase(id, body);
     private static ObjectVersionRecord D(uint id, FrameAddress prior, byte[] body) => ObjectVersionRecord.CreateDelta(id, prior, body);
     private static long Tail(SegmentStore segments) {

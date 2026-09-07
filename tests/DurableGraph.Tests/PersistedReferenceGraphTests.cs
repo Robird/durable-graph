@@ -211,7 +211,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             ObjectVersionRecord record = Assert.Single(rewrite.Revision.LocalObjects);
             Assert.Equal(nodeId, record.ObjectId);
             Assert.Equal(ObjectVersionKind.Base, record.Kind);
-            Assert.Equal(2, BaseObjectPayloadCodec.Decode(record.Body).SchemaKey!.Value.Version);
+            Assert.Equal(2, BaseObjectBodyCodec.Decode(record.Body).SchemaKey!.Value.Version);
             rewritten = store.Append(rewrite.Revision);
             Assert.Equal(ids.Order(), store.ReadLiveObjectHeads(rewritten).Keys.Order());
             Assert.Single(store.ReadObjectVersionChain(rewritten, nodeId).Records);
@@ -232,7 +232,7 @@ public sealed partial class DurableSchemaGeneratorTests {
     }
 
     private static uint FindGraphObject(StateRevision revision, string schemaId) => Assert.Single(
-        revision.LocalObjects, row => BaseObjectPayloadCodec.Decode(row.Body).SchemaKey?.SchemaId == schemaId).ObjectId;
+        revision.LocalObjects, row => BaseObjectBodyCodec.Decode(row.Body).SchemaKey?.SchemaId == schemaId).ObjectId;
 
     private sealed class ReferenceGraphFixture(Assembly assembly) {
         private readonly Type _host = assembly.GetType("FusedDelta.Host")!;
@@ -324,8 +324,8 @@ public sealed partial class DurableSchemaGeneratorTests {
         public static class Host {
             private static Atelia.DurableGraph.StateStore.StateModelRegistry Models() {
                 var models = new Atelia.DurableGraph.StateStore.StateModelRegistry();
-                World.__DurableBinaryBody.RegisterModel(models); Entity.__DurableBinaryBody.RegisterModel(models);
-                Character.__DurableBinaryBody.RegisterModel(models); Item.__DurableBinaryBody.RegisterModel(models);
+                World.__DurableState.RegisterModel(models); Entity.__DurableState.RegisterModel(models);
+                Character.__DurableState.RegisterModel(models); Item.__DurableState.RegisterModel(models);
                 return models;
             }
             public static object ReplaceUnknown(object loaded) => ((Atelia.DurableGraph.StateStore.LoadedWorld<World>)loaded).World.ReplaceUnknown();
@@ -366,9 +366,9 @@ public sealed partial class DurableSchemaGeneratorTests {
             }
             {{(version == 2 ? """
                 [DurableField(5)] private readonly byte _marker;
-                private static void UpgradeStateV1ToV2(in __DurableBinaryBody.V1 old, out __DurableBinaryBody.V2 next) {
+                private static void UpgradeStateV1ToV2(in __DurableState.V1 old, out __DurableState.V2 next) {
                     Upgrades++;
-                    next = new __DurableBinaryBody.V2(old.Segment0Field1, old.Segment0Field2, old.Segment0Field3, old.Segment0Field4, 42);
+                    next = new __DurableState.V2(old.Segment0Field1, old.Segment0Field2, old.Segment0Field3, old.Segment0Field4, 42);
                 }
                 """ : "")}}
         }
@@ -376,7 +376,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             public static int UpgradeCalls() => Node.Upgrades;
             private static Atelia.DurableGraph.StateStore.StateModelRegistry Models() {
                 var models = new Atelia.DurableGraph.StateStore.StateModelRegistry();
-                World.__DurableBinaryBody.RegisterModel(models); Node.__DurableBinaryBody.RegisterModel(models);
+                World.__DurableState.RegisterModel(models); Node.__DurableState.RegisterModel(models);
                 return models;
             }
         """ + ReferenceGraphHost + "\n}";

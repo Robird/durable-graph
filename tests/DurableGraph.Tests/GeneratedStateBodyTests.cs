@@ -4,7 +4,7 @@ using Microsoft.CodeAnalysis;
 namespace Atelia.DurableGraph.Tests;
 
 public sealed partial class DurableSchemaGeneratorTests {
-    private const string BinaryBodyChain = """
+    private const string GeneratedStateChain = """
         using System;
         using System.Buffers;
         using System.IO;
@@ -42,17 +42,17 @@ public sealed partial class DurableSchemaGeneratorTests {
             public static byte[] Write(bool flag, int number, long wide, int last) {
                 var buffer = new ArrayBufferWriter<byte>();
                 var writer = new BinaryPayloadWriter(buffer);
-                var state = Leaf.__DurableBinaryBody.Capture(new Leaf(flag, number, wide, last));
-                Leaf.__DurableBinaryBody.Write(ref writer, in state);
+                var state = Leaf.__DurableState.Capture(new Leaf(flag, number, wide, last));
+                Leaf.__DurableState.WriteBaseBody(ref writer, in state);
                 return buffer.WrittenSpan.ToArray();
             }
             public static long[] Read(byte[] bytes, bool requireEnd) {
                 var domain = new Leaf(false, 101, 102, 103);
-                var value = Leaf.__DurableBinaryBody.Capture(domain);
+                var value = Leaf.__DurableState.Capture(domain);
                 var reader = new BinaryPayloadReader(bytes);
                 int error = 0;
                 try {
-                    value = Leaf.__DurableBinaryBody.ReadV1(ref reader);
+                    value = Leaf.__DurableState.ReadBaseBodyV1(ref reader);
                     if (requireEnd) { reader.EnsureFullyConsumed(); }
                 }
                 catch (EndOfStreamException) { error = 1; }
@@ -61,22 +61,22 @@ public sealed partial class DurableSchemaGeneratorTests {
                     value.Segment0Field2 ? 1 : 0, value.Segment0Field9, value.Segment1Field2, value.Segment3Field2, domain.Cache];
             }
             public static int NullCapture() {
-                try { Leaf.__DurableBinaryBody.Capture(null!); }
+                try { Leaf.__DurableState.Capture(null!); }
                 catch (ArgumentNullException) { return 1; }
                 return 0;
             }
             public static byte[] WriteBaseOfDerived() {
                 var buffer = new ArrayBufferWriter<byte>();
                 var writer = new BinaryPayloadWriter(buffer);
-                var state = Base.__DurableBinaryBody.Capture(new Leaf(true, -1, 999, 888));
-                Base.__DurableBinaryBody.Write(ref writer, in state);
+                var state = Base.__DurableState.Capture(new Leaf(true, -1, 999, 888));
+                Base.__DurableState.WriteBaseBody(ref writer, in state);
                 return buffer.WrittenSpan.ToArray();
             }
             public static byte[] FailedWrite() {
                 var buffer = new FailAfterFirstAdvance();
                 var writer = new BinaryPayloadWriter(buffer);
-                var state = Leaf.__DurableBinaryBody.Capture(new Leaf(true, int.MinValue, 999, 888));
-                try { Leaf.__DurableBinaryBody.Write(ref writer, in state); }
+                var state = Leaf.__DurableState.Capture(new Leaf(true, int.MinValue, 999, 888));
+                try { Leaf.__DurableState.WriteBaseBody(ref writer, in state); }
                 catch (IOException) { return buffer.Buffer.WrittenSpan.ToArray(); }
                 throw new Exception("Expected downstream failure.");
             }
@@ -94,12 +94,12 @@ public sealed partial class DurableSchemaGeneratorTests {
         """;
 
     [Fact]
-    public void BinaryBodyExecutesPrivateBaseFirstFieldsInLocalIdOrderWithGoldenExtremes() {
-        GeneratorTestRun run = RunGenerator(BinaryBodyChain);
+    public void GeneratedBaseBodyExecutesPrivateBaseFirstFieldsInLocalIdOrderWithGoldenExtremes() {
+        GeneratorTestRun run = RunGenerator(GeneratedStateChain);
         AssertSchemaOnlyCompiles(run);
         Assembly assembly = EmitAndLoad(run.OutputCompilation);
-        var write = BinaryBodyDelegate<Func<bool, int, long, int, byte[]>>(assembly, "Write");
-        var read = BinaryBodyDelegate<Func<byte[], bool, long[]>>(assembly, "Read");
+        var write = GeneratedStateDelegate<Func<bool, int, long, int, byte[]>>(assembly, "Write");
+        var read = GeneratedStateDelegate<Func<byte[], bool, long[]>>(assembly, "Read");
         byte[] minimum = [1, 0xFF, 0xFF, 0xFF, 0xFF, 0x0F,
             0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 1,
             0xFE, 0xFF, 0xFF, 0xFF, 0x0F];
@@ -110,15 +110,15 @@ public sealed partial class DurableSchemaGeneratorTests {
         Assert.Equal(maximum, write(false, int.MaxValue, long.MaxValue, int.MinValue));
         Assert.Equal<long>([0, 21, 0, 1, int.MinValue, long.MinValue, int.MaxValue, 73], read(minimum, true));
         Assert.Equal<long>([0, 21, 0, 0, int.MaxValue, long.MaxValue, int.MinValue, 73], read(maximum, true));
-        Assert.Equal<byte>([1, 1], BinaryBodyDelegate<Func<byte[]>>(assembly, "WriteBaseOfDerived")());
+        Assert.Equal<byte>([1, 1], GeneratedStateDelegate<Func<byte[]>>(assembly, "WriteBaseOfDerived")());
 
-        string generated = BinaryBodyGeneratedText(run);
+        string generated = GeneratedStateText(run);
         AssertGeneratedBodiesRemainStaticallyBound(generated);
         foreach (string forbidden in new[] { "ValueSlotCodec", "PrimitiveSlotCodecs", "DynamicInvoke", "delegate", "(object)", "System.Reflection" }) {
             Assert.DoesNotContain(forbidden, generated);
         }
-        Assert.Contains("global::BinaryBodies.Base.__DurableBinaryBody.Capture(value)", generated);
-        Assert.Contains("global::BinaryBodies.Empty.__DurableBinaryBody.Capture(value)", generated);
+        Assert.Contains("global::BinaryBodies.Base.__DurableState.Capture(value)", generated);
+        Assert.Contains("global::BinaryBodies.Empty.__DurableState.Capture(value)", generated);
         Assert.Contains("writer.WriteBoolean(value.Segment0Field2)", generated);
         Assert.Contains("writer.WriteInt32(value.Segment0Field9)", generated);
         Assert.Contains("writer.WriteInt64(value.Segment1Field2)", generated);
@@ -127,13 +127,13 @@ public sealed partial class DurableSchemaGeneratorTests {
     }
 
     [Fact]
-    public void BinaryBodyNullCaptureAndReadFailuresKeepOriginalDtoWhileReaderCanAdvance() {
-        GeneratorTestRun run = RunGenerator(BinaryBodyChain);
+    public void GeneratedStateNullCaptureAndBaseBodyReadFailuresKeepOriginalDtoWhileReaderCanAdvance() {
+        GeneratorTestRun run = RunGenerator(GeneratedStateChain);
         AssertSchemaOnlyCompiles(run);
         Assembly assembly = EmitAndLoad(run.OutputCompilation);
-        Assert.Equal(1, BinaryBodyDelegate<Func<int>>(assembly, "NullCapture")());
-        Assert.Equal<byte>([1], BinaryBodyDelegate<Func<byte[]>>(assembly, "FailedWrite")());
-        var read = BinaryBodyDelegate<Func<byte[], bool, long[]>>(assembly, "Read");
+        Assert.Equal(1, GeneratedStateDelegate<Func<int>>(assembly, "NullCapture")());
+        Assert.Equal<byte>([1], GeneratedStateDelegate<Func<byte[]>>(assembly, "FailedWrite")());
+        var read = GeneratedStateDelegate<Func<byte[], bool, long[]>>(assembly, "Read");
         Assert.Equal<long>([2, 0, 1, 0, 101, 102, 103, 73], read([2], true));
         // A completed Boolean advances the reader; no partial DTO is assigned.
         Assert.Equal<long>([1, 1, 1, 0, 101, 102, 103, 73], read([1, 0x80], true));
@@ -144,7 +144,7 @@ public sealed partial class DurableSchemaGeneratorTests {
     }
 
     [Fact]
-    public void BinaryBodyInvalidBooleanDoesNotExposeEarlierReadField() {
+    public void GeneratedBaseBodyInvalidBooleanDoesNotExposeEarlierReadField() {
         GeneratorTestRun run = RunGenerator("""
             using System;
             using System.IO;
@@ -162,8 +162,8 @@ public sealed partial class DurableSchemaGeneratorTests {
                 public static int[] Read() {
                     var reader = new BinaryPayloadReader(new byte[] { 1, 2 });
                     var domain = new Item();
-                    var value = Item.__DurableBinaryBody.Capture(domain);
-                    try { value = Item.__DurableBinaryBody.ReadV1(ref reader); }
+                    var value = Item.__DurableState.Capture(domain);
+                    try { value = Item.__DurableState.ReadBaseBodyV1(ref reader); }
                     catch (InvalidDataException) {
                         return [value.Segment0Field1, value.Segment0Field2 ? 1 : 0, reader.ConsumedCount, reader.RemainingCount, domain.Number];
                     }
@@ -172,7 +172,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             }
             """);
         AssertSchemaOnlyCompiles(run);
-        Assert.Equal<int>([73, 1, 1, 1, 73], BinaryBodyDelegate<Func<int[]>>(EmitAndLoad(run.OutputCompilation), "Read")());
+        Assert.Equal<int>([73, 1, 1, 1, 73], GeneratedStateDelegate<Func<int[]>>(EmitAndLoad(run.OutputCompilation), "Read")());
     }
 
     [Theory]
@@ -180,7 +180,7 @@ public sealed partial class DurableSchemaGeneratorTests {
     [InlineData(false, true)]
     [InlineData(true, false)]
     [InlineData(true, true)]
-    public void BinaryBodyRequiresSuccessfulOwnAndAncestorHistory(bool ancestor, bool missingHistory) {
+    public void GeneratedStateRequiresSuccessfulOwnAndAncestorHistory(bool ancestor, bool missingHistory) {
         string source = ancestor ? $$"""
             using Atelia.DurableGraph;
             [DurableType("body.base", {{(missingHistory ? 2 : 1)}})]
@@ -195,11 +195,11 @@ public sealed partial class DurableSchemaGeneratorTests {
         AdditionalText[] history = missingHistory ? [] : [SchemaHistory("old.dgschema", "body.base", 1, (1, 2))];
         GeneratorTestRun run = RunGenerator(source, history);
         Assert.Contains(run.GeneratorDiagnostics, IsError);
-        Assert.DoesNotContain("static void Write(", BinaryBodyGeneratedText(run));
+        Assert.DoesNotContain("static void WriteBaseBody(", GeneratedStateText(run));
     }
 
     [Fact]
-    public void ReferenceCaptureBinaryBodySupportsPrimitiveLeafWhenOptedInAncestorContainsString() {
+    public void ReferenceCaptureGeneratedStateSupportsPrimitiveLeafWhenAncestorContainsString() {
         GeneratorTestRun run = RunGenerator("""
             using Atelia.DurableGraph;
             [DurableType("body.base", 1)]
@@ -208,10 +208,10 @@ public sealed partial class DurableSchemaGeneratorTests {
             public sealed partial class Leaf : Base { [DurableField(1)] private int _leaf; }
             """);
         AssertSchemaOnlyCompiles(run);
-        string generated = BinaryBodyGeneratedText(run);
+        string generated = GeneratedStateText(run);
         Assert.Contains("CaptureString(value._text)", generated);
         Type body = EmitAndLoad(run.OutputCompilation).GetType("Leaf")!
-            .GetNestedType("__DurableBinaryBody", BindingFlags.NonPublic)!;
+            .GetNestedType("__DurableState", BindingFlags.NonPublic)!;
         Assert.Equal(typeof(uint), body.GetNestedType("V1", BindingFlags.NonPublic)!
             .GetField("Segment0Field1", BindingFlags.Instance | BindingFlags.NonPublic)!.FieldType);
         Assert.Equal(2, body.GetMethod("Capture", BindingFlags.Static | BindingFlags.NonPublic)!.GetParameters().Length);
@@ -220,7 +220,7 @@ public sealed partial class DurableSchemaGeneratorTests {
     [Theory]
     [InlineData(false, "DG0012")]
     [InlineData(true, "DG0013")]
-    public void BinaryBodyRejectsUnrelatedHistoryParseOrDuplicateConflict(bool duplicateConflict, string diagnosticId) {
+    public void GeneratedStateRejectsUnrelatedHistoryParseOrDuplicateConflict(bool duplicateConflict, string diagnosticId) {
         AdditionalText[] history = duplicateConflict ? [
             SchemaHistory("first.dgschema", "unrelated", 1, (1, 2)),
             SchemaHistory("second.dgschema", "unrelated", 1, (1, 3)),
@@ -233,12 +233,12 @@ public sealed partial class DurableSchemaGeneratorTests {
             public sealed partial class Valid : DurableBase { [DurableField(1)] private int _value; }
             """, history);
         Assert.Contains(run.GeneratorDiagnostics, diagnostic => diagnostic.Id == diagnosticId);
-        Assert.DoesNotContain(run.GeneratedSources, source => source.HintName == "DurableBinaryBodies.g.cs");
-        Assert.DoesNotContain("static void Write(", BinaryBodyGeneratedText(run));
+        Assert.DoesNotContain(run.GeneratedSources, source => source.HintName == "DurableStates.g.cs");
+        Assert.DoesNotContain("static void WriteBaseBody(", GeneratedStateText(run));
     }
 
     [Fact]
-    public void BinaryBodyGeneratesDistinctTypedBodiesForCurrentAndHistoricalVersions() {
+    public void GeneratedStateProvidesDistinctTypedBodiesForCurrentAndHistoricalVersions() {
         GeneratorTestRun run = RunGenerator("""
             using System;
             using System.Buffers;
@@ -253,8 +253,8 @@ public sealed partial class DurableSchemaGeneratorTests {
                 public static byte[] Write() {
                     var buffer = new ArrayBufferWriter<byte>();
                     var writer = new BinaryPayloadWriter(buffer);
-                    var state = Versioned.__DurableBinaryBody.Capture(new Versioned());
-                    Versioned.__DurableBinaryBody.Write(ref writer, in state);
+                    var state = Versioned.__DurableState.Capture(new Versioned());
+                    Versioned.__DurableState.WriteBaseBody(ref writer, in state);
                     return buffer.WrittenSpan.ToArray();
                 }
             }
@@ -265,17 +265,17 @@ public sealed partial class DurableSchemaGeneratorTests {
         Assert.Equal(TypeTag.Int32, Assert.Single(ReadSchemaOnly(type, 1).Fields).TypeTag);
         Assert.Equal(TypeTag.Int64, Assert.Single(ReadSchemaOnly(type, 2).Fields).TypeTag);
         Assert.Equal<byte>([0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 1],
-            BinaryBodyDelegate<Func<byte[]>>(assembly, "Write")());
-        Type body = type.GetNestedType("__DurableBinaryBody", BindingFlags.NonPublic)!;
-        Assert.Equal(new[] { "AddRoot", "Allocate", "ApplyDeltaV1", "ApplyDeltaV2", "Capture", "Hydrate", "Normalize", "PrepareBase", "PrepareBase", "PrepareDelta", "PrepareDelta", "ReadV1", "ReadV2", "RegisterModel", "RegisterReaders", "ValidateStringReferences", "ValidateStringReferences", "VisitReferences", "VisitReferences", "Write", "Write" }, body.GetMethods(BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.DeclaredOnly)
+            GeneratedStateDelegate<Func<byte[]>>(assembly, "Write")());
+        Type body = type.GetNestedType("__DurableState", BindingFlags.NonPublic)!;
+        Assert.Equal(new[] { "AddRoot", "Allocate", "ApplyDeltaBodyV1", "ApplyDeltaBodyV2", "Capture", "Hydrate", "Normalize", "PrepareBaseBody", "PrepareBaseBody", "PrepareDeltaBody", "PrepareDeltaBody", "ReadBaseBodyV1", "ReadBaseBodyV2", "RegisterModel", "RegisterReaders", "ValidateStringReferences", "ValidateStringReferences", "VisitReferences", "VisitReferences", "WriteBaseBody", "WriteBaseBody" }, body.GetMethods(BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.DeclaredOnly)
             .Select(method => method.Name).OrderBy(name => name).ToArray());
-        AssertGeneratedBodiesRemainStaticallyBound(BinaryBodyGeneratedText(run));
-        Assert.DoesNotContain("__DurableSnapshot", BinaryBodyGeneratedText(run));
+        AssertGeneratedBodiesRemainStaticallyBound(GeneratedStateText(run));
+        Assert.DoesNotContain("__DurableSnapshot", GeneratedStateText(run));
     }
 
-    private static T BinaryBodyDelegate<T>(Assembly assembly, string method) where T : Delegate =>
+    private static T GeneratedStateDelegate<T>(Assembly assembly, string method) where T : Delegate =>
         assembly.GetType("BinaryBodies.Host")!.GetMethod(method)!.CreateDelegate<T>();
 
-    private static string BinaryBodyGeneratedText(GeneratorTestRun run) =>
+    private static string GeneratedStateText(GeneratorTestRun run) =>
         string.Join("\n", run.GeneratedSources.Select(source => source.SourceText.ToString()));
 }

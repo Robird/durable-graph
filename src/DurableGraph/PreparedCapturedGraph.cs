@@ -26,17 +26,21 @@ public sealed class PreparedCapturedGraph {
 
 /// <summary>One candidate object's prepared body and optional same-object comparison.</summary>
 public sealed class PreparedCapturedObject {
-    internal PreparedCapturedObject(CapturedObject current, CapturedObject? previous, PreparedBase baseContent, PreparedDelta? deltaContent) {
+    internal PreparedCapturedObject(
+        ObjectStateRecord current,
+        ObjectStateRecord? previous,
+        PreparedBaseBody baseBody,
+        PreparedDeltaBody? deltaBody) {
         Current = current;
         Previous = previous;
-        BaseContent = baseContent;
-        DeltaContent = deltaContent;
+        BaseBody = baseBody;
+        DeltaBody = deltaBody;
     }
 
-    public CapturedObject Current { get; }
+    public ObjectStateRecord Current { get; }
     /// <summary>Null for a new object; otherwise the same ID from the previous in-memory graph.</summary>
-    public CapturedObject? Previous { get; }
-    public PreparedBase BaseContent { get; }
+    public ObjectStateRecord? Previous { get; }
+    public PreparedBaseBody BaseBody { get; }
     /// <summary>Present for existing durable objects; existing immutable strings need no Delta.</summary>
-    public PreparedDelta? DeltaContent { get; }
+    public PreparedDeltaBody? DeltaBody { get; }
 }

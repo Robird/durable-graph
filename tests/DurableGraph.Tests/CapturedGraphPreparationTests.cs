@@ -15,8 +15,8 @@ public sealed class CapturedGraphPreparationTests {
 
     private readonly record struct State(int Value, uint Text);
     private static State Capture(Domain value, CaptureContext context) => new(value.Value, context.CaptureString(value.Text));
-    private static PreparedBase Base(in State state) => new([(byte)state.Value, (byte)state.Text]);
-    private static PreparedDelta Delta(in State prior, in State current) => prior == current
+    private static PreparedBaseBody Base(in State state) => new([(byte)state.Value, (byte)state.Text]);
+    private static PreparedDeltaBody Delta(in State prior, in State current) => prior == current
         ? new(false, [0]) : new(true, [1, (byte)current.Value, (byte)current.Text]);
 
     private static CapturedGraph CaptureGraph(CaptureSession session, params Domain?[] roots) {
@@ -39,7 +39,7 @@ public sealed class CapturedGraphPreparationTests {
         Assert.Same(previous, initial.Candidate);
         Assert.All(initial.Objects, row => {
             Assert.Null(row.Previous);
-            Assert.Null(row.DeltaContent);
+            Assert.Null(row.DeltaBody);
         });
         session.Accept(previous);
 
@@ -57,18 +57,18 @@ public sealed class CapturedGraphPreparationTests {
         PreparedCapturedObject changed = prepared.Objects[0];
         Assert.Same(candidate.Objects[0], changed.Current);
         Assert.Same(previous.Objects[0], changed.Previous);
-        Assert.True(changed.DeltaContent!.HasChanges);
-        Assert.Equal(new byte[] { 8, 3 }, changed.BaseContent.Payload.ToArray());
+        Assert.True(changed.DeltaBody!.HasChanges);
+        Assert.Equal(new byte[] { 8, 3 }, changed.BaseBody.Body.ToArray());
         PreparedCapturedObject text = prepared.Objects[1];
         Assert.Same(shared, text.Current.StringContent);
         Assert.NotNull(text.Previous);
-        Assert.Null(text.DeltaContent);
+        Assert.Null(text.DeltaBody);
         Assert.Null(prepared.Objects[2].Previous);
         for (int index = 0; index < prepared.Objects.Count; index++) {
-            Assert.Equal(prepared.Objects[index].BaseContent.Payload.ToArray(), repeated.Objects[index].BaseContent.Payload.ToArray());
+            Assert.Equal(prepared.Objects[index].BaseBody.Body.ToArray(), repeated.Objects[index].BaseBody.Body.ToArray());
         }
         session.Discard(candidate);
-        Assert.Equal(new byte[] { 8, 3 }, changed.BaseContent.Payload.ToArray());
+        Assert.Equal(new byte[] { 8, 3 }, changed.BaseBody.Body.ToArray());
         Assert.False(prepared.Objects is ICollection);
         Assert.False(prepared.Objects is IList<PreparedCapturedObject>);
         Assert.Empty(typeof(PreparedCapturedGraph).GetConstructors());
@@ -83,11 +83,11 @@ public sealed class CapturedGraphPreparationTests {
         session.Accept(CaptureGraph(session, domain));
         CapturedGraph candidate = CaptureGraph(session, domain);
         PreparedCapturedGraph prepared = session.Prepare(candidate);
-        Assert.False(prepared.Objects[0].DeltaContent!.HasChanges);
-        Assert.Equal(new byte[] { 0 }, prepared.Objects[0].DeltaContent!.Payload.ToArray());
-        Assert.Equal(new byte[] { 4, 2 }, prepared.Objects[0].BaseContent.Payload.ToArray());
+        Assert.False(prepared.Objects[0].DeltaBody!.HasChanges);
+        Assert.Equal(new byte[] { 0 }, prepared.Objects[0].DeltaBody!.Body.ToArray());
+        Assert.Equal(new byte[] { 4, 2 }, prepared.Objects[0].BaseBody.Body.ToArray());
         Assert.Same(string.Empty, prepared.Objects[1].Current.StringContent);
-        Assert.Equal(StringPayloadCodec.PrepareBase(string.Empty).Payload.ToArray(), prepared.Objects[1].BaseContent.Payload.ToArray());
+        Assert.Equal(StringPayloadCodec.PrepareBase(string.Empty).Body.ToArray(), prepared.Objects[1].BaseBody.Body.ToArray());
         session.Accept(candidate);
     }
 
@@ -99,13 +99,13 @@ public sealed class CapturedGraphPreparationTests {
         session.Accept(CaptureGraph(session, first, second));
         first.Text = new string(['x']);
         PreparedCapturedGraph prepared = session.Prepare(CaptureGraph(session, first, second));
-        Assert.True(prepared.Objects[0].DeltaContent!.HasChanges);
-        Assert.False(prepared.Objects[1].DeltaContent!.HasChanges);
-        PreparedCapturedObject[] strings = prepared.Objects.Where(row => row.Current.Kind == CapturedObjectKind.String).ToArray();
+        Assert.True(prepared.Objects[0].DeltaBody!.HasChanges);
+        Assert.False(prepared.Objects[1].DeltaBody!.HasChanges);
+        PreparedCapturedObject[] strings = prepared.Objects.Where(row => row.Current.Kind == ObjectStateKind.String).ToArray();
         Assert.Equal(2, strings.Length);
         Assert.NotNull(strings[0].Previous);
         Assert.Null(strings[1].Previous);
-        Assert.Equal(strings[0].BaseContent.Payload.ToArray(), strings[1].BaseContent.Payload.ToArray());
+        Assert.Equal(strings[0].BaseBody.Body.ToArray(), strings[1].BaseBody.Body.ToArray());
     }
 
     [Fact]
@@ -223,7 +223,7 @@ public sealed class CapturedGraphPreparationTests {
         Assert.Equal(1, baseCalls);
         Assert.Same(previous, session.Current);
         fail = false;
-        Assert.True(Assert.Single(session.Prepare(candidate).Objects).DeltaContent!.HasChanges);
+        Assert.True(Assert.Single(session.Prepare(candidate).Objects).DeltaBody!.HasChanges);
         Assert.Equal(2, baseCalls);
         session.Discard(candidate);
     }
@@ -251,15 +251,15 @@ public sealed class CapturedGraphPreparationTests {
             1 => Binding,
             _ => binding,
         };
-        CapturedObject prior = mismatch == 5 ? new CapturedObject(2, "x")
-            : new CapturedObject(2, priorSchema, mismatch == 4 ? (object)7L : new State(1, 0), priorBinding);
+        ObjectStateRecord prior = mismatch == 5 ? new ObjectStateRecord(2, "x")
+            : new ObjectStateRecord(2, priorSchema, mismatch == 4 ? (object)7L : new State(1, 0), priorBinding);
         CaptureSession session = new();
         // Deliberately forge only the private test seam to exercise states ordinary registration cannot create.
         typeof(CaptureSession).GetProperty(nameof(CaptureSession.Current))!.SetValue(session,
             new CapturedGraph([], [prior]));
         CaptureContext context = session.BeginCapture();
-        CapturedGraph candidate = new([], [new CapturedObject(1, Schema, new State(1, 0), binding),
-            new CapturedObject(2, Schema, new State(1, 0), binding)]);
+        CapturedGraph candidate = new([], [new ObjectStateRecord(1, Schema, new State(1, 0), binding),
+            new ObjectStateRecord(2, Schema, new State(1, 0), binding)]);
         typeof(CaptureContext).GetProperty("Candidate", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
             .SetValue(context, candidate);
         Assert.Throws<InvalidOperationException>(() => session.Prepare(candidate));
@@ -271,7 +271,7 @@ public sealed class CapturedGraphPreparationTests {
     public void CurrentDtoMismatchAlsoFailsBeforeAnyBody() {
         CaptureSession session = new();
         CaptureContext context = session.BeginCapture();
-        CapturedGraph candidate = new([], [new CapturedObject(1, Schema, 7L, Binding)]);
+        CapturedGraph candidate = new([], [new ObjectStateRecord(1, Schema, 7L, Binding)]);
         typeof(CaptureContext).GetProperty("Candidate", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
             .SetValue(context, candidate);
         Assert.Throws<InvalidOperationException>(() => session.Prepare(candidate));

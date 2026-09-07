@@ -41,7 +41,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         using var reopenedFile = RbfFile.OpenReadOnlyExisting(schemaPath);
         SchemaStore reopened = new(reopenedFile, readOnly: true);
         Assert.Equal(3, reopened.Count);
-        foreach (var row in input.Objects.Where(item => item.Current.Kind == CapturedObjectKind.Durable)) {
+        foreach (var row in input.Objects.Where(item => item.Current.Kind == ObjectStateKind.Durable)) {
             DurableSchema expected = row.Current.Schema!;
             Assert.Equal(expected, reopened.GetRequired(expected.SchemaId, expected.Version));
             if (expected.BaseSchema is { } ancestor) {
@@ -118,7 +118,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         session.Accept(first);
         CapturedGraph candidate = capture(0);
         PreparedCapturedGraph input = session.Prepare(candidate);
-        Assert.False(input.Objects.Single(item => item.Current.Id == ownerId).DeltaContent!.HasChanges);
+        Assert.False(input.Objects.Single(item => item.Current.Id == ownerId).DeltaBody!.HasChanges);
 
         FrameAddress? selectedParent = parent;
         switch (mismatch) {
@@ -130,21 +130,21 @@ public sealed partial class DurableSchemaGeneratorTests {
                 break;
             case "membership":
                 selectedParent = store.Append(StateRevision.CreateDelta(parent, [],
-                    [first.Objects.First(item => item.Kind == CapturedObjectKind.String).Id]));
+                    [first.Objects.First(item => item.Kind == ObjectStateKind.String).Id]));
                 break;
             case "kind":
-                var text = BaseObjectPayloadCodec.EncodeString(StringPayloadCodec.PrepareBase("x"));
+                var text = BaseObjectBodyCodec.EncodeString(StringPayloadCodec.PrepareBase("x"));
                 selectedParent = store.Append(StateRevision.CreateDelta(parent,
-                    [ObjectVersionRecord.CreateBase(ownerId, text.Payload)], []));
+                    [ObjectVersionRecord.CreateBase(ownerId, text.Body)], []));
                 break;
             case "schema":
                 var owner = initial.Objects.Single(item => item.Current.Id == ownerId);
                 var original = owner.Current.Schema!;
                 var versionTwo = new DurableSchema(original.SchemaId, 2, original.Fields.ToArray(), original.BaseSchema);
                 schemas.RegisterBatch([versionTwo]);
-                var differentType = BaseObjectPayloadCodec.EncodeDurable(versionTwo, owner.BaseContent);
+                var differentType = BaseObjectBodyCodec.EncodeDurable(versionTwo, owner.BaseBody);
                 selectedParent = store.Append(StateRevision.CreateDelta(parent,
-                    [ObjectVersionRecord.CreateBase(ownerId, differentType.Payload)], []));
+                    [ObjectVersionRecord.CreateBase(ownerId, differentType.Body)], []));
                 break;
         }
         long schemaTail = schemaFile.TailOffset;

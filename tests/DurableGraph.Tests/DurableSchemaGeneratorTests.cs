@@ -66,7 +66,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         foreach (string hintName in new[] {
             "DurableSchemas.g.cs",
             "DurableGraphSchemaHistoryCandidates.g.cs",
-            "DurableBinaryBodies.g.cs",
+            "DurableStates.g.cs",
         }) {
             string firstGenerated = GeneratedSource(first, hintName);
             string secondGenerated = GeneratedSource(second, hintName);
@@ -90,7 +90,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         foreach (string hintName in new[] {
             "DurableSchemas.g.cs",
             "DurableGraphSchemaHistoryCandidates.g.cs",
-            "DurableBinaryBodies.g.cs",
+            "DurableStates.g.cs",
         }) {
             string firstGenerated = GeneratedSource(first, hintName);
             string secondGenerated = GeneratedSource(second, hintName);

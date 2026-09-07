@@ -38,20 +38,20 @@ public abstract class StateModelBinding {
     public Type DomainType { get; }
     public IReadOnlyList<StateReaderBinding> Readers { get; }
 
-    internal void RequireSource(CapturedObject source) {
+    internal void RequireSource(ObjectStateRecord source) {
         ArgumentNullException.ThrowIfNull(source);
-        if (source.Kind != CapturedObjectKind.Durable ||
+        if (source.Kind != ObjectStateKind.Durable ||
             !_readers.Any(reader => reader.Schema.Equals(source.Schema))) {
             throw new InvalidDataException("The source does not match an exact Schema in this model family.");
         }
     }
 
-    internal abstract CapturedObject Normalize(CapturedObject source);
-    internal abstract void VisitReferences(CapturedObject current, IStateReferenceVisitor visitor);
+    internal abstract ObjectStateRecord Normalize(ObjectStateRecord source);
+    internal abstract void VisitReferences(ObjectStateRecord current, IStateReferenceVisitor visitor);
     internal abstract DurableBase Allocate();
-    internal abstract void Hydrate(DurableBase domain, CapturedObject current, ObjectReadTable objects);
+    internal abstract void Hydrate(DurableBase domain, ObjectStateRecord current, ObjectReadTable objects);
     internal abstract uint AddRoot(CaptureContext context, DurableBase domain);
-    internal abstract CapturedObject Capture(uint id, DurableBase domain, CaptureContext context);
+    internal abstract ObjectStateRecord Capture(uint id, DurableBase domain, CaptureContext context);
     internal abstract bool MatchesCapture(DurableSchema schema, Delegate capture, ICapturedStatePreparation? preparation);
 
     private sealed class ReaderList(StateReaderBinding[] readers) : IReadOnlyList<StateReaderBinding> {
@@ -66,7 +66,7 @@ public abstract class StateModelBinding {
 public sealed class StateModelBinding<TDomain, TState> : StateModelBinding
     where TDomain : DurableBase where TState : unmanaged {
     private readonly CapturedStatePreparation<TState> _preparation;
-    private readonly Func<CapturedObject, TState> _normalize;
+    private readonly Func<ObjectStateRecord, TState> _normalize;
     private readonly Func<TDomain> _allocate;
     private readonly StateHydrator<TDomain, TState> _hydrate;
     private readonly Func<TDomain, CaptureContext, TState> _capture;
@@ -75,7 +75,7 @@ public sealed class StateModelBinding<TDomain, TState> : StateModelBinding
     public StateModelBinding(
         CapturedStatePreparation<TState> preparation,
         IEnumerable<StateReaderBinding> readers,
-        Func<CapturedObject, TState> normalize,
+        Func<ObjectStateRecord, TState> normalize,
         Func<TDomain> allocate,
         StateHydrator<TDomain, TState> hydrate,
         Func<TDomain, CaptureContext, TState> capture,
@@ -94,12 +94,12 @@ public sealed class StateModelBinding<TDomain, TState> : StateModelBinding
         _visitReferences = visitReferences;
     }
 
-    internal override CapturedObject Normalize(CapturedObject source) {
+    internal override ObjectStateRecord Normalize(ObjectStateRecord source) {
         RequireSource(source);
-        return new CapturedObject(source.Id, CurrentSchema, _normalize(source), _preparation);
+        return new ObjectStateRecord(source.Id, CurrentSchema, _normalize(source), _preparation);
     }
 
-    internal override void VisitReferences(CapturedObject current, IStateReferenceVisitor visitor) {
+    internal override void VisitReferences(ObjectStateRecord current, IStateReferenceVisitor visitor) {
         ArgumentNullException.ThrowIfNull(visitor);
         ((ICapturedStatePreparation)_preparation).Validate(current);
         TState state = current.GetState<TState>();
@@ -112,7 +112,7 @@ public sealed class StateModelBinding<TDomain, TState> : StateModelBinding
         return domain;
     }
 
-    internal override void Hydrate(DurableBase domain, CapturedObject current, ObjectReadTable objects) {
+    internal override void Hydrate(DurableBase domain, ObjectStateRecord current, ObjectReadTable objects) {
         RequireDomain(domain);
         ArgumentNullException.ThrowIfNull(objects);
         ((ICapturedStatePreparation)_preparation).Validate(current);
@@ -125,9 +125,9 @@ public sealed class StateModelBinding<TDomain, TState> : StateModelBinding
         return context.AddRoot((TDomain)domain, CurrentSchema, _capture, _preparation);
     }
 
-    internal override CapturedObject Capture(uint id, DurableBase domain, CaptureContext context) {
+    internal override ObjectStateRecord Capture(uint id, DurableBase domain, CaptureContext context) {
         RequireDomain(domain);
-        return new CapturedObject(id, CurrentSchema, _capture((TDomain)domain, context), _preparation);
+        return new ObjectStateRecord(id, CurrentSchema, _capture((TDomain)domain, context), _preparation);
     }
 
     internal override bool MatchesCapture(DurableSchema schema, Delegate capture, ICapturedStatePreparation? preparation) =>

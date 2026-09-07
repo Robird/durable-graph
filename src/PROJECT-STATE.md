@@ -24,8 +24,10 @@
 完成一轮语境化一致；内部 B/D/H 输入现分别命名为精确 Base payload、Delta payload 上界和
 重建链 payload。[DB-035](../docs/design-branches/0035-public-contract-terminology-migration.md)
 Wave 1 已删除 legacy 生成路径并把裸 `[DurableType]` 收敛为唯一 State model；Wave 2 已将构建期
-Schema history 原子迁移为 `.dgschema`、`SchemaHistory` tool/manifest 和对应 MSBuild 合同，并明确拒绝
-旧 `.dgsnapshot`。生成 ABI、对象状态/body 品牌和 Storage API 的后续 Wave 仍未实施。
+Schema history 原子迁移为 `.dgschema`、`SchemaHistory` tool/manifest 和对应 MSBuild 合同；Wave 3
+已将生成 ABI 收敛为 `__DurableState` 及显式 Base/Delta body 方法，以 `ObjectStateRecord` 统一单行
+carrier，并用 StateStore 内部 `EncodedBaseObjectBody` 保证 Base 类型头只包装一次。Storage API 清理
+仍留给后续 Wave；State wire v3 未改变。
 自定义 struct、有限数组对象和泛型闭合待后续分别选片；本批不自动进入下一片。
 持久 World 根、Commit/Ref 和其他类型扩展继续按[路线图](../docs/DurableGraph-research-roadmap.md)独立排期。
 未来联合 Commit/Ref 及内建类型自举的 SchemaStore 复用路线见
@@ -39,7 +41,7 @@ Schema history 原子迁移为 `.dgschema`、`SchemaHistory` tool/manifest 和�
 | [Generator](DurableGraph.Generator/DurableGraph.Generator.csproj) / [Build](DurableGraph.Build/DurableGraph.Build.csproj) | 裸 `[DurableType]` 生成各版 readonly DTO、标量/引用 ID 静态 body、Capture/引用遍历、历史 reader/model、相邻 DTO Upgrade、无构造器/readonly Hydrate；`.dgschema` Schema history 含 nominal family | struct、泛型、数组/BCL 尚无对象生成 |
 | [StateStore](DurableGraph.StateStore/DurableGraph.StateStore.csproj) | 持久 Schema、Base 类型头；完整 stored/current 引用验证、可达图两阶段恢复；公开 PrepareNew、fixed-Parent Prepare、升级强制 Base/不可达 Remove | 无持久 roots、原地 Accept/Commit 或发布 |
 | [Storage](DurableGraph.StateStore.Storage/DurableGraph.StateStore.Storage.csproj) | local Base/Delta records、wire v3、exact Revision live map、Parent/prior 校验、object-first 原始重建链及实际 payload H；v3 Base 精确/Delta 上界计量；真实 Segment/RBF 冷重开 | 不解码 typed body；不拥有持久 roots、类型目录或发布 head；重复读取暂未缓存 |
-| [Serialization](DurableGraph.StateStore.Serialization/DurableGraph.StateStore.Serialization.csproj) | 字节原语、string 内容 codec、拥有自有 bytes 的 PreparedBase/PreparedDelta、预制 string PrepareBase、显式 body 的 typed slot、SZ/rank-2 元素 ref 循环 | 无数组对象 envelope、一般 struct 生成器或通用泛型 codec |
+| [Serialization](DurableGraph.StateStore.Serialization/DurableGraph.StateStore.Serialization.csproj) | 字节原语、string 内容 codec、拥有 raw bytes 的 PreparedBaseBody/PreparedDeltaBody、预制 string Base body、显式 body 的 typed slot、SZ/rank-2 元素 ref 循环 | 无数组对象 envelope、一般 struct 生成器或通用泛型 codec |
 
 容易混淆的限制：
 
@@ -79,9 +81,9 @@ Schema history 原子迁移为 `.dgschema`、`SchemaHistory` tool/manifest 和�
   分配从完整 source live max+1 起，只承诺会话内单调；uint 耗尽不阻止已有对象保存。
   恢复的可达 durable 实例身份导入同一捕获会话；child-only 修改不改变 owner ID 槽，
   断开最后根路径后整个循环岛由完整 source − candidate 得到 Remove，旧 Revision 不受影响。
-- PrepareDelta 每槽比较一次形成位图，再静态写变化值；结果含 HasChanges 和可复用 payload，裸 Delta body 大小可直接取长度。
+- PrepareDeltaBody 每槽比较一次形成位图，再静态写变化值；结果含 HasChanges 和可复用 raw body，裸 Delta body 大小可直接取长度。
   策略 D 还须计入对象 envelope，不能直接以裸 body 大小代替。
-  PrepareBase 对每版 DTO 复用 Write；全部 live Base 提前准备，决策后复用 bytes，性能优化留待 MVP 后。
+  PrepareBaseBody 对每版 DTO 复用 WriteBaseBody；全部 live Base 提前准备，决策后复用 bytes，性能优化留待 MVP 后。
   B 为完整 Base payload 精确值，D 仅对未定文件距离按 5 字节上界计量（超额 0..4）；H 仍是原记录实编码。
   ApplyDeltaVn 只处理同 Vn；不证明 prior 身份，之后仍须对完整 DTO 验证引用。
 - SchemaStore 借用独占的专用 IRbfFile；完整祖先闭包与同 key 冲突预检后，一批次一帧追加/flush，等价注册不写。
@@ -90,7 +92,8 @@ Schema history 原子迁移为 `.dgschema`、`SchemaHistory` tool/manifest 和�
   nominal 约束改变属于 owner Schema 改变，目标自身升版则不传播 owner 版本。
   严格重放全部帧/CRC；坏尾、tombstone、未知格式拒绝且不自动截断。写入不确定后 faulted，须重开；
   可写非空重开先 flush 再交付，readonly 不确认新屏障。尚无 Schema 分段、联合版本目录或自动修复。
-- BaseObjectPayloadCodec 只为 Base 加 v1 类型头，durable 使用逻辑 SchemaKey，string 走内建路径；Delta 仍为裸 body。
+- StateStore 内部 BaseObjectBodyCodec 只为 raw Base body 加 v1 类型头，返回 `EncodedBaseObjectBody`；
+  durable 使用逻辑 SchemaKey，string 走内建路径，Delta 仍为裸 body。typed planner 不能漏包或重复包装类型头。
   TypedObjectVersionReader 在 callbacks 前匹配持久完整 Schema，逐 body 全消费；string 拒绝 Delta。
   它保留单对象显式入口，与 RevisionDecoder 共用读取规则；不执行 Upgrade。
   Schema 注册帧是共享元数据，不摊入对象 B/D/H。

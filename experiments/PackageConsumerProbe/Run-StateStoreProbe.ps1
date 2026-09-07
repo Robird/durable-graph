@@ -60,7 +60,7 @@ try {
 
     $consumerAssembly = Join-Path $output "Debug/net10.0/Atelia.StateStoreConsumer.dll"
     $consumerOutput = (& dotnet $consumerAssembly (Join-Path $workRoot "database") | Out-String).Trim()
-    if ($LASTEXITCODE -ne 0 -or $consumerOutput -ne "PersistedSchema:True:BaseTypeReference:True:RawDelta:True:ColdTypedRead:True:SharedString:True:ConflictBeforeAppend:True:DecodedRevision:True") {
+    if ($LASTEXITCODE -ne 0 -or $consumerOutput -ne "PersistedSchema:True:PreparedWorld:True:RawDelta:True:ColdTypedRead:True:SharedString:True:ConflictBeforeAppend:True:DecodedRevision:True") {
         throw "Packaged StateStore exercise failed; output was '$consumerOutput'."
     }
     Write-Host $consumerOutput
@@ -70,11 +70,17 @@ try {
     Invoke-DotNet (@("build", $consumerProject, "--no-restore", "-p:RestoreVersion=1") + $consumerProperties)
     $historyFiles = @(Get-ChildItem -LiteralPath $history -Filter *.dgschema -File)
     if ($historyFiles.Count -ne 3) { throw "Expected original two plus World V1 history, found $($historyFiles.Count)." }
+    $upgradeDatabase = Join-Path $workRoot "upgraded-database"
+    $seedOutput = (& dotnet $consumerAssembly $upgradeDatabase | Out-String).Trim()
+    if ($LASTEXITCODE -ne 0 -or $seedOutput -ne "HistoricalWorldSeeded:True") {
+        throw "Packaged V1 historical seed exercise failed; output was '$seedOutput'."
+    }
+    Write-Host $seedOutput
     Invoke-DotNet (@("clean", $consumerProject, "-p:RestoreVersion=2") + $consumerProperties)
     Invoke-DotNet (@("build", $consumerProject, "--no-restore", "-p:RestoreVersion=2") + $consumerProperties)
     $historyFiles = @(Get-ChildItem -LiteralPath $history -Filter *.dgschema -File)
     if ($historyFiles.Count -ne 8) { throw "Expected original two plus World V1/V2 and four graph model histories, found $($historyFiles.Count)." }
-    $restoreOutput = (& dotnet $consumerAssembly (Join-Path $workRoot "upgraded-database") | Out-String).Trim().Replace("`r`n", "`n")
+    $restoreOutput = (& dotnet $consumerAssembly $upgradeDatabase | Out-String).Trim().Replace("`r`n", "`n")
     $expectedRestore = $consumerOutput + "`nHistoricalUpgrade:True:ConstructorFree:True:ReadonlyHydrate:True:ForcedBase:True:UnchangedResave:True:NormalDelta:True:ReopenedWorld:True"
     $expectedRestore += "`nPrepareNewGraph:True:SharedDerived:True:ReadonlyCycles:True:ChildOnlyDelta:True:UnreachableCycleRemoved:True:HistoricalGraphPreserved:True"
     if ($LASTEXITCODE -ne 0 -or $restoreOutput -ne $expectedRestore) {

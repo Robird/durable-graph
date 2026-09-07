@@ -22,7 +22,7 @@ public sealed partial class DurableSchemaGenerator {
                 !method.IsStatic || !method.ReturnsVoid || method.Arity != 0 ||
                 method.Parameters.Length != 2 || method.Parameters[0].RefKind != RefKind.In ||
                 method.Parameters[1].RefKind != RefKind.Out) {
-                ReportInvalidBinaryBody(context, type.Symbol,
+                ReportInvalidGeneratedState(context, type.Symbol,
                     name + " must be one static void method with an in prior DTO and out next DTO");
                 valid = false;
             }
@@ -39,7 +39,7 @@ public sealed partial class DurableSchemaGenerator {
         string domain = type.Symbol.ToDisplayString(FullyQualifiedNameFormat);
         source.Append(indent).Append("private static readonly global::Atelia.DurableGraph.CapturedStatePreparation<")
             .Append(current.Name).Append("> Preparation = new(").Append(current.Name)
-            .AppendLine(".Schema, PrepareBase, PrepareDelta);");
+            .AppendLine(".Schema, PrepareBaseBody, PrepareDeltaBody);");
         source.Append(indent).Append("private static readonly global::System.Func<").Append(domain)
             .Append(", global::Atelia.DurableGraph.CaptureContext, ").Append(current.Name)
             .Append("> CaptureDelegate = static (value, context) => Capture(value");
@@ -93,7 +93,7 @@ public sealed partial class DurableSchemaGenerator {
         StringBuilder source, DurableTypeModel type, List<BinaryVersionModel> versions, string indent) {
         BinaryVersionModel current = versions[versions.Count - 1];
         source.Append(indent).Append("internal static ").Append(current.Name)
-            .AppendLine(" Normalize(global::Atelia.DurableGraph.CapturedObject item) {");
+            .AppendLine(" Normalize(global::Atelia.DurableGraph.ObjectStateRecord item) {");
         source.Append(indent).AppendLine("    global::System.ArgumentNullException.ThrowIfNull(item);");
         foreach (BinaryVersionModel version in versions) {
             source.Append(indent).Append("    if (").Append(version.Name).AppendLine(".Schema.Equals(item.Schema)) {");
@@ -152,15 +152,15 @@ public sealed partial class DurableSchemaGenerator {
         }
         if (hasDomainBase) {
             SchemaReference reference = GetCurrentBaseReference(type.Symbol)!.Value;
-            string baseBody = type.Symbol.BaseType!.ToDisplayString(FullyQualifiedNameFormat) + "." + BinaryBodyTypeName;
-            source.Append(indent).Append("    var baseState = new ").Append(baseBody).Append(".V")
+            string baseState = type.Symbol.BaseType!.ToDisplayString(FullyQualifiedNameFormat) + "." + GeneratedStateTypeName;
+            source.Append(indent).Append("    var baseState = new ").Append(baseState).Append(".V")
                 .Append(reference.Version.ToString(CultureInfo.InvariantCulture)).Append('(');
             for (int index = 0; index < inheritedCount; index++) {
                 if (index != 0) source.Append(", ");
                 source.Append("state.").Append(current.Fields[index].Name);
             }
             source.AppendLine(");");
-            source.Append(indent).Append("    ").Append(baseBody).AppendLine(".Hydrate(value, in baseState, objects);");
+            source.Append(indent).Append("    ").Append(baseState).AppendLine(".Hydrate(value, in baseState, objects);");
         }
         for (int index = 0; index < type.Fields.Count; index++) {
             DurableFieldModel field = type.Fields[index];

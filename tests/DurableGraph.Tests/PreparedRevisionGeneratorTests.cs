@@ -43,15 +43,15 @@ public sealed partial class DurableSchemaGeneratorTests {
                 Assert.Equal(input.Objects.Select(row => row.Current.Id), repeated.Objects.Select(row => row.Current.Id));
                 foreach (var row in input.Objects) {
                     var again = repeated.Objects.Single(item => item.Current.Id == row.Current.Id);
-                    Assert.Equal(row.BaseContent.Payload.ToArray(), again.BaseContent.Payload.ToArray());
-                    Assert.Equal(row.DeltaContent?.HasChanges, again.DeltaContent?.HasChanges);
-                    CapturedObject? previous = accepted?.Objects.SingleOrDefault(item => item.Id == row.Current.Id);
+                    Assert.Equal(row.BaseBody.Body.ToArray(), again.BaseBody.Body.ToArray());
+                    Assert.Equal(row.DeltaBody?.HasChanges, again.DeltaBody?.HasChanges);
+                    ObjectStateRecord? previous = accepted?.Objects.SingleOrDefault(item => item.Id == row.Current.Id);
                     Assert.Same(previous, row.Previous);
-                    if (previous is null || row.Current.Kind == CapturedObjectKind.String)
-                        Assert.Null(row.DeltaContent);
-                    else Assert.NotNull(row.DeltaContent);
-                    if (row.DeltaContent is not null)
-                        Assert.Equal(row.DeltaContent.Payload.ToArray(), again.DeltaContent!.Payload.ToArray());
+                    if (previous is null || row.Current.Kind == ObjectStateKind.String)
+                        Assert.Null(row.DeltaBody);
+                    else Assert.NotNull(row.DeltaBody);
+                    if (row.DeltaBody is not null)
+                        Assert.Equal(row.DeltaBody.Body.ToArray(), again.DeltaBody!.Body.ToArray());
                 }
                 Assert.Same(accepted, session.Current);
                 Assert.Throws<InvalidOperationException>(() => session.BeginCapture());
@@ -65,15 +65,15 @@ public sealed partial class DurableSchemaGeneratorTests {
                 if (stage == 0) {
                     ownerId = owner.Current.Id;
                     originalStringId = Assert.Single(graph.Objects,
-                        item => item.Kind == CapturedObjectKind.String && item.StringContent == "x").Id;
+                        item => item.Kind == ObjectStateKind.String && item.StringContent == "x").Id;
                     emptyId = Assert.Single(graph.Objects,
-                        item => item.Kind == CapturedObjectKind.String && item.StringContent == string.Empty).Id;
+                        item => item.Kind == ObjectStateKind.String && item.StringContent == string.Empty).Id;
                     Assert.NotEqual(0u, originalStringId);
                     Assert.NotEqual(0u, emptyId);
                 }
                 if (stage == 1) {
                     equalStringId = Assert.Single(graph.Objects,
-                        item => item.Kind == CapturedObjectKind.String && item.StringContent == "x" && item.Id != originalStringId).Id;
+                        item => item.Kind == ObjectStateKind.String && item.StringContent == "x" && item.Id != originalStringId).Id;
                     Assert.NotEqual(originalStringId, equalStringId);
                 }
                 uint name = stage < 2 ? originalStringId : equalStringId;
@@ -85,25 +85,25 @@ public sealed partial class DurableSchemaGeneratorTests {
                 expected[stage][1] = checked((byte)alias);
                 expected[stage][2] = checked((byte)emptyId);
                 expected[stage][3] = score;
-                Assert.Equal(expected[stage], owner.BaseContent.Payload.ToArray());
+                Assert.Equal(expected[stage], owner.BaseBody.Body.ToArray());
                 if (stage is 1 or 2) {
-                    Assert.True(owner.DeltaContent!.HasChanges);
+                    Assert.True(owner.DeltaBody!.HasChanges);
                     Assert.Equal<byte>([stage == 1 ? (byte)0x0A : (byte)0x09, 0, checked((byte)equalStringId), score],
-                        owner.DeltaContent.Payload.ToArray());
+                        owner.DeltaBody.Body.ToArray());
                 }
                 if (stage >= 3) {
-                    Assert.False(owner.DeltaContent!.HasChanges);
-                    Assert.Equal<byte>([0, 0], owner.DeltaContent.Payload.ToArray());
+                    Assert.False(owner.DeltaBody!.HasChanges);
+                    Assert.Equal<byte>([0, 0], owner.DeltaBody.Body.ToArray());
                 }
 
                 if (stage is 1 or 2) {
                     var tag = Assert.Single(input.Objects, row => row.Current.Id == tagId);
                     Assert.NotNull(tag.Current.Schema!.BaseSchema);
-                    Assert.Equal<byte>([checked((byte)equalStringId), 7], tag.BaseContent.Payload.ToArray());
+                    Assert.Equal<byte>([checked((byte)equalStringId), 7], tag.BaseBody.Body.ToArray());
                     if (stage == 1) Assert.Null(tag.Previous);
                     else {
-                        Assert.False(tag.DeltaContent!.HasChanges);
-                        Assert.Equal<byte>([0], tag.DeltaContent.Payload.ToArray());
+                        Assert.False(tag.DeltaBody!.HasChanges);
+                        Assert.Equal<byte>([0], tag.DeltaBody.Body.ToArray());
                     }
                 }
 
@@ -124,7 +124,7 @@ public sealed partial class DurableSchemaGeneratorTests {
                 else if (stage is 1 or 2) {
                     ObjectVersionRecord record = Assert.Single(prepared.Revision.LocalObjects, item => item.ObjectId == ownerId);
                     Assert.Equal(ObjectVersionKind.Delta, record.Kind);
-                    Assert.Equal(owner.DeltaContent!.Payload.ToArray(), record.Body.ToArray());
+                    Assert.Equal(owner.DeltaBody!.Body.ToArray(), record.Body.ToArray());
                     Assert.Equal(priorHeads[ownerId], record.PriorAddress);
                     Assert.Equal(stage == 1 ? 3 : 1, prepared.Revision.LocalObjects.Count);
                     if (stage == 1) {
@@ -137,7 +137,7 @@ public sealed partial class DurableSchemaGeneratorTests {
                     ObjectVersionRecord record = Assert.Single(prepared.Revision.LocalObjects);
                     Assert.Equal(ownerId, record.ObjectId);
                     Assert.Equal(ObjectVersionKind.Base, record.Kind);
-                    Assert.Equal(expected[stage], BaseObjectPayloadCodec.Decode(record.Body).Body.ToArray());
+                    Assert.Equal(expected[stage], BaseObjectBodyCodec.Decode(record.Body).Body.ToArray());
                     Assert.Equal(new[] { tagId }, prepared.Revision.RemovedObjectIds);
                 }
                 else {
@@ -187,13 +187,13 @@ public sealed partial class DurableSchemaGeneratorTests {
                 tagChain = cold.ReadObjectVersionChain(revisions[stage], tagId);
                 Assert.Single(tagChain.Records);
                 Assert.Equal<byte>([checked((byte)equalStringId), 7],
-                    BaseObjectPayloadCodec.Decode(tagChain.Records[0].Record.Body).Body.ToArray());
+                    BaseObjectBodyCodec.Decode(tagChain.Records[0].Record.Body).Body.ToArray());
             }
             Dictionary<uint, byte[]> strings = [];
             foreach ((uint id, FrameAddress address) in heads.Where(item => item.Key != ownerId && item.Key != tagId)) {
                 ObjectVersionChain stringChain = cold.ReadObjectVersionChain(revisions[stage], id);
                 Assert.Equal(id == emptyId ? string.Empty : "x", TypedObjectVersionReader.ReadString(stringChain));
-                strings.Add(id, BaseObjectPayloadCodec.Decode(stringChain.Records[0].Record.Body).Body.ToArray());
+                strings.Add(id, BaseObjectBodyCodec.Decode(stringChain.Records[0].Record.Body).Body.ToArray());
             }
             Assert.Equal(expected[stage], decode(chain, coldSchemas, strings, stage == 1, tagChain));
             // Even references unchanged by Delta must be validated against the target view.
@@ -202,7 +202,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         }
         Assert.True(cold.ReadLiveObjectHeads(revisions[0]).ContainsKey(originalStringId));
         Assert.False(cold.ReadLiveObjectHeads(revisions[2]).ContainsKey(originalStringId));
-        Assert.Equal<byte>([3, (byte)'x'], BaseObjectPayloadCodec.Decode(cold.ReadObjectBase(revisions[0], originalStringId)).Body.ToArray());
+        Assert.Equal<byte>([3, (byte)'x'], BaseObjectBodyCodec.Decode(cold.ReadObjectBase(revisions[0], originalStringId)).Body.ToArray());
     }
 
     private delegate CapturedGraph PreparedRevisionCapture(int stage);
@@ -258,13 +258,13 @@ public sealed partial class DurableSchemaGeneratorTests {
                 Domain.Change(stage < 2 ? Shared : Equal, stage == 0 ? Shared : Equal, (uint)(Math.Min(stage, 2) + 1));
                 Secondary.Change(Equal, 7);
                 var context = Session.BeginCapture();
-                Owner.__DurableBinaryBody.AddRoot(context, Domain);
-                Owner.__DurableBinaryBody.AddRoot(context, Domain);
-                Owner.__DurableBinaryBody.AddRoot(context, null);
+                Owner.__DurableState.AddRoot(context, Domain);
+                Owner.__DurableState.AddRoot(context, Domain);
+                Owner.__DurableState.AddRoot(context, null);
                 if (stage is 1 or 2) {
-                    Tag.__DurableBinaryBody.AddRoot(context, Secondary);
-                    Tag.__DurableBinaryBody.AddRoot(context, Secondary);
-                    Tag.__DurableBinaryBody.AddRoot(context, null);
+                    Tag.__DurableState.AddRoot(context, Secondary);
+                    Tag.__DurableState.AddRoot(context, Secondary);
+                    Tag.__DurableState.AddRoot(context, null);
                 }
                 var graph = context.Seal();
                 Domain.Change("mutated after Seal", "never captured", 99);
@@ -273,23 +273,23 @@ public sealed partial class DurableSchemaGeneratorTests {
             }
             public static byte[] Decode(ObjectVersionChain chain, SchemaStore schemas,
                 Dictionary<uint, byte[]> stringBodies, bool expectDistinct, ObjectVersionChain? tagChain) {
-                var state = TypedObjectVersionReader.ReadDurable(chain, schemas, Owner.__DurableBinaryBody.V1.Schema,
-                    Owner.__DurableBinaryBody.ReadV1, Owner.__DurableBinaryBody.ApplyDeltaV1);
+                var state = TypedObjectVersionReader.ReadDurable(chain, schemas, Owner.__DurableState.V1.Schema,
+                    Owner.__DurableState.ReadBaseBodyV1, Owner.__DurableState.ApplyDeltaBodyV1);
                 var strings = StringReadTable.Decode(stringBodies.Select(item => (item.Key, (ReadOnlyMemory<byte>)item.Value)));
-                Owner.__DurableBinaryBody.ValidateStringReferences(in state, strings);
+                Owner.__DurableState.ValidateStringReferences(in state, strings);
                 string name = strings.ResolveString(state.Segment0Field1)!;
                 string alias = strings.ResolveString(state.Segment0Field2)!;
                 if (name != "x" || alias != "x" || ReferenceEquals(name, alias) == expectDistinct ||
                     !ReferenceEquals(strings.ResolveString(state.Segment0Field3), string.Empty))
                     throw new InvalidDataException("String content, sharing or Empty identity failed.");
                 if (tagChain is not null) {
-                    var tag = TypedObjectVersionReader.ReadDurable(tagChain, schemas, Tag.__DurableBinaryBody.V1.Schema,
-                        Tag.__DurableBinaryBody.ReadV1, Tag.__DurableBinaryBody.ApplyDeltaV1);
-                    Tag.__DurableBinaryBody.ValidateStringReferences(in tag, strings);
+                    var tag = TypedObjectVersionReader.ReadDurable(tagChain, schemas, Tag.__DurableState.V1.Schema,
+                        Tag.__DurableState.ReadBaseBodyV1, Tag.__DurableState.ApplyDeltaBodyV1);
+                    Tag.__DurableState.ValidateStringReferences(in tag, strings);
                     if (!ReferenceEquals(strings.ResolveString(tag.Segment0Field1), alias) || tag.Segment1Field1 != 7)
                         throw new InvalidDataException("Inherited frozen fields or cross-object string sharing failed.");
                 }
-                return Owner.__DurableBinaryBody.PrepareBase(in state).Payload.ToArray();
+                return Owner.__DurableState.PrepareBaseBody(in state).Body.ToArray();
             }
         }
         """;

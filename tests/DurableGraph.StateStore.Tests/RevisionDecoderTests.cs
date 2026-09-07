@@ -50,7 +50,7 @@ public sealed class RevisionDecoderTests : IDisposable {
         Assert.Throws<InvalidDataException>(() => decoded.GetRequired(0));
         Assert.Throws<InvalidDataException>(() => decoded.GetRequired(99));
         Assert.False(decoded.Objects is System.Collections.ICollection);
-        Assert.False(decoded.Objects is IList<CapturedObject>);
+        Assert.False(decoded.Objects is IList<ObjectStateRecord>);
         NodeState copy = decoded.GetRequired(1).GetState<NodeState>();
         copy = copy with { Value = 99 };
         Assert.Equal((byte)9, decoded.GetRequired(1).GetState<NodeState>().Value);
@@ -226,9 +226,9 @@ public sealed class RevisionDecoderTests : IDisposable {
 
     private static ObjectVersionRecord Node(uint id, byte value, byte textId) => Durable(id, NodeSchema, [value, textId]);
     private static ObjectVersionRecord Durable(uint id, DurableSchema schema, ReadOnlySpan<byte> body) =>
-        ObjectVersionRecord.CreateBase(id, BaseObjectPayloadCodec.EncodeDurable(schema, new(body)).Payload);
+        ObjectVersionRecord.CreateBase(id, BaseObjectBodyCodec.EncodeDurable(schema, new(body)).Body);
     private static ObjectVersionRecord Text(uint id, string value) =>
-        ObjectVersionRecord.CreateBase(id, BaseObjectPayloadCodec.EncodeString(StringPayloadCodec.PrepareBase(value)).Payload);
+        ObjectVersionRecord.CreateBase(id, BaseObjectBodyCodec.EncodeString(StringPayloadCodec.PrepareBase(value)).Body);
 
     private SegmentStore NewSegments() => SegmentStore.CreateNew(NextPath(), new() { NewStoreLayout = RbfSegmentStoreLayout.Flat });
     private string NextPath() => Path.Combine(_root, (++_nextFile).ToString(System.Globalization.CultureInfo.InvariantCulture));

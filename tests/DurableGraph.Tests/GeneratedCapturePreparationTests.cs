@@ -32,24 +32,24 @@ public sealed partial class DurableSchemaGeneratorTests {
                     var leaf = new Leaf(shared);
                     var label = new Label(shared);
                     using var first = session.BeginCapture();
-                    Leaf.__DurableBinaryBody.AddRoot(first, leaf);
-                    Label.__DurableBinaryBody.AddRoot(first, label);
-                    Leaf.__DurableBinaryBody.AddRoot(first, leaf);
-                    Label.__DurableBinaryBody.AddRoot(first, null);
+                    Leaf.__DurableState.AddRoot(first, leaf);
+                    Label.__DurableState.AddRoot(first, label);
+                    Leaf.__DurableState.AddRoot(first, leaf);
+                    Label.__DurableState.AddRoot(first, null);
                     var graph = first.Seal();
                     leaf.Change(43, new string(new[] { 'A' }));
                     var initial = session.Prepare(graph);
                     var repeated = session.Prepare(graph);
                     session.Accept(graph);
                     using var second = session.BeginCapture();
-                    Leaf.__DurableBinaryBody.AddRoot(second, leaf);
-                    Label.__DurableBinaryBody.AddRoot(second, label);
+                    Leaf.__DurableState.AddRoot(second, leaf);
+                    Label.__DurableState.AddRoot(second, label);
                     var changedGraph = second.Seal();
                     var changed = session.Prepare(changedGraph);
                     session.Accept(changedGraph);
                     using var third = session.BeginCapture();
-                    Leaf.__DurableBinaryBody.AddRoot(third, leaf);
-                    Label.__DurableBinaryBody.AddRoot(third, label);
+                    Leaf.__DurableState.AddRoot(third, leaf);
+                    Label.__DurableState.AddRoot(third, label);
                     var unchanged = session.Prepare(third.Seal());
                     return new[] { initial, repeated, changed, unchanged };
                 }
@@ -65,44 +65,44 @@ public sealed partial class DurableSchemaGeneratorTests {
         Assert.Equal<uint>([1, 2, 1, 0], initial.Candidate.RootIds);
         Assert.Equal<uint>([1, 2, 3, 4], initial.Objects.Select(row => row.Current.Id));
         Assert.Equal(new[] { "212A03", "0304", "0341", "00" },
-            initial.Objects.Select(row => Convert.ToHexString(row.BaseContent.Payload)));
-        Assert.All(initial.Objects, row => { Assert.Null(row.Previous); Assert.Null(row.DeltaContent); });
+            initial.Objects.Select(row => Convert.ToHexString(row.BaseBody.Body)));
+        Assert.All(initial.Objects, row => { Assert.Null(row.Previous); Assert.Null(row.DeltaBody); });
         Assert.Same(initial.Candidate, results[1].Candidate);
-        Assert.Equal(initial.Objects.Select(row => row.BaseContent.Payload.ToArray()),
-            results[1].Objects.Select(row => row.BaseContent.Payload.ToArray()));
+        Assert.Equal(initial.Objects.Select(row => row.BaseBody.Body.ToArray()),
+            results[1].Objects.Select(row => row.BaseBody.Body.ToArray()));
 
         var changed = results[2];
         Assert.Same(initial.Candidate, changed.Previous);
         Assert.Equal<uint>([1, 2, 3, 4, 5], changed.Objects.Select(row => row.Current.Id));
         Assert.Equal(new[] { "212B05", "0304", "0341", "00", "0341" },
-            changed.Objects.Select(row => Convert.ToHexString(row.BaseContent.Payload)));
-        Assert.Equal<byte>([0x06, 0x2B, 0x05], changed.Objects[0].DeltaContent!.Payload.ToArray());
-        Assert.True(changed.Objects[0].DeltaContent!.HasChanges);
-        Assert.False(changed.Objects[1].DeltaContent!.HasChanges);
-        Assert.Equal<byte>([0], changed.Objects[1].DeltaContent!.Payload.ToArray());
+            changed.Objects.Select(row => Convert.ToHexString(row.BaseBody.Body)));
+        Assert.Equal<byte>([0x06, 0x2B, 0x05], changed.Objects[0].DeltaBody!.Body.ToArray());
+        Assert.True(changed.Objects[0].DeltaBody!.HasChanges);
+        Assert.False(changed.Objects[1].DeltaBody!.HasChanges);
+        Assert.Equal<byte>([0], changed.Objects[1].DeltaBody!.Body.ToArray());
         Assert.Same(initial.Candidate.Objects[0], changed.Objects[0].Previous);
         Assert.Null(changed.Objects[4].Previous);
-        Assert.Null(changed.Objects[4].DeltaContent);
+        Assert.Null(changed.Objects[4].DeltaBody);
         Assert.NotSame(changed.Objects[2].Current.StringContent, changed.Objects[4].Current.StringContent);
         Assert.Same(string.Empty, changed.Objects[3].Current.StringContent);
-        Assert.All(results[3].Objects.Where(row => row.Current.Kind == CapturedObjectKind.Durable), row => {
-            Assert.False(row.DeltaContent!.HasChanges);
-            Assert.Equal<byte>([0], row.DeltaContent.Payload.ToArray());
+        Assert.All(results[3].Objects.Where(row => row.Current.Kind == ObjectStateKind.Durable), row => {
+            Assert.False(row.DeltaBody!.HasChanges);
+            Assert.Equal<byte>([0], row.DeltaBody.Body.ToArray());
         });
-        Assert.All(results[3].Objects.Where(row => row.Current.Kind == CapturedObjectKind.String), row => {
+        Assert.All(results[3].Objects.Where(row => row.Current.Kind == ObjectStateKind.String), row => {
             Assert.NotNull(row.Previous);
-            Assert.Null(row.DeltaContent);
+            Assert.Null(row.DeltaBody);
         });
 
-        string generated = GeneratedSource(run, "DurableBinaryBodies.g.cs");
-        Assert.Contains("CapturedStatePreparation<V1> Preparation = new(V1.Schema, PrepareBase, PrepareDelta);", generated);
+        string generated = GeneratedSource(run, "DurableStates.g.cs");
+        Assert.Contains("CapturedStatePreparation<V1> Preparation = new(V1.Schema, PrepareBaseBody, PrepareDeltaBody);", generated);
         Assert.Contains(".Schema, CaptureDelegate, Preparation);", generated);
         foreach (string forbidden in new[] { "ValueSlotCodec", "PrimitiveSlotCodecs", "DynamicInvoke", "System.Reflection", "Dictionary<" }) {
             Assert.DoesNotContain(forbidden, generated);
         }
-        Type baseBody = assembly.GetType("FusedDelta.Base")!.GetNestedType("__DurableBinaryBody", BindingFlags.NonPublic)!;
+        Type baseBody = assembly.GetType("FusedDelta.Base")!.GetNestedType("__DurableState", BindingFlags.NonPublic)!;
         Assert.True(baseBody.GetField("Preparation", BindingFlags.NonPublic | BindingFlags.Static)!.IsInitOnly);
-        Type leafBody = assembly.GetType("FusedDelta.Leaf")!.GetNestedType("__DurableBinaryBody", BindingFlags.NonPublic)!;
+        Type leafBody = assembly.GetType("FusedDelta.Leaf")!.GetNestedType("__DurableState", BindingFlags.NonPublic)!;
         FieldInfo binding = leafBody.GetField("Preparation", BindingFlags.NonPublic | BindingFlags.Static)!;
         Assert.True(binding.IsPrivate && binding.IsInitOnly);
         Assert.Same(binding.GetValue(null), binding.GetValue(null));
@@ -139,20 +139,20 @@ public sealed partial class DurableSchemaGeneratorTests {
                     var session = new CaptureSession();
                     var item = new Item();
                     using var first = session.BeginCapture();
-                    Item.__DurableBinaryBody.AddRoot(first, item);
+                    Item.__DurableState.AddRoot(first, item);
                     var graph = first.Seal();
                     var initial = session.Prepare(graph);
                     session.Accept(graph);
                     item.Change();
                     using var second = session.BeginCapture();
-                    Item.__DurableBinaryBody.AddRoot(second, item);
+                    Item.__DurableState.AddRoot(second, item);
                     return new[] { initial, session.Prepare(second.Seal()) };
                 }
                 public static byte[] Historical() {
                     var reader = new BinaryPayloadReader(new byte[] { 0x21 });
-                    var state = Item.__DurableBinaryBody.ReadV1(ref reader);
+                    var state = Item.__DurableState.ReadBaseBodyV1(ref reader);
                     reader.EnsureFullyConsumed();
-                    return Item.__DurableBinaryBody.PrepareBase(in state).Payload.ToArray();
+                    return Item.__DurableState.PrepareBaseBody(in state).Body.ToArray();
                 }
             }
             """, files.ReadAdditionalTexts());
@@ -160,18 +160,18 @@ public sealed partial class DurableSchemaGeneratorTests {
         Assembly assembly = EmitAndLoad(current.OutputCompilation);
         Type host = assembly.GetType("PreparationHistory.Host")!;
         var results = host.GetMethod("Run")!.CreateDelegate<Func<PreparedCapturedGraph[]>>()();
-        Assert.Equal<byte>([0x21, 0x63], Assert.Single(results[0].Objects).BaseContent.Payload.ToArray());
+        Assert.Equal<byte>([0x21, 0x63], Assert.Single(results[0].Objects).BaseBody.Body.ToArray());
         var updated = Assert.Single(results[1].Objects);
-        Assert.Equal<byte>([0x21, 0x64], updated.BaseContent.Payload.ToArray());
-        Assert.Equal<byte>([0x02, 0x64], updated.DeltaContent!.Payload.ToArray());
+        Assert.Equal<byte>([0x21, 0x64], updated.BaseBody.Body.ToArray());
+        Assert.Equal<byte>([0x02, 0x64], updated.DeltaBody!.Body.ToArray());
         Assert.Equal<byte>([0x21], host.GetMethod("Historical")!.CreateDelegate<Func<byte[]>>()());
-        Type body = assembly.GetType("PreparationHistory.Item")!.GetNestedType("__DurableBinaryBody", BindingFlags.NonPublic)!;
+        Type body = assembly.GetType("PreparationHistory.Item")!.GetNestedType("__DurableState", BindingFlags.NonPublic)!;
         FieldInfo binding = Assert.Single(body.GetFields(BindingFlags.Static | BindingFlags.NonPublic),
             field => field.Name == "Preparation");
         Assert.Equal(body.GetNestedType("V2", BindingFlags.NonPublic), Assert.Single(binding.FieldType.GenericTypeArguments));
         Assert.Single(body.GetNestedType("V1", BindingFlags.NonPublic)!.GetFields(BindingFlags.Instance | BindingFlags.NonPublic));
         Assert.Equal(2, body.GetNestedType("V2", BindingFlags.NonPublic)!.GetFields(BindingFlags.Instance | BindingFlags.NonPublic).Length);
-        Assert.Equal(2, body.GetMethods(BindingFlags.Static | BindingFlags.NonPublic).Count(method => method.Name == "PrepareBase"));
-        Assert.Equal(2, body.GetMethods(BindingFlags.Static | BindingFlags.NonPublic).Count(method => method.Name == "PrepareDelta"));
+        Assert.Equal(2, body.GetMethods(BindingFlags.Static | BindingFlags.NonPublic).Count(method => method.Name == "PrepareBaseBody"));
+        Assert.Equal(2, body.GetMethods(BindingFlags.Static | BindingFlags.NonPublic).Count(method => method.Name == "PrepareDeltaBody"));
     }
 }

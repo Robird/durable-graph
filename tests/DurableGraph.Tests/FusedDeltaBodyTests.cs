@@ -10,7 +10,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         GeneratorTestRun run = RunGenerator(FusedDeltaSource(types));
         AssertSchemaOnlyCompiles(run);
         Type host = EmitAndLoad(run.OutputCompilation).GetType("FusedDelta.Host")!;
-        var prepare = host.GetMethod("Prepare1")!.CreateDelegate<Func<byte[], byte[], PreparedDelta>>();
+        var prepare = host.GetMethod("Prepare1")!.CreateDelegate<Func<byte[], byte[], PreparedDeltaBody>>();
         var apply = host.GetMethod("Apply1")!.CreateDelegate<Func<byte[], byte[], byte[]>>();
 
         // Independent canonical scalar fragments, including surrogate char, signed bounds,
@@ -19,47 +19,47 @@ public sealed partial class DurableSchemaGeneratorTests {
         string[] high = ["01", "FF", "80", "FFFF03", "FFFF03", "FFFFFFFF0F", "FFFFFFFF0F", "FFFFFFFFFFFFFFFFFF01", "FFFFFFFFFFFFFFFFFF01", "80B003", "357E", "4523C17F", "BC9A78563412F87F", "8001"];
         byte[] prior = Convert.FromHexString(string.Concat(low));
         byte[] priorCopy = prior.ToArray();
-        PreparedDelta unchanged = prepare(prior, prior);
+        PreparedDeltaBody unchanged = prepare(prior, prior);
         Assert.False(unchanged.HasChanges);
-        Assert.Equal<byte>([0, 0], unchanged.Payload.ToArray());
-        Assert.Equal(prior, apply(prior, unchanged.Payload.ToArray()));
+        Assert.Equal<byte>([0, 0], unchanged.Body.ToArray());
+        Assert.Equal(prior, apply(prior, unchanged.Body.ToArray()));
 
         for (int slot = 0; slot < types.Length; slot++) {
             string[] changed = low.ToArray();
             changed[slot] = high[slot];
             byte[] current = Convert.FromHexString(string.Concat(changed));
-            PreparedDelta delta = prepare(prior, current);
+            PreparedDeltaBody delta = prepare(prior, current);
             byte[] mask = [0, 0];
             mask[slot / 8] = (byte)(1 << (slot % 8));
             byte[] expected = mask.Concat(Convert.FromHexString(high[slot])).ToArray();
             Assert.True(delta.HasChanges);
-            Assert.Equal(expected, delta.Payload.ToArray());
-            Assert.Equal(current, apply(prior, delta.Payload.ToArray()));
-            Assert.True(delta.Payload.Length < current.Length);
-            Assert.Equal(expected, prepare(prior, current).Payload.ToArray());
+            Assert.Equal(expected, delta.Body.ToArray());
+            Assert.Equal(current, apply(prior, delta.Body.ToArray()));
+            Assert.True(delta.Body.Length < current.Length);
+            Assert.Equal(expected, prepare(prior, current).Body.ToArray());
 
-            // The actual PreparedDelta crosses the generated assembly boundary. Its bytes remain
+            // The actual PreparedDeltaBody crosses the generated assembly boundary. Its bytes remain
             // usable after later Prepare calls and mutation of inputs and separately obtained copies.
             byte[] savedCurrent = current.ToArray();
             Array.Clear(current);
-            byte[] externalCopy = delta.Payload.ToArray();
+            byte[] externalCopy = delta.Body.ToArray();
             Array.Clear(externalCopy);
             _ = prepare(prior, prior);
-            Assert.Equal(expected, delta.Payload.ToArray());
-            Assert.Equal(savedCurrent, apply(prior, delta.Payload.ToArray()));
-            Assert.Equal(savedCurrent, apply(prior, delta.Payload.ToArray()));
+            Assert.Equal(expected, delta.Body.ToArray());
+            Assert.Equal(savedCurrent, apply(prior, delta.Body.ToArray()));
+            Assert.Equal(savedCurrent, apply(prior, delta.Body.ToArray()));
         }
 
         byte[] all = Convert.FromHexString(string.Concat(high));
-        PreparedDelta allDelta = prepare(prior, all);
+        PreparedDeltaBody allDelta = prepare(prior, all);
         Assert.True(allDelta.HasChanges);
-        Assert.Equal(new byte[] { 0xFF, 0x3F }.Concat(all).ToArray(), allDelta.Payload.ToArray());
-        Assert.True(allDelta.Payload.Length > all.Length);
-        Assert.Equal(all, apply(prior, allDelta.Payload.ToArray()));
+        Assert.Equal(new byte[] { 0xFF, 0x3F }.Concat(all).ToArray(), allDelta.Body.ToArray());
+        Assert.True(allDelta.Body.Length > all.Length);
+        Assert.Equal(all, apply(prior, allDelta.Body.ToArray()));
         Assert.False(prepare(all, all).HasChanges); // Equal NaNs must not become updates.
         Assert.Equal(priorCopy, prior);
 
-        string generated = GeneratedSource(run, "DurableBinaryBodies.g.cs");
+        string generated = GeneratedSource(run, "DurableStates.g.cs");
         AssertGeneratedBodiesRemainStaticallyBound(generated);
         foreach (string forbidden in new[] { "StateEquals(", "WriteDelta(", "EstimateDelta(", "ValueSlotCodec", "PrimitiveSlotCodecs", "System.Reflection" }) {
             Assert.DoesNotContain(forbidden, generated);
@@ -75,18 +75,18 @@ public sealed partial class DurableSchemaGeneratorTests {
         GeneratorTestRun run = RunGenerator(FusedDeltaSource(Enumerable.Repeat("bool", slots).ToArray()));
         AssertSchemaOnlyCompiles(run);
         Type host = EmitAndLoad(run.OutputCompilation).GetType("FusedDelta.Host")!;
-        var prepare = host.GetMethod("Prepare1")!.CreateDelegate<Func<byte[], byte[], PreparedDelta>>();
+        var prepare = host.GetMethod("Prepare1")!.CreateDelegate<Func<byte[], byte[], PreparedDeltaBody>>();
         var apply = host.GetMethod("Apply1")!.CreateDelegate<Func<byte[], byte[], byte[]>>();
         byte[] prior = Convert.FromHexString(priorHex);
         byte[] current = Convert.FromHexString(currentHex);
-        PreparedDelta delta = prepare(prior, current);
+        PreparedDeltaBody delta = prepare(prior, current);
         Assert.Equal(changed, delta.HasChanges);
-        Assert.Equal(Convert.FromHexString(deltaHex), delta.Payload.ToArray());
-        Assert.Equal(current, apply(prior, delta.Payload.ToArray()));
-        PreparedDelta equal = prepare(current, current);
+        Assert.Equal(Convert.FromHexString(deltaHex), delta.Body.ToArray());
+        Assert.Equal(current, apply(prior, delta.Body.ToArray()));
+        PreparedDeltaBody equal = prepare(current, current);
         Assert.False(equal.HasChanges);
-        Assert.Equal(new byte[(slots + 7) / 8], equal.Payload.ToArray());
-        Assert.Equal(current, apply(current, equal.Payload.ToArray()));
+        Assert.Equal(new byte[(slots + 7) / 8], equal.Body.ToArray());
+        Assert.Equal(current, apply(current, equal.Body.ToArray()));
     }
 
     [Fact]
@@ -94,7 +94,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         GeneratorTestRun run = RunGenerator(FusedDeltaSource(["System.Half", "float", "double"]));
         AssertSchemaOnlyCompiles(run);
         Type host = EmitAndLoad(run.OutputCompilation).GetType("FusedDelta.Host")!;
-        var prepare = host.GetMethod("Prepare1")!.CreateDelegate<Func<byte[], byte[], PreparedDelta>>();
+        var prepare = host.GetMethod("Prepare1")!.CreateDelegate<Func<byte[], byte[], PreparedDeltaBody>>();
         var apply = host.GetMethod("Apply1")!.CreateDelegate<Func<byte[], byte[], byte[]>>();
         byte[][] states = new[] {
             "0000000000000000000000000000", // +0, +0, +0
@@ -105,10 +105,10 @@ public sealed partial class DurableSchemaGeneratorTests {
         foreach (byte[] prior in states) {
             Assert.Throws<InvalidDataException>(() => apply(prior, new byte[] { 7 }.Concat(prior).ToArray()));
             foreach (byte[] current in states) {
-                PreparedDelta delta = prepare(prior, current);
+                PreparedDeltaBody delta = prepare(prior, current);
                 Assert.Equal(!prior.SequenceEqual(current), delta.HasChanges);
-                Assert.Equal(current, apply(prior, delta.Payload.ToArray()));
-                Assert.Equal(prior.SequenceEqual(current) ? (byte)0 : (byte)7, delta.Payload[0]);
+                Assert.Equal(current, apply(prior, delta.Body.ToArray()));
+                Assert.Equal(prior.SequenceEqual(current) ? (byte)0 : (byte)7, delta.Body[0]);
             }
         }
     }
@@ -118,12 +118,12 @@ public sealed partial class DurableSchemaGeneratorTests {
         GeneratorTestRun run = RunGenerator(FusedDeltaSource(["bool", "uint", "int"]));
         AssertSchemaOnlyCompiles(run);
         Type host = EmitAndLoad(run.OutputCompilation).GetType("FusedDelta.Host")!;
-        var prepare = host.GetMethod("Prepare1")!.CreateDelegate<Func<byte[], byte[], PreparedDelta>>();
+        var prepare = host.GetMethod("Prepare1")!.CreateDelegate<Func<byte[], byte[], PreparedDeltaBody>>();
         var apply = host.GetMethod("Apply1")!.CreateDelegate<Func<byte[], byte[], byte[]>>();
         byte[] prior = [0, 0, 0];
         byte[] current = [1, 0x80, 1, 2];
         byte[] valid = [7, 1, 0x80, 1, 2];
-        Assert.Equal(valid, prepare(prior, current).Payload.ToArray());
+        Assert.Equal(valid, prepare(prior, current).Body.ToArray());
         for (int length = 0; length < valid.Length; length++) {
             Assert.Throws<EndOfStreamException>(() => apply(prior, valid[..length]));
         }
@@ -156,13 +156,13 @@ public sealed partial class DurableSchemaGeneratorTests {
         (types.SequenceEqual(new[] { "bool", "uint", "int" }) ? """
             public static bool LateFailureKeepsDto() {
                 var reader = new BinaryPayloadReader(new byte[] { 0, 0, 0 });
-                var prior = Item.__DurableBinaryBody.ReadV1(ref reader);
+                var prior = Item.__DurableState.ReadBaseBodyV1(ref reader);
                 var bad = new BinaryPayloadReader(new byte[] { 7, 1, 128, 1, 0 });
-                try { Item.__DurableBinaryBody.ApplyDeltaV1(ref bad, in prior); return false; }
+                try { Item.__DurableState.ApplyDeltaBodyV1(ref bad, in prior); return false; }
                 catch (System.IO.InvalidDataException) { }
                 var buffer = new ArrayBufferWriter<byte>();
                 var writer = new BinaryPayloadWriter(buffer);
-                Item.__DurableBinaryBody.Write(ref writer, in prior);
+                Item.__DurableState.WriteBaseBody(ref writer, in prior);
                 return buffer.WrittenSpan.SequenceEqual(new byte[] { 0, 0, 0 });
             }
             """ : "") + "\n}";
@@ -177,25 +177,25 @@ public sealed partial class DurableSchemaGeneratorTests {
         """;
 
     private static string FusedDeltaHostMethods(string type, int version) => $$"""
-        public static PreparedDelta Prepare{{version}}(byte[] oldBytes, byte[] newBytes) {
+        public static PreparedDeltaBody Prepare{{version}}(byte[] oldBytes, byte[] newBytes) {
             var oldReader = new BinaryPayloadReader(oldBytes);
-            var prior = {{type}}.__DurableBinaryBody.ReadV{{version}}(ref oldReader);
+            var prior = {{type}}.__DurableState.ReadBaseBodyV{{version}}(ref oldReader);
             oldReader.EnsureFullyConsumed();
             var newReader = new BinaryPayloadReader(newBytes);
-            var current = {{type}}.__DurableBinaryBody.ReadV{{version}}(ref newReader);
+            var current = {{type}}.__DurableState.ReadBaseBodyV{{version}}(ref newReader);
             newReader.EnsureFullyConsumed();
-            return {{type}}.__DurableBinaryBody.PrepareDelta(in prior, in current);
+            return {{type}}.__DurableState.PrepareDeltaBody(in prior, in current);
         }
         public static byte[] Apply{{version}}(byte[] oldBytes, byte[] delta) {
             var oldReader = new BinaryPayloadReader(oldBytes);
-            var prior = {{type}}.__DurableBinaryBody.ReadV{{version}}(ref oldReader);
+            var prior = {{type}}.__DurableState.ReadBaseBodyV{{version}}(ref oldReader);
             oldReader.EnsureFullyConsumed();
             var deltaReader = new BinaryPayloadReader(delta);
-            var restored = {{type}}.__DurableBinaryBody.ApplyDeltaV{{version}}(ref deltaReader, in prior);
+            var restored = {{type}}.__DurableState.ApplyDeltaBodyV{{version}}(ref deltaReader, in prior);
             deltaReader.EnsureFullyConsumed();
             var buffer = new ArrayBufferWriter<byte>();
             var writer = new BinaryPayloadWriter(buffer);
-            {{type}}.__DurableBinaryBody.Write(ref writer, in restored);
+            {{type}}.__DurableState.WriteBaseBody(ref writer, in restored);
             return buffer.WrittenSpan.ToArray();
         }
 

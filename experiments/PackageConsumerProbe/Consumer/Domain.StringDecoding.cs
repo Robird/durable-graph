@@ -11,8 +11,8 @@ internal static class StringDecodingExercise {
     private sealed record BodyBundle(uint[] Roots, BodyRecord[] Records);
     private sealed record Loaded(
         uint[] Roots,
-        Dictionary<uint, CaptureHero.__DurableBinaryBody.V1> Heroes,
-        Dictionary<uint, CaptureItem.__DurableBinaryBody.V1> Items,
+        Dictionary<uint, CaptureHero.__DurableState.V1> Heroes,
+        Dictionary<uint, CaptureItem.__DurableState.V1> Items,
         StringReadTable Strings);
 
     internal static void Run() {
@@ -56,10 +56,10 @@ internal static class StringDecodingExercise {
         CaptureItem item = new(shared, distinct);
         CaptureSession session = new();
         using CaptureContext capture = session.BeginCapture();
-        CaptureHero.__DurableBinaryBody.AddRoot(capture, hero);
-        CaptureItem.__DurableBinaryBody.AddRoot(capture, item);
-        CaptureHero.__DurableBinaryBody.AddRoot(capture, hero);
-        CaptureHero.__DurableBinaryBody.AddRoot(capture, null);
+        CaptureHero.__DurableState.AddRoot(capture, hero);
+        CaptureItem.__DurableState.AddRoot(capture, item);
+        CaptureHero.__DurableState.AddRoot(capture, hero);
+        CaptureHero.__DurableState.AddRoot(capture, null);
         CapturedGraph candidate = capture.Seal();
         hero.ChangeAlias("changed after Seal, before encoding");
         return Encode(candidate);
@@ -67,21 +67,21 @@ internal static class StringDecodingExercise {
 
     private static BodyBundle Encode(CapturedGraph candidate) {
         List<BodyRecord> records = [];
-        foreach (CapturedObject entry in candidate.Objects) {
+        foreach (ObjectStateRecord entry in candidate.Objects) {
             ArrayBufferWriter<byte> buffer = new();
             BinaryPayloadWriter writer = new(buffer);
             BodyKind kind;
-            if (entry.Kind == CapturedObjectKind.String) {
+            if (entry.Kind == ObjectStateKind.String) {
                 kind = BodyKind.String;
                 writer.WriteString(entry.StringContent);
             } else if (CaptureHero.Schema.Equals(entry.Schema)) {
                 kind = BodyKind.Hero;
-                var state = entry.GetState<CaptureHero.__DurableBinaryBody.V1>();
-                CaptureHero.__DurableBinaryBody.Write(ref writer, in state);
+                var state = entry.GetState<CaptureHero.__DurableState.V1>();
+                CaptureHero.__DurableState.WriteBaseBody(ref writer, in state);
             } else if (CaptureItem.Schema.Equals(entry.Schema)) {
                 kind = BodyKind.Item;
-                var state = entry.GetState<CaptureItem.__DurableBinaryBody.V1>();
-                CaptureItem.__DurableBinaryBody.Write(ref writer, in state);
+                var state = entry.GetState<CaptureItem.__DurableState.V1>();
+                CaptureItem.__DurableState.WriteBaseBody(ref writer, in state);
             } else {
                 throw new InvalidOperationException("Unexpected fixture schema.");
             }
@@ -101,13 +101,13 @@ internal static class StringDecodingExercise {
         BodyBundle bytes;
         CaptureSession session = new();
         using (CaptureContext capture = session.BeginCapture()) {
-            CaptureHero.__DurableBinaryBody.AddRoot(capture, new CaptureHero(firstEmpty));
-            CaptureItem.__DurableBinaryBody.AddRoot(capture, new CaptureItem(firstEmpty, secondEmpty));
+            CaptureHero.__DurableState.AddRoot(capture, new CaptureHero(firstEmpty));
+            CaptureItem.__DurableState.AddRoot(capture, new CaptureItem(firstEmpty, secondEmpty));
             CapturedGraph candidate = capture.Seal();
             var hero = candidate.Objects.Single(record => record.Id == 1)
-                .GetState<CaptureHero.__DurableBinaryBody.V1>();
+                .GetState<CaptureHero.__DurableState.V1>();
             var item = candidate.Objects.Single(record => record.Id == 2)
-                .GetState<CaptureItem.__DurableBinaryBody.V1>();
+                .GetState<CaptureItem.__DurableState.V1>();
             uint emptyId = hero.Segment0Field1;
             Require(emptyId != 0 && hero.Segment1Field1 == emptyId && item.Segment0Field1 == emptyId &&
                 item.Segment0Field2 == emptyId && item.Segment0Field5 == emptyId,
@@ -147,8 +147,8 @@ internal static class StringDecodingExercise {
                 throw new InvalidDataException("Object IDs must be nonzero and unique across every kind.");
             }
             bool exactSchema = record.Kind switch {
-                BodyKind.Hero => CaptureHero.__DurableBinaryBody.V1.Schema.Equals(record.Schema),
-                BodyKind.Item => CaptureItem.__DurableBinaryBody.V1.Schema.Equals(record.Schema),
+                BodyKind.Hero => CaptureHero.__DurableState.V1.Schema.Equals(record.Schema),
+                BodyKind.Item => CaptureItem.__DurableState.V1.Schema.Equals(record.Schema),
                 BodyKind.String => record.Schema is null,
                 _ => false,
             };
@@ -162,19 +162,19 @@ internal static class StringDecodingExercise {
         StringReadTable strings = StringReadTable.Decode(bundle.Records
             .Where(record => record.Kind == BodyKind.String)
             .Select(record => (record.Id, (ReadOnlyMemory<byte>)record.Body)));
-        Dictionary<uint, CaptureHero.__DurableBinaryBody.V1> heroes = [];
-        Dictionary<uint, CaptureItem.__DurableBinaryBody.V1> items = [];
+        Dictionary<uint, CaptureHero.__DurableState.V1> heroes = [];
+        Dictionary<uint, CaptureItem.__DurableState.V1> items = [];
         foreach (BodyRecord record in bundle.Records) {
             BinaryPayloadReader reader = new(record.Body);
             if (record.Kind == BodyKind.Hero) {
-                var state = CaptureHero.__DurableBinaryBody.ReadV1(ref reader);
+                var state = CaptureHero.__DurableState.ReadBaseBodyV1(ref reader);
                 reader.EnsureFullyConsumed();
-                CaptureHero.__DurableBinaryBody.ValidateStringReferences(in state, strings);
+                CaptureHero.__DurableState.ValidateStringReferences(in state, strings);
                 heroes.Add(record.Id, state);
             } else if (record.Kind == BodyKind.Item) {
-                var state = CaptureItem.__DurableBinaryBody.ReadV1(ref reader);
+                var state = CaptureItem.__DurableState.ReadBaseBodyV1(ref reader);
                 reader.EnsureFullyConsumed();
-                CaptureItem.__DurableBinaryBody.ValidateStringReferences(in state, strings);
+                CaptureItem.__DurableState.ValidateStringReferences(in state, strings);
                 items.Add(record.Id, state);
             }
         }

@@ -9,46 +9,46 @@ namespace Atelia.DurableGraph.StateStore;
 /// Remaining bytes are the raw body; this codec neither validates that body nor registers Schema.
 /// Delta bodies have no header and inherit the Base's exact interpretation.
 /// </remarks>
-public static class BaseObjectPayloadCodec {
-    public static PreparedBase EncodeString(PreparedBase raw) {
-        ArgumentNullException.ThrowIfNull(raw);
-        return Encode(raw, null);
+internal static class BaseObjectBodyCodec {
+    internal static EncodedBaseObjectBody EncodeString(PreparedBaseBody rawBody) {
+        ArgumentNullException.ThrowIfNull(rawBody);
+        return Encode(rawBody, null);
     }
 
     /// <summary>Wraps a raw body. The caller must register its Schema before saving the object.</summary>
-    public static PreparedBase EncodeDurable(DurableSchema schema, PreparedBase raw) {
+    internal static EncodedBaseObjectBody EncodeDurable(DurableSchema schema, PreparedBaseBody rawBody) {
         ArgumentNullException.ThrowIfNull(schema);
-        ArgumentNullException.ThrowIfNull(raw);
-        return Encode(raw, new SchemaKey(schema.SchemaId, schema.Version));
+        ArgumentNullException.ThrowIfNull(rawBody);
+        return Encode(rawBody, new SchemaKey(schema.SchemaId, schema.Version));
     }
 
-    public static BaseObjectPayload Decode(ReadOnlySpan<byte> payload) {
-        BinaryPayloadReader reader = new(payload);
+    internal static DecodedBaseObjectBody Decode(ReadOnlySpan<byte> encodedBody) {
+        BinaryPayloadReader reader = new(encodedBody);
         byte version = reader.ReadByte();
         if (version != 1) {
             throw new InvalidDataException($"Unsupported Base type header version {version}.");
         }
 
         byte tag = reader.ReadByte();
-        CapturedObjectKind kind;
+        ObjectStateKind kind;
         SchemaKey? key;
         switch (tag) {
             case 1:
-                kind = CapturedObjectKind.String;
+                kind = ObjectStateKind.String;
                 key = null;
                 break;
             case 2:
-                kind = CapturedObjectKind.Durable;
+                kind = ObjectStateKind.Durable;
                 key = SchemaKeyWireCodec.Read(ref reader);
                 break;
             default:
                 throw new InvalidDataException($"Unsupported Base type tag {tag}.");
         }
 
-        return new(kind, key, payload[reader.ConsumedCount..]);
+        return new(kind, key, encodedBody[reader.ConsumedCount..]);
     }
 
-    private static PreparedBase Encode(PreparedBase raw, SchemaKey? key) {
+    private static EncodedBaseObjectBody Encode(PreparedBaseBody rawBody, SchemaKey? key) {
         ArrayBufferWriter<byte> buffer = new();
         BinaryPayloadWriter writer = new(buffer);
         writer.WriteByte(1);
@@ -56,7 +56,7 @@ public static class BaseObjectPayloadCodec {
         if (key is SchemaKey exact) {
             SchemaKeyWireCodec.Write(ref writer, exact);
         }
-        buffer.Write(raw.Payload);
+        buffer.Write(rawBody.Body);
         // TODO: After MVP, avoid the intermediate buffer/copy when wrapping prepared content.
         return new(buffer.WrittenSpan);
     }

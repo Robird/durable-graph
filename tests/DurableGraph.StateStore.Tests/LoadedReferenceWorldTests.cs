@@ -97,7 +97,7 @@ public sealed class LoadedReferenceWorldTests : IDisposable {
         _schemas.RegisterBatch([worldSchema, otherSchema]);
         FrameAddress source = _store.Append(StateRevision.CreateBase(null,
             [Durable(1, worldSchema, new(reference, 1)),
-             ObjectVersionRecord.CreateBase(2, BaseObjectPayloadCodec.EncodeString(StringPayloadCodec.PrepareBase("text")).Payload),
+             ObjectVersionRecord.CreateBase(2, BaseObjectBodyCodec.EncodeString(StringPayloadCodec.PrepareBase("text")).Body),
              Durable(3, otherSchema, new(0, 3))], []));
         int allocated = 0;
         StateModelRegistry models = Registry(Model<World>(worldSchema, () => { allocated++; return new World(); }),
@@ -257,7 +257,7 @@ public sealed class LoadedReferenceWorldTests : IDisposable {
         Func<State, State>? upgrade = null, Action? onHydrate = null, Action<T>? onCapture = null) where T : Domain {
         CapturedStatePreparation<State> preparation = new(current,
             static (in State state) => Base(state),
-            static (in State prior, in State next) => new(prior != next, Base(next).Payload));
+            static (in State prior, in State next) => new(prior != next, Base(next).Body));
         static void Visit(DurableSchema schema, in State state, IStateReferenceVisitor visitor) =>
             visitor.VisitDurable(state.NextId, schema.Fields[0].TargetSchemaId!);
         StateReaderBinding Reader(DurableSchema schema) => new StateReaderBinding<State>(schema,
@@ -290,8 +290,8 @@ public sealed class LoadedReferenceWorldTests : IDisposable {
         return _store.Append(StateRevision.CreateBase(null, rows.Select(static row => Durable(row.Id, row.Schema, row.State)), []));
     }
     private static ObjectVersionRecord Durable(uint id, DurableSchema schema, State state) =>
-        ObjectVersionRecord.CreateBase(id, BaseObjectPayloadCodec.EncodeDurable(schema, Base(state)).Payload);
-    private static PreparedBase Base(State state) {
+        ObjectVersionRecord.CreateBase(id, BaseObjectBodyCodec.EncodeDurable(schema, Base(state)).Body);
+    private static PreparedBaseBody Base(State state) {
         ArrayBufferWriter<byte> bytes = new();
         BinaryPayloadWriter writer = new(bytes);
         writer.WriteUInt32(state.NextId);
