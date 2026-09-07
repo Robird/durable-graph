@@ -18,7 +18,11 @@
 
 ## 当前规划
 
-DB-033 已验收，当前无待执行的批次；下一分片从路线图选择。完成范围见下表与 DB-033 账本。
+DB-033 已验收。下一轮推荐如下，尚未实施：
+
+| 文档 | 状态 | 推荐范围 |
+|---|---|---|
+| [DB-034 领域引用图与首次保存](0034-durable-reference-graph-batch.md) | Proposed | nominal Schema/history、非泛型 class 共享/循环、队列 Capture、两阶段 Restore、PrepareNew 与独立增量续写；不含 Commit/发布 |
 
 ## 按任务查阅的混合决策
 

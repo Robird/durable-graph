@@ -14,11 +14,15 @@
 
 ## 当前焦点
 
-[DB-033](../docs/design-branches/0033-upgrade-restore-resave-batch.md) G0–G6 已完成，当前无正在施工的分片。
-根 build、完整回归、两个包消费者及独立审查通过，证据集中在分片账本。当前范围是 13 标量/string、非泛型同编译 class 链：
-历史 exact DTO → 单对象升级 → 无构造器/readonly Restore → fixed-Parent Prepare → 宿主 Append 后重新 Load。
-不含一般对象互引、持久根或 Commit/Ref 发布；单 WorldId 仍由宿主显式提供。
-后续选片从[路线图](../docs/DurableGraph-research-roadmap.md)出发，不自动进入下一批。
+[DB-033](../docs/design-branches/0033-upgrade-restore-resave-batch.md) 已在 `cab7b5c` 完成；
+根 build、完整回归、两个包消费者与独立审查的证据集中在其账本，本轮文档规划未重跑产品验证。
+当前能从显式 Revision/WorldId 恢复标量/string World，并冻结后继计划；还不是一般领域引用图。
+公共首次保存入口尚无：当前包/测试的旧 Revision 初始化仍由低层显式组装。
+
+下一轮推荐 [DB-034 引用图与首次保存计划](../docs/design-branches/0034-durable-reference-graph-batch.md)（Proposed）：
+nominal 引用 Schema、队列 Capture、两阶段可达图 Restore、最小 PrepareNew 与对象级增量续写。
+本轮仅修订状态和计划，没有启动实施。Schema/history、图闭包与首次入口的范围/验收只维护在该计划；
+持久 World 根、Commit/Ref 和其他类型扩展继续按[路线图](../docs/DurableGraph-research-roadmap.md)独立排期。
 未来联合 Commit/Ref 及内建类型自举的 SchemaStore 复用路线见
 [路线图](../docs/DurableGraph-research-roadmap.md#41-schemastore-复用-statestore-与联合版本视图)。
 
@@ -28,7 +32,7 @@
 |---|---|---|
 | [DurableGraph](DurableGraph/DurableGraph.csproj) | immutable Schema、exact BaseSchema、内存 SchemaStore；Capture/string 身份、StringReadTable；统一 Prepare；typed 整链读取、稳定模型 binding 与身份导入 | 无工作会话 Commit 或一般领域引用图恢复 |
 | [Generator](DurableGraph.Generator/DurableGraph.Generator.csproj) / [Build](DurableGraph.Build/DurableGraph.Build.csproj) | SchemaOnly 祖先/history；各版 readonly DTO、current Capture/AddRoot、PrepareBase/融合 Delta、静态 body/string 校验、历史 reader/model 登记、相邻 DTO Upgrade、Allocate/readonly Hydrate；包内 history 发布/验证 | 一般引用/复合类型尚无生成；legacy boxed Snapshot/Upgrade 路径独立保留 |
-| [StateStore](DurableGraph.StateStore/DurableGraph.StateStore.csproj) | 持久 Schema 批注册/严格重开；Base 类型引用；局部 reader 目录与完整 Revision 自动冷读、引用验证；受控 LoadedWorld/完整归一化与 fixed-Parent Prepare，升级强制 Base；原 prepared 图接缝保留 | 无持久 roots、原地 Accept/Commit 或发布 |
+| [StateStore](DurableGraph.StateStore/DurableGraph.StateStore.csproj) | 持久 Schema 批注册/严格重开；Base 类型引用；局部 reader 目录与完整 Revision 自动冷读、引用验证；受控 LoadedWorld/完整归一化与 fixed-Parent Prepare，升级强制 Base；原 prepared 图接缝保留 | 无公共首次 Prepare、持久 roots、原地 Accept/Commit 或发布 |
 | [Storage](DurableGraph.StateStore.Storage/DurableGraph.StateStore.Storage.csproj) | local Base/Delta records、wire v3、exact Revision live map、Parent/prior 校验、object-first 原始重建链及实际 payload H；v3 Base 精确/Delta 上界计量；真实 Segment/RBF 冷重开 | 不解码 typed body；不拥有持久 roots、类型目录或发布 head；重复读取暂未缓存 |
 | [Serialization](DurableGraph.StateStore.Serialization/DurableGraph.StateStore.Serialization.csproj) | 字节原语、string 内容 codec、拥有自有 bytes 的 PreparedBase/PreparedDelta、预制 string PrepareBase、显式 body 的 typed slot、SZ/rank-2 元素 ref 循环 | 无数组对象 envelope、一般 struct 生成器或通用泛型 codec |
 
@@ -56,6 +60,7 @@
   按相邻版本转换完整 leaf DTO，不重复升级祖先。已声明边逐一强类型检查；缺边仅阻止需要该边的 current Load。
   LoadedWorld.Load 先完整 exact 解码、再升级全部 source 行并校验引用，最后分配/填充所选 exact World。
   内部仅保留 current DTO 比较基线及 source Schema/完整 membership，升级仍 live 必须 Base。
+  当前只物化所选 World；不可达 source 仍须归一化，但不要求其 current 类型可以 Allocate。
 - LoadedWorld.Prepare 固定 Parent/WorldId，返回 owned StateRevision，成功或失败均释放临时 Capture，
   不推进基线。宿主 Append 后重新 Load；Schema 注册可持久生效，不代表发布。
   Empty 反向映射选择最小 source ID，但基线槽保留旧 ID，首次 Capture 形成真实 Delta/Remove。
