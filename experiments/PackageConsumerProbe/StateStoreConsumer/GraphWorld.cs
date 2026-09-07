@@ -107,6 +107,61 @@ public sealed partial class GraphWorld : DurableBase {
             AssertGraph(LoadedWorld.Load<GraphWorld>(store, schemas, initialRevision, worldId, models).World, 7, constructed);
             AssertGraph(LoadedWorld.Load<GraphWorld>(store, schemas, childRevision, worldId, models).World, 8, constructed);
         }
+
+        ExerciseSession(Path.Combine(directory, "repository"), models);
+        Console.WriteLine("GraphSessionContinuousCommit:True");
+    }
+
+    private static void ExerciseSession(string directory, StateModelRegistry models) {
+        ReadAmplificationBaseBudgetParameters policy = new(int.MaxValue, 1);
+        GraphCharacter character = new(new string('G', 1), 20);
+        GraphItem item = character.Item;
+        GraphWorld world = new(character);
+        int constructed = GraphConstruction.Count;
+        FrameAddress last;
+
+        using (GraphRepository repository = GraphRepository.CreateNew(directory))
+        using (GraphSession<GraphWorld> session = repository.Create(world, models)) {
+            Require(ReferenceEquals(session.World, world) && session.ParentRevisionAddress is null,
+                "Create must retain the supplied World without a preexisting published Parent.");
+            last = session.Commit(policy);
+            for (int score = 21; score <= 22; score++) {
+                character.Score = score; // Held by the application, without fetching another object graph.
+                FrameAddress previous = last;
+                last = session.Commit(policy);
+                Require(last != previous && session.ParentRevisionAddress == last && repository.HeadRevisionAddress == last,
+                    "Each successful Commit must advance the session and repository together.");
+                Require(ReferenceEquals(session.World, world) && ReferenceEquals(world._primary, character) &&
+                    ReferenceEquals(world._alias, character) && ReferenceEquals(character.Item, item) &&
+                    ReferenceEquals(item.Owner, character) && ReferenceEquals(item.Self, item),
+                    "Continuous commits must preserve application-held domain instances and readonly cycles.");
+                Require(character.Score == score && item.Cache == 17 && GraphConstruction.Count == constructed,
+                    "Commit must not reconstruct domain objects or reset their transient state.");
+            }
+        }
+
+        // Only the repository directory and model code are supplied: head and World ID are persisted.
+        using (GraphRepository repository = GraphRepository.OpenExisting(directory))
+        using (GraphSession<GraphWorld> session = repository.Load<GraphWorld>(models)) {
+            Require(session.ParentRevisionAddress == last, "Reopen selected an older published Revision.");
+            AssertGraph(session.World, 22, constructed);
+            GraphWorld restoredWorld = session.World;
+            GraphCharacter restoredCharacter = (GraphCharacter)restoredWorld._primary!;
+            GraphItem restoredItem = restoredCharacter.Item;
+            restoredCharacter.Score = 23;
+            last = session.Commit(policy);
+            Require(ReferenceEquals(session.World, restoredWorld) &&
+                ReferenceEquals(restoredWorld._primary, restoredCharacter) &&
+                ReferenceEquals(restoredCharacter.Item, restoredItem) && session.ParentRevisionAddress == last,
+                "The loaded session must retain its domain instances when installing its next baseline.");
+            AssertGraph(session.World, 23, constructed);
+        }
+
+        using (GraphRepository repository = GraphRepository.OpenExisting(directory))
+        using (GraphSession<GraphWorld> session = repository.Load<GraphWorld>(models)) {
+            Require(session.ParentRevisionAddress == last, "The continued loaded-session commit was not published.");
+            AssertGraph(session.World, 23, constructed);
+        }
     }
 
     private static void AssertGraph(GraphWorld world, int score, int constructed) {

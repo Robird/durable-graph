@@ -19,7 +19,17 @@ public sealed class StateRevisionStore {
         _segmentStore = segmentStore;
     }
 
-    public FrameAddress Append(StateRevision revision) {
+    public FrameAddress Append(StateRevision revision) => AppendCore(revision, durable: false);
+
+    /// <summary>Appends and flushes the containing file before releasing its writer lease.</summary>
+    /// <remarks>
+    /// This confirms a State data barrier, not head publication. On an I/O failure the caller
+    /// must reopen its owning repository before writing again. The original Append remains
+    /// available for callers that explicitly coordinate their own barriers.
+    /// </remarks>
+    public FrameAddress AppendDurably(StateRevision revision) => AppendCore(revision, durable: true);
+
+    private FrameAddress AppendCore(StateRevision revision, bool durable) {
         ArgumentNullException.ThrowIfNull(revision);
 
         ValidateDirectPriors(revision);
@@ -32,6 +42,7 @@ public sealed class StateRevisionStore {
             new FileScope(writer.SegmentNumber));
         SizedPtr ticket = builder.EndAppend(
             StateRevisionWireFormat.RbfTag).Unwrap();
+        if (durable) { writer.File.DurableFlush(); }
         return new FrameAddress(writer.SegmentNumber, ticket);
     }
 

@@ -29,14 +29,17 @@ flowchart TD
     New["普通 new World"] --> W
     W --> F["Capture / Seal：冻结候选图"]
     F --> P["保存准备：准备内容、选择表示、生成计划"]
-    N -. "LoadedWorld 的固定比较基线" .-> P
+    N -. "加载得到的比较基线" .-> P
     P --> S["宿主 Append：得到 Revision 地址"]
-    S -. "显式重新 Load" .-> R
+    S --> B["GraphSession：State 屏障 → 发布 head"]
+    B --> I["安装同一候选基线与 live 身份"]
+    I -. "保留领域实例继续编辑" .-> W
+    S -. "低层显式地址路径：重新 Load" .-> R
 ```
 
 新建图的 `PrepareNew` 使用无 Parent 计划；已加载图的 `Prepare` 使用固定 Parent。
 图中展开了 LoadedWorld 保存准备的内部流程；内容层 `CaptureSession.Prepare` 只消费已经 Seal 的候选。
-Append 之后尚无自动 Commit/发布步骤。各阶段是否允许写入、推进什么状态，见下列词条。
+GraphSession.Commit 受控完成整条发布与安装路径；低层 Append 自身仍不发布。各阶段推进什么状态见下列词条。
 
 ## Schema、类型与生成代码
 
@@ -66,7 +69,7 @@ Append 之后尚无自动 Commit/发布步骤。各阶段是否允许写入、�
 | <a id="stored-view"></a>**落盘版本 DTO 视图（stored DTO view）**／`DecodedRevision` | 选定 Revision 的完整 live 目录，逐对象保持落盘 exact Schema，如同目录包含 `A/V1`、`B/V3`。已解码并验证引用，尚未 Upgrade；无领域实例或可编辑基线。 | [DecodedRevision](../src/DurableGraph.StateStore/DecodedRevision.cs)、[RevisionDecoder](../src/DurableGraph.StateStore/RevisionDecoder.cs) |
 | <a id="current-view"></a>**当前版本 DTO 视图（current DTO view）**／`NormalizedRevision` | 全部 source 行按本次操作的模型目录升级到各自当前 DTO 后的目录；保留 ID、source Schema 与 `RequiresRewrite`。current 指模型版本，不是用户刚修改的值，也不是 `CaptureSession.Current`。 | [NormalizedRevision](../src/DurableGraph.StateStore/NormalizedRevision.cs)、[StateModelBinding](../src/DurableGraph/StateModelBinding.cs) |
 | <a id="membership-reachability"></a>**源成员集合与根可达闭包（source membership / reachable closure）** | source 是所读 Revision 的全部 live IDs；闭包是 current DTO 图从 World 可达的 IDs。Upgrade 删边后，孤立 A/B 仍须解码、升级、验证，但不再 Allocate；后继候选不含它们时才产生 Remove。使用 live 时说明是哪一个集合。 | [NormalizedRevision](../src/DurableGraph.StateStore/NormalizedRevision.cs)、[LoadedWorld](../src/DurableGraph.StateStore/LoadedWorld.cs) |
-| <a id="loaded-baseline"></a>**已加载 World 与固定 Parent 比较基线**／`LoadedWorld<TWorld>` | 可编辑领域 World 配有固定 Parent 地址、完整 source membership、current DTO 比较状态及实例身份关联。Prepare 读取最新领域值，始终相对于此基线；当前宿主 Append 后重新 Load 建立下一基线。 | [LoadedWorld](../src/DurableGraph.StateStore/LoadedWorld.cs)、[LoadedRevisionPlanner](../src/DurableGraph.StateStore/LoadedRevisionPlanner.cs) |
+| <a id="loaded-baseline"></a>**已加载 World 与固定 Parent 比较基线**／`LoadedWorld<TWorld>` | 可编辑领域 World 配有固定 Parent 地址、完整 source membership、current DTO 比较状态及实例身份关联。Prepare 读取最新领域值，始终相对于此基线；此低层路径由宿主 Append 后重新 Load 建立下一基线；同实例连续保存用 GraphSession。 | [LoadedWorld](../src/DurableGraph.StateStore/LoadedWorld.cs)、[LoadedRevisionPlanner](../src/DurableGraph.StateStore/LoadedRevisionPlanner.cs) |
 | <a id="upgrade-normalize"></a>**DTO 升级与归一化（Upgrade / Normalize）** | Upgrade 是用户提供的相邻版单对象转换，如 `UpgradeStateV1ToV2`；Normalize 选择 source exact 版本并串联所需转换，到达当前 DTO。操作完整 leaf DTO，不重复升级祖先；不查询其他对象或分配新对象身份。升级行仍 live 时下次强制对象 Base。 | [SG model/Upgrade 发出逻辑](../src/DurableGraph.Generator/DurableSchemaGenerator.StateModel.cs)、[NormalizedRevision](../src/DurableGraph.StateStore/NormalizedRevision.cs) |
 | <a id="allocate-hydrate"></a>**领域实例分配与字段填充（Allocate / Hydrate）** | 先为全部可达 durable IDs 分配彼此不同的 exact 类型实例，再填充 DTO 字段和对象引用，因此能恢复循环。SG Allocate 使用 `RuntimeHelpers.GetUninitializedObject`，不执行实例构造器或字段初始化表达式；Transient 由用户交付后重建。 | [LoadedWorld](../src/DurableGraph.StateStore/LoadedWorld.cs)、[SG Allocate/Hydrate 发出逻辑](../src/DurableGraph.Generator/DurableSchemaGenerator.StateModel.cs) |
 | <a id="reference-operations"></a>**引用槽遍历与引用解析表（VisitReferences / ObjectReadTable）** | 遍历只报告 ID 与 string/nominal 约束；校验 visitor 判断合法性，可达分析 visitor 收集闭包，二者复用该遍历。解析表在 Allocate 后将 ID 解析为实例供 Hydrate 使用；字节 body 仍直接静态调用原语。 | [StateReferenceVisitor / Validator](../src/DurableGraph/StateReferenceVisitor.cs)、[ObjectReadTable](../src/DurableGraph/ObjectReadTable.cs) |
@@ -103,11 +106,21 @@ Base 记录的 `body` 已含类型头；Delta 记录的 `body` 没有该头。�
 | <a id="bdh"></a>**对象写入成本 B／D 与重建成本 H** | B 是本轮 Base payload 精确大小；D 是本轮 Delta payload 上界，未定 prior 文件距离造成 0–4 bytes 超额；H 是已有重建链实际 payload 字节之和。均排除 ObjectId、目录、共享 Frame、Schema 日志；H 不是总冷读 I/O。 | [ObjectVersionPayloadSize](../src/DurableGraph.StateStore.Storage/ObjectVersionPayloadSize.cs)、[ObjectVersionChain](../src/DurableGraph.StateStore.Storage/ObjectVersionChain.cs) |
 | <a id="base-budget"></a>**读放大动机与可选 Base 预算** | 未变对象考察 H/B、变化对象考察 (H+D)/B，严格超过整数倍率阈值才有可选 Base 动机。预算取全部 post-live 对象 B 总和的整数百分比；强制 Base 不占可选预算，首个候选允许超预算，因此不是总写入硬上限。 | [ReadAmplificationBaseBudgetPolicy](../src/DurableGraph.StateStore/ReadAmplificationBaseBudgetPolicy.cs) |
 | <a id="content-preparation-planning"></a>**内容准备与修订规划（content preparation / revision planning）** | `CaptureSession.Prepare` 消费已经 Seal 的候选，产生可复用内容及比较结果，不进行 Capture 或生成 StateRevision。修订规划另核对 Parent、应用表示策略并构建 StateRevision；规划结果不是已追加的 Frame。 | [CaptureSession.Prepare](../src/DurableGraph/CaptureSession.cs)、[ObjectRevisionPlanner](../src/DurableGraph.StateStore/ObjectRevisionPlanner.cs) |
-| <a id="prepare-append-commit"></a>**World 保存准备、追加与提交发布（Prepare / Append / Commit）** | `LoadedWorld.Prepare/PrepareNew` 编排 Capture/Seal、内容准备和修订规划；可持久注册 Schema，不追加 State 或推进基线。Append 写入 Revision Frame 并返回地址。完整 Commit/发布仍是目标，还须绑定持久化屏障、发布 head 和基线推进。 | [LoadedWorld / PreparedWorldRevision](../src/DurableGraph.StateStore/LoadedWorld.cs)、[StateRevisionStore.Append](../src/DurableGraph.StateStore.Storage/StateRevisionStore.cs)；[提交发布目标](DurableGraph-target-design-v0.md#单一发布权威与明确故障结果) |
+| <a id="prepare-append-commit"></a>**World 保存准备、追加与提交发布（Prepare / Append / Commit）** | `LoadedWorld.Prepare/PrepareNew` 编排 Capture/Seal、内容准备和修订规划；可持久注册 Schema，不追加 State 或推进基线。Append 写入 Revision Frame 并返回地址。GraphSession.Commit 绑定 Schema/State 屏障、publication 发布及原候选基线安装；AppendDurably 只确认 State 文件屏障。 | [LoadedWorld / PreparedWorldRevision](../src/DurableGraph.StateStore/LoadedWorld.cs)、[StateRevisionStore.Append](../src/DurableGraph.StateStore.Storage/StateRevisionStore.cs)；[GraphRepository](../src/DurableGraph.StateStore/GraphRepository.cs) |
 
 规划输入是**完整 post-live 集合**，策略 `Writes` 只列实际选写对象：未变对象可能不写，也可能因读放大而写 Base。
 Remove 来自 Parent 完整成员集合减去候选成员集合；[ObjectRevisionPlanner](../src/DurableGraph.StateStore/ObjectRevisionPlanner.cs)
 负责生成这份存储计划，Storage 消费明确结果，不自行从领域图推导可达性。
+
+## Repository 与工作会话
+
+| 项目内术语／代码符号 | 释义与示意 | 关键代码 |
+|---|---|---|
+| <a id="graph-repository"></a>**图仓库**／`GraphRepository` | 独占匹配的 State/Schema 文件和一个发布 head，最多一个活动会话；CreateNew/OpenExisting 管资源，Create/Load 交付可编辑 World。单调 Schema 尚非联合版本视图。 | [GraphRepository](../src/DurableGraph.StateStore/GraphRepository.cs) |
+| <a id="graph-session"></a>**图工作会话**／`GraphSession<TWorld>` | 同时拥有领域 World、已发布 Parent 对应比较基线和实例-ID 绑定；Commit 成功后安装原候选并保持领域实例，Dispose 不自动保存。首次成功前 Parent/WorldId 可空。 | [GraphSession](../src/DurableGraph.StateStore/GraphSession.cs)、[WorldWorkspace](../src/DurableGraph.StateStore/WorldWorkspace.cs) |
+| <a id="publication-head"></a>**发布 head／发布日志** | 当前权威的 RevisionAddress + WorldId；专用 RBF 日志还记录 exact 前驱。数据先 flush，发布记录再 flush；完整严格重放并验证引用，坏尾不猜测旧 head。 | [PublicationLog](../src/DurableGraph.StateStore/PublicationLog.cs) |
+| <a id="commit-outcome"></a>**提交结果**／`GraphCommitOutcome` | NotPublished、Unknown、Published 描述持久发布结果，不描述领域修改是否撤销；Unknown 或发布后安装失败须使会话停止续写，dispose/reopen 裁决。NotPublished 也需检查资源是否 faulted。 | [GraphCommitException](../src/DurableGraph.StateStore/GraphCommitException.cs) |
+| <a id="migration-shell"></a>**迁移壳** | 已退出业务模型、仍承载历史 reader/Upgrade 的声明角色，不是新 attribute 或独立框架类型；不可达壳仍完成 source 验证，支持旧 Revision 的程序仍须保留对应能力。 | [真实包见证](../experiments/PackageConsumerProbe/HistoryCapabilityConsumer/Legacy.V2.cs)、[能力合同](design-branches/0036-working-session-and-history-capabilities.md#4-并行小线明确历史恢复能力合同) |
 
 ## 多义词、历史叫法与代码命名差异
 
@@ -129,7 +142,7 @@ Remove 来自 Parent 完整成员集合减去候选成员集合；[ObjectRevisio
 
 | 目标术语 | 含义与使用边界 | 设计落点（尚非完整产品实现） |
 |---|---|---|
-| **WorkingTree / GraphSession / Branch** | 受控工作会话方向，未来与发布、基线安装及故障裁决配套；具体外层名称尚未统一。现有 LoadedWorld 只承接固定 Parent 编辑/准备能力，不将这些目标名视为其完整同义词。 | [工作会话路线](DurableGraph-research-roadmap.md#2-已采纳方向中的未完成能力) |
-| **CommitManifest / 发布 head** | 将一次联合状态与对外可见根绑定的发布方向。Schema 注册、State Append 和显式读取地址本身均不等于发布。 | [单一发布权威](DurableGraph-target-design-v0.md#单一发布权威与明确故障结果) |
+| **WorkingTree / Branch** | 工作树与命名分支的长期概念；当前 GraphSession 已承担单 head 编辑会话，尚无 branch/Reset，二者不是完整同义词。 | [工作会话路线](DurableGraph-research-roadmap.md#2-已采纳方向中的未完成能力) |
+| **CommitManifest** | 联合 State/Schema/Artifact exact 视图的长期表达；当前单 State head 的发布日志不是完整联合 manifest。 | [单一发布权威](DurableGraph-target-design-v0.md#单一发布权威与明确故障结果) |
 | **TypeCodec** | 编码/解码受支持类型经数组/泛型构成的类型表达；能表达某类型不等于已有对应数据读写 codec。当前字段 `TypeTag`、Base 类型头及 reader 目录是局部能力，不视为通用 TypeCodec 已完成。 | [类型组合路线](DurableGraph-research-roadmap.md#2-已采纳方向中的未完成能力) |
 | **ArtifactStore / DerivedStore** | 分别承担独立历史内容与可重建派生数据的目标职责；不凭现有 StateStore 类推已实现其存储合同。 | [四类 Store 的逻辑职责](DurableGraph-target-design-v0.md#四类-store-的逻辑职责) |

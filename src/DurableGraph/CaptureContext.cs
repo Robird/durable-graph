@@ -9,7 +9,7 @@ public sealed class CaptureContext : IDisposable {
 
     private CaptureSession? _session;
     private Phase _phase;
-    private Dictionary<object, uint> _bindings = new(ReferenceEqualityComparer.Instance);
+    private Dictionary<object, uint>? _bindings = new(ReferenceEqualityComparer.Instance);
     private readonly Dictionary<object, RootCapture> _durables = new(ReferenceEqualityComparer.Instance);
     private readonly IReadOnlyDictionary<Type, StateModelBinding> _models;
     private readonly List<RootCapture> _queue = [];
@@ -85,7 +85,7 @@ public sealed class CaptureContext : IDisposable {
             }
             uint id = _session!.GetOrAllocateId(value);
             RootCapture<TDomain, TState> root = new(id, value, schema, capture, preparation);
-            _bindings.Add(value, id);
+            _bindings!.Add(value, id);
             _durables.Add(value, root);
             _queue.Add(root);
             _rootIds.Add(id);
@@ -120,7 +120,7 @@ public sealed class CaptureContext : IDisposable {
             }
             uint id = _session!.GetOrAllocateId(value);
             ModelCapture registration = new(id, value, model);
-            _bindings.Add(value, id);
+            _bindings!.Add(value, id);
             _durables.Add(value, registration);
             _queue.Add(registration);
             return id;
@@ -141,11 +141,11 @@ public sealed class CaptureContext : IDisposable {
             if (value.Length == 0) {
                 value = string.Empty;
             }
-            if (_bindings.TryGetValue(value, out uint id)) {
+            if (_bindings!.TryGetValue(value, out uint id)) {
                 return id;
             }
             id = _session!.GetOrAllocateId(value);
-            _bindings.Add(value, id);
+            _bindings!.Add(value, id);
             _objects.Add(new ObjectStateRecord(id, value));
             return id;
         }
@@ -181,15 +181,17 @@ public sealed class CaptureContext : IDisposable {
     public void Dispose() => Resolve();
 
     internal Dictionary<object, uint> DetachBindings() {
-        Dictionary<object, uint> result = _bindings;
-        _bindings = new(ReferenceEqualityComparer.Instance);
+        Dictionary<object, uint> result = _bindings!;
+        // Ownership transfer must not allocate after a durable publication. Resolve sees null
+        // and therefore cannot clear the dictionary now owned by the session.
+        _bindings = null;
         return result;
     }
 
     internal void Resolve() {
         _session?.RequireNotPreparing();
         _phase = Phase.Resolved;
-        _bindings.Clear();
+        _bindings?.Clear();
         ClearBuildData();
         Candidate = null;
         CaptureSession? session = _session;

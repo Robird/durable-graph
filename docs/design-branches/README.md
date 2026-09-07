@@ -18,11 +18,11 @@
 
 ## 当前规划
 
-DB-034 与 DB-035 已验收；后续类型与发布工作从活跃路线图选片：
+DB-034–036 已验收；后续类型与发布能力扩展从活跃路线图选片：
 
 | 文档 | 状态 | 实施范围 |
 |---|---|---|
-| [DB-036 工作会话与历史恢复能力](0036-working-session-and-history-capabilities.md) | Proposed | 同实例连续 Commit 的最小 Repository/会话方案；发布 G0 待实证；历史迁移壳合同与见证，未实施 |
+| [DB-036 工作会话与历史恢复能力](0036-working-session-and-history-capabilities.md) | Chosen / Implemented | 单 head Repository/同实例 GraphSession Commit、原 lease 屏障/严格发布日志、迁移壳跨版本真实包见证；不含自动坏尾恢复或联合 Store 视图 |
 | [DB-035 公开合同与持久格式术语迁移](0035-public-contract-terminology-migration.md) | Chosen / Implemented | 删除 legacy、唯一 State model、`.dgschema`、生成/runtime/Storage 术语；State wire v3 不变 |
 | [DB-034 领域引用图与首次保存](0034-durable-reference-graph-batch.md) | Chosen / Implemented | G0–G6：nominal Schema/history、非泛型 class 共享/循环、队列 Capture、两阶段 Restore、PrepareNew 与独立增量续写；不含 Commit/发布 |
 

@@ -4,15 +4,37 @@ namespace Atelia.DurableGraph.StateStore;
 
 /// <summary>One current DTO baseline, with complete source membership and migration provenance.</summary>
 internal sealed class NormalizedRevision {
-    private NormalizedRevision(FrameAddress address, Dictionary<uint, NormalizedObject> objects, StringReadTable strings) {
+    private readonly Dictionary<uint, NormalizedObject> _objects;
+
+    private NormalizedRevision(FrameAddress address, Dictionary<uint, NormalizedObject> objects, StringReadTable strings, IReadOnlyDictionary<uint, ObjectStateRecord>? currentDtos = null) {
         RevisionAddress = address;
-        Objects = objects;
+        _objects = objects;
         Strings = strings;
+        CurrentDtos = currentDtos ?? objects.ToDictionary(static pair => pair.Key, static pair => pair.Value.Current);
     }
 
     internal FrameAddress RevisionAddress { get; }
-    internal IReadOnlyDictionary<uint, NormalizedObject> Objects { get; }
+    internal IReadOnlyDictionary<uint, NormalizedObject> Objects => _objects;
     internal StringReadTable Strings { get; }
+    internal IReadOnlyDictionary<uint, ObjectStateRecord> CurrentDtos { get; }
+
+    // Candidate rows and provenance are prepared before any State append. Only the outer
+    // address wrapper is completed once Append returns, still before publication.
+    internal static NormalizedRevision FromCandidate(CapturedGraph candidate, StateModelSnapshot models) {
+        Dictionary<uint, NormalizedObject> rows = [];
+        foreach (ObjectStateRecord row in candidate.Objects) {
+            StateModelBinding? model = row.Kind == ObjectStateKind.Durable
+                ? models.Models[row.Schema!.SchemaId] : null;
+            rows.Add(row.Id, new(row, row.Schema, false, model));
+        }
+        StringReadTable strings = StringReadTable.FromDecoded(candidate.Objects
+            .Where(static row => row.Kind == ObjectStateKind.String)
+            .Select(static row => (row.Id, row.StringContent)));
+        return new(default, rows, strings);
+    }
+
+    internal NormalizedRevision WithAddress(FrameAddress address) =>
+        new(address, _objects, Strings, CurrentDtos);
 
     internal static NormalizedRevision Create(DecodedRevision source, StateModelSnapshot models) {
         Dictionary<uint, NormalizedObject> normalized = [];

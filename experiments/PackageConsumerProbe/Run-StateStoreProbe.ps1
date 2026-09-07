@@ -82,6 +82,7 @@ try {
     if ($historyFiles.Count -ne 8) { throw "Expected original two plus World V1/V2 and four graph model histories, found $($historyFiles.Count)." }
     $restoreOutput = (& dotnet $consumerAssembly $upgradeDatabase | Out-String).Trim().Replace("`r`n", "`n")
     $expectedRestore = $consumerOutput + "`nHistoricalUpgrade:True:ConstructorFree:True:ReadonlyHydrate:True:ForcedBase:True:UnchangedResave:True:NormalDelta:True:ReopenedWorld:True"
+    $expectedRestore += "`nGraphSessionContinuousCommit:True"
     $expectedRestore += "`nPrepareNewGraph:True:SharedDerived:True:ReadonlyCycles:True:ChildOnlyDelta:True:UnreachableCycleRemoved:True:HistoricalGraphPreserved:True"
     if ($LASTEXITCODE -ne 0 -or $restoreOutput -ne $expectedRestore) {
         throw "Packaged upgrade/restore/resave exercise failed; output was '$restoreOutput'."

@@ -159,6 +159,12 @@ Source Generator 负责可在编译期确定的类型知识与机械代码，框
 
 未知版本、相同身份/版本却不一致的 Schema、缺失升级器、损坏引用或来源不匹配时，
 应明确拒绝，不猜测并不回退到 latest。升级由显式类型知识和函数承担，不自动推断业务迁移。
+应用须明确仍支持的历史版本范围并保留对应可执行能力：exact DTO 解码需要每个 source-live 族的
+reader/Delta applier/引用遍历，当前 World 恢复还需要全部 source 行的 Normalize/Upgrade，以及
+可达对象的 Allocate/Hydrate。历史 Schema 文件不能自动补回被删除族的这些能力。
+可以保留仅承载生成代码和 Upgrade 的迁移壳；退出可达闭包不免除 source 验证。
+新 Revision 已 Remove 某族，只能免除读取该新 Revision 所需的该族能力，不能解除仍支持旧 Revision 的责任。
+技术见证见 [DB-036](design-branches/0036-working-session-and-history-capabilities.md#4-并行小线明确历史恢复能力合同)。
 读取升级本身不隐式写回 Store；升级失败不修改权威状态。历史数据成为可编辑领域图、
 当前版本 DTO 比较基线及后续重写的具体衔接，由专门切片收敛。
 
@@ -205,7 +211,7 @@ Capture/Prepare/Accept 是会话内部组件；其单独可调用不意味着完
 无历史的新分支建立空会话；重置到历史 Revision 则从目标重建对应状态，推荐使旧会话失效并返回
 新会话。若提供清空操作，它表示沿原 Parent 清空新视图，不等于创建无历史分支；
 单 World API 是否接受 null 以及如何表达清空，留待该分片确定。
-具体公开名称、返回凭据和 Repository API 由消费分片冻结。
+当前单 head 产品入口使用 GraphRepository / GraphSession；更广的 branch/Reset 和联合视图接口由消费分片冻结。
 
 长期目标是让 Schema、State、Artifact 的共同引用有一个可裁决的发布点，而不是各自发布
 无法协调的 head；Derived 不充当权威提交的参与者。CommitManifest 是候选表达形状，
@@ -247,8 +253,8 @@ source 目录与升级后 World 可达集合，不能假定两者始终一一对
 决定当前版本 DTO 图中从 World 得到的可达闭包，并由差集产生 Removes，不通过重新 Capture 已恢复对象猜测基线。
 Empty 多 ID 的反向绑定确定选择最小 source ID，但基线引用槽保留原 ID，让下一 Capture 产生
 实际引用差异。新加载会话从完整 source live max+1 开始分配，只承诺会话内单调；uint 耗尽仅阻止
-新增 ID，不阻止加载或已有对象保存。固定 Parent 的 Prepare 不就地接受新地址，Append 后重新 Load
-是发布协议尚未实现时的基线接续方式。
+新增 ID，不阻止加载或已有对象保存。固定 Parent 的低层 Prepare 不就地接受新地址，需 Append 后重新 Load；
+普通连续保存使用受控 GraphSession.Commit，发布成功后直接安装原候选并保留领域实例。
 
 Hydrate 普通字段由 SG 直接赋值；readonly 实例字段优先由 SG 生成返回字段可写 ref 的
 `UnsafeAccessor`，再进行强类型赋值。访问器按字段的声明类型绑定，基类 private 字段不通过
@@ -260,7 +266,7 @@ DynamicMethod 保留为有具体需要时的备选，不为该能力引入第二
 字段初始化表达式，增加恢复语义。现有 Probe 与 .NET 10 机制验证见
 [无构造器分配与 readonly 写入证据](DurableGraph-lab-notebook.md#2026-09-07无构造器分配与-readonly-实例字段写入)。
 标量/string 的 SG Hydrate 与升级续写实现范围见 [DB-033](design-branches/0033-upgrade-restore-resave-batch.md)；
-一般对象互引与循环恢复仍须后续分片验证。
+一般对象互引与循环恢复的证据见 [DB-034](design-branches/0034-durable-reference-graph-batch.md)。
 
 Transient 指索引、缓存、反向查找等非持久内存状态；排除这些字段的持久化仍是产品职责。
 建议宿主重建保持便宜、确定、幂等；昂贵的 LLM 摘要或 embedding 属于 Derived builder 的目标场景，

@@ -1,0 +1,25 @@
+using Atelia.DurableGraph;
+
+namespace HistoryCapabilityPackageConsumerProbe;
+
+// This is a migration shell, not the retired business implementation. Its abstract current
+// model must never be allocated; source rows still require complete normalization/validation.
+[DurableType("package.history-legacy", 2)]
+public abstract partial class Legacy : DurableBase {
+    [DurableField(1)] private World? _world = null;
+    internal static int UpgradeCalls = 0;
+    internal static bool ProduceInvalidReference = false;
+    internal static int LastHistoricalValue = 0;
+
+    // Keep the field visibly used without adding business behavior to the migration shell.
+    private World? MigrationReference => _world;
+
+#if !READERS_ONLY
+    private static void UpgradeStateV1ToV2(in __DurableState.V1 old, out __DurableState.V2 next) {
+        UpgradeCalls++;
+        LastHistoricalValue = old.Segment0Field1;
+        Program.Require(old.Segment0Field2 != 0, "The old Legacy self-reference was not decoded.");
+        next = new(ProduceInvalidReference ? uint.MaxValue : 0);
+    }
+#endif
+}

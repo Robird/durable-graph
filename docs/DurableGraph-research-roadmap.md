@@ -12,21 +12,14 @@ DB-034 领域引用图与首次准备的实现、实际边界及验收从 PROJEC
 
 后续方向按依赖而非承诺日期安排：引用图 → 分别评估 inline struct、有限数组对象和泛型闭合；
 BCL 内容恢复在所需引用/值/类型表达可用后逐类型推进。struct 可独立穿插，不强制等待全部引用能力。
-持久 World 根/Repository 会话另设发布故障模型，可与类型扩展独立排期；不把它并入本批。
+DB-036 单 World/单 head 工作会话已实现；branch/Reset、联合 Store 视图及更强恢复保证仍独立排期。
 MVP 库内加载顺序为 exact 重建 → 单对象 Upgrade → 分配实例 → 填充/连接引用 → 完整交付 World；
 Transient 由用户在交付后处理，约束维护在[目标设计](DurableGraph-target-design-v0.md#恢复transient-与宿主边界)。
 数组形状、升级、单根、Transient hook、boxed value，以及无需无参构造器/readonly 字段的支持选择见
 [MVP 功能边界](DurableGraph-target-design-v0.md#mvp-功能边界)，不再作为开放范围反复讨论。
-WorkingTree/GraphSession 的职责方向已采纳；发布/故障裁决尚未实现。不要把会话已 Accept 的内存基线（`CaptureSession.Current`）、Schema
-注册成功或 State Append 返回地址直接当作已发布基线。Schema 严格坏尾拒绝合同见 DB-031 §8。
-
-自定义 struct、完整数组对象与持久根/会话可以独立成片。
-它们与存储推进的穿插顺序尚未冻结；不要恢复旧 R4 → R5 → R6 或 P0–P7 为强制流水线。
-选片时给出一个可观察成功/失败判据；新增类型表达先冻结 Schema/history 格式，publication 仍另行裁决。
-
-[DB-036](design-branches/0036-working-session-and-history-capabilities.md)是工作会话与历史能力的
-Proposed 重构方案：推荐以发布 G0 为停点，再闭合同实例连续 Commit；历史能力先验证现有 ABI 的迁移壳。
-原 Base body 阶段混用已由 DB-035 修复，不再列入该方案的未完成工作。
+GraphSession 的正常同实例 Commit 与严格重开从 PROJECT-STATE/DB-036 查证；不再列为未完成能力。
+当前只支持单活动会话、固定非空 World，发布故障范围为正常关闭/进程中止和明确的 I/O 异常。
+inline struct、完整数组对象、泛型闭合的穿插顺序仍未冻结。
 
 ## 2. 已采纳方向中的未完成能力
 
@@ -36,8 +29,6 @@ B/D/H 分别指本轮精确 Base payload、Delta payload 上界、已有对象�
 
 | 工作项 | 最小应回答的问题 | 设计或证据入口 |
 |---|---|---|
-| 工作会话与 exact Revision Parent 比较基线 | 已选 Repository 受控创建/加载的 WorkingTree/GraphSession；现有 LoadedWorld 固定 Revision Parent、当前版本 DTO 与实例身份并在 Append 后重新 Load；后续定义发布后安装、Commit API 与故障裁决 | [目标约束](DurableGraph-target-design-v0.md#单一发布权威与明确故障结果)、[DB-030 接缝](design-branches/0030-captured-object-preparation-slice.md#4-exact-parent-接缝明确留到后片) |
-| 历史恢复能力保留 | 区分 exact DTO 解码与当前 World 恢复；明确所支持历史版本所需的 reader/Upgrade/model 保留规则，验证迁移壳，不把 Schema history 当作可执行能力 | [DB-036 §4 候选合同](design-branches/0036-working-session-and-history-capabilities.md#4-并行小线明确历史恢复能力合同)；完全删除 CLR 壳的独立能力目录尚未选定 |
 | TypeCodec 与 exact Schema 绑定 | 一般类型组合与内建复合类型 codec；已有 nominal class 引用及 exact reader 分派不等于一般 TypeCodec，也不自动复活已删除模型族 | [DB-034](design-branches/0034-durable-reference-graph-batch.md)、[DB-018](design-branches/0018-generated-graph-codec-shape.md)、[DB-001](design-branches/0001-schema-authority-and-runtime-representation.md) |
 | 复合类型的 DTO 升级与恢复 | 将单对象 Upgrade/Restore 扩展到复合值、数组与容器内容；保持完整 source 目录、强制 Base、当前版本 DTO 图的可达分析和失败不交付 | [DB-034](design-branches/0034-durable-reference-graph-batch.md)、[DB-018](design-branches/0018-generated-graph-codec-shape.md) |
 | 自定义泛型 Schema/DTO | 保留 SG 开放模板 + 首次运行时闭合/缓存方向；领域 T 与冻结表示参数分离，接通泛型定义/实参身份及历史 exact reader；现有手写 body 见证不等于 SG 已支持 | [泛型 DTO 技术备忘](design-branches/0018-generic-dto-binding-followup.md)，扩充 Schema 类型表达或泛型 Capture 时重访 |
@@ -50,14 +41,13 @@ B/D/H 分别指本轮精确 Base payload、Delta payload 上界、已有对象�
 |---|---|
 | 对象版本解释与保存来源 | 已登记模型族可按 Base exact Schema 自动读取；完整 ObjectHeadMap 中 external object heads 的来源、候选对象身份连续性仍需产品 Save/Load 合同，不能由 Revision Parent 声明一致推导全局身份认证 |
 | 保存相等性与真实估算 | 同版标量 DTO 的浮点按位、引用槽按 ID 已采纳；未来复合值/容器相等性另定。已准备 body 与当前 v3 envelope 计量见 [DB-029](design-branches/0029-prepared-object-revision-planning-slice.md)；Base 类型头已计入 B/H。未来新增类型头/容器布局时继续按实际对象 payload 计量 |
-| 发布后基线安装 | DB-033 通过 Append 后重新 Load 建立新基线并清除已落盘升级重写义务；后续若增加就地推进，须证明它与真实发布状态绑定，不能任意 Accept(address) |
 | Schema 规范表示和持久引用 | canonical 注册批次与逻辑 SchemaKey 已闭合；未来 SchemaHash、紧凑引用及一般类型家族约束随消费者裁决，不用 GetHashCode 作持久身份 |
 | 开放泛型/数组组合绑定 | 已有 static-T 缓存与 typed ref 运行时组合证据；剩余为领域/DTO 表示参数闭合、版本缓存边界及注册初始化协议，不要求全面切换 DynamicMethod。摘要、取舍与首个 SG 验证见[技术备忘](design-branches/0018-generic-dto-binding-followup.md) |
 | 跨程序集与一般类型形状 | 继承 helper 可见性、外部历史祖先、enum/nullable/decimal/native int 等支持范围；自定义泛型的具体形状/约束仍须分片确定，技术方向见上项；boxed value identity 已排除 MVP |
 | 多态与运行时注册扩展 | 已标记 class 基类到登记派生实例按 DB-034 合同；interface/object 通配引用、开放组合与跨程序集发现仍后续裁决，不能自动回退成声明基类的 codec |
 | 捕获复合值的所有权 | 含引用 struct/数组/容器如何真正冻结候选，不能从 scalar readonly DTO 推导浅复制足够 |
 | 数组完整形状与分配 | 非零下界与非 SZ rank-1 已明确不支持；实施时在 rank 上界 3/4 中选择，确定有限 tag、元素类型和各维长度编码、分配及按 ref 遍历 |
-| 根与持久目录 | 单 WorldId 如何与 Revision 持久绑定及表达空值/清空/替换；现有显式 WorldId 的图恢复不能替代持久根引用或联合 manifest，无需多根产品 API |
+| 根与持久目录扩展 | 单 WorldId/Revision 发布已闭合；后续仅在真实需求下选择 null/清空/替换、命名 branch 与 Reset，不建设多根 API |
 
 设计证据：[DB-006](design-branches/0006-flat-graph-delta-prototype.md)、
 [旧路线图 R3/R4](archive/2026-09-06/DurableGraph-research-roadmap.md)、
@@ -73,7 +63,7 @@ DB-009/010 的旧 no-reuse 前提不能沿用；借用 Base 共享 prior 等结�
 | BCL 集合 | 基础引用/值和对象恢复形成消费者后；逐类型定义内容、顺序、comparer、共享和 key/index 建立时机 |
 | SchemaStore 后续能力 | MVP 单调注册已实现；联合 Commit/Ref 及复用 StateStore 的演进候选见下节，Dictionary 与内建类型 codec 完整后重访。多 writer、压缩/GC 另待真实需求 |
 | Schema 日志自动修复/分段 | 遇到真实坏尾恢复或容量需求时；无额外确认水位不能自动区分未完成尾部和已确认末帧损坏，当前严格拒绝。重访时先冻结故障模型，不绕过完整注册一致性 |
-| 完整 Save、发布与恢复 | 内容链和保存输入闭合后；确定 expected parent、durability barrier、publication 不确定结果、reopen/reconcile、基线安装及故障模型 |
+| 发布恢复保证扩展 | DB-036 已闭合同实例 Commit、expected Parent、数据/发布屏障及严格重开；遇到真实可用性要求时再设计坏尾自动修复、OS crash/power loss 与目录持久性，不能默默回退旧 head |
 | ArtifactStore | 真实 HistoryLog/消息/附件消费者出现；比较地址方案、chunk、历史 view、嵌套引用与 Schema 复用，不强迫 State 常驻完整历史 |
 | DerivedStore | 真实昂贵派生消费者出现；定义 exact 输入围栏、recipe/builder/model 身份、stale/missing 及可删重建 |
 | 框架 Transient hook | MVP 明确不做，用户在完整图交付后自行重建；MVP 后若多个宿主确有重复的重建协调需求，再比较 hook/依赖调度及失败边界 |
@@ -84,6 +74,7 @@ DB-009/010 的旧 no-reuse 前提不能沿用；借用 Base 共享 prior 等结�
 | 性能优化 | MVP 后有具体测量再优化全量 Base 准备、缓冲复制、cache、typed buckets 或指纹；DB-028 先 object-first 直读 RBF，Frame cache 只减少重复 I/O/解码，重复完整 map 物化需另评估 map cache/单 ID 查询，必要时再按 Frame 合并批量读取 |
 | 并发、分支与跨 Repository | 宿主提出真实 consumer 后；分别定义 concurrent Capture、snapshot isolation、branch/fork/multi-writer 和跨 Store/Repository identity，不扩大当前单 writer 假设 |
 | 跨对象升级与外部副作用 | MVP 仅单对象字段转换；读取其他对象、拆分/合并及创建持久新对象均延后。MVP 后有真实迁移案例时，再讨论图访问、新 ID 与失败隔离；不借普通升级默认授权 |
+| 无 CLR 迁移壳的历史族 | 应用需要完全删除迁移壳且继续恢复含该族的旧 Revision 时，再设计独立状态族 Normalize/引用能力、显式退休声明和 history-only 生成；现有保留规则与包见证见 [DB-036 §4](design-branches/0036-working-session-and-history-capabilities.md#4-并行小线明确历史恢复能力合同) |
 | 历史工具/升级调用优化 | 有 package/history 或升级调用的真实限制后，再重访 DB-003 的 Try/result/ABI 和 DB-004 的多 writer/多 TFM 与批次原子性，不顺带做兼容框架 |
 
 ### 4.1 SchemaStore 复用 StateStore 与联合版本视图

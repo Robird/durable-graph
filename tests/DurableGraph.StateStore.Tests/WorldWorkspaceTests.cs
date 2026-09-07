@@ -1,0 +1,348 @@
+using System.Buffers;
+using System.Runtime.CompilerServices;
+using Atelia.DurableGraph.StateStore.Serialization;
+using Atelia.DurableGraph.StateStore.Storage;
+using Atelia.Rbf;
+using Atelia.RbfSegmentStore;
+using SegmentStore = Atelia.RbfSegmentStore.RbfSegmentStore;
+
+namespace Atelia.DurableGraph.StateStore.Tests;
+
+public sealed class WorldWorkspaceTests : IDisposable {
+    private readonly string _root = Path.Combine(Path.GetTempPath(), $"durable-graph-workspace-{Guid.NewGuid():N}");
+    private readonly IRbfFile _file;
+    private readonly SegmentStore _segments;
+    private readonly SchemaStore _schemas;
+    private readonly StateRevisionStore _store;
+    private static readonly DurableSchema Old = Schema("World", 1);
+    private static readonly DurableSchema Current = Schema("World", 2);
+    private static readonly ReadAmplificationBaseBudgetParameters NoRebase = new(1000000, 1);
+
+    public WorldWorkspaceTests() {
+        Directory.CreateDirectory(_root);
+        _file = RbfFile.CreateNew(Path.Combine(_root, "schemas.rbf"));
+        _schemas = new(_file);
+        _segments = SegmentStore.CreateNew(Path.Combine(_root, "state"), new() { NewStoreLayout = RbfSegmentStoreLayout.Flat });
+        _store = new(_segments);
+    }
+
+    [Fact]
+    public void ThreeInstallsRetainWorldAndInstallFrozenCandidateRatherThanLaterMutation() {
+        World world = new() { Value = 1, Text = new string('x', 1) };
+        StateModelRegistry models = Registry(Model());
+        WorldWorkspace<World> workspace = WorldWorkspace<World>.Create(_store, _schemas, world, models);
+        Assert.Null(workspace.ParentRevisionAddress);
+        Assert.Equal(0u, workspace.WorldId);
+        FrameAddress first;
+        using (PreparedWorldSave<World> pending = workspace.Stage(NoRebase)) {
+            Assert.Throws<InvalidOperationException>(() => workspace.Stage(NoRebase));
+            Assert.Throws<InvalidOperationException>(pending.Install);
+            world.Value = 2;
+            first = Install(pending);
+            Assert.Throws<InvalidOperationException>(pending.Install);
+        }
+        Assert.Same(world, workspace.World);
+        Assert.Equal(first, workspace.ParentRevisionAddress);
+        Assert.Equal((byte)1, Read(first, workspace.WorldId, models).Value);
+        using (PreparedWorldSave<World> second = workspace.Stage(NoRebase)) {
+            Assert.Equal(first, second.Revision.ParentRevisionAddress);
+            Assert.Equal(ObjectVersionKind.Delta, Assert.Single(second.Revision.LocalObjects).Kind);
+            FrameAddress address = Install(second);
+            Assert.Equal((byte)2, Read(address, workspace.WorldId, models).Value);
+        }
+        world.Value = 3;
+        using (PreparedWorldSave<World> third = workspace.Stage(NoRebase)) {
+            FrameAddress address = Install(third);
+            Assert.Equal((byte)3, Read(address, workspace.WorldId, models).Value);
+        }
+        Assert.Same(world, workspace.World);
+        using PreparedWorldSave<World> unchanged = workspace.Stage(NoRebase);
+        Assert.Empty(unchanged.Revision.LocalObjects);
+    }
+
+    [Fact]
+    public void RemovedInstanceReentryUsesFreshIdAndUnpublishedCandidateBurnsIds() {
+        string original = new('x', 1);
+        World world = new() { Text = original };
+        WorldWorkspace<World> workspace = WorldWorkspace<World>.Create(_store, _schemas, world, Registry(Model()));
+        using (PreparedWorldSave<World> first = workspace.Stage(NoRebase)) Install(first);
+        uint oldId = _store.ReadLiveObjectHeadMap(workspace.ParentRevisionAddress!.Value).Keys.Max();
+        world.Text = null;
+        using (PreparedWorldSave<World> remove = workspace.Stage(NoRebase)) {
+            Assert.Contains(oldId, remove.Revision.RemovedObjectIds);
+            Install(remove);
+        }
+        world.Text = original;
+        uint burned;
+        using (PreparedWorldSave<World> abandoned = workspace.Stage(NoRebase)) {
+            burned = abandoned.Revision.LocalObjectIds.Max();
+            Assert.True(burned > oldId);
+        }
+        using PreparedWorldSave<World> readded = workspace.Stage(NoRebase);
+        uint newId = readded.Revision.LocalObjectIds.Max();
+        Assert.True(newId > burned);
+        Assert.Equal(ObjectVersionKind.Base, readded.Revision.LocalObjects.Single(row => row.ObjectId == newId).Kind);
+        Install(readded);
+        Assert.Same(original, world.Text);
+    }
+
+    [Fact]
+    public void FailedCaptureBurnsIdsButPreservesAcceptedParentAndBindings() {
+        bool fail = false;
+        World world = new() { Value = 1 };
+        StateModelRegistry models = Registry(Model(beforePrepare: () => { if (fail) throw new InvalidOperationException("body failed"); }));
+        WorldWorkspace<World> workspace = WorldWorkspace<World>.Create(_store, _schemas, world, models);
+        FrameAddress first;
+        using (PreparedWorldSave<World> pending = workspace.Stage(NoRebase)) first = Install(pending);
+        world.Text = new string('y', 1);
+        fail = true;
+        Assert.Throws<InvalidOperationException>(() => workspace.Stage(NoRebase));
+        Assert.Equal(first, workspace.ParentRevisionAddress);
+        fail = false;
+        using PreparedWorldSave<World> retry = workspace.Stage(NoRebase);
+        Assert.Equal(first, retry.Revision.ParentRevisionAddress);
+        Assert.Contains(3u, retry.Revision.LocalObjectIds); // ID 2 was consumed by the failed candidate.
+        Install(retry);
+    }
+
+    [Fact]
+    public void UpgradeRewriteAndCompleteSourceMembershipSurviveDiscardThenClearOnInstall() {
+        FrameAddress old = Seed(Old, new(5, 100, 0), Text(100, "orphan after upgrade"));
+        StateModelRegistry models = Registry(Model(upgrade: state => state with { TextId = 0 }));
+        WorldWorkspace<World> workspace = WorldWorkspace<World>.Load(_store, _schemas, old, 1, models);
+        World instance = workspace.World;
+        using (PreparedWorldSave<World> abandoned = workspace.Stage(NoRebase)) {
+            Assert.Equal(ObjectVersionKind.Base, Assert.Single(abandoned.Revision.LocalObjects).Kind);
+            Assert.Contains(100u, abandoned.Revision.RemovedObjectIds);
+            FrameAddress orphanAppend = _store.Append(abandoned.Revision);
+            abandoned.PrepareInstall(orphanAppend);
+        }
+        Assert.Equal(old, workspace.ParentRevisionAddress);
+        using (PreparedWorldSave<World> retry = workspace.Stage(NoRebase)) {
+            Assert.Equal(ObjectVersionKind.Base, Assert.Single(retry.Revision.LocalObjects).Kind);
+            Assert.Contains(100u, retry.Revision.RemovedObjectIds);
+            Install(retry);
+        }
+        using (PreparedWorldSave<World> unchanged = workspace.Stage(NoRebase)) {
+            Assert.Empty(unchanged.Revision.LocalObjects);
+            Assert.Empty(unchanged.Revision.RemovedObjectIds);
+        }
+        instance.Value = 6;
+        instance.Text = new string('z', 1);
+        using PreparedWorldSave<World> changed = workspace.Stage(NoRebase);
+        Assert.Equal(ObjectVersionKind.Delta, changed.Revision.LocalObjects.Single(row => row.ObjectId == 1).Kind);
+        Assert.Contains(101u, changed.Revision.LocalObjectIds);
+        Assert.Same(instance, workspace.World);
+        Install(changed);
+    }
+
+    [Fact]
+    public void EmptyAliasesCollapseOnlyAtSuccessfulInstallAndThenRemainStable() {
+        FrameAddress old = Seed(Current, new(5, 9, 0), Text(3, ""), Text(9, ""));
+        WorldWorkspace<World> workspace = WorldWorkspace<World>.Load(_store, _schemas, old, 1, Registry(Model()));
+        using (PreparedWorldSave<World> first = workspace.Stage(NoRebase)) {
+            Assert.Equal(new uint[] { 9 }, first.Revision.RemovedObjectIds);
+            Install(first);
+        }
+        using PreparedWorldSave<World> second = workspace.Stage(NoRebase);
+        Assert.Empty(second.Revision.LocalObjects);
+        Assert.Empty(second.Revision.RemovedObjectIds);
+        Assert.Same(string.Empty, workspace.World.Text);
+    }
+
+    [Fact]
+    public void RecursivePreparationFailsWithoutLeavingWorkspaceOccupied() {
+        bool recurse = true;
+        WorldWorkspace<World>? workspace = null;
+        StateModelRegistry models = Registry(Model(beforePrepare: () => { if (recurse) workspace!.Stage(NoRebase); }));
+        workspace = WorldWorkspace<World>.Create(_store, _schemas, new World(), models);
+        Assert.Throws<InvalidOperationException>(() => workspace.Stage(NoRebase));
+        recurse = false;
+        using PreparedWorldSave<World> retry = workspace.Stage(NoRebase);
+        Assert.True(retry.WorldId > 1);
+        Install(retry);
+    }
+
+    [Fact]
+    public void DurableCycleChildOnlyChangesPreserveInstancesAndRetiredChildGetsNewId() {
+        DurableSchema schema = new("Node", 1, new DurableFieldInfo(1, TypeTag.DurableReference, "Node"),
+            new DurableFieldInfo(2, TypeTag.Byte));
+        int restores = 0;
+        CapturedStatePreparation<NodeState> preparation = new(schema,
+            static (in NodeState state) => NodeBase(state),
+            static (in NodeState prior, in NodeState next) => new(prior != next, NodeBase(next).Body));
+        StateReaderBinding<NodeState> reader = new(schema,
+            static (ref BinaryPayloadReader bytes) => new(bytes.ReadUInt32(), bytes.ReadByte()),
+            static (ref BinaryPayloadReader bytes, in NodeState prior) => new(bytes.ReadUInt32(), bytes.ReadByte()),
+            VisitNode);
+        StateModelBinding<Node, NodeState> model = new(preparation, [reader],
+            static row => row.GetState<NodeState>(),
+            () => { restores++; return new Node(); },
+            static (Node node, in NodeState state, ObjectReadTable objects) => {
+                node.Next = objects.ResolveDurable<Node>(state.NextId);
+                node.Value = state.Value;
+            },
+            static (node, context) => new(context.CaptureDurable(node.Next, "Node"), node.Value), VisitNode);
+        Node child = new() { Value = 7 };
+        child.Next = child;
+        Node root = new() { Next = child };
+        StateModelRegistry models = Registry(model);
+        WorldWorkspace<Node> workspace = WorldWorkspace<Node>.Create(_store, _schemas, root, models);
+        FrameAddress first;
+        using (PreparedWorldSave<Node> pending = workspace.Stage(NoRebase)) {
+            first = _store.Append(pending.Revision);
+            pending.PrepareInstall(first);
+            pending.Install();
+        }
+        child.Value = 8;
+        using (PreparedWorldSave<Node> pending = workspace.Stage(NoRebase)) {
+            ObjectVersionRecord delta = Assert.Single(pending.Revision.LocalObjects);
+            Assert.Equal(2u, delta.ObjectId);
+            Assert.Equal(ObjectVersionKind.Delta, delta.Kind);
+            FrameAddress next = _store.Append(pending.Revision);
+            pending.PrepareInstall(next);
+            pending.Install();
+        }
+        Assert.Same(root, workspace.World);
+        Assert.Same(child, root.Next);
+        Assert.Same(child, child.Next);
+        Assert.Equal(0, restores); // Neither initial nor subsequent installation rematerializes any object.
+        root.Next = null;
+        using (PreparedWorldSave<Node> pending = workspace.Stage(NoRebase)) {
+            Assert.Equal(new uint[] { 2 }, pending.Revision.RemovedObjectIds);
+            pending.PrepareInstall(_store.Append(pending.Revision));
+            pending.Install();
+        }
+        root.Next = child;
+        using (PreparedWorldSave<Node> pending = workspace.Stage(NoRebase)) {
+            Assert.Equal(ObjectVersionKind.Base, pending.Revision.LocalObjects.Single(row => row.ObjectId == 3).Kind);
+            pending.PrepareInstall(_store.Append(pending.Revision));
+            pending.Install();
+        }
+        Assert.Same(child, root.Next);
+        Assert.Equal((byte)7, RevisionDecoder.ReadSnapshot(_store, _schemas, first, models.Snapshot().Readers)
+            .GetRequired(2).GetState<NodeState>().Value);
+    }
+
+    private sealed class Node : DurableBase {
+        internal Node? Next;
+        internal byte Value;
+    }
+    private readonly record struct NodeState(uint NextId, byte Value);
+    private static void VisitNode(in NodeState state, IStateReferenceVisitor visitor) => visitor.VisitDurable(state.NextId, "Node");
+    private static PreparedBaseBody NodeBase(NodeState state) {
+        ArrayBufferWriter<byte> bytes = new();
+        BinaryPayloadWriter writer = new(bytes);
+        writer.WriteUInt32(state.NextId);
+        writer.WriteByte(state.Value);
+        return new(bytes.WrittenSpan);
+    }
+
+    private FrameAddress Install(PreparedWorldSave<World> pending) {
+        FrameAddress address = _store.Append(pending.Revision);
+        pending.PrepareInstall(address);
+        pending.Install(); // Internal mechanism witness; publication is the outer Repository's responsibility.
+        return address;
+    }
+
+    private State Read(FrameAddress address, uint id, StateModelRegistry models) =>
+        RevisionDecoder.ReadSnapshot(_store, _schemas, address, models.Snapshot().Readers).GetRequired(id).GetState<State>();
+
+    private class World : DurableBase {
+        internal byte Value;
+        internal string? Text;
+        internal string? Alias;
+        internal int TransientMarker = 73;
+        internal World(int unused = 0) { }
+    }
+    private sealed class OtherWorld() : World(0) { }
+    private readonly record struct State(byte Value, uint TextId, uint AliasId);
+
+    private static StateModelBinding Model(Func<State, State>? upgrade = null, Action? beforePrepare = null,
+        Action? onRead = null, DurableSchema? current = null, DurableSchema? old = null) =>
+        ModelCore<World>(upgrade, beforePrepare, onRead, current, old);
+
+    private static StateModelBinding ModelCore<TWorld>(Func<State, State>? upgrade = null, Action? beforePrepare = null,
+        Action? onRead = null, DurableSchema? current = null, DurableSchema? old = null) where TWorld : World {
+        DurableSchema currentSchema = current ?? Current;
+        DurableSchema oldSchema = old ?? Old;
+        CapturedStatePreparation<State> preparation = new(currentSchema,
+            (in State state) => { beforePrepare?.Invoke(); return Base(state); },
+            static (in State prior, in State next) => Delta(prior, next));
+        StateReaderBinding<State> Reader(DurableSchema schema) => new(schema,
+            (ref BinaryPayloadReader reader) => { onRead?.Invoke(); return Read(ref reader); },
+            static (ref BinaryPayloadReader reader, in State prior) => Apply(ref reader, prior), Validate);
+        StateReaderBinding[] readers = currentSchema.Equals(oldSchema)
+            ? [Reader(currentSchema)] : [Reader(oldSchema), Reader(currentSchema)];
+        return new StateModelBinding<TWorld, State>(preparation, readers,
+            row => row.Schema!.Equals(currentSchema) ? row.GetState<State>() : (upgrade ?? (static state => state))(row.GetState<State>()),
+            static () => (TWorld)RuntimeHelpers.GetUninitializedObject(typeof(TWorld)),
+            static (TWorld world, in State state, ObjectReadTable strings) => {
+                world.Value = state.Value;
+                world.Text = strings.ResolveString(state.TextId);
+                world.Alias = strings.ResolveString(state.AliasId);
+            },
+            static (world, context) => new(world.Value, context.CaptureString(world.Text), context.CaptureString(world.Alias)),
+            Validate);
+    }
+
+    private static void Validate(in State state, IStateReferenceVisitor visitor) {
+        visitor.VisitString(state.TextId);
+        visitor.VisitString(state.AliasId);
+    }
+    private static StateModelRegistry Registry(StateModelBinding model) {
+        StateModelRegistry result = new();
+        result.Register(model);
+        return result;
+    }
+    private static DurableSchema Schema(string id, int version) => new(id, version,
+        new DurableFieldInfo(1, TypeTag.Byte), new DurableFieldInfo(2, TypeTag.String), new DurableFieldInfo(3, TypeTag.String));
+    private FrameAddress Seed(DurableSchema schema, State state, params ObjectVersionRecord[] strings) {
+        _schemas.Register(schema);
+        return _store.Append(StateRevision.CreateObjectHeadMapBase(null, new[] { Durable(1, schema, state) }.Concat(strings), []));
+    }
+    private static ObjectVersionRecord Durable(uint id, DurableSchema schema, State state) =>
+        ObjectVersionRecord.CreateBase(id, BaseObjectBodyCodec.EncodeDurable(schema, Base(state)).Body);
+    private static ObjectVersionRecord Text(uint id, string value) =>
+        ObjectVersionRecord.CreateBase(id, BaseObjectBodyCodec.EncodeString(StringPayloadCodec.PrepareBase(value)).Body);
+    private static PreparedBaseBody Base(State state) {
+        ArrayBufferWriter<byte> bytes = new();
+        BinaryPayloadWriter writer = new(bytes);
+        writer.WriteByte(state.Value);
+        writer.WriteUInt32(state.TextId);
+        writer.WriteUInt32(state.AliasId);
+        return new(bytes.WrittenSpan);
+    }
+    private static State Read(ref BinaryPayloadReader reader) => new(reader.ReadByte(), reader.ReadUInt32(), reader.ReadUInt32());
+    private static PreparedDeltaBody Delta(State prior, State next) {
+        byte mask = (byte)((prior.Value != next.Value ? 1 : 0) | (prior.TextId != next.TextId ? 2 : 0) | (prior.AliasId != next.AliasId ? 4 : 0));
+        ArrayBufferWriter<byte> bytes = new();
+        BinaryPayloadWriter writer = new(bytes);
+        writer.WriteByte(mask);
+        if ((mask & 1) != 0) writer.WriteByte(next.Value);
+        if ((mask & 2) != 0) writer.WriteUInt32(next.TextId);
+        if ((mask & 4) != 0) writer.WriteUInt32(next.AliasId);
+        return new(mask != 0, bytes.WrittenSpan);
+    }
+    private static State Apply(ref BinaryPayloadReader reader, State prior) {
+        byte mask = reader.ReadByte();
+        if (mask == 0 || mask > 7) throw new InvalidDataException("Invalid test bitmap.");
+        return new((mask & 1) != 0 ? reader.ReadByte() : prior.Value,
+            (mask & 2) != 0 ? reader.ReadUInt32() : prior.TextId,
+            (mask & 4) != 0 ? reader.ReadUInt32() : prior.AliasId);
+    }
+    private long Tail() {
+        using RbfSegmentWriterLease writer = _segments.OpenActiveWriter();
+        return writer.File.TailOffset;
+    }
+    public void Dispose() {
+        _file.Dispose();
+        _segments.Dispose();
+        string resolved = Path.GetFullPath(_root);
+        if (!string.Equals(Path.GetDirectoryName(resolved), Path.TrimEndingDirectorySeparator(Path.GetFullPath(Path.GetTempPath())), StringComparison.OrdinalIgnoreCase) ||
+            !Path.GetFileName(resolved).StartsWith("durable-graph-workspace-", StringComparison.Ordinal)) {
+            throw new InvalidOperationException("Refusing to delete outside this test fixture.");
+        }
+        Directory.Delete(resolved, recursive: true);
+    }
+}

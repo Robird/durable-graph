@@ -7,6 +7,7 @@
 | 何时使用 | 入口 |
 |---|---|
 | 修改 Generator 输出、runtime 公共 API、history/build 或 package 接线，需要验证真实单包消费者 | [PackageConsumerProbe](PackageConsumerProbe/README.md)：活动产品回归 |
+| 验证单 writer 进程中止、RBF 发布可见性与严格坏尾拒绝 | [PublicationCrashProbe](PublicationCrashProbe/README.md)：DB-036 底层故障见证，非断电保证 |
 | 排查 AddSource、AdditionalFiles、编译成功后发布之间的机制或负对照 | [SourceGeneratorHistoryProbe](SourceGeneratorHistoryProbe/README.md)：已完成机制见证 |
 | 复查强类型 struct 升级签名、确定赋值或相关 C# 编译诊断 | [SnapshotUpgradeShapeProbe](SnapshotUpgradeShapeProbe/README.md)：已完成语言见证 |
 | 研究多 Segment 地址、对象版本链、Save planning 或合成 workload 的机制依据 | [MultiSegmentStateStoreProbe](MultiSegmentStateStoreProbe/PROJECT-STATE.md)：冻结可执行储备 |

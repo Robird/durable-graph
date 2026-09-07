@@ -1,7 +1,7 @@
 # DB-036 工作会话与历史恢复能力重构草案
 
-> 状态：Proposed，2026-09-07；源码调研基线 `6bcadbb`。
-> 本文是调研后的推荐方案，不是实施授权或已冻结的发布格式。
+> 状态：Chosen / Implemented，2026-09-07；源码调研基线 `6bcadbb`。
+> §1–6 保留原调研与施工合同，其“当前/待验证”指实施前；最终选择、实现与证据见 §7。
 > 当前事实见 [PROJECT-STATE](../../src/PROJECT-STATE.md)，术语见[术语表](../DurableGraph-glossary.md)。
 
 ## 1. 结论与需求依据
@@ -19,7 +19,7 @@
 同一候选为基线；保留对象身份、完整 source 目录、单对象 Upgrade、升级存活对象强制 Base。
 新 API 名称、publication carrier、故障域尚未采纳；不将本文的建议反写成已选目标。
 
-本轮仅阅读源码、现有测试与文档，没有重新执行 build、测试或故障实验。
+初次调研仅阅读源码、测试与文档；后续用户批准的实施验证记录在 §7。
 
 ## 2. 当前代码提供了什么
 
@@ -184,3 +184,68 @@ G1 的内存设计和 H1 已足够明确；G2 的大方向明确，完整施工�
 因此可以批准一个**带 G0 停点的多步骤工作批次**，不能把本文当作 publication 格式已经选定的盲执行工作单。
 下一轮若采纳此路线，先补齐 G0 的具体实验输入和故障范围，再启动实施；不扩展类型、策略、wire v3
 对象格式、GC、性能缓存或新程序集。长期已选约束不变。
+
+## 7. 本轮施工与验证记录
+
+实施基线 `9cbb5c1`，工作区干净；根 build 0 warning/error，现有四项目测试 840/840 通过。
+授权边界是本篇 G0–G3/H1；不实现跨对象 Upgrade、无 CLR 壳退休框架、其他类型、联合 Store 视图或自动修复。
+依赖保持 StateStore → Runtime/Storage；不修改 Atelia 上游，主线程串行运行 build/test/package。
+
+| 要求 | 负责人/落点 | 状态与证据 |
+|---|---|---|
+| G0 严格发布日志、原 lease 屏障、process 中止 | PublicationSubstrateTests、PublicationCrashProbe、StateRevisionStore.AppendDurably | verified：13 个 substrate cases + 5 个进程 Kill 场景；选择专用 RBF 严格日志 |
+| G1 exact 候选/基线/绑定安装 | WorldWorkspace、PreparedWorldSave、CaptureContext | verified：7 个 WorldWorkspace cases；原 fixed-Parent/加载 tests 回归通过 |
+| G2 单 head Repository/GraphSession | GraphRepository、GraphSession、PublicationLog | verified：21 个 Repository cases、35 个 publication cases；无任意 Accept，State wire v3 不变 |
+| H1 迁移壳完整消费 | HistoryCapabilityConsumer、Run-HistoryCapabilityProbe.ps1 | verified：V1、V2 readers-only、V2 migration、V3 删除壳四次真实包编译运行 |
+| G3 集成与独立审查 | 根 solution、真实包 consumer、独立只读 review | 根 build 0 warning/error；916/916 tests；StateStore 包消费含 GraphSessionContinuousCommit；最终包/文档检查见下 |
+
+### 冻结的最小产品合同
+
+- `GraphRepository.CreateNew(path)` 新建且拒绝已有路径；`OpenExisting(path)` 只打开完整仓库。
+  布局为 publication.rbf、schemas.rbf、state/；先独占 publication 文件，再取得其他资源。
+  创建中途失败不删除半成品，重开缺文件明确拒绝；Create(World, models) 只允许无发布 head。
+- 一个活动 `GraphSession<TWorld>`，Create 保留用户实例；Load 从日志取得 WorldId/Revision，无地址 sidecar。
+  Dispose 会话不保存；故障或 Dispose 不回滚领域修改。WorldId/Parent 在首次成功 Commit 前为空。
+- State 屏障由公开低层 `AppendDurably` 在原 lease 内完成；原 `Append` 语义不变。
+  重开强制 RecoverActiveTailOnOpen=false，Schema 确认后严格检查全部物理 State 文件 CRC/终止并 flush，
+  再重放 publication、验证每条记录的 State Parent/World membership、完整对象链及 Schema 引用，最后确认 publication。
+  领域 DTO 和引用合法性仍由 Load 的完整 exact/Normalize 验证承担，不声称能认证任意错误手写 codec。
+- publication 独占 RBF 文件，tag 数值 `0x44475048`，body v1：byte version、canonical Boolean hasParent、
+  optional parent address、new address、canonical UInt32 WorldId；address 是 canonical UInt32 FileNumber +
+  canonical UInt64 `SizedPtr.Serialize()`。全消费；帧 CRC/类型/尾元数据/断链/WorldId 改变均拒绝。
+  独立 golden：首条 `010001860207`；下一条 `010101860201A20207`。
+- 日志每条前驱必须等于上条 Revision，新地址严格更晚，WorldId 固定。发布 Append/flush 结果不确定后
+  repository faulted；GraphCommitException 提供 Unknown 和已知 candidate 地址，禁止旧会话续写。
+  重开按可见完整日志及新屏障确认旧/新 head；坏尾明确拒绝，不自动回退。
+  发布已确认而安装失败报告 Published；确定未发布但 State 写入路径异常报告 NotPublished 并要求重开。
+  AfterStateDurable 后的普通内存失败可保留健康资源重试，孤立追加不成为 head。
+- 只验证正常 OS 下的进程中止/确定性故障注入；不承诺 OS crash、power loss、目录元数据、介质丢失。
+  单日志无法区分合法旧文件和被外部精确删除了完整帧后缀的文件；该外部破坏不在本片模型中。
+  不确定结果的重开可能拒绝打开，此处没有自动修复或不中断保留原实例的恢复承诺。
+
+### 集成证据与实际限制
+
+- 根 build 0 warnings/errors；根四项目 **916/916**，0 skip，比基线增加 76。
+  Runtime/SG 391、StateStore 267、Storage 155、Serialization 103；TRX 前缀 `db036-final`。
+  初轮发现并修正了测试清理前缀、测试访问上游私有路径、InvalidDataException 继承关系的错误断言；
+  最终测试没有通过跳过、放宽格式或修改上游来规避失败。
+- PublicationCrashProbe 五场景由父进程 Kill 子进程，不执行子进程 Dispose；独立验证进程检查结果。
+  产物 `experiments/PublicationCrashProbe/obj/run-20260907132120-c6c6cb6c420a4906bdae0c92cf4d4976`。
+  substrate/probe 使用小 ordinal 格式，产品日志格式另由 PublicationLogTests 的 golden/非法输入覆盖。
+  Repository 的 BeforeStateAppend 故障是内部检查点注入，不冒称真实设备 flush 失败；
+  publication 的 Append/flush 前后失败还由 IRbfFile wrapper 覆盖。
+- H1 产物 `experiments/PackageConsumerProbe/obj/history-capability-20260907132553-28960-19f04a71`，
+  history 数量 2→4→4→4，旧文件 hash 保持。V2 壳为 abstract 且保留一个可注入非法 ID 的引用槽，
+  用来证明坏 orphan 仍拒绝；未要求所有迁移壳都是零字段，也未新增退休类型 ABI。
+- StateStore 实际包消费保留旧 markers，并新增 `GraphSessionContinuousCommit:True`：SG 领域图连续三次
+  Commit 保留实例/readonly 环/transient，目录重开后再 Commit 并第二次重开验证。
+  产物 `experiments/PackageConsumerProbe/obj/state-store-run-20260907133347-38280-45b4d5a8`。
+- 原 Runtime package consumer 回归通过，7 份 Schema history；产物
+  `experiments/PackageConsumerProbe/obj/run-20260907133616-27792`。
+  三条包回归与进程见证均由主线程串行执行，未改动上游源码。
+- 文档/编码检查：34 个变更文件 UTF-8 无 BOM/LF，9 份 Markdown 的 278 个本地链接/锚点通过，
+  `git diff --check` 通过；构建产物及测试结果留在 ignored 目录。
+- 独立只读评审覆盖候选/完整 source/身份安装与 publication/重开/异常结果，无未解决阻塞。
+  根据评审调整重开屏障次序、增加 CRC 正确但 State Parent 错误/World 缺失的真实跨 Store 拒绝测试。
+- 不实现的部分继续是原先的明确非目标：命名 branch/Reset、根替换/清空、多 writer、联合 Store 视图、
+  自动坏尾修复、无 CLR 迁移壳历史族、类型扩展及性能优化。它们不是本轮未完成的实施闸门。

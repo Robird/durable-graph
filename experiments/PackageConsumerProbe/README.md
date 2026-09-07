@@ -151,3 +151,29 @@ reopening checks the removed view and both earlier graphs. Required markers are 
 `SharedDerived`, `ReadonlyCycles`, `ChildOnlyDelta`, `UnreachableCycleRemoved`, and
 `HistoricalGraphPreserved`, each followed by `True`. The host still retains the explicit WorldId
 and Revision address; preparation and Append do not publish a head or advance the loaded baseline.
+
+DB-036 adds a separate public `GraphRepository` / `GraphSession` exercise using the same generated
+graph. Three consecutive commits preserve the original World/Character/Item instances and their
+transient state. Reopening needs only the repository path and model directory: the persistent head
+selects the World ID and Revision. The loaded session commits again without reloading, and a final
+reopen verifies the result. The script requires `GraphSessionContinuousCommit:True` as well as all
+earlier markers. The low-level fixed-Parent exercises above remain unchanged.
+
+## Historical capability retention
+
+```powershell
+./experiments/PackageConsumerProbe/Run-HistoryCapabilityProbe.ps1
+```
+
+This independent script builds four real package consumers: V1 writes a World and a cyclic Legacy
+object with Base/Delta history; V2 without Upgrade methods proves exact DTO decoding works while
+editable Load fails; V2 with explicit upgrades removes the World edge and retains an abstract
+migration shell, validates even the orphan's references, then writes a required World Base and
+Legacy Remove. V3 removes the Legacy CLR class entirely: the migrated Revision loads, the old
+Revision fails for lack of an exact reader despite its persisted Schema and retained history files.
+Existing history hashes must remain unchanged. The witness freezes no automatic retired-type API.
+
+An application that still promises to load older Revisions must retain their reader and normalization
+capabilities. Removing a family from a newer Revision does not make its older versions independently
+recoverable from metadata. `-PackageSource <feed> -Version <version>` can reuse an existing eight-package
+feed; the default invocation packs its own isolated dependency closure.
