@@ -95,3 +95,55 @@ BoxCodec<TDomainValue, TValueState>
 SchemaKind 与 InlineSchema 只表达当前非泛型 exact 布局，不是一般 TypeExpr。
 后续泛型可复用静态值操作的组合方式，但仍须显式建立领域参数与状态表示参数的对应关系，
 并为闭合实参及历史版本设计身份/缓存；当前按 SchemaId/version 的 helper 名称不能代替这些工作。
+
+## 6. StateJournal 的静态 helper 与工厂组装素材
+
+2026-09-07 用户提供以下相邻仓库素材，主代理与独立只读 subagent 已核查源码。
+本节是下一泛型分片的推荐细化，尚未在 DurableGraph 中实施或验证性能，不替代完整分片设计。
+
+- [DurObjDictImpl](../../../atelia/src/StateJournal/Internal/DurObjDictImpl.cs)：对外为
+  `DurableDict<TKey, TDurObj>`，内部为 `DictChangeTracker<TKey, LocalId>`；读写外观转换对象/ID，
+  持久内容操作静态选择 `LocalIdAsRefHelper`。这是引用投影的具体证据，尚非任意领域类型到 DTO 的映射框架。
+- [ITypeHelper](../../../atelia/src/StateJournal/Internal/ITypeHelper.cs)：静态抽象操作经
+  `where THelper : unmanaged, ITypeHelper<T>` 和 `THelper.Write(...)` 等形式调用，不需要 helper 接口实例。
+- [HelperRegistry](../../../atelia/src/StateJournal/Internal/HelperRegistry.cs)：解析并验证类型，
+  返回 helper Type 与 TypeCode；复合类型递归闭合预制 helper，解析结果可缓存。
+- [DurableFactory](../../../atelia/src/StateJournal/Internal/DurableFactory.cs)：MakeGenericType 选择闭合实现，
+  Expression 编译构造/外观适配委托，后续不再逐字段反射。泛型静态工厂按闭合实参初始化，
+  外层 Type 缓存不意味着并发 GetOrAdd 的 value factory 严格只执行一次。
+
+据此，将 §2 的默认候选进一步细化为 **领域参数 + 状态参数 + 操作类型参数**。
+优先比较静态 helper 方案，不再预设每个泛型字段都需要持有 codec 接口实例。示意：
+
+```csharp
+interface IValueProjection<TDomain, TState> where TState : unmanaged {
+    static abstract TState Capture(in TDomain value, CaptureContext context);
+    static abstract void Hydrate(ref TDomain value, in TState state, ObjectReadTable objects);
+}
+
+// 生成模板以 TProjection.Capture(...) 调用，TProjection 没有运行期实例。
+// BoxCapture<TDomain, TState, TProjection>
+//     where TState : unmanaged
+//     where TProjection : unmanaged, IValueProjection<TDomain, TState>
+```
+
+DTO 本身仍只含状态表示参数，例如 `BoxStateV1<TState>`；操作类型参数属于执行模板，
+不会作为 DTO 字段持久化。工厂解析出 StateType/ProjectionType 后闭合模板，用户仍只写 `Box<T>`。
+这不取消领域/状态映射：static interface 约束检查已经选出的类型配对，不能自动推导关联的 StateType。
+
+历史状态操作与当前领域投影继续分开：可采用 `IStateOps<TState>` 及带 TStateOps 参数的 body 模板，
+覆盖 Base、融合 Delta、Apply 与引用遍历。其绑定必须带 exact 历史布局/引用约束，不能仅按 TState 缓存；
+`uint` 可以是普通数值、string ID 或 durable ID。历史 helper 的类型参数也不能无意引用已经删除的领域 struct，
+否则会破坏 DB-037 的历史能力。引用约束等元数据可由生成的身份 helper 或显式参数承载，具体形状待验证。
+
+Expression 适合首次构造与外观适配；若 SG 已生成可调用的泛型工厂，则 MakeGenericMethod/CreateDelegate
+也可完成组装。两者都是冷路径选择，不用 Expression 重写成员遍历，也不把 Expression.Compile 称为完全无动态代码。
+静态接口通过受约束的类型参数调用，见 [C# 官方说明](https://learn.microsoft.com/en-us/dotnet/csharp/advanced-topics/interface-implementation/static-virtual-interface-members)。
+它消除了 helper 实例和相应的实例接口调用需求，但 JIT 是否内联、泛型共享下最终调用形状及性能须实测，
+不承诺所有情形零间接调用或必然最优。
+
+复用的是组装机制：不搬入 StateJournal 的 setter/ChangeTracker 权威、懒加载外观、string/symbol 或独立估算语义。
+DurableGraph 仍先捕获冻结 DTO，融合准备实际 body，按 exact 版本读取，并由现有 Session 发布原候选。
+首次构建失败不发布半成品 binding；模型目录初始化及循环引用仍需在下一分片验证，
+不直接复制静态构造中所有异常/缓存策略。优先验证同一模板在 int、string、durable 引用、含引用 struct 下的闭合，
+再验证历史 body 脱离旧领域 struct、共享状态 CLR 类型但引用约束不同，以及泛型 owner Upgrade 的可书写性。
