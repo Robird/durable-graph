@@ -8,10 +8,12 @@
 ## 1. 下一个分片如何选择
 
 [DB-032](design-branches/0032-exact-revision-decoding-slice.md) 已接通完整 stored-exact DTO 目录冷读。
-下一片优先评估“历史目录 → current DTO 升级与重写义务”，再与 roots/Restore、加载身份/基线导入
+下一片优先评估“历史目录 → current DTO 单对象升级与重写义务”，再与单 World/Restore、加载身份/基线导入
 和工作会话一起选择可观察闭环；下一范围尚未冻结，不预定扩大为完整 Commit。
-整体加载顺序已选为 exact 重建 → Upgrade → 分配实例 → 填充/连接引用 → 重建 Transient →
-完整交付，约束维护在[目标设计](DurableGraph-target-design-v0.md#恢复transient-与宿主边界)。
+MVP 库内加载顺序为 exact 重建 → 单对象 Upgrade → 分配实例 → 填充/连接引用 → 完整交付 World；
+Transient 由用户在交付后处理，约束维护在[目标设计](DurableGraph-target-design-v0.md#恢复transient-与宿主边界)。
+数组形状、升级、单根、Transient hook 和 boxed value 的已选裁剪见
+[MVP 功能边界](DurableGraph-target-design-v0.md#mvp-功能边界)，不再作为开放范围反复讨论。
 WorkingTree/GraphSession 的职责方向已采纳；发布/故障裁决尚未实现。不要把内存 Current、Schema
 注册成功或 State Append 返回地址直接当作已发布基线。Schema 严格坏尾拒绝合同见 DB-031 §8。
 
@@ -28,10 +30,10 @@ B/D/H 分别指 Base 写入字节、Delta 写入字节、当前对象重建字�
 |---|---|---|
 | 工作会话与 exact Parent baseline | 已选 Repository 受控创建/加载的 WorkingTree/GraphSession；如何建立、安装、冷重建 Parent / DTO / 实例身份绑定，收敛 Commit API 与失败行为 | [目标约束](DurableGraph-target-design-v0.md#单一发布权威与明确故障结果)、[DB-030 接缝](design-branches/0030-captured-object-preparation-slice.md#4-exact-parent-接缝明确留到后片) |
 | TypeCodec 与 exact Schema 绑定 | 一般类型组合、nominal 引用约束、内建复合类型的 codec；已登记模型族的 exact reader 分派不等于一般 TypeCodec，也不自动复活已删除模型族 | [DB-032 接缝](design-branches/0032-exact-revision-decoding-slice.md)、[DB-018](design-branches/0018-generated-graph-codec-shape.md)、[DB-001](design-branches/0001-schema-authority-and-runtime-representation.md) |
-| DTO 升级与领域 Restore | 完整 stored-exact 目录如何升级为 current DTO、保留重写义务，再构造领域对象；失败时不交付半成品 | [DB-032 读取输入](design-branches/0032-exact-revision-decoding-slice.md)、[DB-022](design-branches/0022-versioned-state-dto-capture.md)、[DB-002](design-branches/0002-read-time-version-upgrade-pipeline.md) |
+| DTO 升级与领域 Restore | 通过单对象字段转换形成 current DTO、保留重写义务，再构造领域对象；失败时不交付半成品，不带入跨对象迁移 | [DB-032 读取输入](design-branches/0032-exact-revision-decoding-slice.md)、[DB-022](design-branches/0022-versioned-state-dto-capture.md)、[DB-002](design-branches/0002-read-time-version-upgrade-pipeline.md) |
 | 一般 durable 引用图 | 递归登记、共享/循环、nominal 约束、多态实际类型、完整目录及 roots 可达闭包如何共同成立 | [DB-018](design-branches/0018-generated-graph-codec-shape.md)、[DB-024](design-branches/0024-reference-capture-and-reusable-object-ids.md) |
 | 自定义 struct | exact inline Schema/history 与 owner 升版，嵌套 DTO/布局及字段和数组元素的 ref body 复用 | [DB-024 struct TODO](design-branches/0024-reference-capture-and-reusable-object-ids.md)、[DB-020](design-branches/0020-typed-slot-array-binding-slice.md) |
-| 完整数组对象 | identity、shape/下界、分配与全 rank 元素循环如何组成 codec；不能把现有元素模板视为完整数组支持 | [DB-020](design-branches/0020-typed-slot-array-binding-slice.md) |
+| 完整数组对象 | 在已选零下界 SZ/有限多维 rank 范围内，实现 identity、shape、分配与元素循环，并拒绝不支持的形状；不能把现有元素模板视为完整数组支持 | [MVP 边界](DurableGraph-target-design-v0.md#mvp-功能边界)、[DB-020](design-branches/0020-typed-slot-array-binding-slice.md) |
 | reopen 后身份接续 | 加载实例怎样绑定到所选 Revision 的 ID；如何恢复分配高水位及隔离失败候选 | [DB-024](design-branches/0024-reference-capture-and-reusable-object-ids.md) |
 
 ## 3. 尚待裁决的机制
@@ -43,13 +45,13 @@ B/D/H 分别指 Base 写入字节、Delta 写入字节、当前对象重建字�
 | 历史升级后的比较和重写 | DB-006/R3 已见证 normalized baseline 与 RequiresRewrite；产品同版重建接缝已就绪；升级须先按 Base Schema 完整还原旧链再进行，仍 live 的升级对象即使值未变也必须 BaseOnlyUpdate。新 DTO 自动升级、义务导入/发布后清除与删边清理尚未接通，读取不回写 |
 | 完整 source 目录与 current 可达集合 | 升级可能删边。研究见证保留 source rows，再由 Save 移除不可达项；产品保存视图怎样表达需与候选/Parent 衔接 |
 | Schema 规范表示和持久引用 | canonical 注册批次与逻辑 SchemaKey 已闭合；未来 SchemaHash、紧凑引用及一般类型家族约束随消费者裁决，不用 GetHashCode 作持久身份 |
-| Restore 的分配和阶段边界 | allocate-all / hydrate-all 有循环见证；构造器、readonly 字段、升级引用重绑定、验证/transient hook 的具体可见性和顺序待选 |
+| Restore 的分配和阶段边界 | allocate-all / hydrate-all 有循环见证；构造器、readonly 字段、升级后引用连接与持久数据校验的具体实现待选。MVP 无 Transient hook，交付后由用户初始化 |
 | 开放泛型/数组组合绑定 | SG 静态 body + runtime 按需闭合是推荐路线；具体 generic factories、局部 DynamicMethod 或其他后端尚待消费场景裁决，不据此扩建通用 registry |
-| 跨程序集与一般类型形状 | 继承 helper 可见性、外部历史祖先、generic durable 类型、boxed value identity、enum/nullable/decimal/native int 等支持范围 |
+| 跨程序集与一般类型形状 | 继承 helper 可见性、外部历史祖先、generic durable 类型、enum/nullable/decimal/native int 等支持范围；boxed value identity 已排除 MVP |
 | 多态与运行时注册 | exact runtime 类型到 Schema/DTO/codec 的绑定、nominal assignability、未知实现 fail closed；不为尚无消费者的插件体系预制完整注册框架 |
 | 捕获复合值的所有权 | 含引用 struct/数组/容器如何真正冻结候选，不能从 scalar readonly DTO 推导浅复制足够 |
-| 数组完整形状与分配 | 明确非零下界、非 SZ rank-1、一般 rank 的类型/shape 编码与分配，保留元素按 ref 读写 |
-| 根与持久目录 | roots 如何与 Revision 持久绑定、从完整 DTO 目录恢复可达领域图；已有目录读取不能替代根目录或联合 manifest |
+| 数组完整形状与分配 | 非零下界与非 SZ rank-1 已明确不支持；实施时在 rank 上界 3/4 中选择，确定有限 tag、元素类型和各维长度编码、分配及按 ref 遍历 |
+| 根与持久目录 | 单 World 根如何与 Revision 持久绑定、恢复可达图及表达空值/清空；已有目录读取不能替代持久根引用或联合 manifest，无需多根产品 API |
 | 多个空串 ID 的会话导入 | 读取允许多个 ID 解析到同一个 Empty；reopen 后如何绑定/合并别名及接续保存尚待裁决，不重开独立空串实例分配 |
 
 设计证据：[DB-006](design-branches/0006-flat-graph-delta-prototype.md)、
@@ -69,12 +71,14 @@ DB-009/010 的旧 no-reuse 前提不能沿用；借用 Base 共享 prior 等结�
 | 完整 Save、发布与恢复 | 内容链和保存输入闭合后；确定 expected parent、durability barrier、publication 不确定结果、reopen/reconcile、基线安装及故障模型 |
 | ArtifactStore | 真实 HistoryLog/消息/附件消费者出现；比较地址方案、chunk、历史 view、嵌套引用与 Schema 复用，不强迫 State 常驻完整历史 |
 | DerivedStore | 真实昂贵派生消费者出现；定义 exact 输入围栏、recipe/builder/model 身份、stale/missing 及可删重建 |
-| Transient 重建 | 首个领域 Restore 消费者需要索引/缓存时；比较单对象 hook、全局 registry、两阶段或依赖调度，失败不交付 roots |
+| 框架 Transient hook | MVP 明确不做，用户在完整图交付后自行重建；MVP 后若多个宿主确有重复的重建协调需求，再比较 hook/依赖调度及失败边界 |
+| 多根产品 API | MVP 单 World；应用根对象无法满足实际独立根管理需求时，再评估根列表、命名根与局部加载，不提前建设 |
+| boxed value 持久身份 | MVP 拒绝领域图中的装箱值对象；实际模型需要通过引用槽保留装箱值身份时，再增加局部 codec/身份支持；不影响框架内部 DTO 装箱 |
 | 物理 GC、compaction、历史保留 | 出现真实空间或 recovery-closure 问题后；与 CLR 映射清理和数字 ID 回收分开裁决 |
 | TwoLeg / incremental cleaner | 多历史 Segment 无法满足实际有界 dependency file count、在线退休、backup/rescue 或 compaction SLO 时重访，见其 [技术储备](../experiments/TwoLegRotationProbe/PROJECT-STATE.md) |
 | 性能优化 | MVP 后有具体测量再优化全量 Base 准备、缓冲复制、cache、typed buckets 或指纹；DB-028 先 object-first 直读 RBF，Frame cache 只减少重复 I/O/解码，重复完整 map 物化需另评估 map cache/单 ID 查询，必要时再按 Frame 合并批量读取 |
 | 并发、分支与跨 Repository | 宿主提出真实 consumer 后；分别定义 concurrent Capture、snapshot isolation、branch/fork/multi-writer 和跨 Store/Repository identity，不扩大当前单 writer 假设 |
-| 升级创建新对象或外部副作用 | 当前升级/图恢复闭合之后，有具体需求再讨论新 ID、source table 外引用与失败隔离，不借普通升级默认授权 |
+| 跨对象升级与外部副作用 | MVP 仅单对象字段转换；读取其他对象、拆分/合并及创建持久新对象均延后。MVP 后有真实迁移案例时，再讨论图访问、新 ID 与失败隔离；不借普通升级默认授权 |
 | 历史工具/升级调用优化 | 有 package/history 或升级调用的真实限制后，再重访 DB-003 的 Try/result/ABI 和 DB-004 的多 writer/多 TFM 与批次原子性，不顺带做兼容框架 |
 
 ### 4.1 SchemaStore 复用 StateStore 与联合版本视图

@@ -16,8 +16,9 @@
 
 DB-032 已接通 SG 模型族历史 reader 登记、指定 Revision 完整 DTO/string 冷读和引用验证，
 实施及验证见分片账本，当前无正在施工的分片。下一范围尚未选择，优先评估 current DTO 升级与重写义务，再与
-roots/Restore、加载身份接续和工作会话需求一起选片。
-读取返回 stored-exact 目录，不自动建立可编辑基线；六阶段目标加载流程见
+单 World/Restore、加载身份接续和工作会话需求一起选片。已选范围裁剪见
+[MVP 功能边界](../docs/DurableGraph-target-design-v0.md#mvp-功能边界)。
+读取返回 stored-exact 目录，不自动建立可编辑基线；库内加载与宿主初始化边界见
 [目标设计](../docs/DurableGraph-target-design-v0.md#恢复transient-与宿主边界)。
 WorkingTree/GraphSession 仍是统一持有 Parent、DTO 基线与实例身份的目标，现有保存接缝不等于 Commit。
 未来联合 Commit/Ref 及内建类型自举的 SchemaStore 复用路线见
@@ -39,6 +40,7 @@ WorkingTree/GraphSession 仍是统一持有 Parent、DTO 基线与实例身份�
   SchemaOnly + GenerateBinaryBody 仍限同编译、顶层、非泛型、非 record 的 partial class 链；readonly durable 字段仍拒绝。
 - AddRoot 登记根，Seal 捕获字段；Accept/Discard 只是内存候选协议。ID 单调分配、失败可烧号；退役实例映射清理不回收数字。
   空串 Capture/读取两端统一 Empty，非空 string 保留引用身份。
+  现有多根 Capture 是内部能力/机制见证；后续 MVP 外层 API 按单 World 收敛，本轮文档裁剪未改代码。
 - CaptureSession.Prepare 自动使用 Current，完整预检 exact Schema/DTO/稳定 binding 后编码；全部 live Base 提前生成，
   existing durable 调用融合 Delta、existing string 为 unchanged。结果只标识内存 Previous/Candidate，不带磁盘地址。
   重复准备与失败不安装或放弃候选、不烧号；临时 guard 拒绝会话重入。capture-only 登记仍有效，缺 binding 仅 Prepare 拒绝。
@@ -75,6 +77,8 @@ WorkingTree/GraphSession 仍是统一持有 Parent、DTO 基线与实例身份�
   H 含 kind/prior/length/body，不含 ObjectId/membership/共享 Frame；不是总冷读 I/O。
   先直读 RBF，缓存优化留有 [TODO](DurableGraph.StateStore.Storage/StateRevisionStore.cs)。
 - 数组循环可操作已有 rank-2 非零下界数组，但尚无 shape 编码/分配、其他 rank 或非 SZ rank-1 支持。
+  此底层循环能力不等于目标支持范围；后续数组产品入口须按 MVP 边界拒绝非零下界、非 SZ rank-1
+  及超过所选上界的 rank，本轮没有修改已有元素循环或测试。
   已知成员的 SG body 静态绑定字节原语；PrimitiveSlotCodecs 只在测试工具中。
 - Generator 中未注册的 graph operations probe 和 tests 中 logical graph R1–R3b 是机制见证，不能算产品通用图能力。
 
