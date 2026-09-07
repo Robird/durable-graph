@@ -7,11 +7,11 @@
 
 ## 1. 下一个分片如何选择
 
-[DB-031](design-branches/0031-persisted-object-type-envelope-slice.md) 已闭合持久 Schema 注册、Base 类型引用
-及显式 reader 的同版冷重建，接续现有统一准备和策略。下一片推荐
-[DB-032 完整 exact-version 对象目录冷读](design-branches/0032-exact-revision-decoding-slice.md)（Proposed，未实施）：
-先把现有静态历史 reader 接成完整目录读取，具体取舍和验收只维护在提案。
-其后重新评估新 DTO 升级、roots/Restore、加载身份/基线导入和工作会话，不预定扩大为完整 Commit。
+[DB-032](design-branches/0032-exact-revision-decoding-slice.md) 已接通完整 stored-exact DTO 目录冷读。
+下一片优先评估“历史目录 → current DTO 升级与重写义务”，再与 roots/Restore、加载身份/基线导入
+和工作会话一起选择可观察闭环；下一范围尚未冻结，不预定扩大为完整 Commit。
+整体加载顺序已选为 exact 重建 → Upgrade → 分配实例 → 填充/连接引用 → 重建 Transient →
+完整交付，约束维护在[目标设计](DurableGraph-target-design-v0.md#恢复transient-与宿主边界)。
 WorkingTree/GraphSession 的职责方向已采纳；发布/故障裁决尚未实现。不要把内存 Current、Schema
 注册成功或 State Append 返回地址直接当作已发布基线。Schema 严格坏尾拒绝合同见 DB-031 §8。
 
@@ -27,8 +27,8 @@ B/D/H 分别指 Base 写入字节、Delta 写入字节、当前对象重建字�
 | 工作项 | 最小应回答的问题 | 设计或证据入口 |
 |---|---|---|
 | 工作会话与 exact Parent baseline | 已选 Repository 受控创建/加载的 WorkingTree/GraphSession；如何建立、安装、冷重建 Parent / DTO / 实例身份绑定，收敛 Commit API 与失败行为 | [目标约束](DurableGraph-target-design-v0.md#单一发布权威与明确故障结果)、[DB-030 接缝](design-branches/0030-captured-object-preparation-slice.md#4-exact-parent-接缝明确留到后片) |
-| TypeCodec 与 exact Schema 绑定 | 一般类型组合、nominal 引用约束、内建复合类型与自动 reader 分派；现有 string/durable Base 引用及显式 typed reader 不等于完整 TypeCodec | [DB-031 接缝](design-branches/0031-persisted-object-type-envelope-slice.md)、[DB-018](design-branches/0018-generated-graph-codec-shape.md)、[DB-001](design-branches/0001-schema-authority-and-runtime-representation.md) |
-| DTO 升级与领域 Restore | stored exact 版本如何分派、升级为 current DTO，再构造领域对象；失败时不交付半成品 | [DB-022](design-branches/0022-versioned-state-dto-capture.md)、[DB-002](design-branches/0002-read-time-version-upgrade-pipeline.md) |
+| TypeCodec 与 exact Schema 绑定 | 一般类型组合、nominal 引用约束、内建复合类型的 codec；已登记模型族的 exact reader 分派不等于一般 TypeCodec，也不自动复活已删除模型族 | [DB-032 接缝](design-branches/0032-exact-revision-decoding-slice.md)、[DB-018](design-branches/0018-generated-graph-codec-shape.md)、[DB-001](design-branches/0001-schema-authority-and-runtime-representation.md) |
+| DTO 升级与领域 Restore | 完整 stored-exact 目录如何升级为 current DTO、保留重写义务，再构造领域对象；失败时不交付半成品 | [DB-032 读取输入](design-branches/0032-exact-revision-decoding-slice.md)、[DB-022](design-branches/0022-versioned-state-dto-capture.md)、[DB-002](design-branches/0002-read-time-version-upgrade-pipeline.md) |
 | 一般 durable 引用图 | 递归登记、共享/循环、nominal 约束、多态实际类型、完整目录及 roots 可达闭包如何共同成立 | [DB-018](design-branches/0018-generated-graph-codec-shape.md)、[DB-024](design-branches/0024-reference-capture-and-reusable-object-ids.md) |
 | 自定义 struct | exact inline Schema/history 与 owner 升版，嵌套 DTO/布局及字段和数组元素的 ref body 复用 | [DB-024 struct TODO](design-branches/0024-reference-capture-and-reusable-object-ids.md)、[DB-020](design-branches/0020-typed-slot-array-binding-slice.md) |
 | 完整数组对象 | identity、shape/下界、分配与全 rank 元素循环如何组成 codec；不能把现有元素模板视为完整数组支持 | [DB-020](design-branches/0020-typed-slot-array-binding-slice.md) |
@@ -38,7 +38,7 @@ B/D/H 分别指 Base 写入字节、Delta 写入字节、当前对象重建字�
 
 | 问题 | 现有依据与裁决边界 |
 |---|---|
-| 对象版本解释与保存来源 | Base exact Schema 已可持久解析；自动 reader 绑定、完整 head map 的 external heads 来源、候选对象身份连续性仍需产品 Save/Load 合同，不能由 Parent 声明一致推导全局身份认证 |
+| 对象版本解释与保存来源 | 已登记模型族可按 Base exact Schema 自动读取；完整 head map 的 external heads 来源、候选对象身份连续性仍需产品 Save/Load 合同，不能由 Parent 声明一致推导全局身份认证 |
 | 保存相等性与真实估算 | 同版标量 DTO 的浮点按位、引用槽按 ID 已采纳；未来复合值/容器相等性另定。已准备 body 与当前 v3 envelope 计量见 [DB-029](design-branches/0029-prepared-object-revision-planning-slice.md)；Base 类型头已计入 B/H。未来新增类型头/容器布局时继续按实际对象 payload 计量 |
 | 历史升级后的比较和重写 | DB-006/R3 已见证 normalized baseline 与 RequiresRewrite；产品同版重建接缝已就绪；升级须先按 Base Schema 完整还原旧链再进行，仍 live 的升级对象即使值未变也必须 BaseOnlyUpdate。新 DTO 自动升级、义务导入/发布后清除与删边清理尚未接通，读取不回写 |
 | 完整 source 目录与 current 可达集合 | 升级可能删边。研究见证保留 source rows，再由 Save 移除不可达项；产品保存视图怎样表达需与候选/Parent 衔接 |
@@ -49,7 +49,7 @@ B/D/H 分别指 Base 写入字节、Delta 写入字节、当前对象重建字�
 | 多态与运行时注册 | exact runtime 类型到 Schema/DTO/codec 的绑定、nominal assignability、未知实现 fail closed；不为尚无消费者的插件体系预制完整注册框架 |
 | 捕获复合值的所有权 | 含引用 struct/数组/容器如何真正冻结候选，不能从 scalar readonly DTO 推导浅复制足够 |
 | 数组完整形状与分配 | 明确非零下界、非 SZ rank-1、一般 rank 的类型/shape 编码与分配，保留元素按 ref 读写 |
-| 根与持久目录 | roots 如何与 Revision 持久绑定、加载完整对象目录并自动分派 reader；Base 类型引用不能替代根目录或联合 manifest |
+| 根与持久目录 | roots 如何与 Revision 持久绑定、从完整 DTO 目录恢复可达领域图；已有目录读取不能替代根目录或联合 manifest |
 | 多个空串 ID 的会话导入 | 读取允许多个 ID 解析到同一个 Empty；reopen 后如何绑定/合并别名及接续保存尚待裁决，不重开独立空串实例分配 |
 
 设计证据：[DB-006](design-branches/0006-flat-graph-delta-prototype.md)、

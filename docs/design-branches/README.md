@@ -16,12 +16,6 @@
 - **Rejected / Superseded**：保留否决原因或后继链接，不继续作为施工输入。
 - 本索引的“实施/适用范围”与原状态分开。源码和可执行证据决定实现事实，历史测试数字只属于当时基线。
 
-## 当前规划
-
-| 文档 | 状态 | 推荐范围 |
-|---|---|---|
-| [DB-032 完整 exact-version 对象目录冷读](0032-exact-revision-decoding-slice.md) | Proposed | SG 模型族历史 reader 登记、指定 Revision 全目录读取与 string 引用验证；未实施，不含 Upgrade/roots/Restore/Commit |
-
 ## 按任务查阅的混合决策
 
 这些文档跨越已实施、已接受未实施和未决问题；仅在路线图指向相关主题时阅读对应章节。
@@ -58,6 +52,7 @@
 | [DB-029 已准备对象内容到可追加 Revision](0029-prepared-object-revision-planning-slice.md) | Chosen / Implemented | SG/string PrepareBase、prepared rows、B/D/H、固定 policy、raw Revision；typed 适配仍为集成见证，不含完整 Save/发布 |
 | [DB-030 异构 Capture 图统一准备内容](0030-captured-object-preparation-slice.md) | Chosen / Implemented | SG 对象级 binding、Runtime 完整 prepared 内容；作为未来工作会话内部组件，不含 exact Parent baseline、持久类型或 Save/发布 |
 | [DB-031 持久 Schema 注册与 Base 类型引用](0031-persisted-object-type-envelope-slice.md) | Chosen / Implemented | 单调持久注册、严格恢复、Base exact 引用、同版 typed 冷读及保存桥接；不含自动修复、Upgrade/Restore 或 Commit |
+| [DB-032 完整 exact-version 对象目录冷读](0032-exact-revision-decoding-slice.md) | Chosen / Implemented | SG 历史 reader 登记、局部目录与完整 Revision 自动读取、目标视图 string 引用验证；不含 Upgrade/roots/Restore/Commit |
 
 ## 隔离研究与技术储备
 

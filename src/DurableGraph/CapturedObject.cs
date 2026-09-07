@@ -1,12 +1,15 @@
 namespace Atelia.DurableGraph;
 
-/// <summary>The in-memory content kind of a captured object; not a wire-format type code.</summary>
+/// <summary>The in-memory content kind of a captured or decoded object; not a wire-format type code.</summary>
 public enum CapturedObjectKind {
     Durable,
     String,
 }
 
-/// <summary>One immutable object record. Domain instances are never exposed or retained here.</summary>
+/// <summary>
+/// One immutable captured or decoded object record. Domain instances are never exposed or retained here.
+/// A decoded record alone is not a capture candidate or an accepted session baseline.
+/// </summary>
 public sealed class CapturedObject {
     private readonly object _content;
 
@@ -29,7 +32,7 @@ public sealed class CapturedObject {
     public DurableSchema? Schema { get; }
     internal ICapturedStatePreparation? Preparation { get; }
 
-    /// <summary>Returns a copy of the exact captured DTO, never the stored box.</summary>
+    /// <summary>Returns a copy of the exact DTO, never the stored box.</summary>
     public TState GetState<TState>() where TState : unmanaged {
         if (Kind != CapturedObjectKind.Durable || _content is not TState state) {
             throw new InvalidOperationException("The record does not contain the requested durable DTO type.");

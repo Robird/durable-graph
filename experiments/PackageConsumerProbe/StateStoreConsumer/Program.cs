@@ -11,7 +11,7 @@ internal static class Program {
     private static void Main(string[] args) {
         if (args.Length != 1) { throw new ArgumentException("Pass one unused artifact directory."); }
         Character.Exercise(Path.GetFullPath(args[0]));
-        Console.WriteLine("PersistedSchema:True:BaseTypeReference:True:RawDelta:True:ColdTypedRead:True:SharedString:True:ConflictBeforeAppend:True");
+        Console.WriteLine("PersistedSchema:True:BaseTypeReference:True:RawDelta:True:ColdTypedRead:True:SharedString:True:ConflictBeforeAppend:True:DecodedRevision:True");
     }
 }
 
@@ -99,23 +99,29 @@ public sealed partial class Character : NamedObject {
         Require(envelope.Kind == CapturedObjectKind.Durable && envelope.SchemaKey == new SchemaKey(Schema.SchemaId, 1) &&
             envelope.Body.SequenceEqual(new byte[] { 3, 14, 3 }), "Base did not preserve its reference and frozen body.");
 
-        var firstState = TypedObjectVersionReader.ReadDurable(firstChain, coldSchemas, __DurableBinaryBody.V1.Schema,
-            __DurableBinaryBody.ReadV1, __DurableBinaryBody.ApplyDeltaV1);
-        var secondState = TypedObjectVersionReader.ReadDurable(cold.ReadObjectVersionChain(secondRevision, secondId), coldSchemas,
-            __DurableBinaryBody.V1.Schema, __DurableBinaryBody.ReadV1, __DurableBinaryBody.ApplyDeltaV1);
-        var oldState = TypedObjectVersionReader.ReadDurable(cold.ReadObjectVersionChain(firstRevision, firstId), coldSchemas,
-            __DurableBinaryBody.V1.Schema, __DurableBinaryBody.ReadV1, __DurableBinaryBody.ApplyDeltaV1);
+        StateReaderRegistry readers = new();
+        __DurableBinaryBody.RegisterReaders(readers);
+        __DurableBinaryBody.RegisterReaders(readers); // Stable generated registration is idempotent.
+        DecodedRevision current = RevisionDecoder.Read(cold, coldSchemas, secondRevision, readers);
+        DecodedRevision previous = RevisionDecoder.Read(cold, coldSchemas, firstRevision, readers);
+        Require(current.RevisionAddress == secondRevision && previous.RevisionAddress == firstRevision &&
+            current.Objects.Count == 3 && previous.Objects.Count == 3 &&
+            current.Objects.Select(row => row.Id).SequenceEqual(new[] { firstId, secondId, stringId }),
+            "Revision decoding lost complete ordered live membership or its query address.");
+        var firstState = current.GetRequired(firstId).GetState<__DurableBinaryBody.V1>();
+        var secondState = current.GetRequired(secondId).GetState<__DurableBinaryBody.V1>();
+        var oldState = previous.GetRequired(firstId).GetState<__DurableBinaryBody.V1>();
         Require(firstState.Segment1Field1 == 8 && secondState.Segment1Field1 == 9 && oldState.Segment1Field1 == 7,
             "Cold static body reconstruction ignored the selected revision.");
 
         ObjectVersionChain stringChain = cold.ReadObjectVersionChain(secondRevision, stringId);
-        Require(TypedObjectVersionReader.ReadString(stringChain) == "A", "Built-in string decoding failed.");
+        Require(current.GetRequired(stringId).StringContent == "A", "Built-in string decoding failed.");
         var stringEnvelope = BaseObjectPayloadCodec.Decode(stringChain.Records[0].Record.Body);
         Require(stringEnvelope.SchemaKey is null, "Built-in string must not require SchemaStore.");
-        StringReadTable strings = StringReadTable.Decode([(stringId, (ReadOnlyMemory<byte>)stringEnvelope.Body.ToArray())]);
-        __DurableBinaryBody.ValidateStringReferences(in firstState, strings);
-        __DurableBinaryBody.ValidateStringReferences(in secondState, strings);
-        Require(ReferenceEquals(strings.ResolveString(firstState.Segment0Field1), strings.ResolveString(secondState.Segment1Field2)) &&
+        StringReadTable strings = current.Strings;
+        Require(ReferenceEquals(current.GetRequired(stringId).StringContent, strings.ResolveString(stringId)) &&
+            ReferenceEquals(previous.GetRequired(stringId).StringContent, previous.Strings.ResolveString(stringId)) &&
+            ReferenceEquals(strings.ResolveString(firstState.Segment0Field1), strings.ResolveString(secondState.Segment1Field2)) &&
             ReferenceEquals(strings.ResolveString(firstState.Segment1Field2), strings.ResolveString(secondState.Segment0Field1)),
             "Shared strings lost reference identity across inherited owners.");
     }

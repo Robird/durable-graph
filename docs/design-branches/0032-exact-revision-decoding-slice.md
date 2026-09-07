@@ -1,6 +1,6 @@
 # DB-032：完整 exact-version 对象目录冷读
 
-状态：**Proposed**；2026-09-07。本轮只规划，尚未实施或冻结公开 API。
+状态：**Chosen / Implemented**；2026-09-07。§1–7 保留提案时依据，当前实施合同与结果见 §8。
 提案基线：`39624f6`，DB-031 已完成；当前事实见 [PROJECT-STATE](../../src/PROJECT-STATE.md)。
 
 ## 1. 问题与最小结果
@@ -163,3 +163,66 @@ PackageConsumer probes。没有新 wire，所以不为本片另造 wire golden�
 本轮只改设计与导航；未运行 build/tests，不把 DB-031 的既有测试数字记为新验证。
 提案及三份导航经独立只读复审，无阻塞项；4 份 Markdown 为 UTF-8/LF，115 个本地链接及
 引用锚点检查通过，Git diff 检查通过。
+
+## 8. 施工合同与账本
+
+实施基线 `8fc1357`，工作区干净；根 build 0 警告/错误，基线完整 tests 768/768，无跳过。
+用户确认的六阶段加载顺序已记录到[目标设计](../DurableGraph-target-design-v0.md#恢复transient-与宿主边界)，
+本片只实现 stored-exact DTO 目录及现有 string 引用验证。
+
+本轮冻结接缝：
+
+- Runtime public `StateReaderBinding<TState>` 绑定 Schema、Base/Delta reader 与 string validator；
+  public `IStateReaderRegistration.Register(StateReaderBinding)` 为 SG 提供不依赖 StateStore 的登记口。
+  同步 `IStateBodySource` 与共用 typed `StateBodyDecoder` 保持 internal；通过 Runtime 对 StateStore 的
+  friend 可见性接入，无反向项目依赖。原 typed reader 的两个 delegate 移至 Runtime namespace。
+- SG `__DurableBinaryBody.RegisterReaders(registration)` 登记各 Vn 的稳定 reader 实例，成员 body 不改。
+- StateStore `StateReaderRegistry` 按 SchemaKey 登记，同一实例幂等、同 key 另一实例拒绝；
+  每次读取复制固定索引，之后对原目录的登记不影响正在执行的读取或已返回结果。
+- `RevisionDecoder.Read(store,schemas,revisionAddress,readers)` 返回 `DecodedRevision`，提供
+  RevisionAddress、Objects、GetRequired(id) 和 Strings。对象优先解码，引用校验完成后才交付。
+  行复用 CapturedObject，历史 DTO 没有 preparation；StringReadTable 复制已解码实例映射，不重新解码。
+
+| 要求 | 实施负责 | 验证入口 | 状态 |
+|---|---|---|---|
+| typed 整链与一次装箱、内部 string 建表 | Runtime 子任务 | StateReaderBindingTests | 已验证 |
+| 稳定模型族历史登记与静态 body | SG 子任务 | GeneratedReaderBindingTests | 已验证 |
+| exact 分派、完整目录、晚期失败、只读结果 | StateStore 子任务 | RevisionDecoder / StateReaderRegistry tests | 已验证 |
+| 异构历史 DTO、旧祖先及真实文件重开 | 集成子任务 | DecodedRevisionGeneratorTests | 已验证 |
+| 原 Runtime 与 StateStore 实际包交付 | 包消费子任务 | 两个 PackageConsumer scripts | 已验证 |
+| 总体流程文档、集中验证、独立审查 | 主代理 + reviewer | 根 build/tests、diff/链接 | 已验证 |
+
+### 8.1 实施结果与验证
+
+实现范围与上表一致。Runtime 提供 typed binding 和共用整链解码；SG 新增各版稳定 ReaderVn 及
+RegisterReaders，已有成员 body 不变。StateStore 的局部 registry、RevisionDecoder 和 DecodedRevision
+完成 exact 分派、目标视图 string 引用验证与整体交付。读取不调用 Append、RegisterBatch 或 Accept。
+
+真实生成集成在混合 Leaf V1/V2 与另一模型族的 Revision 上，跨 Segment 还原 Base→两次 Delta→
+新 Base；旧祖先 CLR 定义已删除。反例使只有历史祖先槽引用的 string ID 被 Remove 或改为 durable，
+证明不能由其他 current 对象的校验代替历史槽校验。末尾对象缺 reader/坏 body 不交付半份目录；
+此前成功结果及关闭 Store 后的 DTO/string 仍有效，逐文件内容对比无写入。
+
+2026-09-07 主代理集中执行：
+
+- `dotnet build DurableGraph.slnx --verbosity quiet`：最终 0 警告、0 错误。
+- Runtime/SG 定向测试 16/16，包含新 binding/登记与既有 preparation 定位；完整冷读生成集成 1/1。
+- StateStore 定向测试 25/25：新 registry/目录与既有 TypedObjectVersionReader 共用路径。
+- 两项旧 SG API 清单断言适配后定向测试 2/2；仍严格检查生成方法集合。
+- `dotnet test DurableGraph.slnx --no-build --verbosity quiet`：最终 800/800，无跳过；
+  DurableGraph 397、StateStore 145、Storage 155、Serialization 103，较基线增加 32 项。
+- `./experiments/PackageConsumerProbe/Run-Probe.ps1`：通过；Runtime-only consumer 新增
+  `GeneratedReaders:True` 强制标记，history count 7。
+  产物 `experiments/PackageConsumerProbe/obj/run-20260907022946-8240`。
+- `./experiments/PackageConsumerProbe/Run-StateStoreProbe.ps1`：通过；保留 DB-031 六项标记并新增
+  `DecodedRevision:True`，history count 2。实际包消费者改为登记模型族并读取完整目录，
+  验证两个 Revision 的值、完整 membership、行与 string 表实例一致。
+  产物 `experiments/PackageConsumerProbe/obj/state-store-run-20260907023420-25348-7a8cf059`。
+
+集成中修正测试夹具的 ReadUInt32 名称与截断异常断言；第一次全套回归发现两个旧测试的方法清单
+缺 RegisterReaders，补入该方法后重跑通过。另一个旧 reflection 断言改为按 Preparation 名取字段，
+避免把新增 ReaderVn 字段当作 preparation；均未放宽原 DTO/layout/字节断言。
+
+独立 reviewer 完成产品、测试及包消费审查，无未解决阻塞项；主代理核对实际 diff 和执行结果。
+27 个修改文件 UTF-8/LF，6 份 Markdown 的 140 个本地链接及引用锚点有效，Git diff 检查通过。
+没有更改持久格式、Storage、策略算法或上游源码；无 Upgrade、roots、Restore、Current 导入或发布承诺。

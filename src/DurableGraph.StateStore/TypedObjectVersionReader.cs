@@ -3,9 +3,6 @@ using Atelia.DurableGraph.StateStore.Storage;
 
 namespace Atelia.DurableGraph.StateStore;
 
-public delegate TState StateBaseReader<TState>(ref BinaryPayloadReader reader) where TState : unmanaged;
-public delegate TState StateDeltaApplier<TState>(ref BinaryPayloadReader reader, in TState prior) where TState : unmanaged;
-
 /// <summary>Reconstructs one exact-version DTO using explicitly selected static body functions.</summary>
 /// <remarks>
 /// Storage validates prior addresses. The Base selects the Schema for every Delta; the caller
@@ -23,25 +20,12 @@ public static class TypedObjectVersionReader {
         ArgumentNullException.ThrowIfNull(expectedSchema);
         ArgumentNullException.ThrowIfNull(readBase);
         ArgumentNullException.ThrowIfNull(applyDelta);
-        ValidateShape(chain);
-        BaseObjectPayload payload = BaseObjectPayloadCodec.Decode(chain.Records[0].Record.Body);
+        BaseObjectPayload payload = DecodeBase(chain);
         if (payload.Kind != CapturedObjectKind.Durable || payload.SchemaKey is not SchemaKey key) {
             throw new InvalidDataException("A durable reader requires a durable Base type header.");
         }
-        DurableSchema storedSchema = schemas.GetRequired(key);
-        if (!storedSchema.Equals(expectedSchema)) {
-            throw new InvalidDataException("The stored exact Schema definition does not match the selected body reader.");
-        }
-
-        BinaryPayloadReader reader = new(payload.Body);
-        TState state = readBase(ref reader);
-        reader.EnsureFullyConsumed();
-        for (int index = 1; index < chain.Records.Count; index++) {
-            reader = new(chain.Records[index].Record.Body);
-            state = applyDelta(ref reader, in state);
-            reader.EnsureFullyConsumed();
-        }
-        return state;
+        MatchSchema(schemas, key, expectedSchema);
+        return StateBodyDecoder.Read(CreateBodySource(chain, payload), readBase, applyDelta);
     }
 
     /// <summary>
@@ -49,11 +33,14 @@ public static class TypedObjectVersionReader {
     /// reference identity across ObjectIds; each independent nonempty decode creates content.
     /// </summary>
     public static string ReadString(ObjectVersionChain chain) {
-        ValidateShape(chain);
+        BaseObjectPayload payload = DecodeBase(chain);
+        return ReadString(chain, payload);
+    }
+
+    internal static string ReadString(ObjectVersionChain chain, BaseObjectPayload payload) {
         if (chain.Records.Count != 1) {
             throw new InvalidDataException("An immutable string object cannot have Delta records.");
         }
-        BaseObjectPayload payload = BaseObjectPayloadCodec.Decode(chain.Records[0].Record.Body);
         if (payload.Kind != CapturedObjectKind.String) {
             throw new InvalidDataException("A string reader requires a string Base type header.");
         }
@@ -61,6 +48,27 @@ public static class TypedObjectVersionReader {
         string value = reader.ReadString();
         reader.EnsureFullyConsumed();
         return value;
+    }
+
+    internal static BaseObjectPayload DecodeBase(ObjectVersionChain chain) {
+        ValidateShape(chain);
+        return BaseObjectPayloadCodec.Decode(chain.Records[0].Record.Body);
+    }
+
+    internal static void MatchSchema(SchemaStore schemas, SchemaKey key, DurableSchema expectedSchema) {
+        DurableSchema storedSchema = schemas.GetRequired(key);
+        if (!storedSchema.Equals(expectedSchema)) {
+            throw new InvalidDataException("The stored exact Schema definition does not match the selected body reader.");
+        }
+    }
+
+    internal static IStateBodySource CreateBodySource(ObjectVersionChain chain, BaseObjectPayload payload) =>
+        new ChainBodySource(chain, payload);
+
+    // Borrow the owned chain for this synchronous read; Delta bodies do not need another copy.
+    private sealed class ChainBodySource(ObjectVersionChain chain, BaseObjectPayload payload) : IStateBodySource {
+        public int Count => chain.Records.Count;
+        public ReadOnlySpan<byte> GetBody(int index) => index == 0 ? payload.Body : chain.Records[index].Record.Body;
     }
 
     private static void ValidateShape(ObjectVersionChain chain) {

@@ -60,7 +60,7 @@ try {
 
     $consumerAssembly = Join-Path $output "Debug/net10.0/Atelia.StateStoreConsumer.dll"
     $consumerOutput = (& dotnet $consumerAssembly (Join-Path $workRoot "database") | Out-String).Trim()
-    if ($LASTEXITCODE -ne 0 -or $consumerOutput -ne "PersistedSchema:True:BaseTypeReference:True:RawDelta:True:ColdTypedRead:True:SharedString:True:ConflictBeforeAppend:True") {
+    if ($LASTEXITCODE -ne 0 -or $consumerOutput -ne "PersistedSchema:True:BaseTypeReference:True:RawDelta:True:ColdTypedRead:True:SharedString:True:ConflictBeforeAppend:True:DecodedRevision:True") {
         throw "Packaged StateStore exercise failed; output was '$consumerOutput'."
     }
     Write-Host $consumerOutput

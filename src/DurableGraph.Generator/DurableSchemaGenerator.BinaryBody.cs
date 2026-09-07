@@ -185,6 +185,8 @@ public sealed partial class DurableSchemaGenerator {
             AppendBinaryStringReferenceValidation(source, version, bodyIndent);
         }
 
+        AppendBinaryReaderRegistration(source, versions, bodyIndent);
+
         BinaryVersionModel current = versions[versions.Count - 1];
         AppendBinaryCapture(source, type, current, bodyIndent, hasDomainBase);
         if (!type.Symbol.IsAbstract) {
@@ -196,6 +198,24 @@ public sealed partial class DurableSchemaGenerator {
         if (hasNamespace) {
             source.AppendLine("}");
         }
+    }
+
+    private static void AppendBinaryReaderRegistration(
+        StringBuilder source, List<BinaryVersionModel> versions, string indent) {
+        foreach (BinaryVersionModel version in versions) {
+            source.Append(indent).Append("private static readonly global::Atelia.DurableGraph.StateReaderBinding<")
+                .Append(version.Name).Append("> Reader").Append(version.Name).Append(" = new(")
+                .Append(version.Name).Append(".Schema, Read").Append(version.Name).Append(", ApplyDelta")
+                .Append(version.Name).AppendLine(", ValidateStringReferences);");
+        }
+
+        source.Append(indent).AppendLine("internal static void RegisterReaders(global::Atelia.DurableGraph.IStateReaderRegistration readers) {");
+        source.Append(indent).AppendLine("    global::System.ArgumentNullException.ThrowIfNull(readers);");
+        foreach (BinaryVersionModel version in versions) {
+            source.Append(indent).Append("    readers.Register(Reader").Append(version.Name).AppendLine(");");
+        }
+
+        source.Append(indent).AppendLine("}");
     }
 
     private static void AppendBinaryCapture(

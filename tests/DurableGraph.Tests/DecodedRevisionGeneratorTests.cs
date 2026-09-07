@@ -1,0 +1,189 @@
+using System.Reflection;
+using Atelia.DurableGraph.Build;
+using Atelia.DurableGraph.StateStore;
+using Atelia.DurableGraph.StateStore.Serialization;
+using Atelia.DurableGraph.StateStore.Storage;
+using Atelia.Rbf;
+using Atelia.RbfSegmentStore;
+using SegmentStore = Atelia.RbfSegmentStore.RbfSegmentStore;
+
+namespace Atelia.DurableGraph.Tests;
+
+public sealed partial class DurableSchemaGeneratorTests {
+    [Fact]
+    public void DecodedRevisionColdReopenDispatchesMixedHistoricalModelsAndValidatesTheWholeTargetView() {
+        using AncestryHistoryDirectory history = new();
+        SnapshotHistoryTool publisher = new();
+        GeneratorTestRun initial = RunGenerator(FusedDeltaPreamble + """
+            [DurableType("decoded.base", 1, SchemaOnly = true, GenerateBinaryBody = true)]
+            public abstract partial class OldBase : DurableBase {
+                [DurableField(9)] private string? _name;
+            }
+            [DurableType("decoded.leaf", 1, SchemaOnly = true, GenerateBinaryBody = true)]
+            public sealed partial class Leaf : OldBase {
+                [DurableField(3)] private int _number;
+                [DurableField(8)] private string? _alias;
+            }
+            """);
+        AssertSchemaOnlyCompiles(initial);
+        publisher.Publish(history.WriteManifest(initial), history.History);
+        GeneratorTestRun current = RunGenerator(DecodedRevisionCurrentSource, history.ReadAdditionalTexts());
+        AssertSchemaOnlyCompiles(current);
+        Assembly assembly = EmitAndLoad(current.OutputCompilation);
+        Assert.Null(assembly.GetType("FusedDelta.OldBase"));
+        Type leaf = assembly.GetType("FusedDelta.Leaf")!;
+        DurableSchema oldSchema = ReadSchemaOnly(leaf, 1);
+        DurableSchema currentSchema = ReadSchemaOnly(leaf, 2);
+        DurableSchema otherSchema = ReadSchemaOnly(assembly.GetType("FusedDelta.Other")!, 1);
+        Assert.Equal(TypeTag.String, Assert.Single(oldSchema.BaseSchema!.Fields).TypeTag);
+        Assert.Equal(TypeTag.Byte, Assert.Single(currentSchema.BaseSchema!.Fields).TypeTag);
+        Type host = assembly.GetType("FusedDelta.Host")!;
+        var register = host.GetMethod("Register")!.CreateDelegate<Func<bool, StateReaderRegistry>>();
+        var check = host.GetMethod("Check")!.CreateDelegate<Action<DecodedRevision, int>>();
+        var prepare = host.GetMethod("Prepare1")!.CreateDelegate<Func<byte[], byte[], PreparedDelta>>();
+
+        // Independent raw values seed the stored bodies; generated typed code prepares Deltas.
+        // Stored IDs are fixture data only. The read API receives neither IDs nor per-object readers.
+        byte[] original = [10, 2, 11]; // Old ancestor string ID 10; int 1; alias ID 11.
+        PreparedDelta firstDelta = prepare(original, [10, 4, 11]);
+        PreparedDelta secondDelta = prepare([10, 4, 11], [10, 4, 10]);
+        Assert.Equal<byte>([2, 4], firstDelta.Payload.ToArray());
+        Assert.Equal<byte>([4, 10], secondDelta.Payload.ToArray());
+        static ObjectVersionRecord Durable(uint id, DurableSchema schema, byte[] body) =>
+            ObjectVersionRecord.CreateBase(id, BaseObjectPayloadCodec.EncodeDurable(schema, new(body)).Payload);
+        static ObjectVersionRecord Text(uint id, string value) =>
+            ObjectVersionRecord.CreateBase(id, BaseObjectPayloadCodec.EncodeString(StringPayloadCodec.PrepareBase(value)).Payload);
+
+        using RawBaseDirectory directory = new();
+        using RawBaseDirectory schemaDirectory = new();
+        Directory.CreateDirectory(schemaDirectory.Path);
+        string schemaPath = Path.Combine(schemaDirectory.Path, "schemas.rbf");
+        RbfSegmentStoreOptions options = new() { NewStoreLayout = RbfSegmentStoreLayout.Flat, SegmentSizeThresholdBytes = 8 };
+        FrameAddress first, second, third, newBase, missingString, wrongKind, malformed;
+        using (var schemaFile = RbfFile.CreateNew(schemaPath))
+        using (SegmentStore segments = SegmentStore.CreateNew(directory.Path, options)) {
+            SchemaStore schemas = new(schemaFile);
+            schemas.RegisterBatch([oldSchema, currentSchema, otherSchema]);
+            StateRevisionStore store = new(segments);
+            first = store.Append(StateRevision.CreateBase(null, [
+                Durable(1, oldSchema, original),
+                Durable(2, currentSchema, [7, 8, 12]),
+                Text(10, "same"), Text(11, "same"), Text(12, ""), Text(13, ""),
+                Durable(99, otherSchema, [11, 18, 13]),
+            ], []));
+            second = store.Append(StateRevision.CreateDelta(first,
+                [ObjectVersionRecord.CreateDelta(1, first, firstDelta.Payload)], []));
+            third = store.Append(StateRevision.CreateDelta(second,
+                [ObjectVersionRecord.CreateDelta(1, second, secondDelta.Payload)], []));
+            newBase = store.Append(StateRevision.CreateDelta(third,
+                [Durable(1, oldSchema, [11, 6, 12])], []));
+
+            // Only the removed CLR ancestor's slot refers to ID 10 in this parent.
+            // Checking only current or leaf-declared slots would incorrectly accept these views.
+            missingString = store.Append(StateRevision.CreateDelta(second, [], [10]));
+            wrongKind = store.Append(StateRevision.CreateDelta(second,
+                [Durable(10, currentSchema, [7, 8, 12])], []));
+            // ID 99 is last: all earlier objects have decoded before this trailing-byte error.
+            malformed = store.Append(StateRevision.CreateDelta(third,
+                [Durable(99, otherSchema, [11, 18, 13, 0])], []));
+        }
+        Assert.NotEqual(first.FileNumber, third.FileNumber);
+        Array.Clear(original);
+        firstDelta = null!;
+        secondDelta = null!;
+        Dictionary<string, byte[]> diskBefore = Directory.EnumerateFiles(directory.Path, "*", SearchOption.AllDirectories)
+            .Append(schemaPath).ToDictionary(path => path, File.ReadAllBytes);
+
+        DecodedRevision[] retained;
+        using (var reopenedSchemaFile = RbfFile.OpenReadOnlyExisting(schemaPath))
+        using (SegmentStore reopened = SegmentStore.OpenReadOnlyExisting(directory.Path, options)) {
+            SchemaStore schemas = new(reopenedSchemaFile, readOnly: true);
+            StateRevisionStore store = new(reopened);
+            StateReaderRegistry readers = register(true);
+            retained = new[] { first, second, third, newBase }
+                .Select(address => RevisionDecoder.Read(store, schemas, address, readers)).ToArray();
+            for (int stage = 0; stage < retained.Length; stage++) {
+                check(retained[stage], stage);
+                Assert.Equal(new[] { first, second, third, newBase }[stage], retained[stage].RevisionAddress);
+                Assert.Equal<uint>([1, 2, 10, 11, 12, 13, 99], retained[stage].Objects.Select(row => row.Id));
+            }
+            Assert.Equal(3, store.ReadObjectVersionChain(third, 1).Records.Count);
+            Assert.Single(store.ReadObjectVersionChain(newBase, 1).Records);
+
+            foreach (FrameAddress bad in new[] { missingString, wrongKind, malformed }) {
+                DecodedRevision? delivered = null;
+                Assert.Throws<InvalidDataException>(() => delivered = RevisionDecoder.Read(store, schemas, bad, readers));
+                Assert.Null(delivered);
+                check(retained[2], 2);
+            }
+            // The Schema log includes Other, but intentionally omit that code capability.
+            // Missing ID 99's reader cannot fall back to the same-shaped historical Leaf DTO.
+            StateReaderRegistry missingReader = register(false);
+            DecodedRevision? partial = null;
+            Assert.Throws<InvalidDataException>(() => partial = RevisionDecoder.Read(store, schemas, third, missingReader));
+            Assert.Null(partial);
+            check(RevisionDecoder.Read(store, schemas, first, readers), 0);
+            check(retained[2], 2);
+        }
+        // Decoded DTOs and the identity table own their content beyond file/store lifetimes.
+        for (int stage = 0; stage < retained.Length; stage++) check(retained[stage], stage);
+        foreach ((string path, byte[] contents) in diskBefore) Assert.Equal(contents, File.ReadAllBytes(path));
+        Assert.Equal(diskBefore.Count - 1, Directory.EnumerateFiles(directory.Path, "*", SearchOption.AllDirectories).Count());
+    }
+
+    private static readonly string DecodedRevisionCurrentSource = FusedDeltaPreamble + """
+        [DurableType("decoded.base", 2, SchemaOnly = true, GenerateBinaryBody = true)]
+        public abstract partial class NewBase : DurableBase {
+            [DurableField(2)] private byte _small;
+        }
+        [DurableType("decoded.leaf", 2, SchemaOnly = true, GenerateBinaryBody = true)]
+        public sealed partial class Leaf : NewBase {
+            [DurableField(1)] private uint _number;
+            [DurableField(8)] private string? _alias;
+        }
+        [DurableType("decoded.other", 1, SchemaOnly = true, GenerateBinaryBody = true)]
+        public sealed partial class Other : DurableBase {
+            [DurableField(1)] private string? _name;
+            [DurableField(2)] private int _number;
+            [DurableField(3)] private string? _empty;
+        }
+        public static class Host {
+        """ + FusedDeltaHostMethods("Leaf", 1) + """
+            public static Atelia.DurableGraph.StateStore.StateReaderRegistry Register(bool includeOther) {
+                var readers = new Atelia.DurableGraph.StateStore.StateReaderRegistry();
+                Leaf.__DurableBinaryBody.RegisterReaders(readers);
+                Leaf.__DurableBinaryBody.RegisterReaders(readers); // Stable generated bindings are idempotent.
+                if (includeOther) Other.__DurableBinaryBody.RegisterReaders(readers);
+                return readers;
+            }
+            public static void Check(Atelia.DurableGraph.StateStore.DecodedRevision view, int stage) {
+                var old = view.GetRequired(1).GetState<Leaf.__DurableBinaryBody.V1>();
+                var current = view.GetRequired(2).GetState<Leaf.__DurableBinaryBody.V2>();
+                var other = view.GetRequired(99).GetState<Other.__DurableBinaryBody.V1>();
+                if (old.Segment0Field9 != (stage == 3 ? 11u : 10u) ||
+                    old.Segment1Field3 != (stage == 0 ? 1 : stage == 3 ? 3 : 2) ||
+                    old.Segment1Field8 != (stage < 2 ? 11u : stage == 2 ? 10u : 12u) ||
+                    current.Segment0Field2 != 7 || current.Segment1Field1 != 8 || current.Segment1Field8 != 12 ||
+                    other.Segment0Field1 != 11 || other.Segment0Field2 != 9 || other.Segment0Field3 != 13)
+                    throw new Exception("Stored exact DTO values or dispatch differ.");
+                if (!view.GetRequired(1).Schema.Equals(Leaf.__DurableBinaryBody.V1.Schema) ||
+                    !view.GetRequired(2).Schema.Equals(Leaf.__DurableBinaryBody.V2.Schema) ||
+                    !view.GetRequired(99).Schema.Equals(Other.__DurableBinaryBody.V1.Schema))
+                    throw new Exception("The stored exact Schema was replaced.");
+                string shared = view.Strings.ResolveString(10);
+                string equal = view.Strings.ResolveString(11);
+                if (shared != "same" || equal != "same" || ReferenceEquals(shared, equal) ||
+                    !ReferenceEquals(equal, view.Strings.ResolveString(other.Segment0Field1)) ||
+                    !ReferenceEquals(view.Strings.ResolveString(12), string.Empty) ||
+                    !ReferenceEquals(view.Strings.ResolveString(13), string.Empty) || view.Strings.ResolveString(0) != null)
+                    throw new Exception("String value or identity differs.");
+                foreach (uint id in new uint[] { 10, 11, 12, 13 })
+                    if (!ReferenceEquals(view.GetRequired(id).StringContent, view.Strings.ResolveString(id)))
+                        throw new Exception("Rows and the reference table decoded different instances.");
+                old = default; // GetState returns a copy; changing the local cannot alter the retained row.
+                if (view.GetRequired(1).GetState<Leaf.__DurableBinaryBody.V1>().Segment0Field9 == 0)
+                    throw new Exception("A returned DTO copy changed the stored state.");
+            }
+        }
+        """;
+}

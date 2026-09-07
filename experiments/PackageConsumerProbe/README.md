@@ -53,6 +53,11 @@ string replacement, retirement, and content surviving Discard. The script requir
 `CapturePreparation:True` marker. This prepares in-memory candidates; it does not establish a
 persistent Parent baseline, append a StateRevision, or publish a branch head.
 
+Generated `RegisterReaders` also accepts a small consumer-owned `IStateReaderRegistration` sink
+from Runtime alone. Two calls supply the same stable reader binding and its exact generated Schema;
+the script requires `GeneratedReaders:True`. This verifies the generator's registration seam
+without adding a StateStore package dependency or assigning registry policy to the sink.
+
 The final consumer also captures two concrete roots with shared strings, distinct equal strings,
 null/empty/surrogate content, and private base fields through generated AddRoot adapters. It checks
 the closed ID DTO list, static ID-body golden bytes, mutation isolation, accept/discard, stable live
@@ -92,8 +97,13 @@ operations, with no manual analyzer, import or project-reference wiring. Generat
 two inherited owners sharing a string. Schema registration persists the ancestor closure, is
 idempotent, and rejects a conflicting batch before append. Manually selected Base then raw Delta
 records are written to real segments; read-only reopening recovers exact Schema definitions and
-uses public typed readers plus static generated bodies to reconstruct both revisions and validate
-shared string references. Only Base carries a type header; string has no SchemaStore dependency.
-The script requires all six output markers and retains artifacts under its unique ignored `obj`
+uses generated `RegisterReaders` with the public `StateReaderRegistry` and `RevisionDecoder.Read`
+to reconstruct complete stored-exact DTO/string directories for both revisions. No per-object
+reader selection or manual string-table construction coordinates decoding. The consumer checks
+all live rows, selected Revision addresses, unchanged owners, and the same string instance in the
+result row and reference table. Repeating generated registration is idempotent. Only Base carries
+a type header; string has no SchemaStore dependency. The script requires the original six output
+markers plus `DecodedRevision:True` and retains artifacts under its unique ignored `obj`
 directory. It does not test the internal representation policy, publish a head, upgrade DTOs,
-discover CLR types, or restore domain instances.
+discover CLR types, or restore domain instances. Mixed historical model families are covered by
+the product integration tests; this package witness stays with two owners of the same Schema.

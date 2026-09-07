@@ -9,6 +9,7 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="Atelia.DurableGraph.Tests" />
+    <InternalsVisibleTo Include="Atelia.DurableGraph.StateStore" />
     <ProjectReference Include="..\DurableGraph.StateStore.Serialization\DurableGraph.StateStore.Serialization.csproj" />
     <ProjectReference Include="..\DurableGraph.Generator\DurableGraph.Generator.csproj"
                       OutputItemType="Analyzer"

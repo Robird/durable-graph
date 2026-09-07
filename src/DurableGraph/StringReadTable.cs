@@ -31,14 +31,39 @@ public sealed class StringReadTable {
             BinaryPayloadReader reader = new(body.Span);
             string value = reader.ReadString();
             reader.EnsureFullyConsumed();
-            if (value.Length == 0) {
-                value = string.Empty;
-            } else if (!nonemptyInstances.Add(value)) {
-                throw new InvalidDataException("Different nonempty string IDs must have distinct instances.");
-            }
-            strings.Add(id, value);
+            AddDecoded(strings, nonemptyInstances, id, value);
         }
         return new(strings);
+    }
+
+    /// <summary>Copies completed decoded bindings without decoding or replacing nonempty instances.</summary>
+    internal static StringReadTable FromDecoded(IEnumerable<(uint Id, string Value)> records) {
+        ArgumentNullException.ThrowIfNull(records);
+        Dictionary<uint, string> strings = [];
+        HashSet<string> nonemptyInstances = new(ReferenceEqualityComparer.Instance);
+        foreach ((uint id, string value) in records) {
+            AddDecoded(strings, nonemptyInstances, id, value);
+        }
+        return new(strings);
+    }
+
+    private static void AddDecoded(
+        Dictionary<uint, string> strings,
+        HashSet<string> nonemptyInstances,
+        uint id,
+        string value) {
+        if (id == 0 || strings.ContainsKey(id)) {
+            throw new InvalidDataException("String object IDs must be nonzero and unique.");
+        }
+        if (value is null) {
+            throw new InvalidDataException("A string object must contain a non-null string.");
+        }
+        if (value.Length == 0) {
+            value = string.Empty;
+        } else if (!nonemptyInstances.Add(value)) {
+            throw new InvalidDataException("Different nonempty string IDs must have distinct instances.");
+        }
+        strings.Add(id, value);
     }
 
     /// <summary>Resolves a string ID in this view. Zero is null; any other absent ID is invalid.</summary>

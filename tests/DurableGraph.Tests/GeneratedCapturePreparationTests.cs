@@ -166,7 +166,8 @@ public sealed partial class DurableSchemaGeneratorTests {
         Assert.Equal<byte>([0x02, 0x64], updated.DeltaContent!.Payload.ToArray());
         Assert.Equal<byte>([0x21], host.GetMethod("Historical")!.CreateDelegate<Func<byte[]>>()());
         Type body = assembly.GetType("PreparationHistory.Item")!.GetNestedType("__DurableBinaryBody", BindingFlags.NonPublic)!;
-        FieldInfo binding = Assert.Single(body.GetFields(BindingFlags.Static | BindingFlags.NonPublic));
+        FieldInfo binding = Assert.Single(body.GetFields(BindingFlags.Static | BindingFlags.NonPublic),
+            field => field.Name == "Preparation");
         Assert.Equal(body.GetNestedType("V2", BindingFlags.NonPublic), Assert.Single(binding.FieldType.GenericTypeArguments));
         Assert.Single(body.GetNestedType("V1", BindingFlags.NonPublic)!.GetFields(BindingFlags.Instance | BindingFlags.NonPublic));
         Assert.Equal(2, body.GetNestedType("V2", BindingFlags.NonPublic)!.GetFields(BindingFlags.Instance | BindingFlags.NonPublic).Length);

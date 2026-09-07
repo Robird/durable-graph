@@ -33,6 +33,15 @@ public sealed partial class Character : BinaryBase {
         StringDecodingExercise.Run();
         ExercisePreparedDelta();
         ExerciseCapturePreparation();
+        ReaderSink registered = new();
+        __DurableBinaryBody.RegisterReaders(registered);
+        __DurableBinaryBody.RegisterReaders(registered);
+        if (registered.Readers.Count != 2 ||
+            !ReferenceEquals(registered.Readers[0], registered.Readers[1]) ||
+            !ReferenceEquals(registered.Readers[0].Schema, __DurableBinaryBody.V1.Schema) ||
+            !registered.Readers[0].Schema.Equals(Schema)) {
+            throw new InvalidOperationException("Generated registration lost its stable exact Schema binding.");
+        }
         Character source = new(true, -17, 42, 8);
         var captured = __DurableBinaryBody.Capture(source);
         source._total = 999;
@@ -61,7 +70,13 @@ public sealed partial class Character : BinaryBase {
         bool valid = restored.Segment0Field1 && restored.Segment0Field7 == -17 &&
             restored.Segment1Field1 == 42 && source._total == 1001 && source._sentinel == 8 &&
             source.HasExpectedBase && ReferenceEquals(__DurableBinaryBody.V1.Schema, Schema);
-        return $"BinaryBody:{Convert.ToHexString(buffer.WrittenSpan)}:{valid}:ReferenceCapture:True:StringDecoding:True:PreparedDelta:True:PreparedBase:True:CapturePreparation:True";
+        return $"BinaryBody:{Convert.ToHexString(buffer.WrittenSpan)}:{valid}:ReferenceCapture:True:StringDecoding:True:PreparedDelta:True:PreparedBase:True:CapturePreparation:True:GeneratedReaders:True";
+    }
+
+    // This sink needs only the Runtime package. StateStore owns registry policy and persistence.
+    private sealed class ReaderSink : IStateReaderRegistration {
+        internal List<StateReaderBinding> Readers { get; } = [];
+        public void Register(StateReaderBinding reader) => Readers.Add(reader);
     }
 }
 
