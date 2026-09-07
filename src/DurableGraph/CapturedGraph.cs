@@ -10,7 +10,7 @@ public sealed class CapturedGraph {
     /// <summary>Root IDs in registration order, including duplicates and zero for null roots.</summary>
     public IReadOnlyList<uint> RootIds { get; }
 
-    /// <summary>The complete live object set in ascending ID order.</summary>
+    /// <summary>The complete candidate object set in ascending ID order.</summary>
     public IReadOnlyList<CapturedObject> Objects { get; }
 
     // Array.AsReadOnly leaks its backing array through ICollection.SyncRoot.

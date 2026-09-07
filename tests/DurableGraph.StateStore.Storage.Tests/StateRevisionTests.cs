@@ -7,7 +7,7 @@ public sealed class StateRevisionTests {
     private static readonly FrameAddress Parent = Address(1, 32);
 
     [Fact]
-    public void Base_freezes_canonical_records_and_external_collections() {
+    public void Head_map_Base_freezes_canonical_records_and_external_collections() {
         ObjectVersionRecord nine = ObjectVersionRecord.CreateBase(9, [90]);
         ObjectVersionRecord one = ObjectVersionRecord.CreateBase(1, [10]);
         List<ObjectVersionRecord> records = [nine, one];
@@ -30,7 +30,7 @@ public sealed class StateRevisionTests {
     }
 
     [Fact]
-    public void Delta_freezes_canonical_removed_ids_and_requires_parent() {
+    public void Head_map_Delta_freezes_canonical_removed_ids_and_requires_parent() {
         List<uint> removed = [9, 2];
         StateRevision revision = StateRevision.CreateDelta(Parent, [ObjectVersionRecord.CreateBase(3, [30]), ObjectVersionRecord.CreateBase(7, [])], removed);
         removed.Clear();

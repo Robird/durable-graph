@@ -65,7 +65,7 @@ API 名称施工时按最小 diff 收敛，推荐统一 ObjectVersionRecord 与 
 | 方案 | 取舍 |
 |---|---|
 | 只保存 Revision Parent，读取时推导对象 prior | 少写一个地址，但无法检查调用方准备 Delta 时声明的 prior 是否已经过时 |
-| 显式保存对象 prior，并与 Parent 当前 head 对照 | 多写一个 locator，换取明确的内容依赖和 stale-prior 拒绝；本片推荐 |
+| 显式保存对象 prior，并与 exact Parent Revision 选定的对象 head 对照 | 多写一个 locator，换取明确的内容依赖和 stale-prior 拒绝；本片推荐 |
 | 显式 prior 只检查“更早同 ID” | 验证便宜，但允许接错分支或旧占用者，拒绝此方案 |
 
 对 containing Revision R 内每条 Delta `(id, prior)`：

@@ -7,12 +7,12 @@
 ## 1. 问题与最小成功判据
 
 已有 frozen DTO、融合 PreparedDelta、持久原始对象链与 H，以及独立表示策略。
-下一片回答：给定完整的保存后对象列表及已经准备好的内容，能否依据 exact Parent，
+下一片回答：给定调用方冻结的完整 post-live 对象集合及已经准备好的内容，能否依据 exact Parent，
 自动产生真实 Base/Delta records 和 membership Removes，交给现有 Append 落盘？
 
 最小见证：真实 SG 捕获并准备内容，产品规划器产生 Revision，通过现有 Storage.Append 保存；
 再次修改并保存，冷重开后按 DB-028 链重建得到独立预期。未改对象沿用旧 head，变化对象
-使用策略选出的表示，退出 live 集合的对象退出新视图，旧 Revision 仍可读取。
+使用策略选出的表示；未进入候选成员集合的 Parent 成员在新 Revision 中被 Remove，旧 Revision 仍可读取。
 
 本片落点是 **已准备内容 → 估算 → policy → 可追加 Revision**。
 Capture 到 prepared rows 的强类型适配在集成测试中显式编写，不宣称产品通用对象列表比较器已完成。
@@ -99,7 +99,8 @@ string 仍是同一列表中的对象。持续存活的同一 string ID 为 Unch
 规划器从指定 Parent 读取完整 live map，检查全部输入后再产生结果：
 
 - Parent=null 时所有行必须为 New；否则 New 必须不在 Parent 中。
-- 每个 existing 行必须在 Parent 中，claimed prior 必须等于 Parent 当前 head 的完整 FrameAddress。
+- 每个 existing 行必须在 Parent 中，claimed prior 必须等于 exact Parent Revision 选定的
+  该 ObjectId 对象 head 完整 FrameAddress。
 - 拒绝重复/零 ID、无效地址、错误形状和错误 prior；不按最大文件号或最近 Revision 猜 Parent。
 - NoChange 和可 Delta Update 使用 `ReadObjectVersionChain(parent, id)` 的实际 ReconstructionBytes。
   不接收外部任意填写的 H。暂按对象逐条读取，沿用 DB-028 的缓存 TODO。
@@ -110,7 +111,8 @@ raw 层不能证明 prepared bytes 真是基于所声明 prior 产生的，也�
 这一责任仍属于 typed producer：它须使用 exact Parent 对应的 frozen baseline、检查 exact Schema，
 再调用正确版本生成函数。测试显式构造这一对应，不伪造产品级 baseline witness 或持久类型认证。
 
-完整 rows 是调用方给定的 post-live 集合；StateStore 可由 Parent IDs 减去这些 IDs 得到 Removes。
+完整 rows 是调用方给定的完整 post-live 对象集合，即候选成员集合；StateStore 可由 Parent membership
+减去这些 IDs 得到 Removes。
 这不是 Storage 推断 reachability：Storage 仍只保存调用方最终提供的移除集合。
 ID 相同不自动证明跨会话/跨 Revision 的实体连续性；本片仍使用同一 CaptureSession 的单调 ID，
 不导入任意 reopen 实例映射，不实现数字回收。

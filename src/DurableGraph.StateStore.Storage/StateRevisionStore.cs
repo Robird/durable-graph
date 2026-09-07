@@ -66,10 +66,12 @@ public sealed class StateRevisionStore {
     }
 
     /// <summary>
-    /// Reconstructs the membership-declared current head of every live Object.
+    /// Reconstructs the object head for every ObjectId declared live by the
+    /// ObjectHeadMap at the specified StateRevision address.
     /// </summary>
     /// <remarks>
-    /// Local ObjectIds map to the containing State Revision Frame. External
+    /// This does not identify or publish a publication head. Local ObjectIds map
+    /// to the containing Revision Frame. External
     /// ObjectIds keep the absolute address recorded by the completing Base. The
     /// returned map is immutable and enumerates in ascending ObjectId order.
     /// These shallow declarations are not dereferenced or validated as
@@ -80,7 +82,7 @@ public sealed class StateRevisionStore {
         LiveObjectHeadMapMaterializer.Materialize(revisionHead, Read);
 
     /// <summary>
-    /// Reads the complete Base body of an Object live in the specified Revision.
+    /// Reads the complete Base body of an Object live in the specified StateRevision.
     /// The returned array is an independent copy owned by the caller.
     /// </summary>
     /// <remarks>
@@ -106,7 +108,7 @@ public sealed class StateRevisionStore {
     /// its most recent Base through its current Delta head.
     /// </summary>
     /// <remarks>
-    /// Each Delta must name the exact current head declared by its own Parent.
+    /// Each Delta must name the object head selected by its exact Parent Revision.
     /// Records own their bytes and no pooled Frame lease escapes this operation.
     /// This does not interpret bodies or authenticate their Schema or producer.
     /// Complete maps retain their shallow external-head declaration contract.
@@ -183,7 +185,7 @@ public sealed class StateRevisionStore {
         FrameAddress prior) {
         if (!parentHeads.TryGetValue(objectId, out FrameAddress expected) || expected != prior) {
             throw new InvalidDataException(
-                $"Delta ObjectId {objectId} prior {prior} is not its exact Parent's current head.");
+                $"Delta ObjectId {objectId} prior {prior} is not the object head selected by its exact Parent Revision.");
         }
     }
 

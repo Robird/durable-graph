@@ -20,6 +20,9 @@
 宿主 Append 后按显式地址/WorldId 恢复非泛型领域引用图，再 Prepare 对象级增量；共享、循环、
 已登记派生实例与 private/readonly 引用由统一对象身份和两阶段恢复支持。
 完整提交/发布仍未实现；Append 后重新 Load 建立新基线。
+活跃文档、当前源码注释和测试见证已按[项目术语表](../docs/DurableGraph-glossary.md)
+完成一轮语境化一致；内部 B/D/H 输入现分别命名为精确 Base payload、Delta payload 上界和
+重建链 payload。公开 API、生成 ABI、持久格式与明确 legacy/Probe 词汇未做机械改名；后续触发见[路线图](../docs/DurableGraph-research-roadmap.md#2-已采纳方向中的未完成能力)。
 自定义 struct、有限数组对象和泛型闭合待后续分别选片；本批不自动进入下一片。
 持久 World 根、Commit/Ref 和其他类型扩展继续按[路线图](../docs/DurableGraph-research-roadmap.md)独立排期。
 未来联合 Commit/Ref 及内建类型自举的 SchemaStore 复用路线见
@@ -95,7 +98,7 @@
   读取链 H，BaseOnlyUpdate 不读取旧内容链。输出 map Base（无 Parent）或 map Delta（有 Parent）及 Removes。
   typed producer 负责内容/Schema/基线对应；planner 不调用 Append/Accept，结果可作为显式 Parent 的分支追加。
 - Storage 的 ObjectHeadMap 与对象内容的 Base/Delta 独立组合。ReadObjectVersionChain 逐条核对
-  prior 等于该记录 exact Parent 的当前 head，要求 direct local record；Base 截断内容链，H 随之重置。
+  prior 等于该记录 exact Parent Revision 选定的对象 head，要求 direct local record；Base 截断内容链，H 随之重置。
   Append 只预检直接 edge；完整 map 的 external heads 仍是浅声明，不认证全局实体历史。
   ReadObjectBase 仍只接受 Base head，不回退 parent 补内容；wire v3 拒绝 v1/v2。
   H 含 kind/prior/length/body，不含 ObjectId/membership/共享 Frame；不是总冷读 I/O。

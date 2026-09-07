@@ -3,8 +3,8 @@ using System.Collections.ObjectModel;
 namespace Atelia.DurableGraph.StateStore.Storage;
 
 /// <summary>
-/// Reconstructs the canonical live Object head map from an exact State Revision
-/// head.
+/// Reconstructs the canonical live Object head map from a specified StateRevision
+/// address.
 /// </summary>
 internal static class LiveObjectHeadMapMaterializer {
     internal static IReadOnlyDictionary<uint, FrameAddress> Materialize(

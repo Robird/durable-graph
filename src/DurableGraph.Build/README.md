@@ -1,9 +1,9 @@
-# DurableGraph snapshot history tool
+# DurableGraph schema history tool
 
 This private .NET 10 console tool is intended for the DurableGraph package's
 MSBuild integration. It validates the comment-only manifest emitted by the
-Source Generator and either publishes exact history files or verifies that the
-current snapshots are already present.
+Source Generator and either publishes exact schema-history files or verifies
+that the current manifest candidates are already present.
 
 ```text
 DurableGraph.Build publish --manifest <generated.g.cs> --history <directory>
@@ -21,7 +21,7 @@ The manifest format is strict:
 // snapshot-end
 ```
 
-It may contain zero or more snapshot blocks. Field IDs must be positive,
+It may contain zero or more schema-history record blocks. Field IDs must be positive,
 unique, and sorted. Type tags `1` through `14` retain their existing meanings
 and two-column field records. Tag `15` is a durable reference and requires a
 third column containing its nominal target SchemaId in canonical UTF-8 Base64:
@@ -37,7 +37,7 @@ SHA-256 hashes of the decoded SchemaId and canonical history content, plus the
 version; a SchemaId never becomes a path component.
 
 Publishing validates the entire manifest and all existing history before it
-writes. Exact existing snapshots are left untouched. New snapshots are written
+writes. Exact existing schema-history records are left untouched. New records are written
 to a temporary file in the history directory and moved into place without
 overwrite. The prototype assumes one writer; publishing several files is not a
 transaction.

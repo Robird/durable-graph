@@ -116,7 +116,8 @@ Base 对象 envelope：已有 exact SchemaKey 足以解释实际 durable 对象�
    private readonly 字段仍由声明层 UnsafeAccessor 填充；所有验证成功后才交付 World。
    callbacks 不得提前发布实例，框架不承诺撤销任意用户回调的外部副作用。
 5. 把恢复的可达 durable 实例身份导入捕获会话。source DTO 及高水位保持完整；source string
-   最小 Empty ID 的反向选择仍沿 DB-033，不能预改写原 DTO 槽。下一 Capture 决定保存后 live 集合。
+   最小 Empty ID 的反向选择仍沿 DB-033，不能预改写原 DTO 槽。下一 Capture 冻结候选成员集合；
+   只有它相对 source membership 的差异才决定 Remove。
 
 必须区分的反例：Owner 的槽约束 BaseB，target 旧版 Derived:BaseB 合法；target 升级为 Derived:BaseC。
 旧验证不能用 current CLR 拒绝原来合法的记录；current 验证也不能因旧时合法就放行不相容赋值。
@@ -134,8 +135,9 @@ owner 需显式升级清空或调整槽，否则加载失败。历史 Schema 判
 可以注册并持久化 Schema；不追加 State、不执行 State 的持久化屏障或发布。
 宿主 Append 后用 plan.WorldId 和返回地址 Load，保留 SchemaStore.RegisterBatch 自身的 flush 语义。
 
-已有 LoadedWorld.Prepare 扩大到可达对象图：source current DTO 对照候选，still-live 升级行用 BaseOnlyUpdate，
-其余保持融合 Delta/PrepareBase/固定策略，source − candidate 输出 Removes。完整来源预检与失败清理不削弱。
+已有 LoadedWorld.Prepare 扩大到可达对象图：将 source membership 的 current DTO 基线与候选成员集合对照；
+仍在候选成员集合内的升级行用 BaseOnlyUpdate，其余保持融合 Delta/PrepareBase/固定策略，
+source membership − candidate membership 输出 Removes。完整来源预检与失败清理不削弱。
 子对象改值不改变 owner 引用 ID；owner 可因既有策略主动重写 Base，但不得产生虚假的字段变化。
 
 fresh 会话内 ID 单调；加载会话从完整 source live max+1 开始，耗尽只阻止新对象登记。

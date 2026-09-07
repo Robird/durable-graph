@@ -1,8 +1,8 @@
 namespace Atelia.DurableGraph.StateStore.Storage;
 
 /// <summary>
-/// Describes whether a State Revision contains a complete live-object head map or
-/// a mutation relative to its exact parent Revision.
+/// Describes whether a StateRevision contains an ObjectHeadMap Base checkpoint or
+/// an ObjectHeadMap Delta relative to its exact Parent Revision.
 /// </summary>
 public enum ObjectHeadMapKind : byte {
     Base = 1,

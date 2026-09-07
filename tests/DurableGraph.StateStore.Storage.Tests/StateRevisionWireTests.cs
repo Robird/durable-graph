@@ -6,7 +6,7 @@ namespace Atelia.DurableGraph.StateStore.Storage.Tests;
 
 public sealed class StateRevisionWireTests {
     [Fact]
-    public void Genesis_Base_has_stable_golden_bytes() {
+    public void Genesis_head_map_Base_has_stable_golden_bytes() {
         StateRevision revision = StateRevision.CreateBase(null, [ObjectVersionRecord.CreateBase(128, []), ObjectVersionRecord.CreateBase(1, [0xaa, 0xbb])], []);
         byte[] golden = [0x03, 0x01, 0x00, 0x02, 0x01, 0x01, 0x02, 0xaa, 0xbb, 0x80, 0x01, 0x01, 0x00, 0x00];
 
@@ -15,7 +15,7 @@ public sealed class StateRevisionWireTests {
     }
 
     [Fact]
-    public void Delta_with_previous_file_parent_has_stable_golden_bytes() {
+    public void Head_map_Delta_with_previous_file_parent_has_stable_golden_bytes() {
         StateRevision revision = StateRevision.CreateDelta(
             new FrameAddress(1, SizedPtr.Create(4, 4)), [ObjectVersionRecord.CreateBase(3, [0xfe])], [2]);
         byte[] golden = [0x03, 0x02, 0x01, 0x01, 0x05, 0x01, 0x03, 0x01, 0x01, 0xfe, 0x01, 0x02];
@@ -25,7 +25,7 @@ public sealed class StateRevisionWireTests {
     }
 
     [Fact]
-    public void Base_round_trip_restores_absolute_parent_and_external_heads() {
+    public void Head_map_Base_round_trip_restores_absolute_parent_and_external_heads() {
         StateRevision source = StateRevision.CreateBase(
             new FrameAddress(3, SizedPtr.Create(4, 32)),
             [ObjectVersionRecord.CreateBase(9, [90]), ObjectVersionRecord.CreateBase(1, [10]), ObjectVersionRecord.CreateBase(7, []), ObjectVersionRecord.CreateBase(3, [30, 31])],
@@ -85,7 +85,7 @@ public sealed class StateRevisionWireTests {
     }
 
     [Fact]
-    public void Default_scope_is_rejected_for_address_free_genesis_Base() {
+    public void Default_scope_is_rejected_for_address_free_genesis_head_map_Base() {
         StateRevision revision = StateRevision.CreateBase(null, [], []);
         byte[] encoded = [0x03, 0x01, 0x00, 0x00, 0x00];
         Assert.Throws<ArgumentOutOfRangeException>(() => Encode(revision, default));

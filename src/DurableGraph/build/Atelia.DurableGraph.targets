@@ -27,7 +27,7 @@
     <Error Condition="'@(_DurableGraphSnapshotManifest->Count())' != '1'"
            Text="DurableGraph expected exactly one snapshot candidate manifest under '$(CompilerGeneratedFilesOutputPath)' but found @(_DurableGraphSnapshotManifest->Count()). Clean the project and rebuild, and do not disable EmitCompilerGeneratedFiles." />
     <Error Condition="!Exists('$(_DurableGraphBuildTool)')"
-           Text="DurableGraph snapshot publisher was not found at '$(_DurableGraphBuildTool)'." />
+           Text="DurableGraph Schema-history tool was not found at '$(_DurableGraphBuildTool)'." />
 
     <Exec Condition="'@(_DurableGraphSnapshotManifest->Count())' == '1' and '$(DurableGraphHistoryMode)' == 'Publish'"
           Command="&quot;$(_DurableGraphDotNetHost)&quot; &quot;$(_DurableGraphBuildTool)&quot; publish --manifest &quot;@(_DurableGraphSnapshotManifest)&quot; --history &quot;$(DurableGraphSnapshotHistoryDirectory)&quot;" />

@@ -37,7 +37,9 @@ internal static class ObjectRevisionPlanner {
                 }
             }
             else if (!exists || row.PriorAddress != head) {
-                throw new ArgumentException($"Object {row.ObjectId} must claim the exact Parent's current head.", nameof(objects));
+                throw new ArgumentException(
+                    $"Object {row.ObjectId} must claim the object head selected by the exact Parent Revision.",
+                    nameof(objects));
             }
         }
 

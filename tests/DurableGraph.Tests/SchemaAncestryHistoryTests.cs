@@ -46,9 +46,9 @@ public sealed class SchemaAncestryHistoryTests {
             base2, middle2, Record("Leaf", 1, middle2.Key)));
         Assert.Equal(initial, fixture.HistoryContents());
 
-        Assert.Equal("published 3 snapshot(s); 0 already exact", fixture.Publish(leaf2, middle2, base2).Message);
-        Assert.Equal("published 0 snapshot(s); 3 already exact", fixture.Publish(base2, middle2, leaf2).Message);
-        Assert.Equal("verified 3 current snapshot(s) against 6 history snapshot(s)",
+        Assert.Equal("published 3 schema-history record(s); 0 already exact", fixture.Publish(leaf2, middle2, base2).Message);
+        Assert.Equal("published 0 schema-history record(s); 3 already exact", fixture.Publish(base2, middle2, leaf2).Message);
+        Assert.Equal("verified 3 current manifest candidate(s) against 6 schema-history record(s)",
             fixture.Verify(leaf2, base2, middle2).Message);
         SnapshotRecord[] accepted = Directory.GetFiles(fixture.History).Select(SnapshotDocument.ParseHistory).ToArray();
         Assert.Equal(base1.Key, Assert.Single(accepted, row => row.Key == middle1.Key).BaseSchema);
@@ -62,8 +62,8 @@ public sealed class SchemaAncestryHistoryTests {
         fixture.Publish(base1);
         SnapshotRecord leaf = Record("Leaf", 1, base1.Key);
 
-        Assert.Equal("published 1 snapshot(s); 0 already exact", fixture.Publish(leaf).Message);
-        Assert.Equal("verified 1 current snapshot(s) against 2 history snapshot(s)", fixture.Verify(leaf).Message);
+        Assert.Equal("published 1 schema-history record(s); 0 already exact", fixture.Publish(leaf).Message);
+        Assert.Equal("verified 1 current manifest candidate(s) against 2 schema-history record(s)", fixture.Verify(leaf).Message);
     }
 
     [Theory]

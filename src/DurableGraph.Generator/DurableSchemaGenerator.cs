@@ -121,32 +121,32 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
 
     private static readonly DiagnosticDescriptor MalformedSnapshotHistory = new(
         id: "DG0012",
-        title: "Malformed durable snapshot history",
-        messageFormat: "Snapshot history file '{0}' is malformed: {1}",
+        title: "Malformed durable Schema history",
+        messageFormat: "Schema history file '{0}' is malformed: {1}",
         category: "DurableGraph.Generator",
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true);
 
     private static readonly DiagnosticDescriptor ConflictingSnapshotHistory = new(
         id: "DG0013",
-        title: "Conflicting durable snapshot history",
-        messageFormat: "Snapshot history for schema '{0}' version {1} conflicts with another shape",
+        title: "Conflicting durable Schema history",
+        messageFormat: "Schema history for schema '{0}' version {1} conflicts with another shape",
         category: "DurableGraph.Generator",
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true);
 
     private static readonly DiagnosticDescriptor MissingSnapshotHistory = new(
         id: "DG0014",
-        title: "Missing durable snapshot history",
-        messageFormat: "Durable type '{0}' requires snapshot history for schema '{1}' version {2}",
+        title: "Missing durable Schema history",
+        messageFormat: "Durable type '{0}' requires Schema history for schema '{1}' version {2}",
         category: "DurableGraph.Generator",
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true);
 
     private static readonly DiagnosticDescriptor CurrentSnapshotMismatch = new(
         id: "DG0015",
-        title: "Current durable snapshot history mismatch",
-        messageFormat: "Durable type '{0}' does not match snapshot history for schema '{1}' version {2}",
+        title: "Current durable Schema-history candidate mismatch",
+        messageFormat: "Durable type '{0}' does not match Schema history for schema '{1}' version {2}",
         category: "DurableGraph.Generator",
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true);

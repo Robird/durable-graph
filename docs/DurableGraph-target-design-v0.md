@@ -46,7 +46,7 @@ Source Generator 负责可在编译期确定的类型知识与机械代码，框
 - MVP 不提供、发现或自动调用 Transient 重建 hook，不调度 hook 依赖。库交付完整持久对象图后，
   用户代码自行重建索引、缓存并决定何时向业务代码开放。详见下文宿主边界。
 - MVP 不支持领域对象图中 boxed value 的持久对象身份，遇到该类内容明确拒绝。
-  此限制不排除受支持值字段/inline struct，也不禁止框架内部为异构 DTO 列表装箱。
+  此限制不排除受支持值字段/inline struct，也不禁止框架内部为异构版本化状态 DTO 目录装箱。
 - 支持没有无参构造器的领域类，也支持受支持字段类型的 readonly 实例持久字段，包括 private
   及基类声明的字段。恢复采用 `RuntimeHelpers.GetUninitializedObject` 分配，再由 SG 生成
   Hydrate 填充；不要求用户补无参构造器或专用反序列化构造器。readonly 写入仅用于未交付实例的
@@ -57,7 +57,7 @@ Source Generator 负责可在编译期确定的类型知识与机械代码，框
 
 ### 捕获状态与领域行为分离
 
-- 保存先从领域图捕获与 VersionedSchema 配对的 Versioned DTO 和对象列表；后续比较、
+- 保存先从领域图捕获与完整精确 Schema 配对的版本化状态 DTO，形成捕获候选图（候选 DTO 视图）；后续比较、
   估算、Base/Delta 选择和编码都消费该候选状态。领域对象随后变化不能改变候选内容。
 - 自定义领域类型的 DTO 与 Capture 由 SG 生成；受支持 CLR/BCL 引用类型使用预制或可组合适配。
   string 不可变，非空内容可以直接保留原实例；一般容器不能据此假定浅拷贝已隔离可变内容。
@@ -78,7 +78,8 @@ Source Generator 负责可在编译期确定的类型知识与机械代码，框
 
 ### 统一引用身份，值类型嵌套
 
-- 所有受支持引用类型统一进入对象列表，包括自定义 class、string、数组与 BCL 容器。
+- 所有受支持引用类型统一进入对象状态记录的目录，包括自定义 class、string、数组与 BCL 容器；
+  具体目录属于 candidate、stored 或 current 视图时另行说明。
   成员中的引用只保存 ObjectId，对象本体独立保存；共享和循环是整体恢复目标。
 - 当前 CLR 图按引用相等语义登记。内容相等的不同非空 string 实例不能合并；唯一明确例外是
   所有零长度 string 在 Capture 和读取两端都规范化为 string.Empty。null 仍与空串区分。
@@ -88,9 +89,9 @@ Source Generator 负责可在编译期确定的类型知识与机械代码，框
 - 引用槽经正在加载的目标 Revision 解析，即使 owner body 沿用更早的记录；旧 Revision
   使用自己的视图。已解析的 CLR 对象图缓存不能直接跨视图复用。
 - stored DTO 的引用按该 Revision 中目标的 stored Schema 祖先校验；全部单对象 Upgrade 完成后，
-  再按 current DTO 目录校验。历史合法不保证升级后仍合法，current CLR 祖先也不能替代旧 Schema。
-  完整源目录均须解码、升级和验证；仅当前 World 可达的实例参与分配，全部分配完成后才填充引用。
-  不可达对象的坏数据仍拒绝，但其 current 类型不可实例化本身不应阻止其他 World 的加载。
+  再按当前版本 DTO 目录校验。历史合法不保证升级后仍合法，当前 CLR 祖先也不能替代旧 Schema。
+  完整 source 目录均须解码、升级和验证；仅当前版本 DTO 图中从 World 可达的实例参与分配，全部分配完成后才填充引用。
+  不可达对象的坏数据仍拒绝，但其当前模型类型不可实例化本身不应阻止其他 World 的加载。
 - 首轮采用会话内单调分配，失败或放弃候选可以烧号。允许未来复用不要求立即实现回收器；
   CLR 实例映射清理、可达集合变化、编号回收与历史文件物理 GC 是不同动作。
   publication 不确定也不能当作确定失败释放候选身份。
@@ -130,13 +131,14 @@ Source Generator 负责可在编译期确定的类型知识与机械代码，框
   精确比较、预算和强制/可选分类以 [DB-015](design-branches/0015-statestore-object-representation-policy.md)
   与对应代码为准，后续执行层不能自行改变策略语义。没有合法 Delta 的更新显式强制 Base，
   不伪造 Delta 估算；它与 Insert 一样属于必需写入，不消耗可选 Base 预算。
-- 策略消费完整保存后 live 集合的估算，产生稀疏表示计划。真实 parent、对象变化分类、
+- 策略消费完整 post-live 对象集合的估算，产生稀疏表示计划。真实 Revision Parent、对象变化分类、
   reachability 和 Removes 由保存调用方提供，策略不能证明这些输入完整。
 - Storage 使用多历史 Segment 地址与 BackwardFileDistance；rollover 是 soft threshold，
   不因此强制冷对象 Base。对象内容 Delta 与 ObjectHeadMap 的 membership Delta 是不同层次。
 - Storage 不解释 CLR 字段、Schema 升级或可达性。Append 产生 candidate address，
   外层拥有最终发布 head；raw body 读取不等价于类型或完整图验证。
-- 对象 Delta 显式引用同 ObjectId 的 prior record，并与其 containing Revision 的 exact Parent 当前 head 对照。
+- 对象 Delta 显式引用同 ObjectId 的 prior record，并与其 containing Revision 的
+  exact Parent Revision 中该 ObjectId 的对象 head 对照。
   新 Base 截断对象内容重建链；这不等于截断 membership 读取、历史查询或允许删除旧文件。
 - B/D/H 采用统一对象 payload 口径，包含对象独有 kind/prior/length/body 及 Base 的类型引用；
   排除 ObjectId key、共享 membership/Frame/对齐。H 从原 Frame 实编码累计，是成本代理而非总物理 I/O。
@@ -157,8 +159,8 @@ Source Generator 负责可在编译期确定的类型知识与机械代码，框
 
 未知版本、相同身份/版本却不一致的 Schema、缺失升级器、损坏引用或来源不匹配时，
 应明确拒绝，不猜测并不回退到 latest。升级由显式类型知识和函数承担，不自动推断业务迁移。
-读取升级本身不隐式写回 Store；升级失败不修改权威状态。历史数据成为可编辑 current 状态、
-比较基线及后续重写的具体衔接，由专门切片收敛。
+读取升级本身不隐式写回 Store；升级失败不修改权威状态。历史数据成为可编辑领域图、
+当前版本 DTO 比较基线及后续重写的具体衔接，由专门切片收敛。
 
 ### 可达对象图与独立对象版本
 
@@ -190,7 +192,7 @@ State/Artifact/Schema 输入及 recipe/builder 版本；围栏不匹配应为 mi
 ### 单一发布权威与明确故障结果
 
 上层 API 采用由 Repository 创建/加载的工作会话（暂称 WorkingTree / GraphSession），对外提供
-checkout/create、访问领域根（MVP 单 World）和 Commit。它同时拥有所选持久 Parent、对应的冻结 DTO 基线、
+checkout/create、访问领域根（MVP 单 World）和 Commit。它同时拥有所选持久 Revision Parent、对应的冻结当前版本 DTO 比较基线、
 领域实例到 ObjectId 的绑定及分配状态；普通调用方不分别传入或设置这几份状态。
 仅由受控加载和成功提交流程建立、推进其对应关系，不为此另造独立的认证或 receipt 框架。
 Capture/Prepare/Accept 是会话内部组件；其单独可调用不意味着完成持久 Commit。
@@ -226,8 +228,8 @@ publication 结果不明确时，不能假装确定失败并透明重试，应�
 
 MVP 库内加载采用以下阶段顺序；这是目标流程，不表示各阶段都已实现：
 
-1. 按每个对象自己的 stored exact Schema 完整重建 Base/Delta，得到历史 DTO 列表并验证引用。
-2. 对需要升级的对象执行单对象字段转换的显式合法路径，形成 current DTO 列表；缺失路径或升级失败则停止加载，
+1. 按每个对象自己的 stored exact Schema 完整重建 Base/Delta，得到 stored DTO 全目录并验证引用。
+2. 对需要升级的对象执行单对象字段转换的显式合法路径，形成当前版本 DTO 全目录；缺失路径或升级失败则停止加载，
    不悄悄交付旧版。记录升级对象下一次保存必须 Base 的义务，读取本身不回写。
 3. 对受支持的自定义领域类用 `RuntimeHelpers.GetUninitializedObject` 分配全部实例，
    建立 ObjectId 到实例的映射；string/数组等内建类型使用各自适配器。
@@ -242,7 +244,7 @@ MVP 库内加载采用以下阶段顺序；这是目标流程，不表示各阶�
 内建引用类型使用预制适配；这些阶段不要求 string 重新复制。升级可能删除引用，须区分完整
 source 目录与升级后 World 可达集合，不能假定两者始终一一对应。领域分配、引用连接和后继保存
 应保留 source membership 与 stored Schema 来源，只维护一份归一化 DTO 比较基线；下一次 Capture
-决定 current 可达集合，并由差集产生 Removes，不通过重新 Capture 已恢复对象猜测基线。
+决定当前版本 DTO 图中从 World 得到的可达闭包，并由差集产生 Removes，不通过重新 Capture 已恢复对象猜测基线。
 Empty 多 ID 的反向绑定确定选择最小 source ID，但基线引用槽保留原 ID，让下一 Capture 产生
 实际引用差异。新加载会话从完整 source live max+1 开始分配，只承诺会话内单调；uint 耗尽仅阻止
 新增 ID，不阻止加载或已有对象保存。固定 Parent 的 Prepare 不就地接受新地址，Append 后重新 Load

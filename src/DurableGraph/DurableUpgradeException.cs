@@ -1,7 +1,7 @@
 namespace Atelia.DurableGraph;
 
 /// <summary>
-/// Wraps a failure while upgrading one durable snapshot version to another.
+/// Wraps a failure while upgrading a versioned state DTO to the next exact Schema version.
 /// </summary>
 public sealed class DurableUpgradeException : InvalidOperationException {
     public DurableUpgradeException(

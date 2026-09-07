@@ -54,9 +54,9 @@ internal enum ObjectSaveChangeKind {
 internal readonly record struct ObjectSaveEstimate(
     uint ObjectId,
     ObjectSaveChangeKind ChangeKind,
-    long EstimatedBaseWriteBytes,
-    long? EstimatedDeltaWriteBytes,
-    long? CurrentReconstructionBytes);
+    long BasePayloadBytes,
+    long? DeltaPayloadBytesUpperBound,
+    long? ReconstructionPayloadBytes);
 
 internal readonly record struct ReadAmplificationBaseBudgetParameters(
     int ReadAmplificationLimit,
@@ -89,28 +89,30 @@ internal static class ReadAmplificationBaseBudgetPolicy {
 
 ### 3.1 字段适用性
 
-| ChangeKind | B：EstimatedBaseWriteBytes | D：EstimatedDeltaWriteBytes | H：CurrentReconstructionBytes |
+| ChangeKind | B：BasePayloadBytes | D：DeltaPayloadBytesUpperBound | H：ReconstructionPayloadBytes |
 |---|---|---|---|
 | Insert | 必须提供 | 必须 null | 必须 null |
 | Update | 必须提供 | 必须提供 | 必须提供 |
 | NoChange | 必须提供 | 必须 null | 必须提供 |
 
-- B 是本次保存后状态的完整 Base 估算，不是历史链起点的旧 Base 大小。
-- H 是 exact parent 中该对象现有重建链的累计对象 payload 成本，可以是同口径的估算或统计。
-- D 是从该 exact parent 对象状态得到本次目标状态的可用 Delta 的估算。
+- B 是本次保存后状态的完整 Base payload 精确大小，不是历史链起点的旧 Base 大小。
+- H 是 exact parent 中该对象现有重建链的累计对象 payload 实际字节数。
+- D 是从该 exact parent 对象状态得到本次目标状态的可用 Delta payload 上界；实际 prior 的向后文件距离未定时，
+  该上界可能多计 0–4 bytes。
 - B/D/H 都是已提供的非负整数；`null` 只表示该字段不适用，不表示未知。
 - `D=0` 的 Update 仍是 Update，仍须写入；`H=0` 也不表示没有前驱。不要求 `H>=B`。
 - 本轮前提是每个 Update 均有合法 Delta 方案；无法提供 Delta 的 schema/codec 场景出现时再扩展输入，
   不用 null、极大 D 或伪造 ChangeKind 表示“只能 Base”。
 
-统一口径为对象自身的编码 payload 字节，B/D 不计共享 Revision/Frame、membership、对齐和文件开销。
-H 按同一口径累计，因此 `H+D` 可以作为继续 Delta 后的重建成本代理。零估算不代表真实记录零字节。
-不要求本轮实现编码器或保证误差上限；上层以后可以用估算或实测值产生 DTO。
+统一口径为对象自身的编码 payload 字节，B/H 不计共享 Revision/Frame、membership、对齐和文件开销；
+D 是同层 payload 的保守上界。H 按同一口径累计，因此 `H+D` 可以作为继续 Delta 后的重建成本代理。
+零值不代表真实记录零字节。不要求本轮实现编码器；D 的上界只来自实际地址编码范围，
+不承诺其他物理开销的估算误差上限。
 真实物理冷读涉及完整 Frame，此处比率不承诺磁盘读放大上限。
 
 ### 3.2 完整性与身份归属
 
-集合必须恰好覆盖保存后全部 live 对象，Insert/Update/NoChange 由调用方从同一保存视图产生。
+集合必须恰好覆盖调用方冻结的完整 post-live 对象集合，Insert/Update/NoChange 由调用方从同一保存视图产生。
 Remove 不进入此集合；策略只从集合计算 `G=ΣB`，不另外接收一个总量 authority。
 
 策略验证非零且唯一的 ObjectId、合法枚举、字段适用性和数值范围；它不读取 Storage 来证明集合完整，
@@ -147,7 +149,7 @@ DTO/plan 不携带 FrameAddress、SnapshotId、PlanId 或对象实例。同步�
 没有额外对象、重复 ID、NoChange Delta 或 Remove 决策。NoChange Base 只改变存储表示，不产生逻辑修改。
 预算只约束可选 Base，不能使 Insert/Update 从输出中消失。
 
-Writes 是本次对象内容写集合，不是完整 live 集合。后续生成 ObjectHeadMap Delta 时，被省略的 NoChange
+Writes 是本次对象内容写集合，不是完整 post-live 对象集合。后续生成 ObjectHeadMap Delta 时，被省略的 NoChange
 沿用旧 head；生成 ObjectHeadMap Base 时，调用方还必须把其旧 head 放入 ExternalObjectHeads。
 Removes 和 ObjectHeadMap 模式仍由外层处理。不能仅用 Writes 生成一个“完整映射 Base”。
 输出不附带 G、Q、预测写入总量、后继 H 或第二份 Base/Delta ID 集合；需要时从输入、参数和 Writes 派生。

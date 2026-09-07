@@ -25,7 +25,7 @@ public sealed class ObjectRevisionPlannerTests : IDisposable {
         Assert.Null(result.Revision.ParentRevisionAddress);
         Assert.Equal(new uint[] { 1, 2 }, result.Revision.LocalObjectIds);
         Assert.Equal(new byte[] { 10, 20 }, result.Revision.LocalObjects[1].Body.ToArray());
-        Assert.Equal(new long[] { 2, 4 }, result.Estimates.Select(x => x.EstimatedBaseWriteBytes));
+        Assert.Equal(new long[] { 2, 4 }, result.Estimates.Select(x => x.BasePayloadBytes));
         Assert.All(result.Estimates, x => Assert.Equal(ObjectSaveChangeKind.Insert, x.ChangeKind));
         Assert.False(result.Estimates is ICollection);
         Assert.False(result.Estimates is IList<ObjectSaveEstimate>);
@@ -47,8 +47,8 @@ public sealed class ObjectRevisionPlannerTests : IDisposable {
         Assert.Empty(result.Revision.RemovedObjectIds);
         Assert.All(result.Estimates, x => {
             Assert.Equal(ObjectSaveChangeKind.NoChange, x.ChangeKind);
-            Assert.Null(x.EstimatedDeltaWriteBytes);
-            Assert.NotNull(x.CurrentReconstructionBytes);
+            Assert.Null(x.DeltaPayloadBytesUpperBound);
+            Assert.NotNull(x.ReconstructionPayloadBytes);
         });
         FrameAddress saved = store.Append(result.Revision);
         Assert.Equal(parent, store.ReadLiveObjectHeads(saved)[1]);
@@ -74,7 +74,7 @@ public sealed class ObjectRevisionPlannerTests : IDisposable {
         Assert.Equal(ObjectVersionKind.Delta, result.Revision.LocalObjects[0].Kind);
         Assert.Equal(parent, result.Revision.LocalObjects[0].PriorAddress);
         Assert.Equal(new byte[] { 5 }, result.Revision.LocalObjects[0].Body.ToArray());
-        Assert.Equal(store.ReadObjectVersionChain(parent, 1).ReconstructionBytes, result.Estimates[0].CurrentReconstructionBytes);
+        Assert.Equal(store.ReadObjectVersionChain(parent, 1).ReconstructionBytes, result.Estimates[0].ReconstructionPayloadBytes);
         FrameAddress saved = store.Append(result.Revision);
         Assert.Equal(new uint[] { 1, 2, 4 }, store.ReadLiveObjectHeads(saved).Keys.Order());
         Assert.Equal(first, store.ReadLiveObjectHeads(saved)[2]);
@@ -127,7 +127,7 @@ public sealed class ObjectRevisionPlannerTests : IDisposable {
         ], 1, 10);
         Assert.Equal(new uint[] { 1 }, result.Revision.LocalObjectIds);
         Assert.Equal(new uint[] { 3 }, result.Revision.RemovedObjectIds);
-        Assert.Equal(44L, result.Estimates.Sum(x => x.EstimatedBaseWriteBytes));
+        Assert.Equal(44L, result.Estimates.Sum(x => x.BasePayloadBytes));
     }
 
     [Fact]
@@ -141,8 +141,8 @@ public sealed class ObjectRevisionPlannerTests : IDisposable {
         PreparedObjectRevision result = Plan(store, original,
             [PreparedObject.Compared(1, original, Base(actual - 1), new(true, [2]))], int.MaxValue, 1);
         ObjectSaveEstimate estimate = Assert.Single(result.Estimates);
-        Assert.True(actual < estimate.EstimatedBaseWriteBytes);
-        Assert.True(estimate.EstimatedBaseWriteBytes <= estimate.EstimatedDeltaWriteBytes);
+        Assert.True(actual < estimate.BasePayloadBytes);
+        Assert.True(estimate.BasePayloadBytes <= estimate.DeltaPayloadBytesUpperBound);
         Assert.Equal(ObjectVersionKind.Base, Assert.Single(result.Revision.LocalObjects).Kind);
     }
 
@@ -204,8 +204,8 @@ public sealed class ObjectRevisionPlannerTests : IDisposable {
         PreparedObjectRevision result = Plan(store, corrupt, [PreparedObject.BaseOnlyUpdate(1, corrupt, new([3]))]);
         ObjectSaveEstimate estimate = Assert.Single(result.Estimates);
         Assert.Equal(ObjectSaveChangeKind.BaseOnlyUpdate, estimate.ChangeKind);
-        Assert.Null(estimate.CurrentReconstructionBytes);
-        Assert.Null(estimate.EstimatedDeltaWriteBytes);
+        Assert.Null(estimate.ReconstructionPayloadBytes);
+        Assert.Null(estimate.DeltaPayloadBytesUpperBound);
         FrameAddress saved = store.Append(result.Revision);
         Assert.Equal(3L, store.ReadObjectVersionChain(saved, 1).ReconstructionBytes);
         Assert.Equal(new byte[] { 3 }, store.ReadObjectBase(saved, 1));

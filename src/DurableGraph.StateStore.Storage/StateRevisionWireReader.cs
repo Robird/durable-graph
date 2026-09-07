@@ -3,8 +3,9 @@ using Atelia.DurableGraph.StateStore.Serialization;
 namespace Atelia.DurableGraph.StateStore.Storage;
 
 /// <summary>
-/// Decodes the provisional v3 State Revision object contents and membership, and immediately
-/// normalizes every persisted reference to an absolute <see cref="FrameAddress"/>.
+/// Decodes the provisional v3 StateRevision's object-version records and
+/// ObjectHeadMap membership representation, and immediately normalizes every
+/// persisted reference to an absolute <see cref="FrameAddress"/>.
 /// </summary>
 internal static class StateRevisionWireReader {
     internal static StateRevision Read(

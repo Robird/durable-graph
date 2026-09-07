@@ -12,7 +12,7 @@ public sealed class SnapshotHistoryToolTests {
 
         SnapshotHistoryResult result = new SnapshotHistoryTool().Publish(manifest, history);
 
-        Assert.Equal("published 0 snapshot(s); 0 already exact", result.Message);
+        Assert.Equal("published 0 schema-history record(s); 0 already exact", result.Message);
         Assert.False(Directory.Exists(history));
     }
 
@@ -33,9 +33,9 @@ public sealed class SnapshotHistoryToolTests {
         SnapshotHistoryResult verification = tool.Verify(manifest, history);
         FileSnapshot[] after = ReadHistory(history);
 
-        Assert.Equal("published 2 snapshot(s); 0 already exact", first.Message);
-        Assert.Equal("published 0 snapshot(s); 2 already exact", second.Message);
-        Assert.Equal("verified 2 current snapshot(s) against 2 history snapshot(s)", verification.Message);
+        Assert.Equal("published 2 schema-history record(s); 0 already exact", first.Message);
+        Assert.Equal("published 0 schema-history record(s); 2 already exact", second.Message);
+        Assert.Equal("verified 2 current manifest candidate(s) against 2 schema-history record(s)", verification.Message);
         Assert.Equal(before, after);
     }
 

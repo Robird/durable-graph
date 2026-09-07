@@ -400,7 +400,7 @@ public sealed partial class DurableSchemaGenerator {
         }
 
         // Compare every slot once. The resulting masks are the sole authority for
-        // both HasChanges and which current values are subsequently written.
+        // both HasChanges and which candidate DTO values are subsequently written.
         for (int index = 0; index < version.Fields.Count; index++) {
             BinaryFieldModel field = version.Fields[index];
             source.Append(indent).Append("    if (!(");

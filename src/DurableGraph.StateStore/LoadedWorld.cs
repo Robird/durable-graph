@@ -128,7 +128,7 @@ public sealed class LoadedWorld<TWorld> where TWorld : DurableBase {
     private readonly StateModelBinding _model;
     private readonly StateModelSnapshot _models;
     private readonly NormalizedRevision _baseline;
-    private readonly IReadOnlyDictionary<uint, CapturedObject> _currentStates;
+    private readonly IReadOnlyDictionary<uint, CapturedObject> _baselineCurrentDtos;
     private readonly CaptureSession _capture;
     private bool _preparing;
 
@@ -141,7 +141,7 @@ public sealed class LoadedWorld<TWorld> where TWorld : DurableBase {
         _model = model;
         _models = models;
         _baseline = baseline;
-        _currentStates = baseline.Objects.ToDictionary(static pair => pair.Key, static pair => pair.Value.Current);
+        _baselineCurrentDtos = baseline.Objects.ToDictionary(static pair => pair.Key, static pair => pair.Value.Current);
         _capture = capture;
     }
 
@@ -166,7 +166,7 @@ public sealed class LoadedWorld<TWorld> where TWorld : DurableBase {
             }
             CapturedGraph candidate = context.Seal();
             try {
-                IReadOnlyList<PreparedCapturedObject> contents = _capture.PrepareAgainst(candidate, _currentStates);
+                IReadOnlyList<PreparedCapturedObject> contents = _capture.PrepareAgainst(candidate, _baselineCurrentDtos);
                 PreparedObjectRevision prepared = LoadedRevisionPlanner.Prepare(_store, _schemas, _baseline, contents, parameters);
                 return new(WorldId, prepared.Revision);
             } finally {

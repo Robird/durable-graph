@@ -97,7 +97,7 @@ public sealed class CaptureContext : IDisposable {
         }
     }
 
-    /// <summary>Interns a durable reference by actual type, validates its nominal constraint, and queues its capture.</summary>
+    /// <summary>Registers a durable reference by reference identity, validates its nominal constraint, and queues its capture.</summary>
     public uint CaptureDurable(DurableBase? value, string nominalSchemaId) {
         try {
             RequirePhase(Phase.Capturing);

@@ -1,7 +1,7 @@
 namespace Atelia.DurableGraph.StateStore;
 
 /// <summary>
-/// Selects object representations from estimates for one frozen, complete post-save live set.
+/// Selects object representations from payload measurements for one frozen, complete post-live set.
 /// The optional Base budget is soft; required writes do not consume it.
 /// </summary>
 internal static class ReadAmplificationBaseBudgetPolicy {
@@ -30,14 +30,14 @@ internal static class ReadAmplificationBaseBudgetPolicy {
                 throw new ArgumentException("ObjectIds must be unique.", nameof(objects));
             }
 
-            graphBaseBytes = checked(graphBaseBytes + estimate.EstimatedBaseWriteBytes);
-            long reconstructionBytes = estimate.ChangeKind == ObjectSaveChangeKind.Update
-                ? checked(estimate.CurrentReconstructionBytes!.Value + estimate.EstimatedDeltaWriteBytes!.Value)
-                : estimate.CurrentReconstructionBytes.GetValueOrDefault();
+            graphBaseBytes = checked(graphBaseBytes + estimate.BasePayloadBytes);
+            long prospectiveReconstructionPayloadBytes = estimate.ChangeKind == ObjectSaveChangeKind.Update
+                ? checked(estimate.ReconstructionPayloadBytes!.Value + estimate.DeltaPayloadBytesUpperBound!.Value)
+                : estimate.ReconstructionPayloadBytes.GetValueOrDefault();
 
             if (estimate.ChangeKind is ObjectSaveChangeKind.Insert or ObjectSaveChangeKind.BaseOnlyUpdate ||
                 (estimate.ChangeKind == ObjectSaveChangeKind.Update &&
-                    estimate.EstimatedBaseWriteBytes <= estimate.EstimatedDeltaWriteBytes!.Value)) {
+                    estimate.BasePayloadBytes <= estimate.DeltaPayloadBytesUpperBound!.Value)) {
                 writes.Add(new(estimate.ObjectId, ObjectRepresentationMode.Base));
                 continue;
             }
@@ -49,9 +49,10 @@ internal static class ReadAmplificationBaseBudgetPolicy {
             }
 
             // At a zero denominator, 0/0 has no motive and positive/0 always has one.
-            if (reconstructionBytes > (Int128)estimate.EstimatedBaseWriteBytes * parameters.ReadAmplificationLimit) {
+            if (prospectiveReconstructionPayloadBytes >
+                (Int128)estimate.BasePayloadBytes * parameters.ReadAmplificationLimit) {
                 candidates.Add(new(
-                    estimate.ObjectId, estimate.EstimatedBaseWriteBytes, reconstructionBytes, writeIndex));
+                    estimate.ObjectId, estimate.BasePayloadBytes, prospectiveReconstructionPayloadBytes, writeIndex));
             }
         }
 
@@ -60,7 +61,7 @@ internal static class ReadAmplificationBaseBudgetPolicy {
         long remainingBudget = (long)((Int128)graphBaseBytes * parameters.BaseBudgetPercent / 100);
         for (int i = 0; i < candidates.Count; i++) {
             Candidate candidate = candidates[i];
-            bool exceedsBudget = candidate.BaseWriteBytes > remainingBudget;
+            bool exceedsBudget = candidate.BasePayloadBytes > remainingBudget;
             if (exceedsBudget && i != 0) {
                 break;
             }
@@ -78,7 +79,7 @@ internal static class ReadAmplificationBaseBudgetPolicy {
                 break;
             }
 
-            remainingBudget -= candidate.BaseWriteBytes;
+            remainingBudget -= candidate.BasePayloadBytes;
         }
 
         writes.Sort(static (left, right) => left.ObjectId.CompareTo(right.ObjectId));
@@ -91,44 +92,44 @@ internal static class ReadAmplificationBaseBudgetPolicy {
             throw new ArgumentException("ObjectIds must be nonzero.", parameterName);
         }
 
-        if (estimate.EstimatedBaseWriteBytes < 0 ||
-            estimate.EstimatedDeltaWriteBytes < 0 ||
-            estimate.CurrentReconstructionBytes < 0) {
-            throw new ArgumentOutOfRangeException(parameterName, "Byte estimates must be nonnegative.");
+        if (estimate.BasePayloadBytes < 0 ||
+            estimate.DeltaPayloadBytesUpperBound < 0 ||
+            estimate.ReconstructionPayloadBytes < 0) {
+            throw new ArgumentOutOfRangeException(parameterName, "Payload byte measurements must be nonnegative.");
         }
 
         bool validShape;
         switch (estimate.ChangeKind) {
             case ObjectSaveChangeKind.Insert:
             case ObjectSaveChangeKind.BaseOnlyUpdate:
-                validShape = estimate.EstimatedDeltaWriteBytes is null && estimate.CurrentReconstructionBytes is null;
+                validShape = estimate.DeltaPayloadBytesUpperBound is null && estimate.ReconstructionPayloadBytes is null;
                 break;
             case ObjectSaveChangeKind.Update:
-                validShape = estimate.EstimatedDeltaWriteBytes is not null && estimate.CurrentReconstructionBytes is not null;
+                validShape = estimate.DeltaPayloadBytesUpperBound is not null && estimate.ReconstructionPayloadBytes is not null;
                 break;
             case ObjectSaveChangeKind.NoChange:
-                validShape = estimate.EstimatedDeltaWriteBytes is null && estimate.CurrentReconstructionBytes is not null;
+                validShape = estimate.DeltaPayloadBytesUpperBound is null && estimate.ReconstructionPayloadBytes is not null;
                 break;
             default:
                 throw new ArgumentOutOfRangeException(parameterName, estimate.ChangeKind, "Unknown object change kind.");
         }
 
         if (!validShape) {
-            throw new ArgumentException("Delta and reconstruction estimates must match the object change kind.", parameterName);
+            throw new ArgumentException("Delta and reconstruction payload measurements must match the object change kind.", parameterName);
         }
     }
 
     private static int CompareCandidates(Candidate left, Candidate right) {
         // A zero-Base candidate necessarily has positive reconstruction cost: it ranks as infinity.
         int byAmplification;
-        if (left.BaseWriteBytes == 0 || right.BaseWriteBytes == 0) {
-            byAmplification = left.BaseWriteBytes == 0
-                ? (right.BaseWriteBytes == 0 ? 0 : -1)
+        if (left.BasePayloadBytes == 0 || right.BasePayloadBytes == 0) {
+            byAmplification = left.BasePayloadBytes == 0
+                ? (right.BasePayloadBytes == 0 ? 0 : -1)
                 : 1;
         }
         else {
-            Int128 leftProduct = (Int128)left.ReconstructionBytes * right.BaseWriteBytes;
-            Int128 rightProduct = (Int128)right.ReconstructionBytes * left.BaseWriteBytes;
+            Int128 leftProduct = (Int128)left.ProspectiveReconstructionPayloadBytes * right.BasePayloadBytes;
+            Int128 rightProduct = (Int128)right.ProspectiveReconstructionPayloadBytes * left.BasePayloadBytes;
             byAmplification = rightProduct.CompareTo(leftProduct);
         }
 
@@ -137,7 +138,7 @@ internal static class ReadAmplificationBaseBudgetPolicy {
 
     private readonly record struct Candidate(
         uint ObjectId,
-        long BaseWriteBytes,
-        long ReconstructionBytes,
+        long BasePayloadBytes,
+        long ProspectiveReconstructionPayloadBytes,
         int WriteIndex);
 }

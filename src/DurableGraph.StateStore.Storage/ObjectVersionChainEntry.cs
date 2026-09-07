@@ -21,7 +21,8 @@ public sealed class ObjectVersionChainEntry {
 
     /// <summary>
     /// Observed encoded bytes from representation kind through body, including a
-    /// Delta's prior locator. Excludes ObjectId, shared Frame and membership costs.
+    /// Delta's prior locator. Excludes ObjectId, ObjectHeadMap membership, and
+    /// shared Revision-Frame bytes.
     /// </summary>
     public int PayloadBytes { get; }
 }

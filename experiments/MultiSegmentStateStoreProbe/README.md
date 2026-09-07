@@ -17,8 +17,8 @@ TwoLeg evacuation，也不把 threshold 冒充严格文件上限。
 - 显式 multi-origin witness 仍证明 relative reference 必须随 containing origin 重编码；
 - empty oversize、single-Frame hard bound、FileNumber overflow 与 reject 不发布；
 - Revision shared Prior、OVD Base/Delta、ObjectVersion Base/Delta 与 canonical bindings；
-- F1-F4 exact-head current reconstruction：冷 ObjectVersion 可留在 F1，热 Delta 链独立推进；
-- current-required missing、non-earlier、cycle、wrong ObjectId/parent state/ordinal 的 fail-close。
+- F1-F4 从 exact object heads 在所选 Revision 中重建：冷 ObjectVersion 可留在 F1，热 Delta 链独立推进；
+- 所选 Revision 所需项缺失、non-earlier、cycle、wrong ObjectId/Revision Parent state/ordinal 的 fail-close。
 - exact-parent normalization、origin-free RevisionPlan、whole-candidate admission 与 OVD Base historical-head
   reencode；
 - shared-prior Base lineage、append-before-publish orphan 与 publish 后 cache failure；

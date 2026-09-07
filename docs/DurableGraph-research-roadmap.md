@@ -17,7 +17,7 @@ MVP 库内加载顺序为 exact 重建 → 单对象 Upgrade → 分配实例 �
 Transient 由用户在交付后处理，约束维护在[目标设计](DurableGraph-target-design-v0.md#恢复transient-与宿主边界)。
 数组形状、升级、单根、Transient hook、boxed value，以及无需无参构造器/readonly 字段的支持选择见
 [MVP 功能边界](DurableGraph-target-design-v0.md#mvp-功能边界)，不再作为开放范围反复讨论。
-WorkingTree/GraphSession 的职责方向已采纳；发布/故障裁决尚未实现。不要把内存 Current、Schema
+WorkingTree/GraphSession 的职责方向已采纳；发布/故障裁决尚未实现。不要把会话已 Accept 的内存基线（`CaptureSession.Current`）、Schema
 注册成功或 State Append 返回地址直接当作已发布基线。Schema 严格坏尾拒绝合同见 DB-031 §8。
 
 自定义 struct、完整数组对象与持久根/会话可以独立成片。
@@ -27,14 +27,15 @@ WorkingTree/GraphSession 的职责方向已采纳；发布/故障裁决尚未实
 ## 2. 已采纳方向中的未完成能力
 
 此表只列仍需工作的增量。方向已选不代表每项 API、顺序和细节已经批准。
-B/D/H 分别指 Base 写入字节、Delta 写入字节、当前对象重建字节；均按策略已定的对象自身 payload 口径。
+B/D/H 分别指本轮精确 Base payload、Delta payload 上界、已有对象重建链的实际 payload 字节；
+均排除 ObjectId、ObjectHeadMap 目录与共享 Revision Frame 结构。
 
 | 工作项 | 最小应回答的问题 | 设计或证据入口 |
 |---|---|---|
-| 术语一致化 | 按首选词分批核对活跃文档、注释和代码符号；先区分同义、同词异义与职责变化，再决定迁移。历史材料保留语境，涉及 API/持久格式的名称须单独核对影响 | [项目术语表与命名差异](DurableGraph-glossary.md#多义词历史叫法与代码命名差异) |
-| 工作会话与 exact Parent baseline | 已选 Repository 受控创建/加载的 WorkingTree/GraphSession；现有 LoadedWorld 固定 Parent、DTO 与实例身份并在 Append 后重新 Load；后续定义发布后安装、Commit API 与故障裁决 | [目标约束](DurableGraph-target-design-v0.md#单一发布权威与明确故障结果)、[DB-030 接缝](design-branches/0030-captured-object-preparation-slice.md#4-exact-parent-接缝明确留到后片) |
+| 公开符号命名迁移 | 活跃文档、注释和内部 B/D/H 符号的首轮一致化已完成。`CaptureSession.Current`、`PreparedCapturedObject.Current/Previous`、`CapturedObject`、`PreparedBase.Payload`、`StateRevision.CreateBase/CreateDelta` 只在出现真实消费者需求或带版本迁移片时重访；届时先冻结替代词、源/二进制/生成 ABI 影响及兼容策略，不为表面一致做无证据破坏性改名 | [项目术语表与命名差异](DurableGraph-glossary.md#多义词历史叫法与代码命名差异) |
+| 工作会话与 exact Revision Parent 比较基线 | 已选 Repository 受控创建/加载的 WorkingTree/GraphSession；现有 LoadedWorld 固定 Revision Parent、当前版本 DTO 与实例身份并在 Append 后重新 Load；后续定义发布后安装、Commit API 与故障裁决 | [目标约束](DurableGraph-target-design-v0.md#单一发布权威与明确故障结果)、[DB-030 接缝](design-branches/0030-captured-object-preparation-slice.md#4-exact-parent-接缝明确留到后片) |
 | TypeCodec 与 exact Schema 绑定 | 一般类型组合与内建复合类型 codec；已有 nominal class 引用及 exact reader 分派不等于一般 TypeCodec，也不自动复活已删除模型族 | [DB-034](design-branches/0034-durable-reference-graph-batch.md)、[DB-018](design-branches/0018-generated-graph-codec-shape.md)、[DB-001](design-branches/0001-schema-authority-and-runtime-representation.md) |
-| 复合类型的 DTO 升级与恢复 | 将单对象 Upgrade/Restore 扩展到复合值、数组与容器内容；保持完整源目录、强制 Base、current 可达分析和失败不交付 | [DB-034](design-branches/0034-durable-reference-graph-batch.md)、[DB-018](design-branches/0018-generated-graph-codec-shape.md) |
+| 复合类型的 DTO 升级与恢复 | 将单对象 Upgrade/Restore 扩展到复合值、数组与容器内容；保持完整 source 目录、强制 Base、当前版本 DTO 图的可达分析和失败不交付 | [DB-034](design-branches/0034-durable-reference-graph-batch.md)、[DB-018](design-branches/0018-generated-graph-codec-shape.md) |
 | 自定义泛型 Schema/DTO | 保留 SG 开放模板 + 首次运行时闭合/缓存方向；领域 T 与冻结表示参数分离，接通泛型定义/实参身份及历史 exact reader；现有手写 body 见证不等于 SG 已支持 | [泛型 DTO 技术备忘](design-branches/0018-generic-dto-binding-followup.md)，扩充 Schema 类型表达或泛型 Capture 时重访 |
 | 自定义 struct | exact inline Schema/history 与 owner 升版，嵌套 DTO/布局及字段和数组元素的 ref body 复用 | [DB-024 struct TODO](design-branches/0024-reference-capture-and-reusable-object-ids.md)、[DB-020](design-branches/0020-typed-slot-array-binding-slice.md) |
 | 完整数组对象 | 在已选零下界 SZ/有限多维 rank 范围内，实现 identity、shape、分配与元素循环，并拒绝不支持的形状；不能把现有元素模板视为完整数组支持 | [MVP 边界](DurableGraph-target-design-v0.md#mvp-功能边界)、[DB-020](design-branches/0020-typed-slot-array-binding-slice.md) |
@@ -43,7 +44,7 @@ B/D/H 分别指 Base 写入字节、Delta 写入字节、当前对象重建字�
 
 | 问题 | 现有依据与裁决边界 |
 |---|---|
-| 对象版本解释与保存来源 | 已登记模型族可按 Base exact Schema 自动读取；完整 head map 的 external heads 来源、候选对象身份连续性仍需产品 Save/Load 合同，不能由 Parent 声明一致推导全局身份认证 |
+| 对象版本解释与保存来源 | 已登记模型族可按 Base exact Schema 自动读取；完整 ObjectHeadMap 中 external object heads 的来源、候选对象身份连续性仍需产品 Save/Load 合同，不能由 Revision Parent 声明一致推导全局身份认证 |
 | 保存相等性与真实估算 | 同版标量 DTO 的浮点按位、引用槽按 ID 已采纳；未来复合值/容器相等性另定。已准备 body 与当前 v3 envelope 计量见 [DB-029](design-branches/0029-prepared-object-revision-planning-slice.md)；Base 类型头已计入 B/H。未来新增类型头/容器布局时继续按实际对象 payload 计量 |
 | 发布后基线安装 | DB-033 通过 Append 后重新 Load 建立新基线并清除已落盘升级重写义务；后续若增加就地推进，须证明它与真实发布状态绑定，不能任意 Accept(address) |
 | Schema 规范表示和持久引用 | canonical 注册批次与逻辑 SchemaKey 已闭合；未来 SchemaHash、紧凑引用及一般类型家族约束随消费者裁决，不用 GetHashCode 作持久身份 |
@@ -122,7 +123,7 @@ Revision/加载能力足以表示元数据集合；建设联合 Commit/Ref 时�
 - 类型/图读取：exact Schema 预检、typed decode/upgrade、引用目标合法性、共享/循环，
   late failure 不暴露半成品；升级删边与 source membership 的区别必须可观察。
 - 格式：独立 golden bytes、canonical 编码、截断/未知标签/溢长/尾随数据与错误 prior 拒绝。
-- 持久发布：在明确故障阶段注入错误并 reopen，证明 parent 或 exact candidate 的可裁决结果，
+- 持久发布：在明确故障阶段注入错误并 reopen，证明 Revision Parent 或 exact candidate 的可裁决结果，
   不能仅用 Append 正常返回或内存 Accept 宣称 durability。
 
 历史 logical graph、TwoLeg 和 MultiSegment 的材料由

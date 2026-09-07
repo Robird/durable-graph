@@ -19,16 +19,16 @@ public sealed class ReadAmplificationBaseBudgetPolicyTests {
     [InlineData(28, false)]
     [InlineData(29, false)]
     [InlineData(30, true)]
-    public void Update_motive_depends_on_H_plus_D_and_requires_strict_threshold(long history, bool motivated) {
-        AssertWrites(Plan([Update(1, 10, 1, history)], 3, 100), motivated ? Base(1) : Delta(1));
+    public void Update_motive_depends_on_H_plus_D_and_requires_strict_threshold(long reconstructionPayloadBytes, bool motivated) {
+        AssertWrites(Plan([Update(1, 10, 1, reconstructionPayloadBytes)], 3, 100), motivated ? Base(1) : Delta(1));
     }
 
     [Theory]
     [InlineData(29, false)]
     [InlineData(30, false)]
     [InlineData(31, true)]
-    public void NoChange_motive_depends_on_H_and_requires_strict_threshold(long history, bool motivated) {
-        ObjectRepresentationPlan plan = Plan([Cold(1, 10, history)], 3, 100);
+    public void NoChange_motive_depends_on_H_and_requires_strict_threshold(long reconstructionPayloadBytes, bool motivated) {
+        ObjectRepresentationPlan plan = Plan([Cold(1, 10, reconstructionPayloadBytes)], 3, 100);
         AssertWrites(plan, motivated ? [Base(1)] : []);
     }
 
@@ -105,7 +105,7 @@ public sealed class ReadAmplificationBaseBudgetPolicyTests {
     }
 
     [Fact]
-    public void Known_zero_estimates_preserve_change_kind_and_zero_denominator_semantics() {
+    public void Known_zero_measurements_preserve_change_kind_and_zero_denominator_semantics() {
         AssertWrites(Plan([
             Cold(1, 0, 0), Cold(2, 0, 1), Update(3, 0, 0, 0),
             Insert(4, 0), Update(5, 5, 0, 0), Cold(6, 5, 0),
@@ -206,7 +206,7 @@ public sealed class ReadAmplificationBaseBudgetPolicyTests {
     }
 
     [Fact]
-    public void Negative_applicable_estimates_are_rejected_for_every_field_and_kind() {
+    public void Negative_applicable_payload_measurements_are_rejected_for_every_field_and_kind() {
         ObjectSaveEstimate[] invalid = [
             Insert(1, -1), Update(1, -1, 0, 0), Cold(1, -1, 0),
             Update(1, 1, -1, 0), Update(1, 1, 0, -1), Cold(1, 1, -1),
@@ -269,14 +269,15 @@ public sealed class ReadAmplificationBaseBudgetPolicyTests {
         int limit = 3,
         int percent = 25) => ReadAmplificationBaseBudgetPolicy.Plan(objects, new(limit, percent));
 
-    private static ObjectSaveEstimate Insert(uint id, long baseBytes) =>
-        new(id, ObjectSaveChangeKind.Insert, baseBytes, null, null);
+    private static ObjectSaveEstimate Insert(uint id, long basePayloadBytes) =>
+        new(id, ObjectSaveChangeKind.Insert, basePayloadBytes, null, null);
 
-    private static ObjectSaveEstimate Update(uint id, long baseBytes, long deltaBytes, long historyBytes) =>
-        new(id, ObjectSaveChangeKind.Update, baseBytes, deltaBytes, historyBytes);
+    private static ObjectSaveEstimate Update(
+        uint id, long basePayloadBytes, long deltaPayloadBytesUpperBound, long reconstructionPayloadBytes) =>
+        new(id, ObjectSaveChangeKind.Update, basePayloadBytes, deltaPayloadBytesUpperBound, reconstructionPayloadBytes);
 
-    private static ObjectSaveEstimate Cold(uint id, long baseBytes, long historyBytes) =>
-        new(id, ObjectSaveChangeKind.NoChange, baseBytes, null, historyBytes);
+    private static ObjectSaveEstimate Cold(uint id, long basePayloadBytes, long reconstructionPayloadBytes) =>
+        new(id, ObjectSaveChangeKind.NoChange, basePayloadBytes, null, reconstructionPayloadBytes);
 
     private static ObjectWriteDecision Base(uint id) => new(id, ObjectRepresentationMode.Base);
 

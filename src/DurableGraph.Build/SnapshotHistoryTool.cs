@@ -14,7 +14,7 @@ internal sealed class SnapshotHistoryTool {
 
         if (candidates.Count == 0 && !Directory.Exists(historyDirectory)) {
             return new SnapshotHistoryResult(
-                "published 0 snapshot(s); 0 already exact");
+                "published 0 schema-history record(s); 0 already exact");
         }
 
         Dictionary<SnapshotKey, ExistingSnapshot> existing = Directory.Exists(historyDirectory)
@@ -64,7 +64,7 @@ internal sealed class SnapshotHistoryTool {
         }
 
         return new SnapshotHistoryResult(
-            $"published {pending.Count} snapshot(s); {unchangedCount} already exact");
+            $"published {pending.Count} schema-history record(s); {unchangedCount} already exact");
     }
 
     public SnapshotHistoryResult Verify(
@@ -88,7 +88,7 @@ internal sealed class SnapshotHistoryTool {
         }
 
         return new SnapshotHistoryResult(
-            $"verified {candidates.Count} current snapshot(s) against {existing.Count} history snapshot(s)");
+            $"verified {candidates.Count} current manifest candidate(s) against {existing.Count} schema-history record(s)");
     }
 
     private static Dictionary<SnapshotKey, ExistingSnapshot> LoadHistory(

@@ -22,7 +22,7 @@
   wire 用 BackwardFileDistance；required references 必须指向更早地址。
 - tail-triggered soft rollover：crossing append 留在原文件，下次 Save 借 writer 时轮转；
   final origin 确定后编码一次。冷对象不因文件切换而被强制 Base。
-- ObjectHeadMap Base/Delta 与对象 Base/Delta 正交；exact-head current reconstruction、
+- ObjectHeadMap Base/Delta 与对象 Base/Delta 正交；从 exact object heads 在所选 Revision 中重建、
   shared-prior lineage、append-before-publish 和发布后缓存失效已有 Probe 见证。
 - 单次 Save 一个 Revision Frame；所有历史文件保留，不保证总空间、依赖文件数或 cold-read fan-out 有界。
 - policy 与 evaluator 使用合成 payload/raw outcomes；不把结果解释为产品默认参数或性能保证。

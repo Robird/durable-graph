@@ -116,7 +116,7 @@ public sealed partial class DurableSchemaGeneratorTests {
                 var prepared = CapturedRevisionPlanner.PrepareRevision(store, schemas, parent, input, parameters);
                 Assert.Same(accepted, session.Current); // Planning never installs a candidate or baseline.
                 Assert.Equal(parent, prepared.Revision.ParentRevisionAddress);
-                Assert.Equal(97, Assert.Single(prepared.Estimates, item => item.ObjectId == ownerId).EstimatedBaseWriteBytes);
+                Assert.Equal(97, Assert.Single(prepared.Estimates, item => item.ObjectId == ownerId).BasePayloadBytes);
                 if (stage == 0) {
                     Assert.Equal(input.Objects.Count, prepared.Revision.LocalObjects.Count);
                     Assert.All(prepared.Revision.LocalObjects, record => Assert.Equal(ObjectVersionKind.Base, record.Kind));

@@ -1,7 +1,7 @@
 namespace Atelia.DurableGraph.StateStore.Storage;
 
 /// <summary>
-/// Immutable local object contents and live-object metadata of one StateStore Revision.
+/// Immutable local object-version records and ObjectHeadMap metadata of one StateRevision.
 /// </summary>
 public sealed class StateRevision {
     private readonly FrozenList<ObjectVersionRecord> _localObjects;
@@ -72,24 +72,32 @@ public sealed class StateRevision {
     public FrameAddress? ParentRevisionAddress { get; }
     public ObjectHeadMapKind ObjectHeadMapKind { get; }
 
-    /// <summary>Complete same-Frame object records in ascending ObjectId order.</summary>
+    /// <summary>All object records located in the containing Revision Frame, in ascending ObjectId order.</summary>
     public IReadOnlyList<ObjectVersionRecord> LocalObjects => _localObjects;
 
     /// <summary>IDs derived from the local object records. Each head is its containing Revision Frame.</summary>
     public IReadOnlyList<uint> LocalObjectIds => _localObjectIds;
 
-    /// <summary>Earlier current heads completing an ObjectHeadMap Base; empty for a map Delta.</summary>
+    /// <summary>Earlier object heads completing an ObjectHeadMap Base; empty for an ObjectHeadMap Delta.</summary>
     public IReadOnlyDictionary<uint, FrameAddress> ExternalObjectHeads => _externalObjectHeads;
 
     /// <summary>IDs removed by a map Delta; a map Base expresses non-live objects by absence.</summary>
     public IReadOnlyList<uint> RemovedObjectIds => _removedObjectIds;
 
+    /// <summary>
+    /// Creates a revision with an ObjectHeadMap Base representation. This does not
+    /// constrain the Base or Delta representation of its local object records.
+    /// </summary>
     public static StateRevision CreateBase(
         FrameAddress? parentRevisionAddress,
         IEnumerable<ObjectVersionRecord> localObjects,
         IEnumerable<KeyValuePair<uint, FrameAddress>> externalObjectHeads) =>
         new(parentRevisionAddress, ObjectHeadMapKind.Base, localObjects, externalObjectHeads, []);
 
+    /// <summary>
+    /// Creates a revision with an ObjectHeadMap Delta representation. This does not
+    /// constrain the Base or Delta representation of its local object records.
+    /// </summary>
     public static StateRevision CreateDelta(
         FrameAddress parentRevisionAddress,
         IEnumerable<ObjectVersionRecord> localObjects,

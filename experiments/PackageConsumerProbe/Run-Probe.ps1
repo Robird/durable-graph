@@ -67,7 +67,7 @@ function Assert-HistoryCount {
     $actual = @(Get-HistoryFiles $HistoryDirectory).Count
 
     if ($actual -ne $Expected) {
-        throw "Expected $Expected snapshot history file(s), found $actual."
+        throw "Expected $Expected Schema-history file(s), found $actual."
     }
 }
 

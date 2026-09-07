@@ -59,7 +59,7 @@ the script requires `GeneratedReaders:True`. This verifies the generator's regis
 without adding a StateStore package dependency or assigning registry policy to the sink.
 
 The Runtime-only consumer also registers the stable generated `Model` through a consumer-owned
-`IStateModelRegistration` sink, normalizes a current captured row, then calls generated `Allocate`
+`IStateModelRegistration` sink, normalizes a captured row to the current-version DTO, then calls generated `Allocate`
 and `Hydrate`. Its private readonly base fields survive; neither the leaf/base constructors nor
 the transient field initializer executes. The script additionally requires `GeneratedModel:True`
 and `ReadonlyRestore:True`. This verifies generated restoration helpers without adding StateStore
@@ -67,8 +67,8 @@ to the Runtime package or implementing a consumer-owned persistence coordinator.
 
 The final consumer also captures two concrete roots with shared strings, distinct equal strings,
 null/empty/surrogate content, and private base fields through generated AddRoot adapters. It checks
-the closed ID DTO list, static ID-body golden bytes, mutation isolation, accept/discard, stable live
-IDs, discarded-number consumption, and fresh IDs after retirement. These use public runtime seams
+the ID-closed candidate DTO directory, static ID-body golden bytes, mutation isolation, accept/discard, stable IDs for
+instances retained across accepted candidates, discarded-number consumption, and fresh IDs after retirement. These use public runtime seams
 from the single package reference; generated helpers and DTOs stay internal to the consumer.
 This remains an in-memory candidate witness, not StateStore Save.
 
@@ -119,7 +119,7 @@ including the four reference-graph models described below). The V2
 consumer writes a historical Base plus two Deltas and closes the files. After writable reopening,
 public `LoadedWorld.Load<World>` upgrades the complete old DTO, allocates without a constructor,
 and hydrates private readonly scalar/string fields. `Prepare` forces an unchanged upgraded object
-to current Base; a later domain mutation cannot change that prepared content. The host explicitly
+to a Base for the current-version DTO; a later domain mutation cannot change that prepared content. The host explicitly
 appends and loads a new owner, whose unchanged plan contains no object writes and whose next edit
 uses ordinary Delta. A second cold reopening restores that Base/Delta pair and still reads the
 original historical revision. No fixture-owned DTO migration or planning coordinator substitutes
@@ -139,7 +139,7 @@ hand-built DTOs or bootstrap records. Mutating and disconnecting the original gr
 cannot change those saved bytes. Closing and reopening restores the exact derived type, sharing,
 cycles and readonly fields without executing constructors or transient initializers.
 
-A child-only edit produces one Character Delta and retains the World's previous head. Repeated
+A child-only edit produces one Character Delta and retains the World object's prior object head. Repeated
 preparation is equivalent, reloading an unchanged graph produces no writes, and disconnecting both
 World references removes the entire cyclic island and its string from the new view. A final cold
 reopening checks the removed view and both earlier graphs. Required markers are `PrepareNewGraph`,

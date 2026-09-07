@@ -4,7 +4,8 @@ using Atelia.DurableGraph.StateStore.Serialization;
 namespace Atelia.DurableGraph.StateStore.Storage;
 
 /// <summary>
-/// Encodes the provisional v3 State Revision with local opaque Base and Delta bodies.
+/// Encodes the provisional v3 StateRevision's object-version records and
+/// ObjectHeadMap membership representation.
 /// </summary>
 internal static class StateRevisionWireWriter {
     internal static void Write(

@@ -54,8 +54,9 @@ public sealed class ObjectVersionChain {
 
     /// <summary>
     /// Checked sum of each entry's actual ObjectVersion payload bytes (H).
-    /// This is not total physical read traffic: membership and shared Frame reads
-    /// are excluded, including any repeated reads used to validate prior edges.
+    /// This is not total physical read traffic: ObjectHeadMap membership and
+    /// shared Revision-Frame reads are excluded, including any repeated reads
+    /// used to validate prior edges.
     /// </summary>
     public long ReconstructionBytes { get; }
 

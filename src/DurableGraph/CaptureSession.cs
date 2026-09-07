@@ -182,7 +182,7 @@ public sealed class CaptureSession {
         RequireNotPreparing();
         ArgumentNullException.ThrowIfNull(candidate);
         if (_pending is null || !ReferenceEquals(_pending.Candidate, candidate)) {
-            throw new InvalidOperationException("The candidate is not the session's current unresolved capture.");
+            throw new InvalidOperationException("The candidate is not the session's pending unresolved candidate.");
         }
         return _pending;
     }

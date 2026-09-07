@@ -1,10 +1,10 @@
 # Atelia.DurableGraph
 
 DurableGraph is an exploratory .NET 10 prototype for versioned durable object graphs.
-Its public API, snapshot-history format, and build workflow are not stable yet.
+Its public API, Schema-history format, and build workflow are not stable yet.
 
 A direct package reference supplies the runtime library, Source Generator, and the current
-snapshot-history build integration. By default, each successful local `CoreCompile` appends exact
+Schema-history build integration. By default, each successful local `CoreCompile` appends exact
 snapshot metadata under `DurableGraphSnapshots/`; a later unrelated build phase can still fail.
 Builds with `ContinuousIntegrationBuild=true` verify that the current metadata is already present
 without writing it.
