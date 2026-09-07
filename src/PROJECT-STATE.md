@@ -15,8 +15,10 @@
 ## 当前焦点
 
 DB-032 已接通 SG 模型族历史 reader 登记、指定 Revision 完整 DTO/string 冷读和引用验证，
-实施及验证见分片账本，当前无正在施工的分片。下一范围尚未选择，优先评估 current DTO 升级与重写义务，再与
-单 World/Restore、加载身份接续和工作会话需求一起选片。已选范围裁剪见
+实施及验证见分片账本，当前无正在施工的分片。下一轮推荐
+[DB-033 连续施工计划](../docs/design-branches/0033-upgrade-restore-resave-batch.md)（Proposed）：
+current DTO 升级、readonly Restore、受控加载基线、保存准备及 Append 后重新 Load 的闭环；尚未实施。
+本批范围、分步验收及下一轮任务文本集中在该计划，不包含 Commit/发布或一般引用类型扩展。已选范围裁剪见
 [MVP 功能边界](../docs/DurableGraph-target-design-v0.md#mvp-功能边界)。
 读取返回 stored-exact 目录，不自动建立可编辑基线；库内加载与宿主初始化边界见
 [目标设计](../docs/DurableGraph-target-design-v0.md#恢复transient-与宿主边界)。

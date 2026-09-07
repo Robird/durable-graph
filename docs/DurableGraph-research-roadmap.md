@@ -8,8 +8,10 @@
 ## 1. 下一个分片如何选择
 
 [DB-032](design-branches/0032-exact-revision-decoding-slice.md) 已接通完整 stored-exact DTO 目录冷读。
-下一片优先评估“历史目录 → current DTO 单对象升级与重写义务”，再与单 World/Restore、加载身份/基线导入
-和工作会话一起选择可观察闭环；下一范围尚未冻结，不预定扩大为完整 Commit。
+下一轮推荐 [DB-033 多步骤施工计划](design-branches/0033-upgrade-restore-resave-batch.md)（Proposed，未实施）：
+连续完成 current DTO 升级、readonly Restore、加载基线/身份导入、保存准备和 Append 后重新冷加载。
+本批只用现有标量/string、显式 WorldId；不做原会话就地推进、持久根或 Commit/Ref 发布。
+具体 gate、身份选择、验收与后续 agent 任务文本只维护在该计划。
 MVP 库内加载顺序为 exact 重建 → 单对象 Upgrade → 分配实例 → 填充/连接引用 → 完整交付 World；
 Transient 由用户在交付后处理，约束维护在[目标设计](DurableGraph-target-design-v0.md#恢复transient-与宿主边界)。
 数组形状、升级、单根、Transient hook、boxed value，以及无需无参构造器/readonly 字段的支持选择见
