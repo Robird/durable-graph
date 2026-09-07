@@ -38,6 +38,8 @@ WorkingTree/GraphSession 仍是统一持有 Parent、DTO 基线与实例身份�
 
 - SG DTO/body 支持 13 种标量：bool、byte/sbyte、short/ushort、int/uint、long/ulong、char、Half、float、double；string 字段保存 UInt32 ID。
   SchemaOnly + GenerateBinaryBody 仍限同编译、顶层、非泛型、非 record 的 partial class 链；readonly durable 字段仍拒绝。
+  MVP 已选支持无需无参构造器的领域类和 readonly 实例持久字段，走 RuntimeHelpers 分配 + SG Hydrate/
+  UnsafeAccessor；这是待实现方向，尚未解除上述诊断或实现产品 Restore，见[路线图](../docs/DurableGraph-research-roadmap.md#2-已采纳方向中的未完成能力)。
 - AddRoot 登记根，Seal 捕获字段；Accept/Discard 只是内存候选协议。ID 单调分配、失败可烧号；退役实例映射清理不回收数字。
   空串 Capture/读取两端统一 Empty，非空 string 保留引用身份。
   现有多根 Capture 是内部能力/机制见证；后续 MVP 外层 API 按单 World 收敛，本轮文档裁剪未改代码。

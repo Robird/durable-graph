@@ -12,7 +12,7 @@
 和工作会话一起选择可观察闭环；下一范围尚未冻结，不预定扩大为完整 Commit。
 MVP 库内加载顺序为 exact 重建 → 单对象 Upgrade → 分配实例 → 填充/连接引用 → 完整交付 World；
 Transient 由用户在交付后处理，约束维护在[目标设计](DurableGraph-target-design-v0.md#恢复transient-与宿主边界)。
-数组形状、升级、单根、Transient hook 和 boxed value 的已选裁剪见
+数组形状、升级、单根、Transient hook、boxed value，以及无需无参构造器/readonly 字段的支持选择见
 [MVP 功能边界](DurableGraph-target-design-v0.md#mvp-功能边界)，不再作为开放范围反复讨论。
 WorkingTree/GraphSession 的职责方向已采纳；发布/故障裁决尚未实现。不要把内存 Current、Schema
 注册成功或 State Append 返回地址直接当作已发布基线。Schema 严格坏尾拒绝合同见 DB-031 §8。
@@ -31,6 +31,7 @@ B/D/H 分别指 Base 写入字节、Delta 写入字节、当前对象重建字�
 | 工作会话与 exact Parent baseline | 已选 Repository 受控创建/加载的 WorkingTree/GraphSession；如何建立、安装、冷重建 Parent / DTO / 实例身份绑定，收敛 Commit API 与失败行为 | [目标约束](DurableGraph-target-design-v0.md#单一发布权威与明确故障结果)、[DB-030 接缝](design-branches/0030-captured-object-preparation-slice.md#4-exact-parent-接缝明确留到后片) |
 | TypeCodec 与 exact Schema 绑定 | 一般类型组合、nominal 引用约束、内建复合类型的 codec；已登记模型族的 exact reader 分派不等于一般 TypeCodec，也不自动复活已删除模型族 | [DB-032 接缝](design-branches/0032-exact-revision-decoding-slice.md)、[DB-018](design-branches/0018-generated-graph-codec-shape.md)、[DB-001](design-branches/0001-schema-authority-and-runtime-representation.md) |
 | DTO 升级与领域 Restore | 通过单对象字段转换形成 current DTO、保留重写义务，再构造领域对象；失败时不交付半成品，不带入跨对象迁移 | [DB-032 读取输入](design-branches/0032-exact-revision-decoding-slice.md)、[DB-022](design-branches/0022-versioned-state-dto-capture.md)、[DB-002](design-branches/0002-read-time-version-upgrade-pipeline.md) |
+| 无构造器分配与 readonly Hydrate | 落实已选 RuntimeHelpers 分配、SG 普通字段赋值及 readonly UnsafeAccessor；解除现有字段诊断限制并贯通 Capture/body/Restore，验证 private 基类字段、构造器未运行及循环引用 | [目标约束](DurableGraph-target-design-v0.md#恢复transient-与宿主边界)、[机制证据](DurableGraph-lab-notebook.md#2026-09-07无构造器分配与-readonly-实例字段写入) |
 | 一般 durable 引用图 | 递归登记、共享/循环、nominal 约束、多态实际类型、完整目录及 roots 可达闭包如何共同成立 | [DB-018](design-branches/0018-generated-graph-codec-shape.md)、[DB-024](design-branches/0024-reference-capture-and-reusable-object-ids.md) |
 | 自定义 struct | exact inline Schema/history 与 owner 升版，嵌套 DTO/布局及字段和数组元素的 ref body 复用 | [DB-024 struct TODO](design-branches/0024-reference-capture-and-reusable-object-ids.md)、[DB-020](design-branches/0020-typed-slot-array-binding-slice.md) |
 | 完整数组对象 | 在已选零下界 SZ/有限多维 rank 范围内，实现 identity、shape、分配与元素循环，并拒绝不支持的形状；不能把现有元素模板视为完整数组支持 | [MVP 边界](DurableGraph-target-design-v0.md#mvp-功能边界)、[DB-020](design-branches/0020-typed-slot-array-binding-slice.md) |
@@ -45,7 +46,7 @@ B/D/H 分别指 Base 写入字节、Delta 写入字节、当前对象重建字�
 | 历史升级后的比较和重写 | DB-006/R3 已见证 normalized baseline 与 RequiresRewrite；产品同版重建接缝已就绪；升级须先按 Base Schema 完整还原旧链再进行，仍 live 的升级对象即使值未变也必须 BaseOnlyUpdate。新 DTO 自动升级、义务导入/发布后清除与删边清理尚未接通，读取不回写 |
 | 完整 source 目录与 current 可达集合 | 升级可能删边。研究见证保留 source rows，再由 Save 移除不可达项；产品保存视图怎样表达需与候选/Parent 衔接 |
 | Schema 规范表示和持久引用 | canonical 注册批次与逻辑 SchemaKey 已闭合；未来 SchemaHash、紧凑引用及一般类型家族约束随消费者裁决，不用 GetHashCode 作持久身份 |
-| Restore 的分配和阶段边界 | allocate-all / hydrate-all 有循环见证；构造器、readonly 字段、升级后引用连接与持久数据校验的具体实现待选。MVP 无 Transient hook，交付后由用户初始化 |
+| Restore 的加载协调 | 无需无参构造器及 readonly 实例持久字段已纳入 MVP，分配/Hydrate 技术方向已选；剩余为 current DTO 到实例绑定、升级后可达集合、引用连接及失败时不交付的产品合同。MVP 无 Transient hook |
 | 开放泛型/数组组合绑定 | SG 静态 body + runtime 按需闭合是推荐路线；具体 generic factories、局部 DynamicMethod 或其他后端尚待消费场景裁决，不据此扩建通用 registry |
 | 跨程序集与一般类型形状 | 继承 helper 可见性、外部历史祖先、generic durable 类型、enum/nullable/decimal/native int 等支持范围；boxed value identity 已排除 MVP |
 | 多态与运行时注册 | exact runtime 类型到 Schema/DTO/codec 的绑定、nominal assignability、未知实现 fail closed；不为尚无消费者的插件体系预制完整注册框架 |
