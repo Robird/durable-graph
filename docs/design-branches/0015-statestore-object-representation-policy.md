@@ -23,8 +23,8 @@
 产品事实见 [StateStore 项目](../../src/DurableGraph.StateStore/DurableGraph.StateStore.csproj)、
 [StateRevision](../../src/DurableGraph.StateStore.Storage/StateRevision.cs)、
 [StateRevisionStore](../../src/DurableGraph.StateStore.Storage/StateRevisionStore.cs)。
-策略参照为 [MultiSegment 实现](../../experiments/MultiSegmentStateStoreProbe/Policies/ReadAmplificationBaseBudgetPolicy.cs)
-及[测试](../../experiments/MultiSegmentStateStoreProbe/Tests/ReadAmplificationBaseBudgetPolicyTests.cs)。
+策略参照为 [MultiSegment 实现（归档）](../../experiments/ARCHIVE.md#multi-segment "原路径：experiments/MultiSegmentStateStoreProbe/Policies/ReadAmplificationBaseBudgetPolicy.cs")
+及[测试（归档）](../../experiments/ARCHIVE.md#multi-segment "原路径：experiments/MultiSegmentStateStoreProbe/Tests/ReadAmplificationBaseBudgetPolicyTests.cs")。
 TwoLeg 只提供设计储备，不建立项目依赖，不继承 Stay/Rotate、A-debt、evacuation 或两文件约束。
 
 可观察目标：同一组有效估算和参数，无论输入排列如何，都产生同一组按 ObjectId 排序的写决策；
@@ -264,4 +264,4 @@ StateStore、Storage、Serialization 三个测试项目分别通过 40、73、65
 后续由真实 Save 消费者提供估算并消费 Writes；那一切片才确定估算生产、payload 写入和状态更新。
 
 当前 Storage wire、StateRevision 及其 API 均不因本设计改变；没有必要为运行纯 selector 先改 Storage。
-相邻总览见 [阶段 B 设计](../../experiments/MultiSegmentStateStoreProbe/STATESTORE-SUBSYSTEM-DESIGN.md)。
+相邻总览见 [阶段 B 设计（归档）](../../experiments/ARCHIVE.md#multi-segment "原路径：experiments/MultiSegmentStateStoreProbe/STATESTORE-SUBSYSTEM-DESIGN.md")。

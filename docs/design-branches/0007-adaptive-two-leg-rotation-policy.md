@@ -9,7 +9,7 @@
 > 冻结结论：可执行 workload 已观察到 budget-compatible 低放大 A-debt 连续 64 个自然 Save 保持 Stay；
 > 在相同 strategy view 持续重复的条件下，pure selector 会 indefinitely stall，这是源码推导而非无限期测量。
 > 未实现的后续控制分成 ReadMotive、ReadinessProgress 与 ShouldRotate。候选公式、边界与判别实验见
-> [`ADAPTIVE-ROTATION-CONTROL-CANDIDATE.md`](../../experiments/TwoLegRotationProbe/ADAPTIVE-ROTATION-CONTROL-CANDIDATE.md)。
+> [`ADAPTIVE-ROTATION-CONTROL-CANDIDATE.md`（归档）](../../experiments/ARCHIVE.md#two-leg "原路径：experiments/TwoLegRotationProbe/ADAPTIVE-ROTATION-CONTROL-CANDIDATE.md")。
 > 2026-09-02 起 TwoLeg 路线暂停；产品候选转向 [`DB-014`](0014-multi-segment-backward-file-distance.md)。
 
 > Authority boundary：本文保存 2026-08-28 至 2026-08-30 的候选分支与历史探针证据，不是当前

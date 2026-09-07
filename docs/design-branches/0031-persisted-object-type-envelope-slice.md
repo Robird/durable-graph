@@ -35,7 +35,7 @@ Delta 不重复声明类型：整个 Base→Delta 内容链只能使用 Base 所
   [图恢复见证](../../tests/DurableGraph.Tests/NormalizedGraphMaterializationProbeTests.cs) 覆盖
   重写义务、失败保留、恢复后保存、共享和循环。这是内存 logical graph 见证，不是物理 Delta 链升级
   或持久发布故障已经完成的证据。
-- 用户提到的 [SnapshotUpgradeShapeProbe](../../experiments/SnapshotUpgradeShapeProbe/README.md)
+- 用户提到的 [SnapshotUpgradeShapeProbe（归档）](../../experiments/ARCHIVE.md#snapshot-upgrade-shape "原路径：experiments/SnapshotUpgradeShapeProbe/README.md")
   主要是升级函数 `in/out` 等 C# 语言形状见证。
 - 产品 [PreparedObject.BaseOnlyUpdate](../../src/DurableGraph.StateStore/PreparedObject.cs) 与
   [ObjectRevisionPlanner](../../src/DurableGraph.StateStore/ObjectRevisionPlanner.cs) 已接受

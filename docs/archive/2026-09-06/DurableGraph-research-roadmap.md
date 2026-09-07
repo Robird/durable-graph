@@ -49,7 +49,7 @@ MultiSegment probe 已完成其文件级 address/rollover 风险验证，产品 
 不再充当当前产品路线图。
 
 [`DB-014`](../../design-branches/0014-multi-segment-backward-file-distance.md) 与
-[`MultiSegmentStateStoreProbe/PROJECT-STATE.md`](../../../experiments/MultiSegmentStateStoreProbe/PROJECT-STATE.md) 记录文件层证据边界；
+[`MultiSegmentStateStoreProbe/PROJECT-STATE.md`（归档）](../../../experiments/ARCHIVE.md#multi-segment "原路径：experiments/MultiSegmentStateStoreProbe/PROJECT-STATE.md") 记录文件层证据边界；
 `state-store-base-design.md`、`state-store-base-derived.md`、`state-store-addressing-design.md`
 与 DB-007/011 仅保留 TwoLeg 技术储备和可复用局部结论，不作为当前 API 形状先行事实。
 
@@ -236,7 +236,7 @@ certificate 与 W/P/F/R/L evaluator。它没有实现正式 wire、publication/r
 
 产品候选转向 DB-014，因此 A/B/C、1-bit RelativeFrameTicket、A-debt evacuation 与
 `CanPrepareAndRotate` 不进入正常 Save。完整冻结边界、未闭合项、可复用资产与恢复条件见
-[`TwoLegRotationProbe/PROJECT-STATE.md`](../../../experiments/TwoLegRotationProbe/PROJECT-STATE.md)；实现证据见其
+[`TwoLegRotationProbe/PROJECT-STATE.md`（归档）](../../../experiments/ARCHIVE.md#two-leg "原路径：experiments/TwoLegRotationProbe/PROJECT-STATE.md")；实现证据见其
 README/tests，annotated recovery tag 为 `research/two-leg-rotation-probe-tech-reserve-20260902`。
 
 只有 DB-014 无法满足真实的有界 dependency file count、在线磁盘退休、backup/rescue 或 compaction SLO

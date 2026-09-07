@@ -13,6 +13,9 @@
 - 查某项实现的来由或验收：[设计与施工记录索引](../docs/design-branches/README.md)。
 - 查历史实验：[实验簿入口](../docs/DurableGraph-lab-notebook.md)；重跑独立实验：[Probe 导航](../experiments/README.md)。
 
+四个早期 Probe 已归档到 Git，默认搜索优先 src/tests 与活动回归；只有具体历史机制问题才查
+[归档恢复索引](../experiments/ARCHIVE.md)，不要把旧项目整体恢复为续工上下文。
+
 ## 当前焦点
 
 [DB-036 工作会话与历史恢复能力](../docs/design-branches/0036-working-session-and-history-capabilities.md)

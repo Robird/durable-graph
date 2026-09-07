@@ -463,9 +463,9 @@ BCL adapter 保存和重建内容，不能序列化 bucket/capacity 等内部实
 性质：逻辑可变、物理 append-only、权威。
 
 StateStore 当前选定的多历史 Segment 地址、rollover、OVD/ObjectVersion 与恢复目标，详见
-[`MultiSegmentStateStoreProbe/TARGET-DESIGN.md`](../../../experiments/MultiSegmentStateStoreProbe/TARGET-DESIGN.md)。
+[`MultiSegmentStateStoreProbe/TARGET-DESIGN.md`（归档）](../../../experiments/ARCHIVE.md#multi-segment "原路径：experiments/MultiSegmentStateStoreProbe/TARGET-DESIGN.md")。
 正式子系统分层和产品化入口见
-[`STATESTORE-SUBSYSTEM-DESIGN.md`](../../../experiments/MultiSegmentStateStoreProbe/STATESTORE-SUBSYSTEM-DESIGN.md)。
+[`STATESTORE-SUBSYSTEM-DESIGN.md`（归档）](../../../experiments/ARCHIVE.md#multi-segment "原路径：experiments/MultiSegmentStateStoreProbe/STATESTORE-SUBSYSTEM-DESIGN.md")。
 产品当前进展统一维护在 [src/PROJECT-STATE.md](../../../src/PROJECT-STATE.md)。
 本节只保留 DurableGraph 全局职责，不重复冻结该探针的 provisional 类型与 wire。
 

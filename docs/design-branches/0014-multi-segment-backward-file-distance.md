@@ -12,9 +12,9 @@
 > 旧文档保留为 TwoLeg 可执行研究说明；one-frame、OVD、Base/Delta 与 lineage 等可复用部分仍需逐项验证。
 >
 > 实现入口：阶段 A 的内存模型、Save/Load、策略/评价与 G0-G4 gates 见
-> [`TARGET-DESIGN.md`](../../experiments/MultiSegmentStateStoreProbe/TARGET-DESIGN.md)；阶段 B 的正式
+> [`TARGET-DESIGN.md`（归档）](../../experiments/ARCHIVE.md#multi-segment "原路径：experiments/MultiSegmentStateStoreProbe/TARGET-DESIGN.md")；阶段 B 的正式
 > filesystem/RBF 与产品子系统晋升见
-> [`STATESTORE-SUBSYSTEM-DESIGN.md`](../../experiments/MultiSegmentStateStoreProbe/STATESTORE-SUBSYSTEM-DESIGN.md)。
+> [`STATESTORE-SUBSYSTEM-DESIGN.md`（归档）](../../experiments/ARCHIVE.md#multi-segment "原路径：experiments/MultiSegmentStateStoreProbe/STATESTORE-SUBSYSTEM-DESIGN.md")。
 
 ## 裁决
 

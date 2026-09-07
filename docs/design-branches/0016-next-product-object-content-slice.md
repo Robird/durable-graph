@@ -131,4 +131,4 @@ Schema authority/SchemaStore 以及外层 publication，分别等对应消费者
 相关边界：[DB-001](0001-schema-authority-and-runtime-representation.md)、
 [DB-005](0005-durable-inheritance-flattening.md)、
 [DB-015](0015-statestore-object-representation-policy.md)、
-[阶段 B 总览](../../experiments/MultiSegmentStateStoreProbe/STATESTORE-SUBSYSTEM-DESIGN.md)。
+[阶段 B 总览（归档）](../../experiments/ARCHIVE.md#multi-segment "原路径：experiments/MultiSegmentStateStoreProbe/STATESTORE-SUBSYSTEM-DESIGN.md")。

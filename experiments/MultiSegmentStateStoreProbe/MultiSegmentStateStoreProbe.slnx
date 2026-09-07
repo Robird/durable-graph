@@ -1,4 +1,0 @@
-<Solution>
-  <Project Path="MultiSegmentStateStoreProbe.csproj" />
-  <Project Path="Tests/MultiSegmentStateStoreProbe.Tests.csproj" />
-</Solution>
