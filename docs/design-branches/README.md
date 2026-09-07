@@ -72,6 +72,7 @@
 ## 机制见证附件
 
 - [DB-018 运行时泛型 binding 见证](0018-runtime-binding-witness.md)：typed ref + 闭合泛型的独立机制，不能证明通用 codec registry 已实现。
+- [DB-018 泛型 DTO 后续技术备忘](0018-generic-dto-binding-followup.md)：2026-09-07 已认可方向；静态缓存、运行时闭合及领域/冻结表示参数分离，未实施 SG 泛型 Schema/DTO，不是下一施工分片。
 - [DB-025 独立空字符串分配见证](0025-empty-string-allocation-witness.md)：未采用机制的历史证据；产品明确统一为 string.Empty。
 
 ## 新增与结束文档
