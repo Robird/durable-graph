@@ -25,6 +25,9 @@ DB-036 同实例 GraphSession/发布协议、DB-037 inline 布局与 DB-038 持�
 真实包三代构建已验证开放 owner/Pair 复用值规则、删除旧 inline 领域声明后的升级与强制 Base/稳定续写。
 有限数组等其他方向从[路线图](../docs/DurableGraph-research-roadmap.md)进入，已有 ref 元素循环仍不等于数组对象支持。
 
+当前设计调研为 [DB-040 typed ObjectId](../docs/design-branches/0040-typed-object-id-representation-research.md)：
+已比较 DTO/nominal 品牌、物理字段与 typed 属性的 CLR 可行性；尚未选定重构，产品引用槽仍为 uint。
+
 ## 当前能力与实际边界
 
 | 层 | 已验证能力 | 尚未闭合的边界 |

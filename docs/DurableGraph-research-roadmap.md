@@ -39,6 +39,7 @@ B/D/H 分别指本轮精确 Base payload、Delta payload 上界、已有对象�
 
 | 问题 | 现有依据与裁决边界 |
 |---|---|
+| 引用 ID 的强类型表示 | [DB-040](design-branches/0040-typed-object-id-representation-research.md) 比较 ObjectId、nominal marker 与 DTO 品牌。部分 typed 物理字段存在本机 CLR 加载障碍，uint backing + typed 属性有成功对照；仍须裁决版本含义、phantom nominal 保留与历史表示依赖，尚未授权产品改造 |
 | 对象版本解释与保存来源 | 已登记模型族可按 Base exact Schema 自动读取；完整 ObjectHeadMap 中 external object heads 的来源、候选对象身份连续性仍需产品 Save/Load 合同，不能由 Revision Parent 声明一致推导全局身份认证 |
 | 保存相等性与真实估算 | 同版 DTO 的浮点按位、引用槽按 ID、inline 值递归融合 Delta 已采纳；未来数组/容器相等性另定。已准备 body 与当前 v3 envelope 计量见 [DB-029](design-branches/0029-prepared-object-revision-planning-slice.md)；Base 类型头已计入 B/H。未来新增类型头/容器布局时继续按实际对象 payload 计量 |
 | Schema 规范表示和持久引用 | canonical 注册批次与逻辑 SchemaKey 已闭合；未来 SchemaHash、紧凑引用及一般类型家族约束随消费者裁决，不用 GetHashCode 作持久身份 |

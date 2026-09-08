@@ -18,11 +18,12 @@
 
 ## 当前规划
 
-DB-034–038 已实现；下一片 DB-039 在现有泛型闭环/最小 Context 上增加值 Upgrade 工具与组合。
-两片尚未产品实施；具体调度由用户后续授权，其他扩展从活跃路线图选片：
+DB-034–039 已实现；DB-040 调查引用 ID 的强类型表示，尚未选择产品重构。
+具体后继调度由用户授权，其他扩展从活跃路线图选片：
 
 | 文档 | 状态 | 实施范围 |
 |---|---|---|
+| [DB-040 typed ObjectId 调研](0040-typed-object-id-representation-research.md) | Open / Research | DTO 品牌的版本/nominal 含义、CLR 加载边界、uint backing + typed 属性及 nominal marker 对照；未修改产品 |
 | [DB-039 可组合值 Upgrade](0039-composable-value-upgrade-design.md) | Chosen / Implemented | G0–G3：Context 预绑定 typed 值工具、规则集/exact 槽依赖/provider 子作用域；整链拒绝规则、共享 DAG 与三代真实包闭环已验证，见 §8 |
 | [DB-038 泛型 Schema、状态与绑定](0038-generic-schema-state-and-binding-design.md) | Chosen / Implemented | G0–G4：闭合 TypeExpr/history v3、Family DTO/静态 body、按需绑定、通用/闭合 Upgrade 与最小 Context；完整回归与三代真实包通过，值工具后继见 DB-039 |
 | [DB-037 inline struct 状态](0037-inline-struct-state-slice.md) | Chosen / Implemented | G0–G4：显式非泛型 struct、exact Schema DAG/history v2、静态嵌套 DTO/融合 Delta、ref 恢复、owner Upgrade/连续保存与删除领域值声明后的历史包恢复；不含泛型或数组对象 |
