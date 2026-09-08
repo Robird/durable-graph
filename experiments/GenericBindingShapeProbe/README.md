@@ -39,6 +39,21 @@ HistoricalBodyAndUpgradeWithoutOldDomain:True
 NamedFamilyDtoAliasesAndOwnerUpgrade:True
 PhantomFirstEdgeHasMultipleStateClosures:True
 ExplicitHistoricalMiddleThreeVersionUpgrade:True
+StaticAndDelegateValueUpgradeReuseInBoxAndPair:True
+StaticAndDelegateNestedValueUpgradeComposition:True
+OwnerSelectsDifferentRulesForSameDtoFields:True
+ValueUpgradeDtoRemainsUnmanaged:True
+BothValueUpgradeFacadesColdClosedWithoutDynamicInvoke:True
+ExplicitSelectionUsesFullSlotNotStateClrType:True
+EqualSchemaCanExplicitlySelectBusinessRuleInsteadOfIdentity:True
+IdentityRequiresCompleteSlotEquivalence:True
+ExplicitSemanticConversionBetweenEqualClrStateTypes:True
+AllKnownChainDependenciesPreboundBeforeBusiness:True
+MissingConflictingOrWrongExactDependencyFailsWithZeroCallbacks:True
+DependencyCycleFailsWithZeroCallbacks:True
+KeepExactFallbackOnlyWhenExplicitRuleIsAbsent:True
+MalformedExplicitRuleCannotFallBackToIdentity:True
+BusinessFailureDoesNotTryAnotherRule:True
 HistoricalAssemblyWithoutOldDomainTypes:True
 MissingBusinessConversionRejected:CS1503
 MissingDomainConstraintRejected:CS0452
@@ -60,6 +75,46 @@ GenericBindingShapeProbe:PASS
 | 用户能否自然命名泛型历史 DTO？ | `NamedHistory.cs.txt` 使用非泛型 `Generated.Family_Box` 宿主及嵌套 `V1<TState>/V2<TState>`；用户可 `using BoxStates = Generated.Family_Box`，书写 `in BoxStates.V1<PointStates.V1>` 及开放 generic Upgrade。仅证明 C# 表达与调用成立。 |
 | 中间版本的状态参数能否自动推导？ | `Family_Phantom.V1` 不含 T，V2 才新增 T 字段。`AddField<TState>(in V1)` 未显式传 TState 时编译报 CS0411；即使赋值目标已声明为 `V2<Point.V1>`，也不能从返回类型推导。分别显式闭合 `uint` 与 `Point.V1` 均可编译运行，表明 C# 模板本身没有选出唯一中间表示。 |
 | 能否拿 current 表示填补历史中间版本？ | 显式第一条 owner edge 选择 `V2<Point.V1>`，第二条把 Point.V1 转换为 Point.V2，形成 `Phantom.V1 → V2<Point.V1> → V3<Point.V2>` 完整执行链。把 `V2<Point.V2>` 传给第二条 edge 编译报 CS1503；不能省略历史中间表示或业务转换。 |
+
+## 值 Upgrade 组合与显式选择见证
+
+`Fixtures/ValueUpgrade.cs.txt` 共 342 行，追加两种可执行形状，均保留强类型 `in` 参数：
+
+| 候选 | 本例的表示及已观察成本 |
+| --- | --- |
+| A：static interface + helper 参数 | `IValueUpgrade<TOld,TNew>` 的 `TUpgrade.Convert(...)`；owner 再带一个 helper 类型参数，组合 Pair 时闭合 `PairStaticUpgrade<TOld,TNew,TUpgrade>`。没有操作实例字段；每一种操作组合会增加一个闭合 helper 类型。 |
+| B：typed delegate 注入普通 generic owner | `ValueUpgrade<TOld,TNew>` delegate 作为 owner 参数；复用同一 Point 函数，组合 Pair 时在绑定阶段建立一个捕获子 delegate 的闭包。热路径是 typed delegate 调用，不使用 `DynamicInvoke`。 |
+
+两者实际将相同 Point v1→v2 业务规则复用到 Box、Pair 和嵌套 Pair，输出相等。
+同一 Pair 的两个 Point 字段还可显式分别选择乘 1000 与加 100；输入/输出 DTO 类型相同不唯一决定业务规则。
+所有输出仍为 unmanaged DTO；fixture 在无旧领域 Point/Box 编译依赖的第二个程序集运行。
+两种方案都通过 `MakeGenericMethod/CreateDelegate` 冷闭合为简单 facade，之后反复执行 typed 代码。
+本例不做 benchmark，不能据此认定 A 或 B 更快；外层 facade 仍有异构边界的接口调用与装箱。
+
+同文件的有限 `ExperimentSelection` 使用 **实验 record** `ExperimentSlot`：
+`StateType + Kind + Family + Version + LayoutToken`。它不是产品 `DurableSchema`，不生成或保存 Schema；
+尤其 `LayoutToken` 只是显式模拟“同 family/version，但完整布局定义不同”这一冲突。
+为隔离选择问题，该 harness 的实际操作统一为 `ValueUpgrade<uint,uint>`；另校验 StateType 必须匹配它。
+
+已运行的选择边界：
+
+- 调用者提供完整有限链、rule ID、exact 槽端点和明确依赖。Prepare 全部绑定后才交出可执行链，
+  不发现迁移路径、不搜索最优路径、不推导中间状态、不登记全局 latest。
+- Identity 必须显式选择且完整槽相等；相同完整槽仍可显式选业务规则，已有 Identity 不会吞掉它。
+  相同 uint CLR 表示的 number/string ID/durable ID 不可互换绑定，但显式规则可进行已声明的语义转换。
+- 调用者还可显式启用有限 `KeepExact` fallback：仅 requested rule ID 根本不存在且完整槽相等时透传。
+  ID 存在即先验证其完整端点；即使请求两端自身相等，同名同版但 layout 错误的显式规则仍报错，
+  不会被当成“无匹配”滑入 identity。正常无候选的相同槽透传、不同槽拒绝、未启用 fallback 拒绝，
+  以及相同 Schema 的显式 normalize 仍执行，均已实际运行。
+- 先有合法步骤、后有缺失依赖/端点不匹配时，全部 business callback 仍为 0；
+  重复冲突 rule ID、同名同版不同 layout token、错误 CLR 状态类型与循环依赖也在业务执行前拒绝。
+- 业务规则执行抛异常后原样失败，不尝试另一个候选规则；成功路径使用已绑定 typed 依赖，不逐值查找。
+
+这里的绑定工厂是本实验控制的纯组装代码。callback=0 只约束被测业务函数，
+不声称任意用户自定义工厂都无副作用，也不证明任意领域修改可以回滚。
+此 harness 不等于完整 Schema 选择器、真实 SG 签名检查或产品 Upgrade API。
+新增 fallback 只按调用者明确给出的 rule ID 判断候选是否存在；
+**未验证根据 ruleset 与 nominal 端点模式自动定位候选**，也不定义其语法或歧义选择算法。
 
 ## 证据边界与后续闸门
 

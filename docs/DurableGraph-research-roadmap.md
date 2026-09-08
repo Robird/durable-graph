@@ -22,6 +22,8 @@ DB-037 的已实现边界与 G0–G4 证据从 PROJECT-STATE 进入，不再把�
 用户要求为下一步泛型留准备：现有静态值 helper 已分离领域类型与冻结 DTO，后续从
 [DB-038 完整设计提案](design-branches/0038-generic-schema-state-and-binding-design.md)进入；它包含方案比较、
 历史类型/升级/中间布局、目录快照及验收顺序，尚未实施。原始素材见泛型技术备忘。
+其中 Upgrade 的复用改进见 [DB-039](design-branches/0039-composable-value-upgrade-design.md)：
+推荐 owner 显式调用已绑定的 typed 值委托；具体登记/依赖槽语法、真 SG 生成及完整 Schema 绑定仍须实施验证。
 有限数组仍为独立候选；本片不自动授权开始任一后继。
 
 ## 2. 已采纳方向中的未完成能力
@@ -45,6 +47,7 @@ B/D/H 分别指本轮精确 Base payload、Delta payload 上界、已有对象�
 | 保存相等性与真实估算 | 同版 DTO 的浮点按位、引用槽按 ID、inline 值递归融合 Delta 已采纳；未来数组/容器相等性另定。已准备 body 与当前 v3 envelope 计量见 [DB-029](design-branches/0029-prepared-object-revision-planning-slice.md)；Base 类型头已计入 B/H。未来新增类型头/容器布局时继续按实际对象 payload 计量 |
 | Schema 规范表示和持久引用 | canonical 注册批次与逻辑 SchemaKey 已闭合；未来 SchemaHash、紧凑引用及一般类型家族约束随消费者裁决，不用 GetHashCode 作持久身份 |
 | 开放泛型/数组组合绑定 | 已有 static-T 缓存与 typed ref 运行时组合证据；剩余为领域/DTO 表示参数闭合、版本缓存边界及注册初始化协议，不要求全面切换 DynamicMethod。摘要、取舍与首个 SG 验证见[技术备忘](design-branches/0018-generic-dto-binding-followup.md) |
+| 泛型 Upgrade 的显式值依赖 | typed 值转换可由通用 owner 主动调用，开放值 provider 可组合子能力；须验证具名规则集、声明段/FieldId、完整 exact 端点与整对象链预绑定；不自动决定业务或历史中间版本。见 [DB-039](design-branches/0039-composable-value-upgrade-design.md) |
 | 跨程序集与一般类型形状 | 继承 helper 可见性、外部历史祖先、enum/nullable/decimal/native int 等支持范围；自定义泛型的具体形状/约束仍须分片确定，技术方向见上项；boxed value identity 已排除 MVP |
 | 多态与运行时注册扩展 | 已标记 class 基类到登记派生实例按 DB-034 合同；interface/object 通配引用、开放组合与跨程序集发现仍后续裁决，不能自动回退成声明基类的 codec |
 | 捕获复合值的所有权 | 数组/容器如何真正冻结候选；inline struct 已递归捕获成标量/ID 的 unmanaged DTO，不能据此推导一般容器浅复制足够 |

@@ -5,6 +5,7 @@
 > 基线：`5c6545d`，DB-037 已实现非泛型 class/struct。当前能力见 [PROJECT-STATE](../../src/PROJECT-STATE.md)。
 > 本文承接 [DB-018 泛型备忘](0018-generic-dto-binding-followup.md)，是完整方案讨论入口；本轮结果见 §11。
 > 阅读顺序：先看 §2 推荐、§3.2–3.3 版本代价与保证范围、§6 Upgrade；代码接缝与施工顺序在 §8、§10。
+> Upgrade 的后续简化见 [DB-039](0039-composable-value-upgrade-design.md)：向通用 owner 注入已绑定的强类型值委托；本节同步其边界，具体依赖选择与反例在后继文档维护。
 
 ## 1. 目标、来源与支持范围
 
@@ -257,7 +258,7 @@ static void Upgrade<TState>(
 ### 6.2 表示变化的闭合 owner 转换
 
 `Box<Point>` 的 Point v1→v2 使旧、新状态类型不同；TOps 不能替用户发明业务转换。
-推荐显式登记闭合 owner 的相邻版本边，参数写为具体历史状态：
+最初方案使用显式闭合 owner 相邻边，参数写为具体历史状态；该能力继续保留给业务特例：
 
 ```csharp
 static void UpgradePointBox(
@@ -283,15 +284,20 @@ expected Schema 是从模板/owner/显式表示派生的能力校验数据，不
 候选数据和选择在调用任何 Upgrade 前固定，保持失败不交付。
 
 不增加自动 struct Normalize。对 inline `Pair<Point>`，转换仍由所属对象的 Upgrade 显式完成。
-用户可以自行调用普通值转换 helper；只有真正出现多个 owner 需要统一可登记的值迁移能力时，
-才重新比较 TTransition 方案及其注册/选择规则，不能为了泛型先引入第二套自动升级权威。
+用户进一步授权研究复用同一值规则的多个 owner 后，[DB-039](0039-composable-value-upgrade-design.md)
+推荐通用 owner 额外接收 `ValueUpgrade<TPrior,TNext>` 强类型委托，显式调用已绑定的值转换。
+owner 按定义边声明规则集及源/目标槽位置，开放值 provider 可显式组合子能力；无需每个闭合 owner 重写外壳。
+该委托属于执行 binding，不进入 unmanaged DTO；绑定仍比较两端完整槽语义，不能仅凭 CLR 状态类型选规则。
+static TTransition 技术可行，当前作为可选优化；值能力不选择 owner 的历史中间版本，不替代本节的闭合特例。
 
 ### 6.3 注册及命名必须先可执行验证
 
-建议复用现有显式模型登记风格，由 SG 发出定义模板、历史 body provider、通用/闭合 Upgrade 的登记入口。
+建议复用现有显式模型登记风格，由 SG 发出定义模板、历史 body provider、通用/闭合 Upgrade 及其值依赖的登记入口。
 方法可放领域定义或独立应用静态类型中；闭合边的 DTO 参数不得被放回带旧领域类型参数的宿主。
 登记语法的属性/函数名字未冻结，第一闸门必须给出可编译用户源码和 actual stored Schema 匹配反例。
 已经证明手写形状能编译，不等于已经实现 SG 从方法签名生成这份登记信息。
+DB-039 将能力选择纳入同一冻结代码目录；方法多出的 typed delegate 参数及显式元数据须由真实 SG 验证，
+不建设第二个全局转换注册器，也不要求首轮 Roslyn 已解析尚未生成的 DTO 类型。
 
 ### 6.4 多跳升级的中间 exact 布局
 
@@ -374,7 +380,8 @@ Capture/准备失败保留原基线；SchemaStore 仍整批预检；Decode/Norma
 这些沿用原职责，工厂只拥有代码绑定，不能分配对象 ID、读取其他对象来修补升级或发布 head。
 
 以下属于后续裁决，不是假定已经解决：跨程序集闭合版本独立演化、任意删除泛型实参后无 CLR 的 current Normalize、
-通用可登记值迁移框架、泛型虚/接口多态、数组/BCL、AOT/裁剪、并发初始化、性能和代码尺寸优化。
+自动值迁移调度/路径搜索、泛型虚/接口多态、数组/BCL、AOT/裁剪、并发初始化、性能和代码尺寸优化。
+owner 显式调用的有限值依赖组合已转入 DB-039 推荐范围，仍尚未产品实施。
 本轮应将不同技术取舍及具体失败轨迹保留，不以一句“SG 可生成泛型”覆盖这些边界。
 
 ## 10. 建议施工闸门
@@ -388,6 +395,8 @@ Capture/准备失败保留原基线；SchemaStore 仍整批预检；Decode/Norma
 | G4 历史包 | 三次真实 PackageReference 构建，通用透传/闭合业务转换，old→middle→current 的布局唯一性/同 key 一致性，旧 inline 领域声明删除后的 owner 升级、缺历史/缺边/错 expected Schema 拒绝、强制 Base 后稳定 NoChange/Delta |
 
 先通过 G0 用户写法与 G1 版本反例，再冻结对外 Upgrade 登记和 wire；不从序列化热循环一路写到最后才发现历史 API 无法使用。
+G0/G2/G4 同时纳入 [DB-039 §6](0039-composable-value-upgrade-design.md#6-产品接缝与研究验收) 的依赖注入用户写法、
+组合/错绑定反例及历史包验收；只证明 static/delegate 代码形状都成立还不够。
 当前研究 probe 只证明部分 G0 接缝，不能替代这些产品闸门。实施须另获用户授权。
 
 ## 11. 比较、验证与审阅记录
@@ -411,7 +420,7 @@ Capture/准备失败保留原基线；SchemaStore 仍整批预检；Decode/Norma
 三位审阅者对最终修订均未留下设计阻塞；这表示 Proposed 方案足以进入后续产品验证，
 不表示已实现 generic SG 或所有参数/继承形状已可执行。用户采纳的 §3.3 选择已同步进入目标设计。
 
-### 可复跑证据
+### 首次研究的可复跑证据
 
 [GenericBindingShapeProbe](../../experiments/GenericBindingShapeProbe/README.md) 为本轮新增的独立实验。
 在 Windows / .NET SDK 10.0.201 / Roslyn 5.3.0 上，主代理运行：
@@ -424,6 +433,7 @@ dotnet build DurableGraph.slnx --verbosity quiet
 probe 输出 **20 项预期结果与 PASS，exit 0**，包括 uint 三种语义、递归静态投影、冷工厂、
 实际 readonly generic 访问器、移除旧领域程序集依赖、family alias、显式三版本中间状态及四类编译负例。
 根 solution build 零警告、零错误。没有修改产品源代码或持久格式，本轮不将此前 994 项产品测试记为新的泛型验收。
+后续 DB-039 在同一 Probe 增加可组合值 Upgrade 见证；新增验收以其研究记录和 Probe README 为准。
 
 probe 使用手写 generated-like 模板和少量 BinaryWriter/Reader 定长字段；
 不是 DurableGraph wire、融合 Delta、SchemaStore、真实 SG/history 生成、完整升级边规划器或 NuGet 包见证。

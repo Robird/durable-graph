@@ -34,6 +34,8 @@ DB-036 的单 head GraphRepository/同实例 GraphSession Commit、严格发布�
 （Proposed，尚未实施）。完整比较包含同编译的定义统一升版代价、静态 helper、纯状态历史宿主、通用/闭合 Upgrade
 及中间 exact 布局来源；独立 [GenericBindingShapeProbe](../experiments/GenericBindingShapeProbe/README.md)
 仅验证代码形状，不表示产品 SG 或持久格式已支持泛型。
+当前进一步研究见 [DB-039 可组合值 Upgrade](../docs/design-branches/0039-composable-value-upgrade-design.md)：
+向通用 owner 显式注入强类型值委托，按规则集和 exact 槽绑定；保留闭合特例与中间布局闸门，尚未产品实施。
 
 ## 当前能力与实际边界
 

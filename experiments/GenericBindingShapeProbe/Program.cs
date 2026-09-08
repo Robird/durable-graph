@@ -17,7 +17,9 @@ Require(codes.Contains(OpCodes.Constrained.Value) && codes.Contains(OpCodes.Call
 Console.WriteLine("StaticHelperConstrainedCallWithoutCallvirt:True");
 
 var namedHistory = File.ReadAllText(Path.Combine(fixtures, "NamedHistory.cs.txt"));
-var second = Compile("HistoricalShape", shared, File.ReadAllText(Path.Combine(fixtures, "Historical.cs.txt")), namedHistory);
+var valueUpgrade = File.ReadAllText(Path.Combine(fixtures, "ValueUpgrade.cs.txt"));
+var second = Compile("HistoricalShape", shared, File.ReadAllText(Path.Combine(fixtures, "Historical.cs.txt")),
+    namedHistory, valueUpgrade);
 Require(second.GetType("Point") is null && second.GetType("Box`1") is null,
     "Historical assembly must contain neither old domain Point nor Box<T>.");
 Require(second.GetReferencedAssemblies().All(reference => reference.Name != first.GetName().Name),
@@ -25,6 +27,8 @@ Require(second.GetReferencedAssemblies().All(reference => reference.Name != firs
 var historicalBytes = (byte[])first.GetType("CurrentChecks")!.GetMethod("HistoricalPayload")!.Invoke(null, null)!;
 Run(second, "HistoricalChecks", historicalBytes);
 Run(second, "NamedHistoryChecks");
+Run(second, "ValueUpgradeChecks");
+Run(second, "ValueSelectionChecks");
 Console.WriteLine("HistoricalAssemblyWithoutOldDomainTypes:True");
 
 var unsupported = CompileDiagnostics("""

@@ -1,0 +1,342 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Reflection;
+using System.Runtime.CompilerServices;
+
+public interface IValueUpgrade<TOld, TNew> where TOld : unmanaged where TNew : unmanaged {
+    static abstract TNew Convert(in TOld value);
+}
+
+public delegate TNew ValueUpgrade<TOld, TNew>(in TOld value) where TOld : unmanaged where TNew : unmanaged;
+
+public static class ValueBusinessRules {
+    public static PointStateV2 Scale(in PointStateV1 value) => new(checked(value.X * 1000L), value.Label);
+    public static PointStateV2 Shift(in PointStateV1 value) => new(checked(value.X + 100L), value.Label);
+}
+
+// A: operation choice is represented as another generic argument.
+public readonly struct PointScaleUpgrade : IValueUpgrade<PointStateV1, PointStateV2> {
+    public static PointStateV2 Convert(in PointStateV1 value) => ValueBusinessRules.Scale(in value);
+}
+
+public readonly struct PointShiftUpgrade : IValueUpgrade<PointStateV1, PointStateV2> {
+    public static PointStateV2 Convert(in PointStateV1 value) => ValueBusinessRules.Shift(in value);
+}
+
+public readonly struct PairStaticUpgrade<TOld, TNew, TUpgrade> : IValueUpgrade<PairState<TOld>, PairState<TNew>>
+    where TOld : unmanaged where TNew : unmanaged where TUpgrade : unmanaged, IValueUpgrade<TOld, TNew> {
+    public static PairState<TNew> Convert(in PairState<TOld> value) =>
+        StaticOwnerUpgrade.Pair<TOld, TNew, TUpgrade>(in value);
+}
+
+public static class StaticOwnerUpgrade {
+    public static BoxStateV2<TNew> Box<TOld, TNew, TUpgrade>(in BoxStateV1<TOld> old)
+        where TOld : unmanaged where TNew : unmanaged where TUpgrade : unmanaged, IValueUpgrade<TOld, TNew> =>
+        new(TUpgrade.Convert(old.Value), 91);
+
+    public static PairState<TNew> Pair<TOld, TNew, TUpgrade>(in PairState<TOld> old)
+        where TOld : unmanaged where TNew : unmanaged where TUpgrade : unmanaged, IValueUpgrade<TOld, TNew> =>
+        new(TUpgrade.Convert(old.First), TUpgrade.Convert(old.Second));
+
+    public static PairState<TNew> DifferentFields<TOld, TNew, TFirst, TSecond>(in PairState<TOld> old)
+        where TOld : unmanaged where TNew : unmanaged
+        where TFirst : unmanaged, IValueUpgrade<TOld, TNew> where TSecond : unmanaged, IValueUpgrade<TOld, TNew> =>
+        new(TFirst.Convert(old.First), TSecond.Convert(old.Second));
+}
+
+// B: operation choice is an ordinary strongly typed, in-parameter delegate.
+public static class DelegateOwnerUpgrade {
+    public static BoxStateV2<TNew> Box<TOld, TNew>(in BoxStateV1<TOld> old, ValueUpgrade<TOld, TNew> convert)
+        where TOld : unmanaged where TNew : unmanaged => new(convert(old.Value), 91);
+
+    public static PairState<TNew> Pair<TOld, TNew>(in PairState<TOld> old, ValueUpgrade<TOld, TNew> convert)
+        where TOld : unmanaged where TNew : unmanaged => new(convert(old.First), convert(old.Second));
+
+    public static PairState<TNew> DifferentFields<TOld, TNew>(in PairState<TOld> old,
+        ValueUpgrade<TOld, TNew> first, ValueUpgrade<TOld, TNew> second)
+        where TOld : unmanaged where TNew : unmanaged => new(first(old.First), second(old.Second));
+
+    public static ValueUpgrade<PairState<TOld>, PairState<TNew>> ComposePair<TOld, TNew>(ValueUpgrade<TOld, TNew> child)
+        where TOld : unmanaged where TNew : unmanaged =>
+        (in PairState<TOld> value) => Pair(in value, child);
+}
+
+public interface IClosedOwnerUpgrade {
+    Type SourceType { get; }
+    Type TargetType { get; }
+    object Apply(object old);
+}
+
+public sealed class StaticBoxUpgradeFacade<TOld, TNew, TUpgrade> : IClosedOwnerUpgrade
+    where TOld : unmanaged where TNew : unmanaged where TUpgrade : unmanaged, IValueUpgrade<TOld, TNew> {
+    public Type SourceType => typeof(BoxStateV1<TOld>);
+    public Type TargetType => typeof(BoxStateV2<TNew>);
+    public object Apply(object old) {
+        var typed = (BoxStateV1<TOld>)old;
+        return StaticOwnerUpgrade.Box<TOld, TNew, TUpgrade>(in typed);
+    }
+}
+
+public sealed class DelegateBoxUpgradeFacade<TOld, TNew> : IClosedOwnerUpgrade
+    where TOld : unmanaged where TNew : unmanaged {
+    private readonly ValueUpgrade<TOld, TNew> _convert;
+    public DelegateBoxUpgradeFacade(ValueUpgrade<TOld, TNew> convert) => _convert = convert;
+    public Type SourceType => typeof(BoxStateV1<TOld>);
+    public Type TargetType => typeof(BoxStateV2<TNew>);
+    public object Apply(object old) {
+        var typed = (BoxStateV1<TOld>)old;
+        return DelegateOwnerUpgrade.Box(in typed, _convert);
+    }
+}
+
+public static class ClosedOwnerUpgradeFactory {
+    public static IClosedOwnerUpgrade Static(Type old, Type current, Type operation) =>
+        Method(nameof(CreateStatic)).MakeGenericMethod(old, current, operation)
+            .CreateDelegate<Func<IClosedOwnerUpgrade>>()();
+
+    public static IClosedOwnerUpgrade WithDelegate(Type old, Type current, MethodInfo operation) {
+        var delegateType = typeof(ValueUpgrade<,>).MakeGenericType(old, current);
+        var convert = operation.CreateDelegate(delegateType);
+        return Method(nameof(CreateDelegate)).MakeGenericMethod(old, current)
+            .CreateDelegate<Func<Delegate, IClosedOwnerUpgrade>>()(convert);
+    }
+
+    private static MethodInfo Method(string name) => typeof(ClosedOwnerUpgradeFactory)
+        .GetMethod(name, BindingFlags.NonPublic | BindingFlags.Static)!;
+
+    private static IClosedOwnerUpgrade CreateStatic<TOld, TNew, TUpgrade>()
+        where TOld : unmanaged where TNew : unmanaged where TUpgrade : unmanaged, IValueUpgrade<TOld, TNew> =>
+        new StaticBoxUpgradeFacade<TOld, TNew, TUpgrade>();
+
+    private static IClosedOwnerUpgrade CreateDelegate<TOld, TNew>(Delegate convert)
+        where TOld : unmanaged where TNew : unmanaged =>
+        new DelegateBoxUpgradeFacade<TOld, TNew>((ValueUpgrade<TOld, TNew>)convert);
+}
+
+public static class ValueUpgradeChecks {
+    public static string[] Run() {
+        var box = new BoxStateV1<PointStateV1>(new(2, 7));
+        var pair = new PairState<PointStateV1>(new(2, 7), new(3, 8));
+        var nested = new PairState<PairState<PointStateV1>>(pair, pair);
+        ValueUpgrade<PointStateV1, PointStateV2> scale = ValueBusinessRules.Scale;
+        ValueUpgrade<PointStateV1, PointStateV2> shift = ValueBusinessRules.Shift;
+
+        var staticBox = StaticOwnerUpgrade.Box<PointStateV1, PointStateV2, PointScaleUpgrade>(in box);
+        var delegateBox = DelegateOwnerUpgrade.Box(in box, scale);
+        Check.That(staticBox == delegateBox && staticBox.Value.X == 2000 && staticBox.Value.Label == 7,
+            "both owner Box shapes must reuse the Point rule");
+
+        var staticPair = StaticOwnerUpgrade.Pair<PointStateV1, PointStateV2, PointScaleUpgrade>(in pair);
+        var delegatePair = DelegateOwnerUpgrade.Pair(in pair, scale);
+        Check.That(staticPair == delegatePair && staticPair.First.X == 2000 && staticPair.Second.X == 3000,
+            "both owner Pair shapes must reuse the Point rule");
+
+        var staticNested = StaticOwnerUpgrade.Pair<PairState<PointStateV1>, PairState<PointStateV2>,
+            PairStaticUpgrade<PointStateV1, PointStateV2, PointScaleUpgrade>>(in nested);
+        var pairConvert = DelegateOwnerUpgrade.ComposePair(scale);
+        var delegateNested = DelegateOwnerUpgrade.Pair(in nested, pairConvert);
+        Check.That(staticNested == delegateNested && staticNested.First.Second.X == 3000,
+            "both mechanisms must compose a nested Pair rule");
+
+        var staticMixed = StaticOwnerUpgrade.DifferentFields<PointStateV1, PointStateV2,
+            PointScaleUpgrade, PointShiftUpgrade>(in pair);
+        var delegateMixed = DelegateOwnerUpgrade.DifferentFields(in pair, scale, shift);
+        Check.That(staticMixed == delegateMixed && staticMixed.First.X == 2000 && staticMixed.Second.X == 103,
+            "an owner may select distinct rules for fields sharing exact source and target DTO types");
+        Check.That(!RuntimeHelpers.IsReferenceOrContainsReferences<PairState<PairState<PointStateV2>>>(),
+            "value upgrade output must remain unmanaged");
+
+        // Type values stand in for a runtime descriptor; neither factory emits new member IL.
+        var staticFacade = ClosedOwnerUpgradeFactory.Static(typeof(PointStateV1), typeof(PointStateV2), typeof(PointScaleUpgrade));
+        var delegateFacade = ClosedOwnerUpgradeFactory.WithDelegate(typeof(PointStateV1), typeof(PointStateV2),
+            typeof(ValueBusinessRules).GetMethod(nameof(ValueBusinessRules.Scale))!);
+        Check.That(staticFacade.SourceType == delegateFacade.SourceType && staticFacade.TargetType == delegateFacade.TargetType,
+            "closed facades must expose the same DTO endpoints");
+        for (int i = 0; i < 3; i++) {
+            Check.That(staticFacade.Apply(box).Equals(staticBox) && delegateFacade.Apply(box).Equals(delegateBox),
+                "hot facade must execute its previously closed typed operations");
+        }
+
+        return new[] {
+            "StaticAndDelegateValueUpgradeReuseInBoxAndPair:True",
+            "StaticAndDelegateNestedValueUpgradeComposition:True",
+            "OwnerSelectsDifferentRulesForSameDtoFields:True",
+            "ValueUpgradeDtoRemainsUnmanaged:True",
+            "BothValueUpgradeFacadesColdClosedWithoutDynamicInvoke:True"
+        };
+    }
+}
+
+// This record is an experiment token, NOT DurableSchema or a proposed wire type.
+// LayoutToken deliberately distinguishes equal nominal keys with different full definitions.
+public sealed record ExperimentSlot(Type StateType, string Kind, string Family, int Version, string LayoutToken);
+public sealed record ExperimentNeed(string RuleId, ExperimentSlot Old, ExperimentSlot Current);
+public sealed record ExperimentRule(string Id, ExperimentSlot Old, ExperimentSlot Current,
+    ExperimentNeed[] Dependencies, Func<ValueUpgrade<uint, uint>[], ValueUpgrade<uint, uint>> Bind,
+    bool Identity = false);
+
+public sealed class PreparedExperimentChain {
+    private readonly ValueUpgrade<uint, uint>[] _steps;
+    public PreparedExperimentChain(ValueUpgrade<uint, uint>[] steps) => _steps = steps;
+    public uint Apply(uint old) {
+        foreach (var step in _steps) { old = step(in old); }
+        return old;
+    }
+}
+
+public static class ExperimentSelection {
+    // A deliberately finite caller-selected rule ID, not a nominal/ruleset candidate search.
+    public static PreparedExperimentChain PrepareWithKeepExact(ExperimentNeed requested, bool allowKeepExact,
+        ExperimentRule[] rules) {
+        if (rules.Any(rule => rule.Id == requested.RuleId)) {
+            // Existence wins before endpoint validation: a broken explicit rule cannot become identity.
+            return Prepare(new[] { requested }, rules);
+        }
+        if (!allowKeepExact || requested.Old != requested.Current) {
+            throw new InvalidOperationException("No explicit rule and no permitted exact fallback.");
+        }
+        var fallback = new ExperimentRule(requested.RuleId, requested.Old, requested.Current,
+            Array.Empty<ExperimentNeed>(), _ => (in uint value) => value, Identity: true);
+        return Prepare(new[] { requested }, rules.Append(fallback).ToArray());
+    }
+
+    // Only resolves an explicitly supplied finite chain and its named dependencies.
+    // It does not discover upgrade paths, infer generic arguments, or choose a latest version.
+    public static PreparedExperimentChain Prepare(ExperimentNeed[] chain, ExperimentRule[] rules) {
+        var index = new Dictionary<string, ExperimentRule>();
+        foreach (var rule in rules) {
+            if (!index.TryAdd(rule.Id, rule)) { throw new InvalidOperationException("Conflicting rule identity."); }
+        }
+        var bound = new Dictionary<string, ValueUpgrade<uint, uint>>();
+        var active = new HashSet<string>();
+        ValueUpgrade<uint, uint> Resolve(ExperimentNeed need) {
+            if (!index.TryGetValue(need.RuleId, out var rule)) { throw new InvalidOperationException("Missing dependency."); }
+            if (rule.Old != need.Old || rule.Current != need.Current
+                || rule.Old.StateType != typeof(uint) || rule.Current.StateType != typeof(uint)) {
+                throw new InvalidOperationException("Full slot endpoint mismatch.");
+            }
+            if (rule.Identity && (rule.Old != rule.Current || rule.Dependencies.Length != 0)) {
+                throw new InvalidOperationException("Identity requires equal full slots and no dependencies.");
+            }
+            if (bound.TryGetValue(rule.Id, out var prior)) { return prior; }
+            if (!active.Add(rule.Id)) { throw new InvalidOperationException("Dependency cycle."); }
+            var dependencies = rule.Dependencies.Select(Resolve).ToArray();
+            ValueUpgrade<uint, uint> result = rule.Identity ? (in uint value) => value : rule.Bind(dependencies);
+            bound.Add(rule.Id, result);
+            active.Remove(rule.Id);
+            return result;
+        }
+        for (int i = 1; i < chain.Length; i++) {
+            if (chain[i - 1].Current != chain[i].Old) { throw new InvalidOperationException("Chain endpoint mismatch."); }
+        }
+        // No business callbacks run during binding, including earlier valid steps on later failure.
+        return new PreparedExperimentChain(chain.Select(Resolve).ToArray());
+    }
+}
+
+public static class ValueSelectionChecks {
+    public static string[] Run() {
+        var number = new ExperimentSlot(typeof(uint), "number", "uint", 1, "uint32");
+        var text = new ExperimentSlot(typeof(uint), "reference", "string", 1, "ObjectId:string");
+        var node = new ExperimentSlot(typeof(uint), "reference", "Node", 1, "ObjectId:nominal-Node");
+        var structure = new ExperimentSlot(typeof(uint), "inline", "Point", 1, "X:uint32");
+        var differentDefinition = structure with { LayoutToken = "X:string-ObjectId" };
+        int calls = 0, fallbackCalls = 0;
+        ValueUpgrade<uint, uint> plusOne = (in uint value) => { calls++; return checked(value + 1); };
+        ExperimentRule Rule(string id, ExperimentSlot old, ExperimentSlot current, ValueUpgrade<uint, uint> code) =>
+            new(id, old, current, Array.Empty<ExperimentNeed>(), _ => code);
+        ExperimentNeed Need(ExperimentRule rule) => new(rule.Id, rule.Old, rule.Current);
+        var identity = Rule("identity", number, number, plusOne) with { Identity = true };
+        var normalize = Rule("normalize", number, number, plusOne);
+        var relabel = Rule("number-to-string", number, text, plusOne);
+        var inline = Rule("inline-rule", structure, structure, plusOne);
+        var owner = new ExperimentRule("owner", number, number, new[] { Need(normalize) }, children =>
+            (in uint value) => children[0](in value));
+        var catalog = new[] { identity, normalize, relabel, inline, owner };
+
+        void RejectedBeforeBusiness(ExperimentNeed[] chain, ExperimentRule[] rules) {
+            calls = 0;
+            bool rejected = false;
+            try { ExperimentSelection.Prepare(chain, rules); }
+            catch (InvalidOperationException) { rejected = true; }
+            Check.That(rejected && calls == 0, "preflight failure must not invoke any business rule");
+        }
+
+        var identityPlan = ExperimentSelection.Prepare(new[] { Need(identity) }, catalog);
+        Check.That(identityPlan.Apply(9) == 9 && calls == 0, "explicit full-slot identity uses no business callback");
+        var normalizePlan = ExperimentSelection.Prepare(new[] { Need(normalize) }, catalog);
+        Check.That(normalizePlan.Apply(9) == 10 && calls == 1,
+            "same full slot may explicitly choose business conversion despite an identity alternative");
+        calls = 0;
+        var relabelPlan = ExperimentSelection.Prepare(new[] { Need(relabel) }, catalog);
+        Check.That(relabelPlan.Apply(9) == 10 && calls == 1,
+            "explicit semantic conversion may have equal CLR storage types and different full slots");
+
+        RejectedBeforeBusiness(new[] { new ExperimentNeed(identity.Id, text, text) }, catalog);
+        RejectedBeforeBusiness(new[] { new ExperimentNeed(identity.Id, node, node) }, catalog);
+        RejectedBeforeBusiness(new[] { new ExperimentNeed(inline.Id, differentDefinition, differentDefinition) }, catalog);
+        var invalidIdentity = relabel with { Id = "invalid-identity", Identity = true };
+        RejectedBeforeBusiness(new[] { Need(invalidIdentity) }, new[] { invalidIdentity });
+        var wrongClr = normalize with { Old = number with { StateType = typeof(int) }, Current = number with { StateType = typeof(int) } };
+        RejectedBeforeBusiness(new[] { Need(wrongClr) }, new[] { wrongClr });
+
+        // The first valid step must remain unexecuted when the second step/dependency cannot bind.
+        var missing = owner with { Dependencies = new[] { new ExperimentNeed("absent", number, number) } };
+        RejectedBeforeBusiness(new[] { Need(normalize), Need(missing) }, new[] { normalize, missing });
+        RejectedBeforeBusiness(new[] { Need(normalize) }, new[] { normalize, normalize with { Bind = _ => (in uint value) => 999 } });
+        RejectedBeforeBusiness(new[] { Need(normalize), new ExperimentNeed("owner", number, node) }, catalog);
+        var exactMismatch = owner with { Dependencies = new[] { new ExperimentNeed(inline.Id, differentDefinition, differentDefinition) } };
+        RejectedBeforeBusiness(new[] { Need(normalize), Need(exactMismatch) }, new[] { normalize, inline, exactMismatch });
+        var cycle = owner with { Dependencies = new[] { Need(owner) } };
+        RejectedBeforeBusiness(new[] { Need(normalize), Need(cycle) }, new[] { normalize, cycle });
+
+        void RejectedKeepExactBeforeBusiness(ExperimentNeed requested, bool allowKeepExact) {
+            calls = 0;
+            bool rejected = false;
+            try { ExperimentSelection.PrepareWithKeepExact(requested, allowKeepExact, catalog); }
+            catch (InvalidOperationException) { rejected = true; }
+            Check.That(rejected && calls == 0, "invalid explicit rule or unavailable fallback must fail before business");
+        }
+        var absentExact = new ExperimentNeed("no-explicit-rule", number, number);
+        calls = 0;
+        var keepExact = ExperimentSelection.PrepareWithKeepExact(absentExact, true, catalog);
+        Check.That(keepExact.Apply(9) == 9 && calls == 0, "explicitly enabled missing-rule exact fallback");
+        RejectedKeepExactBeforeBusiness(absentExact, false);
+        RejectedKeepExactBeforeBusiness(new("no-explicit-rule", number, text), true);
+        RejectedKeepExactBeforeBusiness(new(inline.Id, differentDefinition, differentDefinition), true);
+        calls = 0;
+        var explicitBeforeFallback = ExperimentSelection.PrepareWithKeepExact(Need(normalize), true, catalog);
+        Check.That(explicitBeforeFallback.Apply(9) == 10 && calls == 1,
+            "an explicit same-schema rule must execute even when KeepExact fallback is enabled");
+
+        calls = 0;
+        var fullPlan = ExperimentSelection.Prepare(new[] { Need(normalize), Need(owner) }, catalog);
+        Check.That(calls == 0, "complete chain and dependencies are bound before executing business rules");
+        Check.That(fullPlan.Apply(9) == 11 && calls == 2, "prebound typed dependency executes without resolving during values");
+
+        var throwing = Rule("selected-throw", number, number,
+            (in uint value) => { calls++; throw new ApplicationException("business failure"); });
+        var alternate = Rule("unselected-alternative", number, number,
+            (in uint value) => { fallbackCalls++; return 999; });
+        var throwingPlan = ExperimentSelection.Prepare(new[] { Need(throwing) }, new[] { throwing, alternate });
+        calls = 0;
+        bool failed = false;
+        try { throwingPlan.Apply(9); }
+        catch (ApplicationException) { failed = true; }
+        Check.That(failed && calls == 1 && fallbackCalls == 0, "execution failure must not select another rule");
+
+        return new[] {
+            "ExplicitSelectionUsesFullSlotNotStateClrType:True",
+            "EqualSchemaCanExplicitlySelectBusinessRuleInsteadOfIdentity:True",
+            "IdentityRequiresCompleteSlotEquivalence:True",
+            "ExplicitSemanticConversionBetweenEqualClrStateTypes:True",
+            "AllKnownChainDependenciesPreboundBeforeBusiness:True",
+            "MissingConflictingOrWrongExactDependencyFailsWithZeroCallbacks:True",
+            "DependencyCycleFailsWithZeroCallbacks:True",
+            "KeepExactFallbackOnlyWhenExplicitRuleIsAbsent:True",
+            "MalformedExplicitRuleCannotFallBackToIdentity:True",
+            "BusinessFailureDoesNotTryAnotherRule:True"
+        };
+    }
+}
