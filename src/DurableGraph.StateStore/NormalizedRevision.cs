@@ -24,7 +24,7 @@ internal sealed class NormalizedRevision {
         Dictionary<uint, NormalizedObject> rows = [];
         foreach (ObjectStateRecord row in candidate.Objects) {
             StateModelBinding? model = row.Kind == ObjectStateKind.Durable
-                ? models.Models[row.Schema!.SchemaId] : null;
+                ? models.ResolveCurrentModel(row.Schema!.Type) : null;
             rows.Add(row.Id, new(row, row.Schema, false, model));
         }
         StringReadTable strings = StringReadTable.FromDecoded(candidate.Objects
@@ -44,9 +44,7 @@ internal sealed class NormalizedRevision {
                 continue;
             }
             DurableSchema storedSchema = row.Schema!;
-            if (!models.Models.TryGetValue(storedSchema.SchemaId, out StateModelBinding? model)) {
-                throw new InvalidDataException($"No current model is registered for {storedSchema.SchemaId}.");
-            }
+            StateModelBinding model = models.ResolveCurrentModel(storedSchema.Type);
             ObjectStateRecord current = model.Normalize(row);
             if (current.Id != row.Id || current.Kind != ObjectStateKind.Durable ||
                 !model.CurrentSchema.Equals(current.Schema)) {

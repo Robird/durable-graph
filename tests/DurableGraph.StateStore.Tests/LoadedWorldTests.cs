@@ -170,10 +170,11 @@ public sealed class LoadedWorldTests : IDisposable {
         LoadedWorld<World> loaded = LoadedWorld.Load<World>(_store, _schemas, address, 1, Registry(Model()));
         _schemas.Register(new DurableSchema("World", 2, new DurableFieldInfo(1, TypeTag.Int64)));
         long tail = Tail();
-        Assert.Throws<SchemaConflictException>(() => loaded.Prepare(NoRebase));
+        // The frozen model resolver detects the newly registered conflict before Schema registration.
+        Assert.Throws<InvalidDataException>(() => loaded.Prepare(NoRebase));
         Assert.Equal(tail, Tail());
         Assert.Equal(address, loaded.ParentRevisionAddress);
-        Assert.Throws<SchemaConflictException>(() => loaded.Prepare(NoRebase));
+        Assert.Throws<InvalidDataException>(() => loaded.Prepare(NoRebase));
     }
 
     [Theory]
@@ -258,7 +259,7 @@ public sealed class LoadedWorldTests : IDisposable {
         StateModelRegistry models = Registry(original);
         models.Register(original);
         Assert.Throws<InvalidOperationException>(() => models.Register(Model()));
-        Assert.Same(original, models.Snapshot().Models["World"]);
+        Assert.Same(original, models.Snapshot().Models[TypeExpr.Named("World")]);
         Assert.Equal((byte)5, LoadedWorld.Load<World>(_store, _schemas, address, 1, models).World.Value);
     }
 
@@ -276,7 +277,7 @@ public sealed class LoadedWorldTests : IDisposable {
         StateModelBinding accepted = ModelCore<OtherWorld>(current: other, old: other);
         models.Register(accepted);
         StateModelSnapshot afterSuccess = models.Snapshot();
-        Assert.Same(accepted, afterSuccess.Models["Other"]);
+        Assert.Same(accepted, afterSuccess.Models[TypeExpr.Named("Other")]);
         Assert.Same(accepted, afterSuccess.Types[typeof(OtherWorld)]);
         Assert.Same(accepted.Readers[0], afterSuccess.Readers[new("Other", 1)]);
         Assert.Single(afterFailure.Models);

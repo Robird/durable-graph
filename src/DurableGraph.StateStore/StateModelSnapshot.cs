@@ -1,0 +1,257 @@
+using System.Reflection;
+using System.Runtime.CompilerServices;
+
+namespace Atelia.DurableGraph.StateStore;
+
+/// <summary>One frozen application catalog with successful closures memoized locally.</summary>
+internal sealed class StateModelSnapshot : StateBindingContext {
+    private readonly Dictionary<TypeExpr, StateModelBinding> _models;
+    private readonly Dictionary<Type, StateModelBinding> _types;
+    private readonly Dictionary<SchemaKey, StateReaderBinding> _readers;
+    private readonly Dictionary<string, StateDefinitionBinding> _definitions;
+    private readonly Dictionary<Type, StateDefinitionBinding> _domainDefinitions = [];
+    private readonly Dictionary<Type, StateValueBinding> _currentValues = [];
+    private readonly Dictionary<SchemaKey, StateValueBinding> _storedValues = [];
+    private readonly HashSet<(string Kind, object Key)> _closing = [];
+    private readonly HashSet<Type> _validatedDomainTypes = [];
+    private readonly Dictionary<Type, bool> _managedValueTypes = [];
+    private readonly SchemaStore? _schemas;
+
+    internal StateModelSnapshot(Dictionary<TypeExpr, StateModelBinding> models,
+        Dictionary<Type, StateModelBinding> types, Dictionary<SchemaKey, StateReaderBinding> readers,
+        Dictionary<string, StateDefinitionBinding>? definitions = null, SchemaStore? schemas = null) {
+        _models = models;
+        _types = types;
+        _readers = readers;
+        _definitions = definitions ?? new(StringComparer.Ordinal);
+        _schemas = schemas;
+        foreach (StateDefinitionBinding definition in _definitions.Values) {
+            if (definition.DomainTypeDefinition is { } domain && !_domainDefinitions.TryAdd(domain, definition)) {
+                throw new InvalidOperationException("A domain declaration is registered under more than one definition.");
+            }
+        }
+    }
+
+    internal IReadOnlyDictionary<TypeExpr, StateModelBinding> Models => _models;
+    internal IReadOnlyDictionary<Type, StateModelBinding> Types => _types;
+    internal IReadOnlyDictionary<SchemaKey, StateReaderBinding> Readers => _readers;
+
+    internal static void RegisterDefinition(Dictionary<string, StateDefinitionBinding> definitions, StateDefinitionBinding definition) {
+        ArgumentNullException.ThrowIfNull(definition);
+        if (definitions.TryGetValue(definition.DefinitionId, out StateDefinitionBinding? existing)) {
+            if (!ReferenceEquals(existing, definition)) {
+                throw new InvalidOperationException($"A different definition is already registered for {definition.DefinitionId}.");
+            }
+            return;
+        }
+        if (definition.DomainTypeDefinition is { } domain && definitions.Values.Any(item => item.DomainTypeDefinition == domain)) {
+            throw new InvalidOperationException("A different definition already owns this CLR declaration.");
+        }
+        definitions.Add(definition.DefinitionId, definition);
+    }
+
+    public override StateDefinitionBinding GetDefinition(string definitionId) =>
+        _definitions.TryGetValue(definitionId, out StateDefinitionBinding? definition) ? definition :
+        throw new InvalidDataException($"No declaration factory is registered for {definitionId}.");
+
+    public override bool TryGetSchema(TypeExpr type, int version, out DurableSchema? schema) {
+        if (_schemas is not null && _schemas.TryGet(new SchemaKey(type, version), out schema)) { return true; }
+        schema = null;
+        return false;
+    }
+
+    public override bool TryGetCurrentModel(Type domainType, out StateModelBinding? model) {
+        RequireClosed(domainType);
+        if (_types.TryGetValue(domainType, out model)) {
+            CheckRegistered(model.CurrentSchema);
+            if (_definitions.ContainsKey(model.CurrentSchema.SchemaId)) { BindSchema(model.CurrentSchema); }
+            return true;
+        }
+        if (!TryDefinition(domainType, out StateDefinitionBinding? definition) || definition!.CurrentModelFactory is null) {
+            model = null;
+            return false;
+        }
+        var active = ("model", (object)domainType);
+        Begin(active);
+        try {
+            model = definition.CurrentModelFactory(domainType, this);
+            if (model.DomainType != domainType || model.CurrentSchema.Type != GetTypeExpr(domainType) ||
+                model.CurrentSchema.Kind != definition.Kind || model.CurrentSchema.Version != definition.CurrentVersion) {
+                throw new InvalidDataException("A current model factory returned the wrong domain or exact current Schema.");
+            }
+            BindSchema(model.CurrentSchema);
+            if (_models.TryGetValue(model.CurrentSchema.Type, out StateModelBinding? byFamily) && !ReferenceEquals(byFamily, model)) {
+                throw new InvalidDataException("A second current model was produced for the same constructed family.");
+            }
+            foreach (StateReaderBinding reader in model.Readers) {
+                SchemaKey key = new(reader.Schema.Type, reader.Schema.Version);
+                if (_readers.TryGetValue(key, out StateReaderBinding? prior) && !ReferenceEquals(prior, reader)) {
+                    throw new InvalidDataException("The model did not reuse its snapshot's exact reader binding.");
+                }
+            }
+            foreach (StateReaderBinding reader in model.Readers) { _readers.TryAdd(new(reader.Schema.Type, reader.Schema.Version), reader); }
+            _models.Add(model.CurrentSchema.Type, model);
+            _types.Add(domainType, model);
+            return true;
+        } finally { _closing.Remove(active); }
+    }
+
+    public override StateReaderBinding ResolveReader(DurableSchema schema) {
+        ArgumentNullException.ThrowIfNull(schema);
+        schema.RequireReferenceObject();
+        SchemaKey key = new(schema.Type, schema.Version);
+        if (_readers.TryGetValue(key, out StateReaderBinding? prior)) {
+            if (!prior.Schema.Equals(schema)) { throw new InvalidDataException("A reader key was reused with a different complete Schema."); }
+            CheckRegistered(schema);
+            if (_definitions.ContainsKey(schema.SchemaId)) { BindSchema(schema); }
+            return prior;
+        }
+        StateDefinitionBinding definition = GetDefinition(schema.SchemaId);
+        var factory = definition.HistoricalReaderFactory ?? throw new InvalidDataException("The definition has no historical object reader factory.");
+        var active = ("reader", (object)key);
+        Begin(active);
+        try {
+            BindSchema(schema);
+            StateReaderBinding result = factory(schema, this);
+            if (!schema.Equals(result.Schema)) { throw new InvalidDataException("A historical reader factory returned another exact Schema."); }
+            _readers.Add(key, result);
+            return result;
+        } finally { _closing.Remove(active); }
+    }
+
+    public override StateValueBinding ResolveCurrentValue(Type domainType) {
+        RequireClosed(domainType);
+        if (_currentValues.TryGetValue(domainType, out StateValueBinding? prior)) {
+            if (prior.Slot.InlineSchema is { } inline) { CheckRegistered(inline); }
+            return prior;
+        }
+        if (BuiltinStateValues.TryBindCurrent(domainType, out StateValueBinding builtin)) {
+            _currentValues.Add(domainType, builtin);
+            return builtin;
+        }
+        TypeExpr nominal = GetTypeExpr(domainType);
+        // Reference metadata must not recursively close the referenced object's body.
+        if (typeof(DurableBase).IsAssignableFrom(domainType)) {
+            StateValueBinding reference = new(DurableFieldInfo.Reference(1, nominal), typeof(uint), typeof(DurableIdStateOps),
+                domainType, typeof(DurableValueProjection<>).MakeGenericType(domainType));
+            _currentValues.Add(domainType, reference);
+            return reference;
+        }
+        StateDefinitionBinding definition = GetDefinition(nominal.DefinitionId!);
+        var factory = definition.CurrentValueFactory ?? throw new InvalidDataException("No current inline value projection is registered.");
+        var active = ("current value", (object)domainType);
+        Begin(active);
+        try {
+            StateValueBinding result = factory(domainType, this);
+            if (result.DomainType != domainType || result.ProjectionType is null || result.Slot.InlineSchema is not { } schema ||
+                schema.Type != nominal || schema.Version != definition.CurrentVersion) {
+                throw new InvalidDataException("The current value factory returned the wrong exact projection.");
+            }
+            BindSchema(schema);
+            _currentValues.Add(domainType, result);
+            return result;
+        } finally { _closing.Remove(active); }
+    }
+
+    public override StateValueBinding ResolveStoredValue(DurableFieldInfo slot) {
+        if (BuiltinStateValues.TryBindStored(slot, out StateValueBinding builtin)) { return builtin; }
+        DurableSchema schema = slot.InlineSchema ?? throw new InvalidDataException("Unsupported stored value slot.");
+        SchemaKey key = new(schema.Type, schema.Version);
+        if (_storedValues.TryGetValue(key, out StateValueBinding? prior)) {
+            if (!schema.Equals(prior.Slot.InlineSchema)) { throw new InvalidDataException("An inline value key was reused with a different exact Schema."); }
+            CheckRegistered(schema);
+            return prior.WithFieldId(slot.FieldId);
+        }
+        var factory = GetDefinition(schema.SchemaId).HistoricalValueFactory ??
+            throw new InvalidDataException("No retained inline body factory is registered.");
+        var active = ("stored value", (object)key);
+        Begin(active);
+        try {
+            BindSchema(schema);
+            StateValueBinding result = factory(schema, this);
+            if (!schema.Equals(result.Slot.InlineSchema)) { throw new InvalidDataException("An inline body factory returned another exact Schema."); }
+            _storedValues.Add(key, result.WithFieldId(1));
+            return result.WithFieldId(slot.FieldId);
+        } finally { _closing.Remove(active); }
+    }
+
+    public override TypeExpr GetTypeExpr(Type domainType) {
+        RequireClosed(domainType);
+        if (BuiltinStateValues.TryBindCurrent(domainType, out StateValueBinding builtin)) { return NominalType(builtin.Slot); }
+        if (_types.TryGetValue(domainType, out StateModelBinding? model)) { return model.CurrentSchema.Type; }
+        if (!TryDefinition(domainType, out StateDefinitionBinding? definition)) {
+            throw new InvalidDataException($"No supported declaration is registered for {domainType}.");
+        }
+        return TypeExpr.Named(definition!.DefinitionId, domainType.IsGenericType
+            ? domainType.GetGenericArguments().Select(GetTypeExpr).ToArray() : []);
+    }
+
+    public override Type GetDomainType(TypeExpr type) {
+        ArgumentNullException.ThrowIfNull(type);
+        if (!type.IsClosed) { throw new InvalidDataException("A current domain lookup requires a closed nominal type."); }
+        if (type.Kind == TypeExprKind.Builtin) {
+            return type.BuiltinTag switch {
+                TypeTag.Boolean => typeof(bool), TypeTag.Byte => typeof(byte), TypeTag.SByte => typeof(sbyte),
+                TypeTag.Int16 => typeof(short), TypeTag.UInt16 => typeof(ushort), TypeTag.Int32 => typeof(int),
+                TypeTag.UInt32 => typeof(uint), TypeTag.Int64 => typeof(long), TypeTag.UInt64 => typeof(ulong),
+                TypeTag.Char => typeof(char), TypeTag.Half => typeof(Half), TypeTag.Single => typeof(float),
+                TypeTag.Double => typeof(double), TypeTag.String => typeof(string),
+                _ => throw new InvalidDataException("Unsupported builtin domain type."),
+            };
+        }
+        if (_models.TryGetValue(type, out StateModelBinding? model)) {
+            RequireClosed(model.DomainType);
+            return model.DomainType;
+        }
+        StateDefinitionBinding definition = GetDefinition(type.DefinitionId!);
+        if (definition.Arity != type.Arguments.Length || definition.DomainTypeDefinition is not { } domain) {
+            throw new InvalidDataException("This historical family has no matching current CLR declaration.");
+        }
+        if (definition.Arity == 0) { RequireClosed(domain); return domain; }
+        try {
+            Type result = domain.MakeGenericType(type.Arguments.Select(GetDomainType).ToArray());
+            RequireClosed(result);
+            return result;
+        }
+        catch (ArgumentException error) { throw new InvalidDataException("The closed domain type violates its generic constraints.", error); }
+    }
+
+    private bool TryDefinition(Type type, out StateDefinitionBinding? definition) =>
+        _domainDefinitions.TryGetValue(type.IsGenericType ? type.GetGenericTypeDefinition() : type, out definition);
+
+    private void Begin((string Kind, object Key) active) {
+        if (!_closing.Add(active)) { throw new InvalidDataException($"Recursive exact {active.Kind} binding is unsupported."); }
+    }
+
+    private void RequireClosed(Type type) {
+        ArgumentNullException.ThrowIfNull(type);
+        if (_validatedDomainTypes.Contains(type)) { return; }
+        if (type.ContainsGenericParameters || type.IsByRefLike || type.IsPointer || type.IsByRef || type.IsArray) {
+            throw new InvalidDataException("The domain type is not a supported closed value or durable declaration.");
+        }
+        if (type.IsGenericType) {
+            Type[] arguments = type.GetGenericArguments();
+            Type[] parameters = type.GetGenericTypeDefinition().GetGenericArguments();
+            for (int index = 0; index < arguments.Length; index++) {
+                RequireClosed(arguments[index]);
+                // The CLR enforces the ordinary struct/class/new()/type constraints, but
+                // MakeGenericType does not enforce C#'s additional unmanaged requirement.
+                if (parameters[index].IsDefined(typeof(IsUnmanagedAttribute), inherit: false) && ContainsManagedReferences(arguments[index])) {
+                    throw new InvalidDataException("A closed domain argument violates its unmanaged generic constraint.");
+                }
+            }
+        }
+        _validatedDomainTypes.Add(type);
+    }
+
+    private bool ContainsManagedReferences(Type type) {
+        if (_managedValueTypes.TryGetValue(type, out bool result)) { return result; }
+        MethodInfo method = typeof(StateModelSnapshot).GetMethod(nameof(ContainsManagedReferencesTyped), BindingFlags.Static | BindingFlags.NonPublic)!
+            .MakeGenericMethod(type);
+        result = method.CreateDelegate<Func<bool>>()();
+        _managedValueTypes.Add(type, result);
+        return result;
+    }
+
+    private static bool ContainsManagedReferencesTyped<T>() => RuntimeHelpers.IsReferenceOrContainsReferences<T>();
+}

@@ -35,11 +35,11 @@ internal sealed class WorldWorkspace<TWorld> where TWorld : DurableBase {
         ArgumentNullException.ThrowIfNull(schemas);
         ArgumentNullException.ThrowIfNull(world);
         ArgumentNullException.ThrowIfNull(models);
-        StateModelSnapshot snapshot = models.Snapshot();
-        if (world.GetType() != typeof(TWorld) || !snapshot.Types.TryGetValue(typeof(TWorld), out StateModelBinding? model)) {
+        StateModelSnapshot snapshot = models.Snapshot(schemas);
+        if (world.GetType() != typeof(TWorld) || !snapshot.TryGetCurrentModel(typeof(TWorld), out StateModelBinding? model)) {
             throw new ArgumentException("World must have its requested exact domain type registered.", nameof(world));
         }
-        return new(store, schemas, world, 0, model, snapshot, null, new());
+        return new(store, schemas, world, 0, model!, snapshot, null, new());
     }
 
     internal static WorldWorkspace<TWorld> Load(StateRevisionStore store, SchemaStore schemas,
@@ -48,8 +48,8 @@ internal sealed class WorldWorkspace<TWorld> where TWorld : DurableBase {
         ArgumentNullException.ThrowIfNull(schemas);
         ArgumentNullException.ThrowIfNull(models);
         ArgumentOutOfRangeException.ThrowIfZero(worldId);
-        StateModelSnapshot snapshot = models.Snapshot();
-        DecodedRevision decoded = RevisionDecoder.ReadSnapshot(store, schemas, revisionAddress, snapshot.Readers);
+        StateModelSnapshot snapshot = models.Snapshot(schemas);
+        DecodedRevision decoded = RevisionDecoder.ReadSnapshot(store, schemas, revisionAddress, snapshot);
         NormalizedRevision normalized = NormalizedRevision.Create(decoded, snapshot);
         if (!normalized.Objects.TryGetValue(worldId, out NormalizedObject? root) ||
             root.Model is not { } model || model.DomainType != typeof(TWorld) || typeof(TWorld).IsAbstract) {
@@ -97,7 +97,7 @@ internal sealed class WorldWorkspace<TWorld> where TWorld : DurableBase {
         _staging = true;
         CaptureContext? context = null;
         try {
-            context = _capture.BeginCapture(_models.Models.Values);
+            context = _capture.BeginCapture(_models);
             uint worldId = _model.AddRoot(context, World);
             if (WorldId != 0 && worldId != WorldId) {
                 throw new InvalidOperationException("Capture did not preserve the World ID.");
@@ -162,5 +162,6 @@ internal sealed class WorldWorkspace<TWorld> where TWorld : DurableBase {
         }
         public void VisitString(uint objectId) => Add(objectId);
         public void VisitDurable(uint objectId, string nominalSchemaId) => Add(objectId);
+        public void VisitDurable(uint objectId, TypeExpr nominalType) => Add(objectId);
     }
 }

@@ -11,7 +11,7 @@ public sealed class InlineSchemaHistoryToolTests {
         const string golden = "// durable-graph-schema-history:2\n// schema-begin\n" +
             "// schema-id-base64:V29ybGQ=\n// version:1\n// kind:1\n" +
             "// field:7|16|UG9pbnQ=|2\n// schema-end\n";
-        Assert.Equal(golden, SchemaHistoryDocument.RenderHistory(record));
+        Assert.Equal(golden, SchemaHistoryDocument.RenderHistory(record, 2));
         SchemaHistoryRecord parsed = SchemaHistoryDocument.ParseHistory(fixture.Write("world.dgschema", golden));
         Assert.True(record.ShapeEquals(parsed));
         Assert.Null(Assert.Single(parsed.Fields).TargetSchemaId);
@@ -21,7 +21,7 @@ public sealed class InlineSchemaHistoryToolTests {
     }
 
     [Fact]
-    public void OldClassHistoryIsPreservedWhileAllNewWritesUseVersionTwo() {
+    public void OldClassHistoryIsPreservedWhileAllNewWritesUseVersionThree() {
         using Fixture fixture = new();
         SchemaHistoryRecord old = Record("Base");
         const string oldContent = "// durable-graph-schema-history:1\n// schema-begin\n" +
@@ -33,7 +33,7 @@ public sealed class InlineSchemaHistoryToolTests {
         Assert.Equal(3, fixture.HistoryContents().Length);
         Assert.Contains(before[0], fixture.HistoryContents());
         Assert.Equal(2, Directory.GetFiles(fixture.History).Count(path =>
-            File.ReadAllText(path).StartsWith("// durable-graph-schema-history:2\n", StringComparison.Ordinal)));
+            File.ReadAllText(path).StartsWith("// durable-graph-schema-history:3\n", StringComparison.Ordinal)));
         string[] accepted = fixture.HistoryContents();
         fixture.Verify(old, Record("Point", kind: 2));
         fixture.Publish(old);
@@ -49,7 +49,7 @@ public sealed class InlineSchemaHistoryToolTests {
     [InlineData("")]
     public void VersionTwoRequiresOneCanonicalKnownKind(string kind) {
         using Fixture fixture = new();
-        string text = SchemaHistoryDocument.RenderHistory(Record("World")).Replace("// kind:1\n", kind);
+        string text = SchemaHistoryDocument.RenderHistory(Record("World"), 2).Replace("// kind:1\n", kind);
         Assert.Throws<SchemaHistoryException>(() => SchemaHistoryDocument.ParseHistory(fixture.Write("bad.dgschema", text)));
     }
 
@@ -68,7 +68,7 @@ public sealed class InlineSchemaHistoryToolTests {
     [InlineData("1|15|UG9pbnQ=|1")]
     public void InlineOperandMustHaveCanonicalExactIdentity(string field) {
         using Fixture fixture = new();
-        string text = SchemaHistoryDocument.RenderHistory(Record("World", fields: [new(1, 2)]))
+        string text = SchemaHistoryDocument.RenderHistory(Record("World", fields: [new(1, 2)]), 2)
             .Replace("1|2", field);
         Assert.Throws<SchemaHistoryException>(() => SchemaHistoryDocument.ParseHistory(fixture.Write("bad.dgschema", text)));
     }
@@ -76,7 +76,7 @@ public sealed class InlineSchemaHistoryToolTests {
     [Fact]
     public void VersionOneCannotSmuggleInlineTagOrKind() {
         using Fixture fixture = new();
-        string text = SchemaHistoryDocument.RenderHistory(Record("World", fields: [new(1, 16, InlineSchema: new("Point", 1))]))
+        string text = SchemaHistoryDocument.RenderHistory(Record("World", fields: [new(1, 16, InlineSchema: new("Point", 1))]), 2)
             .Replace("history:2", "history:1");
         Assert.Throws<SchemaHistoryException>(() => SchemaHistoryDocument.ParseHistory(fixture.Write("bad.dgschema", text)));
         Assert.Throws<SchemaHistoryException>(() => SchemaHistoryDocument.ParseHistory(fixture.Write("bad.dgschema", text.Replace("// kind:1\n", ""))));
@@ -201,8 +201,8 @@ public sealed class InlineSchemaHistoryToolTests {
             return path;
         }
         private string Manifest(SchemaHistoryRecord[] records) => Write("manifest.g.cs",
-            "// durable-graph-schema-history-manifest:2\n" + string.Concat(records.Select(record =>
-                SchemaHistoryDocument.RenderHistory(record).Replace("// durable-graph-schema-history:2\n", ""))));
+            "// durable-graph-schema-history-manifest:3\n" + string.Concat(records.Select(record =>
+                SchemaHistoryDocument.RenderHistory(record).Replace("// durable-graph-schema-history:3\n", ""))));
         public void Publish(params SchemaHistoryRecord[] records) => _tool.Publish(Manifest(records), History);
         public void Verify(params SchemaHistoryRecord[] records) => _tool.Verify(Manifest(records), History);
         public void Accept(SchemaHistoryRecord record, string? content = null) {

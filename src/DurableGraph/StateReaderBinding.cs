@@ -13,7 +13,7 @@ public delegate TState StateBaseReader<TState>(ref BinaryPayloadReader reader) w
 public delegate TState StateDeltaApplier<TState>(ref BinaryPayloadReader reader, in TState prior) where TState : unmanaged;
 
 /// <summary>Receives generated readers for explicitly selected model families and their history.</summary>
-public interface IStateReaderRegistration {
+public interface IStateReaderRegistration : IStateDefinitionRegistration {
     void Register(StateReaderBinding reader);
 }
 
@@ -27,6 +27,7 @@ public abstract class StateReaderBinding {
     }
 
     public DurableSchema Schema { get; }
+    public abstract Type StateType { get; }
 
     internal abstract ObjectStateRecord Read(uint objectId, IStateBodySource source);
     internal abstract void VisitReferences(ObjectStateRecord item, IStateReferenceVisitor visitor);
@@ -35,6 +36,7 @@ public abstract class StateReaderBinding {
 /// <summary>Reconstructs one exact-version unmanaged DTO before boxing the completed value once.</summary>
 /// <remarks>Callbacks read bodies or validate references; they must not publish partial loading state.</remarks>
 public sealed class StateReaderBinding<TState> : StateReaderBinding where TState : unmanaged {
+    public override Type StateType => typeof(TState);
     private readonly StateBaseReader<TState> _readBase;
     private readonly StateDeltaApplier<TState> _applyDelta;
     private readonly StateReferenceVisitor<TState> _visitReferences;

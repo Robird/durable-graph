@@ -28,8 +28,24 @@ public sealed class DurableSchema : IEquatable<DurableSchema> {
         int version,
         DurableFieldInfo[] fields,
         DurableSchema? baseSchema,
-        SchemaKind kind = SchemaKind.ReferenceObject) {
-        ArgumentException.ThrowIfNullOrWhiteSpace(schemaId);
+        SchemaKind kind = SchemaKind.ReferenceObject)
+        : this(TypeExpr.Named(schemaId), version, fields, baseSchema, kind) {
+    }
+
+    public DurableSchema(TypeExpr type, int version, params DurableFieldInfo[] fields)
+        : this(type, version, fields, baseSchema: null) {
+    }
+
+    public DurableSchema(TypeExpr type, int version, SchemaKind kind, params DurableFieldInfo[] fields)
+        : this(type, version, fields, baseSchema: null, kind) {
+    }
+
+    public DurableSchema(TypeExpr type, int version, DurableFieldInfo[] fields,
+        DurableSchema? baseSchema, SchemaKind kind = SchemaKind.ReferenceObject) {
+        ArgumentNullException.ThrowIfNull(type);
+        if (type.Kind != TypeExprKind.Named || !type.IsClosed) {
+            throw new ArgumentException("An exact Schema requires a closed named type.", nameof(type));
+        }
 
         if (version <= 0) {
             throw new ArgumentOutOfRangeException(
@@ -47,9 +63,9 @@ public sealed class DurableSchema : IEquatable<DurableSchema> {
             throw new ArgumentException("Only reference object Schemas can have a reference object base.", nameof(baseSchema));
         }
 
-        HashSet<string> ancestorIds = new(StringComparer.Ordinal) { schemaId };
+        HashSet<TypeExpr> ancestorIds = new() { type };
         for (DurableSchema? ancestor = baseSchema; ancestor is not null; ancestor = ancestor.BaseSchema) {
-            if (!ancestorIds.Add(ancestor.SchemaId)) {
+            if (!ancestorIds.Add(ancestor.Type)) {
                 throw new ArgumentException(
                     "A schema identity cannot occur more than once in an inheritance chain.",
                     nameof(baseSchema));
@@ -79,7 +95,7 @@ public sealed class DurableSchema : IEquatable<DurableSchema> {
             }
         }
 
-        SchemaId = schemaId;
+        Type = type;
         Version = version;
         Kind = kind;
         Fields = ImmutableArray.CreateRange(canonicalFields);
@@ -88,7 +104,7 @@ public sealed class DurableSchema : IEquatable<DurableSchema> {
         // Immutable dependencies already have their hashes. Hashing a shared DAG
         // must not expand it repeatedly as a tree. This is never a persistent hash.
         HashCode hashCode = new();
-        hashCode.Add(SchemaId, StringComparer.Ordinal);
+        hashCode.Add(Type);
         hashCode.Add(Version);
         hashCode.Add(Kind);
         hashCode.Add(BaseSchema);
@@ -96,7 +112,11 @@ public sealed class DurableSchema : IEquatable<DurableSchema> {
         _hashCode = hashCode.ToHashCode();
     }
 
-    public string SchemaId { get; }
+    /// <summary>Gets the complete closed nominal family, including ordered generic arguments.</summary>
+    public TypeExpr Type { get; }
+
+    /// <summary>Gets the declaration identity. Generic arguments are available from <see cref="Type"/>.</summary>
+    public string SchemaId => Type.DefinitionId!;
 
     public int Version { get; }
 
@@ -118,14 +138,14 @@ public sealed class DurableSchema : IEquatable<DurableSchema> {
             var (left, right) = pair;
             if (ReferenceEquals(left, right) || !seen.Add(pair)) { continue; }
             if (left.Version != right.Version || left.Kind != right.Kind ||
-                !StringComparer.Ordinal.Equals(left.SchemaId, right.SchemaId) ||
+                left.Type != right.Type ||
                 left.Fields.Length != right.Fields.Length) { return false; }
             if ((left.BaseSchema is null) != (right.BaseSchema is null)) { return false; }
             if (left.BaseSchema is not null) { pending.Push((left.BaseSchema, right.BaseSchema!)); }
             for (int index = 0; index < left.Fields.Length; index++) {
                 DurableFieldInfo a = left.Fields[index], b = right.Fields[index];
                 if (a.FieldId != b.FieldId || a.TypeTag != b.TypeTag ||
-                    !StringComparer.Ordinal.Equals(a.TargetSchemaId, b.TargetSchemaId) ||
+                    a.TargetType != b.TargetType ||
                     (a.InlineSchema is null) != (b.InlineSchema is null)) { return false; }
                 if (a.InlineSchema is not null) { pending.Push((a.InlineSchema, b.InlineSchema!)); }
             }

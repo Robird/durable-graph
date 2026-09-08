@@ -9,4 +9,7 @@
     <UseAppHost>false</UseAppHost>
   </PropertyGroup>
 
+  <ItemGroup>
+    <Compile Include="../Shared/SchemaHistoryTypePattern.cs" Link="SchemaHistoryTypePattern.cs" />
+  </ItemGroup>
 </Project>

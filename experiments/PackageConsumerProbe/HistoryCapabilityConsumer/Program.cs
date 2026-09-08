@@ -141,9 +141,9 @@ internal static class Program {
             RevisionDecoder.Read(store, schemas, migrated, Readers()).Objects.Count == 1,
             "The migrated Revision should load with only the surviving World model.");
         ExpectInvalidData(() => RevisionDecoder.Read(store, schemas, historical, Readers()),
-            "No reader is registered for package.history-legacy v1");
+            "No declaration factory is registered for package.history-legacy");
         ExpectInvalidData(() => LoadedWorld.Load<World>(store, schemas, historical, worldId, Models()),
-            "No reader is registered for package.history-legacy v1");
+            "No declaration factory is registered for package.history-legacy");
     }
 #endif
 

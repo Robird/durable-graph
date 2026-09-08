@@ -4,7 +4,7 @@ DurableGraph is an exploratory .NET 10 prototype for versioned durable object gr
 Its public API, Schema-history format, and build workflow are not stable yet.
 
 A direct package reference supplies the runtime library, Source Generator, and Schema-history
-build integration. Each successful local `CoreCompile` publishes exact Schema records under
+build integration. Each successful local `CoreCompile` publishes Schema definition templates under
 `DurableGraphSchemaHistory/`; `ContinuousIntegrationBuild=true` verifies that the current records
 already exist without writing them. Configure this with `DurableGraphSchemaHistoryDirectory` and
 `DurableGraphSchemaHistoryMode` (`Publish`, `Verify`, or `Off`). Keep `.dgschema` files under source
@@ -14,11 +14,101 @@ and legacy `.dgsnapshot` files are rejected rather than silently ignored or cons
 
 ## Generated Schema and state
 
-Annotate each durable partial class with `[DurableType("example.character", 1)]`; the root of a
-durable inheritance chain derives from `DurableBase`. This is the only generation mode. The
-Generator emits exact Schema/history, readonly versioned state DTOs, raw Base/Delta body operations,
+Annotate each durable partial class or struct with `[DurableType("example.character", 1)]`; the root of a
+durable class inheritance chain derives from `DurableBase`, while structs have no object identity.
+Top-level generic classes and structs are supported, including readonly structs, generic base
+classes, and private/readonly fields. The Generator emits exact Schema/history,
+readonly versioned state DTOs, raw Base/Delta body operations,
 Capture, reader/model registration, Normalize, Allocate, and Hydrate. Unsupported type shapes or
 field types are diagnostics rather than a metadata-only fallback.
+
+`TypeExpr.Named(definitionId, arguments)` identifies a closed durable family; `Box<int>` and
+`Box<Point>` are distinct families sharing a definition ID. A Schema key combines this closed
+identity with the declaration's explicit version. Complete base/inline layouts remain part of
+`DurableSchema`, and equal keys require equal complete definitions in the destination SchemaStore.
+The `.dgschema` templates preserve declaration arity, scoped parameters and fixed dependency
+versions; they do not enumerate all closed combinations. Missing a generic owner version bump can
+therefore produce different first layouts in independent empty repositories. Existing conflicting
+definitions are rejected; a key alone is not a cross-repository equivalence guarantee.
+
+The supported closed value universe is bool, byte/sbyte, short/ushort, int/uint, long/ulong, char,
+Half, float, double, string, same-compilation durable classes and recursively inline durable structs.
+Arrays, BCL containers, nullable/enum/decimal, boxed identity, CLR nested or record types, ref structs,
+cross-assembly models and NativeAOT guarantees remain outside this slice. CLR generic constraints
+are retained and enforced; `allows ref struct` is rejected, and a constraint does not make an
+otherwise unsupported closed value serializable.
+
+### Definition registration and generic state hosts
+
+A compilation containing generic durable declarations/history or explicit `[DurableUpgrade]`
+registrations uses the generated Family surface for all its durable declarations. Register the
+definition factories once; the operation snapshot closes actual supported types as needed:
+
+```csharp
+var models = new StateModelRegistry();
+Atelia.DurableGraph.Generated.DurableDefinitions.Register(models);
+
+using var repository = GraphRepository.CreateNew(repositoryPath);
+using var session = repository.Create(world, models);
+var revision = session.Commit(new ReadAmplificationBaseBudgetParameters(3, 5));
+```
+
+These storage APIs require `Atelia.DurableGraph.StateStore` in addition to the runtime package.
+For stored-exact decoding, register the same generated definitions into a `StateReaderRegistry`.
+An operation freezes its definition/model directory; later registration cannot alter that operation.
+Current bindings use actual closed CLR types, while historical readers bind retained templates
+against the complete stored Schema. The framework does not discover models by assembly scanning.
+
+Historical DTOs are named `Atelia.DurableGraph.Generated.Family_<UTF8HexDefinitionId>.Vn<TState…>`.
+The host itself is non-generic and is independent of the current domain type. DTO type parameters
+represent only unresolved state values: references use UInt32 IDs, structs use exact nested DTOs,
+and unused nominal parameters need not produce DTO parameters. The generated execution templates
+separately use `IStateOps<TState>` and `IValueProjection<TDomain,TState>` static helpers. Their CLR
+types are derived execution metadata, not persisted type identities; known fields still call their
+operations directly. Resolve a closed Schema through its reader/model binding rather than assuming
+a generic DTO CLR type identifies the entire Schema or slot semantics.
+
+Use a normal C# alias for readable historical types. For a declaration with ID `Box`, whose V2 adds
+an integer field after the retained value, a generic adjacent conversion is:
+
+```csharp
+using BoxStates = Atelia.DurableGraph.Generated.Family_426F78;
+
+internal static class Upgrades {
+    [DurableUpgrade(typeof(Box<>), 1)]
+    internal static void Upgrade<TState>(
+        in BoxStates.V1<TState> oldValue,
+        out BoxStates.V2<TState> newValue,
+        UpgradeContext context) where TState : unmanaged {
+        newValue = new(oldValue.Segment0Field1, 0);
+    }
+}
+```
+
+The method must be public or internal on a top-level non-generic static CLR host. The attribute selects the owner and the
+adjacent edge (`1` means V1 to V2); a closed owner such as `typeof(Box<Point>)` can register an
+explicit business conversion between different old/new state types. A selected closed provider has
+priority and does not fall back on failure. All required adjacent steps for that object bind before
+its first business callback. Missing or ambiguous intermediate exact layouts require explicit
+historical endpoints; the current value version is not substituted for an unknown old one.
+
+`UpgradeContext` provides the current ObjectId and exact SourceObjectSchema/TargetObjectSchema for
+that adjacent edge. Do not retain it after the synchronous call. It exposes no object-graph reads,
+ID allocation or composable value tools; those tools remain the separate DB-039 follow-up. Business
+code explicitly converts inline values. When such a dependency advances, the owner definition must
+also advance, including closures such as `Box<int>` whose physical fields did not change.
+
+For a complete package consumer, see the
+[generic history probe](../../experiments/PackageConsumerProbe/GenericConsumer/README.md).
+The implementation record is [DB-038 §12](../../docs/design-branches/0038-generic-schema-state-and-binding-design.md#12-产品施工跟踪).
+
+### Retained non-generic generated helpers
+
+Pure non-generic compilations without explicit DurableUpgrade registration retain the established
+generated API below. Introducing the Family path above changes generated names for the whole
+compilation; update direct DTO/helper references to Family aliases and definition registration.
+Existing non-generic two-parameter Upgrade methods can still be adapted to the common invocation
+contract, while new generic and explicitly registered providers use the three-parameter form.
 
 The generated `Schema` property is the current exact Schema. `GetSchema(int version)` returns cached
 metadata for versions 1 through the current version, including each version's exact historical base
@@ -39,7 +129,7 @@ declarations first, then each declaration's fields in FieldId order. Schema meta
 segmented. Historical DTOs do not depend on old CLR base definitions remaining in source.
 
 Inline structs are explicitly marked with their own `[DurableType("example.position", 1)]` on a
-top-level non-generic `partial struct` (including `readonly partial struct`). They do not derive
+top-level `partial struct` (including `readonly partial struct`). They do not derive
 from DurableBase. Each has Schema/history even if no class currently uses it, and every instance
 field remains explicitly durable or transient. Supported scalar, string, durable-reference and
 nested struct fields are recursively projected into unmanaged readonly DTOs; references become IDs.
@@ -59,11 +149,11 @@ contains a nonempty child Delta, without another Schema header or length. Struct
 with a default temporary and fills private/readonly fields without running constructors or
 initializers; Transient fields remain default. Field and array-element slots can use this same
 helper, but array-object serialization is not yet supported. Current Capture/Hydrate bridges keep
-domain and state types separate for future generic composition. Generic types, record/ref structs,
-CLR nested type declarations, boxed identity and additional BCL value types remain unsupported.
+domain and state types separate; the Family path uses that separation for generic composition.
 
-Schema history/manifest and runtime Schema batches write format v2 and also read the previous
-class-only v1 format. Already accepted history files are not rewritten.
+Schema history/manifest and runtime Schema batches write format v3 and retain strict readers for
+v1/v2. Already accepted history files are not rewritten. Base type headers encode the closed Schema
+identity; same-Schema Deltas still use the Base's type information.
 
 For a scalar-only layout:
 
@@ -104,8 +194,8 @@ Base by a later explicit Prepare.
 
 ## Capture and object-state rows
 
-Layouts containing references capture through a `CaptureContext`. Generated `AddRoot` supplies the
-exact model binding:
+Layouts containing references capture through a `CaptureContext`. The retained non-generic
+generated `AddRoot` supplies the exact model binding:
 
 ```csharp
 var session = new CaptureSession();
@@ -128,8 +218,8 @@ accepted graph, although allocated numeric IDs can remain consumed.
 
 ## Typed StateStore path
 
-Product loading registers generated readers and models with `StateReaderRegistry` and
-`StateModelRegistry`. `RevisionDecoder` reconstructs a complete stored-exact DTO/string directory.
+Product loading registers generated readers/models or definition factories with `StateReaderRegistry`
+and `StateModelRegistry`. `RevisionDecoder` reconstructs a complete stored-exact DTO/string directory.
 `LoadedWorld.Load` then validates, upgrades, allocates all reachable objects, and hydrates references
 before exposing the single World root. It uses `RuntimeHelpers.GetUninitializedObject`; constructors,
 field initializers, and Transient rebuild hooks do not run. User code rebuilds Transient state after

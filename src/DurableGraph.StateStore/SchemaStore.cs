@@ -66,7 +66,8 @@ public sealed class SchemaStore {
         try {
             var merged = new Dictionary<SchemaKey, DurableSchema>(_schemas);
             var familyKinds = new Dictionary<string, SchemaKind>(StringComparer.Ordinal);
-            foreach (DurableSchema schema in _schemas.Values) { familyKinds[schema.SchemaId] = schema.Kind; }
+            var familyArities = new Dictionary<string, int>(StringComparer.Ordinal);
+            foreach (DurableSchema schema in _schemas.Values) { ValidateDefinition(schema); }
             var heights = new Dictionary<DurableSchema, int>(ReferenceEqualityComparer.Instance);
             foreach (DurableSchema schema in schemas) {
                 ArgumentNullException.ThrowIfNull(schema);
@@ -93,14 +94,25 @@ public sealed class SchemaStore {
                     if (!old.Equals(schema)) { throw new SchemaConflictException(old, schema); }
                 }
                 else {
-                    if (familyKinds.TryGetValue(schema.SchemaId, out SchemaKind oldKind) && oldKind != schema.Kind) {
-                        throw new ArgumentException($"Schema family '{schema.SchemaId}' cannot change kind across versions.", nameof(schemas));
-                    }
-                    familyKinds[schema.SchemaId] = schema.Kind;
+                    ValidateDefinition(schema);
                     merged.Add(key, schema);
                 }
                 heights.Add(schema, height);
                 return height;
+            }
+
+            void ValidateDefinition(DurableSchema schema) {
+                try {
+                    SchemaBatchWireCodec.ValidateDeclaration(familyKinds, familyArities, schema.Type, schema.Kind);
+                    foreach (DurableFieldInfo field in schema.Fields) {
+                        if (field.TargetType is { } target) {
+                            SchemaBatchWireCodec.ValidateDeclaration(familyKinds, familyArities, target, SchemaKind.ReferenceObject);
+                        }
+                    }
+                }
+                catch (InvalidDataException error) {
+                    throw new ArgumentException(error.Message, nameof(schemas), error);
+                }
             }
             DurableSchema[] missing = merged.Where(pair => !_schemas.ContainsKey(pair.Key)).Select(static pair => pair.Value).ToArray();
             RequireUnchangedTail();
@@ -123,6 +135,15 @@ public sealed class SchemaStore {
     }
 
     public DurableSchema GetRequired(string schemaId, int version) => GetRequired(new SchemaKey(schemaId, version));
+
+    public DurableSchema GetRequired(TypeExpr type, int version) => GetRequired(new SchemaKey(type, version));
+
+    /// <summary>Looks up an already registered exact layout without changing registry visibility.</summary>
+    public bool TryGet(SchemaKey key, out DurableSchema? schema) {
+        RequireAvailable();
+        key.Validate();
+        return _schemas.TryGetValue(key, out schema);
+    }
 
     public DurableSchema GetRequired(SchemaKey key) {
         RequireAvailable();

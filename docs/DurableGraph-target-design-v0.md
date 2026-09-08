@@ -120,8 +120,12 @@ Source Generator 负责可在编译期确定的类型知识与机械代码，框
 - Upgrade 用户入口统一接收非泛型 UpgradeContext，优先考虑工具扩展的灵活性；Context 提供本次转换的只读信息，
   值转换能力由 owner 显式取得并调用，不逐个追加到历史方法的参数列表。
   当前采用预声明/预绑定能力，只在执行时查询已选工具；不由 Context 动态选择业务规则，也不扩张单对象操作边界。
-  最小入口先随 [DB-038 §6.5](design-branches/0038-generic-schema-state-and-binding-design.md#65-统一-upgradecontext-与本片最小内容) 实施，
-  可组合工具随后按 [DB-039](design-branches/0039-composable-value-upgrade-design.md) 接入；设计已采纳不等于产品已有此入口。
+  最小调用信息与后续工具组合分别由 [DB-038](design-branches/0038-generic-schema-state-and-binding-design.md)
+  和 [DB-039](design-branches/0039-composable-value-upgrade-design.md) 承接；当前实现范围从 PROJECT-STATE 查证。
+- 自定义泛型的持久身份是定义 ID、有序 nominal 实参与定义版本；领域参数、冻结状态表示和静态操作参数分开。
+  历史 DTO/body 位于纯状态宿主，按 stored 完整布局闭合，不要求旧领域值 CLR 类型继续存在。
+  单对象整条相邻 Upgrade 链先绑定再执行；中间 exact 布局不足以唯一确定时明确拒绝，不能用 current/latest 补齐。
+  元数据缓存只是派生结果，后续登记的 exact base/inline 定义仍必须与缓存的完整依赖闭包一致。
 - 2026-09-08 用户选择泛型闭合 Schema 的 MVP 保证范围为目标 Repository 内严格一致，暂不增加闭合历史账本。
   开放定义 history 保证模板不变，不承诺穷尽检测所有实参导致的漏升版；不同空库可能首次接受同 key、不同完整布局。
   因此完整 Schema 校验不能省略，也不能仅凭 key 跨库复用绑定。具体反例、方案比较与后续触发见

@@ -1,9 +1,9 @@
 # DB-038：泛型 Schema、状态表示与运行时绑定
 
-> 状态：Proposed — 2026-09-08。用户授权本轮撰写、比较、审阅与技术验证；尚未授权产品泛型实现。
-> 主干完成交叉审阅；用户已采纳 §3.3 的仓库内严格一致范围及 §6.5 的统一 UpgradeContext 入口。整体产品实施仍待另行调度。
-> 基线：`5c6545d`，DB-037 已实现非泛型 class/struct。当前能力见 [PROJECT-STATE](../../src/PROJECT-STATE.md)。
-> 本文承接 [DB-018 泛型备忘](0018-generic-dto-binding-followup.md)，是完整方案讨论入口；本轮结果见 §11。
+> 状态：Chosen / Implemented — 2026-09-08。本片 G0–G4 已实施并验收，DB-039 另行调度。
+> 主干完成交叉审阅；用户已采纳 §3.3 的仓库内严格一致范围及 §6.5 的统一 UpgradeContext 入口。施工跟踪见 §12。
+> 设计起点：`5c6545d`；产品施工基线：`2aedb07`。当前能力见 [PROJECT-STATE](../../src/PROJECT-STATE.md)。
+> 本文承接 [DB-018 泛型备忘](0018-generic-dto-binding-followup.md)；研究结论见 §11，产品验收见 §12。
 > 阅读顺序：先看 §2 推荐、§3.2–3.3 版本代价与保证范围、§6 Upgrade；代码接缝与施工顺序在 §8、§10。
 > 实施顺序为本片 → [DB-039](0039-composable-value-upgrade-design.md)。本片完成泛型闭环与最小 UpgradeContext；后片通过 Context 提供可组合值转换，两轮边界见 §10。
 
@@ -122,7 +122,7 @@ Build B：Point v2，漏升 Box；Box 模板未变，空 Store B 首存 → 同 
 仅扫描“本次哪几个 inline 类型升版”不能给出 B：Box 可以暂时退出编译、Point 升版后再引入旧 Box。
 要用参数宇宙锁解决，就必须持久保留替换环境，且新增类型也牵涉版本管理；当前无理由把它包装成免费检查。
 2026-09-08 用户明确选择“保持仓库内严格一致：明确诊断边界，暂不增加闭合历史账本”。
-本方案据此收敛；这项边界选择不等于已经授权产品代码/wire 实施。
+本方案据此收敛；后续产品实施授权与验收另记于 §12。
 
 ## 4. 定义历史与 stored Schema 的职责
 
@@ -442,7 +442,7 @@ exact/current 目录及保存恢复闭环、通用透传和闭合 owner Upgrade�
 先通过 G0 用户写法与 G1 版本反例，再冻结对外 Upgrade 登记和 wire；不从序列化热循环一路写到最后才发现历史 API 无法使用。
 依赖 key/规则集、Context 工具获取、开放值组合及相应历史包验收属于 [DB-039 §6](0039-composable-value-upgrade-design.md#6-产品接缝与研究验收)，
 **不是本片 G0/G2/G4 的验收条件**。本片结束后再据实际生成形状校准后片；后片不重开持久类型格式。
-当前研究 probe 只证明部分 G0 接缝，不能替代这些产品闸门。实施须另获用户授权。
+独立研究 probe 只证明部分 G0 接缝；后续真实产品闸门验收见 §12。
 
 ### 实施入口尚须验证的接缝
 
@@ -502,3 +502,68 @@ probe 使用手写 generated-like 模板和少量 BinaryWriter/Reader 定长字�
 把 Context 工具/规则/组合留给后片。动态工具解析、生命周期平台和跨对象能力不进入本片。
 在已接受的版本代价和支持范围内，未发现新的架构阻塞；剩余真实 SG/约束矩阵/格式 golden 必须在 G0/G1 先验证，
 不能以设计审阅替代测试。此次仅修改文档，原 Probe/build 数字仍属于上面的历史验证，不是新 Context 验收。
+
+## 12. 产品施工跟踪
+
+2026-09-08 用户授权完整实施 DB-038。基线 `2aedb07` 工作树干净；根构建零警告/错误，994 项测试通过。
+本节记录本片的验收映射；DB-039 的工具查询、规则集及组合 provider 不进入施工范围。
+
+| 需求 | 实现归属 | 验收 | 状态 |
+|---|---|---|---|
+| 闭合身份、exact Schema、版本化类型头和旧格式读取 | Runtime TypeExpr；StateStore SchemaKey/SchemaStore/wire | G1 canonical golden、冲突与完整布局 | 已验证 |
+| 开放定义历史与 accepted-history 独立校验 | SG/Build，共享内部 TypePattern parser | G1 模板/约束/缺历史反例 | 已验证 |
+| 开放 DTO/静态 body/current 投影、readonly 和继承 | SG Family emitter；Runtime 静态值操作 | G0/G2 真实用户源码及执行 | 已验证 |
+| 冻结目录内按需闭合、stored-first reader | Runtime binding；StateStore snapshot/decoder | G3 身份、目录隔离、扩张引用 | 已验证 |
+| 三参通用/闭合 owner Upgrade 与最小 Context | SG provider；Runtime 整条相邻链计划 | G0/G4 完整端点、多对象/多跳、失败前置 | 已验证 |
+| 包交付和完整保存恢复 | PackageConsumer 与产品集成测试 | G4 三代真实包与回归 | 已验证 |
+
+本轮先冻结的接缝：
+
+- `TypeExpr` 使用 Builtin/Named/Parameter；闭合 Schema 的 `Type` 与 `SchemaKey.Type` 不含 Parameter。
+  `SchemaId` 保留为 DefinitionId 便捷访问，不能用它代替闭合族 key。
+- TypeExpr 最大深度 64、展开节点 4096、单定义 arity 32；闭合 wire 的 tag 1 为内建、2 为 Named，拒绝开放参数。
+  SchemaBatch 新写 v3，Base 类型头新写 v2；旧格式保持严格读取。
+- SG 与 Build 共用内部文本 TypePattern parser，不引入新程序集；新 history v3 带 arity 和参数模式。
+- 不含显式 DurableUpgrade 的纯非泛型编译保留既有生成入口；包含泛型定义/历史依赖或显式 Upgrade 登记的编译使用统一 Family 状态宿主。
+  在后一路径中，用户源码若引用旧内部 `__DurableState.Vn`，改用 Family alias；不生成两份互不相同的状态表示。
+  非泛型二参 Upgrade 的调用适配继续保留。
+- 新通用/闭合升级方法以 `DurableUpgrade` 属性标明开放/闭合 owner 与相邻边起始版本，终点固定为 +1；
+  方法位于顶层非泛型 static host，public/internal 可访问。未知/不支持的 owner 或 host 明确诊断，不能被忽略。
+  Family.Definition 可单独登记，也可用 `Generated.DurableDefinitions.Register` 登记整份生成目录。
+- CLR 约束复制保留 class/class?、struct、unmanaged、notnull、new()、基类/接口及参数间约束；
+  nullable 注解仍遵循 C# 的静态语义。反射可以绕过 C# 的 unmanaged 检查，因此冷绑定另用
+  RuntimeHelpers.IsReferenceOrContainsReferences 验证实际实参；含引用字段的 struct 不可冒充 unmanaged。
+  此验证不进入字段循环，不约束历史纯状态 reader 的旧领域类型。
+
+独立审阅发现并推动修复：nominal-only 声明的 kind/arity 义务；缓存 owner 根未覆盖后来登记的 exact 子依赖；
+以及共享 Schema DAG 的重复展开。最终实现对完整 base/inline 闭包复核，缓存不保存 ObjectId/Context，
+匹配按 exact Schema 与声明作用域去重，仍检查较长路径的深度上界。相关拒绝均有针对性回归。
+
+具体源码与证据：
+
+| 闸门 | 产品证据 |
+|---|---|
+| G0 / G2 | [真实生成模板/静态 body/readonly 继承/属性入口](../../tests/DurableGraph.Tests/GenericGeneratedStateTests.cs)、[逐对象/相邻边 Context](../../tests/DurableGraph.Tests/GeneratedUpgradeContextTests.cs)、[CLR 约束补充验证](../../tests/DurableGraph.Tests/GenericUnmanagedConstraintTests.cs) |
+| G1 | [结构化身份](../../tests/DurableGraph.Tests/GenericSchemaIdentityTests.cs)、[canonical/旧 wire/仓库冲突](../../tests/DurableGraph.StateStore.Tests/GenericSchemaPersistenceTests.cs)、[v3 history](../../tests/DurableGraph.Tests/GenericTemplateHistoryTests.cs) |
+| G3 | [snapshot/重复参数/缓存/DAG/引用边](../../tests/DurableGraph.StateStore.Tests/GenericBindingCatalogTests.cs)、[整链/phantom/闭合特例/缺能力](../../tests/DurableGraph.Tests/GenericUpgradeBindingTests.cs)；实际图保存冷读也由 G0/G2 生成测试覆盖 |
+| G4 | [GenericConsumer](../../experiments/PackageConsumerProbe/GenericConsumer/README.md)：三代真实包、缺闭合转换反例、删除旧 inline CLR、完整 Context、强制 Base 后稳定保存 |
+
+DB-039 从现有 `UpgradeContext`、`StateUpgradeProvider`、`StateBindingContext` 的已绑定计划接入；
+值工具查找和嵌套调用作用域尚未实现，不需要再修改 history/SchemaBatch/Base 类型表达格式。
+
+### 完成验收
+
+2026-09-08 主代理在合并工作树验证：
+
+- `dotnet build DurableGraph.slnx --no-restore --verbosity quiet`：零警告、零错误。
+- `dotnet test DurableGraph.slnx --no-build --no-restore`：**1077/1077**，零失败、零跳过
+  （Runtime/SG 506、StateStore 313、Storage 155、Serialization 103）。
+- 随后补强同一泛型图测试的 null/Empty 与 `Box<World>` 回环，重建并定向执行通过；没有修改产品代码。
+- 主代理运行全部五个真实包脚本：Run-Probe、Run-StateStoreProbe、Run-InlineStructProbe、
+  Run-HistoryCapabilityProbe、Run-GenericProbe，均 exit 0。后三者复用同一最终版本的八个依赖包。
+  新泛型脚本跨三代 Schema、四个构建/独立进程，旧 history SHA256 不变，缺闭合转换保持仓库 bytes 不变。
+- 独立审阅复核 Schema/history、绑定、整链 Upgrade、缓存 exact 子依赖及 unmanaged 防护，无剩余阻断发现。
+
+回归中的旧格式读取仍保留；新写版本的 golden/空 manifest 预期更新为 v3，新 Base header 引起的实际尺寸变化
+同步进入断言。已加载模型随后遭遇 Schema 冲突时，新 resolver 会在 Capture 阶段更早拒绝；没有追加 State 或推进基线。
+缺失旧对象族执行能力时，新的目录入口报告缺 declaration factory；该反例仍验证旧 Revision 拒绝、新 Revision 可读。

@@ -178,7 +178,6 @@ public sealed partial class DurableSchemaGeneratorTests {
     }
 
     [Theory]
-    [InlineData("public partial class Single<T> : DurableBase { }")]
     [InlineData("public class Single : DurableBase { }")]
     [InlineData("public partial record Single : DurableBase;")]
     public void SchemaOnlyRetainsTheBoundedClrTypeShape(string declaration) {

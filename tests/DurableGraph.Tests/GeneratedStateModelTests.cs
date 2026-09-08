@@ -298,7 +298,7 @@ public sealed partial class DurableSchemaGeneratorTests {
 
     private static object? StateModelField(ObjectStateRecord row, string name) {
         object value = typeof(ObjectStateRecord).GetField("_content", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(row)!;
-        return value.GetType().GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(value);
+        return value.GetType().GetField(name, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)!.GetValue(value);
     }
 
     private sealed class StateModelBodySource(params byte[][] bodies) : IStateBodySource {

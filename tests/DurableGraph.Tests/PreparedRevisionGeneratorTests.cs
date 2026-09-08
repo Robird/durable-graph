@@ -116,7 +116,8 @@ public sealed partial class DurableSchemaGeneratorTests {
                 var prepared = CapturedRevisionPlanner.PrepareRevision(store, schemas, parent, input, parameters);
                 Assert.Same(accepted, session.Current); // Planning never installs a candidate or baseline.
                 Assert.Equal(parent, prepared.Revision.ParentRevisionAddress);
-                Assert.Equal(97, Assert.Single(prepared.Estimates, item => item.ObjectId == ownerId).BasePayloadBytes);
+                // Envelope v2 adds the Named tag and zero-argument count to this non-generic key.
+                Assert.Equal(99, Assert.Single(prepared.Estimates, item => item.ObjectId == ownerId).BasePayloadBytes);
                 if (stage == 0) {
                     Assert.Equal(input.Objects.Count, prepared.Revision.LocalObjects.Count);
                     Assert.All(prepared.Revision.LocalObjects, record => Assert.Equal(ObjectVersionKind.Base, record.Kind));
@@ -170,7 +171,7 @@ public sealed partial class DurableSchemaGeneratorTests {
                 else session.Discard(graph);
             }
         }
-        Assert.Equal(97, initialH); // 68 raw bytes + 27 type-header bytes + 2 ObjectVersion bytes.
+        Assert.Equal(99, initialH); // 68 raw bytes + 29 type-header bytes + 2 ObjectVersion bytes.
         Assert.True(accumulatedH > initialH);
         Assert.Equal(revisions.Length, revisions.Select(address => address.FileNumber).Distinct().Count());
 

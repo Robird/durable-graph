@@ -4,7 +4,11 @@ namespace Atelia.DurableGraph;
 /// Describes one persisted field in a durable schema.
 /// </summary>
 public readonly record struct DurableFieldInfo {
-    public DurableFieldInfo(int fieldId, TypeTag typeTag, string? targetSchemaId = null, DurableSchema? inlineSchema = null) {
+    public DurableFieldInfo(int fieldId, TypeTag typeTag, string? targetSchemaId = null, DurableSchema? inlineSchema = null)
+        : this(fieldId, typeTag, targetSchemaId is null ? null : TypeExpr.Named(targetSchemaId), inlineSchema) {
+    }
+
+    private DurableFieldInfo(int fieldId, TypeTag typeTag, TypeExpr? targetType, DurableSchema? inlineSchema) {
         if (fieldId <= 0) {
             throw new ArgumentOutOfRangeException(
                 nameof(fieldId),
@@ -20,10 +24,13 @@ public readonly record struct DurableFieldInfo {
         }
 
         if (typeTag == TypeTag.DurableReference) {
-            ArgumentException.ThrowIfNullOrWhiteSpace(targetSchemaId);
+            ArgumentNullException.ThrowIfNull(targetType);
+            if (targetType.Kind != TypeExprKind.Named || !targetType.IsClosed) {
+                throw new ArgumentException("A durable reference requires a closed nominal named type.", nameof(targetType));
+            }
         }
-        else if (targetSchemaId is not null) {
-            throw new ArgumentException("Only durable references have a nominal target Schema identity.", nameof(targetSchemaId));
+        else if (targetType is not null) {
+            throw new ArgumentException("Only durable references have a nominal target Schema identity.", nameof(targetType));
         }
 
         if (typeTag == TypeTag.InlineValue) {
@@ -38,7 +45,7 @@ public readonly record struct DurableFieldInfo {
 
         FieldId = fieldId;
         TypeTag = typeTag;
-        TargetSchemaId = targetSchemaId;
+        TargetType = targetType;
         InlineSchema = inlineSchema;
     }
 
@@ -47,7 +54,13 @@ public readonly record struct DurableFieldInfo {
     public TypeTag TypeTag { get; }
 
     /// <summary>Gets the stable nominal target family for a durable reference, without binding its version.</summary>
-    public string? TargetSchemaId { get; }
+    public string? TargetSchemaId => TargetType?.DefinitionId;
+
+    /// <summary>Gets the complete closed nominal reference constraint, without binding a version.</summary>
+    public TypeExpr? TargetType { get; }
+
+    public static DurableFieldInfo Reference(int fieldId, TypeExpr targetType) =>
+        new(fieldId, TypeTag.DurableReference, targetType, inlineSchema: null);
 
     /// <summary>Gets the immutable exact layout of an inline value, including its value dependencies.</summary>
     public DurableSchema? InlineSchema { get; }

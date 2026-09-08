@@ -106,7 +106,7 @@ public sealed partial class DurableSchemaGeneratorTests {
 
         Assert.DoesNotContain(run.GeneratorDiagnostics, IsError);
         Assert.Equal(
-            "// durable-graph-schema-history-manifest:2\n",
+            "// durable-graph-schema-history-manifest:3\n",
             GeneratedSource(run, "DurableGraphSchemaHistoryCandidates.g.cs"));
         Assert.DoesNotContain(
             run.GeneratedSources,

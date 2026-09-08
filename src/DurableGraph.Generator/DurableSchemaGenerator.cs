@@ -4,6 +4,7 @@ using System.Collections.Immutable;
 using System.Globalization;
 using System.IO;
 using System.Text;
+using Atelia.DurableGraph.SchemaHistory;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
@@ -22,7 +23,7 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
     private const string DurableBaseMetadataName =
         "Atelia.DurableGraph.DurableBase";
     private const string SchemaHistoryManifestHeader =
-        "// durable-graph-schema-history-manifest:2";
+        "// durable-graph-schema-history-manifest:3";
     private const string SchemaHistoryHeader =
         "// durable-graph-schema-history:1";
     private static readonly UTF8Encoding StrictUtf8 = new(
@@ -32,7 +33,7 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
     internal static readonly DiagnosticDescriptor InvalidTypeShape = new(
         id: "DG0001",
         title: "Invalid durable type shape",
-        messageFormat: "Type '{0}' must be a top-level, non-generic, non-record partial struct or partial class in an attributed hierarchy ending at Atelia.DurableGraph.DurableBase",
+        messageFormat: "Type '{0}' must be a top-level, non-record partial struct or partial class with supported generic constraints in an attributed hierarchy ending at Atelia.DurableGraph.DurableBase",
         category: "DurableGraph.Generator",
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true);
@@ -224,6 +225,9 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
         if (!ValidateHistoryClosure(context, history)) {
             return;
         }
+        if (!ValidateUpgradeRegistrations(context, validTypes, compilation, out bool hasUpgradeRegistrations)) {
+            return;
+        }
 
         if (validTypes.Count > 0 || types.Count == 0) {
             string manifestSource = RenderSchemaHistoryManifest(validTypes)
@@ -234,6 +238,12 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
         }
 
         if (validTypes.Count > 0) {
+            if (hasUpgradeRegistrations || UsesGenericTemplates(validTypes, history)) {
+                if (ValidateGenericTemplateHistory(context, validTypes, history)) {
+                    GenerateGenericStates(context, validTypes, history, historyParsedSuccessfully, compilation);
+                }
+                return;
+            }
             List<DurableTypeModel> schemaTypes = GenerateSchemas(context, validTypes, history);
             GenerateStates(context, validTypes, schemaTypes, history, historyParsedSuccessfully);
         }
@@ -378,6 +388,9 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
         }
 
         string[] lines = normalized.Split('\n');
+        if (lines.Length > 0 && lines[0] == "// durable-graph-schema-history:3") {
+            return TryParseTemplateHistory(file.Path, lines, out model, out error);
+        }
         if (lines.Length < 5 ||
             (!StringComparer.Ordinal.Equals(lines[0], SchemaHistoryHeader) &&
                 !StringComparer.Ordinal.Equals(lines[0], "// durable-graph-schema-history:2")) ||
@@ -566,6 +579,7 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
         for (int index = 0; index < left.Count; index++) {
             if (left[index].FieldId != right[index].FieldId ||
                 left[index].TypeTagValue != right[index].TypeTagValue ||
+                !left[index].ValuePattern.Equals(right[index].ValuePattern) ||
                 !StringComparer.Ordinal.Equals(left[index].TargetSchemaId, right[index].TargetSchemaId) ||
                 !SameReference(left[index].InlineSchema, right[index].InlineSchema)) {
                 return false;
@@ -582,7 +596,7 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
         foreach (DurableFieldModel field in fields) {
             result.Add(new SchemaHistoryFieldModel(
                 field.FieldId,
-                field.TypeTagValue, field.TargetSchemaId, field.InlineSchema));
+                field.TypeTagValue, field.TargetSchemaId, field.InlineSchema, field.ValuePattern));
         }
 
         return result;
@@ -603,6 +617,12 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
         }
 
         bool hasErrors = false;
+        if (type.TypeKind == TypeKind.Class && type.BaseType is not null && type.BaseType.Arity > 0 &&
+            !HasMetadataName(type.BaseType, DurableBaseMetadataName) &&
+            !TryGetTypePattern(type.BaseType, type, halfType, out _)) {
+            context.ReportDiagnostic(Diagnostic.Create(InvalidTypeShape, GetSourceLocation(type), typeName));
+            return null;
+        }
         AttributeData? durableTypeAttribute = GetAttribute(
             type.GetAttributes(),
             DurableTypeAttributeMetadataName);
@@ -702,6 +722,7 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
 
             string? targetSchemaId = null;
             SchemaReference? inlineSchema = null;
+            TypePattern? valuePattern = null;
             if (!TryGetTypeTag(
                 field.Type,
                 halfType,
@@ -711,7 +732,8 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
                 !TryGetNominalReference(field.Type, type,
                     context.CancellationToken, out typeTag, out typeTagValue, out fieldTypeName, out targetSchemaId) &&
                 !TryGetInlineValue(field.Type, type, context.CancellationToken,
-                    out typeTag, out typeTagValue, out fieldTypeName, out inlineSchema)) {
+                    out typeTag, out typeTagValue, out fieldTypeName, out inlineSchema) &&
+                !TryGetParameterField(field.Type, out typeTag, out typeTagValue, out fieldTypeName)) {
                 context.ReportDiagnostic(Diagnostic.Create(
                     UnsupportedFieldType,
                     GetSourceLocation(field),
@@ -720,13 +742,20 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
                 hasErrors = true;
                 continue;
             }
+            if (!TryGetTypePattern(field.Type, type, halfType, out valuePattern)) {
+                context.ReportDiagnostic(Diagnostic.Create(UnsupportedFieldType, GetSourceLocation(field),
+                    field.Name, field.Type.ToDisplayString(QualifiedNameFormat)));
+                hasErrors = true;
+                continue;
+            }
+            if (inlineSchema.HasValue) inlineSchema = new SchemaReference(inlineSchema.Value.SchemaId, inlineSchema.Value.Version, valuePattern);
 
             durableFields.Add(new DurableFieldModel(
                 field,
                 fieldId,
                 typeTag!,
                 typeTagValue,
-                fieldTypeName!, targetSchemaId, inlineSchema));
+                fieldTypeName!, targetSchemaId, inlineSchema, valuePattern));
         }
 
         durableFields.Sort(static (left, right) => left.FieldId.CompareTo(right.FieldId));
@@ -924,10 +953,11 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
             source.Append("// version:")
                 .AppendLine(type.Version.ToString(CultureInfo.InvariantCulture));
             source.Append("// kind:").AppendLine(type.IsInline ? "2" : "1");
+            source.Append("// arity:").AppendLine(type.Arity.ToString(CultureInfo.InvariantCulture));
             SchemaReference? baseSchema = GetCurrentBaseReference(type.Symbol);
             if (baseSchema.HasValue) {
                 source.Append("// base:")
-                    .Append(Convert.ToBase64String(StrictUtf8.GetBytes(baseSchema.Value.SchemaId)))
+                    .Append(baseSchema.Value.Type.ToString())
                     .Append('|')
                     .AppendLine(baseSchema.Value.Version.ToString(CultureInfo.InvariantCulture));
             }
@@ -937,11 +967,11 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
                     .Append(field.FieldId.ToString(CultureInfo.InvariantCulture))
                     .Append('|')
                     .Append(field.TypeTagValue.ToString(CultureInfo.InvariantCulture));
-                if (field.TargetSchemaId is not null) {
-                    source.Append('|').Append(Convert.ToBase64String(StrictUtf8.GetBytes(field.TargetSchemaId)));
+                if (field.TypeTagValue == 15 || field.TypeTagValue == 17) {
+                    source.Append('|').Append(field.ValuePattern.ToString());
                 }
                 if (field.InlineSchema.HasValue) {
-                    source.Append('|').Append(Convert.ToBase64String(StrictUtf8.GetBytes(field.InlineSchema.Value.SchemaId)))
+                    source.Append('|').Append(field.ValuePattern.ToString())
                         .Append('|').Append(field.InlineSchema.Value.Version.ToString(CultureInfo.InvariantCulture));
                 }
                 source.AppendLine();
@@ -1059,7 +1089,7 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
             string typeTag,
             int typeTagValue,
             string fieldTypeName,
-            string? targetSchemaId = null, SchemaReference? inlineSchema = null) {
+            string? targetSchemaId = null, SchemaReference? inlineSchema = null, TypePattern? valuePattern = null) {
             InlineSchema = inlineSchema;
             Symbol = symbol;
             FieldId = fieldId;
@@ -1067,6 +1097,7 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
             TypeTagValue = typeTagValue;
             FieldTypeName = fieldTypeName;
             TargetSchemaId = targetSchemaId;
+            ValuePattern = valuePattern ?? (inlineSchema?.Type ?? (targetSchemaId is not null ? TypePattern.Named(targetSchemaId) : TypePattern.Builtin(typeTagValue)));
         }
 
         public IFieldSymbol Symbol { get; }
@@ -1080,6 +1111,7 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
         public string FieldTypeName { get; }
         public string? TargetSchemaId { get; }
         public SchemaReference? InlineSchema { get; }
+        public TypePattern ValuePattern { get; }
     }
 
     private readonly struct DurableTypeModel {
@@ -1102,6 +1134,7 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
 
         public List<DurableFieldModel> Fields { get; }
         public bool IsInline => Symbol.TypeKind == TypeKind.Struct;
+        public int Arity => Symbol.Arity;
     }
 
     private readonly struct SchemaHistoryText {
@@ -1116,11 +1149,12 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
     }
 
     private readonly struct SchemaHistoryFieldModel {
-        public SchemaHistoryFieldModel(int fieldId, int typeTagValue, string? targetSchemaId = null, SchemaReference? inlineSchema = null) {
+        public SchemaHistoryFieldModel(int fieldId, int typeTagValue, string? targetSchemaId = null, SchemaReference? inlineSchema = null, TypePattern? valuePattern = null) {
             InlineSchema = inlineSchema;
             FieldId = fieldId;
             TypeTagValue = typeTagValue;
             TargetSchemaId = targetSchemaId;
+            ValuePattern = valuePattern ?? (inlineSchema?.Type ?? (targetSchemaId is not null ? TypePattern.Named(targetSchemaId) : TypePattern.Builtin(typeTagValue)));
         }
 
         public int FieldId { get; }
@@ -1128,6 +1162,7 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
         public int TypeTagValue { get; }
         public string? TargetSchemaId { get; }
         public SchemaReference? InlineSchema { get; }
+        public TypePattern ValuePattern { get; }
     }
 
     private readonly struct SchemaHistoryModel {
@@ -1136,13 +1171,14 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
             string schemaId,
             int version,
             List<SchemaHistoryFieldModel> fields,
-            SchemaReference? baseSchema = null, int kind = 1) {
+            SchemaReference? baseSchema = null, int kind = 1, int arity = 0) {
             Kind = kind;
             Path = path;
             SchemaId = schemaId;
             Version = version;
             Fields = fields;
             BaseSchema = baseSchema;
+            Arity = arity;
         }
 
         public string Path { get; }
@@ -1155,6 +1191,7 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
 
         public SchemaReference? BaseSchema { get; }
         public int Kind { get; }
+        public int Arity { get; }
     }
 
 }

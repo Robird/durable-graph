@@ -1,22 +1,32 @@
 namespace Atelia.DurableGraph.StateStore;
 
 /// <summary>
-/// Locates a Schema definition by its <c>(SchemaId, Version)</c> within one SchemaStore.
+/// Locates a Schema by its closed nominal type and definition version within one SchemaStore.
 /// Exactness still requires equality of the complete definition.
 /// </summary>
 public readonly record struct SchemaKey {
-    public SchemaKey(string schemaId, int version) {
-        ArgumentException.ThrowIfNullOrWhiteSpace(schemaId);
+    public SchemaKey(string schemaId, int version) : this(TypeExpr.Named(schemaId), version) {
+    }
+
+    public SchemaKey(TypeExpr type, int version) {
+        ArgumentNullException.ThrowIfNull(type);
+        if (type.Kind != TypeExprKind.Named || !type.IsClosed) {
+            throw new ArgumentException("Schema keys require a closed named type.", nameof(type));
+        }
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(version);
-        SchemaId = schemaId;
+        Type = type;
         Version = version;
     }
 
-    public string SchemaId { get; }
+    public TypeExpr Type { get; }
+    public string SchemaId => Type?.DefinitionId!;
     public int Version { get; }
 
     internal void Validate() {
-        ArgumentException.ThrowIfNullOrWhiteSpace(SchemaId);
+        ArgumentNullException.ThrowIfNull(Type);
+        if (Type.Kind != TypeExprKind.Named || !Type.IsClosed) {
+            throw new ArgumentException("Schema keys require a closed named type.");
+        }
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(Version);
     }
 }

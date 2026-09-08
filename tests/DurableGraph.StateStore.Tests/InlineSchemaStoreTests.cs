@@ -14,16 +14,18 @@ public sealed class InlineSchemaStoreTests : IDisposable {
     public InlineSchemaStoreTests() => Directory.CreateDirectory(_root);
 
     [Fact]
-    public void V2IndependentGoldenBindsExactForwardInlineSchema() {
+    public void V3IndependentGoldenBindsExactForwardInlineSchemaAndV2RemainsReadable() {
         DurableSchema value = new("Z", 2, SchemaKind.InlineValue, new DurableFieldInfo(1, TypeTag.Int32));
         DurableSchema owner = new("A", 1, new DurableFieldInfo(1, TypeTag.InlineValue, inlineSchema: value));
-        byte[] golden = Convert.FromHexString("02020341010100010110035A02035A020200010102");
+        byte[] golden = Convert.FromHexString("03020203410001010001011002035A000202035A00020200010102");
         Assert.Equal(golden, SchemaBatchWireCodec.Write([value, owner]));
         var read = SchemaBatchWireCodec.Read(golden, Empty);
         Assert.Equal(owner, read[new("A", 1)]);
         Assert.Equal(SchemaKind.ReferenceObject, read[new("A", 1)].Kind);
         Assert.Equal(SchemaKind.InlineValue, read[new("Z", 2)].Kind);
         Assert.Same(read[new("Z", 2)], read[new("A", 1)].Fields[0].InlineSchema);
+        byte[] legacy = Convert.FromHexString("02020341010100010110035A02035A020200010102");
+        Assert.Equal(owner, SchemaBatchWireCodec.Read(legacy, Empty)[new("A", 1)]);
         for (int length = 0; length < golden.Length; length++) {
             byte[] prefix = golden[..length];
             Assert.ThrowsAny<Exception>(() => SchemaBatchWireCodec.Read(prefix, Empty));
@@ -31,7 +33,7 @@ public sealed class InlineSchemaStoreTests : IDisposable {
     }
 
     [Fact]
-    public void V1RemainsReadableAndV2AppendsWithoutRewritingOldBytes() {
+    public void V1RemainsReadableAndV3AppendsWithoutRewritingOldBytes() {
         string path = NextPath();
         byte[] legacy = Convert.FromHexString("010203410101035A020201010809035A0200010304");
         byte[] original;
@@ -55,7 +57,7 @@ public sealed class InlineSchemaStoreTests : IDisposable {
             Assert.Equal(legacy, first.PayloadAndMeta.ToArray());
             Assert.True(scan.MoveNext());
             using RbfPooledFrame second = file.ReadPooledFrame(scan.Current.Ticket).Unwrap();
-            Assert.Equal(2, second.PayloadAndMeta[0]);
+            Assert.Equal(3, second.PayloadAndMeta[0]);
         }
         Assert.Equal(original, File.ReadAllBytes(path)[..original.Length]);
         using IRbfFile reopened = RbfFile.OpenReadOnlyExisting(path);

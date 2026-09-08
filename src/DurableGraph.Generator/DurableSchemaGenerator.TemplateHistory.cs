@@ -1,0 +1,217 @@
+using System;
+using System.Collections.Generic;
+using System.Globalization;
+using System.Text;
+using Atelia.DurableGraph.SchemaHistory;
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
+
+namespace Atelia.DurableGraph.Generator;
+
+public sealed partial class DurableSchemaGenerator {
+    private static bool TryGetParameterField(ITypeSymbol type, out string? tag, out int number, out string? name) {
+        tag = null; number = 0; name = null;
+        if (type is not ITypeParameterSymbol parameter || parameter.Ordinal >= 32 || parameter.AllowsRefLikeType) return false;
+        tag = "Parameter"; number = 17; name = type.ToDisplayString(FullyQualifiedNameFormat);
+        return true;
+    }
+
+    private static bool TryGetTypePattern(ITypeSymbol type, INamedTypeSymbol owner, INamedTypeSymbol? halfType, out TypePattern? pattern) {
+        pattern = null;
+        if (TryGetTypeTag(type, halfType, out _, out int builtin, out _)) {
+            pattern = TypePattern.Builtin(builtin); return true;
+        }
+        if (type is ITypeParameterSymbol parameter) {
+            if (parameter.Ordinal >= owner.Arity || parameter.AllowsRefLikeType) return false;
+            pattern = TypePattern.Parameter(parameter.Ordinal); return true;
+        }
+        if (type is not INamedTypeSymbol named || named.Arity > 32 || named.IsRefLikeType || named.ContainingType is not null ||
+            !SymbolEqualityComparer.Default.Equals(named.ContainingAssembly, owner.ContainingAssembly)) return false;
+        AttributeData? attribute = GetAttribute(named.GetAttributes(), DurableTypeAttributeMetadataName);
+        if (attribute is null || attribute.ConstructorArguments.Length != 2 ||
+            attribute.ConstructorArguments[0].Value is not string id || string.IsNullOrWhiteSpace(id) || !CanEncodeStrictUtf8(id)) return false;
+        TypePattern[] arguments = new TypePattern[named.TypeArguments.Length];
+        for (int index = 0; index < arguments.Length; index++) {
+            if (!TryGetTypePattern(named.TypeArguments[index], owner, halfType, out TypePattern? argument)) return false;
+            arguments[index] = argument!;
+        }
+        try { pattern = TypePattern.Named(id, arguments); return true; }
+        catch (ArgumentException) { return false; }
+    }
+
+    private static TypePattern GetNamedTypePattern(INamedTypeSymbol type) {
+        INamedTypeSymbol root = type;
+        while (root.BaseType is not null) root = root.BaseType;
+        INamedTypeSymbol? half = root.ContainingAssembly.GetTypeByMetadataName("System.Half");
+        TypePattern ConvertType(ITypeSymbol item) {
+            if (item is ITypeParameterSymbol parameter) return TypePattern.Parameter(parameter.Ordinal);
+            if (TryGetTypeTag(item, half, out _, out int tag, out _)) return TypePattern.Builtin(tag);
+            INamedTypeSymbol named = (INamedTypeSymbol)item;
+            AttributeData attribute = GetAttribute(named.GetAttributes(), DurableTypeAttributeMetadataName)!;
+            TypePattern[] arguments = new TypePattern[named.TypeArguments.Length];
+            for (int index = 0; index < arguments.Length; index++) arguments[index] = ConvertType(named.TypeArguments[index]);
+            return TypePattern.Named((string)attribute.ConstructorArguments[0].Value!, arguments);
+        }
+        return ConvertType(type);
+    }
+
+    private static void AppendTypePatternExpression(StringBuilder text, TypePattern pattern) {
+        const string prefix = "global::Atelia.DurableGraph.TypeExpr.";
+        if (pattern.Kind == PatternKind.Builtin) {
+            text.Append(prefix).Append("Builtin((global::Atelia.DurableGraph.TypeTag)").Append(pattern.BuiltinTag).Append(')');
+        } else if (pattern.Kind == PatternKind.Parameter) {
+            text.Append(prefix).Append("Parameter(").Append(pattern.ParameterOrdinal).Append(')');
+        } else {
+            text.Append(prefix).Append("Named(").Append(SymbolDisplay.FormatLiteral(pattern.DefinitionId!, true));
+            foreach (TypePattern argument in pattern.Arguments) {
+                text.Append(", "); AppendTypePatternExpression(text, argument);
+            }
+            text.Append(')');
+        }
+    }
+
+    private static bool UsesGenericTemplates(List<DurableTypeModel> types, List<SchemaHistoryModel> history) {
+        foreach (DurableTypeModel type in types) if (UsesGenericTemplate(CurrentShape(type))) return true;
+        foreach (SchemaHistoryModel shape in history) if (UsesGenericTemplate(shape)) return true;
+        return false;
+    }
+
+    private static bool UsesGenericTemplate(SchemaHistoryModel shape) {
+        if (shape.Arity != 0 || (shape.BaseSchema.HasValue && shape.BaseSchema.Value.Type.Arguments.Count != 0)) return true;
+        foreach (SchemaHistoryFieldModel field in shape.Fields) {
+            if (field.ValuePattern.ContainsParameter || field.ValuePattern.Arguments.Count != 0) return true;
+        }
+        return false;
+    }
+
+    private static bool ValidateGenericTemplateHistory(SourceProductionContext context, List<DurableTypeModel> types, List<SchemaHistoryModel> history) {
+        bool valid = true;
+        List<SchemaHistoryModel> available = new(history);
+        foreach (DurableTypeModel type in types) {
+            SchemaHistoryModel current = CurrentShape(type);
+            foreach (SchemaHistoryModel old in history) {
+                if (old.SchemaId != current.SchemaId) continue;
+                if (old.Kind != current.Kind || old.Arity != current.Arity ||
+                    (old.Version == current.Version && !HaveSameShape(old, current))) {
+                    context.ReportDiagnostic(Diagnostic.Create(CurrentSchemaHistoryMismatch, GetSourceLocation(type.Symbol),
+                        type.Symbol.ToDisplayString(QualifiedNameFormat), type.SchemaId, type.Version));
+                    valid = false;
+                }
+            }
+            for (int version = 1; version < type.Version; version++) {
+                if (FindHistory(history, type.SchemaId, version).Count == 0) {
+                    context.ReportDiagnostic(Diagnostic.Create(MissingSchemaHistory, GetSourceLocation(type.Symbol),
+                        type.Symbol.ToDisplayString(QualifiedNameFormat), type.SchemaId, version));
+                    valid = false;
+                }
+            }
+            available.RemoveAll(entry => entry.SchemaId == current.SchemaId && entry.Version == current.Version);
+            available.Add(current);
+        }
+        return ValidateHistoryClosure(context, available) && valid;
+    }
+
+    private static bool ValidatePatternReferences(SourceProductionContext context, SchemaHistoryModel shape, List<SchemaHistoryModel> available) {
+        List<TypePattern> patterns = new();
+        if (shape.BaseSchema.HasValue) patterns.Add(shape.BaseSchema.Value.Type);
+        foreach (SchemaHistoryFieldModel field in shape.Fields) patterns.Add(field.ValuePattern);
+        foreach (TypePattern pattern in patterns) {
+            if (!pattern.ParametersFit(shape.Arity)) {
+                ReportInvalidHistoryAncestry(context, shape, "a type parameter lies outside its declaration's arity"); return false;
+            }
+            foreach (TypePattern named in pattern.NamedNodes()) {
+                foreach (SchemaHistoryModel target in available) {
+                    if (target.SchemaId == named.DefinitionId && target.Arity != named.Arguments.Count) {
+                        ReportInvalidHistoryAncestry(context, shape, "a named type pattern has incompatible arity"); return false;
+                    }
+                }
+            }
+        }
+        return true;
+    }
+
+    private static bool ValidateTemplateNominalShapes(SourceProductionContext context, List<SchemaHistoryModel> records) {
+        Dictionary<string, int> arities = new(StringComparer.Ordinal);
+        Dictionary<string, int> kinds = new(StringComparer.Ordinal);
+        foreach (SchemaHistoryModel shape in records) {
+            if (!Require(arities, shape.SchemaId, shape.Arity) || !Require(kinds, shape.SchemaId, shape.Kind)) {
+                ReportInvalidHistoryAncestry(context, shape, "a Schema family has conflicting kind or arity"); return false;
+            }
+            if (shape.BaseSchema.HasValue && !Check(shape.BaseSchema.Value.Type, 1)) {
+                ReportInvalidHistoryAncestry(context, shape, "a base type pattern has conflicting kind or arity"); return false;
+            }
+            foreach (SchemaHistoryFieldModel field in shape.Fields) {
+                if (!Check(field.ValuePattern, field.TypeTagValue == 15 ? 1 : field.TypeTagValue == 16 ? 2 : 0)) {
+                    ReportInvalidHistoryAncestry(context, shape, "a field type pattern has conflicting kind or arity"); return false;
+                }
+            }
+        }
+        return true;
+
+        bool Check(TypePattern pattern, int rootKind) {
+            if (rootKind != 0 && !Require(kinds, pattern.DefinitionId!, rootKind)) return false;
+            foreach (TypePattern named in pattern.NamedNodes()) {
+                if (!Require(arities, named.DefinitionId!, named.Arguments.Count)) return false;
+            }
+            return true;
+        }
+
+        bool Require(Dictionary<string, int> values, string id, int value) {
+            if (values.TryGetValue(id, out int previous) && previous != value) return false;
+            values[id] = value;
+            return true;
+        }
+    }
+
+    private static bool TryParseTemplateHistory(string path, string[] lines, out SchemaHistoryModel model, out string? error) {
+        model = default;
+        error = "format 3 requires canonical kind, arity, and type-pattern records";
+        if (lines.Length < 7 || lines[1] != "// schema-begin" || lines[lines.Length - 1] != "// schema-end" ||
+            !lines[2].StartsWith("// schema-id-base64:", StringComparison.Ordinal) ||
+            !TryDecodeSchemaId(lines[2].Substring(20), out string? id) ||
+            !lines[3].StartsWith("// version:", StringComparison.Ordinal) || !TryParsePositiveCanonicalInt(lines[3].Substring(11), out int version) ||
+            (lines[4] != "// kind:1" && lines[4] != "// kind:2") ||
+            !lines[5].StartsWith("// arity:", StringComparison.Ordinal) || !TryParseArity(lines[5].Substring(9), out int arity)) return false;
+        int kind = lines[4] == "// kind:2" ? 2 : 1;
+        int cursor = 6;
+        SchemaReference? baseSchema = null;
+        if (lines[cursor].StartsWith("// base:", StringComparison.Ordinal)) {
+            string[] parts = lines[cursor++].Substring(8).Split('|');
+            if (parts.Length != 2 || !TypePattern.TryParse(parts[0], arity, out TypePattern? pattern) || pattern!.Kind != PatternKind.Named ||
+                !TryParsePositiveCanonicalInt(parts[1], out int baseVersion)) return false;
+            baseSchema = new SchemaReference(pattern.DefinitionId!, baseVersion, pattern);
+        }
+        if (kind == 2 && baseSchema.HasValue) return false;
+        List<SchemaHistoryFieldModel> fields = new();
+        int previous = 0;
+        while (cursor < lines.Length - 1) {
+            string line = lines[cursor++];
+            if (!line.StartsWith("// field:", StringComparison.Ordinal)) return false;
+            string[] parts = line.Substring(9).Split('|');
+            if (parts.Length < 2 || !TryParsePositiveCanonicalInt(parts[0], out int fieldId) || fieldId <= previous ||
+                !TryParsePositiveCanonicalInt(parts[1], out int tag) || tag > 17) return false;
+            previous = fieldId;
+            TypePattern? pattern;
+            SchemaReference? inline = null;
+            if (tag <= 14) {
+                if (parts.Length != 2) return false;
+                pattern = TypePattern.Builtin(tag);
+            } else {
+                if (parts.Length != (tag == 16 ? 4 : 3) || !TypePattern.TryParse(parts[2], arity, out pattern) ||
+                    pattern!.Kind != (tag == 17 ? PatternKind.Parameter : PatternKind.Named)) return false;
+                if (tag == 16) {
+                    if (!TryParsePositiveCanonicalInt(parts[3], out int inlineVersion)) return false;
+                    inline = new SchemaReference(pattern.DefinitionId!, inlineVersion, pattern);
+                }
+            }
+            fields.Add(new SchemaHistoryFieldModel(fieldId, tag, tag == 15 ? pattern.DefinitionId : null, inline, pattern));
+        }
+        model = new SchemaHistoryModel(path, id!, version, fields, baseSchema, kind, arity);
+        error = null;
+        return true;
+    }
+
+    private static bool TryParseArity(string text, out int arity) =>
+        int.TryParse(text, NumberStyles.None, CultureInfo.InvariantCulture, out arity) && arity >= 0 && arity <= 32 &&
+        text == arity.ToString(CultureInfo.InvariantCulture);
+}

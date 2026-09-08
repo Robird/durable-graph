@@ -5,7 +5,7 @@ public delegate void StateHydrator<TDomain, TState>(TDomain domain, in TState st
     where TDomain : DurableBase where TState : unmanaged;
 
 /// <summary>Receives explicitly selected generated model families.</summary>
-public interface IStateModelRegistration {
+public interface IStateModelRegistration : IStateDefinitionRegistration {
     void Register(StateModelBinding model);
 }
 
@@ -13,18 +13,21 @@ public interface IStateModelRegistration {
 /// <remarks>Use stable generated bindings. Callbacks must not publish partial objects or mutate input DTOs.</remarks>
 public abstract class StateModelBinding {
     private readonly StateReaderBinding[] _readers;
+    private readonly Func<DurableSchema, StateReaderBinding>? _sourceReaderResolver;
 
-    private protected StateModelBinding(DurableSchema currentSchema, Type domainType, IEnumerable<StateReaderBinding> readers) {
+    private protected StateModelBinding(DurableSchema currentSchema, Type domainType, IEnumerable<StateReaderBinding> readers,
+        Func<DurableSchema, StateReaderBinding>? sourceReaderResolver = null) {
         ArgumentNullException.ThrowIfNull(currentSchema);
         currentSchema.RequireReferenceObject();
         ArgumentNullException.ThrowIfNull(domainType);
         ArgumentNullException.ThrowIfNull(readers);
         CurrentSchema = currentSchema;
         DomainType = domainType;
+        _sourceReaderResolver = sourceReaderResolver;
         _readers = readers.ToArray();
         HashSet<int> versions = [];
         foreach (StateReaderBinding reader in _readers) {
-            if (reader is null || reader.Schema.SchemaId != currentSchema.SchemaId ||
+            if (reader is null || reader.Schema.Type != currentSchema.Type ||
                 reader.Schema.Version > currentSchema.Version || !versions.Add(reader.Schema.Version)) {
                 throw new ArgumentException("Model readers must have unique versions in the current Schema family.", nameof(readers));
             }
@@ -41,8 +44,9 @@ public abstract class StateModelBinding {
 
     internal void RequireSource(ObjectStateRecord source) {
         ArgumentNullException.ThrowIfNull(source);
-        if (source.Kind != ObjectStateKind.Durable ||
-            !_readers.Any(reader => reader.Schema.Equals(source.Schema))) {
+        if (source.Kind != ObjectStateKind.Durable || source.Schema!.Type != CurrentSchema.Type ||
+            (!_readers.Any(reader => reader.Schema.Equals(source.Schema)) &&
+             !(_sourceReaderResolver?.Invoke(source.Schema).Schema.Equals(source.Schema) ?? false))) {
             throw new InvalidDataException("The source does not match an exact Schema in this model family.");
         }
     }
@@ -80,8 +84,9 @@ public sealed class StateModelBinding<TDomain, TState> : StateModelBinding
         Func<TDomain> allocate,
         StateHydrator<TDomain, TState> hydrate,
         Func<TDomain, CaptureContext, TState> capture,
-        StateReferenceVisitor<TState> visitReferences)
-        : base((preparation ?? throw new ArgumentNullException(nameof(preparation))).Schema, typeof(TDomain), readers) {
+        StateReferenceVisitor<TState> visitReferences,
+        Func<DurableSchema, StateReaderBinding>? sourceReaderResolver = null)
+        : base((preparation ?? throw new ArgumentNullException(nameof(preparation))).Schema, typeof(TDomain), readers, sourceReaderResolver) {
         ArgumentNullException.ThrowIfNull(normalize);
         ArgumentNullException.ThrowIfNull(allocate);
         ArgumentNullException.ThrowIfNull(hydrate);

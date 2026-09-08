@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Text;
+using Atelia.DurableGraph.SchemaHistory;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
@@ -21,19 +22,21 @@ public sealed partial class DurableSchemaGenerator {
         isEnabledByDefault: true);
 
     private readonly struct SchemaReference {
-        public SchemaReference(string schemaId, int version) {
+        public SchemaReference(string schemaId, int version, TypePattern? type = null) {
             SchemaId = schemaId;
             Version = version;
+            Type = type ?? TypePattern.Named(schemaId);
         }
 
         public string SchemaId { get; }
         public int Version { get; }
+        public TypePattern Type { get; }
     }
 
     private static bool HasDurableTypeShape(
         INamedTypeSymbol type,
         System.Threading.CancellationToken cancellationToken) {
-        if ((type.TypeKind != TypeKind.Class && type.TypeKind != TypeKind.Struct) || type.IsRefLikeType || type.IsRecord || type.Arity != 0 ||
+        if ((type.TypeKind != TypeKind.Class && type.TypeKind != TypeKind.Struct) || type.IsRefLikeType || type.IsRecord || type.Arity > 32 ||
             type.ContainingType is not null || type.DeclaringSyntaxReferences.Length == 0) {
             return false;
         }
@@ -43,6 +46,10 @@ public sealed partial class DurableSchemaGenerator {
                 !HasPartialModifier(declaration.Modifiers) || HasFileModifier(declaration.Modifiers)) {
                 return false;
             }
+        }
+
+        foreach (ITypeParameterSymbol parameter in type.TypeParameters) {
+            if (parameter.AllowsRefLikeType) return false;
         }
 
         return true;
@@ -94,13 +101,13 @@ public sealed partial class DurableSchemaGenerator {
         }
         height = 1;
         if (!type.IsInline && !HasMetadataName(type.Symbol.BaseType, DurableBaseMetadataName)) {
-            int index = types.FindIndex(candidate => SymbolEqualityComparer.Default.Equals(candidate.Symbol, type.Symbol.BaseType));
+            int index = types.FindIndex(candidate => SymbolEqualityComparer.Default.Equals(candidate.Symbol, type.Symbol.BaseType!.OriginalDefinition));
             if (index < 0 || types[index].IsInline || !ValidateCurrentDependency(types[index], types, path, heights, depth + 1, out int childHeight)) return false;
             height = Math.Max(height, childHeight + 1);
         }
         foreach (DurableFieldModel field in type.Fields) {
             if (!field.InlineSchema.HasValue) continue;
-            int index = types.FindIndex(candidate => SymbolEqualityComparer.Default.Equals(candidate.Symbol, field.Symbol.Type));
+            int index = types.FindIndex(candidate => SymbolEqualityComparer.Default.Equals(candidate.Symbol, ((INamedTypeSymbol)field.Symbol.Type).OriginalDefinition));
             if (index < 0 || !types[index].IsInline || !ValidateCurrentDependency(types[index], types, path, heights, depth + 1, out int childHeight)) return false;
             height = Math.Max(height, childHeight + 1);
         }
@@ -117,31 +124,33 @@ public sealed partial class DurableSchemaGenerator {
         AttributeData attribute = GetAttribute(type.BaseType!.GetAttributes(), DurableTypeAttributeMetadataName)!;
         return new SchemaReference(
             (string)attribute.ConstructorArguments[0].Value!,
-            (int)attribute.ConstructorArguments[1].Value!);
+            (int)attribute.ConstructorArguments[1].Value!, GetNamedTypePattern(type.BaseType!));
     }
 
     private static bool SameReference(SchemaReference? left, SchemaReference? right) {
         return left.HasValue == right.HasValue &&
             (!left.HasValue ||
                 (StringComparer.Ordinal.Equals(left.Value.SchemaId, right!.Value.SchemaId) &&
+                    left.Value.Type.Equals(right.Value.Type) &&
                     left.Value.Version == right.Value.Version));
     }
 
     private static bool HaveSameShape(SchemaHistoryModel left, SchemaHistoryModel right) {
-        return left.Kind == right.Kind && SameReference(left.BaseSchema, right.BaseSchema) && HaveSameFields(left.Fields, right.Fields);
+        return left.Kind == right.Kind && left.Arity == right.Arity && SameReference(left.BaseSchema, right.BaseSchema) && HaveSameFields(left.Fields, right.Fields);
     }
 
     // Accepted history is checked by itself. Current candidates must never repair a missing historical ancestor.
     private static bool ValidateHistoryClosure(SourceProductionContext context, List<SchemaHistoryModel> history) {
-        bool valid = true;
+        bool valid = ValidateTemplateNominalShapes(context, history);
         Dictionary<string, int> kinds = new(StringComparer.Ordinal);
         Dictionary<string, int> heights = new(StringComparer.Ordinal);
         foreach (SchemaHistoryModel entry in history) {
-            if (kinds.TryGetValue(entry.SchemaId, out int kind) && kind != entry.Kind) {
-                ReportInvalidHistoryAncestry(context, entry, "a Schema family cannot change kind");
+            if (kinds.TryGetValue(entry.SchemaId, out int kind) && kind != (entry.Kind * 64 + entry.Arity)) {
+                ReportInvalidHistoryAncestry(context, entry, "a Schema family cannot change kind or arity");
                 valid = false;
             }
-            kinds[entry.SchemaId] = entry.Kind;
+            kinds[entry.SchemaId] = entry.Kind * 64 + entry.Arity;
+            if (!ValidatePatternReferences(context, entry, history)) valid = false;
             if (!ValidateExactDependency(context, entry, history, new HashSet<string>(StringComparer.Ordinal), heights, 0, out _)) valid = false;
         }
         return valid;
@@ -197,6 +206,10 @@ public sealed partial class DurableSchemaGenerator {
             }
             if (!AllHaveSameShape(matches) || matches[0].Kind != dependency.Kind) {
                 ReportInvalidHistoryAncestry(context, entry, "conflicting or wrong-kind exact dependency '" + dependency.Reference.SchemaId + "'");
+                return false;
+            }
+            if (matches[0].Arity != dependency.Reference.Type.Arguments.Count) {
+                ReportInvalidHistoryAncestry(context, entry, "wrong generic arity for exact dependency '" + dependency.Reference.SchemaId + "'");
                 return false;
             }
             if (!ValidateExactDependency(context, matches[0], available, path, heights, depth + 1, out int childHeight)) return false;
@@ -289,7 +302,7 @@ public sealed partial class DurableSchemaGenerator {
     private static SchemaHistoryModel CurrentShape(DurableTypeModel current) {
         return new SchemaHistoryModel(
             string.Empty, current.SchemaId, current.Version,
-            ToSchemaHistoryFields(current.Fields), GetCurrentBaseReference(current.Symbol), current.IsInline ? 2 : 1);
+            ToSchemaHistoryFields(current.Fields), GetCurrentBaseReference(current.Symbol), current.IsInline ? 2 : 1, current.Arity);
     }
 
     private static void AppendSchemaType(

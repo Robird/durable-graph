@@ -88,8 +88,8 @@ try {
         }
         foreach ($file in $historyFiles) {
             $content = Get-Content -LiteralPath $file.FullName -Raw
-            if (-not $content.StartsWith("// durable-graph-schema-history:2`n", [StringComparison]::Ordinal)) {
-                throw "Newly published Schema history is not canonical format v2."
+            if (-not $content.StartsWith("// durable-graph-schema-history:3`n", [StringComparison]::Ordinal)) {
+                throw "Newly published Schema history is not canonical format v3."
             }
             $hash = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash
             if ($oldHistoryHashes.ContainsKey($file.Name) -and $oldHistoryHashes[$file.Name] -ne $hash) {

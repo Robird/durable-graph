@@ -204,7 +204,30 @@ child and strings and reopens normally. Shared historical value DTO/body helpers
 of the deleted domain CLR names; this does not provide readers for deleted reference-object families.
 
 The script requires all stage markers and history counts `5 -> 10 -> 11 -> 13`, rejects deletion or
-modification of previously published `.dgschema` files, and checks that new history uses text format v2.
+modification of previously published `.dgschema` files, and checks that new history uses text format v3.
 It packs the same eight-package dependency closure by default; `-PackageSource <feed> -Version <version>`
 reuses an existing feed. Generated artifacts and probe-owned address sidecars remain under the unique
 ignored `obj` run directory.
+
+## Generic definitions and owner upgrades
+
+```powershell
+./experiments/PackageConsumerProbe/Run-GenericProbe.ps1
+```
+
+The [generic consumer](GenericConsumer/README.md) exercises the DB-038 product path through real
+runtime and StateStore packages. It builds successive application versions in separate processes,
+registers `Generated.DurableDefinitions`, and lets operation snapshots close the encountered
+`Box<int>`, `Box<Point>`, and inline `Pair<LegacyPoint>` bindings. Historical state DTOs live in
+generated Family hosts, independently of current domain CLR declarations.
+
+The stages cover actual Base/Delta persistence, stored-exact decoding, generic pass-through and
+closed business upgrades, forced Base after Upgrade, stable resave, and deletion of an old inline
+domain struct. A missing closed conversion leaves exact decoding available while editable loading
+fails before that object's first business callback. The consumer also checks that UpgradeContext
+identifies the actual object and each adjacent owner edge; it does not exercise DB-039 value tools.
+
+The runner preserves accepted history hashes and requires v3 for new history. It packs an isolated
+dependency feed by default, or reuses one through `-PackageSource <feed> -Version <version>`.
+Run instructions, stage details and limitations live in the consumer README; the implementation
+record is [DB-038 §12](../../docs/design-branches/0038-generic-schema-state-and-binding-design.md#12-产品施工跟踪).

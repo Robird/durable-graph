@@ -1,7 +1,7 @@
 # DB-039：owner 显式调用的可组合值 Upgrade
 
 > 状态：Proposed — 2026-09-08。用户已采纳统一 UpgradeContext 外观及当前预绑定方案；产品实施另行调度。
-> 基线：`24004ab`；产品仍为 DB-037 的非泛型能力。
+> 后继接缝：DB-038 的产品代码，实际验收见其 §12；本片尚未实施。
 > 本文细化并修订 [DB-038 §6](0038-generic-schema-state-and-binding-design.md#6-upgrade通用方法与显式闭合边)；泛型身份、历史及仓库一致性继续由 DB-038 说明。
 > 排期：DB-038 独立完成泛型闭环和最小 Context 后，再实施本片。原逐参数注入委托改为从 Context 获取；旧 Probe 仍只证明原机制，未验证新外观。
 
@@ -16,7 +16,7 @@ DB-038 的闭合 owner Upgrade 可以正确表达 `Box<PointV1State> → Box<Poi
 | 业务转换由用户决定，owner 控制执行 | 用户当前要求；框架可以绑定工具，不能主动遍历 inline 值并执行 Upgrade |
 | 单对象、无其他对象读取或新 ObjectId | 用户已裁剪的 MVP；Context 提供当前转换信息及事先绑定的工具，不提供跨对象操作 |
 | UpgradeContext 为统一入口，灵活性优先 | 用户新采纳；值能力不再逐个占用用户函数参数，执行期仍只获取已声明的能力 |
-| DTO readonly/unmanaged，引用为 ID | 当前 DB-037；delegate 存在于执行 binding 中，不是 DTO 字段 |
+| DTO readonly/unmanaged，引用为 ID | DB-037/038；delegate 存在于执行 binding 中，不是 DTO 字段 |
 | exact 布局先确定，再绑定整条对象升级链 | DB-038 §6.4；值能力不填补 phantom 参数缺少的历史版本信息 |
 | 目录在操作开始冻结，失败不交付部分 World | 当前模型目录及 DB-038 的扩展方向；不建立全局 latest 转换目录 |
 | 仓库内同 key 完整 Schema 一致，无闭合历史账本 | 用户已选 DB-038 §3.3；本次不改变版本轴或保证范围 |

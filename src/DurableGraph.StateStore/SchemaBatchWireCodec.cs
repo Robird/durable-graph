@@ -6,7 +6,7 @@ namespace Atelia.DurableGraph.StateStore;
 
 internal static class SchemaBatchWireCodec {
     internal const uint RbfTag = 0x31424753; // SGB1 in little-endian byte order.
-    internal const byte Version = 2;
+    internal const byte Version = 3;
     internal const int MaximumDepth = 256;
 
     internal static byte[] Write(IReadOnlyCollection<DurableSchema> schemas) {
@@ -17,7 +17,7 @@ internal static class SchemaBatchWireCodec {
         var writer = new BinaryPayloadWriter(buffer);
         writer.WriteByte(Version);
         writer.WriteUInt32((uint)schemas.Count);
-        foreach (DurableSchema schema in schemas.OrderBy(static x => x.SchemaId, StringComparer.Ordinal).ThenBy(static x => x.Version)) {
+        foreach (DurableSchema schema in schemas.OrderBy(static x => x.Type).ThenBy(static x => x.Version)) {
             SchemaKeyWireCodec.Write(ref writer, Key(schema));
             writer.WriteByte((byte)schema.Kind);
             writer.WriteBoolean(schema.BaseSchema is not null);
@@ -29,7 +29,7 @@ internal static class SchemaBatchWireCodec {
                 writer.WriteUInt32((uint)field.FieldId);
                 writer.WriteByte(EncodeType(field.TypeTag));
                 if (field.TypeTag == TypeTag.DurableReference) {
-                    writer.WriteString(field.TargetSchemaId!);
+                    TypeExprWireCodec.Write(ref writer, field.TargetType!);
                 }
                 else if (field.TypeTag == TypeTag.InlineValue) {
                     SchemaKeyWireCodec.Write(ref writer, Key(field.InlineSchema!));
@@ -44,7 +44,7 @@ internal static class SchemaBatchWireCodec {
         IReadOnlyDictionary<SchemaKey, DurableSchema> registered) {
         var reader = new BinaryPayloadReader(payload);
         byte version = reader.ReadByte();
-        if (version is not 1 and not Version) {
+        if (version is not 1 and not 2 and not Version) {
             throw new InvalidDataException("Unknown Schema batch version.");
         }
         uint count = reader.ReadUInt32();
@@ -54,12 +54,18 @@ internal static class SchemaBatchWireCodec {
         }
         var declarations = new Dictionary<SchemaKey, Declaration>();
         var familyKinds = new Dictionary<string, SchemaKind>(StringComparer.Ordinal);
+        var familyArities = new Dictionary<string, int>(StringComparer.Ordinal);
         foreach (DurableSchema schema in registered.Values) {
-            ValidateFamilyKind(familyKinds, schema.SchemaId, schema.Kind);
+            ValidateDeclaration(familyKinds, familyArities, schema.Type, schema.Kind);
+            foreach (DurableFieldInfo field in schema.Fields) {
+                if (field.TargetType is { } target) {
+                    ValidateDeclaration(familyKinds, familyArities, target, SchemaKind.ReferenceObject);
+                }
+            }
         }
         SchemaKey? previous = null;
         for (uint index = 0; index < count; index++) {
-            SchemaKey key = SchemaKeyWireCodec.Read(ref reader);
+            SchemaKey key = ReadKey(ref reader, version);
             if (previous is { } prior && Compare(prior, key) >= 0) {
                 throw new InvalidDataException("Schema definitions must be strictly ordered by identity and version.");
             }
@@ -69,8 +75,9 @@ internal static class SchemaBatchWireCodec {
                 2 => SchemaKind.InlineValue,
                 _ => throw new InvalidDataException("Unknown Schema kind."),
             };
-            ValidateFamilyKind(familyKinds, key.SchemaId, kind);
-            SchemaKey? baseKey = reader.ReadBoolean() ? SchemaKeyWireCodec.Read(ref reader) : null;
+            ValidateDeclaration(familyKinds, familyArities, key.Type, kind);
+            SchemaKey? baseKey = reader.ReadBoolean() ? ReadKey(ref reader, version) : null;
+            if (baseKey is { } baseIdentity) { ValidateTypeArities(familyArities, baseIdentity.Type); }
             if (kind == SchemaKind.InlineValue && baseKey.HasValue) {
                 throw new InvalidDataException("An inline Schema cannot have a base Schema.");
             }
@@ -90,12 +97,24 @@ internal static class SchemaBatchWireCodec {
                 if (version == 1 && tag == TypeTag.InlineValue) {
                     throw new InvalidDataException("Version 1 Schema batches cannot contain inline fields.");
                 }
-                string? targetSchemaId = tag == TypeTag.DurableReference ? reader.ReadString() : null;
-                if (tag == TypeTag.DurableReference && string.IsNullOrWhiteSpace(targetSchemaId)) {
-                    throw new InvalidDataException("A durable reference requires a nonblank nominal Schema identity.");
+                TypeExpr? targetType = null;
+                if (tag == TypeTag.DurableReference) {
+                    if (version < 3) {
+                        string targetId = reader.ReadString();
+                        if (string.IsNullOrWhiteSpace(targetId)) {
+                            throw new InvalidDataException("A durable reference requires a nonblank nominal Schema identity.");
+                        }
+                        targetType = TypeExpr.Named(targetId);
+                    }
+                    else { targetType = TypeExprWireCodec.Read(ref reader); }
+                    if (targetType.Kind != TypeExprKind.Named) {
+                        throw new InvalidDataException("A durable reference requires a named nominal type.");
+                    }
+                    ValidateDeclaration(familyKinds, familyArities, targetType, SchemaKind.ReferenceObject);
                 }
-                SchemaKey? inlineKey = tag == TypeTag.InlineValue ? SchemaKeyWireCodec.Read(ref reader) : null;
-                fields[fieldIndex] = new((int)fieldId, tag, targetSchemaId, inlineKey);
+                SchemaKey? inlineKey = tag == TypeTag.InlineValue ? ReadKey(ref reader, version) : null;
+                if (inlineKey is { } inlineIdentity) { ValidateTypeArities(familyArities, inlineIdentity.Type); }
+                fields[fieldIndex] = new((int)fieldId, tag, targetType, inlineKey);
             }
             declarations.Add(key, new(kind, baseKey, fields));
         }
@@ -112,12 +131,13 @@ internal static class SchemaBatchWireCodec {
         foreach (SchemaKey key in order) {
             Declaration row = declarations[key];
             DurableSchema? ancestor = row.BaseKey is { } baseKey ? merged[baseKey] : null;
-            DurableFieldInfo[] fields = row.Fields.Select(field => new DurableFieldInfo(
-                field.FieldId, field.Tag, field.TargetSchemaId,
-                field.InlineKey is { } inlineKey ? merged[inlineKey] : null)).ToArray();
+            DurableFieldInfo[] fields = row.Fields.Select(field => field.Tag == TypeTag.DurableReference
+                ? DurableFieldInfo.Reference(field.FieldId, field.TargetType!)
+                : new DurableFieldInfo(field.FieldId, field.Tag,
+                    inlineSchema: field.InlineKey is { } inlineKey ? merged[inlineKey] : null)).ToArray();
             DurableSchema schema;
             try {
-                schema = new DurableSchema(key.SchemaId, key.Version, fields, ancestor, row.Kind);
+                schema = new DurableSchema(key.Type, key.Version, fields, ancestor, row.Kind);
             }
             catch (ArgumentException error) {
                 throw new InvalidDataException("Invalid persisted Schema layout.", error);
@@ -168,17 +188,33 @@ internal static class SchemaBatchWireCodec {
         }
     }
 
-    private static void ValidateFamilyKind(Dictionary<string, SchemaKind> families, string schemaId, SchemaKind kind) {
+    internal static void ValidateDeclaration(Dictionary<string, SchemaKind> families, Dictionary<string, int> arities,
+        TypeExpr type, SchemaKind kind) {
+        string schemaId = type.DefinitionId!;
         if (families.TryGetValue(schemaId, out SchemaKind previous) && previous != kind) {
             throw new InvalidDataException($"Schema family '{schemaId}' cannot change kind across versions.");
         }
         families[schemaId] = kind;
+        ValidateTypeArities(arities, type);
     }
 
-    internal static SchemaKey Key(DurableSchema schema) => new(schema.SchemaId, schema.Version);
+    internal static void ValidateTypeArities(Dictionary<string, int> arities, TypeExpr type) {
+        if (type.Kind != TypeExprKind.Named) { return; }
+        string id = type.DefinitionId!;
+        if (arities.TryGetValue(id, out int arity) && arity != type.Arguments.Length) {
+            throw new InvalidDataException($"Schema definition '{id}' cannot change generic arity.");
+        }
+        arities[id] = type.Arguments.Length;
+        foreach (TypeExpr argument in type.Arguments) { ValidateTypeArities(arities, argument); }
+    }
+
+    internal static SchemaKey Key(DurableSchema schema) => new(schema.Type, schema.Version);
+
+    private static SchemaKey ReadKey(ref BinaryPayloadReader reader, byte version) =>
+        version < 3 ? SchemaKeyWireCodec.ReadLegacy(ref reader) : SchemaKeyWireCodec.Read(ref reader);
 
     private static int Compare(SchemaKey left, SchemaKey right) {
-        int identity = StringComparer.Ordinal.Compare(left.SchemaId, right.SchemaId);
+        int identity = left.Type.CompareTo(right.Type);
         return identity == 0 ? left.Version.CompareTo(right.Version) : identity;
     }
 
@@ -203,7 +239,7 @@ internal static class SchemaBatchWireCodec {
     };
 
     private sealed record Declaration(SchemaKind Kind, SchemaKey? BaseKey, FieldDeclaration[] Fields);
-    private sealed record FieldDeclaration(int FieldId, TypeTag Tag, string? TargetSchemaId, SchemaKey? InlineKey);
+    private sealed record FieldDeclaration(int FieldId, TypeTag Tag, TypeExpr? TargetType, SchemaKey? InlineKey);
 
     private sealed class LimitedBufferWriter : IBufferWriter<byte> {
         private readonly ArrayBufferWriter<byte> _buffer = new();

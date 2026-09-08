@@ -8,6 +8,9 @@ namespace Atelia.DurableGraph.StateStore;
 /// </remarks>
 public sealed class StateReaderRegistry : IStateReaderRegistration {
     private readonly Dictionary<SchemaKey, StateReaderBinding> _bindings = [];
+    private readonly Dictionary<string, StateDefinitionBinding> _definitions = new(StringComparer.Ordinal);
+
+    public void Register(StateDefinitionBinding definition) => StateModelSnapshot.RegisterDefinition(_definitions, definition);
 
     /// <summary>
     /// Registers one stable binding. Repeating the same instance is harmless; another binding
@@ -15,7 +18,7 @@ public sealed class StateReaderRegistry : IStateReaderRegistration {
     /// </summary>
     public void Register(StateReaderBinding binding) {
         ArgumentNullException.ThrowIfNull(binding);
-        SchemaKey key = new(binding.Schema.SchemaId, binding.Schema.Version);
+        SchemaKey key = new(binding.Schema.Type, binding.Schema.Version);
         if (_bindings.TryGetValue(key, out StateReaderBinding? existing)) {
             if (!ReferenceEquals(existing, binding)) {
                 throw new InvalidOperationException($"A different reader is already registered for {key.SchemaId} v{key.Version}.");
@@ -26,4 +29,6 @@ public sealed class StateReaderRegistry : IStateReaderRegistration {
     }
 
     internal Dictionary<SchemaKey, StateReaderBinding> Snapshot() => new(_bindings);
+
+    internal StateModelSnapshot Snapshot(SchemaStore schemas) => new([], [], new(_bindings), new(_definitions, StringComparer.Ordinal), schemas);
 }

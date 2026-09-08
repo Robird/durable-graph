@@ -104,21 +104,37 @@ public sealed class CaptureSession {
         _beginningCapture = true;
         try {
             Dictionary<Type, StateModelBinding> types = [];
-            Dictionary<string, StateModelBinding> families = new(StringComparer.Ordinal);
+            Dictionary<TypeExpr, StateModelBinding> families = [];
             foreach (StateModelBinding model in models) {
                 ArgumentNullException.ThrowIfNull(model);
                 if ((types.TryGetValue(model.DomainType, out StateModelBinding? byType) && !ReferenceEquals(byType, model)) ||
-                    (families.TryGetValue(model.CurrentSchema.SchemaId, out StateModelBinding? byFamily) && !ReferenceEquals(byFamily, model))) {
+                    (families.TryGetValue(model.CurrentSchema.Type, out StateModelBinding? byFamily) && !ReferenceEquals(byFamily, model))) {
                     throw new ArgumentException("Each exact domain type and Schema family requires one stable model binding.", nameof(models));
                 }
                 types.TryAdd(model.DomainType, model);
-                families.TryAdd(model.CurrentSchema.SchemaId, model);
+                families.TryAdd(model.CurrentSchema.Type, model);
             }
-            _pending = new CaptureContext(this, types);
+            _pending = new CaptureContext(this, new FixedModels(types));
             return _pending;
         } finally {
             _beginningCapture = false;
         }
+    }
+
+    // Repository workspaces already own a frozen catalog. Its lazy closures stay in that
+    // snapshot, allowing newly encountered generic object types without registry mutation.
+    internal CaptureContext BeginCapture(IStateModelResolver models) {
+        RequireNotPreparing();
+        ArgumentNullException.ThrowIfNull(models);
+        if (_pending is not null || _beginningCapture) {
+            throw new InvalidOperationException("Resolve the current capture before beginning another.");
+        }
+        _pending = new CaptureContext(this, models);
+        return _pending;
+    }
+
+    private sealed class FixedModels(IReadOnlyDictionary<Type, StateModelBinding> models) : IStateModelResolver {
+        public bool TryGetCurrentModel(Type domainType, out StateModelBinding? model) => models.TryGetValue(domainType, out model);
     }
 
     /// <summary>Installs the actual candidate and its live bindings without recapturing domain data.</summary>

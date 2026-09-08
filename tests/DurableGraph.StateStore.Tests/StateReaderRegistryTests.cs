@@ -15,7 +15,7 @@ public sealed class StateReaderRegistryTests {
             Binding(new("Model", 1, new DurableFieldInfo(1, TypeTag.SByte)))));
         registry.Register(Binding(new("Model", 2, new DurableFieldInfo(1, TypeTag.Byte))));
         registry.Register(Binding(new("Other", 1, new DurableFieldInfo(1, TypeTag.Byte))));
-        Assert.Throws<ArgumentNullException>(() => registry.Register(null!));
+        Assert.Throws<ArgumentNullException>(() => registry.Register((StateReaderBinding)null!));
     }
 
     private static StateReaderBinding<byte> Binding(DurableSchema schema) => new(

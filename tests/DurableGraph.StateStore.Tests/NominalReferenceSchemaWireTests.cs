@@ -6,7 +6,7 @@ public sealed class NominalReferenceSchemaWireTests {
     [Fact]
     public void ReferenceOperandHasIndependentGoldenAndDoesNotRequireTargetRegistration() {
         DurableSchema owner = new("A", 1, new DurableFieldInfo(1, TypeTag.DurableReference, "B"));
-        byte[] golden = Convert.FromHexString("0201034101010001010F0342");
+        byte[] golden = Convert.FromHexString("03010203410001010001010F02034200");
         Assert.Equal(golden, SchemaBatchWireCodec.Write([owner]));
         Assert.Equal(owner, SchemaBatchWireCodec.Read(golden, new Dictionary<SchemaKey, DurableSchema>())[new("A", 1)]);
         for (int length = 0; length < golden.Length; length++) {

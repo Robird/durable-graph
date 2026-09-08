@@ -11,12 +11,12 @@ public sealed class CaptureContext : IDisposable {
     private Phase _phase;
     private Dictionary<object, uint>? _bindings = new(ReferenceEqualityComparer.Instance);
     private readonly Dictionary<object, RootCapture> _durables = new(ReferenceEqualityComparer.Instance);
-    private readonly IReadOnlyDictionary<Type, StateModelBinding> _models;
+    private readonly IStateModelResolver _models;
     private readonly List<RootCapture> _queue = [];
     private readonly List<uint> _rootIds = [];
     private readonly List<ObjectStateRecord> _objects = [];
 
-    internal CaptureContext(CaptureSession session, IReadOnlyDictionary<Type, StateModelBinding> models) {
+    internal CaptureContext(CaptureSession session, IStateModelResolver models) {
         _session = session;
         _models = models;
     }
@@ -71,8 +71,8 @@ public sealed class CaptureContext : IDisposable {
             if (value.GetType() != typeof(TDomain)) {
                 throw new ArgumentException("Root capture requires the exact concrete domain type.", nameof(value));
             }
-            if (_models.TryGetValue(typeof(TDomain), out StateModelBinding? model) &&
-                !model.MatchesCapture(schema, capture, preparation)) {
+            if (_models.TryGetCurrentModel(typeof(TDomain), out StateModelBinding? model) &&
+                !model!.MatchesCapture(schema, capture, preparation)) {
                 throw new ArgumentException("Root capture must match its registered model binding.", nameof(capture));
             }
             if (_durables.TryGetValue(value, out RootCapture? existing)) {
@@ -100,18 +100,27 @@ public sealed class CaptureContext : IDisposable {
 
     /// <summary>Registers a durable reference by reference identity, validates its nominal constraint, and queues its capture.</summary>
     public uint CaptureDurable(DurableBase? value, string nominalSchemaId) {
+        try { return CaptureDurable(value, TypeExpr.Named(nominalSchemaId)); }
+        catch { AbortBuild(); throw; }
+    }
+
+    /// <summary>Captures a reference constrained by a complete constructed nominal type.</summary>
+    public uint CaptureDurable(DurableBase? value, TypeExpr nominalType) {
         try {
             RequirePhase(Phase.Capturing);
-            ArgumentException.ThrowIfNullOrWhiteSpace(nominalSchemaId);
+            ArgumentNullException.ThrowIfNull(nominalType);
+            if (nominalType.Kind != TypeExprKind.Named || !nominalType.IsClosed) {
+                throw new ArgumentException("A durable reference requires a closed named constraint.", nameof(nominalType));
+            }
             if (value is null) {
                 return 0;
             }
-            if (!_models.TryGetValue(value.GetType(), out StateModelBinding? model)) {
+            if (!_models.TryGetCurrentModel(value.GetType(), out StateModelBinding? model)) {
                 throw new InvalidOperationException($"No current model is registered for actual domain type {value.GetType()}.");
             }
             // Validate every edge before interning, including aliases of an already queued root or child.
-            if (!StateReferenceValidator.Accepts(model.CurrentSchema, nominalSchemaId)) {
-                throw new InvalidOperationException($"The actual domain type does not satisfy nominal Schema {nominalSchemaId}.");
+            if (!StateReferenceValidator.Accepts(model!.CurrentSchema, nominalType)) {
+                throw new InvalidOperationException($"The actual domain type does not satisfy nominal Schema {nominalType}.");
             }
             if (_durables.TryGetValue(value, out RootCapture? existing)) {
                 if (!existing.Matches(model)) {

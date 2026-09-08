@@ -12,7 +12,7 @@ public sealed class SchemaAncestryHistoryTests {
             "// schema-id-base64:TGVhZg==\n// version:2\n// kind:1\n// base:5Z+657G7|3\n" +
             "// field:1|2\n// schema-end\n";
 
-        Assert.Equal(expected, SchemaHistoryDocument.RenderHistory(record));
+        Assert.Equal(expected, SchemaHistoryDocument.RenderHistory(record, 2));
         SchemaHistoryRecord parsed = SchemaHistoryDocument.ParseHistory(fixture.Write("record.dgschema", expected));
         Assert.Equal(record.Key, parsed.Key);
         Assert.True(record.ShapeEquals(parsed));
@@ -20,10 +20,10 @@ public sealed class SchemaAncestryHistoryTests {
     }
 
     [Fact]
-    public void NewClassOnlyRecordUsesVersionTwo() {
+    public void NewClassOnlyRecordUsesVersionThreeWithArityZero() {
         Assert.Equal(
-            "// durable-graph-schema-history:2\n// schema-begin\n// schema-id-base64:QmFzZQ==\n" +
-            "// version:1\n// kind:1\n// field:1|2\n// schema-end\n",
+            "// durable-graph-schema-history:3\n// schema-begin\n// schema-id-base64:QmFzZQ==\n" +
+            "// version:1\n// kind:1\n// arity:0\n// field:1|2\n// schema-end\n",
             SchemaHistoryDocument.RenderHistory(Record("Base", 1)));
     }
 
@@ -159,7 +159,7 @@ public sealed class SchemaAncestryHistoryTests {
     public void MalformedBaseEntryIsRejected(string entry) {
         using Fixture fixture = new();
         string text = Manifest(Record("Leaf", 1)).Replace(
-            "// kind:1\n", $"// kind:1\n// base:{entry}\n", StringComparison.Ordinal);
+            "// arity:0\n", $"// arity:0\n// base:{entry}\n", StringComparison.Ordinal);
         string path = fixture.Write("invalid.g.cs", text);
 
         Assert.Throws<SchemaHistoryException>(() => SchemaHistoryDocument.ParseManifest(path));
@@ -181,8 +181,8 @@ public sealed class SchemaAncestryHistoryTests {
     }
 
     private static string Manifest(params SchemaHistoryRecord[] records) {
-        return "// durable-graph-schema-history-manifest:2\n" + string.Concat(records.Select(record =>
-            SchemaHistoryDocument.RenderHistory(record).Replace("// durable-graph-schema-history:2\n", "", StringComparison.Ordinal)));
+        return "// durable-graph-schema-history-manifest:3\n" + string.Concat(records.Select(record =>
+            SchemaHistoryDocument.RenderHistory(record).Replace("// durable-graph-schema-history:3\n", "", StringComparison.Ordinal)));
     }
 
     private sealed class Fixture : IDisposable {

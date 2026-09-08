@@ -17,7 +17,7 @@ public static class RevisionDecoder {
         ArgumentNullException.ThrowIfNull(store);
         ArgumentNullException.ThrowIfNull(schemas);
         ArgumentNullException.ThrowIfNull(readers);
-        Dictionary<SchemaKey, StateReaderBinding> bindings = readers.Snapshot();
+        StateModelSnapshot bindings = readers.Snapshot(schemas);
         return ReadSnapshot(store, schemas, revisionAddress, bindings);
     }
 
@@ -25,7 +25,21 @@ public static class RevisionDecoder {
         StateRevisionStore store,
         SchemaStore schemas,
         FrameAddress revisionAddress,
-        IReadOnlyDictionary<SchemaKey, StateReaderBinding> bindings) {
+        IReadOnlyDictionary<SchemaKey, StateReaderBinding> bindings) => ReadCore(store, schemas, revisionAddress, schema => {
+            SchemaKey key = new(schema.Type, schema.Version);
+            if (!bindings.TryGetValue(key, out StateReaderBinding? binding)) {
+                throw new InvalidDataException($"No reader is registered for {key.Type} v{key.Version}.");
+            }
+            return binding;
+        });
+
+    internal static DecodedRevision ReadSnapshot(
+        StateRevisionStore store, SchemaStore schemas, FrameAddress revisionAddress, StateBindingContext bindings) =>
+        ReadCore(store, schemas, revisionAddress, bindings.ResolveReader);
+
+    private static DecodedRevision ReadCore(
+        StateRevisionStore store, SchemaStore schemas, FrameAddress revisionAddress,
+        Func<DurableSchema, StateReaderBinding> resolveReader) {
         List<ObjectStateRecord> objects = [];
         List<(ObjectStateRecord Row, StateReaderBinding Binding)> durableRows = [];
         List<(uint Id, string Value)> strings = [];
@@ -41,10 +55,13 @@ public static class RevisionDecoder {
             } else {
                 SchemaKey key = body.SchemaKey
                     ?? throw new InvalidDataException("A durable Base requires an exact Schema key.");
-                if (!bindings.TryGetValue(key, out StateReaderBinding? binding)) {
-                    throw new InvalidDataException($"No reader is registered for {key.SchemaId} v{key.Version}.");
+                // The persisted full layout selects the historical execution representation.
+                // Current CLR arguments cannot substitute for old inline state versions.
+                DurableSchema schema = schemas.GetRequired(key);
+                StateReaderBinding binding = resolveReader(schema);
+                if (!schema.Equals(binding.Schema)) {
+                    throw new InvalidDataException("The selected reader does not match the complete stored Schema.");
                 }
-                TypedObjectVersionReader.MatchSchema(schemas, key, binding.Schema);
                 ObjectStateRecord row = binding.Read(id, TypedObjectVersionReader.CreateBodySource(chain, body));
                 objects.Add(row);
                 durableRows.Add((row, binding));

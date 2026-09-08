@@ -20,10 +20,12 @@ public sealed partial class DurableSchemaGenerator {
             }
             if (members.Length != 1 || members[0] is not IMethodSymbol method ||
                 !method.IsStatic || !method.ReturnsVoid || method.Arity != 0 ||
-                method.Parameters.Length != 2 || method.Parameters[0].RefKind != RefKind.In ||
-                method.Parameters[1].RefKind != RefKind.Out) {
+                (method.Parameters.Length != 2 && method.Parameters.Length != 3) || method.Parameters[0].RefKind != RefKind.In ||
+                method.Parameters[1].RefKind != RefKind.Out ||
+                (method.Parameters.Length == 3 && (method.Parameters[2].RefKind != RefKind.None ||
+                    !HasMetadataName(method.Parameters[2].Type as INamedTypeSymbol, "Atelia.DurableGraph.UpgradeContext")))) {
                 ReportInvalidGeneratedState(context, type.Symbol,
-                    name + " must be one static void method with an in prior DTO and out next DTO");
+                    name + " must be one static void method with an in prior DTO, out next DTO and optional UpgradeContext");
                 valid = false;
             }
             // DTO symbols are generated in this pass. The emitted typed call lets the compiler
@@ -81,9 +83,11 @@ public sealed partial class DurableSchemaGenerator {
             string from = "V" + version.ToString(CultureInfo.InvariantCulture);
             string to = "V" + (version + 1).ToString(CultureInfo.InvariantCulture);
             source.Append(indent).Append("private static ").Append(to).Append(" UpgradeEdge").Append(from)
-                .Append("(in ").Append(from).AppendLine(" prior) {");
+                .Append("(in ").Append(from).AppendLine(" prior, global::Atelia.DurableGraph.UpgradeContext context) {");
             source.Append(indent).Append("    ").Append(type.Symbol.ToDisplayString(FullyQualifiedNameFormat))
-                .Append('.').Append(name).Append("(in prior, out ").Append(to).AppendLine(" next);");
+                .Append('.').Append(name).Append("(in prior, out ").Append(to).Append(" next");
+            if (((IMethodSymbol)type.Symbol.GetMembers(name)[0]).Parameters.Length == 3) source.Append(", context");
+            source.AppendLine(");");
             source.Append(indent).AppendLine("    return next;");
             source.Append(indent).AppendLine("}");
         }
@@ -111,7 +115,9 @@ public sealed partial class DurableSchemaGenerator {
                     string from = "V" + step.ToString(CultureInfo.InvariantCulture);
                     string to = "V" + (step + 1).ToString(CultureInfo.InvariantCulture);
                     source.Append(indent).Append("        var state").Append(to).Append(" = UpgradeEdge")
-                        .Append(from).Append("(in state").Append(from).AppendLine(");");
+                        .Append(from).Append("(in state").Append(from)
+                        .Append(", new global::Atelia.DurableGraph.UpgradeContext(item.Id, ")
+                        .Append(from).Append(".Schema, ").Append(to).AppendLine(".Schema));");
                 }
                 source.Append(indent).Append("        return state").Append(current.Name).AppendLine(";");
             }

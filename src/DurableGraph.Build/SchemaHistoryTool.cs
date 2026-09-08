@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
+using Atelia.DurableGraph.SchemaHistory;
 
 namespace Atelia.DurableGraph.Build;
 
@@ -137,14 +138,58 @@ internal sealed class SchemaHistoryTool {
 
     private static void ValidateClosure(IReadOnlyDictionary<SchemaHistoryKey, SchemaHistoryRecord> records) {
         const int maximumDepth = 256;
+        Dictionary<string, int> nominalArities = new(StringComparer.Ordinal);
+        Dictionary<string, int> nominalKinds = new(StringComparer.Ordinal);
+        foreach (SchemaHistoryRecord record in records.Values) {
+            RequireArity(record.SchemaId, record.Arity);
+            RequireKind(record.SchemaId, record.Kind);
+            if (record.BaseType is not null) RequirePattern(record.BaseType, 1);
+            foreach (SchemaHistoryField field in record.Fields) {
+                RequirePattern(field.ValuePattern, field.TypeTag == 15 ? 1 : field.TypeTag == 16 ? 2 : 0);
+            }
+        }
+
+        void RequireArity(string id, int arity) {
+            if (nominalArities.TryGetValue(id, out int previous) && previous != arity) {
+                throw new SchemaHistoryException($"schema family '{id}' changes arity or has conflicting nominal arity");
+            }
+            nominalArities[id] = arity;
+        }
+
+        void RequireKind(string id, int kind) {
+            if (nominalKinds.TryGetValue(id, out int previous) && previous != kind) {
+                throw new SchemaHistoryException($"schema family '{id}' changes kind or has conflicting reference kind");
+            }
+            nominalKinds[id] = kind;
+        }
+
+        void RequirePattern(TypePattern pattern, int rootKind) {
+            if (rootKind != 0) RequireKind(pattern.DefinitionId!, rootKind);
+            foreach (TypePattern named in pattern.NamedNodes()) RequireArity(named.DefinitionId!, named.Arguments.Count);
+        }
+
         Dictionary<string, int> kinds = new(StringComparer.Ordinal);
         foreach (SchemaHistoryRecord record in records.Values) {
-            if (kinds.TryGetValue(record.SchemaId, out int kind) && kind != record.Kind) {
-                throw new SchemaHistoryException($"schema family '{record.SchemaId}' changes kind across versions");
+            if (kinds.TryGetValue(record.SchemaId, out int kind) && kind != record.Kind * 64 + record.Arity) {
+                throw new SchemaHistoryException($"schema family '{record.SchemaId}' changes kind or arity across versions");
             }
-            kinds[record.SchemaId] = record.Kind;
+            kinds[record.SchemaId] = record.Kind * 64 + record.Arity;
             if (record.Kind == 2 && record.BaseSchema is not null) {
                 throw new SchemaHistoryException($"inline schema '{record.SchemaId}' cannot have a base schema");
+            }
+            List<TypePattern> patterns = record.Fields.Select(field => field.ValuePattern).ToList();
+            if (record.BaseType is not null) patterns.Add(record.BaseType);
+            foreach (TypePattern pattern in patterns) {
+                if (!pattern.ParametersFit(record.Arity)) {
+                    throw new SchemaHistoryException($"schema '{record.SchemaId}' has an unbound type parameter");
+                }
+                foreach (TypePattern named in pattern.NamedNodes()) {
+                    foreach (SchemaHistoryRecord target in records.Values) {
+                        if (target.SchemaId == named.DefinitionId && target.Arity != named.Arguments.Count) {
+                            throw new SchemaHistoryException($"schema '{record.SchemaId}' has a wrong-arity type pattern for '{target.SchemaId}'");
+                        }
+                    }
+                }
             }
 
             // Retain the stronger CLR ancestry rule: a base chain cannot repeat a family,
@@ -159,7 +204,7 @@ internal sealed class SchemaHistoryTool {
                 if (ancestors.Count > maximumDepth) {
                     throw new SchemaHistoryException($"exact schema dependency depth exceeds {maximumDepth}");
                 }
-                current = Resolve(current, baseKey, "base", 1);
+                current = Resolve(current, baseKey, "base", 1, current.BaseType!);
             }
         }
 
@@ -169,7 +214,7 @@ internal sealed class SchemaHistoryTool {
             Visit(record, 1);
         }
 
-        SchemaHistoryRecord Resolve(SchemaHistoryRecord owner, SchemaHistoryKey key, string edge, int expectedKind) {
+        SchemaHistoryRecord Resolve(SchemaHistoryRecord owner, SchemaHistoryKey key, string edge, int expectedKind, TypePattern pattern) {
             if (!records.TryGetValue(key, out SchemaHistoryRecord? dependency)) {
                 throw new SchemaHistoryException(
                     $"schema '{owner.SchemaId}' version {owner.Version} is missing {edge} schema '{key.SchemaId}' version {key.Version}");
@@ -177,6 +222,9 @@ internal sealed class SchemaHistoryTool {
             if (dependency.Kind != expectedKind) {
                 throw new SchemaHistoryException(
                     $"schema '{owner.SchemaId}' has {edge} schema '{key.SchemaId}' with incompatible kind {dependency.Kind}");
+            }
+            if (dependency.Arity != pattern.Arguments.Count) {
+                throw new SchemaHistoryException($"schema '{owner.SchemaId}' has wrong arity for {edge} schema '{key.SchemaId}'");
             }
             return dependency;
         }
@@ -196,11 +244,11 @@ internal sealed class SchemaHistoryTool {
             }
             int height = 1;
             if (record.BaseSchema is SchemaHistoryKey baseKey) {
-                height = Math.Max(height, 1 + Visit(Resolve(record, baseKey, "base", 1), depth + 1));
+                height = Math.Max(height, 1 + Visit(Resolve(record, baseKey, "base", 1, record.BaseType!), depth + 1));
             }
             foreach (SchemaHistoryField field in record.Fields) {
                 if (field.InlineSchema is SchemaHistoryKey inlineKey) {
-                    height = Math.Max(height, 1 + Visit(Resolve(record, inlineKey, "inline", 2), depth + 1));
+                    height = Math.Max(height, 1 + Visit(Resolve(record, inlineKey, "inline", 2, field.ValuePattern), depth + 1));
                 }
             }
             visiting.Remove(record.Key);
@@ -307,7 +355,7 @@ internal static class SchemaHistoryDocument {
         return record;
     }
 
-    public static string RenderHistory(SchemaHistoryRecord record, int formatVersion = 2) {
+    public static string RenderHistory(SchemaHistoryRecord record, int formatVersion = 3) {
         StringBuilder builder = new();
         builder.Append(HistoryHeader).AppendLine(formatVersion.ToString(CultureInfo.InvariantCulture));
         AppendSchemaRecord(builder, record, formatVersion);
@@ -331,10 +379,11 @@ internal static class SchemaHistoryDocument {
 
         if (lines.Length == 0 ||
             (!StringComparer.Ordinal.Equals(lines[0], expectedHeader + "1") &&
-             !StringComparer.Ordinal.Equals(lines[0], expectedHeader + "2"))) {
-            throw Invalid(path, $"expected header '{expectedHeader}1' or '{expectedHeader}2'");
+             !StringComparer.Ordinal.Equals(lines[0], expectedHeader + "2") &&
+             !StringComparer.Ordinal.Equals(lines[0], expectedHeader + "3"))) {
+            throw Invalid(path, $"expected header '{expectedHeader}1', '{expectedHeader}2', or '{expectedHeader}3'");
         }
-        int formatVersion = lines[0].EndsWith("2", StringComparison.Ordinal) ? 2 : 1;
+        int formatVersion = lines[0].EndsWith("3", StringComparison.Ordinal) ? 3 : lines[0].EndsWith("2", StringComparison.Ordinal) ? 2 : 1;
 
         List<SchemaHistoryRecord> records = new();
         int index = 1;
@@ -362,7 +411,9 @@ internal static class SchemaHistoryDocument {
             if (kind is not (1 or 2)) {
                 throw Invalid(path, $"unsupported schema kind {kind}");
             }
+            int arity = formatVersion == 3 ? ParseArity(path, ReadPrefixedLine(path, lines, ref index, "// arity:")) : 0;
             SchemaHistoryKey? baseSchema = null;
+            TypePattern? baseType = null;
 
             if (index < lines.Length && lines[index].StartsWith(BasePrefix, StringComparison.Ordinal)) {
                 string baseText = lines[index].Substring(BasePrefix.Length);
@@ -372,8 +423,10 @@ internal static class SchemaHistoryDocument {
                     throw Invalid(path, $"line {index + 1} has an invalid base entry");
                 }
 
+                baseType = formatVersion == 3 ? ParsePattern(path, baseText.Substring(0, separator), arity, PatternKind.Named) :
+                    TypePattern.Named(DecodeSchemaId(path, baseText.Substring(0, separator)));
                 baseSchema = new SchemaHistoryKey(
-                    DecodeSchemaId(path, baseText.Substring(0, separator)),
+                    baseType.DefinitionId!,
                     ParsePositiveCanonicalInt(path, baseText.Substring(separator + 1), "base version"));
                 index++;
             }
@@ -405,18 +458,21 @@ internal static class SchemaHistoryDocument {
                         $"field IDs must be unique and sorted; line {index + 1} has {fieldId} after {previousFieldId}");
                 }
 
-                if (typeTag < 1 || typeTag > (formatVersion == 1 ? 15 : 16)) {
+                if (typeTag < 1 || typeTag > (formatVersion == 1 ? 15 : formatVersion == 2 ? 16 : 17)) {
                     throw Invalid(path, $"line {index + 1} has unsupported TypeTag {typeTag}");
                 }
 
-                if (parts.Length != (typeTag == 16 ? 4 : typeTag == 15 ? 3 : 2)) {
+                if (parts.Length != (typeTag == 16 ? 4 : typeTag is 15 or 17 ? 3 : 2)) {
                     throw Invalid(path, $"line {index + 1} has an invalid field operand");
                 }
-                string? targetSchemaId = typeTag == 15 ? DecodeSchemaId(path, parts[2]) : null;
+                TypePattern pattern = typeTag <= 14 ? TypePattern.Builtin(typeTag) :
+                    formatVersion == 3 ? ParsePattern(path, parts[2], arity, typeTag == 17 ? PatternKind.Parameter : PatternKind.Named) :
+                    TypePattern.Named(DecodeSchemaId(path, parts[2]));
+                string? targetSchemaId = typeTag == 15 ? pattern.DefinitionId : null;
                 SchemaHistoryKey? inlineSchema = typeTag == 16 ? new SchemaHistoryKey(
-                    DecodeSchemaId(path, parts[2]),
+                    pattern.DefinitionId!,
                     ParsePositiveCanonicalInt(path, parts[3], "inline version")) : null;
-                fields.Add(new SchemaHistoryField(fieldId, typeTag, targetSchemaId, inlineSchema));
+                fields.Add(new SchemaHistoryField(fieldId, typeTag, targetSchemaId, inlineSchema, pattern));
                 previousFieldId = fieldId;
                 index++;
             }
@@ -429,7 +485,7 @@ internal static class SchemaHistoryDocument {
             if (kind == 2 && baseSchema is not null) {
                 throw Invalid(path, "inline schema cannot have a base schema");
             }
-            records.Add(new SchemaHistoryRecord(schemaId, schemaIdBase64, version, fields, baseSchema, kind) {
+            records.Add(new SchemaHistoryRecord(schemaId, schemaIdBase64, version, fields, baseSchema, kind, arity, baseType) {
                 SourceFormatVersion = formatVersion,
             });
         }
@@ -570,12 +626,15 @@ internal static class SchemaHistoryDocument {
         builder.Append(VersionPrefix)
             .AppendLine(record.Version.ToString(CultureInfo.InvariantCulture));
 
-        if (formatVersion == 2) {
+        if (formatVersion >= 2) {
             builder.Append(KindPrefix).AppendLine(record.Kind.ToString(CultureInfo.InvariantCulture));
+        }
+        if (formatVersion == 3) {
+            builder.Append("// arity:").AppendLine(record.Arity.ToString(CultureInfo.InvariantCulture));
         }
         if (record.BaseSchema is SchemaHistoryKey baseSchema) {
             builder.Append(BasePrefix)
-                .Append(Convert.ToBase64String(Utf8NoBom.GetBytes(baseSchema.SchemaId)))
+                .Append(formatVersion == 3 ? record.BaseType!.ToString() : Convert.ToBase64String(Utf8NoBom.GetBytes(baseSchema.SchemaId)))
                 .Append('|')
                 .AppendLine(baseSchema.Version.ToString(CultureInfo.InvariantCulture));
         }
@@ -585,11 +644,11 @@ internal static class SchemaHistoryDocument {
                 .Append(field.FieldId.ToString(CultureInfo.InvariantCulture))
                 .Append('|')
                 .Append(field.TypeTag.ToString(CultureInfo.InvariantCulture));
-            if (field.TargetSchemaId is not null) {
-                builder.Append('|').Append(Convert.ToBase64String(Utf8NoBom.GetBytes(field.TargetSchemaId)));
+            if (field.TypeTag is 15 or 17) {
+                builder.Append('|').Append(formatVersion == 3 ? field.ValuePattern.ToString() : Convert.ToBase64String(Utf8NoBom.GetBytes(field.TargetSchemaId!)));
             }
             if (field.InlineSchema is SchemaHistoryKey inlineSchema) {
-                builder.Append('|').Append(Convert.ToBase64String(Utf8NoBom.GetBytes(inlineSchema.SchemaId)))
+                builder.Append('|').Append(formatVersion == 3 ? field.ValuePattern.ToString() : Convert.ToBase64String(Utf8NoBom.GetBytes(inlineSchema.SchemaId)))
                     .Append('|').Append(inlineSchema.Version.ToString(CultureInfo.InvariantCulture));
             }
             builder.AppendLine();
@@ -600,6 +659,19 @@ internal static class SchemaHistoryDocument {
 
     private static string ToLowerHex(byte[] bytes) {
         return Convert.ToHexStringLower(bytes);
+    }
+
+    private static int ParseArity(string path, string text) {
+        if (!int.TryParse(text, NumberStyles.None, CultureInfo.InvariantCulture, out int arity) || arity < 0 || arity > 32 ||
+            text != arity.ToString(CultureInfo.InvariantCulture)) throw Invalid(path, "arity must be canonical and between 0 and 32");
+        return arity;
+    }
+
+    private static TypePattern ParsePattern(string path, string text, int arity, PatternKind expectedKind) {
+        if (!TypePattern.TryParse(text, arity, out TypePattern? pattern) || pattern!.Kind != expectedKind) {
+            throw Invalid(path, "invalid or unbound canonical type pattern");
+        }
+        return pattern;
     }
 
     private static SchemaHistoryException Invalid(string path, string reason) {
@@ -615,13 +687,17 @@ internal sealed class SchemaHistoryRecord {
         int version,
         IReadOnlyList<SchemaHistoryField> fields,
         SchemaHistoryKey? baseSchema = null,
-        int kind = 1) {
+        int kind = 1,
+        int arity = 0,
+        TypePattern? baseType = null) {
         SchemaId = schemaId;
         SchemaIdBase64 = schemaIdBase64;
         Version = version;
         Fields = fields;
         BaseSchema = baseSchema;
         Kind = kind;
+        Arity = arity;
+        BaseType = baseType ?? (baseSchema is SchemaHistoryKey key ? TypePattern.Named(key.SchemaId) : null);
     }
 
     public string SchemaId { get; }
@@ -635,20 +711,32 @@ internal sealed class SchemaHistoryRecord {
     public SchemaHistoryKey? BaseSchema { get; }
 
     public int Kind { get; }
+    public int Arity { get; }
+    public TypePattern? BaseType { get; }
 
-    internal int SourceFormatVersion { get; init; } = 2;
+    internal int SourceFormatVersion { get; init; } = 3;
 
     public SchemaHistoryKey Key => new(SchemaId, Version);
 
     public bool ShapeEquals(SchemaHistoryRecord other) {
-        return Kind == other.Kind && BaseSchema == other.BaseSchema && Fields.SequenceEqual(other.Fields);
+        return Kind == other.Kind && Arity == other.Arity && BaseSchema == other.BaseSchema && Equals(BaseType, other.BaseType) && Fields.SequenceEqual(other.Fields);
     }
 }
 
 internal readonly record struct SchemaHistoryKey(string SchemaId, int Version);
 
-internal readonly record struct SchemaHistoryField(
-    int FieldId, int TypeTag, string? TargetSchemaId = null, SchemaHistoryKey? InlineSchema = null);
+internal readonly record struct SchemaHistoryField {
+    public SchemaHistoryField(int FieldId, int TypeTag, string? TargetSchemaId = null, SchemaHistoryKey? InlineSchema = null, TypePattern? ValuePattern = null) {
+        this.FieldId = FieldId; this.TypeTag = TypeTag; this.TargetSchemaId = TargetSchemaId; this.InlineSchema = InlineSchema;
+        this.ValuePattern = ValuePattern ?? (InlineSchema is SchemaHistoryKey key ? TypePattern.Named(key.SchemaId) :
+            TargetSchemaId is not null ? TypePattern.Named(TargetSchemaId) : TypePattern.Builtin(TypeTag));
+    }
+    public int FieldId { get; }
+    public int TypeTag { get; }
+    public string? TargetSchemaId { get; }
+    public SchemaHistoryKey? InlineSchema { get; }
+    public TypePattern ValuePattern { get; }
+}
 
 internal readonly record struct SchemaHistoryResult(string Message);
 

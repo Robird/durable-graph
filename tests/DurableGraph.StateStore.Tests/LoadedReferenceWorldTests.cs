@@ -163,7 +163,7 @@ public sealed class LoadedReferenceWorldTests : IDisposable {
         Assert.Single(snapshot.Models);
         Assert.Single(snapshot.Types);
         Assert.Single(snapshot.Readers);
-        Assert.False(snapshot.Models.ContainsKey("Second"));
+        Assert.False(snapshot.Models.ContainsKey(TypeExpr.Named("Second")));
         StateModelBinding second = Model<Node>(Schema("Second", 1, "Second"), () => new Node());
         registry.Register(second);
         Assert.Same(second, registry.Snapshot().Types[typeof(Node)]);
