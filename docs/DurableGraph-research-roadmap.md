@@ -9,8 +9,9 @@
 
 当前能力与已完成分片的验收从 PROJECT-STATE/其账本进入；这里仅保留后续增量。
 
-后续方向按依赖而非承诺日期安排：下一片规划为 [DB-045 持久表示 ID](design-branches/0045-persisted-representation-id-slice.md)，
-先收敛 State 类型头与 SchemaStore 的登记/解析边界。BCL 内容恢复继续等具体消费者，不预先引入通用容器平台。
+后续方向按依赖而非承诺日期安排：State 类型头与 SchemaStore 的登记/解析边界已由
+[DB-045 持久表示 ID](design-branches/0045-persisted-representation-id-slice.md) 贯通。下一片尚未选择；可按 §3.1 细化内部描述，
+或为具体 BCL 消费者增加内容恢复，不预先引入通用容器平台。
 DB-036 单 World/单 head 工作会话已实现；branch/Reset、联合 Store 视图及更强恢复保证仍独立排期。
 MVP 库内加载顺序为 exact 重建 → 单对象 Upgrade → 分配实例 → 填充/连接引用 → 完整交付 World；
 Transient 由用户在交付后处理，约束维护在[目标设计](DurableGraph-target-design-v0.md#恢复transient-与宿主边界)。
@@ -22,7 +23,7 @@ DB-038 的泛型 Schema/history、开放生成、保存恢复与通用/闭合 ow
 可组合值 Upgrade 的验收与实际范围见 [DB-039](design-branches/0039-composable-value-upgrade-design.md#8-产品施工合同与验收映射)。
 [DB-043 可组合数组与统一引用对象路径](design-branches/0043-vector-array-object-slice.md) 已通过整体验收；
 完成证据集中维护在该分片，不再将数组组合列为待施工架构。
-完整表示的整数寻址已采纳、尚未实施；其内部描述模型、协变和加载内存预算仍按各自边界推进。
+完整表示的整数寻址不再作为新待办；其内部描述模型、协变和加载内存预算仍按各自边界推进。
 
 ## 2. 已采纳方向中的未完成能力
 
@@ -33,16 +34,15 @@ B/D/H 分别指本轮精确 Base payload、Delta payload 上界、已有对象�
 | 工作项 | 最小应回答的问题 | 设计或证据入口 |
 |---|---|---|
 | BCL 内容适配与恢复 | 复用统一 ObjectBinding 生命周期和静态值槽能力，逐类型明确内容、comparer、key/index 建立时机及内容 Upgrade；不保存 CLR 内部字段布局 | [DB-043](design-branches/0043-vector-array-object-slice.md)、[目标引用对象模型](DurableGraph-target-design-v0.md) |
-| 完整表示的持久整数 ID | 复用 ObjectLayout，在 SchemaStore 登记完整闭合表示；新 Base 只写 ID，通过目录取得布局/历史绑定。内部类型模型重整留待后继 | [DB-045](design-branches/0045-persisted-representation-id-slice.md)、[后继问题](#31-版本化表示类型头的统一寻址) |
 
 ## 3. 尚待裁决的机制
 
 | 问题 | 现有依据与裁决边界 |
 |---|---|
 | 引用 ID 的泛型目标品牌 | 已选非泛型包装见 [DB-041](design-branches/0041-object-id-state-representation.md)。泛型化暂缓；确有目标级静态检查需求时重访 [DB-040](design-branches/0040-typed-object-id-representation-research.md) 的版本含义、phantom nominal 与历史表示依赖，以及 typed 物理字段的 CLR 加载边界 |
-| 对象版本解释与保存来源 | 已登记模型族可按 Base exact Schema 自动读取；完整 ObjectHeadMap 中 external object heads 的来源、候选对象身份连续性仍需产品 Save/Load 合同，不能由 Revision Parent 声明一致推导全局身份认证 |
-| 保存相等性与真实估算 | 同版 DTO 的浮点按位、引用槽按 ID、inline 值递归融合 Delta 已采纳；DB-043 数组复用元素操作，BCL 容器另定。已准备 body 与当前 v3 envelope 计量见 [DB-029](design-branches/0029-prepared-object-revision-planning-slice.md)；新增类型头/容器布局继续按实际对象 payload 计量 |
-| Schema 规范表示和持久引用 | canonical 注册批次与逻辑 SchemaKey 已闭合；未来 SchemaHash、紧凑引用及一般类型家族约束随消费者裁决，不用 GetHashCode 作持久身份 |
+| 对象版本解释与保存来源 | Base 表示 ID 可解析 exact 布局与已登记历史 reader；完整 ObjectHeadMap 中 external object heads 的来源、候选对象身份连续性仍需产品 Save/Load 合同，不能由 Revision Parent 声明一致推导全局身份认证 |
+| 保存相等性与真实估算 | 同版 DTO 的浮点按位、引用槽按 ID、inline 值递归融合 Delta 已采纳；DB-043 数组复用元素操作，BCL 容器另定。已准备 body 计量见 [DB-029](design-branches/0029-prepared-object-revision-planning-slice.md)，ID 头见 [DB-045](design-branches/0045-persisted-representation-id-slice.md)；新增容器继续按实际对象 payload 计量 |
+| Schema 规范表示和持久引用 | 持久 RepresentationId 解决对象头寻址；目录内部 SchemaKey/TypeExpr 的描述整合见 §3.1。未来 SchemaHash 与一般类型家族约束随消费者裁决，不用 GetHashCode 作持久身份 |
 | 跨程序集与一般类型形状 | 跨编译 helper 可见性、外部历史祖先、enum/nullable/decimal/native int 等支持范围；当前同编译泛型支持边界见 DB-038，boxed value identity 已排除 MVP |
 | 多态与运行时注册扩展 | 已标记 class 基类到登记派生实例按 DB-034 合同；DB-043 统一框架 object 参数不授予 object/interface 通配字段。数组协变还需空数组的历史元素 ancestry 证据，和跨程序集发现分别后继；不能自动回退成声明基类的 codec |
 | 捕获 BCL 内容的所有权 | 数组使用 owned frozen 元素 buffer，inline struct 递归捕获成标量/ID；后续容器同样不能以浅复制代替冻结，须按其内容模型验证 |
@@ -56,12 +56,11 @@ DB-009/010 的旧 no-reuse 前提不能沿用；借用 Base 共享 prior 等结�
 
 ### 3.1 版本化表示类型头的统一寻址
 
-2026-09-09 用户已采纳先固定完整闭合表示的持久整数 ID；最小贯通规划为
-[DB-045](design-branches/0045-persisted-representation-id-slice.md)，尚未实施。长期合同归入
-[目标设计](DurableGraph-target-design-v0.md#长期-schema-可读与显式演化)。
+完整闭合表示的持久整数 ID 边界与验收由 [DB-045](design-branches/0045-persisted-representation-id-slice.md) 维护；
+长期合同归入[目标设计](DurableGraph-target-design-v0.md#长期-schema-可读与显式演化)。
 前序替代方案及反例保留在 [DB-044](design-branches/0044-type-header-blind-review/README.md)，不再把是否登记完整表示 ID 当作未决问题。
 
-DB-045 完成后再细化：是否合并 SchemaKey/TypeExpr 的内部描述载体、是否改为版本化开放模板 + 必要 exact 实参、
+后继只细化：是否合并 SchemaKey/TypeExpr 的内部描述载体、是否改为版本化开放模板 + 必要 exact 实参、
 模板版本与闭合表示版本的关系，以及组合表达式的编码。单 ID 是持久寻址，不意味着 nominal 约束或 exact 依赖信息冗余。
 `ArrayHolder<T>` 的引用目标依赖必须截断；`Box<Point>` 若允许同模板不同 exact 实参，Upgrade 就不能只比较模板版本。
 这些变化不属于整数 ID 分片，也不能借新号绕过既有同 key 异形拒绝。
@@ -77,7 +76,7 @@ phantom 身份与旧领域 CLR 删除后的历史 reader。数组协变仍需独
 | ObjectId 数字回收 | 单调分配配合其他机制开发后，再定义候选隔离、retire/reuse 时机与恢复；可评估 StateJournal SlabBitmap/SlotPool，不能复用旧对象 Delta 链 |
 | BCL 集合 | 基础引用/值和对象恢复形成消费者后；逐类型定义内容、顺序、comparer、共享和 key/index 建立时机 |
 | SchemaStore 后续能力 | MVP 单调注册已实现；联合 Commit/Ref 及复用 StateStore 的演进候选见下节，Dictionary 与内建类型 codec 完整后重访。多 writer、压缩/GC 另待真实需求 |
-| Schema 日志自动修复/分段 | 遇到真实坏尾恢复或容量需求时；无额外确认水位不能自动区分未完成尾部和已确认末帧损坏，当前严格拒绝。重访时先冻结故障模型，不绕过完整注册一致性 |
+| Schema/表示日志自动修复与分段 | 遇到真实坏尾恢复或容量需求时；无额外确认水位不能自动区分未完成尾部和已确认末帧损坏，当前严格拒绝。重访时先冻结故障模型，不绕过完整注册一致性 |
 | 发布恢复保证扩展 | DB-036 已闭合同实例 Commit、expected Parent、数据/发布屏障及严格重开；遇到真实可用性要求时再设计坏尾自动修复、OS crash/power loss 与目录持久性，不能默默回退旧 head |
 | ArtifactStore | 真实 HistoryLog/消息/附件消费者出现；比较地址方案、chunk、历史 view、嵌套引用与 Schema 复用，不强迫 State 常驻完整历史 |
 | DerivedStore | 真实昂贵派生消费者出现；定义 exact 输入围栏、recipe/builder/model 身份、stale/missing 及可删重建 |
@@ -86,7 +85,7 @@ phantom 身份与旧领域 CLR 删除后的历史 reader。数组协变仍需独
 | boxed value 持久身份 | MVP 拒绝领域图中的装箱值对象；实际模型需要通过引用槽保留装箱值身份时，再增加局部 codec/身份支持；不影响框架内部 DTO 装箱 |
 | 物理 GC、compaction、历史保留 | 出现真实空间或 recovery-closure 问题后；与 CLR 映射清理和数字 ID 回收分开裁决 |
 | TwoLeg / incremental cleaner | 多历史 Segment 无法满足实际有界 dependency file count、在线退休、backup/rescue 或 compaction SLO 时重访，见其 [技术储备（归档）](../experiments/ARCHIVE.md#two-leg "原路径：experiments/TwoLegRotationProbe/PROJECT-STATE.md") |
-| 性能优化 | MVP 后有具体测量再优化全量 Base 准备、缓冲复制、cache、typed buckets 或指纹；DB-042 的 Upgrade requirement set 仍逐次复核，批量历史对象测出热点后可用 SchemaStore catalog generation 做透明快速路径；DB-028 先 object-first 直读 RBF，Frame cache 只减少重复 I/O/解码，重复完整 map 物化需另评估 map cache/单 ID 查询，必要时再按 Frame 合并批量读取 |
+| 性能优化 | MVP 后有具体测量再优化全量 Base 准备、缓冲复制、cache、typed buckets 或指纹；DB-045 新元数据先 Schema 后表示的两次 flush 仅在登记缺失项时发生，测出热点后再比较统一帧/合并屏障；DB-042 的 Upgrade requirement set 仍逐次复核，批量历史对象测出热点后可用 SchemaStore catalog generation 做透明快速路径；DB-028 先 object-first 直读 RBF，Frame cache 只减少重复 I/O/解码，重复完整 map 物化需另评估 map cache/单 ID 查询，必要时再按 Frame 合并批量读取 |
 | 加载内存预算 | 大数组/容器或不可信输入的资源控制成为实际需求时，设计独立的总分配/元素数预算；DB-043 先要求合法 shape、checked 计算及适用时的 payload 下界预检。零字节元素可产生大内存对象，单帧 256MB 不等于 CLR 内存上限 |
 | 并发、分支与跨 Repository | 宿主提出真实 consumer 后；分别定义 concurrent Capture、snapshot isolation、branch/fork/multi-writer 和跨 Store/Repository identity，不扩大当前单 writer 假设 |
 | 跨对象升级与外部副作用 | MVP 仅单对象字段转换；读取其他对象、拆分/合并及创建持久新对象均延后。MVP 后有真实迁移案例时，再讨论图访问、新 ID 与失败隔离；不借普通升级默认授权 |

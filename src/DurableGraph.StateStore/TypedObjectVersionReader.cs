@@ -20,11 +20,11 @@ public static class TypedObjectVersionReader {
         ArgumentNullException.ThrowIfNull(expectedSchema);
         ArgumentNullException.ThrowIfNull(readBase);
         ArgumentNullException.ThrowIfNull(applyDelta);
-        DecodedBaseObjectBody body = DecodeBase(chain);
-        if (body.Kind != ObjectStateKind.Durable || body.SchemaKey is not SchemaKey key) {
+        DecodedBaseObjectBody body = DecodeBase(chain, schemas);
+        if (body.Kind != ObjectStateKind.Durable) {
             throw new InvalidDataException("A durable reader requires a durable Base type header.");
         }
-        MatchSchema(schemas, key, expectedSchema);
+        MatchSchema(body.Layout.Schema!, expectedSchema);
         return StateBodyDecoder.Read(CreateBodySource(chain, body), readBase, applyDelta);
     }
 
@@ -55,8 +55,7 @@ public static class TypedObjectVersionReader {
         return BaseObjectBodyCodec.Decode(chain.Records[0].Record.Body, schemas);
     }
 
-    internal static void MatchSchema(SchemaStore schemas, SchemaKey key, DurableSchema expectedSchema) {
-        DurableSchema storedSchema = schemas.GetRequired(key);
+    internal static void MatchSchema(DurableSchema storedSchema, DurableSchema expectedSchema) {
         if (storedSchema.Kind != SchemaKind.ReferenceObject || expectedSchema.Kind != SchemaKind.ReferenceObject ||
             !storedSchema.Equals(expectedSchema)) {
             throw new InvalidDataException("The stored exact Schema definition does not match the selected body reader.");

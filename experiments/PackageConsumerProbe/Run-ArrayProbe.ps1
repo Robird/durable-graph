@@ -55,8 +55,8 @@ try {
     $assembly = Join-Path $output "Debug/net10.0/Atelia.ArrayConsumer.dll"
     $hashes = @{}
     foreach ($stage in @(
-        @{ Number = 1; Count = 4; Expected = "ArraySeed:True:FourRanks:True:GenericJaggedCycles:True:FrozenDelta:True" },
-        @{ Number = 2; Count = 5; Expected = "ArrayUpgrade:True:SharedOwnerOnce:True:ForcedBaseThenDelta:True:HistoricalExact:True:ColdReopen:True" }
+        @{ Number = 1; Count = 4; Expected = "ArraySeed:True:FourRanks:True:GenericJaggedCycles:True:FrozenDelta:True:RepresentationIds:True:ReorderedRegistration:True" },
+        @{ Number = 2; Count = 5; Expected = "ArrayUpgrade:True:SharedOwnerOnce:True:ForcedBaseThenDelta:True:HistoricalExact:True:ColdReopen:True:IndependentRepresentationUpgrade:True:DeltaInheritsRepresentation:True" }
     )) {
         $stageProperties = $properties + "-p:HistoryVersion=$($stage.Number)"
         Invoke-DotNet (@("clean", $consumerProject) + $stageProperties)

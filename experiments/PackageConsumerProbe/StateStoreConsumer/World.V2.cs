@@ -13,18 +13,19 @@ public sealed partial class World : DurableBase {
     [DurableField(1)] private int _score;
     [DurableField(2)] private readonly string _name;
     [DurableField(3)] private readonly int _generation;
+    [DurableField(4)] private readonly ulong _createdAtTicks;
     [Transient] private int _cache = 37;
     private static int _constructorCalls;
     private static int _upgradeCalls;
 
     public World(int score, string name) {
         _constructorCalls++;
-        _score = score; _name = name; _generation = -1;
+        _score = score; _name = name; _generation = -1; _createdAtTicks = 638_625_600_000_000_000;
     }
 
     private static void UpgradeStateV1ToV2(in __DurableState.V1 old, out __DurableState.V2 next) {
         _upgradeCalls++;
-        next = new(old.Segment0Field1 + 100, old.Segment0Field2, 73);
+        next = new(old.Segment0Field1 + 100, old.Segment0Field2, 73, old.Segment0Field4);
     }
 
     internal static void Exercise(string directory) {
@@ -48,6 +49,7 @@ public sealed partial class World : DurableBase {
             Require(loaded.ParentRevisionAddress == oldRevision && loaded.WorldId == worldId && _upgradeCalls == 1,
                 "Loading lost Parent/World identity or upgraded more than once.");
             Require(loaded.World._score == 109 && loaded.World._name == "A" && loaded.World._generation == 73 &&
+                loaded.World._createdAtTicks == 638_625_600_000_000_000 &&
                 loaded.World._cache == 0 && _constructorCalls == 0, "Upgrade/readonly/constructor-free restoration failed.");
             PreparedWorldRevision prepared = loaded.Prepare(policy);
             Require(prepared.WorldId == worldId && prepared.Revision.ParentRevisionAddress == oldRevision &&
@@ -74,6 +76,7 @@ public sealed partial class World : DurableBase {
             StateRevisionStore store = new(segments);
             LoadedWorld<World> final = LoadedWorld.Load<World>(store, schemas, finalRevision, worldId, models);
             Require(final.World._score == 110 && final.World._generation == 73 && final.World._name == "A" &&
+                final.World._createdAtTicks == 638_625_600_000_000_000 &&
                 final.World._cache == 0 && _constructorCalls == 0 && _upgradeCalls == 1,
                 "Cold reopening failed to restore the current Base plus Delta.");
             Require(store.ReadObjectVersionChain(finalRevision, worldId.Value).Records.Count == 2,

@@ -177,6 +177,9 @@ internal static class Program {
             world.Nested.Value.Left.Value == 61 + offset && world.Nested.Value.Right.Value == 71 + offset &&
             !ReferenceEquals(world.First, world.Second) && world.Label == "composable history",
             "Generic objects lost their values, identities or references.");
+        Require(world.First.CreatedAtTicks == 638_625_600_000_000_000 && world.Second.CreatedAtTicks == 638_625_600_000_000_000 &&
+            world.PointBox.CreatedAtTicks == 638_625_600_000_000_000 && world.Nested.CreatedAtTicks == 638_625_600_000_000_000,
+            "Stable creation timestamps did not survive capture, Upgrade, or restore.");
         Require(world.First.TransientValue == 0 && world.Second.TransientValue == 0 &&
             world.PointBox.TransientValue == 0 && world.Nested.TransientValue == 0,
             "Restoration must bypass constructors and transient initializers.");
@@ -192,6 +195,8 @@ internal static class Program {
         var nested = decoded.GetRequired(world.Segment0Field3).GetState<BoxStates.V1<PairStates.V1<PointStates.V1>>>();
         Require(decoded.Objects.Count == 6 && decoded.GetRequired(worldId).Schema!.Version == 1 &&
             first.Segment0Field1 == 12 && second.Segment0Field1 == 21 && point.Segment0Field1.Segment0Field1 == 31 &&
+            first.Segment0Field4 == 638_625_600_000_000_000 && second.Segment0Field4 == 638_625_600_000_000_000 &&
+            point.Segment0Field4 == 638_625_600_000_000_000 && nested.Segment0Field4 == 638_625_600_000_000_000 &&
             nested.Segment0Field1.Segment0Field1.Segment0Field1 == 61 &&
             nested.Segment0Field1.Segment0Field2.Segment0Field1 == 71 &&
             world.Segment0Field6.Segment0Field1.Segment0Field1 == 41 &&

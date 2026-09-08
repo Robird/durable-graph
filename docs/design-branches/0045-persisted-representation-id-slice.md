@@ -1,7 +1,7 @@
 # DB-045 持久表示 ID：最小贯通分片
 
-状态：**Proposed / 施工规划，尚未实施**。2026-09-09。
-用户已采纳“完整闭合表示统一取得仓库内持久整数 ID”的方向；本文给出最小落地建议，不把新增字节格式细节当作既成事实。
+状态：**Implemented / G0–G3 已通过验收**。2026-09-09。
+完整表示登记、新 Base ID 头与历史读取已贯通；根构建、完整测试及真实包回归通过，证据见 §6.2。
 前序比较：[DB-044](0044-type-header-blind-review/README.md)；当前实现：[PROJECT-STATE](../../src/PROJECT-STATE.md)。
 
 ## 1. 本片只回答什么
@@ -28,19 +28,19 @@ class 的 exact base/inline 依赖、数组 exact 元素槽及 nominal 类型身
 本片 ID 覆盖作为独立对象保存的 string/class/array 完整表示；inline struct 依赖继续由 SchemaStore 保存 exact Schema，
 不为了没有独立 Base 的值另建一套 ID 消费 API。它们的完整解释仍可从 owner 的 ID 经 SchemaStore 得到。
 
-## 3. 建议的窄接口与所有权
+## 3. 窄接口与所有权
 
-名称可在施工时按现有风格微调，职责不扩大：
+已落盘的入口位于现有 StateStore 程序集；不进入 Capture DTO 或 SG 参数：
 
 ```csharp
 // 位于现有 StateStore 程序集，不进入 Capture DTO 或 SG 参数。
-readonly record struct RepresentationId(uint Value);
+public readonly record struct RepresentationId(uint Value);
 
 // SchemaStore 的持久目录能力。
 RepresentationId[] RegisterRepresentations(IReadOnlyList<ObjectLayout> layouts);
 ObjectLayout GetRepresentation(RepresentationId id);
 
-// 使用本次操作已经冻结的代码目录；可作为同类方法或内部小 helper。
+// SchemaStore 使用本次操作已经冻结的代码目录。
 ObjectReaderBinding ResolveReader(RepresentationId id, StateBindingContext bindings);
 ```
 
@@ -51,21 +51,25 @@ ResolveReader 复用 `bindings.ResolveObjectReader(layout)` 并核对完整布�
 
 表示目录由 SchemaStore 拥有，继续使用同一 `schemas.rbf`，不增加 Repository 文件、服务层或注册表接口家族。
 一个 ID→layout 索引与一个 layout→ID 索引描述同一份持久事实，进程缓存不能重新分配既有 ID。
+实际代码：[RepresentationId](../../src/DurableGraph.StateStore/RepresentationId.cs)、
+[SchemaStore](../../src/DurableGraph.StateStore/SchemaStore.cs)。`SchemaStore.Count` 仍只统计用户 Schema 定义，
+不把内建 string 或表示登记数量混入原计数。
 
-## 4. ID 与登记日志建议
+## 4. ID 与登记日志
 
 - `0` 无效；不是 ObjectId 的 null，也不用于缺失 Schema 的占位。
-- `1` 为 string 内建表示。它是格式规定的恒定条目，不需写用户 Schema 记录；两种对象都经同一 ID 入口解析。
+- `1` 为 string 内建表示。它是格式规定的恒定条目，不需写登记记录；string/class/array 均经同一 ID 入口解析。
 - 其他完整对象表示从 `2` 单调分配 UInt32；不回收，不承诺跨仓库同号同义。耗尽只拒绝新表示，已有表示仍可取得。
 - 相同完整表示重复登记无追加；已分配 ID 重开保持。输入顺序变化不重编号；未分配项的先后不构成跨仓库规范身份。
 
-建议新增一种 RepresentationBatch RBF tag，和现有 SchemaBatch 共用日志；保留 SchemaBatch v4 本体及已有旧版读取。
+新增 RepresentationBatch RBF tag `0x31425052`（小端 ASCII `RPB1`），批次版本为 `1`；
+和现有 SchemaBatch `SGB1` 共用 `schemas.rbf`，保留 SchemaBatch v4 本体及已有旧版读取。
 表示批次的逻辑内容为 `formatVersion + count + (explicit ID + descriptor)...`，按新分配 ID 升序。
 descriptor 复用今天的 class SchemaKey / 数组 codec、构造码和元素槽描述，但编码由 SchemaStore 一侧拥有；
 不调用“写空 Base 再拆字节”复用，不将 Base envelope 格式版本绑定到表示目录版本。
 
 不在这片为表达式换 prefix/postfix、压缩描述内部逻辑名称，或为所有依赖再编号。
-新增 tag/目录版本的具体常量在施工时与独立 golden 一并确定；无须联动 `.dgschema` history 格式。
+独立 golden 固定新 tag/目录版本；`.dgschema` history 格式不变。
 
 登记顺序：
 
@@ -78,12 +82,15 @@ descriptor 复用今天的 class SchemaKey / 数组 codec、构造码和元素�
 统一注册帧/flush 合并以后有测量再做，不为本片引入联合事务。
 恢复按日志顺序重建；表示引用的 exact Schema 必须此前已登记，整个表示批次校验通过才安装其索引。
 可写非空重开仍需确认持久屏障，不能只以用户 Schema 数量判断非空：纯基元数组也会产生表示登记帧。
-非法 ID、重复/重绑定 ID、同表示重复绑定不同 ID、缺依赖、未知格式、坏尾和溢长均拒绝；不按字典枚举顺序恢复编号。
-参考 [SchemaStore](../../src/DurableGraph.StateStore/SchemaStore.cs)、[SchemaBatchWireCodec](../../src/DurableGraph.StateStore/SchemaBatchWireCodec.cs)。
+非法 ID、跳号、重复/重绑定 ID、同表示重复绑定不同 ID、缺依赖、未知格式、坏尾和溢长均拒绝；不按字典枚举顺序恢复编号。
+定义 kind/arity 的声明一致性覆盖 Schema 和数组表示登记，恢复时亦统一检查。
+参考 [SchemaStore](../../src/DurableGraph.StateStore/SchemaStore.cs)、[SchemaBatchWireCodec](../../src/DurableGraph.StateStore/SchemaBatchWireCodec.cs)、
+[RepresentationBatchWireCodec](../../src/DurableGraph.StateStore/RepresentationBatchWireCodec.cs)、
+[RepresentationDescriptorCodec](../../src/DurableGraph.StateStore/RepresentationDescriptorCodec.cs)。
 
 ## 5. Base 与读写贯通
 
-建议新写 Base 类型头 v4：`version=4 + canonical VarUInt32(RepresentationId) + raw body`。
+新写 Base 类型头 v4：`version=4 + canonical VarUInt32(RepresentationId) + raw body`。
 不再含独立 string/class/array tag、SchemaKey 或数组元素描述；kind 从解析出的布局取得。
 Delta 仍只含变化 body，按终止 Base 继承表示；ObjectVersion/StateRevision 外层格式不变。
 
@@ -91,10 +98,15 @@ Delta 仍只含变化 body，按终止 Base 继承表示；ObjectVersion/StateRe
 旧头的描述解释集中到同一表示解析边界；旧记录没有持久表示 ID，不能在只读时虚构/登记一个。
 读路径可统一交付“完整布局 + raw body”，v4 reader 解析必须从持久 ID 出发；新写一律 v4。
 string 的内建固定 ID 可保留 `ReadString(chain)` 无 SchemaStore 的便捷读取；用户/数组读取仍需所属目录。
+实际 `DecodedBaseObjectBody` 交付 `Layout`、owned raw body 和可空 `RepresentationId`；
+旧 v1–v3 的 ID 为 null，不在读取时补登记。旧描述与表示批次的描述语法都由 SchemaStore 一侧的
+`RepresentationDescriptorCodec` 拥有，原 `ObjectPersistence` 类型分派 helper 已删除。
 
 写入两条 planner 在既有 Parent/来源预检之后批量 RegisterRepresentations，再用相应 ID 包装 PreparedBaseBody。
 原 Base/Delta 策略继续接收实际完整 payload 尺寸；B 含新的 ID 字节宽度，D/prior 上界与已有链 H 的计量规则不变。
 共享 Schema/表示登记帧仍不摊入单对象 B/D/H。
+因此同一 DTO 在缩短 Base 头后，既有策略可能合法地从 Delta 改选 Base：当实际 B 已不大于 D 时，
+原先依赖较长类型头的微型对象未必还有 Delta 收益。本片保留该真实尺寸结果，不为维持旧测试选型而改变策略。
 
 读入统一解析入口，覆盖 RevisionDecoder、TypedObjectVersionReader、两个 planner 的来源校验和 GraphRepository 的严格重开验证。
 world-kind/string-no-delta、完整 reader 匹配、空数组声明校验及 Upgrade requirement set 继续执行，不能因数字相等就跳过。
@@ -105,7 +117,7 @@ world-kind/string-no-delta、完整 reader 匹配、空数组声明校验及 Upg
 | 步骤 | 改动入口 | 最小验收 |
 |---|---|---|
 | G0 表示目录 | SchemaStore、ID/描述与批次 codec；复用现有 ObjectLayout | 幂等、完整相等性、重开稳定、先 Schema 后表示、失败/faulted；同 key 异形不分配新号逃逸；only-array/string 目录 |
-| G1 新 Base 边界 | BaseObjectBodyCodec、ObjectPersistence、TypedObjectVersionReader | v4 独立 golden；0/未知/溢长 ID 拒绝且业务 reader 不调用；已有旧头仍只读；整数宽度边界 127/128、16383/16384 |
+| G1 新 Base 边界 | BaseObjectBodyCodec、RepresentationDescriptorCodec、TypedObjectVersionReader | v4 独立 golden；0/未知/溢长 ID 拒绝且业务 reader 不调用；已有旧头仍只读；整数宽度边界 127/128、16383/16384 |
 | G2 全路径替换 | CapturedRevisionPlanner、LoadedRevisionPlanner、RevisionDecoder、GraphRepository | string/class/array 仅写 ID；旧来源/NoChange/升级强制 Base 正确；Base/Delta/H 尺寸无旧头常数残留 |
 | G3 整体验证 | 既有 StateStore/生成器集成与真实包消费 | 完全冷重开恢复历史 DTO、同实例 Commit、泛型+数组+struct 升级、引用身份与 malformed/fault 回归 |
 
@@ -117,6 +129,40 @@ G0–G1 需要测试以下容易被 DTO 类型相等掩盖的案例：不同 nom
 施工可按 G0 的目录/格式、G1–G2 的集成、G3 的独立审查分派文件所有权；新 API 先对齐，dotnet build/test/package 串行运行。
 最终根 solution build、完整 tests，真实 ArrayConsumer + 既有 Generic/ValueUpgrade package 的相关历史路径；
 成功后把验证证据留在本片，更新 PROJECT 的当前能力，不能提前把计划写成已实现。
+
+### 6.1 代码与验收映射
+
+| 闸门 | 代码与回归入口 | 状态 |
+|---|---|---|
+| G0 表示目录 | [SchemaStore](../../src/DurableGraph.StateStore/SchemaStore.cs)、[目录测试](../../tests/DurableGraph.StateStore.Tests/RepresentationStoreTests.cs)、[批次格式测试](../../tests/DurableGraph.StateStore.Tests/RepresentationBatchWireCodecTests.cs) | 通过 |
+| G1 Base 格式 | [BaseObjectBodyCodec](../../src/DurableGraph.StateStore/BaseObjectBodyCodec.cs)、[DecodedBaseObjectBody](../../src/DurableGraph.StateStore/DecodedBaseObjectBody.cs)、[表示头测试](../../tests/DurableGraph.StateStore.Tests/RepresentationHeaderTests.cs)、[旧头兼容测试](../../tests/DurableGraph.StateStore.Tests/BaseObjectBodyCodecTests.cs) | 通过 |
+| G2 保存与读取 | [CapturedRevisionPlanner](../../src/DurableGraph.StateStore/CapturedRevisionPlanner.cs)、[LoadedRevisionPlanner](../../src/DurableGraph.StateStore/LoadedRevisionPlanner.cs)、[RevisionDecoder](../../src/DurableGraph.StateStore/RevisionDecoder.cs)、[TypedObjectVersionReader](../../src/DurableGraph.StateStore/TypedObjectVersionReader.cs)、[GraphRepository](../../src/DurableGraph.StateStore/GraphRepository.cs)、[集成测试](../../tests/DurableGraph.StateStore.Tests/RepresentationIntegrationTests.cs) | 通过 |
+| G3 实际包与历史 | [ArrayConsumer](../../experiments/PackageConsumerProbe/ArrayConsumer/README.md)、[GenericConsumer](../../experiments/PackageConsumerProbe/GenericConsumer/README.md)、[ValueUpgradeConsumer](../../experiments/PackageConsumerProbe/ValueUpgradeConsumer/README.md) | 通过 |
+
+### 6.2 验证证据
+
+2026-09-09，主线程集中执行并确认：
+
+- 根 solution 构建：0 warnings/errors；日志 `experiments/PackageConsumerProbe/obj/db045-build.log`。
+- 定向回归：196 passed、0 failed、0 skipped；日志 `experiments/PackageConsumerProbe/obj/db045-focused-tests.log`。
+- 完整 solution tests：1352 passed（Runtime 636、StateStore 458、Serialization 103、Storage 155），0 failed、0 skipped；
+  日志 `experiments/PackageConsumerProbe/obj/db045-full-tests.log`。
+- 真实 Array package 通过全部新增表示 ID marker、历史冷读、数组 Upgrade 与同实例续写；
+  日志 `experiments/PackageConsumerProbe/obj/db045-array-package.log`，产物目录 `obj/array-20260908180819-32052-35900c81`。
+- 真实 Generic package 与 ValueUpgrade package 各通过全部 4 阶段，保留旧 history 数量/hash 闸门；
+  日志分别为 `experiments/PackageConsumerProbe/obj/db045-generic-package.log`、`experiments/PackageConsumerProbe/obj/db045-value-package.log`，
+  产物目录分别为 `obj/generic-20260908182150-25752-4daf133e`、`obj/value-upgrade-20260908182355-34420-0ccb3bbf`。
+  两者复用 Array runner 打出的隔离 feed，版本 `0.0.0-array-e2e.20260908180819.32052`，无手动 analyzer/ProjectReference 替代。
+- 补充真实 StateStore package 全部通过：持久 Schema、旧版 World 升级、readonly 恢复、正常 Delta、
+  GraphSession 连续提交与共享/循环图；日志 `experiments/PackageConsumerProbe/obj/db045-statestore-package.log`，
+  产物目录 `obj/state-store-run-20260908182622-34708-b47ebba1`。
+- 独立审查及对最终 fixture/package 样本的复核均无阻塞问题；两项非阻塞建议已处理。
+- 文档检查：10 份修改文档、377 条本地链接/锚点通过，`git diff --check` 通过。
+
+实际观察：首轮完整 tests 有 9 项旧尺寸/选型预期失败，Generic 包亦遇到相同的微型 DTO 缩头效应。
+新 B≤D 时原策略合法改选 Base；一个 Base payload golden 从旧 99 bytes 变为 72 bytes。
+专测 Delta 的场景增加真实稳定字段并在历史 Upgrade 中透传，非 Delta 职责场景接受合法 Base。
+上述最终回归均基于修订后的样本；产品策略未修改。
 
 ## 7. 后继才处理什么
 

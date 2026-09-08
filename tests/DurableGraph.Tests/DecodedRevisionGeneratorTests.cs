@@ -49,8 +49,8 @@ public sealed partial class DurableSchemaGeneratorTests {
         PreparedDeltaBody secondDelta = prepare([10, 4, 11], [10, 4, 10]);
         Assert.Equal<byte>([2, 4], firstDelta.Body.ToArray());
         Assert.Equal<byte>([4, 10], secondDelta.Body.ToArray());
-        static ObjectVersionRecord Durable(uint id, DurableSchema schema, byte[] body) =>
-            ObjectVersionRecord.CreateBase(id, BaseObjectBodyCodec.EncodeDurable(schema, new(body)).Body);
+        static ObjectVersionRecord Durable(SchemaStore schemas, uint id, DurableSchema schema, byte[] body) =>
+            ObjectVersionRecord.CreateBase(id, BaseObjectBodyCodec.Encode(schemas.RegisterRepresentations([ObjectLayout.ForDurable(schema)])[0], new(body)).Body);
         static ObjectVersionRecord Text(uint id, string value) =>
             ObjectVersionRecord.CreateBase(id, BaseObjectBodyCodec.EncodeString(StringPayloadCodec.PrepareBase(value)).Body);
 
@@ -66,26 +66,26 @@ public sealed partial class DurableSchemaGeneratorTests {
             schemas.RegisterBatch([oldSchema, currentSchema, otherSchema]);
             StateRevisionStore store = new(segments);
             first = store.Append(StateRevision.CreateObjectHeadMapBase(null, [
-                Durable(1, oldSchema, original),
-                Durable(2, currentSchema, [7, 8, 12]),
+                Durable(schemas, 1, oldSchema, original),
+                Durable(schemas, 2, currentSchema, [7, 8, 12]),
                 Text(10, "same"), Text(11, "same"), Text(12, ""), Text(13, ""),
-                Durable(99, otherSchema, [11, 18, 13]),
+                Durable(schemas, 99, otherSchema, [11, 18, 13]),
             ], []));
             second = store.Append(StateRevision.CreateObjectHeadMapDelta(first,
                 [ObjectVersionRecord.CreateDelta(1, first, firstDelta.Body)], []));
             third = store.Append(StateRevision.CreateObjectHeadMapDelta(second,
                 [ObjectVersionRecord.CreateDelta(1, second, secondDelta.Body)], []));
             newBase = store.Append(StateRevision.CreateObjectHeadMapDelta(third,
-                [Durable(1, oldSchema, [11, 6, 12])], []));
+                [Durable(schemas, 1, oldSchema, [11, 6, 12])], []));
 
             // Only the removed CLR ancestor's slot refers to ID 10 in this parent.
             // Checking only current or leaf-declared slots would incorrectly accept these views.
             missingString = store.Append(StateRevision.CreateObjectHeadMapDelta(second, [], [10]));
             wrongKind = store.Append(StateRevision.CreateObjectHeadMapDelta(second,
-                [Durable(10, currentSchema, [7, 8, 12])], []));
+                [Durable(schemas, 10, currentSchema, [7, 8, 12])], []));
             // ID 99 is last: all earlier objects have decoded before this trailing-byte error.
             malformed = store.Append(StateRevision.CreateObjectHeadMapDelta(third,
-                [Durable(99, otherSchema, [11, 18, 13, 0])], []));
+                [Durable(schemas, 99, otherSchema, [11, 18, 13, 0])], []));
         }
         Assert.NotEqual(first.FileNumber, third.FileNumber);
         Array.Clear(original);

@@ -1,6 +1,6 @@
 # DurableGraph 产品开发工作集
 
-> 校准：2026-09-08，[DB-043](../docs/design-branches/0043-vector-array-object-slice.md) 已完成并通过整体验收。本文只维护当前能力、边界与续工入口。
+> 校准：2026-09-09，[DB-045](../docs/design-branches/0045-persisted-representation-id-slice.md) 已完成并通过整体验收。本文只维护当前能力、边界与续工入口。
 > 文档不是实现授权；事实以当前源码、测试和工具输出为准。
 
 ## 从这里继续
@@ -18,16 +18,15 @@
 
 ## 当前焦点
 
-[DB-043 可组合数组与统一引用对象路径](../docs/design-branches/0043-vector-array-object-slice.md)
-已完成：统一 object 实例分派 string/class/array，
-覆盖 SZ/rank 2–4、开放泛型、jagged、inline/generic struct 元素、融合 Delta、数组独立 owner Upgrade
-及 GraphSession/package 冷重开。施工、完整测试和真实包证据集中维护在 DB-043。
-下一片已规划为 [DB-045 持久表示 ID](../docs/design-branches/0045-persisted-representation-id-slice.md)：
-复用现有 ObjectLayout，在 SchemaStore 登记完整表示的整数 ID，新 Base 通过 ID 解析布局与历史 reader。
-方向已采纳，具体施工方案为 Proposed，尚未实施；不改泛型闭合、SchemaKey/TypeExpr 和版本传播合同。
+[DB-045 持久表示 ID](../docs/design-branches/0045-persisted-representation-id-slice.md)
+已完成，根构建、完整测试、真实包与独立审查通过。
+SchemaStore 为完整 ObjectLayout 登记持久整数 ID，新 Base v4 仅写 ID，通过同一目录解析布局与历史 reader；
+旧 Base v1–v3 仅保留读取，不改泛型闭合、SchemaKey/TypeExpr 和版本传播合同。
+施工与验收证据集中维护在 DB-045。下一片尚未排期；内部描述重整仍是后继问题。
 前序匿名比较见 [DB-044](../docs/design-branches/0044-type-header-blind-review/README.md)；
 其余表示模型决策及后继范围由[路线图](../docs/DurableGraph-research-roadmap.md#31-版本化表示类型头的统一寻址)维护。
 
+[DB-043](../docs/design-branches/0043-vector-array-object-slice.md) 已完成统一引用对象路径、可组合数组与数组元素 Upgrade；
 [DB-042](../docs/design-branches/0042-upgrade-schema-requirement-set.md) 已完成 plan 级 exact Schema 依赖证书；
 [DB-041](../docs/design-branches/0041-object-id-state-representation.md) 的非泛型 ObjectId、DB-039 可组合值 Upgrade
 及此前的同实例 GraphSession、泛型/inline Schema/history 能力继续沿用。[DB-040](../docs/design-branches/0040-typed-object-id-representation-research.md)
@@ -39,8 +38,8 @@
 |---|---|---|
 | [DurableGraph](DurableGraph/DurableGraph.csproj) | immutable Schema/exact DAG；统一 ObjectBinding、ObjectLayout、Capture/refs/恢复目录；SZ/rank 2–4 数组 owned 状态、静态元素操作与融合 Delta；独立 historical reader | BCL 内容适配、数组协变；持久发布由 StateStore 拥有 |
 | [Generator](DurableGraph.Generator/DurableGraph.Generator.csproj) / [Build](DurableGraph.Build/DurableGraph.Build.csproj) | class/struct 开放模板、readonly DTO/静态 body、Capture/Hydrate、泛型继承与递归数组组合；history v4；三参 Upgrade/旧二参适配、值规则/局部依赖 adapter | BCL；跨程序集生成规则 |
-| [StateStore](DurableGraph.StateStore/DurableGraph.StateStore.csproj) | 持久 Schema、Base 类型头；完整 stored/current 引用验证、可达图两阶段恢复；公开 PrepareNew/fixed-Parent Prepare；GraphRepository 单 head/持久 WorldId 与 GraphSession 同实例 Commit；升级 Base/Remove | 无 branch/Reset/根替换或联合 Store 视图 |
-| [Storage](DurableGraph.StateStore.Storage/DurableGraph.StateStore.Storage.csproj) | AppendDurably 原 lease 屏障；local Base/Delta records、wire v3、exact Revision live map、Parent/prior 校验、object-first 原始重建链及实际 payload H；v3 Base 精确/Delta 上界计量；真实 Segment/RBF 冷重开 | 不解码 typed body；不拥有持久 roots、类型目录或发布 head；重复读取暂未缓存 |
+| [StateStore](DurableGraph.StateStore/DurableGraph.StateStore.csproj) | 持久 Schema 与 RepresentationId 登记、Base v4 ID 头；完整 stored/current 引用验证、可达图两阶段恢复；公开 PrepareNew/fixed-Parent Prepare；GraphRepository 单 head/持久 WorldId 与 GraphSession 同实例 Commit；升级 Base/Remove | 无 branch/Reset/根替换或联合 Store 视图 |
+| [Storage](DurableGraph.StateStore.Storage/DurableGraph.StateStore.Storage.csproj) | AppendDurably 原 lease 屏障；local Base/Delta records、wire v3、exact Revision live map、Parent/prior 校验、object-first 原始重建链及实际 payload H；Base 精确/Delta 上界计量；真实 Segment/RBF 冷重开 | 不解码 typed body；不拥有持久 roots、类型目录或发布 head；重复读取暂未缓存 |
 | [Serialization](DurableGraph.StateStore.Serialization/DurableGraph.StateStore.Serialization.csproj) | 字节原语、string 内容 codec、拥有 raw bytes 的 PreparedBaseBody/PreparedDeltaBody、显式 body 的 typed slot、早期元素 ref 循环 | 完整数组对象操作位于 Runtime；BCL 内容 codec 尚无 |
 
 容易混淆的限制：
@@ -104,7 +103,7 @@
   内部仅保留 current 冻结状态比较基线及 source ObjectLayout/完整 membership，升级仍 live 必须 Base。
   不可达 source 仍须解码/归一化/验证，但不要求其 current 类型可以 Allocate；历史 ancestry 不能用 current CLR 反推。
 - GraphRepository 独占 publication.rbf、schemas.rbf 和 state/，单 head、单活动 GraphSession；Create 只允许无已发布 head。
-  Commit 完成冻结、Schema 注册、State AppendDurably、publication Append/flush 后安装原候选；保留 World/child 实例与原分配 cursor。
+  Commit 完成冻结、Schema/表示登记、State AppendDurably、publication Append/flush 后安装原候选；保留 World/child 实例与原分配 cursor。
   下一基线 membership 等于成功候选，升级重写义务清除；移除对象以后重接获新 ID/Base。
   GraphCommitException 区分 NotPublished / Unknown / Published，确定未发布也须检查资源是否 faulted；
   Unknown/发布后安装失败禁止透明重试，dispose/reopen。故障/Dispose 不撤销用户领域修改。
@@ -115,10 +114,10 @@
   传统生成路径不为完全删除的族生成 reader；Family 路径可按 retained history 生成 state-only exact reader，
   但 editable Load 仍要求每个 source 引用对象族有 current/migration CLR 模型和 Normalize。只承诺读已 Remove 该族的新 Revision 才能删除其恢复能力，
   仍支持旧 Revision 则须保留相应 reader/Normalize。见 DB-036 H1 真实包回归。
-- LoadedWorld.PrepareNew 从普通新建图生成无 Parent 的完整冻结计划，返回 WorldId；可持久注册 Schema，
+- LoadedWorld.PrepareNew 从普通新建图生成无 Parent 的完整冻结计划，返回 WorldId；可持久登记 Schema/表示，
   不追加 State 或执行 State 屏障/发布，不安装基线。单根非空且要求 exact 已登记 CLR 类型。
 - LoadedWorld.Prepare 固定 Parent/WorldId，返回 owned StateRevision，成功或失败均释放临时 Capture，
-  不推进基线。此低层路径由宿主 Append 后重新 Load；同实例连续保存使用 GraphSession。Schema 注册不代表发布。
+  不推进基线。此低层路径由宿主 Append 后重新 Load；同实例连续保存使用 GraphSession。Schema/表示登记不代表发布。
   Empty 反向映射选择最小 source ID，但基线槽保留旧 ID，首次 Capture 形成真实 Delta/Remove。
   分配从完整 source live max+1 起，只承诺会话内单调；uint 耗尽不阻止已有对象保存。
   恢复的可达 durable 实例身份导入同一捕获会话；child-only 修改不改变 owner ID 槽，
@@ -128,19 +127,27 @@
   PrepareBaseBody 对每版 DTO 复用 WriteBaseBody；全部 live Base 提前准备，决策后复用 bytes，性能优化留待 MVP 后。
   B 为完整 Base payload 精确值，D 仅对未定文件距离按 5 字节上界计量（超额 0..4）；H 仍是原记录实编码。
   ApplyDeltaBodyVn 只处理同 Vn；不证明 prior 身份，之后仍须对完整 DTO 验证引用。
-- SchemaStore 借用独占的专用 IRbfFile；完整 base+inline exact 闭包与同 key/跨版本 family kind 冲突预检后，一批次一帧追加/flush，等价注册不写。
+- SchemaStore 借用独占的专用 IRbfFile，`schemas.rbf` 共同保存 SchemaBatch 与 RepresentationBatch。
+  RepresentationId 为仓库内持久 UInt32：0 无效，1 固定 string，其他从 2 单调分配，不回收、不跨仓库解释；
+  完整 ObjectLayout 相等才复用，shape/对象实例不属于表示身份。SchemaStore.Count 仍只统计用户 Schema。
+  完整 base+inline exact 闭包与同 key/family kind/arity 冲突预检不能因已有 ID 而跳过。
+  两种待写 payload 全部预检后，先 Schema 追加/flush，再表示追加/flush，最后交付 ID；等价登记不追加。
   tag15 ObjectReference 携带完整 closed Named/Array TargetType，不绑定目标版本或形成 exact 注册依赖；
-  nominal 自环/互环无 Schema 初始化环。SchemaBatch 与 `.dgschema` history 新写 v4、严格读旧 v1–v3；旧 reader 不接受新增数组语法。字段 tag 1–16 不变，history-only 参数 tag=17；
+  nominal 自环/互环无 Schema 初始化环。SchemaBatch 与 `.dgschema` history 新写 v4、严格读旧 v1–v3；旧 reader 不接受新增数组语法。
+  RepresentationBatch 使用 RPB1 tag、版本 1，由 RepresentationDescriptorCodec 拥有完整表示描述语法。
+  字段 tag 1–16 不变，history-only 参数 tag=17；
   nominal 约束改变属于 owner Schema 改变，目标自身升版则不传播 owner 版本。
   严格重放全部帧/CRC；坏尾、tombstone、未知格式拒绝且不自动截断。写入不确定后 faulted，须重开；
   可写非空重开先 flush 再交付，readonly 不确认新屏障。尚无 Schema 分段、联合版本目录或自动修复。
-- StateStore 内部 BaseObjectBodyCodec 为 raw Base body 加 v3 类型头（严格读旧 v1/v2），返回 `EncodedBaseObjectBody`；
-  durable 使用逻辑 SchemaKey，string/array 走内建路径；array 保存 codec/构造码/exact element slot，inline 元素由 SchemaKey 解析。Delta 仍为裸 body。
-  TypedObjectVersionReader 在 callbacks 前匹配持久完整 Schema，逐 body 全消费；string 拒绝 Delta。
+- StateStore 内部 BaseObjectBodyCodec 为 raw Base body 加 v4 类型头：格式版本 + canonical RepresentationId，返回 `EncodedBaseObjectBody`。
+  新头统一经 SchemaStore 取得完整 ObjectLayout；string 固定 ID 可无目录解析。旧 v1–v3 描述只读，返回空 RepresentationId，不偷偷登记。
+  State 类型头不再编码 SchemaKey/TypeExpr/数组元素描述，描述语法集中在目录一侧；当前 DTO/SG/body/history/Upgrade 合同不变。
+  SchemaStore.ResolveReader 使用本次操作的冻结目录，完整匹配布局；不全局缓存另一个 snapshot 的 CLR reader。
+  Delta 沿终止 Base 继承 exact 表示，仍为裸 body。TypedObjectVersionReader 在 callbacks 前匹配持久完整布局，逐 body 全消费；string 拒绝 Delta。
   它保留单对象显式入口，与 RevisionDecoder 共用读取规则；不执行 Upgrade。
-  Schema 注册帧是共享元数据，不摊入对象 B/D/H。
-- CapturedRevisionPlanner 先核对 Previous/Parent、完整 prior ID 集合及所有 survivor 的 Base kind/exact Schema，
-  包括 NoChange；再注册全部 current Schema、包装 Base 并调用原 planner。Schema 注册可持久生效，
+  Schema/表示登记帧是共享元数据，不摊入对象 B/D/H；Base 的 ID 实际字节宽度计入 B。
+- CapturedRevisionPlanner 先核对 Previous/Parent、完整 prior ID 集合及所有 survivor 的完整 Base 布局，
+  包括 NoChange；再批量登记全部 current 表示、包装 Base 并调用原 planner。Schema/表示登记可持久生效，
   但该方法不追加 State/发布/Accept，也不证明 DTO 内容与 Parent 一致；合法迁移由受控 LoadedRevisionPlanner 路径产生 BaseOnlyUpdate。
 - ObjectRevisionPlanner 只读 exact Parent，校验完整 post-live rows 的新旧分类/prior；对 NoChange/Delta Update
   读取链 H，BaseOnlyUpdate 不读取旧内容链。输出 map Base（无 Parent）或 map Delta（有 Parent）及 Removes。
@@ -167,6 +174,7 @@ DurableGraph runtime 也引用 Serialization，单一 runtime PackageReference �
 
 | 准备修改 | 先查源码/测试，再按需读合同 |
 |---|---|
+| 持久表示 ID、Base 头及目录解析 | [DB-045](../docs/design-branches/0045-persisted-representation-id-slice.md)、[RepresentationId](DurableGraph.StateStore/RepresentationId.cs)、[SchemaStore](DurableGraph.StateStore/SchemaStore.cs)、[表示目录测试](../tests/DurableGraph.StateStore.Tests/RepresentationStoreTests.cs)、[表示集成测试](../tests/DurableGraph.StateStore.Tests/RepresentationIntegrationTests.cs) |
 | 数组对象、共同引用入口与元素 Upgrade | [DB-043](../docs/design-branches/0043-vector-array-object-slice.md)、[对象布局](DurableGraph/ObjectLayout.cs)、[数组绑定](DurableGraph/ArrayObjectBinding.cs)、[历史 reader](DurableGraph/ArrayStateReader.cs)、[数组 owner Upgrade](DurableGraph/StateBindingContext.ArrayUpgrade.cs) |
 | 引用槽与对象身份包装 | [DB-041](../docs/design-branches/0041-object-id-state-representation.md)、[ObjectId](DurableGraph/ObjectId.cs)、[静态引用操作](DurableGraph/BuiltinStateValues.cs) |
 | 可组合值 Upgrade / 规则集 / Context 子作用域 | [DB-039](../docs/design-branches/0039-composable-value-upgrade-design.md)、[值绑定](DurableGraph/StateBindingContext.ValueUpgrade.cs)、[SG 属性](DurableGraph.Generator/DurableSchemaGenerator.ValueUpgrades.cs)、[历史包](../experiments/PackageConsumerProbe/ValueUpgradeConsumer/README.md) |

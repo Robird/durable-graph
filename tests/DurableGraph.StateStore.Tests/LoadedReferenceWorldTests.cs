@@ -289,10 +289,11 @@ public sealed class LoadedReferenceWorldTests : IDisposable {
     }
     private FrameAddress Seed(params (uint Id, DurableSchema Schema, State State)[] rows) {
         _schemas.RegisterBatch(rows.Select(static row => row.Schema));
-        return _store.Append(StateRevision.CreateObjectHeadMapBase(null, rows.Select(static row => Durable(row.Id, row.Schema, row.State)), []));
+        return _store.Append(StateRevision.CreateObjectHeadMapBase(null, rows.Select(row => Durable(row.Id, row.Schema, row.State)), []));
     }
-    private static ObjectVersionRecord Durable(uint id, DurableSchema schema, State state) =>
-        ObjectVersionRecord.CreateBase(id, BaseObjectBodyCodec.EncodeDurable(schema, Base(state)).Body);
+    private ObjectVersionRecord Durable(uint id, DurableSchema schema, State state) =>
+        ObjectVersionRecord.CreateBase(id, BaseObjectBodyCodec.Encode(
+            _schemas.RegisterRepresentations([ObjectLayout.ForDurable(schema)])[0], Base(state)).Body);
     private static PreparedBaseBody Base(State state) {
         ArrayBufferWriter<byte> bytes = new();
         BinaryPayloadWriter writer = new(bytes);

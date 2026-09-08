@@ -173,12 +173,12 @@ public sealed class InlineSchemaStoreTests : IDisposable {
     [Fact]
     public void InlineSchemaCannotIdentifyObjectBaseOrBeReadAsAnObject() {
         DurableSchema inline = new("A", 1, SchemaKind.InlineValue);
-        Assert.Throws<ArgumentException>(() => BaseObjectBodyCodec.EncodeDurable(inline, new([])));
+        Assert.Throws<ArgumentException>(() => ObjectLayout.ForDurable(inline));
         using IRbfFile file = RbfFile.CreateNew(NextPath());
         SchemaStore schemas = new(file);
         schemas.Register(inline);
-        Assert.Throws<InvalidDataException>(() => TypedObjectVersionReader.MatchSchema(schemas, new("A", 1), inline));
-        Assert.Throws<InvalidDataException>(() => TypedObjectVersionReader.MatchSchema(schemas, new("A", 1), new("A", 1)));
+        Assert.Throws<InvalidDataException>(() => TypedObjectVersionReader.MatchSchema(schemas.GetRequired("A", 1), inline));
+        Assert.Throws<InvalidDataException>(() => TypedObjectVersionReader.MatchSchema(schemas.GetRequired("A", 1), new("A", 1)));
     }
 
     [Fact]
@@ -193,7 +193,7 @@ public sealed class InlineSchemaStoreTests : IDisposable {
         using SegmentStore segments = SegmentStore.CreateNew(NextPath(), new() { NewStoreLayout = RbfSegmentStoreLayout.Flat });
         StateRevisionStore states = new(segments);
         FrameAddress address = states.Append(StateRevision.CreateObjectHeadMapBase(null,
-            [ObjectVersionRecord.CreateBase(1, BaseObjectBodyCodec.EncodeDurable(owner, new([1])).Body)], []));
+            [ObjectVersionRecord.CreateBase(1, BaseObjectBodyCodec.Encode(schemas.RegisterRepresentations([ObjectLayout.ForDurable(owner)])[0], new([1])).Body)], []));
         ObjectVersionChain chain = states.ReadObjectVersionChain(address, 1);
         int calls = 0;
         byte Read(ref BinaryPayloadReader reader) { calls++; return reader.ReadByte(); }

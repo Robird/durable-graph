@@ -25,7 +25,7 @@ internal static class LoadedRevisionPlanner {
                     throw new InvalidDataException("String source provenance is invalid.");
                 }
             } else {
-                ObjectLayout layout = ObjectPersistence.GetLayout(stored, schemas);
+                ObjectLayout layout = stored.Layout;
                 if (!layout.Equals(row.SourceLayout) ||
                     row.RequiresRewrite != !layout.Equals(row.Current.Layout) ||
                     !row.Model.CurrentLayout.Equals(row.Current.Layout)) {
@@ -42,10 +42,12 @@ internal static class LoadedRevisionPlanner {
                 throw new InvalidDataException("Prepared contents do not match the controlled normalized baseline.");
             }
         }
-        ObjectPersistence.RegisterSchemas(schemas, contents.Select(static row => row.Current));
+        RepresentationId[] representations = schemas.RegisterRepresentations(
+            contents.Select(static row => row.Current.Layout).ToArray());
         List<PreparedObject> rows = [];
-        foreach (PreparedCapturedObject row in contents) {
-            EncodedBaseObjectBody encodedBaseBody = ObjectPersistence.Encode(row.Current, row.BaseBody);
+        for (int index = 0; index < contents.Count; index++) {
+            PreparedCapturedObject row = contents[index];
+            EncodedBaseObjectBody encodedBaseBody = BaseObjectBodyCodec.Encode(representations[index], row.BaseBody);
             if (row.Previous is null) {
                 rows.Add(PreparedObject.New(row.Current.Id, encodedBaseBody));
             } else if (source.Objects[row.Current.Id].RequiresRewrite) {

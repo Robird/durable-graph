@@ -1,0 +1,141 @@
+using Atelia.DurableGraph.StateStore.Serialization;
+using Atelia.Rbf;
+
+namespace Atelia.DurableGraph.StateStore.Tests;
+
+public sealed class RepresentationHeaderTests : IDisposable {
+    private readonly List<string> _paths = [];
+
+    [Theory]
+    [InlineData(1U, "0401AB")]
+    [InlineData(2U, "0402AB")]
+    [InlineData(127U, "047FAB")]
+    [InlineData(128U, "048001AB")]
+    [InlineData(16383U, "04FF7FAB")]
+    [InlineData(16384U, "04808001AB")]
+    [InlineData(uint.MaxValue, "04FFFFFFFF0FAB")]
+    public void NewBaseHeaderUsesOnlyVersionAndCanonicalRepresentationId(uint id, string hex) {
+        byte[] golden = Convert.FromHexString(hex);
+        Assert.Equal(golden, BaseObjectBodyCodec.Encode(new(id), new([0xAB])).Body.ToArray());
+        // Independently specified bytes keep integer-width boundaries visible.
+        BinaryPayloadReader reader = new(golden);
+        Assert.Equal(4, reader.ReadByte());
+        Assert.Equal(id, reader.ReadUInt32());
+        Assert.Equal(0xAB, reader.ReadByte());
+        reader.EnsureFullyConsumed();
+    }
+
+    [Fact]
+    public void HeaderIdWidthBoundariesResolveAfterColdReopen() {
+        string path = NewPath();
+        ObjectLayout[] layouts = Enumerable.Range(2, 16383)
+            .Select(value => ObjectLayout.ForDurable(new DurableSchema($"Type{value}", 1))).ToArray();
+        using (IRbfFile file = RbfFile.CreateNew(path)) {
+            SchemaStore schemas = new(file);
+            RepresentationId[] ids = schemas.RegisterRepresentations(layouts);
+            Assert.Equal(new RepresentationId(2), ids[0]);
+            Assert.Equal(new RepresentationId(16384), ids[^1]);
+        }
+        using IRbfFile reopened = RbfFile.OpenReadOnlyExisting(path);
+        SchemaStore restored = new(reopened, readOnly: true);
+        foreach ((uint id, string hex) in new (uint, string)[] {
+            (127, "047FAB"), (128, "048001AB"), (16383, "04FF7FAB"), (16384, "04808001AB")
+        }) {
+            var decoded = BaseObjectBodyCodec.Decode(Convert.FromHexString(hex), restored);
+            Assert.Equal(new RepresentationId(id), decoded.RepresentationId);
+            Assert.Equal(layouts[(int)id - 2], decoded.Layout);
+            Assert.Equal(new byte[] { 0xAB }, decoded.Body.ToArray());
+        }
+    }
+
+    [Fact]
+    public void ClassAndArrayShareTheSameHeaderWhileExactLayoutComesFromDirectory() {
+        DurableSchema point = new("Point", 2, SchemaKind.InlineValue, new DurableFieldInfo(1, TypeTag.Int32));
+        DurableSchema box = new(TypeExpr.Named("Box", TypeExpr.Builtin(TypeTag.Int32)), 1,
+            new DurableFieldInfo(1, TypeTag.Int32));
+        ObjectLayout classLayout = ObjectLayout.ForDurable(box);
+        ObjectLayout arrayLayout = ObjectLayout.ForArray(new(TypeExprKind.Rank2Array,
+            new DurableFieldInfo(1, TypeTag.InlineValue, inlineSchema: point)));
+        string path = NewPath();
+        using (IRbfFile file = RbfFile.CreateNew(path)) {
+            SchemaStore schemas = new(file);
+            RepresentationId[] ids = schemas.RegisterRepresentations([classLayout, arrayLayout]);
+            Assert.Equal(new[] { new RepresentationId(2), new RepresentationId(3) }, ids);
+            Assert.Equal(Convert.FromHexString("0402AB"), BaseObjectBodyCodec.Encode(ids[0], new([0xAB])).Body.ToArray());
+            Assert.Equal(Convert.FromHexString("0403AB"), BaseObjectBodyCodec.Encode(ids[1], new([0xAB])).Body.ToArray());
+        }
+        using IRbfFile reopened = RbfFile.OpenReadOnlyExisting(path);
+        SchemaStore restored = new(reopened, readOnly: true);
+        long tail = reopened.TailOffset;
+        var durable = BaseObjectBodyCodec.Decode(Convert.FromHexString("0402AB"), restored);
+        var array = BaseObjectBodyCodec.Decode(Convert.FromHexString("0403AB"), restored);
+        Assert.Equal(classLayout, durable.Layout);
+        Assert.Equal(arrayLayout, array.Layout);
+        Assert.Equal(new RepresentationId(2), durable.RepresentationId);
+        Assert.Equal(new RepresentationId(3), array.RepresentationId);
+        Assert.Same(restored.GetRequired("Point", 2), array.Layout.Array!.ElementSlot.InlineSchema);
+        Assert.Equal(tail, reopened.TailOffset);
+        Assert.Throws<InvalidDataException>(() => BaseObjectBodyCodec.Decode(Convert.FromHexString("0402AB")));
+        Assert.Throws<InvalidDataException>(() => BaseObjectBodyCodec.Decode(Convert.FromHexString("0403AB")));
+    }
+
+    [Theory]
+    [InlineData("0101AB", false)]
+    [InlineData("0201AB", false)]
+    [InlineData("0301AB", false)]
+    [InlineData("0401AB", true)]
+    public void AllStringHeadersResolveWithoutSchemaStore(string hex, bool hasPersistentId) {
+        var decoded = BaseObjectBodyCodec.Decode(Convert.FromHexString(hex));
+        Assert.Same(ObjectLayout.String, decoded.Layout);
+        Assert.Equal(ObjectStateKind.String, decoded.Kind);
+        Assert.Equal(hasPersistentId ? RepresentationId.String : (RepresentationId?)null, decoded.RepresentationId);
+        Assert.Equal(new byte[] { 0xAB }, decoded.Body.ToArray());
+        Assert.Equal(Convert.FromHexString("0401AB"), BaseObjectBodyCodec.EncodeString(new([0xAB])).Body.ToArray());
+    }
+
+    [Theory]
+    [InlineData("0400")]
+    [InlineData("0402")]
+    [InlineData("047F")]
+    [InlineData("048100")]
+    [InlineData("04FFFFFFFF1F")]
+    [InlineData("04808080808000")]
+    [InlineData("00")]
+    [InlineData("05")]
+    public void InvalidOrUnknownIdAndVersionFailClosed(string hex) {
+        using IRbfFile file = RbfFile.CreateNew(NewPath());
+        SchemaStore schemas = new(file);
+        Assert.Throws<InvalidDataException>(() => BaseObjectBodyCodec.Decode(Convert.FromHexString(hex), schemas));
+        Assert.Throws<InvalidDataException>(() => BaseObjectBodyCodec.Decode(Convert.FromHexString(hex)));
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("04")]
+    [InlineData("0480")]
+    [InlineData("048080")]
+    [InlineData("04808080")]
+    [InlineData("0480808080")]
+    public void EveryIncompleteV4HeaderFails(string hex) {
+        Assert.Throws<EndOfStreamException>(() => BaseObjectBodyCodec.Decode(Convert.FromHexString(hex)));
+    }
+
+    [Fact]
+    public void ZeroCannotBeEncodedAndDecodedBodyOwnsItsBytes() {
+        Assert.Throws<ArgumentOutOfRangeException>(() => BaseObjectBodyCodec.Encode(default, new([])));
+        byte[] encoded = [4, 1, 7, 8];
+        var decoded = BaseObjectBodyCodec.Decode(encoded);
+        encoded.AsSpan().Clear();
+        Assert.Equal(new byte[] { 7, 8 }, decoded.Body.ToArray());
+    }
+
+    private string NewPath() {
+        string path = Path.Combine(Path.GetTempPath(), $"durable-representation-header-{Guid.NewGuid():N}.rbf");
+        _paths.Add(path);
+        return path;
+    }
+
+    public void Dispose() {
+        foreach (string path in _paths) { File.Delete(path); }
+    }
+}

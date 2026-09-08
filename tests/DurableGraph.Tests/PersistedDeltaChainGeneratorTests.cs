@@ -45,7 +45,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             schemas.RegisterBatch([schema]);
             first = store.Append(StateRevision.CreateObjectHeadMapBase(null,
                 input.Strings.Where(item => item.Id.Value != aliasId).Select(item => ObjectVersionRecord.CreateBase(item.Id.Value, BaseObjectBodyCodec.EncodeString(new(item.Body)).Body))
-                    .Append(ObjectVersionRecord.CreateBase(ownerId, BaseObjectBodyCodec.EncodeDurable(schema, new(input.Base)).Body)), []));
+                    .Append(ObjectVersionRecord.CreateBase(ownerId, BaseObjectBodyCodec.Encode(schemas.RegisterRepresentations([ObjectLayout.ForDurable(schema)])[0], new(input.Base)).Body)), []));
             second = store.Append(StateRevision.CreateObjectHeadMapDelta(first,
                 [ObjectVersionRecord.CreateDelta(ownerId, first, input.First.Body),
                     ObjectVersionRecord.CreateBase(aliasId, BaseObjectBodyCodec.EncodeString(new(input.Strings.Single(item => item.Id.Value == aliasId).Body)).Body)], []));
@@ -59,7 +59,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             Assert.Equal(input.First.Body.ToArray(), store.ReadObjectVersionChain(repeated, ownerId).Records[^1].Record.Body.ToArray());
             missingString = store.Append(StateRevision.CreateObjectHeadMapDelta(third, [], [nameId]));
             wrongKind = store.Append(StateRevision.CreateObjectHeadMapDelta(third,
-                [ObjectVersionRecord.CreateBase(nameId, BaseObjectBodyCodec.EncodeDurable(schema, new(expected[2])).Body)], []));
+                [ObjectVersionRecord.CreateBase(nameId, BaseObjectBodyCodec.Encode(schemas.RegisterRepresentations([ObjectLayout.ForDurable(schema)])[0], new(expected[2])).Body)], []));
             malformed = store.Append(StateRevision.CreateObjectHeadMapDelta(third,
                 [ObjectVersionRecord.CreateDelta(ownerId, third, new byte[] { 8, 8, 0 })], []));
         }
@@ -78,7 +78,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             Dictionary<uint, byte[]> strings = [];
             foreach ((uint id, FrameAddress address) in cold.ReadLiveObjectHeadMap(revision)) {
                 var objectChain = cold.ReadObjectVersionChain(revision, id);
-                var stored = BaseObjectBodyCodec.Decode(objectChain.Records[0].Record.Body);
+                var stored = BaseObjectBodyCodec.Decode(objectChain.Records[0].Record.Body, coldSchemas);
                 if (stored.Kind == ObjectStateKind.String) {
                     TypedObjectVersionReader.ReadString(objectChain);
                     strings.Add(id, stored.Body.ToArray());
@@ -99,28 +99,36 @@ public sealed partial class DurableSchemaGeneratorTests {
         Assert.Equal(latest.Records.Sum(entry => (long)entry.ObjectVersionPayloadBytes), latest.ReconstructionPayloadBytes);
         Assert.True(latest.ReconstructionPayloadBytes > oldest.ReconstructionPayloadBytes);
 
-        // The Base key selects one persistent exact Schema for the whole chain.
+        // The Base ID selects one persistent exact representation for the whole chain.
         // Neither missing registration nor a mismatched reader may enter a body callback.
         using (var emptyFile = RbfFile.CreateNew(Path.Combine(schemaDirectory.Path, "missing.rbf"))) {
             SchemaStore missing = new(emptyFile);
             int calls = (int)host.GetField("DecodeCalls")!.GetValue(null)!;
-            Assert.Throws<SchemaNotFoundException>(() => Load(third, missing));
+            Assert.Throws<InvalidDataException>(() => Load(third, missing));
             Assert.Equal(calls, (int)host.GetField("DecodeCalls")!.GetValue(null)!);
         }
         // An independent repository can hold the same logical keys with a different
-        // ancestor definition. Its registry must not silently authorize this reader.
+        // ancestor definition. Its own registered Base must not authorize this reader.
         string alternatePath = Path.Combine(schemaDirectory.Path, "different-definition.rbf");
+        string alternateStatePath = Path.Combine(schemaDirectory.Path, "different-definition-state");
         DurableSchema ancestor = schema.BaseSchema!;
         var differentAncestor = new DurableSchema(ancestor.SchemaId, ancestor.Version, []);
-        using (var alternateFile = RbfFile.CreateNew(alternatePath)) {
+        FrameAddress alternateRevision;
+        using (var alternateFile = RbfFile.CreateNew(alternatePath))
+        using (SegmentStore alternateSegments = SegmentStore.CreateNew(alternateStatePath)) {
             SchemaStore alternate = new(alternateFile);
-            alternate.RegisterBatch([new DurableSchema(schema.SchemaId, schema.Version,
-                schema.Fields.ToArray(), differentAncestor)]);
+            DurableSchema differentSchema = new(schema.SchemaId, schema.Version, schema.Fields.ToArray(), differentAncestor);
+            RepresentationId alternateId = alternate.RegisterRepresentations([ObjectLayout.ForDurable(differentSchema)])[0];
+            StateRevisionStore alternateStates = new(alternateSegments);
+            alternateRevision = alternateStates.Append(StateRevision.CreateObjectHeadMapBase(null,
+                [ObjectVersionRecord.CreateBase(ownerId, BaseObjectBodyCodec.Encode(alternateId, new(expected[0])).Body)], []));
         }
-        using (var alternateFile = RbfFile.OpenReadOnlyExisting(alternatePath)) {
+        using (var alternateFile = RbfFile.OpenReadOnlyExisting(alternatePath))
+        using (SegmentStore alternateSegments = SegmentStore.OpenReadOnlyExisting(alternateStatePath)) {
             SchemaStore alternate = new(alternateFile, readOnly: true);
+            ObjectVersionChain alternateChain = new StateRevisionStore(alternateSegments).ReadObjectVersionChain(alternateRevision, ownerId);
             int calls = (int)host.GetField("DecodeCalls")!.GetValue(null)!;
-            Assert.Throws<InvalidDataException>(() => Load(third, alternate));
+            Assert.Throws<InvalidDataException>(() => decode(alternateChain, alternate, schema, []));
             Assert.Equal(calls, (int)host.GetField("DecodeCalls")!.GetValue(null)!);
         }
         var wrongSchema = new DurableSchema(schema.SchemaId, 2, schema.Fields.ToArray(), schema.BaseSchema);
@@ -197,7 +205,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             StateRevisionStore store = new(segments);
             schemas.RegisterBatch([oldSchema, newSchema]);
             first = store.Append(StateRevision.CreateObjectHeadMapBase(null, [ObjectVersionRecord.CreateBase(1,
-                BaseObjectBodyCodec.EncodeDurable(oldSchema, new(baseBytes)).Body)], []));
+                BaseObjectBodyCodec.Encode(schemas.RegisterRepresentations([ObjectLayout.ForDurable(oldSchema)])[0], new(baseBytes)).Body)], []));
             second = store.Append(StateRevision.CreateObjectHeadMapDelta(first, [ObjectVersionRecord.CreateDelta(1, first, delta1.Body)], []));
             third = store.Append(StateRevision.CreateObjectHeadMapDelta(second, [ObjectVersionRecord.CreateDelta(1, second, delta2.Body)], []));
         }

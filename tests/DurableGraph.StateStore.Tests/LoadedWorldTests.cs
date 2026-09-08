@@ -14,6 +14,8 @@ public sealed class LoadedWorldTests : IDisposable {
     private readonly SegmentStore _segments;
     private readonly SchemaStore _schemas;
     private readonly StateRevisionStore _store;
+    // A real stable scalar makes sparse field updates smaller than a complete Base.
+    private const ulong InitialSequence = 0xFEDC_BA98_7654_3210UL;
     private static readonly DurableSchema Old = Schema("World", 1);
     private static readonly DurableSchema Current = Schema("World", 2);
     private static readonly ReadAmplificationBaseBudgetParameters NoRebase = new(1000000, 1);
@@ -34,15 +36,15 @@ public sealed class LoadedWorldTests : IDisposable {
         FrameAddress second = _store.Append(StateRevision.CreateObjectHeadMapDelta(first,
             [ObjectVersionRecord.CreateDelta(1, first, Delta(new(2, 8, 0), new(3, 8, 0)).Body)], []));
         FrameAddress third = _store.Append(StateRevision.CreateObjectHeadMapDelta(second,
-            [ObjectVersionRecord.CreateDelta(1, second, Delta(new(3, 8, 0), new(4, 8, 0)).Body)], []));
+            [ObjectVersionRecord.CreateDelta(1, second, Delta(new(3, 8, 0), new(4, 8, 0, InitialSequence - 1)).Body)], []));
         StateModelRegistry models = Registry(Model(upgrade: state => state with { Value = (byte)(state.Value + 10), TextId = new ObjectId(0) }));
         StateModelSnapshot snapshot = models.Snapshot();
         DecodedRevision decoded = RevisionDecoder.ReadSnapshot(_store, _schemas, third, snapshot.Readers);
         long schemaTail = _file.TailOffset;
         long stateTail = Tail();
         NormalizedRevision normalized = NormalizedRevision.Create(decoded, snapshot);
-        Assert.Equal(new State(4, 8, 0), decoded.GetRequired(new ObjectId(1)).GetState<State>());
-        Assert.Equal(new State(14, 0, 0), normalized.Objects[new ObjectId(1)].Current.GetState<State>());
+        Assert.Equal(new State(4, 8, 0, InitialSequence - 1), decoded.GetRequired(new ObjectId(1)).GetState<State>());
+        Assert.Equal(new State(14, 0, 0, InitialSequence - 1), normalized.Objects[new ObjectId(1)].Current.GetState<State>());
         Assert.True(normalized.Objects[new ObjectId(1)].RequiresRewrite);
         Assert.Equal(Old, normalized.Objects[new ObjectId(1)].SourceSchema);
         Assert.Equal(Current, normalized.Objects[new ObjectId(1)].Current.Schema);
@@ -111,6 +113,7 @@ public sealed class LoadedWorldTests : IDisposable {
         FrameAddress next = _store.Append(plan.Revision);
         LoadedWorld<World> reloaded = LoadedWorld.Load<World>(_store, _schemas, next, plan.WorldId, models);
         Assert.Equal((byte)5, reloaded.World.Value); // The plan owns content from before the edit.
+        Assert.Equal(InitialSequence, reloaded.World.Sequence);
         Assert.Empty(reloaded.Prepare(NoRebase).Revision.LocalObjects);
         reloaded.World.Value = 6;
         Assert.Equal(ObjectVersionKind.Delta, Assert.Single(reloaded.Prepare(NoRebase).Revision.LocalObjects).Kind);
@@ -306,12 +309,13 @@ public sealed class LoadedWorldTests : IDisposable {
         internal byte Value;
         internal string? Text;
         internal string? Alias;
+        internal ulong Sequence = InitialSequence;
         internal int TransientMarker = 73;
         internal World(int unused) => throw new InvalidOperationException("Constructors must not run.");
     }
     private sealed class OtherWorld() : World(0) { }
-    private readonly record struct State(byte Value, ObjectId TextId, ObjectId AliasId) {
-        internal State(byte value, uint textId, uint aliasId) : this(value, new ObjectId(textId), new ObjectId(aliasId)) { }
+    private readonly record struct State(byte Value, ObjectId TextId, ObjectId AliasId, ulong Sequence = InitialSequence) {
+        internal State(byte value, uint textId, uint aliasId, ulong sequence = InitialSequence) : this(value, new ObjectId(textId), new ObjectId(aliasId), sequence) { }
     }
 
     private static StateModelBinding Model(Func<State, State>? upgrade = null, Action? beforePrepare = null,
@@ -337,8 +341,9 @@ public sealed class LoadedWorldTests : IDisposable {
                 world.Value = state.Value;
                 world.Text = strings.ResolveString(state.TextId);
                 world.Alias = strings.ResolveString(state.AliasId);
+                world.Sequence = state.Sequence;
             },
-            static (world, context) => new(world.Value, context.CaptureString(world.Text), context.CaptureString(world.Alias)),
+            static (world, context) => new(world.Value, context.CaptureString(world.Text), context.CaptureString(world.Alias), world.Sequence),
             Validate);
     }
 
@@ -352,13 +357,15 @@ public sealed class LoadedWorldTests : IDisposable {
         return result;
     }
     private static DurableSchema Schema(string id, int version) => new(id, version,
-        new DurableFieldInfo(1, TypeTag.Byte), new DurableFieldInfo(2, TypeTag.String), new DurableFieldInfo(3, TypeTag.String));
+        new DurableFieldInfo(1, TypeTag.Byte), new DurableFieldInfo(2, TypeTag.String), new DurableFieldInfo(3, TypeTag.String),
+        new DurableFieldInfo(4, TypeTag.UInt64));
     private FrameAddress Seed(DurableSchema schema, State state, params ObjectVersionRecord[] strings) {
         _schemas.Register(schema);
         return _store.Append(StateRevision.CreateObjectHeadMapBase(null, new[] { Durable(1, schema, state) }.Concat(strings), []));
     }
-    private static ObjectVersionRecord Durable(uint id, DurableSchema schema, State state) =>
-        ObjectVersionRecord.CreateBase(id, BaseObjectBodyCodec.EncodeDurable(schema, Base(state)).Body);
+    private ObjectVersionRecord Durable(uint id, DurableSchema schema, State state) =>
+        ObjectVersionRecord.CreateBase(id, BaseObjectBodyCodec.Encode(
+            _schemas.RegisterRepresentations([ObjectLayout.ForDurable(schema)])[0], Base(state)).Body);
     private static ObjectVersionRecord Text(uint id, string value) =>
         ObjectVersionRecord.CreateBase(id, BaseObjectBodyCodec.EncodeString(StringPayloadCodec.PrepareBase(value)).Body);
     private static PreparedBaseBody Base(State state) {
@@ -367,25 +374,28 @@ public sealed class LoadedWorldTests : IDisposable {
         writer.WriteByte(state.Value);
         writer.WriteUInt32(state.TextId.Value);
         writer.WriteUInt32(state.AliasId.Value);
+        writer.WriteUInt64(state.Sequence);
         return new(bytes.WrittenSpan);
     }
-    private static State Read(ref BinaryPayloadReader reader) => new(reader.ReadByte(), reader.ReadUInt32(), reader.ReadUInt32());
+    private static State Read(ref BinaryPayloadReader reader) => new(reader.ReadByte(), reader.ReadUInt32(), reader.ReadUInt32(), reader.ReadUInt64());
     private static PreparedDeltaBody Delta(State prior, State next) {
-        byte mask = (byte)((prior.Value != next.Value ? 1 : 0) | (prior.TextId != next.TextId ? 2 : 0) | (prior.AliasId != next.AliasId ? 4 : 0));
+        byte mask = (byte)((prior.Value != next.Value ? 1 : 0) | (prior.TextId != next.TextId ? 2 : 0) | (prior.AliasId != next.AliasId ? 4 : 0) | (prior.Sequence != next.Sequence ? 8 : 0));
         ArrayBufferWriter<byte> bytes = new();
         BinaryPayloadWriter writer = new(bytes);
         writer.WriteByte(mask);
         if ((mask & 1) != 0) writer.WriteByte(next.Value);
         if ((mask & 2) != 0) writer.WriteUInt32(next.TextId.Value);
         if ((mask & 4) != 0) writer.WriteUInt32(next.AliasId.Value);
+        if ((mask & 8) != 0) writer.WriteUInt64(next.Sequence);
         return new(mask != 0, bytes.WrittenSpan);
     }
     private static State Apply(ref BinaryPayloadReader reader, State prior) {
         byte mask = reader.ReadByte();
-        if (mask == 0 || mask > 7) throw new InvalidDataException("Invalid test bitmap.");
+        if (mask == 0 || mask > 15) throw new InvalidDataException("Invalid test bitmap.");
         return new((mask & 1) != 0 ? reader.ReadByte() : prior.Value,
             (mask & 2) != 0 ? new ObjectId(reader.ReadUInt32()) : prior.TextId,
-            (mask & 4) != 0 ? new ObjectId(reader.ReadUInt32()) : prior.AliasId);
+            (mask & 4) != 0 ? new ObjectId(reader.ReadUInt32()) : prior.AliasId,
+            (mask & 8) != 0 ? reader.ReadUInt64() : prior.Sequence);
     }
     private long Tail() {
         using RbfSegmentWriterLease writer = _segments.OpenActiveWriter();

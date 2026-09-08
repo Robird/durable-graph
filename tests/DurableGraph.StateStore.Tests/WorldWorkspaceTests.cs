@@ -14,6 +14,8 @@ public sealed class WorldWorkspaceTests : IDisposable {
     private readonly SegmentStore _segments;
     private readonly SchemaStore _schemas;
     private readonly StateRevisionStore _store;
+    // A real stable scalar makes sparse field updates smaller than a complete Base.
+    private const ulong InitialSequence = 0xFEDC_BA98_7654_3210UL;
     private static readonly DurableSchema Old = Schema("World", 1);
     private static readonly DurableSchema Current = Schema("World", 2);
     private static readonly ReadAmplificationBaseBudgetParameters NoRebase = new(1000000, 1);
@@ -44,6 +46,7 @@ public sealed class WorldWorkspaceTests : IDisposable {
         Assert.Same(world, workspace.World);
         Assert.Equal(first, workspace.ParentRevisionAddress);
         Assert.Equal((byte)1, Read(first, workspace.WorldId, models).Value);
+        Assert.Equal(InitialSequence, Read(first, workspace.WorldId, models).Sequence);
         using (PreparedWorldSave<World> second = workspace.Stage(NoRebase)) {
             Assert.Equal(first, second.Revision.ParentRevisionAddress);
             Assert.Equal(ObjectVersionKind.Delta, Assert.Single(second.Revision.LocalObjects).Kind);
@@ -51,9 +54,11 @@ public sealed class WorldWorkspaceTests : IDisposable {
             Assert.Equal((byte)2, Read(address, workspace.WorldId, models).Value);
         }
         world.Value = 3;
+        world.Sequence = InitialSequence - 1;
         using (PreparedWorldSave<World> third = workspace.Stage(NoRebase)) {
             FrameAddress address = Install(third);
             Assert.Equal((byte)3, Read(address, workspace.WorldId, models).Value);
+            Assert.Equal(InitialSequence - 1, Read(address, workspace.WorldId, models).Sequence);
         }
         Assert.Same(world, workspace.World);
         using PreparedWorldSave<World> unchanged = workspace.Stage(NoRebase);
@@ -195,12 +200,15 @@ public sealed class WorldWorkspaceTests : IDisposable {
             pending.Install();
         }
         child.Value = 8;
+        FrameAddress changed;
         using (PreparedWorldSave<Node> pending = workspace.Stage(NoRebase)) {
-            ObjectVersionRecord delta = Assert.Single(pending.Revision.LocalObjects);
-            Assert.Equal(2u, delta.ObjectId);
-            Assert.Equal(ObjectVersionKind.Delta, delta.Kind);
-            FrameAddress next = _store.Append(pending.Revision);
-            pending.PrepareInstall(next);
+            ObjectVersionRecord write = Assert.Single(pending.Revision.LocalObjects);
+            Assert.Equal(2u, write.ObjectId);
+            // This fixture's Delta repeats the complete two-field body; the compact v4 Base
+            // is cheaper than adding a prior pointer. Identity must survive that choice too.
+            Assert.Equal(ObjectVersionKind.Base, write.Kind);
+            changed = _store.Append(pending.Revision);
+            pending.PrepareInstall(changed);
             pending.Install();
         }
         Assert.Same(root, workspace.World);
@@ -222,6 +230,10 @@ public sealed class WorldWorkspaceTests : IDisposable {
         Assert.Same(child, root.Next);
         Assert.Equal((byte)7, RevisionDecoder.ReadSnapshot(_store, _schemas, first, models.Snapshot().Readers)
             .GetRequired(new ObjectId(2)).GetState<NodeState>().Value);
+        NodeState changedState = RevisionDecoder.ReadSnapshot(_store, _schemas, changed, models.Snapshot().Readers)
+            .GetRequired(new ObjectId(2)).GetState<NodeState>();
+        Assert.Equal((byte)8, changedState.Value);
+        Assert.Equal(new ObjectId(2), changedState.NextId);
     }
 
     private sealed class Node : DurableBase {
@@ -254,12 +266,13 @@ public sealed class WorldWorkspaceTests : IDisposable {
         internal byte Value;
         internal string? Text;
         internal string? Alias;
+        internal ulong Sequence = InitialSequence;
         internal int TransientMarker = 73;
         internal World(int unused = 0) { }
     }
     private sealed class OtherWorld() : World(0) { }
-    private readonly record struct State(byte Value, ObjectId TextId, ObjectId AliasId) {
-        internal State(byte value, uint textId, uint aliasId) : this(value, new ObjectId(textId), new ObjectId(aliasId)) { }
+    private readonly record struct State(byte Value, ObjectId TextId, ObjectId AliasId, ulong Sequence = InitialSequence) {
+        internal State(byte value, uint textId, uint aliasId, ulong sequence = InitialSequence) : this(value, new ObjectId(textId), new ObjectId(aliasId), sequence) { }
     }
 
     private static StateModelBinding Model(Func<State, State>? upgrade = null, Action? beforePrepare = null,
@@ -285,8 +298,9 @@ public sealed class WorldWorkspaceTests : IDisposable {
                 world.Value = state.Value;
                 world.Text = strings.ResolveString(state.TextId);
                 world.Alias = strings.ResolveString(state.AliasId);
+                world.Sequence = state.Sequence;
             },
-            static (world, context) => new(world.Value, context.CaptureString(world.Text), context.CaptureString(world.Alias)),
+            static (world, context) => new(world.Value, context.CaptureString(world.Text), context.CaptureString(world.Alias), world.Sequence),
             Validate);
     }
 
@@ -300,13 +314,15 @@ public sealed class WorldWorkspaceTests : IDisposable {
         return result;
     }
     private static DurableSchema Schema(string id, int version) => new(id, version,
-        new DurableFieldInfo(1, TypeTag.Byte), new DurableFieldInfo(2, TypeTag.String), new DurableFieldInfo(3, TypeTag.String));
+        new DurableFieldInfo(1, TypeTag.Byte), new DurableFieldInfo(2, TypeTag.String), new DurableFieldInfo(3, TypeTag.String),
+        new DurableFieldInfo(4, TypeTag.UInt64));
     private FrameAddress Seed(DurableSchema schema, State state, params ObjectVersionRecord[] strings) {
         _schemas.Register(schema);
         return _store.Append(StateRevision.CreateObjectHeadMapBase(null, new[] { Durable(1, schema, state) }.Concat(strings), []));
     }
-    private static ObjectVersionRecord Durable(uint id, DurableSchema schema, State state) =>
-        ObjectVersionRecord.CreateBase(id, BaseObjectBodyCodec.EncodeDurable(schema, Base(state)).Body);
+    private ObjectVersionRecord Durable(uint id, DurableSchema schema, State state) =>
+        ObjectVersionRecord.CreateBase(id, BaseObjectBodyCodec.Encode(
+            _schemas.RegisterRepresentations([ObjectLayout.ForDurable(schema)])[0], Base(state)).Body);
     private static ObjectVersionRecord Text(uint id, string value) =>
         ObjectVersionRecord.CreateBase(id, BaseObjectBodyCodec.EncodeString(StringPayloadCodec.PrepareBase(value)).Body);
     private static PreparedBaseBody Base(State state) {
@@ -315,25 +331,28 @@ public sealed class WorldWorkspaceTests : IDisposable {
         writer.WriteByte(state.Value);
         writer.WriteUInt32(state.TextId.Value);
         writer.WriteUInt32(state.AliasId.Value);
+        writer.WriteUInt64(state.Sequence);
         return new(bytes.WrittenSpan);
     }
-    private static State Read(ref BinaryPayloadReader reader) => new(reader.ReadByte(), reader.ReadUInt32(), reader.ReadUInt32());
+    private static State Read(ref BinaryPayloadReader reader) => new(reader.ReadByte(), reader.ReadUInt32(), reader.ReadUInt32(), reader.ReadUInt64());
     private static PreparedDeltaBody Delta(State prior, State next) {
-        byte mask = (byte)((prior.Value != next.Value ? 1 : 0) | (prior.TextId != next.TextId ? 2 : 0) | (prior.AliasId != next.AliasId ? 4 : 0));
+        byte mask = (byte)((prior.Value != next.Value ? 1 : 0) | (prior.TextId != next.TextId ? 2 : 0) | (prior.AliasId != next.AliasId ? 4 : 0) | (prior.Sequence != next.Sequence ? 8 : 0));
         ArrayBufferWriter<byte> bytes = new();
         BinaryPayloadWriter writer = new(bytes);
         writer.WriteByte(mask);
         if ((mask & 1) != 0) writer.WriteByte(next.Value);
         if ((mask & 2) != 0) writer.WriteUInt32(next.TextId.Value);
         if ((mask & 4) != 0) writer.WriteUInt32(next.AliasId.Value);
+        if ((mask & 8) != 0) writer.WriteUInt64(next.Sequence);
         return new(mask != 0, bytes.WrittenSpan);
     }
     private static State Apply(ref BinaryPayloadReader reader, State prior) {
         byte mask = reader.ReadByte();
-        if (mask == 0 || mask > 7) throw new InvalidDataException("Invalid test bitmap.");
+        if (mask == 0 || mask > 15) throw new InvalidDataException("Invalid test bitmap.");
         return new((mask & 1) != 0 ? reader.ReadByte() : prior.Value,
             (mask & 2) != 0 ? new ObjectId(reader.ReadUInt32()) : prior.TextId,
-            (mask & 4) != 0 ? new ObjectId(reader.ReadUInt32()) : prior.AliasId);
+            (mask & 4) != 0 ? new ObjectId(reader.ReadUInt32()) : prior.AliasId,
+            (mask & 8) != 0 ? reader.ReadUInt64() : prior.Sequence);
     }
     private long Tail() {
         using RbfSegmentWriterLease writer = _segments.OpenActiveWriter();

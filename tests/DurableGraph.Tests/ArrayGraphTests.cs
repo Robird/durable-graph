@@ -51,7 +51,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             Assert.NotEmpty(states.Read(compositeChange).LocalObjects);
             Assert.Empty(states.Read(compositeChange).RemovedObjectIds);
             uint hyperId = Assert.Single(initial.LocalObjects, row => {
-                ArrayLayout? layout = BaseObjectBodyCodec.Decode(row.Body, schemas).ArrayLayout;
+                ArrayLayout? layout = BaseObjectBodyCodec.Decode(row.Body, schemas).Layout.Array;
                 return layout?.Rank == 4 && layout.ElementSlot.TypeTag == TypeTag.String;
             }).ObjectId;
             Assert.Equal(ObjectVersionKind.Delta,
@@ -128,8 +128,9 @@ public sealed partial class DurableSchemaGeneratorTests {
 
         DecodedBaseObjectBody decoded = BaseObjectBodyCodec.Decode(replacementBase.Body, schemas);
         Assert.Equal(ObjectStateKind.Array, decoded.Kind);
-        // Header v3 + Array kind + codec v1 + SZ constructor + Int32 slot = five bytes.
-        Assert.Equal(5, replacementBase.Body.Length - decoded.Body.Length);
+        // This small directory has a one-byte ID; v4 plus that ID is exactly two bytes.
+        Assert.InRange(decoded.RepresentationId!.Value.Value, 2u, 127u);
+        Assert.Equal(2, replacementBase.Body.Length - decoded.Body.Length);
         Assert.Equal(ObjectVersionPayloadSize.GetBasePayloadBytes(replacementBase.Body.Length), baseChain.ReconstructionPayloadBytes);
         Assert.True(baseChain.ReconstructionPayloadBytes > ObjectVersionPayloadSize.GetBasePayloadBytes(decoded.Body.Length));
         fixture.Check(fixture.LoadOld(states, schemas, first, worldId), 0, false, false);

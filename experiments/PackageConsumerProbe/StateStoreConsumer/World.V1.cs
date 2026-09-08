@@ -12,8 +12,9 @@ namespace StateStorePackageConsumerProbe;
 public sealed partial class World : DurableBase {
     [DurableField(1)] private int _score;
     [DurableField(2)] private readonly string _name;
+    [DurableField(4)] private readonly ulong _createdAtTicks;
 
-    public World(int score, string name) { _score = score; _name = name; }
+    public World(int score, string name) { _score = score; _name = name; _createdAtTicks = 638_625_600_000_000_000; }
 
     internal static void Seed(string directory) {
         Directory.CreateDirectory(directory);
@@ -39,6 +40,7 @@ public sealed partial class World : DurableBase {
             revision = store.Append(second.Prepare(policy).Revision);
 
             LoadedWorld<World> third = LoadedWorld.Load<World>(store, schemas, revision, worldId, models);
+            Require(third.World._createdAtTicks == 638_625_600_000_000_000, "A score Delta changed World's creation timestamp.");
             third.World._score = 9;
             revision = store.Append(third.Prepare(policy).Revision);
             Require(store.ReadObjectVersionChain(revision, worldId.Value).Records.Count == 3,

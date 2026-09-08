@@ -170,6 +170,7 @@ public sealed partial class GraphWorld : DurableBase {
         GraphCharacter character = (GraphCharacter)world._primary!;
         Require(character.Score == score && ReferenceEquals(character.Item.Owner, character) &&
             ReferenceEquals(character.Item.Self, character.Item), "Readonly mutual/self references lost object identity.");
+        Require(character.CreatedAtTicks == 638_625_600_000_000_000, "A child edit changed the restored creation timestamp.");
         Require(ReferenceEquals(character.Name, character.Item.Label) && character.Name == "G",
             "The inherited readonly name and Item label must share one string instance.");
         Require(character.Item.Cache == 0 && GraphConstruction.Count == constructed,
@@ -192,13 +193,16 @@ public abstract partial class GraphEntity : DurableBase {
 public sealed partial class GraphCharacter : GraphEntity {
     [DurableField(1)] private int _score;
     [DurableField(2)] private readonly GraphItem _item;
+    [DurableField(3)] private readonly ulong _createdAtTicks;
     public GraphCharacter(string name, int score) : base(name) {
         GraphConstruction.Count++;
         _score = score;
         _item = new GraphItem(this, name);
+        _createdAtTicks = 638_625_600_000_000_000;
     }
     public int Score { get => _score; set => _score = value; }
     public GraphItem Item => _item;
+    public ulong CreatedAtTicks => _createdAtTicks;
 }
 
 [DurableType("package.graph-item", 1)]

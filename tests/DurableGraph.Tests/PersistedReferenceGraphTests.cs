@@ -32,7 +32,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             Assert.Null(initial.Revision.ParentRevisionAddress);
             Assert.All(initial.Revision.LocalObjects, row => Assert.Equal(ObjectVersionKind.Base, row.Kind));
             worldId = initial.WorldId;
-            characterId = FindGraphObject(initial.Revision, "reference.character");
+            characterId = FindGraphObject(schemas, initial.Revision, "reference.character");
             allIds = initial.Revision.LocalObjectIds.ToArray();
             Assert.Equal(5, allIds.Length); // World, Character, Item, shared nonempty string, Empty.
             fixture.ChangeNew(world, 999);
@@ -135,8 +135,8 @@ public sealed partial class DurableSchemaGeneratorTests {
         SchemaStore schemas = new(schemaFile);
         StateRevisionStore store = new(segments);
         PreparedWorldRevision initial = fixture.PrepareNew(store, schemas, fixture.Create());
-        uint previousCharacter = FindGraphObject(initial.Revision, "reference.character");
-        uint previousItem = FindGraphObject(initial.Revision, "reference.item");
+        uint previousCharacter = FindGraphObject(schemas, initial.Revision, "reference.character");
+        uint previousItem = FindGraphObject(schemas, initial.Revision, "reference.item");
         uint sourceMaximum = initial.Revision.LocalObjectIds.Max();
         FrameAddress first = store.Append(initial.Revision);
         object loaded = fixture.Load(store, schemas, first, initial.WorldId);
@@ -185,7 +185,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             StateRevisionStore store = new(segments);
             PreparedWorldRevision initial = old.PrepareNew(store, schemas, old.Create());
             worldId = initial.WorldId;
-            nodeId = FindGraphObject(initial.Revision, "reference.history.node");
+            nodeId = FindGraphObject(schemas, initial.Revision, "reference.history.node");
             ids = initial.Revision.LocalObjectIds.ToArray();
             first = store.Append(initial.Revision);
             object loaded = old.Load(store, schemas, first, worldId);
@@ -213,7 +213,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             ObjectVersionRecord record = Assert.Single(rewrite.Revision.LocalObjects);
             Assert.Equal(nodeId, record.ObjectId);
             Assert.Equal(ObjectVersionKind.Base, record.Kind);
-            Assert.Equal(2, BaseObjectBodyCodec.Decode(record.Body).SchemaKey!.Value.Version);
+            Assert.Equal(2, BaseObjectBodyCodec.Decode(record.Body, schemas).Layout.Schema!.Version);
             rewritten = store.Append(rewrite.Revision);
             Assert.Equal(ids.Order(), store.ReadLiveObjectHeadMap(rewritten).Keys.Order());
             Assert.Single(store.ReadObjectVersionChain(rewritten, nodeId).Records);
@@ -233,8 +233,8 @@ public sealed partial class DurableSchemaGeneratorTests {
         }
     }
 
-    private static uint FindGraphObject(StateRevision revision, string schemaId) => Assert.Single(
-        revision.LocalObjects, row => BaseObjectBodyCodec.Decode(row.Body).SchemaKey?.SchemaId == schemaId).ObjectId;
+    private static uint FindGraphObject(SchemaStore schemas, StateRevision revision, string schemaId) => Assert.Single(
+        revision.LocalObjects, row => BaseObjectBodyCodec.Decode(row.Body, schemas).Layout.Schema?.SchemaId == schemaId).ObjectId;
 
     private sealed class ReferenceGraphFixture(Assembly assembly) {
         private readonly Type _host = assembly.GetType("FusedDelta.Host")!;

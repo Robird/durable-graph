@@ -18,6 +18,17 @@ An unchanged Commit writes no objects, and a later element edit uses Delta while
 same domain instances. Cold reopening performs no further Upgrade. The consumer also reads the
 original Revision as `FrozenArrayState<Point.V1>` after current Point has changed.
 
+DB-045 additionally checks every persisted object Base through the public representation directory:
+its v4 header contains only a canonical integer representation ID before the raw body. String uses
+its reserved ID; generic classes and all array shapes resolve their complete exact layouts from
+the persistent directory. Closing all handles and requesting the same layouts in reverse order on
+a new writable SchemaStore must return the original IDs without appending metadata. User Schema
+count is deliberately not treated as representation count, since built-in arrays also register.
+The Point element Upgrade changes only the shared array's representation ID; World's and all other
+objects' IDs remain unchanged. Subsequent array Delta chains inherit that new Base ID, and historical
+reads still resolve the old one. Required markers include `RepresentationIds`, `ReorderedRegistration`,
+`IndependentRepresentationUpgrade`, and `DeltaInheritsRepresentation`, each followed by `True`.
+
 The runner publishes and verifies canonical history v4, checks counts `4 -> 5`, and preserves all
 previous file names and hashes. It retains feed/cache/history/database artifacts in its unique
 ignored `obj` directory. Broader malformed-input, unsupported-shape and upgrade-failure coverage

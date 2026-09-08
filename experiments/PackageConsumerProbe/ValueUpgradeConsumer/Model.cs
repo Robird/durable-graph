@@ -11,6 +11,8 @@ namespace ValueUpgradePackageConsumerProbe;
 #endif
 public sealed partial class Box<T> : DurableBase {
     [DurableField(1)] private T _value;
+    [DurableField(4)] private readonly ulong _createdAtTicks;
+    internal ulong CreatedAtTicks => _createdAtTicks;
 #if !HISTORY_V1
     [DurableField(2)] private readonly int _stamp;
     internal int Stamp => _stamp;
@@ -22,7 +24,7 @@ public sealed partial class Box<T> : DurableBase {
     [Transient] private readonly int _transient = 77;
     internal int TransientValue => _transient;
     internal T Value => _value;
-    internal Box(T value) { _value = value; }
+    internal Box(T value) { _value = value; _createdAtTicks = 638_625_600_000_000_000; }
     internal void Set(T value) => _value = value;
 }
 

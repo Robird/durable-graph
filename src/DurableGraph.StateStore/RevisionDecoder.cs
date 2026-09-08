@@ -25,7 +25,8 @@ public static class RevisionDecoder {
         StateRevisionStore store,
         SchemaStore schemas,
         FrameAddress revisionAddress,
-        IReadOnlyDictionary<SchemaKey, StateReaderBinding> bindings) => ReadCore(store, schemas, revisionAddress, layout => {
+        IReadOnlyDictionary<SchemaKey, StateReaderBinding> bindings) => ReadCore(store, schemas, revisionAddress, body => {
+            ObjectLayout layout = body.Layout;
             if (layout.Kind == ObjectStateKind.String) { return StringObjectReader.Instance; }
             DurableSchema schema = layout.Schema ?? throw new InvalidDataException("Array readers require a model catalog.");
             SchemaKey key = new(schema.Type, schema.Version);
@@ -37,11 +38,13 @@ public static class RevisionDecoder {
 
     internal static DecodedRevision ReadSnapshot(
         StateRevisionStore store, SchemaStore schemas, FrameAddress revisionAddress, StateBindingContext bindings) =>
-        ReadCore(store, schemas, revisionAddress, bindings.ResolveObjectReader);
+        ReadCore(store, schemas, revisionAddress, body => body.RepresentationId is { } id
+            ? schemas.ResolveReader(id, bindings)
+            : bindings.ResolveObjectReader(body.Layout));
 
     private static DecodedRevision ReadCore(
         StateRevisionStore store, SchemaStore schemas, FrameAddress revisionAddress,
-        Func<ObjectLayout, ObjectReaderBinding> resolveReader) {
+        Func<DecodedBaseObjectBody, ObjectReaderBinding> resolveReader) {
         List<ObjectStateRecord> objects = [];
         List<(ObjectStateRecord Row, ObjectReaderBinding Binding)> boundRows = [];
         List<(ObjectId Id, string Value)> strings = [];
@@ -51,8 +54,8 @@ public static class RevisionDecoder {
             ObjectId id = new(rawId);
             ObjectVersionChain chain = store.ReadObjectVersionChain(revisionAddress, rawId);
             DecodedBaseObjectBody body = TypedObjectVersionReader.DecodeBase(chain, schemas);
-            ObjectLayout layout = ObjectPersistence.GetLayout(body, schemas);
-            ObjectReaderBinding binding = resolveReader(layout);
+            ObjectLayout layout = body.Layout;
+            ObjectReaderBinding binding = resolveReader(body);
             if (!layout.Equals(binding.Layout)) {
                 throw new InvalidDataException("The selected reader does not match the complete stored layout.");
             }

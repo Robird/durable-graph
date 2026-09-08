@@ -25,7 +25,7 @@ public sealed class RevisionDecoderTests : IDisposable {
             schemas.Register(NodeSchema);
             StateRevisionStore store = new(segments);
             FrameAddress original = store.Append(StateRevision.CreateObjectHeadMapBase(null,
-                [Node(1, 4, 3), Node(2, 5, 3), Text(3, "same"), Text(4, "same"), Text(5, ""), Text(6, "")], []));
+                [Node(schemas, 1, 4, 3), Node(schemas, 2, 5, 3), Text(3, "same"), Text(4, "same"), Text(5, ""), Text(6, "")], []));
             latest = store.Append(StateRevision.CreateObjectHeadMapDelta(original,
                 [ObjectVersionRecord.CreateDelta(1, original, new byte[] { 1, 9 })], []));
             StateReaderRegistry readers = NodeReaders();
@@ -78,12 +78,12 @@ public sealed class RevisionDecoderTests : IDisposable {
         SchemaStore schemas = new(file);
         schemas.RegisterBatch([NodeSchema, ByteSchema]);
         StateRevisionStore store = new(segments);
-        FrameAddress original = store.Append(StateRevision.CreateObjectHeadMapBase(null, [Node(1, 4, 2), Text(2, "value")], []));
+        FrameAddress original = store.Append(StateRevision.CreateObjectHeadMapBase(null, [Node(schemas, 1, 4, 2), Text(2, "value")], []));
         StateReaderRegistry readers = NodeReaders();
         readers.Register(ByteBinding(ByteSchema));
         DecodedRevision previous = RevisionDecoder.Read(store, schemas, original, readers);
         FrameAddress invalid = store.Append(StateRevision.CreateObjectHeadMapDelta(original,
-            wrongKind ? [Durable(2, ByteSchema, [7])] : [], wrongKind ? [] : [2]));
+            wrongKind ? [Durable(schemas, 2, ByteSchema, [7])] : [], wrongKind ? [] : [2]));
         long stateTail = Tail(segments);
         long schemaTail = file.TailOffset;
         DecodedRevision? result = null;
@@ -106,15 +106,15 @@ public sealed class RevisionDecoderTests : IDisposable {
         DurableSchema stored = missing == 2 ? new("Number", 2, new DurableFieldInfo(1, TypeTag.Byte)) : ByteSchema;
         if (missing != 0) { schemas.Register(stored); }
         StateRevisionStore store = new(segments);
-        FrameAddress address = store.Append(StateRevision.CreateObjectHeadMapBase(null, [Durable(1, stored, [7])], []));
+        // A legacy v1 literal intentionally names a missing Schema without registering it.
+        ObjectVersionRecord record = missing == 0
+            ? ObjectVersionRecord.CreateBase(1, Convert.FromHexString("01020D4E756D6265720107"))
+            : Durable(schemas, 1, stored, [7]);
+        FrameAddress address = store.Append(StateRevision.CreateObjectHeadMapBase(null, [record], []));
         StateReaderRegistry readers = new();
         int calls = 0;
         if (missing != 1) { readers.Register(ByteBinding(ByteSchema, () => calls++)); }
-        if (missing == 0) {
-            Assert.Throws<SchemaNotFoundException>(() => RevisionDecoder.Read(store, schemas, address, readers));
-        } else {
-            Assert.Throws<InvalidDataException>(() => RevisionDecoder.Read(store, schemas, address, readers));
-        }
+        Assert.Throws<InvalidDataException>(() => RevisionDecoder.Read(store, schemas, address, readers));
         Assert.Equal(0, calls);
     }
 
@@ -131,7 +131,7 @@ public sealed class RevisionDecoderTests : IDisposable {
         SchemaStore schemas = new(file);
         schemas.Register(stored);
         StateRevisionStore store = new(segments);
-        FrameAddress address = store.Append(StateRevision.CreateObjectHeadMapBase(null, [Durable(1, stored, [7])], []));
+        FrameAddress address = store.Append(StateRevision.CreateObjectHeadMapBase(null, [Durable(schemas, 1, stored, [7])], []));
         StateReaderRegistry readers = new();
         int calls = 0;
         readers.Register(ByteBinding(wrong, () => calls++));
@@ -148,7 +148,7 @@ public sealed class RevisionDecoderTests : IDisposable {
         schemas.RegisterBatch([ByteSchema, second]);
         StateRevisionStore store = new(segments);
         FrameAddress address = store.Append(StateRevision.CreateObjectHeadMapBase(null,
-            [Durable(1, ByteSchema, [7]), Durable(2, second, [8])], []));
+            [Durable(schemas, 1, ByteSchema, [7]), Durable(schemas, 2, second, [8])], []));
         StateReaderRegistry readers = new();
         StateReaderBinding<byte> late = ByteBinding(second);
         int calls = 0;
@@ -173,9 +173,9 @@ public sealed class RevisionDecoderTests : IDisposable {
         schemas.Register(NodeSchema);
         StateRevisionStore store = new(segments);
         FrameAddress original = store.Append(StateRevision.CreateObjectHeadMapBase(null,
-            [Node(1, 4, 0), malformed == 3 ? Text(2, "text") : Node(2, 5, 0)], []));
+            [Node(schemas, 1, 4, 0), malformed == 3 ? Text(2, "text") : Node(schemas, 2, 5, 0)], []));
         ObjectVersionRecord bad = malformed switch {
-            0 => Durable(2, NodeSchema, [5, 0, 0]), // Trailing Base byte.
+            0 => Durable(schemas, 2, NodeSchema, [5, 0, 0]), // Trailing Base byte.
             1 => ObjectVersionRecord.CreateDelta(2, original, new byte[] { 1 }), // Missing changed value.
             2 => ObjectVersionRecord.CreateDelta(2, original, new byte[] { 1, 9, 0 }), // Trailing Delta byte.
             _ => ObjectVersionRecord.CreateDelta(2, original, Array.Empty<byte>()),
@@ -226,9 +226,9 @@ public sealed class RevisionDecoderTests : IDisposable {
         static (ref BinaryPayloadReader reader, in byte prior) => reader.ReadByte(),
         static (in byte state, IStateReferenceVisitor visitor) => { });
 
-    private static ObjectVersionRecord Node(uint id, byte value, byte textId) => Durable(id, NodeSchema, [value, textId]);
-    private static ObjectVersionRecord Durable(uint id, DurableSchema schema, ReadOnlySpan<byte> body) =>
-        ObjectVersionRecord.CreateBase(id, BaseObjectBodyCodec.EncodeDurable(schema, new(body)).Body);
+    private static ObjectVersionRecord Node(SchemaStore schemas, uint id, byte value, byte textId) => Durable(schemas, id, NodeSchema, [value, textId]);
+    private static ObjectVersionRecord Durable(SchemaStore schemas, uint id, DurableSchema schema, ReadOnlySpan<byte> body) =>
+        ObjectVersionRecord.CreateBase(id, BaseObjectBodyCodec.Encode(schemas.RegisterRepresentations([ObjectLayout.ForDurable(schema)])[0], new(body)).Body);
     private static ObjectVersionRecord Text(uint id, string value) =>
         ObjectVersionRecord.CreateBase(id, BaseObjectBodyCodec.EncodeString(StringPayloadCodec.PrepareBase(value)).Body);
 

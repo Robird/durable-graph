@@ -3,9 +3,9 @@ using Atelia.DurableGraph.StateStore.Storage;
 namespace Atelia.DurableGraph.StateStore;
 
 /// <summary>
-/// Registers captured schemas and plans typed Base contents against an explicit
+/// Registers captured representations and plans typed Base contents against an explicit
 /// Parent. The caller still owns the DTO baseline's correspondence to that Parent.
-/// Schema registration is durable; State append, publication and Capture.Accept
+/// Representation registration is durable; State append, publication and Capture.Accept
 /// remain outside this operation.
 /// </summary>
 internal static class CapturedRevisionPlanner {
@@ -57,19 +57,19 @@ internal static class CapturedRevisionPlanner {
                 }
             }
             else {
-                ObjectLayout storedLayout = ObjectPersistence.GetLayout(stored, schemas);
-                if (!storedLayout.Equals(row.Current.Layout)) {
+                if (!stored.Layout.Equals(row.Current.Layout)) {
                     throw new InvalidDataException($"Object {row.Current.Id} cannot extend a different exact layout. A controlled migration must write a new Base.");
                 }
             }
         }
 
-        // Register the complete current schema closure even if no body changed.
-        // SchemaStore preflights the entire batch before its first append.
-        ObjectPersistence.RegisterSchemas(schemas, input.Objects.Select(static row => row.Current));
+        // Registration validates the complete Schema closure even for an existing
+        // representation ID or unchanged object, before its first append.
+        RepresentationId[] representations = schemas.RegisterRepresentations(
+            input.Objects.Select(static row => row.Current.Layout).ToArray());
 
-        PreparedObject[] rows = input.Objects.Select(row => {
-            EncodedBaseObjectBody encodedBaseBody = ObjectPersistence.Encode(row.Current, row.BaseBody);
+        PreparedObject[] rows = input.Objects.Select((row, index) => {
+            EncodedBaseObjectBody encodedBaseBody = BaseObjectBodyCodec.Encode(representations[index], row.BaseBody);
             if (row.Previous is null) {
                 return PreparedObject.New(row.Current.Id, encodedBaseBody);
             }

@@ -38,8 +38,9 @@ public abstract partial class NamedObject : DurableBase {
 public sealed partial class Character : NamedObject {
     [DurableField(1)] private int _score;
     [DurableField(2)] private string _alias;
+    [DurableField(3)] private readonly ulong _createdAtTicks;
 
-    private Character(string name, int score) : base(name) { _score = score; _alias = name; }
+    private Character(string name, int score) : base(name) { _score = score; _alias = name; _createdAtTicks = 638_625_600_000_000_000; }
 
     internal static void Exercise(string directory) {
         Directory.CreateDirectory(directory);
@@ -82,6 +83,7 @@ public sealed partial class Character : NamedObject {
             firstRevision = store.Append(first.Revision);
             LoadedWorld<Character> loaded = LoadedWorld.Load<Character>(store, schemas, firstRevision, characterId, models);
             Require(loaded.World._score == 7 && loaded.World.Name == "A" &&
+                loaded.World._createdAtTicks == 638_625_600_000_000_000 &&
                 ReferenceEquals(loaded.World.Name, loaded.World._alias),
                 "High-level loading lost the frozen state or shared string identity.");
             loaded.World._score = 8;
@@ -116,7 +118,8 @@ public sealed partial class Character : NamedObject {
             "Revision decoding lost complete ordered live membership or its query address.");
         var currentState = current.GetRequired(characterId).GetState<__DurableState.V1>();
         var priorState = previous.GetRequired(characterId).GetState<__DurableState.V1>();
-        Require(currentState.Segment1Field1 == 8 && priorState.Segment1Field1 == 7,
+        Require(currentState.Segment1Field1 == 8 && priorState.Segment1Field1 == 7 &&
+            currentState.Segment1Field3 == 638_625_600_000_000_000 && priorState.Segment1Field3 == 638_625_600_000_000_000,
             "Cold static body reconstruction ignored the selected revision.");
         Require(current.GetRequired(stringId).StringContent == "A", "Built-in string decoding failed.");
         StringReadTable strings = current.Strings;

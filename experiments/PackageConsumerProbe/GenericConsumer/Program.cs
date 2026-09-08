@@ -181,6 +181,8 @@ internal static class Program {
         Require(world.First.Value == first && world.Second.Value == 21 && world.PointBox.Value.Value == point &&
             !ReferenceEquals(world.First, world.Second) && world.Label == "generic history",
             "Closed generic objects lost their values, identities, or references.");
+        Require(world.First.CreatedAtTicks == 638_625_600_000_000_000 && world.Second.CreatedAtTicks == 638_625_600_000_000_000 &&
+            world.PointBox.CreatedAtTicks == 638_625_600_000_000_000, "Stable creation timestamps did not survive capture, Upgrade, or restore.");
         Require(world.First.TransientValue == 0 && world.Second.TransientValue == 0 && world.PointBox.TransientValue == 0,
             "Restoration must bypass constructors and transient initializers.");
     }
@@ -194,6 +196,8 @@ internal static class Program {
         var point = decoded.GetRequired(world.Segment0Field3).GetState<BoxStates.V1<PointStates.V1>>();
         Require(decoded.Objects.Count == 5 && decoded.GetRequired(worldId).Schema!.Version == 1 &&
             first.Segment0Field1 == 12 && second.Segment0Field1 == 21 && point.Segment0Field1.Segment0Field1 == 31 &&
+            first.Segment0Field4 == 638_625_600_000_000_000 && second.Segment0Field4 == 638_625_600_000_000_000 &&
+            point.Segment0Field4 == 638_625_600_000_000_000 &&
             world.Segment0Field5.Segment0Field1.Segment0Field1 == 41 &&
             world.Segment0Field5.Segment0Field2.Segment0Field1 == 51,
             "Stored-exact generic DTOs/Base+Delta reconstruction changed across package builds.");

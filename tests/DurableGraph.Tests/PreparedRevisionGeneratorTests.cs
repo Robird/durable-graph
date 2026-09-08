@@ -116,8 +116,9 @@ public sealed partial class DurableSchemaGeneratorTests {
                 var prepared = CapturedRevisionPlanner.PrepareRevision(store, schemas, parent, input, parameters);
                 Assert.Same(accepted, session.Current); // Planning never installs a candidate or baseline.
                 Assert.Equal(parent, prepared.Revision.ParentRevisionAddress);
-                // Envelope v2 adds the Named tag and zero-argument count to this non-generic key.
-                Assert.Equal(99, Assert.Single(prepared.Estimates, item => item.ObjectId.Value == ownerId).BasePayloadBytes);
+                // 68 raw bytes + v4 header (one version byte + one representation-ID byte)
+                // + ObjectVersion kind and one-byte body length (70) = 72 payload bytes.
+                Assert.Equal(72, Assert.Single(prepared.Estimates, item => item.ObjectId.Value == ownerId).BasePayloadBytes);
                 if (stage == 0) {
                     Assert.Equal(input.Objects.Count, prepared.Revision.LocalObjects.Count);
                     Assert.All(prepared.Revision.LocalObjects, record => Assert.Equal(ObjectVersionKind.Base, record.Kind));
@@ -138,7 +139,7 @@ public sealed partial class DurableSchemaGeneratorTests {
                     ObjectVersionRecord record = Assert.Single(prepared.Revision.LocalObjects);
                     Assert.Equal(ownerId, record.ObjectId);
                     Assert.Equal(ObjectVersionKind.Base, record.Kind);
-                    Assert.Equal(expected[stage], BaseObjectBodyCodec.Decode(record.Body).Body.ToArray());
+                    Assert.Equal(expected[stage], BaseObjectBodyCodec.Decode(record.Body, schemas).Body.ToArray());
                     Assert.Equal(new[] { tagId }, prepared.Revision.RemovedObjectIds);
                 }
                 else {
@@ -171,7 +172,7 @@ public sealed partial class DurableSchemaGeneratorTests {
                 else session.Discard(graph);
             }
         }
-        Assert.Equal(99, initialH); // 68 raw bytes + 29 type-header bytes + 2 ObjectVersion bytes.
+        Assert.Equal(72, initialH); // 68 raw + 2 v4 representation-header + 2 ObjectVersion bytes.
         Assert.True(accumulatedH > initialH);
         Assert.Equal(revisions.Length, revisions.Select(address => address.FileNumber).Distinct().Count());
 
@@ -188,7 +189,7 @@ public sealed partial class DurableSchemaGeneratorTests {
                 tagChain = cold.ReadObjectVersionChain(revisions[stage], tagId);
                 Assert.Single(tagChain.Records);
                 Assert.Equal<byte>([checked((byte)equalStringId), 7],
-                    BaseObjectBodyCodec.Decode(tagChain.Records[0].Record.Body).Body.ToArray());
+                    BaseObjectBodyCodec.Decode(tagChain.Records[0].Record.Body, coldSchemas).Body.ToArray());
             }
             Dictionary<uint, byte[]> strings = [];
             foreach ((uint id, FrameAddress address) in heads.Where(item => item.Key != ownerId && item.Key != tagId)) {

@@ -193,10 +193,11 @@ Source Generator 负责可在编译期确定的类型知识与机械代码，框
 持久 Schema 需要规范表示与一致性校验；当前运行时 GetHashCode 不能充当持久 SchemaHash。
 规范表示不能依赖反射顺序、metadata token、MVID、AssemblyVersion 或进程随机 hash。
 
-2026-09-09 已采纳、待实现：完整闭合对象表示在仓库内获得持久整数 ID，新写 Base 通过该 ID
+完整闭合对象表示在仓库内获得持久整数 ID，新写 Base 通过该 ID
 取得领域身份与 exact 持久表示布局，Delta 沿用 Base。SchemaStore 封装描述及其解析；当前程序用保留的
 历史代码绑定 DTO/reader，CLR Type/委托本身不落盘。同 ID 不重绑定，引用目标版本仍由目标自己的 Base 决定。
-最小施工规划见 [DB-045](design-branches/0045-persisted-representation-id-slice.md)；内部模板/组合表示的重整另行研究。
+ID 由所属目录统一分配，等价完整表示复用；登记先于使用该 ID 的 State 发布，放弃一次 State 不撤销已登记表示。
+最小实现合同见 [DB-045](design-branches/0045-persisted-representation-id-slice.md)；内部模板/组合表示的重整另行研究。
 
 未知版本、相同身份/版本却不一致的 Schema、缺失升级器、损坏引用或来源不匹配时，
 应明确拒绝，不猜测并不回退到 latest。升级由显式类型知识和函数承担，不自动推断业务迁移。
@@ -223,7 +224,7 @@ equality 必须明确，不能仅凭非密码学 hash 判相等。同版 DTO 的
 
 | Store | 长期职责 | 关键边界 |
 |---|---|---|
-| SchemaStore | 保存版本化 Schema 事实 | 对象能精确绑定其解释；CLR 名称不代替持久身份 |
+| SchemaStore | 保存版本化 Schema 事实和完整对象表示的持久寻址 | 对象能精确绑定其解释；元数据与执行代码分开保留，CLR 名称不代替持久身份 |
 | StateStore | 保存对象版本及每个 Revision 的 live 绑定 | 追加新事实表达逻辑变化；历史视图不被静默覆写 |
 | ArtifactStore | 保存不可变、可寻址的历史内容或大对象 | State 持 exact 引用，按需加载，不使完整历史常驻领域图 |
 | DerivedStore | 缓存可以从权威输入和 recipe 重建的结果 | 可整库删除；不能反向成为 Schema/State/Artifact authority |

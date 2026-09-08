@@ -21,7 +21,7 @@ internal static class Upgrades {
     internal static void BoxV1ToV2<TState>(in BoxStates.V1<TState> old, out BoxStates.V2<TState> next, UpgradeContext context)
         where TState : unmanaged {
         UpgradeTrace.Record(context, "box-pass-through");
-        next = new(old.Segment0Field1, 100);
+        next = new(old.Segment0Field1, 100, old.Segment0Field4);
     }
 
 #if !OMIT_CLOSED_UPGRADE
@@ -29,7 +29,7 @@ internal static class Upgrades {
     internal static void PointBoxV1ToV2(in BoxStates.V1<PointStates.V1> old,
         out BoxStates.V2<PointStates.V2> next, UpgradeContext context) {
         UpgradeTrace.Record(context, "point-closed");
-        next = new(new(old.Segment0Field1.Segment0Field1 + 1000L), 200);
+        next = new(new(old.Segment0Field1.Segment0Field1 + 1000L), 200, old.Segment0Field4);
     }
 #endif
 
@@ -47,7 +47,7 @@ internal static class Upgrades {
     internal static void BoxV2ToV3<TState>(in BoxStates.V2<TState> old, out BoxStates.V3<TState> next, UpgradeContext context)
         where TState : unmanaged {
         UpgradeTrace.Record(context, "box-third-version");
-        next = new(old.Segment0Field1, old.Segment0Field2, 300);
+        next = new(old.Segment0Field1, old.Segment0Field2, 300, old.Segment0Field4);
     }
 
     [DurableUpgrade(typeof(World), 2)]

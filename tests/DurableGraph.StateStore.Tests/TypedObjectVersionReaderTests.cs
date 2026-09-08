@@ -18,11 +18,12 @@ public sealed class TypedObjectVersionReaderTests : IDisposable {
         DurableSchema old = new("Leaf", 1, [new(1, TypeTag.Byte)], ancestor);
         DurableSchema current = new("Leaf", 2, [new(1, TypeTag.UInt16)], ancestor);
         string path = NextPath();
+        RepresentationId oldId;
         using (IRbfFile file = RbfFile.CreateNew(path)) {
             SchemaStore schemas = new(file);
-            schemas.RegisterBatch([old, current]);
+            oldId = schemas.RegisterRepresentations([ObjectLayout.ForDurable(old), ObjectLayout.ForDurable(current)])[0];
         }
-        ObjectVersionChain chain = Chain(BaseObjectBodyCodec.EncodeDurable(old, new([21])), [1, 25], [1, 26]);
+        ObjectVersionChain chain = Chain(BaseObjectBodyCodec.Encode(oldId, new([21])), [1, 25], [1, 26]);
         Assert.Equal(new byte[] { 1, 25 }, chain.Records[1].Record.Body.ToArray());
         Assert.Equal(new byte[] { 1, 26 }, chain.Records[2].Record.Body.ToArray());
         using IRbfFile reopened = RbfFile.OpenReadOnlyExisting(path);
@@ -57,8 +58,8 @@ public sealed class TypedObjectVersionReaderTests : IDisposable {
         };
         using IRbfFile file = RbfFile.CreateNew(NextPath());
         SchemaStore schemas = new(file);
-        schemas.RegisterBatch([stored]);
-        ObjectVersionChain chain = Chain(BaseObjectBodyCodec.EncodeDurable(stored, new([])), Array.Empty<byte>());
+        RepresentationId id = schemas.RegisterRepresentations([ObjectLayout.ForDurable(stored)])[0];
+        ObjectVersionChain chain = Chain(BaseObjectBodyCodec.Encode(id, new([])), Array.Empty<byte>());
         int calls = 0;
         int Read(ref BinaryPayloadReader reader) { calls++; return 0; }
         int Apply(ref BinaryPayloadReader reader, in int prior) { calls++; return prior; }
@@ -67,20 +68,63 @@ public sealed class TypedObjectVersionReaderTests : IDisposable {
     }
 
     [Fact]
-    public void MissingSchemaWrongKindAndOpaqueRawBaseNeverInvokeCallbacks() {
+    public void MissingRepresentationWrongKindAndOpaqueRawBaseNeverInvokeCallbacks() {
         DurableSchema schema = new("A", 1);
         using IRbfFile file = RbfFile.CreateNew(NextPath());
         SchemaStore schemas = new(file);
-        ObjectVersionChain missing = Chain(BaseObjectBodyCodec.EncodeDurable(schema, new([7])));
+        ObjectVersionChain missing = Chain(BaseObjectBodyCodec.Encode(new(2), new([7])));
         ObjectVersionChain text = Chain(BaseObjectBodyCodec.EncodeString(new([0])));
         ObjectVersionChain opaque = Chain(new([7]));
         int calls = 0;
         int Read(ref BinaryPayloadReader reader) { calls++; return 0; }
         int Apply(ref BinaryPayloadReader reader, in int prior) { calls++; return prior; }
-        Assert.Throws<SchemaNotFoundException>(() => TypedObjectVersionReader.ReadDurable<int>(missing, schemas, schema, Read, Apply));
+        Assert.Throws<InvalidDataException>(() => TypedObjectVersionReader.ReadDurable<int>(missing, schemas, schema, Read, Apply));
         Assert.Throws<InvalidDataException>(() => TypedObjectVersionReader.ReadDurable<int>(text, schemas, schema, Read, Apply));
         Assert.Throws<InvalidDataException>(() => TypedObjectVersionReader.ReadDurable<int>(opaque, schemas, schema, Read, Apply));
         Assert.Equal(0, calls);
+    }
+
+    [Theory]
+    [InlineData("0400", typeof(InvalidDataException))]
+    [InlineData("0402", typeof(InvalidDataException))]
+    [InlineData("048100", typeof(InvalidDataException))]
+    [InlineData("04FFFFFFFF1F", typeof(InvalidDataException))]
+    [InlineData("04", typeof(EndOfStreamException))]
+    [InlineData("0480", typeof(EndOfStreamException))]
+    public void MalformedOrUnknownRepresentationFailsBeforeBodyCallbacks(string hex, Type errorType) {
+        using IRbfFile file = RbfFile.CreateNew(NextPath());
+        SchemaStore schemas = new(file);
+        ObjectVersionChain chain = Chain(new(Convert.FromHexString(hex)));
+        int calls = 0;
+        int Read(ref BinaryPayloadReader reader) { calls++; return 0; }
+        int Apply(ref BinaryPayloadReader reader, in int prior) { calls++; return prior; }
+        Assert.Throws(errorType, () => TypedObjectVersionReader.ReadDurable<int>(chain, schemas, new("A", 1), Read, Apply));
+        Assert.Equal(0, calls);
+    }
+
+    [Theory]
+    [InlineData("010203410121")]
+    [InlineData("0202020341000121")]
+    [InlineData("0302020341000121")]
+    public void HistoricalInlineHeadersResolveCompleteSchemaWithoutRegisteringIds(string hex) {
+        using IRbfFile file = RbfFile.CreateNew(NextPath());
+        SchemaStore schemas = new(file);
+        DurableSchema schema = new("A", 1, new DurableFieldInfo(1, TypeTag.Byte));
+        schemas.Register(schema);
+        long tail = file.TailOffset;
+        ObjectVersionChain chain = Chain(new(Convert.FromHexString(hex)), [1, 42]);
+        byte Read(ref BinaryPayloadReader reader) => reader.ReadByte();
+        byte Apply(ref BinaryPayloadReader reader, in byte prior) {
+            Assert.Equal(1, reader.ReadByte());
+            return reader.ReadByte();
+        }
+        Assert.Equal((byte)42, TypedObjectVersionReader.ReadDurable<byte>(chain, schemas, schema, Read, Apply));
+        DecodedBaseObjectBody decoded = TypedObjectVersionReader.DecodeBase(chain, schemas);
+        Assert.Equal(schema, decoded.Layout.Schema);
+        Assert.Null(decoded.RepresentationId);
+        Assert.Equal(tail, file.TailOffset);
+        // Reading old data must not silently allocate the next persistent ID.
+        Assert.Equal(new RepresentationId(2), schemas.RegisterRepresentations([ObjectLayout.ForDurable(schema)])[0]);
     }
 
     [Theory]
@@ -90,9 +134,9 @@ public sealed class TypedObjectVersionReaderTests : IDisposable {
         DurableSchema schema = new("A", 1, new DurableFieldInfo(1, TypeTag.Byte));
         using IRbfFile file = RbfFile.CreateNew(NextPath());
         SchemaStore schemas = new(file);
-        schemas.RegisterBatch([schema]);
+        RepresentationId id = schemas.RegisterRepresentations([ObjectLayout.ForDurable(schema)])[0];
         ObjectVersionChain chain = Chain(
-            BaseObjectBodyCodec.EncodeDurable(schema, new(trailingBase ? new byte[] { 1, 2 } : new byte[] { 1 })),
+            BaseObjectBodyCodec.Encode(id, new(trailingBase ? new byte[] { 1, 2 } : new byte[] { 1 })),
             trailingBase ? new byte[] { 1, 3 } : new byte[] { 1, 3, 4 });
         int deltaCalls = 0;
         byte Read(ref BinaryPayloadReader reader) => reader.ReadByte();
@@ -116,7 +160,7 @@ public sealed class TypedObjectVersionReaderTests : IDisposable {
         Assert.Same(string.Empty, TypedObjectVersionReader.ReadString(Chain(BaseObjectBodyCodec.EncodeString(new([0])))));
         Assert.Throws<InvalidDataException>(() => TypedObjectVersionReader.ReadString(Chain(BaseObjectBodyCodec.EncodeString(new([0])), Array.Empty<byte>())));
         Assert.Throws<InvalidDataException>(() => TypedObjectVersionReader.ReadString(Chain(BaseObjectBodyCodec.EncodeString(new([0, 1])))));
-        Assert.Throws<InvalidDataException>(() => TypedObjectVersionReader.ReadString(Chain(BaseObjectBodyCodec.EncodeDurable(new("A", 1), new([0])))));
+        Assert.Throws<InvalidDataException>(() => TypedObjectVersionReader.ReadString(Chain(BaseObjectBodyCodec.Encode(new(2), new([0])))));
     }
 
     private ObjectVersionChain Chain(EncodedBaseObjectBody encodedBaseBody, params byte[][] deltas) {

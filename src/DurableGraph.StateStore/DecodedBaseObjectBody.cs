@@ -1,19 +1,19 @@
 namespace Atelia.DurableGraph.StateStore;
 
-/// <summary>An owned decoded Base type header and its raw body.</summary>
-/// <remarks>The Schema key is meaningful only in the caller's repository SchemaStore.</remarks>
+/// <summary>An owned raw Base body with its fully resolved historical layout.</summary>
+/// <remarks>Legacy headers have no representation ID; reading never registers or invents one.</remarks>
 internal sealed class DecodedBaseObjectBody {
     private readonly byte[] _body;
 
-    internal DecodedBaseObjectBody(ObjectStateKind kind, SchemaKey? schemaKey, ReadOnlySpan<byte> body, ArrayLayout? arrayLayout = null) {
-        Kind = kind;
-        SchemaKey = schemaKey;
-        ArrayLayout = arrayLayout;
+    internal DecodedBaseObjectBody(ObjectLayout layout, RepresentationId? representationId, ReadOnlySpan<byte> body) {
+        ArgumentNullException.ThrowIfNull(layout);
+        Layout = layout;
+        RepresentationId = representationId;
         _body = body.ToArray();
     }
 
-    internal ObjectStateKind Kind { get; }
-    internal SchemaKey? SchemaKey { get; }
-    internal ArrayLayout? ArrayLayout { get; }
+    internal ObjectLayout Layout { get; }
+    internal ObjectStateKind Kind => Layout.Kind;
+    internal RepresentationId? RepresentationId { get; }
     internal ReadOnlySpan<byte> Body => _body;
 }

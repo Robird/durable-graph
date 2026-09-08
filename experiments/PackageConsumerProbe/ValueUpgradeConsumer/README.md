@@ -25,6 +25,9 @@ V3 删除的只有 inline 领域声明；独立 `Box<Point>` 行仍保留其 cur
 
 runner 检查新增 history 格式 v4，数量依次为 5、10、10、12，并核对先前 `.dgschema` 的存在性与 SHA256。
 三个版本通过磁盘 repository 交接，每次运行都是独立进程。
+Box 还保存稳定的创建时间 ticks，各版本 owner Upgrade 透传它，历史与当前读取均检查其值。
+这让单字段编辑的 Delta 相对于真实完整状态节省字节，而不依赖旧类型名称头的额外尺寸；
+DB-045 表示 ID 头使用原生产策略，未增加 body padding 或放宽 Delta 验收。
 更细的歧义、错误完整槽语义、依赖深度及异常不回退由产品 Runtime/SG 单元测试覆盖。
 
 严格匹配的预期输出为：

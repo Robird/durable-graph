@@ -66,7 +66,8 @@ public sealed class GraphRepository : IDisposable {
             string schemaPath = Path.Combine(root, "schemas.rbf");
             schemas = create ? RbfFile.CreateNew(schemaPath) : RbfFile.OpenExisting(schemaPath);
             SchemaStore schemaStore = new(schemas);
-            // SchemaStore already flushes nonempty recovery; include a new empty header too.
+            // Confirm a possibly empty header too. With only built-in array registrations,
+            // this can repeat SchemaStore's recovery flush because Count counts user Schemas.
             if (schemaStore.Count == 0) { schemas.DurableFlush(); }
             string statePath = Path.Combine(root, "state");
             RbfSegmentStoreOptions strict = StrictOptions(options);
@@ -126,7 +127,7 @@ public sealed class GraphRepository : IDisposable {
             ObjectVersionChain chain = _states.ReadObjectVersionChain(head.RevisionAddress, id);
             DecodedBaseObjectBody body = BaseObjectBodyCodec.Decode(chain.Records[0].Record.Body, _schemas);
             if (body.Kind == ObjectStateKind.Durable) {
-                if (_schemas.GetRequired(body.SchemaKey!.Value).Kind != SchemaKind.ReferenceObject) {
+                if (body.Layout.Schema!.Kind != SchemaKind.ReferenceObject) {
                     throw new InvalidDataException("An object Base cannot refer to an inline Schema.");
                 }
             }

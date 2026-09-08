@@ -28,7 +28,7 @@ internal static class Upgrades {
         where A : unmanaged where B : unmanaged {
         UpgradeTrace.Record(context, "box-value");
         var convert = context.GetValueUpgrade<A, B>("value");
-        next = new(convert(in old.Segment0Field1), 100);
+        next = new(convert(in old.Segment0Field1), 100, old.Segment0Field4);
     }
 
     [DurableValueUpgrade(typeof(Coordinates), "Pair", 1, 2)]
@@ -71,7 +71,7 @@ internal static class Upgrades {
         where TState : unmanaged {
         UpgradeTrace.Record(context, "box-third-version");
         var keep = context.GetValueUpgrade<TState, TState>("value");
-        next = new(keep(in old.Segment0Field1), old.Segment0Field2, 300);
+        next = new(keep(in old.Segment0Field1), old.Segment0Field2, 300, old.Segment0Field4);
     }
 
     [DurableUpgrade(typeof(World), 2)]

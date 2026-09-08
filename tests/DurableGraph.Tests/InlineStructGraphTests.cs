@@ -42,7 +42,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             StateRevision initial = store.Read(first);
             Assert.Equal(4, initial.LocalObjects.Count); // World, Child, two distinct equal strings; no value rows.
             Assert.All(initial.LocalObjects, record => Assert.Equal(ObjectVersionKind.Base, record.Kind));
-            uint childId = FindGraphObject(initial, "inline.graph.child");
+            uint childId = FindGraphObject(schemas, initial, "inline.graph.child");
             Assert.Equal(first, store.Read(unchanged).ParentRevisionAddress);
             Assert.Empty(store.Read(unchanged).LocalObjects);
             Assert.Empty(store.Read(unchanged).RemovedObjectIds);
@@ -151,19 +151,19 @@ public sealed partial class DurableSchemaGeneratorTests {
         PreparedWorldRevision initial = fixture.PrepareNew(store, schemas, fixture.NewWorld());
         ObjectVersionRecord owner = Assert.Single(initial.Revision.LocalObjects,
             record => record.ObjectId == initial.WorldId.Value);
-        DecodedBaseObjectBody envelope = BaseObjectBodyCodec.Decode(owner.Body);
+        DecodedBaseObjectBody envelope = BaseObjectBodyCodec.Decode(owner.Body, schemas);
         byte[] body = envelope.Body.ToArray();
-        uint childId = FindGraphObject(initial.Revision, "inline.graph.child");
+        uint childId = FindGraphObject(schemas, initial.Revision, "inline.graph.child");
         Assert.Equal(14, body[0]); // Envelope.Inner.X = 7, followed by the nested Child ID.
         Assert.Equal(childId, (uint)body[1]);
         uint replacement = wrongKind
             ? initial.Revision.LocalObjects.First(record =>
-                BaseObjectBodyCodec.Decode(record.Body).Kind == ObjectStateKind.String).ObjectId
+                BaseObjectBodyCodec.Decode(record.Body, schemas).Kind == ObjectStateKind.String).ObjectId
             : initial.Revision.LocalObjectIds.Max() + 1;
         Assert.InRange(replacement, 1u, 127u);
         body[1] = (byte)replacement; // Canonical one-byte ID; no broken wire/framing to mask visitor failure.
         ObjectVersionRecord invalidOwner = ObjectVersionRecord.CreateBase(initial.WorldId.Value,
-            BaseObjectBodyCodec.EncodeDurable(schemas.GetRequired(envelope.SchemaKey!.Value), new(body)).Body);
+            BaseObjectBodyCodec.Encode(envelope.RepresentationId!.Value, new(body)).Body);
         FrameAddress address = store.Append(StateRevision.CreateObjectHeadMapBase(null,
             initial.Revision.LocalObjects.Select(record => record.ObjectId == initial.WorldId.Value ? invalidOwner : record), []));
 

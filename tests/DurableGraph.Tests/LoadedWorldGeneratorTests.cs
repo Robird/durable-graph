@@ -31,7 +31,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             schemas.RegisterBatch([fixture.OldSchema]);
             StateRevisionStore store = new(segments);
             first = store.Append(StateRevision.CreateObjectHeadMapBase(null, [
-                LoadedDurable(1, fixture.OldSchema, original), LoadedText(10, "same"),
+                LoadedDurable(schemas, 1, fixture.OldSchema, original), LoadedText(10, "same"),
                 LoadedText(11, "same"), LoadedText(12, ""), LoadedText(20, "retired ancestor field"),
             ], []));
             second = store.Append(StateRevision.CreateObjectHeadMapDelta(first,
@@ -60,8 +60,8 @@ public sealed partial class DurableSchemaGeneratorTests {
             ObjectVersionRecord rewrite = Assert.Single(plan.Revision.LocalObjects);
             Assert.Equal(ObjectVersionKind.Base, rewrite.Kind);
             Assert.Equal(1u, rewrite.ObjectId);
-            DecodedBaseObjectBody envelope = BaseObjectBodyCodec.Decode(rewrite.Body);
-            Assert.Equal(fixture.CurrentSchema.Version, envelope.SchemaKey!.Value.Version);
+            DecodedBaseObjectBody envelope = BaseObjectBodyCodec.Decode(rewrite.Body, schemas);
+            Assert.Equal(fixture.CurrentSchema.Version, envelope.Layout.Schema!.Version);
             Assert.Equal<byte>([7, 10, 6, 10, 11, 10, 12, 12], envelope.Body.ToArray());
             fixture.Change(loaded, 99); // Frozen output cannot follow later domain mutation.
             rewritten = store.Append(plan.Revision);
@@ -137,7 +137,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             schemas.RegisterBatch([fixture.CurrentSchema]);
             StateRevisionStore store = new(segments);
             original = store.Append(StateRevision.CreateObjectHeadMapBase(null, [
-                LoadedDurable(1, fixture.CurrentSchema, [7, 10, 6, 10, 11, 10, 12, 13]),
+                LoadedDurable(schemas, 1, fixture.CurrentSchema, [7, 10, 6, 10, 11, 10, 12, 13]),
                 LoadedText(10, "same"), LoadedText(11, "same"), LoadedText(12, ""), LoadedText(13, ""),
             ], []));
         }
@@ -171,8 +171,8 @@ public sealed partial class DurableSchemaGeneratorTests {
         }
     }
 
-    private static ObjectVersionRecord LoadedDurable(uint id, DurableSchema schema, byte[] body) =>
-        ObjectVersionRecord.CreateBase(id, BaseObjectBodyCodec.EncodeDurable(schema, new(body)).Body);
+    private static ObjectVersionRecord LoadedDurable(SchemaStore schemas, uint id, DurableSchema schema, byte[] body) =>
+        ObjectVersionRecord.CreateBase(id, BaseObjectBodyCodec.Encode(schemas.RegisterRepresentations([ObjectLayout.ForDurable(schema)])[0], new(body)).Body);
 
     private static ObjectVersionRecord LoadedText(uint id, string text) =>
         ObjectVersionRecord.CreateBase(id, BaseObjectBodyCodec.EncodeString(StringPayloadCodec.PrepareBase(text)).Body);

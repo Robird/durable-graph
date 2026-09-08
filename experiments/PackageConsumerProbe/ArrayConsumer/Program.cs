@@ -1,6 +1,7 @@
 using Atelia.Data;
 using Atelia.DurableGraph;
 using Atelia.DurableGraph.StateStore;
+using Atelia.DurableGraph.StateStore.Serialization;
 using Atelia.DurableGraph.StateStore.Storage;
 using Atelia.Rbf;
 using Atelia.RbfSegmentStore;
@@ -18,10 +19,10 @@ internal static class Program {
         string directory = Path.GetFullPath(args.Single());
 #if HISTORY_V1
         Seed(directory);
-        Console.WriteLine("ArraySeed:True:FourRanks:True:GenericJaggedCycles:True:FrozenDelta:True");
+        Console.WriteLine("ArraySeed:True:FourRanks:True:GenericJaggedCycles:True:FrozenDelta:True:RepresentationIds:True:ReorderedRegistration:True");
 #else
         Upgrade(directory);
-        Console.WriteLine("ArrayUpgrade:True:SharedOwnerOnce:True:ForcedBaseThenDelta:True:HistoricalExact:True:ColdReopen:True");
+        Console.WriteLine("ArrayUpgrade:True:SharedOwnerOnce:True:ForcedBaseThenDelta:True:HistoricalExact:True:ColdReopen:True:IndependentRepresentationUpgrade:True:DeltaInheritsRepresentation:True");
 #endif
     }
 
@@ -45,6 +46,7 @@ internal static class Program {
         World world = World.Seed();
         FrameAddress first, historical;
         ObjectId worldId;
+        Dictionary<RepresentationId, ObjectLayout> representations = [];
         using (GraphRepository repository = GraphRepository.CreateNew(directory, Options)) {
             using GraphSession<World> session = repository.Create(world, Models());
             first = session.Commit(Policy);
@@ -61,7 +63,12 @@ internal static class Program {
             var initial = RevisionDecoder.Read(store, schemas, first, Readers());
             Require(initial.GetRequired(pointsId).GetArrayState<PointStates.V1>()[0].Segment0Field1 == 100,
                 "Later domain mutation altered the original array snapshot.");
+            var firstIds = CheckRepresentations(store, schemas, first, representations);
+            var historicalIds = CheckRepresentations(store, schemas, historical, representations);
+            Require(firstIds.Count == historicalIds.Count && firstIds.All(pair => historicalIds[pair.Key] == pair.Value),
+                "A same-layout Delta changed its inherited representation ID.");
         });
+        CheckReorderedRegistration(directory, representations);
         File.WriteAllText(Path.Combine(directory, "historical.txt"), $"{historical.FileNumber}:{historical.FrameTicket.Packed}:{worldId.Value}");
         using GraphRepository reopened = GraphRepository.OpenExisting(directory, Options);
         using GraphSession<World> restored = reopened.Load<World>(Models());
@@ -73,7 +80,12 @@ internal static class Program {
         FrameAddress historical = new(uint.Parse(parts[0]), SizedPtr.FromPacked(ulong.Parse(parts[1])));
         ObjectId worldId = new(uint.Parse(parts[2]));
         ObjectId pointsId = default;
-        Inspect(directory, (store, schemas) => pointsId = CheckHistorical(store, schemas, historical, worldId));
+        Dictionary<uint, RepresentationId> historicalIds = [];
+        Dictionary<RepresentationId, ObjectLayout> representations = [];
+        Inspect(directory, (store, schemas) => {
+            pointsId = CheckHistorical(store, schemas, historical, worldId);
+            historicalIds = CheckRepresentations(store, schemas, historical, representations);
+        });
         Require(Upgrades.Calls.Count == 0, "Stored-exact decoding invoked business Upgrade.");
         FrameAddress upgraded, unchanged, changed;
         using (GraphRepository repository = GraphRepository.OpenExisting(directory, Options)) {
@@ -98,8 +110,17 @@ internal static class Program {
             StateRevision delta = store.Read(changed);
             Require(delta.LocalObjects.Count == 1 && delta.LocalObjects[0].ObjectId == pointsId.Value &&
                 delta.LocalObjects[0].Kind == ObjectVersionKind.Delta, "A subsequent edit should use ordinary array Delta.");
+            var upgradedIds = CheckRepresentations(store, schemas, upgraded, representations);
+            var changedIds = CheckRepresentations(store, schemas, changed, representations);
+            Require(upgradedIds[pointsId.Value] != historicalIds[pointsId.Value], "The upgraded inline array layout must receive a new representation ID.");
+            Require(upgradedIds[worldId.Value] == historicalIds[worldId.Value] &&
+                historicalIds.All(pair => pair.Key == pointsId.Value || upgradedIds[pair.Key] == pair.Value),
+                "A reference target Upgrade must not change its referring objects' representation IDs.");
+            Require(upgradedIds.Count == changedIds.Count && upgradedIds.All(pair => changedIds[pair.Key] == pair.Value),
+                "An ordinary Delta must inherit the upgraded Base's representation ID.");
             CheckHistorical(store, schemas, historical, worldId);
         });
+        CheckReorderedRegistration(directory, representations);
         using GraphRepository reopened = GraphRepository.OpenExisting(directory, Options);
         using GraphSession<World> restored = reopened.Load<World>(Models());
         CheckGraph(restored.World, 1102);
@@ -133,6 +154,48 @@ internal static class Program {
         using var file = RbfFile.OpenReadOnlyExisting(Path.Combine(directory, "schemas.rbf"));
         using SegmentStore segments = SegmentStore.OpenReadOnlyExisting(Path.Combine(directory, "state"), Options);
         action(new StateRevisionStore(segments), new SchemaStore(file, readOnly: true));
+    }
+
+    private static Dictionary<uint, RepresentationId> CheckRepresentations(StateRevisionStore store, SchemaStore schemas,
+        FrameAddress address, Dictionary<RepresentationId, ObjectLayout> representations) {
+        Dictionary<uint, RepresentationId> ids = [];
+        DecodedRevision decoded = RevisionDecoder.Read(store, schemas, address, Readers());
+        foreach (uint id in store.ReadLiveObjectHeadMap(address).Keys) {
+            ObjectVersionChain chain = store.ReadObjectVersionChain(address, id);
+            ReadOnlySpan<byte> bytes = chain.Records[0].Record.Body;
+            BinaryPayloadReader header = new(bytes);
+            Require(header.ReadByte() == 4, "New object Bases must use the representation-ID envelope.");
+            RepresentationId representation = new(header.ReadUInt32());
+            ObjectLayout layout = schemas.GetRepresentation(representation);
+            ObjectStateRecord exact = decoded.GetRequired(new ObjectId(id));
+            Require(layout.Equals(exact.Layout), "Representation lookup changed the complete persisted layout.");
+            Require(layout.Kind != ObjectStateKind.String || representation == RepresentationId.String,
+                "String must use the built-in representation ID.");
+            if (layout.Kind == ObjectStateKind.String) {
+                Require(header.ReadString() == exact.StringContent, "The representation ID must be followed immediately by raw string content.");
+                header.EnsureFullyConsumed();
+            }
+            if (representations.TryGetValue(representation, out ObjectLayout? previous)) {
+                Require(previous.Equals(layout), "A persisted representation ID changed meaning.");
+            }
+            representations[representation] = layout;
+            ids.Add(id, representation);
+        }
+        return ids;
+    }
+
+    private static void CheckReorderedRegistration(string directory, Dictionary<RepresentationId, ObjectLayout> representations) {
+        // The read handles and repository have closed. Reopen a fresh writable directory and
+        // request the complete set in reverse order; no process-local cache can supply its IDs.
+        using var file = RbfFile.OpenExisting(Path.Combine(directory, "schemas.rbf"));
+        SchemaStore schemas = new(file);
+        long before = file.TailOffset;
+        var requested = representations.OrderByDescending(pair => pair.Key.Value).ToArray();
+        RepresentationId[] actual = schemas.RegisterRepresentations(requested.Select(pair => pair.Value).ToArray());
+        Require(actual.SequenceEqual(requested.Select(pair => pair.Key)), "Reopening or request order reassigned persisted IDs.");
+        Require(file.TailOffset == before, "Registering existing representations must not append metadata.");
+        // Schema count is intentionally not a proxy: primitive/reference arrays are complete
+        // representations without a corresponding user Schema registration.
     }
 
     private static void Require(bool condition, string message) {

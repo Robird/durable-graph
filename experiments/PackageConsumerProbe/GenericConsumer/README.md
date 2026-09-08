@@ -21,6 +21,10 @@ pwsh -NoProfile -File experiments/PackageConsumerProbe/Run-GenericProbe.ps1
 runner 检查新增 history 使用 v4 格式，并逐阶段验证已有 `.dgschema` 的文件存在性和 SHA256 不变。
 每代进程独立运行，通过磁盘 repository 传递状态。历史状态类型使用生成的独立 Family 宿主。
 
+Box 还持久保存一个稳定的创建时间 ticks，所有版本的 owner Upgrade 显式透传并校验它。
+这样单字段编辑的 Delta 见证依赖真实未变内容，而不依赖类型头中曾经较长的逻辑名称；
+DB-045 将 Base 头缩成表示 ID 后，仍用原生产策略验证 Base/Delta 链，未加入 body padding。
+
 删除旧 inline 领域类型与删除独立对象族的恢复能力是不同边界：V3 删除 `LegacyPoint`，但保留独立
 `Box<Point>` 行所需的 `Point` 与闭合模型。这个消费者不把“World 后来不引用某对象”视为跳过 source Normalize 的理由。
 恶意中间 Schema、phantom 中间歧义和目录隔离由 DB-038 的产品 Runtime 测试补充；本消费者聚焦包交付与三代可执行历史。

@@ -142,7 +142,7 @@ public sealed partial class DurableSchemaGeneratorTests {
                 var original = owner.Current.Schema!;
                 var versionTwo = new DurableSchema(original.SchemaId, 2, original.Fields.ToArray(), original.BaseSchema);
                 schemas.RegisterBatch([versionTwo]);
-                var differentType = BaseObjectBodyCodec.EncodeDurable(versionTwo, owner.BaseBody);
+                var differentType = BaseObjectBodyCodec.Encode(schemas.RegisterRepresentations([ObjectLayout.ForDurable(versionTwo)])[0], owner.BaseBody);
                 selectedParent = store.Append(StateRevision.CreateObjectHeadMapDelta(parent,
                     [ObjectVersionRecord.CreateBase(ownerId.Value, differentType.Body)], []));
                 break;

@@ -17,11 +17,25 @@ public sealed class GenericSchemaPersistenceTests {
         var reader = new BinaryPayloadReader(buffer.WrittenSpan);
         Assert.Equal(key, SchemaKeyWireCodec.Read(ref reader));
         reader.EnsureFullyConsumed();
-        var encoded = BaseObjectBodyCodec.EncodeDurable(new(type, 128), new([0xAB]));
-        Assert.Equal(Convert.FromHexString("0302020342020102020350008001AB"), encoded.Body.ToArray());
-        var decoded = BaseObjectBodyCodec.Decode(encoded.Body);
-        Assert.Equal(key, decoded.SchemaKey);
-        Assert.Equal(new byte[] { 0xAB }, decoded.Body.ToArray());
+        string path = Path.Combine(Path.GetTempPath(), $"generic-envelope-{Guid.NewGuid():N}.rbf");
+        try {
+            using IRbfFile file = RbfFile.CreateNew(path);
+            SchemaStore schemas = new(file);
+            DurableSchema schema = new(type, 128);
+            RepresentationId id = schemas.RegisterRepresentations([ObjectLayout.ForDurable(schema)])[0];
+            var encoded = BaseObjectBodyCodec.Encode(id, new([0xAB]));
+            Assert.Equal(Convert.FromHexString("0402AB"), encoded.Body.ToArray());
+            var decoded = BaseObjectBodyCodec.Decode(encoded.Body, schemas);
+            Assert.Equal(schema, decoded.Layout.Schema);
+            Assert.Equal(id, decoded.RepresentationId);
+            Assert.Equal(new byte[] { 0xAB }, decoded.Body.ToArray());
+            // The former complete generic envelope remains independently readable.
+            var legacy = BaseObjectBodyCodec.Decode(Convert.FromHexString("0302020342020102020350008001AB"), schemas);
+            Assert.Equal(schema, legacy.Layout.Schema);
+            Assert.Null(legacy.RepresentationId);
+            Assert.Equal(new byte[] { 0xAB }, legacy.Body.ToArray());
+        }
+        finally { File.Delete(path); }
     }
 
     [Fact]

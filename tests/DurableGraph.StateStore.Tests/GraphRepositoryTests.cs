@@ -10,10 +10,13 @@ namespace Atelia.DurableGraph.StateStore.Tests;
 public sealed class GraphRepositoryTests : IDisposable {
     private readonly string _root = Path.Combine(Path.GetTempPath(), $"durable-graph-repository-{Guid.NewGuid():N}");
     private static readonly ReadAmplificationBaseBudgetParameters NoRebase = new(1000000, 1);
+    // A real stable scalar makes sparse field updates smaller than a complete Base.
+    private const ulong InitialSequence = 0xFEDC_BA98_7654_3210UL;
     private static readonly DurableSchema Schema = new("RepositoryNode", 1,
         new DurableFieldInfo(1, TypeTag.ObjectReference, "RepositoryNode"),
         new DurableFieldInfo(2, TypeTag.ObjectReference, "RepositoryNode"),
-        new DurableFieldInfo(3, TypeTag.String), new DurableFieldInfo(4, TypeTag.Byte));
+        new DurableFieldInfo(3, TypeTag.String), new DurableFieldInfo(4, TypeTag.Byte),
+        new DurableFieldInfo(5, TypeTag.UInt64));
 
     [Fact]
     public void ThreeCommitsRetainInstancesAndAdvanceExactParentThenReopenFromPublishedWorldId() {
@@ -63,11 +66,19 @@ public sealed class GraphRepositoryTests : IDisposable {
         using GraphSession<Node> loaded = reopened.Load<Node>(Models());
         Assert.Equal(rootId, loaded.WorldId);
         Assert.Equal((byte)4, loaded.World.Left!.Value);
+        Assert.Equal(InitialSequence, loaded.World.Sequence);
+        Assert.Equal(InitialSequence, loaded.World.Left.Sequence);
         Assert.Same(loaded.World.Left, loaded.World.Right);
         Assert.Same(loaded.World, loaded.World.Left.Left);
         Assert.Same(loaded.World.Text, loaded.World.Left.Text);
         Assert.NotSame(world, loaded.World);
         loaded.Commit(NoRebase);
+        loaded.World.Sequence = 7;
+        loaded.Commit(NoRebase);
+        loaded.Dispose();
+        using GraphSession<Node> sequenceReload = reopened.Load<Node>(Models());
+        Assert.Equal(7UL, sequenceReload.World.Sequence);
+        Assert.Equal(InitialSequence, sequenceReload.World.Left!.Sequence);
     }
 
     [Fact]
@@ -426,9 +437,11 @@ public sealed class GraphRepositoryTests : IDisposable {
         internal Node? Right;
         internal string? Text;
         internal byte Value;
+        internal ulong Sequence = InitialSequence;
     }
-    private readonly record struct State(ObjectId Left, ObjectId Right, ObjectId Text, byte Value) {
-        internal State(uint left, uint right, uint text, byte value) : this(new ObjectId(left), new ObjectId(right), new ObjectId(text), value) { }
+    private readonly record struct State(ObjectId Left, ObjectId Right, ObjectId Text, byte Value, ulong Sequence = InitialSequence) {
+        internal State(uint left, uint right, uint text, byte value, ulong sequence = InitialSequence)
+            : this(new ObjectId(left), new ObjectId(right), new ObjectId(text), value, sequence) { }
     }
 
     private static StateModelRegistry Models(Action<Node>? onCapture = null, bool upgrade = false) {
@@ -437,7 +450,7 @@ public sealed class GraphRepositoryTests : IDisposable {
             static (in State state) => Base(state),
             static (in State prior, in State next) => Delta(prior, next));
         StateReaderBinding Reader(DurableSchema schema) => new StateReaderBinding<State>(schema,
-            static (ref BinaryPayloadReader input) => new(input.ReadUInt32(), input.ReadUInt32(), input.ReadUInt32(), input.ReadByte()),
+            static (ref BinaryPayloadReader input) => new(input.ReadUInt32(), input.ReadUInt32(), input.ReadUInt32(), input.ReadByte(), input.ReadUInt64()),
             static (ref BinaryPayloadReader input, in State prior) => Apply(ref input, prior), Visit);
         StateReaderBinding[] readers = upgrade ? [Reader(Schema), Reader(current)] : [Reader(current)];
         StateModelBinding model = new StateModelBinding<Node, State>(preparation, readers,
@@ -448,11 +461,12 @@ public sealed class GraphRepositoryTests : IDisposable {
                 domain.Right = objects.ResolveDurable<Node>(state.Right);
                 domain.Text = objects.ResolveString(state.Text);
                 domain.Value = state.Value;
+                domain.Sequence = state.Sequence;
             },
             (node, context) => {
                 onCapture?.Invoke(node);
                 return new(context.CaptureDurable(node.Left, Schema.SchemaId), context.CaptureDurable(node.Right, Schema.SchemaId),
-                    context.CaptureString(node.Text), node.Value);
+                    context.CaptureString(node.Text), node.Value, node.Sequence);
             }, Visit);
         StateModelRegistry registry = new();
         registry.Register(model);
@@ -471,11 +485,13 @@ public sealed class GraphRepositoryTests : IDisposable {
         writer.WriteUInt32(state.Right.Value);
         writer.WriteUInt32(state.Text.Value);
         writer.WriteByte(state.Value);
+        writer.WriteUInt64(state.Sequence);
         return new(bytes.WrittenSpan);
     }
     private static PreparedDeltaBody Delta(State prior, State next) {
         byte mask = (byte)((prior.Left != next.Left ? 1 : 0) | (prior.Right != next.Right ? 2 : 0) |
-            (prior.Text != next.Text ? 4 : 0) | (prior.Value != next.Value ? 8 : 0));
+            (prior.Text != next.Text ? 4 : 0) | (prior.Value != next.Value ? 8 : 0) |
+            (prior.Sequence != next.Sequence ? 16 : 0));
         ArrayBufferWriter<byte> bytes = new();
         BinaryPayloadWriter writer = new(bytes);
         writer.WriteByte(mask);
@@ -483,14 +499,17 @@ public sealed class GraphRepositoryTests : IDisposable {
         if ((mask & 2) != 0) writer.WriteUInt32(next.Right.Value);
         if ((mask & 4) != 0) writer.WriteUInt32(next.Text.Value);
         if ((mask & 8) != 0) writer.WriteByte(next.Value);
+        if ((mask & 16) != 0) writer.WriteUInt64(next.Sequence);
         return new(mask != 0, bytes.WrittenSpan);
     }
     private static State Apply(ref BinaryPayloadReader input, State prior) {
         byte mask = input.ReadByte();
+        if (mask == 0 || mask > 31) throw new InvalidDataException("Invalid test bitmap.");
         return new((mask & 1) != 0 ? new ObjectId(input.ReadUInt32()) : prior.Left,
             (mask & 2) != 0 ? new ObjectId(input.ReadUInt32()) : prior.Right,
             (mask & 4) != 0 ? new ObjectId(input.ReadUInt32()) : prior.Text,
-            (mask & 8) != 0 ? input.ReadByte() : prior.Value);
+            (mask & 8) != 0 ? input.ReadByte() : prior.Value,
+            (mask & 16) != 0 ? input.ReadUInt64() : prior.Sequence);
     }
     private GraphRepository CreateRepository() => GraphRepository.CreateNew(_root,
         new() { NewStoreLayout = RbfSegmentStoreLayout.Flat });

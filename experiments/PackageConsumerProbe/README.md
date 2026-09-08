@@ -95,8 +95,8 @@ consumer proves this through generated Capture with independently allocated empt
 then byte-only loading. Public `Replace` calls supply those test inputs with explicit identity
 assertions; product behavior has no dependency on that allocation behavior or private runtime hooks.
 
-An additional public StateStore package consumer exercises persistent Schema registration and
-Base-only type references through actual packages:
+An additional public StateStore package consumer exercises persistent Schema/representation registration and
+Base-only representation IDs through actual packages:
 
 ```powershell
 ./experiments/PackageConsumerProbe/Run-StateStoreProbe.ps1
@@ -107,7 +107,7 @@ including the unmodified sibling `atelia` substrate projects. Its consumer expli
 `Atelia.DurableGraph` for generator/build assets and `Atelia.DurableGraph.StateStore` for storage
 operations, with no manual analyzer, import or project-reference wiring. Public
 `LoadedWorld.PrepareNew` freezes an inherited Character whose base and leaf fields share a string,
-registers the complete Schema closure, and produces its no-Parent Base plan. Registration is
+registers the complete Schema closure and object representations, and produces its no-Parent Base plan. Registration is
 idempotent and rejects a conflicting batch before append. Loading that Revision and editing the
 domain object produces an ordinary raw Delta through `LoadedWorld.Prepare`; read-only reopening recovers exact Schema definitions and
 uses generated `RegisterReaders` with the public `StateReaderRegistry` and `RevisionDecoder.Read`
@@ -273,3 +273,8 @@ supported ranks, jagged sharing, generic array operands and generic struct eleme
 through a World array. A historical inline element Upgrade runs once per shared array, forces one
 Base rewrite, then resumes ordinary Delta saving on the same domain instances. The old Revision
 still decodes its exact old element DTO. The runner publishes and verifies immutable history v4.
+
+The array consumer also covers DB-045's repository-local representation IDs: new Base v4 headers
+contain only the ID, reopening preserves its layout, and array element Upgrade changes the array's
+representation while the referencing owner's representation remains stable. The descriptor and its
+exact Schema dependencies live in `schemas.rbf`; generated DTO and body contracts are unchanged.

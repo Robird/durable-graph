@@ -71,16 +71,16 @@ public sealed class ArrayWireFormatTests {
     [InlineData(TypeExprKind.Rank2Array, "0303010502AB")]
     [InlineData(TypeExprKind.Rank3Array, "0303010602AB")]
     [InlineData(TypeExprKind.Rank4Array, "0303010702AB")]
-    public void ArrayBaseHeaderPreservesOpaqueBodyAndExactShapeConstructor(TypeExprKind constructor, string hex) {
+    public void LegacyArrayBaseAndDirectoryDescriptorPreserveExactShapeConstructor(TypeExprKind constructor, string hex) {
         ArrayLayout layout = new(constructor, new DurableFieldInfo(1, TypeTag.Int32));
-        var encoded = BaseObjectBodyCodec.EncodeArray(layout, new([0xAB]));
-        Assert.Equal(Convert.FromHexString(hex), encoded.Body.ToArray());
-        var decoded = BaseObjectBodyCodec.Decode(encoded.Body);
+        byte[] golden = Convert.FromHexString(hex);
+        Assert.Equal(golden[1..^1], WriteDescriptor(ObjectLayout.ForArray(layout)));
+        var decoded = BaseObjectBodyCodec.Decode(golden);
         Assert.Equal(ObjectStateKind.Array, decoded.Kind);
-        Assert.Equal(layout, decoded.ArrayLayout);
-        Assert.Null(decoded.SchemaKey);
+        Assert.Equal(layout, decoded.Layout.Array);
+        Assert.Null(decoded.RepresentationId);
         Assert.Equal(new byte[] { 0xAB }, decoded.Body.ToArray());
-        byte[] old = encoded.Body.ToArray();
+        byte[] old = (byte[])golden.Clone();
         old[0] = 2;
         Assert.Throws<InvalidDataException>(() => BaseObjectBodyCodec.Decode(old));
     }
@@ -90,10 +90,10 @@ public sealed class ArrayWireFormatTests {
         ArrayLayout layout = new(TypeExprKind.VectorArray, DurableFieldInfo.Reference(1,
             TypeExpr.VectorArray(TypeExpr.Named("B", TypeExpr.MultiDimArray(TypeExpr.Builtin(TypeTag.String), 4)))));
         byte[] golden = Convert.FromHexString("030301040F0402034201070104AB");
-        Assert.Equal(golden, BaseObjectBodyCodec.EncodeArray(layout, new([0xAB])).Body.ToArray());
-        Assert.Equal(layout, BaseObjectBodyCodec.Decode(golden).ArrayLayout);
+        Assert.Equal(golden[1..^1], WriteDescriptor(ObjectLayout.ForArray(layout)));
+        Assert.Equal(layout, BaseObjectBodyCodec.Decode(golden).Layout.Array);
         ArrayLayout strings = new(TypeExprKind.VectorArray, new DurableFieldInfo(1, TypeTag.String));
-        Assert.Equal(Convert.FromHexString("0303010404"), BaseObjectBodyCodec.EncodeArray(strings, new([])).Body.ToArray());
+        Assert.Equal(Convert.FromHexString("03010404"), WriteDescriptor(ObjectLayout.ForArray(strings)));
         // A second representation of the same string slot is deliberately noncanonical.
         Assert.Throws<InvalidDataException>(() => BaseObjectBodyCodec.Decode(Convert.FromHexString("030301040F0104")));
     }
@@ -106,7 +106,7 @@ public sealed class ArrayWireFormatTests {
             DurableSchema point2 = new("P", 2, SchemaKind.InlineValue, new DurableFieldInfo(1, TypeTag.Int64));
             ArrayLayout layout = new(TypeExprKind.VectorArray, new DurableFieldInfo(1, TypeTag.InlineValue, inlineSchema: point1));
             byte[] golden = Convert.FromHexString("03030104100203500001AB");
-            Assert.Equal(golden, BaseObjectBodyCodec.EncodeArray(layout, new([0xAB])).Body.ToArray());
+            Assert.Equal(golden[1..^1], WriteDescriptor(ObjectLayout.ForArray(layout)));
             Assert.Throws<InvalidDataException>(() => BaseObjectBodyCodec.Decode(golden));
             using (IRbfFile file = RbfFile.CreateNew(path)) {
                 var schemas = new SchemaStore(file);
@@ -119,8 +119,9 @@ public sealed class ArrayWireFormatTests {
             using (IRbfFile file = RbfFile.OpenExisting(path)) {
                 var schemas = new SchemaStore(file, readOnly: true);
                 var decoded = BaseObjectBodyCodec.Decode(golden, schemas);
-                Assert.Equal(layout, decoded.ArrayLayout);
-                Assert.Same(schemas.GetRequired("P", 1), decoded.ArrayLayout!.ElementSlot.InlineSchema);
+                Assert.Equal(layout, decoded.Layout.Array);
+                Assert.Null(decoded.RepresentationId);
+                Assert.Same(schemas.GetRequired("P", 1), decoded.Layout.Array!.ElementSlot.InlineSchema);
             }
         }
         finally { if (File.Exists(path)) { File.Delete(path); } }
@@ -153,11 +154,30 @@ public sealed class ArrayWireFormatTests {
     [Fact]
     public void LegacyBaseV2RejectsArrayArgumentsAndKeepsNonArrayBodies() {
         DurableSchema schema = new(TypeExpr.Named("B", TypeExpr.VectorArray(TypeExpr.Builtin(TypeTag.Int32))), 1);
-        byte[] encoded = BaseObjectBodyCodec.EncodeDurable(schema, new([])).Body.ToArray();
-        Assert.Equal(new SchemaKey(schema.Type, 1), BaseObjectBodyCodec.Decode(encoded).SchemaKey);
-        encoded[0] = 2;
-        Assert.Throws<InvalidDataException>(() => BaseObjectBodyCodec.Decode(encoded));
-        Assert.Equal(new SchemaKey("A", 1), BaseObjectBodyCodec.Decode(Convert.FromHexString("02020203410001AB")).SchemaKey);
+        byte[] golden = Convert.FromHexString("03020203420104010201");
+        string path = Path.Combine(Path.GetTempPath(), $"durable-array-legacy-{Guid.NewGuid():N}.rbf");
+        try {
+            using IRbfFile file = RbfFile.CreateNew(path);
+            SchemaStore schemas = new(file);
+            schemas.RegisterBatch([schema, new DurableSchema("A", 1)]);
+            var decoded = BaseObjectBodyCodec.Decode(golden, schemas);
+            Assert.Equal(schema, decoded.Layout.Schema);
+            Assert.Null(decoded.RepresentationId);
+            golden[0] = 2;
+            Assert.Throws<InvalidDataException>(() => BaseObjectBodyCodec.Decode(golden, schemas));
+            var legacy = BaseObjectBodyCodec.Decode(Convert.FromHexString("02020203410001AB"), schemas);
+            Assert.Equal(new DurableSchema("A", 1), legacy.Layout.Schema);
+            Assert.Equal(new byte[] { 0xAB }, legacy.Body.ToArray());
+            Assert.Null(legacy.RepresentationId);
+        }
+        finally { File.Delete(path); }
+    }
+
+    private static byte[] WriteDescriptor(ObjectLayout layout) {
+        ArrayBufferWriter<byte> buffer = new();
+        BinaryPayloadWriter writer = new(buffer);
+        RepresentationDescriptorCodec.Write(ref writer, layout);
+        return buffer.WrittenSpan.ToArray();
     }
 
     private static byte[] WriteType(TypeExpr type) {
