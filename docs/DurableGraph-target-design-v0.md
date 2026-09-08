@@ -81,6 +81,8 @@ Source Generator 负责可在编译期确定的类型知识与机械代码，框
 - 所有受支持引用类型统一进入对象状态记录的目录，包括自定义 class、string、数组与 BCL 容器；
   具体目录属于 candidate、stored 或 current 视图时另行说明。
   成员中的引用只保存 ObjectId，对象本体独立保存；共享和循环是整体恢复目标。
+  引用对象操作以 C# object 接受实例，按实际 runtime 类型分派至受支持的内建或用户模型；
+  字段/元素的强类型操作继续静态绑定。内部 object 参数不等于开放任意 object/interface 持久字段。
 - 当前 CLR 图按引用相等语义登记。内容相等的不同非空 string 实例不能合并；唯一明确例外是
   所有零长度 string 在 Capture 和读取两端都规范化为 string.Empty。null 仍与空串区分。
 - DTO 引用槽及 Runtime/StateStore 上层对象身份使用非泛型 `ObjectId(uint Value)`；普通 UInt32 数值仍为 `uint`。
@@ -120,6 +122,8 @@ Source Generator 负责可在编译期确定的类型知识与机械代码，框
 - owner 的单对象 Upgrade 显式转换嵌套 DTO；框架不另行先升级 struct。历史 inline DTO/body
   从保留的 exact history 生成，不依赖当前领域 struct 声明存在，也不要求值迁移壳。
   领域/DTO 表示保持分离，不能为泛型复用而把可变领域引用保留在 DTO 中。
+  数组是独立的内建 owner：显式选定元素转换规则后，由框架逐元素执行；不能由引用它的不同对象
+  分别决定同一共享数组的转换。元素升级保持数组身份与 shape，仍 live 的升级数组下次保存强制 Base。
 - Upgrade 用户入口统一接收非泛型 UpgradeContext，优先考虑工具扩展的灵活性；Context 提供本次转换的只读信息，
   值转换能力由 owner 显式取得并调用，不逐个追加到历史方法的参数列表。
   当前采用预声明/预绑定能力，只在执行时查询已选工具；不由 Context 动态选择业务规则，也不扩张单对象操作边界。

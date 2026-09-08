@@ -20,10 +20,10 @@ GraphSession 的正常同实例 Commit 与严格重开从 PROJECT-STATE/DB-036 �
 当前只支持单活动会话、固定非空 World，发布故障范围为正常关闭/进程中止和明确的 I/O 异常。
 DB-038 的泛型 Schema/history、开放生成、保存恢复与通用/闭合 owner Upgrade 从 PROJECT-STATE/施工记录查证，不再列为未实现机制。
 可组合值 Upgrade 的验收与实际范围见 [DB-039](design-branches/0039-composable-value-upgrade-design.md#8-产品施工合同与验收映射)。
-推荐下一片为 [DB-043 SZ VectorArray 对象纵切](design-branches/0043-vector-array-object-slice.md)：
-把 array TypeExpr/history、统一 ObjectReference、冻结内容、元素静态操作、稀疏 Delta 与真实 GraphSession
-冷重开接到共同对象链。开放/jagged/inline 元素、rank 2–4 执行及数组元素历史 Upgrade 作为后继；已有值工具不替数组共享对象选择
-升级规则。DB-043 当前为 Proposed，本条不自动授权实施。
+推荐下一片为 [DB-043 可组合数组与统一引用对象路径](design-branches/0043-vector-array-object-slice.md)：
+统一 object 实例分派 string/class/array，闭合 SZ/rank 2–4、开放泛型数组、jagged、inline/generic struct 元素、
+融合 Delta、数组独立 owner Upgrade 与真实 GraphSession 冷重开。已撤回初稿 closed-only 白名单；
+DB-043 当前为施工级 Proposed，本条不自动授权实施。
 
 ## 2. 已采纳方向中的未完成能力
 
@@ -35,7 +35,7 @@ B/D/H 分别指本轮精确 Base payload、Delta payload 上界、已有对象�
 |---|---|---|
 | TypeCodec 与 exact Schema 绑定 | 一般类型组合与内建复合类型 codec；已有 nominal class 引用及 exact reader 分派不等于一般 TypeCodec，也不自动复活已删除模型族 | [DB-034](design-branches/0034-durable-reference-graph-batch.md)、[DB-018](design-branches/0018-generated-graph-codec-shape.md)、[DB-001](design-branches/0001-schema-authority-and-runtime-representation.md) |
 | 复合类型的 DTO 升级与恢复 | 将单对象 Upgrade/Restore 扩展到数组与容器内容；保持完整 source 目录、强制 Base、当前版本 DTO 图的可达分析和失败不交付 | [DB-034](design-branches/0034-durable-reference-graph-batch.md)、[DB-018](design-branches/0018-generated-graph-codec-shape.md) |
-| 完整数组对象 | DB-043 先以 syntactically closed SZ `T[]`（scalar/string/durable-reference element）闭合 identity、shape、冻结、稀疏 Delta、两阶段分配/填充及持久冷重开；后继补开放/jagged/inline、rank 2–4 与显式 element Upgrade。不能把现有元素模板视为完整数组支持 | [DB-043](design-branches/0043-vector-array-object-slice.md)、[MVP 边界](DurableGraph-target-design-v0.md#mvp-功能边界)、[DB-020](design-branches/0020-typed-slot-array-binding-slice.md) |
+| 完整数组对象与共同引用入口 | DB-043 用统一 object 路径接入 string/class/array；SZ/rank 2–4 与所有已支持槽递归组合，冻结/稀疏 Delta/两阶段恢复/显式元素 Upgrade/冷重开一并验收。数组 exact 赋值约束暂保留，协变历史 witness 独立后继 | [DB-043](design-branches/0043-vector-array-object-slice.md)、[MVP 边界](DurableGraph-target-design-v0.md#mvp-功能边界)、[DB-020](design-branches/0020-typed-slot-array-binding-slice.md) |
 
 ## 3. 尚待裁决的机制
 
@@ -43,13 +43,13 @@ B/D/H 分别指本轮精确 Base payload、Delta payload 上界、已有对象�
 |---|---|
 | 引用 ID 的泛型目标品牌 | 已选非泛型包装见 [DB-041](design-branches/0041-object-id-state-representation.md)。泛型化暂缓；确有目标级静态检查需求时重访 [DB-040](design-branches/0040-typed-object-id-representation-research.md) 的版本含义、phantom nominal 与历史表示依赖，以及 typed 物理字段的 CLR 加载边界 |
 | 对象版本解释与保存来源 | 已登记模型族可按 Base exact Schema 自动读取；完整 ObjectHeadMap 中 external object heads 的来源、候选对象身份连续性仍需产品 Save/Load 合同，不能由 Revision Parent 声明一致推导全局身份认证 |
-| 保存相等性与真实估算 | 同版 DTO 的浮点按位、引用槽按 ID、inline 值递归融合 Delta 已采纳；未来数组/容器相等性另定。已准备 body 与当前 v3 envelope 计量见 [DB-029](design-branches/0029-prepared-object-revision-planning-slice.md)；Base 类型头已计入 B/H。未来新增类型头/容器布局时继续按实际对象 payload 计量 |
+| 保存相等性与真实估算 | 同版 DTO 的浮点按位、引用槽按 ID、inline 值递归融合 Delta 已采纳；DB-043 数组复用元素操作，BCL 容器另定。已准备 body 与当前 v3 envelope 计量见 [DB-029](design-branches/0029-prepared-object-revision-planning-slice.md)；新增类型头/容器布局继续按实际对象 payload 计量 |
 | Schema 规范表示和持久引用 | canonical 注册批次与逻辑 SchemaKey 已闭合；未来 SchemaHash、紧凑引用及一般类型家族约束随消费者裁决，不用 GetHashCode 作持久身份 |
 | 泛型与数组组合绑定 | 自定义 class/struct 的领域/状态参数及历史绑定已落地；剩余为数组对象引入的类型构造、shape 和元素操作，与已选数组范围一并验证，不要求全面切换 DynamicMethod |
 | 跨程序集与一般类型形状 | 跨编译 helper 可见性、外部历史祖先、enum/nullable/decimal/native int 等支持范围；当前同编译泛型支持边界见 DB-038，boxed value identity 已排除 MVP |
-| 多态与运行时注册扩展 | 已标记 class 基类到登记派生实例按 DB-034 合同；interface/object 通配引用、开放组合与跨程序集发现仍后续裁决，不能自动回退成声明基类的 codec |
+| 多态与运行时注册扩展 | 已标记 class 基类到登记派生实例按 DB-034 合同；DB-043 统一框架 object 参数不授予 object/interface 通配字段。数组协变还需空数组的历史元素 ancestry 证据，和跨程序集发现分别后继；不能自动回退成声明基类的 codec |
 | 捕获复合值的所有权 | 数组/容器如何真正冻结候选；inline struct 已递归捕获成标量/ID 的 unmanaged DTO，不能据此推导一般容器浅复制足够 |
-| 数组完整形状与分配 | 非零下界与非 SZ rank-1 已明确不支持；实施时在 rank 上界 3/4 中选择，确定有限 tag、元素类型和各维长度编码、分配及按 ref 遍历 |
+| 数组完整形状与分配 | 非零下界与非 SZ rank-1 已明确不支持；DB-043 推荐上界 4、有限构造码与静态 ref 循环，验收合法空维形状、元素数溢出和分配失败；零字段 struct 的零字节 body 不能作为内存预算依据 |
 | 根与持久目录扩展 | 单 WorldId/Revision 发布已闭合；后续仅在真实需求下选择 null/清空/替换、命名 branch 与 Reset，不建设多根 API |
 
 设计证据：[DB-006](design-branches/0006-flat-graph-delta-prototype.md)、
@@ -57,6 +57,20 @@ B/D/H 分别指本轮精确 Base payload、Delta payload 上界、已有对象�
 [运行时绑定见证](design-branches/0018-runtime-binding-witness.md)。
 这些实验选择不自动成为新 DTO 产品路径的 API 或强制前置项目。
 DB-009/010 的旧 no-reuse 前提不能沿用；借用 Base 共享 prior 等结论时也需重新检查 ID 新占用者边界。
+
+### 3.1 版本化表示类型头的统一寻址
+
+2026-09-08 用户提出并要求保留：序列化头部的 TypeCode/TypeExpr 应考虑直接使用 VersionedSchema 的身份，
+使具备相应历史 reader 的程序仅凭 SchemaStore 与 ObjectVersion chain/lineage，就能恢复完整版本化 DTO，
+无需调用方另给 current CLR 布局或数组元素版本。该方向值得研究；此次明确暂缓统一设计，不阻塞 DB-043。
+
+重访触发：收敛统一 TypeCodec/表示类型头，或演进 Schema 寻址和数组类型头时。届时比较以 VersionedSchema ID
+为中心的递归表示，与目前 nominal 引用约束、exact SchemaKey/ArrayLayout 的分工；不要把当前局部 API 视为不可改。
+需要覆盖嵌套泛型/数组、inline 历史依赖、内建类型员工通道、紧凑身份及仓库内同 key 一致性；
+数组协变所需的历史元素 ancestry（包括空数组）也在此检查。Schema 元数据与可执行历史 reader 的保留职责仍分别明确。
+
+在此裁决前，DB-043 用持久 exact element SchemaKey + 内建 array layout 承载必要解释信息；
+该编码是可替换的局部施工选择，不宣称为最终 TypeCode 模型。无论如何编码，都不得以 latest 布局解释历史 body。
 
 ## 4. 明确延后及重访条件
 
@@ -75,6 +89,7 @@ DB-009/010 的旧 no-reuse 前提不能沿用；借用 Base 共享 prior 等结�
 | 物理 GC、compaction、历史保留 | 出现真实空间或 recovery-closure 问题后；与 CLR 映射清理和数字 ID 回收分开裁决 |
 | TwoLeg / incremental cleaner | 多历史 Segment 无法满足实际有界 dependency file count、在线退休、backup/rescue 或 compaction SLO 时重访，见其 [技术储备（归档）](../experiments/ARCHIVE.md#two-leg "原路径：experiments/TwoLegRotationProbe/PROJECT-STATE.md") |
 | 性能优化 | MVP 后有具体测量再优化全量 Base 准备、缓冲复制、cache、typed buckets 或指纹；DB-042 的 Upgrade requirement set 仍逐次复核，批量历史对象测出热点后可用 SchemaStore catalog generation 做透明快速路径；DB-028 先 object-first 直读 RBF，Frame cache 只减少重复 I/O/解码，重复完整 map 物化需另评估 map cache/单 ID 查询，必要时再按 Frame 合并批量读取 |
+| 加载内存预算 | 大数组/容器或不可信输入的资源控制成为实际需求时，设计独立的总分配/元素数预算；DB-043 先要求合法 shape、checked 计算及适用时的 payload 下界预检。零字节元素可产生大内存对象，单帧 256MB 不等于 CLR 内存上限 |
 | 并发、分支与跨 Repository | 宿主提出真实 consumer 后；分别定义 concurrent Capture、snapshot isolation、branch/fork/multi-writer 和跨 Store/Repository identity，不扩大当前单 writer 假设 |
 | 跨对象升级与外部副作用 | MVP 仅单对象字段转换；读取其他对象、拆分/合并及创建持久新对象均延后。MVP 后有真实迁移案例时，再讨论图访问、新 ID 与失败隔离；不借普通升级默认授权 |
 | 无 CLR 迁移壳的 current Normalize | Family 路径可以保留 state-only exact reader，但 editable Load 仍需要 source 对象族的 current/migration CLR 模型。应用需要删除这层模型而继续加载旧 Revision 时，再设计独立 Normalize/退休协议；不能借 World 删除引用跳过 source 行 |

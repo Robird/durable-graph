@@ -18,10 +18,12 @@
 
 ## 当前焦点
 
-[DB-043 SZ VectorArray 对象纵向分片](../docs/design-branches/0043-vector-array-object-slice.md)
-是推荐的下一施工片，当前仍为 Proposed：以真实 `T[]` World 图闭合 TypeExpr/history、统一 ObjectReference、
-冻结数组状态、稀疏元素 Delta、对象图两阶段恢复及 GraphSession/package 冷重开。rank 2–4 执行和数组元素
-组合/历史 Upgrade 分片延后；本片只为 VectorArray 分配 TypeExpr 构造与 wire tag。实施前需审阅 DB-043 的持久格式选择。
+[DB-043 可组合数组与统一引用对象路径](../docs/design-branches/0043-vector-array-object-slice.md)
+是推荐的下一施工片，已按源码复核修订为施工级 Proposed：统一 object 实例分派 string/class/array，
+覆盖 SZ/rank 2–4、开放泛型、jagged、inline/generic struct 元素、融合 Delta、数组独立 owner Upgrade
+及 GraphSession/package 冷重开。当前尚未实现；不再沿用初稿 closed-only 元素白名单。
+版本化表示类型头统一以 VersionedSchema ID 寻址的候选与重访条件保存在
+[路线图待办](../docs/DurableGraph-research-roadmap.md#31-版本化表示类型头的统一寻址)，不阻塞本片局部格式。
 
 [DB-042](../docs/design-branches/0042-upgrade-schema-requirement-set.md) 已完成 plan 级 exact Schema 依赖证书；
 [DB-041](../docs/design-branches/0041-object-id-state-representation.md) 的非泛型 ObjectId、DB-039 可组合值 Upgrade
