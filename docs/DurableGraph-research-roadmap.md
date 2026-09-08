@@ -68,6 +68,12 @@ DB-009/010 的旧 no-reuse 前提不能沿用；借用 Base 共享 prior 等结�
 在此裁决前，DB-043 用持久 exact element SchemaKey + 内建 array layout 承载必要解释信息；
 该编码是可替换的局部施工选择，不宣称为最终 TypeCode 模型。无论如何编码，都不得以 latest 布局解释历史 body。
 
+2026-09-08 后续匿名评审见 [DB-044](design-branches/0044-type-header-blind-review/README.md)。
+整数寻址、开放模板/闭合登记粒度、prefix/postfix 分开评价；尚未选择新格式。
+重点待验证：版本化模板 + 必要 exact 实参是否可用小而确定的规则产生历史 DTO/reader；
+`ArrayHolder<T>` 的引用目标依赖必须截断，`Box<Point>` 的模板版本与闭合表示变化须分别定义，
+不能仅按模板版本判断是否 Upgrade。是否额外 intern 完整闭合表达式单独比较目录摊销，不以评审票数裁决。
+
 ## 4. 明确延后及重访条件
 
 | 延后项 | 何时重访 / 届时要回答的问题 |

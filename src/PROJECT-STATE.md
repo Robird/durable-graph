@@ -25,6 +25,8 @@
 下一片尚未选定；可评估 BCL 内容适配的具体消费者，待办与边界从路线图进入。
 版本化表示类型头统一以 VersionedSchema ID 寻址的候选与重访条件保存在
 [路线图待办](../docs/DurableGraph-research-roadmap.md#31-版本化表示类型头的统一寻址)，不阻塞本片局部格式。
+该议题的匿名方案比较及交叉反例已记录于 [DB-044](../docs/design-branches/0044-type-header-blind-review/README.md)；
+目前为研究结果，尚未改变产品格式、版本传播合同或选择后继施工分片。
 
 [DB-042](../docs/design-branches/0042-upgrade-schema-requirement-set.md) 已完成 plan 级 exact Schema 依赖证书；
 [DB-041](../docs/design-branches/0041-object-id-state-representation.md) 的非泛型 ObjectId、DB-039 可组合值 Upgrade
