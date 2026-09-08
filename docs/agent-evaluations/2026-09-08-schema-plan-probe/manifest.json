@@ -1,0 +1,52 @@
+{
+  "experiment": "2026-09-08-schema-plan-probe",
+  "problemVersion": 1,
+  "problemSha256": "EF315C8E024277A1950417E81357E27B5018A29EAAE11CD8C177A5B28D17D536",
+  "rubricSha256": "B103EB71D33605470E101DACF9D035CE6A24B11E0C6655DD823404E5F110287A",
+  "phase": "initial-pair-completed",
+  "trials": [
+    {
+      "label": "sample-kestrel",
+      "requestedModel": "gpt-6-astra",
+      "requestedReasoningEffort": "xhigh",
+      "forkTurns": "none",
+      "agentTask": "/root/trial_kestrel",
+      "dispatchWindowUtc": "2026-09-08 10:19:49 UTC",
+      "output": "sample-kestrel.md",
+      "observedAnswerWrittenUtc": "2026-09-08 10:25:10 UTC",
+      "answerSha256": "339241C36771F662BDEE92E420935D1F2FBB6AD521A771AC835FD96DC6005AA1",
+      "coordinatorScore": 20,
+      "blindReviewerScore": 20,
+      "independentlyConfirmedRuntimeConfiguration": null,
+      "usage": null
+    },
+    {
+      "label": "sample-orchid",
+      "requestedModel": "gpt-5.6-sol",
+      "requestedReasoningEffort": "medium",
+      "forkTurns": "none",
+      "agentTask": "/root/trial_orchid",
+      "dispatchWindowUtc": "2026-09-08 10:19:49 UTC",
+      "output": "sample-orchid.md",
+      "observedAnswerWrittenUtc": "2026-09-08 10:23:04 UTC",
+      "answerSha256": "52B3597C97D11B02FE55B0F952A38A3B88F84AF49A1D91D2725DD350AB06BBF8",
+      "coordinatorScore": 20,
+      "blindReviewerScore": 20,
+      "independentlyConfirmedRuntimeConfiguration": null,
+      "usage": null
+    }
+  ],
+  "blindReviewer": {
+    "agentTask": "/root/trial_v1_blind_review",
+    "forkTurns": "none",
+    "modelOverride": null,
+    "reasoningEffortOverride": null,
+    "output": "blind-review-v1.md"
+  },
+  "limitations": [
+    "Spawn accepted requested settings but returned task identity only; no independent provider telemetry.",
+    "Shared workspace and inherited host instructions; input restriction is cooperative rather than a filesystem sandbox.",
+    "Raw usage is unavailable through the exposed spawn result.",
+    "A designed discriminator is not a representative model benchmark."
+  ]
+}

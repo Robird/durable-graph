@@ -15,3 +15,5 @@
 四个已完成或未采用路线的旧 Probe 已退出活动工作树，完整源码与证据保存在 Git 恢复点；
 只在明确问题需要时查 [归档索引](ARCHIVE.md)。默认搜索与回归使用上表入口及 src/tests，
 不为跟随产品演进而维护或恢复旧 Probe。
+
+Coding Agent 模型/思考强度的工作方法实验另见[评测材料索引](../docs/agent-evaluations/README.md)，不计入产品机制或回归能力。
