@@ -63,7 +63,7 @@ public abstract partial class StateBindingContext {
                 if (!rules.AllowKeepExact || source != target || priorType != nextType) {
                     throw new InvalidDataException("No explicit value upgrade provider matches, and KeepExact is not available for these complete slots.");
                 }
-                plan = CreateKeepExactPlan(source, priorType);
+                plan = CreateKeepExactPlan(priorType);
             } else {
                 StateValueUpgradeProvider provider = candidates[0];
                 if ((provider.ExpectedSource is { } expectedSource && expectedSource != source) ||
@@ -75,7 +75,7 @@ public abstract partial class StateBindingContext {
                 UnifyStateType(provider.NextType, nextType, variables);
                 MethodInfo method = CloseUpgradeMethod(provider.Method, variables);
                 UpgradeDependencies dependencies = PrepareDependencies(provider.Dependencies, source.InlineSchema, target.InlineSchema, depth + 1);
-                plan = CreateValueUpgradePlan(source, target, priorType, nextType, method, dependencies);
+                plan = CreateValueUpgradePlan(priorType, nextType, method, dependencies);
             }
             _valueUpgradePlans.Add(key, plan);
             return plan;
@@ -107,26 +107,25 @@ public abstract partial class StateBindingContext {
         return true;
     }
 
-    private static ValueUpgradePlan CreateValueUpgradePlan(DurableFieldInfo source, DurableFieldInfo target,
-        Type priorType, Type nextType, MethodInfo method, UpgradeDependencies dependencies) {
+    private static ValueUpgradePlan CreateValueUpgradePlan(Type priorType, Type nextType, MethodInfo method,
+        UpgradeDependencies dependencies) {
         MethodInfo factory = typeof(StateBindingContext).GetMethod(nameof(CreateValueUpgradePlanTyped), BindingFlags.NonPublic | BindingFlags.Static)!
             .MakeGenericMethod(priorType, nextType);
-        return factory.CreateDelegate<Func<DurableFieldInfo, DurableFieldInfo, MethodInfo, UpgradeDependencies, ValueUpgradePlan>>()(
-            source, target, method, dependencies);
+        return factory.CreateDelegate<Func<MethodInfo, UpgradeDependencies, ValueUpgradePlan>>()(method, dependencies);
     }
 
-    private static ValueUpgradePlan CreateValueUpgradePlanTyped<TPrior, TNext>(DurableFieldInfo source, DurableFieldInfo target,
-        MethodInfo method, UpgradeDependencies dependencies) where TPrior : unmanaged where TNext : unmanaged =>
-        new TypedValueUpgradePlan<TPrior, TNext>(source, target, method.CreateDelegate<UpgradeAction<TPrior, TNext>>(), dependencies);
+    private static ValueUpgradePlan CreateValueUpgradePlanTyped<TPrior, TNext>(MethodInfo method, UpgradeDependencies dependencies)
+        where TPrior : unmanaged where TNext : unmanaged =>
+        new TypedValueUpgradePlan<TPrior, TNext>(method.CreateDelegate<UpgradeAction<TPrior, TNext>>(), dependencies);
 
-    private static ValueUpgradePlan CreateKeepExactPlan(DurableFieldInfo slot, Type type) {
+    private static ValueUpgradePlan CreateKeepExactPlan(Type type) {
         MethodInfo factory = typeof(StateBindingContext).GetMethod(nameof(CreateKeepExactPlanTyped), BindingFlags.NonPublic | BindingFlags.Static)!
             .MakeGenericMethod(type);
-        return factory.CreateDelegate<Func<DurableFieldInfo, ValueUpgradePlan>>()(slot);
+        return factory.CreateDelegate<Func<ValueUpgradePlan>>()();
     }
 
-    private static ValueUpgradePlan CreateKeepExactPlanTyped<T>(DurableFieldInfo slot) where T : unmanaged =>
-        new TypedValueUpgradePlan<T, T>(slot, slot,
+    private static ValueUpgradePlan CreateKeepExactPlanTyped<T>() where T : unmanaged =>
+        new TypedValueUpgradePlan<T, T>(
             static (in T prior, out T next, UpgradeContext _) => next = prior, new([]));
 
     private readonly record struct ValuePlanKey(Type RuleSet, DurableFieldInfo Source, DurableFieldInfo Target);
@@ -148,28 +147,18 @@ public abstract partial class StateBindingContext {
             return new(objectId, sourceObject, targetObject, tools);
         }
 
-        internal void CheckRegistered(StateBindingContext context, HashSet<ValueUpgradePlan> visited) {
-            foreach ((_, ValueUpgradePlan plan) in plans) { plan.CheckRegistered(context, visited); }
-        }
     }
 
-    private abstract class ValueUpgradePlan(DurableFieldInfo source, DurableFieldInfo target, UpgradeDependencies dependencies) {
+    private abstract class ValueUpgradePlan(UpgradeDependencies dependencies) {
         internal int Height { get; } = dependencies.Height + 1;
         protected UpgradeDependencies Dependencies { get; } = dependencies;
-
-        internal void CheckRegistered(StateBindingContext context, HashSet<ValueUpgradePlan> visited) {
-            if (!visited.Add(this)) { return; }
-            if (source.InlineSchema is { } prior) { context.CheckRegistered(prior); }
-            if (target.InlineSchema is { } next) { context.CheckRegistered(next); }
-            Dependencies.CheckRegistered(context, visited);
-        }
 
         internal abstract Delegate CreateTool(ObjectId objectId, DurableSchema sourceObject, DurableSchema targetObject,
             Dictionary<ValueUpgradePlan, Delegate> invocationTools);
     }
 
-    private sealed class TypedValueUpgradePlan<TPrior, TNext>(DurableFieldInfo source, DurableFieldInfo target,
-        UpgradeAction<TPrior, TNext> action, UpgradeDependencies dependencies) : ValueUpgradePlan(source, target, dependencies)
+    private sealed class TypedValueUpgradePlan<TPrior, TNext>(UpgradeAction<TPrior, TNext> action,
+        UpgradeDependencies dependencies) : ValueUpgradePlan(dependencies)
         where TPrior : unmanaged where TNext : unmanaged {
         internal override Delegate CreateTool(ObjectId objectId, DurableSchema sourceObject, DurableSchema targetObject,
             Dictionary<ValueUpgradePlan, Delegate> invocationTools) {

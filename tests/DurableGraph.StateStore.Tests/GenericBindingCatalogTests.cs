@@ -37,6 +37,21 @@ public sealed class GenericBindingCatalogTests : IDisposable {
     }
 
     [Fact]
+    public void SameExactKeyWithDifferentLayoutsReportsBothRequirementPaths() {
+        StateModelRegistry registry = BasicRegistry();
+        DurableSchema first = Point(1);
+        DurableSchema conflicting = new("Point", 1, SchemaKind.InlineValue, new DurableFieldInfo(1, TypeTag.Int64));
+        DurableSchema owner = new(TypeExpr.Named("Pair", TypeExpr.Named("Point")), 1,
+            Inline(1, first), Inline(2, conflicting));
+
+        InvalidDataException error = Assert.Throws<InvalidDataException>(() => registry.Snapshot().BindSchema(owner));
+
+        Assert.Contains("field[1].inline", error.Message);
+        Assert.Contains("field[2].inline", error.Message);
+        Assert.Contains("Point v1", error.Message);
+    }
+
+    [Fact]
     public void FullSchemaConflictIsSnapshotLocalWhileIndependentEmptyCatalogsRemainIndependent() {
         StateModelRegistry registry = BasicRegistry();
         TypeExpr family = TypeExpr.Named("Box", TypeExpr.Named("Point"));

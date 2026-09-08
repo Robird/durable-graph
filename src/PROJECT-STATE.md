@@ -1,6 +1,6 @@
 # DurableGraph 产品开发工作集
 
-> 校准：2026-09-08，最近产品施工及验收见 [DB-041](../docs/design-branches/0041-object-id-state-representation.md)。本文只维护当前能力、边界与续工入口。
+> 校准：2026-09-08，最近产品施工及验收见 [DB-042](../docs/design-branches/0042-upgrade-schema-requirement-set.md)。本文只维护当前能力、边界与续工入口。
 > 文档不是实现授权；事实以当前源码、测试和工具输出为准。
 
 ## 从这里继续
@@ -18,11 +18,13 @@
 
 ## 当前焦点
 
-[DB-041 非泛型 ObjectId](../docs/design-branches/0041-object-id-state-representation.md)
-已完成 DTO、Runtime 和 StateStore 的语义 ID 包装，普通 uint 数值与持久格式不变；完整测试及真实包回归通过。
-DB-039 可组合值 Upgrade 及此前的同实例 GraphSession、泛型/inline Schema/history 能力继续沿用。
-[DB-040](../docs/design-branches/0040-typed-object-id-representation-research.md) 的泛型目标品牌暂缓，保留 CLR 与历史语义调研证据。
-后继扩展从[路线图](../docs/DurableGraph-research-roadmap.md)选片；已有 ref 元素循环仍不等于数组对象支持。
+[DB-042 Upgrade exact Schema 依赖证书](../docs/design-branches/0042-upgrade-schema-requirement-set.md)
+已把分散在 owner/value step 的执行前复核收敛为 plan 级不可变 requirement set：按 exact key
+展平 base/inline 闭包、同键异形拒绝、晚登记冲突携带稳定依赖路径，并在 callback 前统一验证。
+缓存计划保存 current DTO 类型，不再为每次调用重复走 BindSchema/reader；SchemaStore catalog generation 优化延后到有测量时。
+[DB-041](../docs/design-branches/0041-object-id-state-representation.md) 的非泛型 ObjectId、DB-039 可组合值 Upgrade
+及此前的同实例 GraphSession、泛型/inline Schema/history 能力继续沿用。[DB-040](../docs/design-branches/0040-typed-object-id-representation-research.md)
+的泛型目标品牌暂缓。后继扩展从[路线图](../docs/DurableGraph-research-roadmap.md)选片；已有 ref 元素循环仍不等于数组对象支持。
 
 ## 当前能力与实际边界
 
@@ -55,8 +57,10 @@ DB-039 可组合值 Upgrade 及此前的同实例 GraphSession、泛型/inline S
   历史 DTO/body 不携带领域泛型参数，phantom 参数不产生状态参数。已知叶子直接调用，未知槽使用 IStateOps/IValueProjection 静态约束调用。
   旧纯非泛型编译保留 Schema/GetSchema/__DurableState；迁入 Family 路径后，内部 DTO 类型引用需改用 Family alias。
 - 目录冻结定义/provider，成功闭合在 snapshot 内缓存；current 按 CLR Type，historical 按完整 stored Schema 绑定。
+  snapshot 只冻结代码能力，仍观察同一 Repository 内单调积累的 SchemaStore 权威定义。
   同 T 多处 exact 不一致、错误 arity/kind、未知定义及不支持的 CLR 闭合拒绝；nominal 边不递归展开对象 body。
-  缓存命中仍核对完整 base/inline 闭包与后续已注册 Schema，匹配共享 DAG 不按树重复展开。
+  UpgradePlan 持有展平去重的 exact Schema requirement set；缓存命中在 callback 前统一核对后续已注册 Schema，
+  冲突报告 owner endpoint 到具体 base/inline 字段的稳定路径。普通 binding 缓存仍复用同一闭包算法；共享 DAG 不按树重复展开。
 - 新 `DurableUpgrade` 方法使用非泛型 static host 中可访问的三参方法；运行时优先闭合 owner 特例，否则选择通用边。
   整条相邻链在该对象首次业务调用前绑定；中间 exact 布局来自显式 DTO 表示、已注册 Schema 或唯一历史推导，缺失则拒绝。
   不使用 latest 补缺，不自动升级 struct，失败不尝试另一业务规则。每对象/相邻边独立 UpgradeContext 含 ObjectId 及完整 Source/TargetObjectSchema。

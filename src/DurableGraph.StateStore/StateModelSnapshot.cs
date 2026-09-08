@@ -3,7 +3,11 @@ using System.Runtime.CompilerServices;
 
 namespace Atelia.DurableGraph.StateStore;
 
-/// <summary>One frozen application catalog with successful closures memoized locally.</summary>
+/// <summary>One frozen application code catalog with successful closures memoized locally.</summary>
+/// <remarks>
+/// Models, readers, definitions and Upgrade providers are frozen. The optional SchemaStore remains
+/// a live, repository-wide monotonic authority, so cached closures recheck definitions registered later.
+/// </remarks>
 internal sealed class StateModelSnapshot : StateBindingContext {
     private readonly Dictionary<TypeExpr, StateModelBinding> _models;
     private readonly Dictionary<Type, StateModelBinding> _types;
@@ -82,8 +86,8 @@ internal sealed class StateModelSnapshot : StateBindingContext {
     public override bool TryGetCurrentModel(Type domainType, out StateModelBinding? model) {
         RequireClosed(domainType);
         if (_types.TryGetValue(domainType, out model)) {
-            CheckRegistered(model.CurrentSchema);
             if (_definitions.ContainsKey(model.CurrentSchema.SchemaId)) { BindSchema(model.CurrentSchema); }
+            else { CheckRegistered(model.CurrentSchema); }
             return true;
         }
         if (!TryDefinition(domainType, out StateDefinitionBinding? definition) || definition!.CurrentModelFactory is null) {
@@ -121,8 +125,8 @@ internal sealed class StateModelSnapshot : StateBindingContext {
         SchemaKey key = new(schema.Type, schema.Version);
         if (_readers.TryGetValue(key, out StateReaderBinding? prior)) {
             if (!prior.Schema.Equals(schema)) { throw new InvalidDataException("A reader key was reused with a different complete Schema."); }
-            CheckRegistered(schema);
             if (_definitions.ContainsKey(schema.SchemaId)) { BindSchema(schema); }
+            else { CheckRegistered(schema); }
             return prior;
         }
         StateDefinitionBinding definition = GetDefinition(schema.SchemaId);

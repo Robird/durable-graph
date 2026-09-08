@@ -119,25 +119,85 @@ public abstract partial class StateBindingContext : IStateModelResolver {
     }
 
     internal void CheckRegistered(DurableSchema schema) {
-        Dictionary<DurableSchema, int> heights = new(ReferenceEqualityComparer.Instance);
-        Visit(schema, 1);
+        ExactSchemaRequirementSet.Create((schema, "schema root")).Validate(this);
+    }
 
-        int Visit(DurableSchema item, int depth) {
-            if (depth > 256) { throw new InvalidDataException("Exact Schema layout exceeded its depth bound."); }
-            if (heights.TryGetValue(item, out int knownHeight)) {
-                if (depth + knownHeight - 1 > 256) { throw new InvalidDataException("Exact Schema layout exceeded its depth bound."); }
-                return knownHeight;
+    /// <summary>A plan-local certificate of every authoritative exact layout it depends on.</summary>
+    private sealed class ExactSchemaRequirementSet {
+        private readonly Requirement[] _requirements;
+
+        private ExactSchemaRequirementSet(Requirement[] requirements) {
+            _requirements = requirements;
+        }
+
+        internal static ExactSchemaRequirementSet Create(params (DurableSchema Schema, string Path)[] roots) {
+            Builder builder = new();
+            foreach ((DurableSchema schema, string path) in roots) { builder.Add(schema, path); }
+            return builder.Build();
+        }
+
+        internal void Validate(StateBindingContext context) {
+            foreach (Requirement requirement in _requirements) {
+                DurableSchema expected = requirement.Schema;
+                if (context.TryGetSchema(expected.Type, expected.Version, out DurableSchema? registered) &&
+                    !expected.Equals(registered)) {
+                    throw new InvalidDataException(
+                        $"Schema requirement '{requirement.Path}' expects {expected.Type} v{expected.Version}, " +
+                        "but the repository registered a different exact definition.",
+                        new SchemaConflictException(registered!, expected));
+                }
             }
-            if (TryGetSchema(item.Type, item.Version, out DurableSchema? registered) && !item.Equals(registered)) {
-                throw new InvalidDataException("A derived Schema disagrees with the repository's registered exact definition.");
+        }
+
+        internal sealed class Builder {
+            private readonly Dictionary<(TypeExpr Type, int Version), Entry> _requirements = [];
+            private readonly List<Entry> _ordered = [];
+
+            internal void Add(DurableSchema schema, string path) => Visit(schema, path, 1);
+
+            internal ExactSchemaRequirementSet Build() => new(_ordered
+                .Select(static entry => new Requirement(entry.Schema, entry.Path)).ToArray());
+
+            private int Visit(DurableSchema schema, string path, int depth) {
+                if (depth > 256) { throw new InvalidDataException($"Exact Schema layout at '{path}' exceeded its depth bound."); }
+                var key = (schema.Type, schema.Version);
+                if (_requirements.TryGetValue(key, out Entry? known)) {
+                    if (!known.Schema.Equals(schema)) {
+                        throw new InvalidDataException(
+                            $"Exact Schema {schema.Type} v{schema.Version} has conflicting layouts at " +
+                            $"'{known.Path}' and '{path}'.");
+                    }
+                    if (depth + known.Height - 1 > 256) {
+                        throw new InvalidDataException($"Exact Schema layout at '{path}' exceeded its depth bound.");
+                    }
+                    return known.Height;
+                }
+
+                // Reserve the key before following children so every later occurrence is
+                // compared with the first stable path. Public immutable Schemas cannot form cycles.
+                Entry pending = new(schema, path);
+                _requirements.Add(key, pending);
+                _ordered.Add(pending);
+                int height = 1;
+                if (schema.BaseSchema is { } ancestor) {
+                    height = Math.Max(height, Visit(ancestor, $"{path}.base", depth + 1) + 1);
+                }
+                foreach (DurableFieldInfo field in schema.Fields) {
+                    if (field.InlineSchema is not { } inline) { continue; }
+                    height = Math.Max(height,
+                        Visit(inline, $"{path}.field[{field.FieldId}].inline", depth + 1) + 1);
+                }
+                pending.Height = height;
+                return height;
             }
-            int height = 1;
-            if (item.BaseSchema is { } ancestor) { height = Math.Max(height, Visit(ancestor, depth + 1) + 1); }
-            foreach (DurableFieldInfo field in item.Fields) {
-                if (field.InlineSchema is { } inline) { height = Math.Max(height, Visit(inline, depth + 1) + 1); }
-            }
-            heights.Add(item, height);
-            return height;
+        }
+
+        private sealed record Requirement(DurableSchema Schema, string Path);
+
+        private sealed class Entry(DurableSchema schema, string path) {
+            internal DurableSchema Schema { get; } = schema;
+            internal string Path { get; } = path;
+            internal int Height { get; set; } = 1;
         }
     }
 

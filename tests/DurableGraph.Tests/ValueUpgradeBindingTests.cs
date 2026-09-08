@@ -236,15 +236,43 @@ public sealed class ValueUpgradeBindingTests {
     [Fact]
     public void CachedPlansRecheckRegisteredInlineClosuresBeforeCallbacksAndFailedBindingsCanRetry() {
         Calls.Clear();
-        TestContext context = CreateContext(Owner(nameof(UpgradeBox), 1, Dependency("value", typeof(CoordinateRules), "Box")));
+        TestContext context = CreateContext(Owner(nameof(IgnoreConvertedBoxValue), 1,
+            Dependency("value", typeof(CoordinateRules), "Box")));
         DurableSchema source = BoxSchema(1, Inline(PointSchema(1))), target = BoxSchema(2, Inline(PointSchema(2)));
         Assert.Throws<InvalidDataException>(() => context.Normalize<Box2<Point2>>(new(new ObjectId(1), source, new Box1<Point1>(new(2))), target));
         Assert.Empty(Calls);
         context.AddRules(new(typeof(CoordinateRules), [InlineRule("Point", 1, 2, nameof(ScalePoint))]));
-        Assert.Equal(20, context.Normalize<Box2<Point2>>(new(new ObjectId(1), source, new Box1<Point1>(new(2))), target).Value.X);
+        Assert.Equal(0, context.Normalize<Box2<Point2>>(new(new ObjectId(1), source, new Box1<Point1>(new(2))), target).Value.X);
+        Assert.Equal(new[] { "ignored" }, Calls.Select(item => item.Provider));
         Calls.Clear();
         context.Registered[(TypeExpr.Named("Point"), 1)] = new("Point", 1, SchemaKind.InlineValue, new DurableFieldInfo(1, TypeTag.Int64));
-        Assert.Throws<InvalidDataException>(() => context.Normalize<Box2<Point2>>(new(new ObjectId(2), source, new Box1<Point1>(new(2))), target));
+        InvalidDataException conflict = Assert.Throws<InvalidDataException>(() =>
+            context.Normalize<Box2<Point2>>(new(new ObjectId(2), source, new Box1<Point1>(new(2))), target));
+        Assert.Contains("Schema requirement", conflict.Message);
+        Assert.Contains("source", conflict.Message);
+        Assert.Contains("field[1]", conflict.Message);
+        Assert.Contains("Point", conflict.Message);
+        Assert.Contains("v1", conflict.Message);
+        Assert.Empty(Calls);
+    }
+
+    [Fact]
+    public void CachedZeroStepPlanRechecksLateRegisteredInlineConflict() {
+        Calls.Clear();
+        TestContext context = CreateContext();
+        DurableSchema schema = BoxSchema(1, Inline(PointSchema(1)));
+        ObjectStateRecord source = new(new ObjectId(3), schema, new Box1<Point1>(new(5)));
+        Assert.Equal(new Point1(5), context.Normalize<Box1<Point1>>(source, schema).Value);
+
+        context.Registered[(TypeExpr.Named("Point"), 1)] =
+            new("Point", 1, SchemaKind.InlineValue, new DurableFieldInfo(1, TypeTag.Int64));
+        InvalidDataException conflict = Assert.Throws<InvalidDataException>(() => context.Normalize<Box1<Point1>>(source, schema));
+
+        Assert.Contains("Schema requirement", conflict.Message);
+        Assert.Contains("source", conflict.Message);
+        Assert.Contains("field[1]", conflict.Message);
+        Assert.Contains("Point", conflict.Message);
+        Assert.Contains("v1", conflict.Message);
         Assert.Empty(Calls);
     }
 
@@ -319,6 +347,8 @@ public sealed class ValueUpgradeBindingTests {
     private static void CopyId(in ObjectId prior, out uint next, UpgradeContext context) { Calls.Add(("copy", context)); next = prior.Value; }
     private static void Constrained<T>(in T prior, out T next, UpgradeContext context) where T : unmanaged, IMarker { Calls.Add(("constraint", context)); next = prior; }
     private static void IgnoreBoxValue<T>(in Box1<T> prior, out Box2<T> next, UpgradeContext context) where T : unmanaged { Calls.Add(("ignored", context)); next = new(prior.Value, 1); }
+    private static void IgnoreConvertedBoxValue<A, B>(in Box1<A> prior, out Box2<B> next, UpgradeContext context)
+        where A : unmanaged where B : unmanaged { Calls.Add(("ignored", context)); next = new(default, 1); }
     private static void Legacy(in int prior, out int next) => next = prior;
     private static void UpgradeTwo(in Two1 prior, out Two2 next, UpgradeContext context) {
         Calls.Add(("two", context)); next = new(context.GetValueUpgrade<int, int>("base")(prior.Base), context.GetValueUpgrade<int, int>("own")(prior.Own));

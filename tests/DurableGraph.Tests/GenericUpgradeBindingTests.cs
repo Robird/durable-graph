@@ -22,6 +22,22 @@ public sealed class GenericUpgradeBindingTests {
     }
 
     [Fact]
+    public void CachedPlanRejectsWrongRequestedCurrentDtoBeforeCallbacks() {
+        Invocations.Clear();
+        var context = BoxContext(Provider(nameof(First), 1), Provider(nameof(Second), 2));
+        DurableSchema source = BoxSchema(TypeExpr.Builtin(TypeTag.Int32), 1, new(1, TypeTag.Int32));
+        DurableSchema target = BoxSchema(TypeExpr.Builtin(TypeTag.Int32), 3, new(1, TypeTag.Int32));
+        Assert.Equal(2, context.Normalize<Box3<int>>(new(new ObjectId(11), source, new Box1<int>(8)), target).Generation);
+        Invocations.Clear();
+
+        InvalidDataException error = Assert.Throws<InvalidDataException>(() =>
+            context.Normalize<Box3<uint>>(new(new ObjectId(22), source, new Box1<int>(8)), target));
+
+        Assert.Contains("requested current DTO type", error.Message);
+        Assert.Empty(Invocations);
+    }
+
+    [Fact]
     public void MissingLaterEdgeAndUnsatisfiedMethodConstraintFailBeforeFirstCallback() {
         Invocations.Clear();
         DurableSchema source = BoxSchema(TypeExpr.Builtin(TypeTag.Int32), 1, new(1, TypeTag.Int32));
@@ -103,11 +119,27 @@ public sealed class GenericUpgradeBindingTests {
         // The same cached plan is no longer acceptable if the repository later registers
         // a different exact middle layout under that key.
         explicitContext.Registered[(owner, 2)] = new(owner, 2, new DurableFieldInfo(1, TypeTag.InlineValue, inlineSchema: PointSchema(2)));
-        Assert.Throws<InvalidDataException>(() => explicitContext.Normalize<Phantom3<Point2>>(new(new ObjectId(8), source, new Phantom1()), target));
+        InvalidDataException ownerConflict = Assert.Throws<InvalidDataException>(() =>
+            explicitContext.Normalize<Phantom3<Point2>>(new(new ObjectId(8), source, new Phantom1()), target));
+        Assert.Contains("Schema requirement", ownerConflict.Message);
+        Assert.Contains("step[0]", ownerConflict.Message);
+        Assert.Contains("target", ownerConflict.Message);
+        Assert.Contains("Phantom<Point>", ownerConflict.Message);
+        Assert.Contains("v2", ownerConflict.Message);
         Assert.Empty(Invocations);
         explicitContext.Registered.Remove((owner, 2));
         explicitContext.Registered[(TypeExpr.Named("Point"), 1)] = new("Point", 1, SchemaKind.InlineValue, new DurableFieldInfo(1, TypeTag.Int64));
-        Assert.Throws<InvalidDataException>(() => explicitContext.Normalize<Phantom3<Point2>>(new(new ObjectId(9), source, new Phantom1()), target));
+        InvalidDataException inlineConflict = Assert.Throws<InvalidDataException>(() =>
+            explicitContext.Normalize<Phantom3<Point2>>(new(new ObjectId(9), source, new Phantom1()), target));
+        Assert.Contains("Schema requirement", inlineConflict.Message);
+        Assert.Contains("step[0]", inlineConflict.Message);
+        Assert.Contains("target", inlineConflict.Message);
+        Assert.Contains("field[1]", inlineConflict.Message);
+        Assert.Contains("Point", inlineConflict.Message);
+        Assert.Contains("v1", inlineConflict.Message);
+        SchemaConflictException layoutConflict = Assert.IsType<SchemaConflictException>(inlineConflict.InnerException);
+        Assert.Equal(new DurableFieldInfo(1, TypeTag.Int64), Assert.Single(layoutConflict.RegisteredSchema.Fields));
+        Assert.Equal(new DurableFieldInfo(1, TypeTag.Int32), Assert.Single(layoutConflict.ConflictingSchema.Fields));
         Assert.Empty(Invocations);
     }
 

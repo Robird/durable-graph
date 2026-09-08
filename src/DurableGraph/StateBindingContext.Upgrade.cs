@@ -13,29 +13,32 @@ public abstract partial class StateBindingContext {
             source.Schema.Version > current.Version || current.Kind != SchemaKind.ReferenceObject) {
             throw new InvalidDataException("Upgrade requires an older exact DTO in the same closed object family.");
         }
-        BindSchema(source.Schema);
-        BindSchema(current);
-        if (ResolveReader(current).StateType != typeof(TCurrent)) {
-            throw new InvalidDataException("The requested current DTO type does not match its exact Schema.");
-        }
         var key = (source.Schema, current);
         if (!_upgradePlans.TryGetValue(key, out UpgradePlan? plan)) {
             plan = PrepareUpgradePlan(source.Schema, current);
             _upgradePlans.Add(key, plan);
         }
+        plan.Requirements.Validate(this);
+        if (plan.CurrentStateType != typeof(TCurrent)) {
+            throw new InvalidDataException("The requested current DTO type does not match its exact Schema.");
+        }
         ObjectStateRecord result = source;
-        // Schema registration is monotonic but may happen after this snapshot cached
-        // a derived middle layout. Recheck the whole plan before any callback.
-        foreach (UpgradeStep step in plan.Steps) { step.CheckRegistered(this); }
         foreach (UpgradeStep step in plan.Steps) { result = step.Apply(result); }
         try { return result.GetState<TCurrent>(); }
         catch (InvalidOperationException error) { throw new InvalidDataException("The upgraded object has the wrong DTO type.", error); }
     }
 
     private UpgradePlan PrepareUpgradePlan(DurableSchema source, DurableSchema current) {
+        BindSchema(source);
+        BindSchema(current);
+        Type currentStateType = ResolveReader(current).StateType;
+        ExactSchemaRequirementSet.Builder requirements = new();
+        string requirementRoot = $"upgrade {source.Type} v{source.Version}->v{current.Version}";
+        requirements.Add(source, $"{requirementRoot}.source");
+        requirements.Add(current, $"{requirementRoot}.current");
         if (source.Version == current.Version) {
             if (!source.Equals(current)) { throw new InvalidDataException("Equal Schema keys have different complete layouts."); }
-            return new([]);
+            return new([], requirements.Build(), currentStateType);
         }
         List<UpgradeStep> steps = [];
         DurableSchema prior = source;
@@ -64,16 +67,19 @@ public abstract partial class StateBindingContext {
                 (next.Version == current.Version && !next.Equals(current))) {
                 throw new InvalidDataException("The selected upgrade output does not match its adjacent exact endpoint.");
             }
-            CheckRegistered(next);
             BindSchema(next);
             Type nextState = ResolveReader(next).StateType;
             UnifyStateType(provider.NextType, nextState, variables);
             MethodInfo method = CloseUpgradeMethod(provider.Method, variables);
             UpgradeDependencies dependencies = PrepareDependencies(provider.Dependencies, prior, next, 1);
+            int stepIndex = steps.Count;
+            string stepPath = $"{requirementRoot}.step[{stepIndex}] v{prior.Version}->v{next.Version}";
+            requirements.Add(prior, $"{stepPath}.source");
+            requirements.Add(next, $"{stepPath}.target");
             steps.Add(CreateUpgradeStep(prior, next, priorState, nextState, provider, method, dependencies));
             prior = next;
         }
-        return new(steps.ToArray());
+        return new(steps.ToArray(), requirements.Build(), currentStateType);
     }
 
     private static StateUpgradeProvider SelectUpgrade(StateDefinitionBinding definition, TypeExpr owner, int fromVersion) {
@@ -131,7 +137,6 @@ public abstract partial class StateBindingContext {
             AddSelection(selections, (parameter.Expression, parameter.InlineVersion), slot);
         }
         DurableSchema result = BuildSchema(owner, template, selections, depth);
-        CheckRegistered(result);
         BindSchema(result);
         Type actualState = result.Kind == SchemaKind.ReferenceObject ? ResolveReader(result).StateType :
             ResolveStoredValue(new(1, TypeTag.InlineValue, inlineSchema: result)).StateType;
@@ -265,9 +270,8 @@ public abstract partial class StateBindingContext {
         StateUpgradeProvider provider, MethodInfo method, UpgradeDependencies dependencies) where TPrior : unmanaged where TNext : unmanaged =>
         new TypedUpgradeStep<TPrior, TNext>(source, target, provider, method, dependencies);
 
-    private sealed record UpgradePlan(UpgradeStep[] Steps);
+    private sealed record UpgradePlan(UpgradeStep[] Steps, ExactSchemaRequirementSet Requirements, Type CurrentStateType);
     private abstract class UpgradeStep {
-        internal abstract void CheckRegistered(StateBindingContext context);
         internal abstract ObjectStateRecord Apply(ObjectStateRecord source);
     }
     private delegate void UpgradeAction<TPrior, TNext>(in TPrior prior, out TNext next, UpgradeContext context)
@@ -289,12 +293,6 @@ public abstract partial class StateBindingContext {
                 LegacyUpgradeAction<TPrior, TNext> oldAction = method.CreateDelegate<LegacyUpgradeAction<TPrior, TNext>>();
                 _action = (in TPrior prior, out TNext next, UpgradeContext _) => oldAction(in prior, out next);
             } else { _action = method.CreateDelegate<UpgradeAction<TPrior, TNext>>(); }
-        }
-
-        internal override void CheckRegistered(StateBindingContext context) {
-            context.CheckRegistered(_source);
-            context.CheckRegistered(_target);
-            _dependencies.CheckRegistered(context, new(ReferenceEqualityComparer.Instance));
         }
 
         internal override ObjectStateRecord Apply(ObjectStateRecord source) {
