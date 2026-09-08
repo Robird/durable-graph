@@ -3,6 +3,8 @@
 2026-09-08 的独立机制见证：比较并验证 DurableGraph 泛型 DTO 候选中的
 **领域类型参数 / 状态表示参数 / 静态操作类型参数**、运行期闭合及历史升级可书写性。
 这是手写 generated-like C# 的编译运行实验，不是产品 Source Generator 已支持泛型的声明。
+后续用户已选择统一 UpgradeContext 外观，见 [DB-039](../../docs/design-branches/0039-composable-value-upgrade-design.md)。
+本 Probe 的值转换仍直接传委托，35 项历史结果不覆盖 Context 用户签名、依赖 key、子作用域或按对象调用信息。
 
 ## 运行
 

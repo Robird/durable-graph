@@ -1,11 +1,11 @@
 # DB-038：泛型 Schema、状态表示与运行时绑定
 
 > 状态：Proposed — 2026-09-08。用户授权本轮撰写、比较、审阅与技术验证；尚未授权产品泛型实现。
-> 主干完成交叉审阅；用户已采纳 §3.3 的仓库内严格一致范围。整体产品实施仍待另行授权。
+> 主干完成交叉审阅；用户已采纳 §3.3 的仓库内严格一致范围及 §6.5 的统一 UpgradeContext 入口。整体产品实施仍待另行调度。
 > 基线：`5c6545d`，DB-037 已实现非泛型 class/struct。当前能力见 [PROJECT-STATE](../../src/PROJECT-STATE.md)。
 > 本文承接 [DB-018 泛型备忘](0018-generic-dto-binding-followup.md)，是完整方案讨论入口；本轮结果见 §11。
 > 阅读顺序：先看 §2 推荐、§3.2–3.3 版本代价与保证范围、§6 Upgrade；代码接缝与施工顺序在 §8、§10。
-> Upgrade 的后续简化见 [DB-039](0039-composable-value-upgrade-design.md)：向通用 owner 注入已绑定的强类型值委托；本节同步其边界，具体依赖选择与反例在后继文档维护。
+> 实施顺序为本片 → [DB-039](0039-composable-value-upgrade-design.md)。本片完成泛型闭环与最小 UpgradeContext；后片通过 Context 提供可组合值转换，两轮边界见 §10。
 
 ## 1. 目标、来源与支持范围
 
@@ -245,7 +245,8 @@ interface 仅作为 CLR where 约束，不等于支持 interface 持久字段；
 ```csharp
 static void Upgrade<TState>(
     in BoxStates.V1<TState> old,
-    out BoxStates.V2<TState> next) where TState : unmanaged {
+    out BoxStates.V2<TState> next,
+    UpgradeContext context) where TState : unmanaged {
     next = new(old.Value, 0); // 字段名为示意；不依赖 T 的业务结构。
 }
 ```
@@ -263,7 +264,8 @@ static void Upgrade<TState>(
 ```csharp
 static void UpgradePointBox(
     in BoxStates.V1<PointStates.V1> old,
-    out BoxStates.V2<PointStates.V2> next) {
+    out BoxStates.V2<PointStates.V2> next,
+    UpgradeContext context) {
     next = new(new(old.Value.X, old.Value.Y, 0), 0);
 }
 ```
@@ -284,20 +286,22 @@ expected Schema 是从模板/owner/显式表示派生的能力校验数据，不
 候选数据和选择在调用任何 Upgrade 前固定，保持失败不交付。
 
 不增加自动 struct Normalize。对 inline `Pair<Point>`，转换仍由所属对象的 Upgrade 显式完成。
-用户进一步授权研究复用同一值规则的多个 owner 后，[DB-039](0039-composable-value-upgrade-design.md)
-推荐通用 owner 额外接收 `ValueUpgrade<TPrior,TNext>` 强类型委托，显式调用已绑定的值转换。
+复用同一值规则的多个 owner 可在下一片 [DB-039](0039-composable-value-upgrade-design.md)
+通过 `UpgradeContext.GetValueUpgrade<TPrior,TNext>(key)` 取得已绑定强类型委托，再显式调用值转换。
 owner 按定义边声明规则集及源/目标槽位置，开放值 provider 可显式组合子能力；无需每个闭合 owner 重写外壳。
 该委托属于执行 binding，不进入 unmanaged DTO；绑定仍比较两端完整槽语义，不能仅凭 CLR 状态类型选规则。
 static TTransition 技术可行，当前作为可选优化；值能力不选择 owner 的历史中间版本，不替代本节的闭合特例。
+本片先独立实现通用透传和显式闭合 owner 转换，不依赖上述 GetValueUpgrade 或规则集机制。
 
 ### 6.3 注册及命名必须先可执行验证
 
-建议复用现有显式模型登记风格，由 SG 发出定义模板、历史 body provider、通用/闭合 Upgrade 及其值依赖的登记入口。
+建议复用现有显式模型登记风格，由 SG 发出定义模板、历史 body provider、通用/闭合 Upgrade 的登记入口。
 方法可放领域定义或独立应用静态类型中；闭合边的 DTO 参数不得被放回带旧领域类型参数的宿主。
 登记语法的属性/函数名字未冻结，第一闸门必须给出可编译用户源码和 actual stored Schema 匹配反例。
 已经证明手写形状能编译，不等于已经实现 SG 从方法签名生成这份登记信息。
-DB-039 将能力选择纳入同一冻结代码目录；方法多出的 typed delegate 参数及显式元数据须由真实 SG 验证，
-不建设第二个全局转换注册器，也不要求首轮 Roslyn 已解析尚未生成的 DTO 类型。
+DB-039 后续在同一冻结代码目录加入值依赖声明及 Context 工具；本片不先实现空规则集/工具查询平台。
+两片都不要求首轮 Roslyn 已解析尚未生成的 DTO 类型：依据显式元数据和 history 发出 expected typed adapter，
+由最终编译器校验用户方法；真实 SG 及用户源码必须在各片首闸门验证。
 
 ### 6.4 多跳升级的中间 exact 布局
 
@@ -322,13 +326,47 @@ source 无 Point 值布局，v2 模板只有 Parameter，current v3 的 Point v2
 typed provider 可执行不等于业务语义自动正确。用户显式编写数值/引用转换仍由其代码负责，
 框架保留 owner/边/完整 Schema 适用性检查和输出引用验证，不能仅凭两端 TState=uint 宣称语义保持。
 
+### 6.5 统一 UpgradeContext 与本片最小内容
+
+2026-09-08 用户采纳：Upgrade 优先考虑灵活性，统一接收非泛型 `UpgradeContext`，
+具体工具由 Context 提供，避免未来给每个历史方法不断追加能力参数。
+本片的新用户方法形状为 `static void Upgrade(in prior, out next, UpgradeContext context)`；
+Context 是普通非泛型 sealed class，由执行器构造，调用方只能读取本次转换信息。
+
+本片只提供有实际消费者的三个只读信息，名称作为施工起点：
+
+| 信息 | 固定含义 |
+|---|---|
+| `ObjectId` | 当前被升级的对象 ID；用于诊断，不是分配或读取其他对象的入口 |
+| `SourceObjectSchema` | 当前这条 owner 相邻升级边的完整输入 Schema |
+| `TargetObjectSchema` | 当前这条 owner 相邻升级边的完整输出 Schema；可能是中间版本，不必是最新版本 |
+
+例如对象 V1→V2→V3 分别收到 V1/V2 和 V2/V3 端点，不能把整链 source/current 填到每一步。
+DB-039 的嵌套值 Context 保留同一 owner 信息，自己的值端点另存内部绑定元数据；
+这些 object 属性始终指 owner，不将标量/string-ID 槽伪装成对象 Schema。
+未来有具体消费者时可添加只读工具，当前不预建 IServiceProvider、服务字典或任意动态解析接口。
+
+生命周期是当前对象、当前相邻边的同步调用。框架缓存不含 ObjectId/本次 Context 的不可变绑定计划，
+执行时据此创建 Context，不能把对象 A 的诊断信息或工具绑定复用于对象 B，也不能把 V1→V2 Context 用于下一边。
+Context/绑定到它的工具不由用户保存为长期状态；本期不加入 pooling、撤销 token、租约或异步调用协议。
+框架不通过 Context 暴露 Repository、对象表、CaptureContext、新 ID 分配或提交能力。
+
+保留当前非泛型二参 Upgrade 的局部迁移办法：SG 发出同一三参 adapter，调用旧方法时忽略 Context。
+每个 owner/版本边仍只允许一个已选用户入口；同边同时提供二参/三参重载继续拒绝，不建设重载搜索或第二条 Normalize。
+新通用泛型/显式闭合 provider 使用三参；既有二参仅允许零 Context 工具依赖，后续声明工具时须改为三参。
+旧调用形状的适配只影响生成调用，不改变历史 DTO、Schema 或磁盘解释。
+已有二参历史包也纳入回归，防止把“历史代码还在”误写成“必须旧参数形式才能解码”。
+
+本片不提供 `GetValueUpgrade`、值规则集、依赖 key 或可组合值 provider。
+DB-039 在保持本节入口的前提下增加这些能力，不要求再修改已完成的 owner 升级函数签名。
+
 ## 7. 目录快照、工厂与缓存
 
 1. 应用显式登记允许的类型定义和 provider。内建叶子由框架预制，自定义模板由 SG 发出；无程序集全扫描。
 2. 操作开始冻结模板及升级目录；保留当前 Snapshot 语义。按需闭合是固定目录中的 memoization，
    不能在 Capture 中向用户可变 StateModelRegistry 偷偷 Register。
 3. current 路径解析 CLR 类型和当前布局；historical 路径从 TypeExpr/完整 stored Schema 解析状态模板。
-4. 解析并核对全部实际需要的值依赖，构造 typed helper/factory，完整成功后才加入缓存；失败不发布半成品。
+4. 解析并核对全部实际需要的 inline/base 布局依赖及投影、状态操作，构造 typed helper/factory，完整成功后才加入缓存；失败不发布半成品。
 5. 缓存 key 使用闭合族/exact key，命中仍与完整定义一致；不同目录 snapshot 的执行 provider 不自动共用。
 
 纯代码/无目录依赖的 helper 信息可按 closed CLR Type 静态缓存；依赖应用 provider 的整个 binding 不放
@@ -359,7 +397,7 @@ inline/base 才进入 exact 布局递归，检查环/最大路径；TypeExpr 本
 | [StateModelRegistry](../../src/DurableGraph.StateStore/StateModelRegistry.cs)、[StateReaderBinding](../../src/DurableGraph/StateReaderBinding.cs) | 从逐个完整 model/reader 目录扩为模板目录 + snapshot 内按需闭合，保留非泛型入口 |
 | [SchemaKey](../../src/DurableGraph.StateStore/SchemaKey.cs)、[SchemaStore](../../src/DurableGraph.StateStore/SchemaStore.cs) | key 的构造类型表达、闭合布局同 key 一致性；不能仍只按 DefinitionId 索引模型 |
 | [TypedObjectVersionReader](../../src/DurableGraph.StateStore/TypedObjectVersionReader.cs)、[RevisionDecoder](../../src/DurableGraph.StateStore/RevisionDecoder.cs) | 在读取完整 stored Schema 后解析 exact reader，再执行 body；不由 current CLR 类型选择历史表示 |
-| [StateModel 生成](../../src/DurableGraph.Generator/DurableSchemaGenerator.StateModel.cs)、Normalize | 单对象相邻边选择、参数化/闭合 provider、旧新 Schema 匹配；仍 live 升级对象强制 Base |
+| [StateModel 生成](../../src/DurableGraph.Generator/DurableSchemaGenerator.StateModel.cs)、Normalize | 单对象相邻边选择、参数化/闭合 provider、旧新 Schema 匹配、统一 Context adapter；仍 live 升级对象强制 Base |
 
 格式变动应显式版本化：history/manifest 与 SchemaBatch 需新的 arity/类型模式/闭合 key 表达；
 Base 类型头需携带新的闭合 SchemaKey。读取保留当前已接受的旧格式，映射为零实参定义；不回写历史材料。
@@ -386,18 +424,32 @@ owner 显式调用的有限值依赖组合已转入 DB-039 推荐范围，仍尚
 
 ## 10. 建议施工闸门
 
+### 本片独立交付范围
+
+DB-038 负责 TypeExpr/模板 history/完整闭合 Schema、开放 class/struct 的 DTO/body 与当前投影、
+exact/current 目录及保存恢复闭环、通用透传和闭合 owner Upgrade、§6.5 最小 Context。
+它须独立完成下表，不以“等待 DB-039”代替泛型历史恢复验收。
+未使用值组合的业务转换可以直接构造历史 DTO 或调用普通纯状态 helper。
+
 | 闸门 | 最小验收 |
 |---|---|
-| G0 形状与用户源码 | static TD/TS/TOps 冷闭合；uint 三种语义；readonly generic accessor 真执行；family alias 的通用/闭合 Upgrade 可编译；三版本 phantom→value 的歧义与显式转换；无旧领域类型的 historical body；缺转换拒绝 |
+| G0 形状与用户源码 | static TD/TS/TOps 冷闭合；uint 三种语义；readonly generic accessor 真执行；family alias 的三参通用/闭合 Upgrade 与旧二参 adapter 可编译；最小 Context 接缝；三版本 phantom→value 的歧义与显式转换；无旧领域类型的 historical body；缺转换拒绝 |
 | G1 类型与历史 | TypeExpr/key、定义模板/闭合布局互校验，Box<Point>漏 bump 冲突，Box<int>保守升版，nominal child 不传播；重复 T 不一致拒绝、phantom 零状态参数、canonical 新格式与旧格式读取 |
 | G2 真 SG 闭合 | class/struct、自由值表达式、交换参数位置的泛型继承、nongeneric owner、静态 body、完整 refs、generic constraints；将 G0 等价物替换为真实 SG 输出 |
-| G3 保存/恢复 | actual Capture → Prepare → Commit → reopen；generic string 同实例共享/非空等值异实例/Empty 规范化；相同 DTO CLR 类型的不同约束不串绑；闭合目录快照与扩张引用不无限初始化 |
+| G3 保存/恢复 | actual Capture → Prepare → Commit → reopen；generic string 同实例共享/非空等值异实例/Empty 规范化；相同 DTO CLR 类型的不同约束不串绑；闭合目录快照与扩张引用不无限初始化；连续两个对象及多跳收到各自正确 Context 信息 |
 | G4 历史包 | 三次真实 PackageReference 构建，通用透传/闭合业务转换，old→middle→current 的布局唯一性/同 key 一致性，旧 inline 领域声明删除后的 owner 升级、缺历史/缺边/错 expected Schema 拒绝、强制 Base 后稳定 NoChange/Delta |
 
 先通过 G0 用户写法与 G1 版本反例，再冻结对外 Upgrade 登记和 wire；不从序列化热循环一路写到最后才发现历史 API 无法使用。
-G0/G2/G4 同时纳入 [DB-039 §6](0039-composable-value-upgrade-design.md#6-产品接缝与研究验收) 的依赖注入用户写法、
-组合/错绑定反例及历史包验收；只证明 static/delegate 代码形状都成立还不够。
+依赖 key/规则集、Context 工具获取、开放值组合及相应历史包验收属于 [DB-039 §6](0039-composable-value-upgrade-design.md#6-产品接缝与研究验收)，
+**不是本片 G0/G2/G4 的验收条件**。本片结束后再据实际生成形状校准后片；后片不重开持久类型格式。
 当前研究 probe 只证明部分 G0 接缝，不能替代这些产品闸门。实施须另获用户授权。
+
+### 实施入口尚须验证的接缝
+
+新格式的 numeric tag/排列、生成 family/登记名称及支持的 CLR 约束清单，在 G0/G1 用用户源码与 golden 冻结。
+这是本轮施工的前置工作，不是“稍后自然成立”的假定；若必须扩大当前类型范围或改变版本语义，返回设计讨论。
+真实 SG 的泛型继承、历史 binding 和 PackageReference 尚未实测，独立 Probe 不代替它们。
+已接受的全定义 bump 代价、空库保证范围，以及缺中间 exact 布局时拒绝仍保留；不能以消除这些限制为完成本片的条件。
 
 ## 11. 比较、验证与审阅记录
 
@@ -442,3 +494,11 @@ probe 使用手写 generated-like 模板和少量 BinaryWriter/Reader 定长字�
 原始素材：StateJournal 的静态 helper/外观工厂与旧 Robird DynamicMethod 的成员/ref 处理，
 来源和作用边界已保存在 [DB-018 §6](0018-generic-dto-binding-followup.md#6-statejournal-的静态-helper-与工厂组装素材)。
 当前产品接缝事实以 §8 所列源码及 DB-037 为准，素材不构成第二份产品规范。
+
+### Context 与两轮施工的文档复核
+
+2026-09-08 按用户新采纳的 Context 方向进行文档修订，并复用三位独立审阅者交叉检查两轮边界。
+移除 §10 对 DB-039 的反向验收依赖；新增最小三参 Context、局部旧二参适配、逐对象/相邻边调用信息，
+把 Context 工具/规则/组合留给后片。动态工具解析、生命周期平台和跨对象能力不进入本片。
+在已接受的版本代价和支持范围内，未发现新的架构阻塞；剩余真实 SG/约束矩阵/格式 golden 必须在 G0/G1 先验证，
+不能以设计审阅替代测试。此次仅修改文档，原 Probe/build 数字仍属于上面的历史验证，不是新 Context 验收。

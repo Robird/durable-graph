@@ -23,7 +23,9 @@ DB-037 的已实现边界与 G0–G4 证据从 PROJECT-STATE 进入，不再把�
 [DB-038 完整设计提案](design-branches/0038-generic-schema-state-and-binding-design.md)进入；它包含方案比较、
 历史类型/升级/中间布局、目录快照及验收顺序，尚未实施。原始素材见泛型技术备忘。
 其中 Upgrade 的复用改进见 [DB-039](design-branches/0039-composable-value-upgrade-design.md)：
-推荐 owner 显式调用已绑定的 typed 值委托；具体登记/依赖槽语法、真 SG 生成及完整 Schema 绑定仍须实施验证。
+用户已采纳统一 UpgradeContext，owner 从中取得已绑定 typed 值工具；方法级依赖声明、真 SG 及完整绑定仍须实施验证。
+施工分两轮：**DB-038** 独立完成泛型持久化/历史恢复和最小 Context，保留通用透传及闭合 owner 转换；
+**DB-039** 再加入具名工具、规则集与开放值组合，不反向阻塞 DB-038 验收，也不要求第二轮重改 Upgrade 入参或持久类型格式。
 有限数组仍为独立候选；本片不自动授权开始任一后继。
 
 ## 2. 已采纳方向中的未完成能力
@@ -47,7 +49,7 @@ B/D/H 分别指本轮精确 Base payload、Delta payload 上界、已有对象�
 | 保存相等性与真实估算 | 同版 DTO 的浮点按位、引用槽按 ID、inline 值递归融合 Delta 已采纳；未来数组/容器相等性另定。已准备 body 与当前 v3 envelope 计量见 [DB-029](design-branches/0029-prepared-object-revision-planning-slice.md)；Base 类型头已计入 B/H。未来新增类型头/容器布局时继续按实际对象 payload 计量 |
 | Schema 规范表示和持久引用 | canonical 注册批次与逻辑 SchemaKey 已闭合；未来 SchemaHash、紧凑引用及一般类型家族约束随消费者裁决，不用 GetHashCode 作持久身份 |
 | 开放泛型/数组组合绑定 | 已有 static-T 缓存与 typed ref 运行时组合证据；剩余为领域/DTO 表示参数闭合、版本缓存边界及注册初始化协议，不要求全面切换 DynamicMethod。摘要、取舍与首个 SG 验证见[技术备忘](design-branches/0018-generic-dto-binding-followup.md) |
-| 泛型 Upgrade 的显式值依赖 | typed 值转换可由通用 owner 主动调用，开放值 provider 可组合子能力；须验证具名规则集、声明段/FieldId、完整 exact 端点与整对象链预绑定；不自动决定业务或历史中间版本。见 [DB-039](design-branches/0039-composable-value-upgrade-design.md) |
+| 泛型 Upgrade 的显式值依赖 | Context 外观/当前预绑定方向已采纳；剩余为方法级 key/规则声明、provider 子作用域及逐对象/边调用信息的真实验证。声明错误预绑定拒绝，用户 Get 错 key/类型只能调用时拒绝。见 [DB-039](design-branches/0039-composable-value-upgrade-design.md) |
 | 跨程序集与一般类型形状 | 继承 helper 可见性、外部历史祖先、enum/nullable/decimal/native int 等支持范围；自定义泛型的具体形状/约束仍须分片确定，技术方向见上项；boxed value identity 已排除 MVP |
 | 多态与运行时注册扩展 | 已标记 class 基类到登记派生实例按 DB-034 合同；interface/object 通配引用、开放组合与跨程序集发现仍后续裁决，不能自动回退成声明基类的 codec |
 | 捕获复合值的所有权 | 数组/容器如何真正冻结候选；inline struct 已递归捕获成标量/ID 的 unmanaged DTO，不能据此推导一般容器浅复制足够 |
@@ -81,6 +83,7 @@ DB-009/010 的旧 no-reuse 前提不能沿用；借用 Base 共享 prior 等结�
 | 跨对象升级与外部副作用 | MVP 仅单对象字段转换；读取其他对象、拆分/合并及创建持久新对象均延后。MVP 后有真实迁移案例时，再讨论图访问、新 ID 与失败隔离；不借普通升级默认授权 |
 | 无 CLR 迁移壳的历史族 | 应用需要完全删除迁移壳且继续恢复含该族的旧 Revision 时，再设计独立状态族 Normalize/引用能力、显式退休声明和 history-only 生成；现有保留规则与包见证见 [DB-036 §4](design-branches/0036-working-session-and-history-capabilities.md#4-并行小线明确历史恢复能力合同) |
 | 历史工具/升级调用优化 | 有 package/history 或升级调用的真实限制后，再重访 DB-003 的 Try/result/ABI 和 DB-004 的多 writer/多 TFM 与批次原子性，不顺带做兼容框架 |
+| UpgradeContext 的动态工具与生命周期扩展 | 当前只查询已声明、已绑定能力；具体迁移确需执行中解析时，再裁决首个业务回调前失败保证。池化/异步或合法跨回调工具复用有消费者后，再设计生命周期；不提前添加服务定位器、租约或通用工具平台 |
 | 泛型闭合历史账本/独立版本 | 用户已选 MVP 仓库内严格一致；要求共享 build history 对所有空库也锁住闭合布局、跨程序集独立演化或跨库交换时，再比较闭合目录与布局身份，见 [DB-038 §3.3](design-branches/0038-generic-schema-state-and-binding-design.md#33-必须明确的保证作用域两个空仓库) |
 
 ### 4.1 SchemaStore 复用 StateStore 与联合版本视图

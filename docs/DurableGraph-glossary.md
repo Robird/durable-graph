@@ -147,5 +147,6 @@ Remove 来自 Parent 完整成员集合减去候选成员集合；[ObjectRevisio
 | **WorkingTree / Branch** | 工作树与命名分支的长期概念；当前 GraphSession 已承担单 head 编辑会话，尚无 branch/Reset，二者不是完整同义词。 | [工作会话路线](DurableGraph-research-roadmap.md#2-已采纳方向中的未完成能力) |
 | **CommitManifest** | 联合 State/Schema/Artifact exact 视图的长期表达；当前单 State head 的发布日志不是完整联合 manifest。 | [单一发布权威](DurableGraph-target-design-v0.md#单一发布权威与明确故障结果) |
 | **TypeCodec** | 编码/解码受支持类型经数组/泛型构成的类型表达；能表达某类型不等于已有对应数据读写 codec。当前字段 `TypeTag`、Base 类型头及 reader 目录是局部能力，不视为通用 TypeCodec 已完成。 | [类型组合路线](DurableGraph-research-roadmap.md#2-已采纳方向中的未完成能力) |
-| **值升级能力（value upgrade capability，提案）** | 对明确两端槽语义绑定的强类型转换，由 owner Upgrade 显式调用；可组合子转换。存在于执行 binding，不进入 DTO，也不是独立 struct Normalize 或自动业务迁移。 | [DB-039](design-branches/0039-composable-value-upgrade-design.md) |
+| **升级上下文（UpgradeContext，已选方向）** | 统一 Upgrade 入参，提供当前对象/相邻升级边的只读信息，后续提供声明并绑定的工具；具体调用视图不跨对象缓存。尚未产品实施。 | [DB-038 §6.5](design-branches/0038-generic-schema-state-and-binding-design.md#65-统一-upgradecontext-与本片最小内容)、[DB-039](design-branches/0039-composable-value-upgrade-design.md) |
+| **值升级能力（value upgrade capability，提案）** | 对明确两端槽语义绑定的强类型转换，由 owner 从 Context 取得并显式调用；可组合子转换。存在于执行 binding，不进入 DTO，也不是独立 struct Normalize 或自动业务迁移。 | [DB-039](design-branches/0039-composable-value-upgrade-design.md) |
 | **ArtifactStore / DerivedStore** | 分别承担独立历史内容与可重建派生数据的目标职责；不凭现有 StateStore 类推已实现其存储合同。 | [四类 Store 的逻辑职责](DurableGraph-target-design-v0.md#四类-store-的逻辑职责) |

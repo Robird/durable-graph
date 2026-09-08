@@ -117,6 +117,11 @@ Source Generator 负责可在编译期确定的类型知识与机械代码，框
 - owner 的单对象 Upgrade 显式转换嵌套 DTO；框架不另行先升级 struct。历史 inline DTO/body
   从保留的 exact history 生成，不依赖当前领域 struct 声明存在，也不要求值迁移壳。
   领域/DTO 表示保持分离，不能为泛型复用而把可变领域引用保留在 DTO 中。
+- Upgrade 用户入口统一接收非泛型 UpgradeContext，优先考虑工具扩展的灵活性；Context 提供本次转换的只读信息，
+  值转换能力由 owner 显式取得并调用，不逐个追加到历史方法的参数列表。
+  当前采用预声明/预绑定能力，只在执行时查询已选工具；不由 Context 动态选择业务规则，也不扩张单对象操作边界。
+  最小入口先随 [DB-038 §6.5](design-branches/0038-generic-schema-state-and-binding-design.md#65-统一-upgradecontext-与本片最小内容) 实施，
+  可组合工具随后按 [DB-039](design-branches/0039-composable-value-upgrade-design.md) 接入；设计已采纳不等于产品已有此入口。
 - 2026-09-08 用户选择泛型闭合 Schema 的 MVP 保证范围为目标 Repository 内严格一致，暂不增加闭合历史账本。
   开放定义 history 保证模板不变，不承诺穷尽检测所有实参导致的漏升版；不同空库可能首次接受同 key、不同完整布局。
   因此完整 Schema 校验不能省略，也不能仅凭 key 跨库复用绑定。具体反例、方案比较与后续触发见
