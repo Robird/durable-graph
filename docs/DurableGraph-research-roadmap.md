@@ -20,8 +20,10 @@ GraphSession 的正常同实例 Commit 与严格重开从 PROJECT-STATE/DB-036 �
 当前只支持单活动会话、固定非空 World，发布故障范围为正常关闭/进程中止和明确的 I/O 异常。
 DB-038 的泛型 Schema/history、开放生成、保存恢复与通用/闭合 owner Upgrade 从 PROJECT-STATE/施工记录查证，不再列为未实现机制。
 可组合值 Upgrade 的验收与实际范围见 [DB-039](design-branches/0039-composable-value-upgrade-design.md#8-产品施工合同与验收映射)。
-下一个候选为有限数组对象：把已选 shape 边界、引用身份、冻结内容与元素静态操作接到共同对象链。
-具体施工需先确定类型码和内容布局；已有值工具不替数组定义历史中间布局。本片不自动授权后继实施。
+推荐下一片为 [DB-043 SZ VectorArray 对象纵切](design-branches/0043-vector-array-object-slice.md)：
+把 array TypeExpr/history、统一 ObjectReference、冻结内容、元素静态操作、稀疏 Delta 与真实 GraphSession
+冷重开接到共同对象链。开放/jagged/inline 元素、rank 2–4 执行及数组元素历史 Upgrade 作为后继；已有值工具不替数组共享对象选择
+升级规则。DB-043 当前为 Proposed，本条不自动授权实施。
 
 ## 2. 已采纳方向中的未完成能力
 
@@ -33,7 +35,7 @@ B/D/H 分别指本轮精确 Base payload、Delta payload 上界、已有对象�
 |---|---|---|
 | TypeCodec 与 exact Schema 绑定 | 一般类型组合与内建复合类型 codec；已有 nominal class 引用及 exact reader 分派不等于一般 TypeCodec，也不自动复活已删除模型族 | [DB-034](design-branches/0034-durable-reference-graph-batch.md)、[DB-018](design-branches/0018-generated-graph-codec-shape.md)、[DB-001](design-branches/0001-schema-authority-and-runtime-representation.md) |
 | 复合类型的 DTO 升级与恢复 | 将单对象 Upgrade/Restore 扩展到数组与容器内容；保持完整 source 目录、强制 Base、当前版本 DTO 图的可达分析和失败不交付 | [DB-034](design-branches/0034-durable-reference-graph-batch.md)、[DB-018](design-branches/0018-generated-graph-codec-shape.md) |
-| 完整数组对象 | 在已选零下界 SZ/有限多维 rank 范围内，实现 identity、shape、分配与元素循环，并拒绝不支持的形状；不能把现有元素模板视为完整数组支持 | [MVP 边界](DurableGraph-target-design-v0.md#mvp-功能边界)、[DB-020](design-branches/0020-typed-slot-array-binding-slice.md) |
+| 完整数组对象 | DB-043 先以 syntactically closed SZ `T[]`（scalar/string/durable-reference element）闭合 identity、shape、冻结、稀疏 Delta、两阶段分配/填充及持久冷重开；后继补开放/jagged/inline、rank 2–4 与显式 element Upgrade。不能把现有元素模板视为完整数组支持 | [DB-043](design-branches/0043-vector-array-object-slice.md)、[MVP 边界](DurableGraph-target-design-v0.md#mvp-功能边界)、[DB-020](design-branches/0020-typed-slot-array-binding-slice.md) |
 
 ## 3. 尚待裁决的机制
 

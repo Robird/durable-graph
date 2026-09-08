@@ -18,13 +18,15 @@
 
 ## 当前焦点
 
-[DB-042 Upgrade exact Schema 依赖证书](../docs/design-branches/0042-upgrade-schema-requirement-set.md)
-已把分散在 owner/value step 的执行前复核收敛为 plan 级不可变 requirement set：按 exact key
-展平 base/inline 闭包、同键异形拒绝、晚登记冲突携带稳定依赖路径，并在 callback 前统一验证。
-缓存计划保存 current DTO 类型，不再为每次调用重复走 BindSchema/reader；SchemaStore catalog generation 优化延后到有测量时。
+[DB-043 SZ VectorArray 对象纵向分片](../docs/design-branches/0043-vector-array-object-slice.md)
+是推荐的下一施工片，当前仍为 Proposed：以真实 `T[]` World 图闭合 TypeExpr/history、统一 ObjectReference、
+冻结数组状态、稀疏元素 Delta、对象图两阶段恢复及 GraphSession/package 冷重开。rank 2–4 执行和数组元素
+组合/历史 Upgrade 分片延后；本片只为 VectorArray 分配 TypeExpr 构造与 wire tag。实施前需审阅 DB-043 的持久格式选择。
+
+[DB-042](../docs/design-branches/0042-upgrade-schema-requirement-set.md) 已完成 plan 级 exact Schema 依赖证书；
 [DB-041](../docs/design-branches/0041-object-id-state-representation.md) 的非泛型 ObjectId、DB-039 可组合值 Upgrade
 及此前的同实例 GraphSession、泛型/inline Schema/history 能力继续沿用。[DB-040](../docs/design-branches/0040-typed-object-id-representation-research.md)
-的泛型目标品牌暂缓。后继扩展从[路线图](../docs/DurableGraph-research-roadmap.md)选片；已有 ref 元素循环仍不等于数组对象支持。
+的泛型目标品牌暂缓。已有 ref 元素循环仍不等于数组对象支持。
 
 ## 当前能力与实际边界
 

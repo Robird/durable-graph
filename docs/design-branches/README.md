@@ -19,10 +19,11 @@
 ## 当前规划
 
 DB-034–039 已实现；DB-041 已实现非泛型 ObjectId，DB-042 已收敛 Upgrade Schema 复核，DB-040 的泛型目标品牌暂缓。
-具体后继调度由用户授权，其他扩展从活跃路线图选片：
+DB-043 是下一候选设计，尚未获得实施状态；具体后继调度由用户授权，其他扩展从活跃路线图选片：
 
 | 文档 | 状态 | 实施范围 |
 |---|---|---|
+| [DB-043 SZ VectorArray 对象纵向分片](0043-vector-array-object-slice.md) | Proposed | closed `T[]`（scalar/string/durable-reference element）的一等 TypeExpr、ObjectReference、冻结 array state、稀疏 Delta、图恢复与真实包闭环；开放/jagged/inline、rank 2–4 和 element Upgrade 后继 |
 | [DB-042 Upgrade exact Schema 依赖证书](0042-upgrade-schema-requirement-set.md) | Chosen / Implemented | plan 级展平 base/inline requirement set、同键异形与晚登记冲突路径诊断、callback 前统一复核；不含 catalog generation |
 | [DB-041 非泛型 ObjectId](0041-object-id-state-representation.md) | Chosen / Implemented | DTO/Runtime/StateStore 语义 ID 隔离；Schema/wire 不变，完整测试和六项真实包回归通过 |
 | [DB-040 typed ObjectId 调研](0040-typed-object-id-representation-research.md) | Research / Deferred | DTO 品牌的版本/nominal 含义、CLR 加载边界、uint backing + typed 属性及 nominal marker 对照；未修改产品 |
