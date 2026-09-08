@@ -22,11 +22,11 @@
 已完成：统一 object 实例分派 string/class/array，
 覆盖 SZ/rank 2–4、开放泛型、jagged、inline/generic struct 元素、融合 Delta、数组独立 owner Upgrade
 及 GraphSession/package 冷重开。施工、完整测试和真实包证据集中维护在 DB-043。
-下一片尚未选定；可评估 BCL 内容适配的具体消费者，待办与边界从路线图进入。
-版本化表示类型头统一以 VersionedSchema ID 寻址的候选与重访条件保存在
-[路线图待办](../docs/DurableGraph-research-roadmap.md#31-版本化表示类型头的统一寻址)，不阻塞本片局部格式。
-该议题的匿名方案比较及交叉反例已记录于 [DB-044](../docs/design-branches/0044-type-header-blind-review/README.md)；
-目前为研究结果，尚未改变产品格式、版本传播合同或选择后继施工分片。
+下一片已规划为 [DB-045 持久表示 ID](../docs/design-branches/0045-persisted-representation-id-slice.md)：
+复用现有 ObjectLayout，在 SchemaStore 登记完整表示的整数 ID，新 Base 通过 ID 解析布局与历史 reader。
+方向已采纳，具体施工方案为 Proposed，尚未实施；不改泛型闭合、SchemaKey/TypeExpr 和版本传播合同。
+前序匿名比较见 [DB-044](../docs/design-branches/0044-type-header-blind-review/README.md)；
+其余表示模型决策及后继范围由[路线图](../docs/DurableGraph-research-roadmap.md#31-版本化表示类型头的统一寻址)维护。
 
 [DB-042](../docs/design-branches/0042-upgrade-schema-requirement-set.md) 已完成 plan 级 exact Schema 依赖证书；
 [DB-041](../docs/design-branches/0041-object-id-state-representation.md) 的非泛型 ObjectId、DB-039 可组合值 Upgrade

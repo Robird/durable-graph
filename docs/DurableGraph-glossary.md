@@ -159,5 +159,5 @@ Remove 来自 Parent 完整成员集合减去候选成员集合；[ObjectRevisio
 |---|---|---|
 | **WorkingTree / Branch** | 工作树与命名分支的长期概念；当前 GraphSession 已承担单 head 编辑会话，尚无 branch/Reset，二者不是完整同义词。 | [工作会话路线](DurableGraph-research-roadmap.md#2-已采纳方向中的未完成能力) |
 | **CommitManifest** | 联合 State/Schema/Artifact exact 视图的长期表达；当前单 State head 的发布日志不是完整联合 manifest。 | [单一发布权威](DurableGraph-target-design-v0.md#单一发布权威与明确故障结果) |
-| **通用 TypeCodec** | 受支持类型组合的完整编码/解码能力；当前 TypeExpr/wire 覆盖标量/string/用户泛型与 SZ/rank 2–4 递归数组，BCL 内容 codec 仍待逐类型扩展。表示头统一以 VersionedSchema 身份寻址尚未裁决；能表达类型与拥有内容 codec 仍是两项能力。 | [类型表达](#type-expression)、[统一寻址待办](DurableGraph-research-roadmap.md#31-版本化表示类型头的统一寻址) |
+| **通用 TypeCodec** | 受支持类型组合的完整编码/解码能力；当前 TypeExpr/wire 覆盖标量/string/用户泛型与 SZ/rank 2–4 递归数组，BCL 内容 codec 仍待逐类型扩展。完整闭合表示的持久整数 ID 已采纳、待实施；目录内部组合表达式尚未重整。能表达类型与拥有内容 codec 仍是两项能力。 | [类型表达](#type-expression)、[DB-045 持久表示 ID](design-branches/0045-persisted-representation-id-slice.md)、[后继问题](DurableGraph-research-roadmap.md#31-版本化表示类型头的统一寻址) |
 | **ArtifactStore / DerivedStore** | 分别承担独立历史内容与可重建派生数据的目标职责；不凭现有 StateStore 类推已实现其存储合同。 | [四类 Store 的逻辑职责](DurableGraph-target-design-v0.md#四类-store-的逻辑职责) |

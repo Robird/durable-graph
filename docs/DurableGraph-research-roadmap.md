@@ -9,8 +9,8 @@
 
 当前能力与已完成分片的验收从 PROJECT-STATE/其账本进入；这里仅保留后续增量。
 
-后续方向按依赖而非承诺日期安排：基于 DB-043 已完成的数组和统一对象路径，评估 BCL 内容恢复的第一个具体消费者；
-既有引用图、inline 值、泛型与数组组合提供其基础，不预先引入通用容器平台。
+后续方向按依赖而非承诺日期安排：下一片规划为 [DB-045 持久表示 ID](design-branches/0045-persisted-representation-id-slice.md)，
+先收敛 State 类型头与 SchemaStore 的登记/解析边界。BCL 内容恢复继续等具体消费者，不预先引入通用容器平台。
 DB-036 单 World/单 head 工作会话已实现；branch/Reset、联合 Store 视图及更强恢复保证仍独立排期。
 MVP 库内加载顺序为 exact 重建 → 单对象 Upgrade → 分配实例 → 填充/连接引用 → 完整交付 World；
 Transient 由用户在交付后处理，约束维护在[目标设计](DurableGraph-target-design-v0.md#恢复transient-与宿主边界)。
@@ -22,7 +22,7 @@ DB-038 的泛型 Schema/history、开放生成、保存恢复与通用/闭合 ow
 可组合值 Upgrade 的验收与实际范围见 [DB-039](design-branches/0039-composable-value-upgrade-design.md#8-产品施工合同与验收映射)。
 [DB-043 可组合数组与统一引用对象路径](design-branches/0043-vector-array-object-slice.md) 已通过整体验收；
 完成证据集中维护在该分片，不再将数组组合列为待施工架构。
-版本化表示头统一寻址、协变和加载内存预算继续按下文的独立触发条件推进。
+完整表示的整数寻址已采纳、尚未实施；其内部描述模型、协变和加载内存预算仍按各自边界推进。
 
 ## 2. 已采纳方向中的未完成能力
 
@@ -33,7 +33,7 @@ B/D/H 分别指本轮精确 Base payload、Delta payload 上界、已有对象�
 | 工作项 | 最小应回答的问题 | 设计或证据入口 |
 |---|---|---|
 | BCL 内容适配与恢复 | 复用统一 ObjectBinding 生命周期和静态值槽能力，逐类型明确内容、comparer、key/index 建立时机及内容 Upgrade；不保存 CLR 内部字段布局 | [DB-043](design-branches/0043-vector-array-object-slice.md)、[目标引用对象模型](DurableGraph-target-design-v0.md) |
-| 版本化表示头与 exact Schema 寻址 | 当前 TypeExpr 递归表达标量/string/用户泛型/数组，Base 分别持有 SchemaKey 或内建 ArrayLayout；是否统一由 VersionedSchema 身份寻址仍未裁决 | [统一寻址待办](#31-版本化表示类型头的统一寻址) |
+| 完整表示的持久整数 ID | 复用 ObjectLayout，在 SchemaStore 登记完整闭合表示；新 Base 只写 ID，通过目录取得布局/历史绑定。内部类型模型重整留待后继 | [DB-045](design-branches/0045-persisted-representation-id-slice.md)、[后继问题](#31-版本化表示类型头的统一寻址) |
 
 ## 3. 尚待裁决的机制
 
@@ -56,23 +56,19 @@ DB-009/010 的旧 no-reuse 前提不能沿用；借用 Base 共享 prior 等结�
 
 ### 3.1 版本化表示类型头的统一寻址
 
-2026-09-08 用户提出并要求保留：序列化头部的 TypeCode/TypeExpr 应考虑直接使用 VersionedSchema 的身份，
-使具备相应历史 reader 的程序仅凭 SchemaStore 与 ObjectVersion chain/lineage，就能恢复完整版本化 DTO，
-无需调用方另给 current CLR 布局或数组元素版本。该方向值得研究；此次明确暂缓统一设计，不阻塞 DB-043。
+2026-09-09 用户已采纳先固定完整闭合表示的持久整数 ID；最小贯通规划为
+[DB-045](design-branches/0045-persisted-representation-id-slice.md)，尚未实施。长期合同归入
+[目标设计](DurableGraph-target-design-v0.md#长期-schema-可读与显式演化)。
+前序替代方案及反例保留在 [DB-044](design-branches/0044-type-header-blind-review/README.md)，不再把是否登记完整表示 ID 当作未决问题。
 
-重访触发：收敛统一 TypeCodec/表示类型头，或演进 Schema 寻址和数组类型头时。届时比较以 VersionedSchema ID
-为中心的递归表示，与目前 nominal 引用约束、exact SchemaKey/ArrayLayout 的分工；不要把当前局部 API 视为不可改。
-需要覆盖嵌套泛型/数组、inline 历史依赖、内建类型员工通道、紧凑身份及仓库内同 key 一致性；
-数组协变所需的历史元素 ancestry（包括空数组）也在此检查。Schema 元数据与可执行历史 reader 的保留职责仍分别明确。
+DB-045 完成后再细化：是否合并 SchemaKey/TypeExpr 的内部描述载体、是否改为版本化开放模板 + 必要 exact 实参、
+模板版本与闭合表示版本的关系，以及组合表达式的编码。单 ID 是持久寻址，不意味着 nominal 约束或 exact 依赖信息冗余。
+`ArrayHolder<T>` 的引用目标依赖必须截断；`Box<Point>` 若允许同模板不同 exact 实参，Upgrade 就不能只比较模板版本。
+这些变化不属于整数 ID 分片，也不能借新号绕过既有同 key 异形拒绝。
 
-在此裁决前，DB-043 用持久 exact element SchemaKey + 内建 array layout 承载必要解释信息；
-该编码是可替换的局部施工选择，不宣称为最终 TypeCode 模型。无论如何编码，都不得以 latest 布局解释历史 body。
-
-2026-09-08 后续匿名评审见 [DB-044](design-branches/0044-type-header-blind-review/README.md)。
-整数寻址、开放模板/闭合登记粒度、prefix/postfix 分开评价；尚未选择新格式。
-重点待验证：版本化模板 + 必要 exact 实参是否可用小而确定的规则产生历史 DTO/reader；
-`ArrayHolder<T>` 的引用目标依赖必须截断，`Box<Point>` 的模板版本与闭合表示变化须分别定义，
-不能仅按模板版本判断是否 Upgrade。是否额外 intern 完整闭合表达式单独比较目录摊销，不以评审票数裁决。
+重访触发为 ID 边界稳定后实施内部描述简化；须覆盖泛型/数组、固定及参数 inline 依赖、内建类型员工通道、
+phantom 身份与旧领域 CLR 删除后的历史 reader。数组协变仍需独立验证空数组元素 ancestry。
+所有组合只锁定本对象需要的 exact 解释，不锁定引用目标版本；元数据与可执行历史能力继续分别保留，不以 latest 补缺。
 
 ## 4. 明确延后及重访条件
 

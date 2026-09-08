@@ -35,7 +35,7 @@ Source Generator 负责可在编译期确定的类型知识与机械代码，框
   多维数组 rank 上界为 4；超过上界明确拒绝。受支持槽可递归作为数组元素，包括泛型/inline struct 与数组引用；
   数组引用要求 exact nominal 类型，协变的历史 ancestry witness 独立后继，不以当前 CLR 祖先替代。
   VectorArray、Rank-2、Rank-3、Rank-4 使用独立构造码，元素类型及每维长度仍须表达；
-  当前局部格式见 [DB-043](design-branches/0043-vector-array-object-slice.md)，最终表示头统一寻址另行研究。
+  当前局部格式见 [DB-043](design-branches/0043-vector-array-object-slice.md)，完整表示整数 ID 的待实施规划见 [DB-045](design-branches/0045-persisted-representation-id-slice.md)。
   可静态识别的不支持类型由 SG 拒绝，其余在 Capture/读取边界校验，不静默降级。
 - Upgrade 仅转换单个对象的字段，从旧 DTO 产生下一版 DTO；不读取其他对象，不拆分/合并对象，
   不创建带持久身份的新对象。创建下一版 DTO 值本身不属于这一禁令。已有引用槽可以保留、调整或
@@ -192,6 +192,11 @@ Source Generator 负责可在编译期确定的类型知识与机械代码，框
 盘上对象版本应能找到 exact Schema 事实，不能依赖当前程序集恰好还理解旧字节。
 持久 Schema 需要规范表示与一致性校验；当前运行时 GetHashCode 不能充当持久 SchemaHash。
 规范表示不能依赖反射顺序、metadata token、MVID、AssemblyVersion 或进程随机 hash。
+
+2026-09-09 已采纳、待实现：完整闭合对象表示在仓库内获得持久整数 ID，新写 Base 通过该 ID
+取得领域身份与 exact 持久表示布局，Delta 沿用 Base。SchemaStore 封装描述及其解析；当前程序用保留的
+历史代码绑定 DTO/reader，CLR Type/委托本身不落盘。同 ID 不重绑定，引用目标版本仍由目标自己的 Base 决定。
+最小施工规划见 [DB-045](design-branches/0045-persisted-representation-id-slice.md)；内部模板/组合表示的重整另行研究。
 
 未知版本、相同身份/版本却不一致的 Schema、缺失升级器、损坏引用或来源不匹配时，
 应明确拒绝，不猜测并不回退到 latest。升级由显式类型知识和函数承担，不自动推断业务迁移。
