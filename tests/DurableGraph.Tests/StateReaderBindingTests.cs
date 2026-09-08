@@ -10,31 +10,31 @@ public sealed class StateReaderBindingTests {
     public void ReaderReconstructsTypedChainAndReturnsIndependentStateCopies() {
         BodySource source = new([10, 7], [1, 11], [2, 9], [1, 12]);
         StateReaderBinding<State> binding = new(Schema, ReadBase, ApplyDelta, ValidateStrings);
-        ObjectStateRecord row = binding.Read(3, source);
+        ObjectStateRecord row = binding.Read(new ObjectId(3), source);
 
         Assert.Equal(new[] { 0, 1, 2, 3 }, source.Requests);
-        Assert.Equal(3u, row.Id);
+        Assert.Equal(new ObjectId(3u), row.Id);
         Assert.Same(Schema, row.Schema);
         Assert.Equal(ObjectStateKind.Durable, row.Kind);
         Assert.Null(row.Preparation);
         State copy = row.GetState<State>();
         Assert.Equal((byte)12, copy.Value);
-        Assert.Equal(9u, copy.Text);
+        Assert.Equal(new ObjectId(9u), copy.Text);
         copy.Value = 99;
-        copy.Text = 99;
+        copy.Text = new(99);
         Assert.Equal((byte)12, row.GetState<State>().Value);
-        Assert.Equal(9u, row.GetState<State>().Text);
+        Assert.Equal(new ObjectId(9u), row.GetState<State>().Text);
         // Only the final DTO is validated: string 7 is no longer referenced.
-        binding.VisitReferences(row, new StateReferenceValidator(new Dictionary<uint, ObjectStateRecord> { [9] = new(9, "current") }));
-        Assert.Throws<InvalidDataException>(() => binding.VisitReferences(row, new StateReferenceValidator(new Dictionary<uint, ObjectStateRecord>())));
+        binding.VisitReferences(row, new StateReferenceValidator(new Dictionary<ObjectId, ObjectStateRecord> { [new ObjectId(9)] = new(new ObjectId(9), "current") }));
+        Assert.Throws<InvalidDataException>(() => binding.VisitReferences(row, new StateReferenceValidator(new Dictionary<ObjectId, ObjectStateRecord>())));
     }
 
     [Fact]
     public void ReaderAcceptsBaseOnlyAndNullStringReference() {
         StateReaderBinding<State> binding = new(Schema, ReadBase, ApplyDelta, ValidateStrings);
-        ObjectStateRecord row = binding.Read(uint.MaxValue, new BodySource([5, 0]));
+        ObjectStateRecord row = binding.Read(new ObjectId(uint.MaxValue), new BodySource([5, 0]));
         Assert.Equal((byte)5, row.GetState<State>().Value);
-        binding.VisitReferences(row, new StateReferenceValidator(new Dictionary<uint, ObjectStateRecord>()));
+        binding.VisitReferences(row, new StateReferenceValidator(new Dictionary<ObjectId, ObjectStateRecord>()));
     }
 
     [Theory]
@@ -46,7 +46,7 @@ public sealed class StateReaderBindingTests {
             : new([10, 0], [1, 12, 99], [1, 13]);
         StateReaderBinding<State> binding = new(Schema, ReadBase, ApplyDelta, ValidateStrings);
         ObjectStateRecord? result = null;
-        Assert.Throws<InvalidDataException>(() => result = binding.Read(1, source));
+        Assert.Throws<InvalidDataException>(() => result = binding.Read(new ObjectId(1), source));
         Assert.Null(result);
         Assert.Equal(inBase ? new[] { 0 } : new[] { 0, 1 }, source.Requests);
     }
@@ -55,7 +55,7 @@ public sealed class StateReaderBindingTests {
     public void TruncatedDeltaPropagatesWithoutReturningAPartialDto() {
         StateReaderBinding<State> binding = new(Schema, ReadBase, ApplyDelta, ValidateStrings);
         ObjectStateRecord? result = null;
-        Assert.Throws<EndOfStreamException>(() => result = binding.Read(1, new BodySource([10, 0], [1])));
+        Assert.Throws<EndOfStreamException>(() => result = binding.Read(new ObjectId(1), new BodySource([10, 0], [1])));
         Assert.Null(result);
     }
 
@@ -63,12 +63,12 @@ public sealed class StateReaderBindingTests {
     public void EmptySourceAndZeroObjectIdAreRejectedBeforeReading() {
         StateReaderBinding<State> binding = new(Schema, ReadBase, ApplyDelta, ValidateStrings);
         BodySource empty = new();
-        Assert.Throws<InvalidDataException>(() => binding.Read(1, empty));
+        Assert.Throws<InvalidDataException>(() => binding.Read(new ObjectId(1), empty));
         Assert.Empty(empty.Requests);
         BodySource source = new([10, 0]);
-        Assert.Throws<InvalidDataException>(() => binding.Read(0, source));
+        Assert.Throws<InvalidDataException>(() => binding.Read(new ObjectId(0), source));
         Assert.Empty(source.Requests);
-        Assert.Throws<ArgumentNullException>(() => binding.Read(1, null!));
+        Assert.Throws<ArgumentNullException>(() => binding.Read(new ObjectId(1), null!));
     }
 
     [Fact]
@@ -76,18 +76,18 @@ public sealed class StateReaderBindingTests {
         int calls = 0;
         StateReaderBinding<State> binding = new(Schema, ReadBase, ApplyDelta,
             (in State state, IStateReferenceVisitor visitor) => calls++);
-        StateReferenceValidator table = new(new Dictionary<uint, ObjectStateRecord>());
+        StateReferenceValidator table = new(new Dictionary<ObjectId, ObjectStateRecord>());
         DurableSchema wrongFields = new(Schema.SchemaId, Schema.Version,
             new DurableFieldInfo(1, TypeTag.UInt32), new DurableFieldInfo(2, TypeTag.String));
         DurableSchema wrongVersion = new(Schema.SchemaId, 2, Schema.Fields.ToArray());
         DurableSchema wrongAncestor = new(Schema.SchemaId, Schema.Version, Schema.Fields.ToArray(),
             new DurableSchema("reader.ancestor", 1));
         ObjectStateRecord[] invalidRows = [
-            new(1, "text"),
-            new(1, wrongFields, new State()),
-            new(1, wrongVersion, new State()),
-            new(1, wrongAncestor, new State()),
-            new(1, Schema, 123u),
+            new(new ObjectId(1), "text"),
+            new(new ObjectId(1), wrongFields, new State()),
+            new(new ObjectId(1), wrongVersion, new State()),
+            new(new ObjectId(1), wrongAncestor, new State()),
+            new(new ObjectId(1), Schema, 123u),
         ];
         foreach (ObjectStateRecord row in invalidRows) {
             Assert.Throws<InvalidDataException>(() => binding.VisitReferences(row, table));
@@ -95,7 +95,7 @@ public sealed class StateReaderBindingTests {
         Assert.Equal(0, calls);
         // Equivalent immutable definitions need not be the same CLR instance.
         DurableSchema equal = new(Schema.SchemaId, Schema.Version, Schema.Fields.ToArray());
-        binding.VisitReferences(new ObjectStateRecord(1, equal, new State()), table);
+        binding.VisitReferences(new ObjectStateRecord(new ObjectId(1), equal, new State()), table);
         Assert.Equal(1, calls);
     }
 
@@ -111,38 +111,38 @@ public sealed class StateReaderBindingTests {
     public void DecodedStringTableCopiesBindingsAndRetainsDistinctNonemptyInstances() {
         string first = new(['x']);
         string second = new(['x']);
-        List<(uint Id, string Value)> records = [(7, first), (9, second), (11, string.Empty), (12, string.Empty)];
+        List<(ObjectId Id, string Value)> records = [(new ObjectId(7), first), (new ObjectId(9), second), (new ObjectId(11), string.Empty), (new ObjectId(12), string.Empty)];
         StringReadTable table = StringReadTable.FromDecoded(records);
-        records[0] = (7, "replacement");
+        records[0] = (new ObjectId(7), "replacement");
         records.Clear();
-        Assert.Same(first, table.ResolveString(7));
-        Assert.Same(second, table.ResolveString(9));
-        Assert.NotSame(table.ResolveString(7), table.ResolveString(9));
-        Assert.Equal(table.ResolveString(7), table.ResolveString(9));
-        Assert.Same(string.Empty, table.ResolveString(11));
-        Assert.Same(string.Empty, table.ResolveString(12));
-        Assert.Null(table.ResolveString(0));
-        Assert.Throws<InvalidDataException>(() => table.ResolveString(8));
+        Assert.Same(first, table.ResolveString(new ObjectId(7)));
+        Assert.Same(second, table.ResolveString(new ObjectId(9)));
+        Assert.NotSame(table.ResolveString(new ObjectId(7)), table.ResolveString(new ObjectId(9)));
+        Assert.Equal(table.ResolveString(new ObjectId(7)), table.ResolveString(new ObjectId(9)));
+        Assert.Same(string.Empty, table.ResolveString(new ObjectId(11)));
+        Assert.Same(string.Empty, table.ResolveString(new ObjectId(12)));
+        Assert.Null(table.ResolveString(new ObjectId(0)));
+        Assert.Throws<InvalidDataException>(() => table.ResolveString(new ObjectId(8)));
     }
 
     [Fact]
     public void DecodedStringTableRejectsInvalidIdentitiesAndMissingContents() {
         string shared = new(['x']);
-        Assert.Throws<InvalidDataException>(() => StringReadTable.FromDecoded([(0u, shared)]));
-        Assert.Throws<InvalidDataException>(() => StringReadTable.FromDecoded([(1u, shared), (1u, "other")]));
-        Assert.Throws<InvalidDataException>(() => StringReadTable.FromDecoded([(1u, shared), (2u, shared)]));
-        Assert.Throws<InvalidDataException>(() => StringReadTable.FromDecoded([(1u, null!)]));
-        Assert.Throws<InvalidDataException>(() => StringReadTable.FromDecoded([(1u, string.Empty), (1u, string.Empty)]));
+        Assert.Throws<InvalidDataException>(() => StringReadTable.FromDecoded([(new ObjectId(0u), shared)]));
+        Assert.Throws<InvalidDataException>(() => StringReadTable.FromDecoded([(new ObjectId(1u), shared), (new ObjectId(1u), "other")]));
+        Assert.Throws<InvalidDataException>(() => StringReadTable.FromDecoded([(new ObjectId(1u), shared), (new ObjectId(2u), shared)]));
+        Assert.Throws<InvalidDataException>(() => StringReadTable.FromDecoded([(new ObjectId(1u), null!)]));
+        Assert.Throws<InvalidDataException>(() => StringReadTable.FromDecoded([(new ObjectId(1u), string.Empty), (new ObjectId(1u), string.Empty)]));
         Assert.Throws<ArgumentNullException>(() => StringReadTable.FromDecoded(null!));
-        Assert.Null(StringReadTable.FromDecoded([]).ResolveString(0));
+        Assert.Null(StringReadTable.FromDecoded([]).ResolveString(new ObjectId(0)));
     }
 
     [Fact]
     public void DecodedStringEnumerationFailureReturnsNoPartialTable() {
         bool disposed = false;
-        IEnumerable<(uint Id, string Value)> Records() {
+        IEnumerable<(ObjectId Id, string Value)> Records() {
             try {
-                yield return (1, "first");
+                yield return (new ObjectId(1), "first");
                 throw new IOException("late failure");
             } finally {
                 disposed = true;
@@ -156,12 +156,12 @@ public sealed class StateReaderBindingTests {
 
     private struct State {
         public byte Value;
-        public uint Text;
+        public ObjectId Text;
     }
 
     private static State ReadBase(ref BinaryPayloadReader reader) => new() {
         Value = reader.ReadByte(),
-        Text = reader.ReadUInt32(),
+        Text = new ObjectId(reader.ReadUInt32()),
     };
 
     private static State ApplyDelta(ref BinaryPayloadReader reader, in State prior) {
@@ -171,7 +171,7 @@ public sealed class StateReaderBindingTests {
             result.Value = reader.ReadByte();
         }
         if ((bitmap & 2) != 0) {
-            result.Text = reader.ReadUInt32();
+            result.Text = new ObjectId(reader.ReadUInt32());
         }
         return result;
     }

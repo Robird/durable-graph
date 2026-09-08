@@ -34,7 +34,7 @@ public sealed partial class Character {
         PreparedCapturedGraph changed = session.Prepare(secondGraph);
         RequireBodies(changed, ["012156", "0504", "00", "0341"]);
         if (!ReferenceEquals(firstGraph, changed.Previous) ||
-            !changed.Objects.Select(row => row.Current.Id).SequenceEqual(new uint[] { 1, 2, 4, 5 }) ||
+            !changed.Objects.Select(row => row.Current.Id.Value).SequenceEqual(new uint[] { 1, 2, 4, 5 }) ||
             changed.Objects[0].DeltaBody is not { HasChanges: true } ownerDelta ||
             !ownerDelta.Body.SequenceEqual(new byte[] { 0x04, 0x56 }) ||
             changed.Objects[1].DeltaBody is not { HasChanges: true } labelDelta ||

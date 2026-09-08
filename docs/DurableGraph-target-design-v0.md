@@ -83,6 +83,9 @@ Source Generator 负责可在编译期确定的类型知识与机械代码，框
   成员中的引用只保存 ObjectId，对象本体独立保存；共享和循环是整体恢复目标。
 - 当前 CLR 图按引用相等语义登记。内容相等的不同非空 string 实例不能合并；唯一明确例外是
   所有零长度 string 在 Capture 和读取两端都规范化为 string.Empty。null 仍与空串区分。
+- DTO 引用槽及 Runtime/StateStore 上层对象身份使用非泛型 `ObjectId(uint Value)`；普通 UInt32 数值仍为 `uint`。
+  零表示 null，显式构造/取 Value，不提供隐式数值转换。Storage/Serialization 边界保持原有 UInt32 编码。
+  包装不携带目标族或版本，Schema 与引用目录继续决定目标约束；泛型目标品牌暂缓。
 - ObjectId 是指定 StateRevision 内的查找编号。相邻保存中持续存活的对象保留编号，
   回收后的数字可以复用；跨 Revision 的裸编号相同不代表同一实体。
   新占用者从 Base 开始，不能继承旧占用者的 Delta 链。

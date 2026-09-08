@@ -22,7 +22,7 @@ public sealed partial class World : DurableBase {
     private static void UpgradeStateV1ToV2(in __DurableState.V1 old, out __DurableState.V2 next) {
         UpgradeCalls++;
         // The old durable slot is an ID, so this historical DTO needs no Legacy CLR type.
-        Program.Require(old.Segment0Field2 != 0, "The historical World must reference Legacy.");
+        Program.Require(!old.Segment0Field2.IsNull, "The historical World must reference Legacy.");
         next = new(old.Segment0Field1 + 100);
     }
 #endif

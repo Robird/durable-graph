@@ -24,7 +24,7 @@ public sealed partial class World : DurableBase {
         StateModelRegistry models = new();
         __DurableState.RegisterModel(models);
         FrameAddress revision;
-        uint worldId;
+        ObjectId worldId;
 
         using (var file = RbfFile.CreateNew(schemaPath))
         using (SegmentStore segments = SegmentStore.CreateNew(statePath, options)) {
@@ -41,12 +41,12 @@ public sealed partial class World : DurableBase {
             LoadedWorld<World> third = LoadedWorld.Load<World>(store, schemas, revision, worldId, models);
             third.World._score = 9;
             revision = store.Append(third.Prepare(policy).Revision);
-            Require(store.ReadObjectVersionChain(revision, worldId).Records.Count == 3,
+            Require(store.ReadObjectVersionChain(revision, worldId.Value).Records.Count == 3,
                 "The V1 process did not persist its Base plus two Delta records.");
         }
 
         File.WriteAllText(Path.Combine(directory, "v1-revision.txt"),
-            $"{revision.FileNumber}:{revision.FrameTicket.Packed}:{worldId}");
+            $"{revision.FileNumber}:{revision.FrameTicket.Packed}:{worldId.Value}");
     }
 
     private static void Require(bool condition, string message) {

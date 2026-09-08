@@ -6,7 +6,7 @@ using Atelia.Rbf;
 
 namespace Atelia.DurableGraph.StateStore;
 
-internal sealed record PublicationHead(FrameAddress RevisionAddress, uint WorldId);
+internal sealed record PublicationHead(FrameAddress RevisionAddress, ObjectId WorldId);
 
 /// <summary>A strict append-only publication chain owned by one repository writer.</summary>
 /// <remarks>
@@ -102,7 +102,7 @@ internal sealed class PublicationLog {
         writer.WriteBoolean(previous.HasValue);
         if (previous is { } parent) { WriteAddress(ref writer, parent); }
         WriteAddress(ref writer, next.RevisionAddress);
-        writer.WriteUInt32(next.WorldId);
+        writer.WriteUInt32(next.WorldId.Value);
         return buffer.WrittenSpan.ToArray();
     }
 
@@ -110,7 +110,7 @@ internal sealed class PublicationLog {
         var reader = new BinaryPayloadReader(payload);
         if (reader.ReadByte() != Version) { throw new InvalidDataException("Unknown publication version."); }
         FrameAddress? previous = reader.ReadBoolean() ? ReadAddress(ref reader) : null;
-        var next = new PublicationHead(ReadAddress(ref reader), reader.ReadUInt32());
+        var next = new PublicationHead(ReadAddress(ref reader), new ObjectId(reader.ReadUInt32()));
         reader.EnsureFullyConsumed();
         ValidateRecord(previous, next);
         return (previous, next);
@@ -128,7 +128,7 @@ internal sealed class PublicationLog {
 
     private static void ValidateRecord(FrameAddress? previous, PublicationHead next) {
         ValidateAddress(next.RevisionAddress);
-        if (next.WorldId == 0) { throw new InvalidDataException("A published World requires a nonzero object identity."); }
+        if (next.WorldId.IsNull) { throw new InvalidDataException("A published World requires a nonzero object identity."); }
         if (previous is { } parent) {
             ValidateAddress(parent);
             FrameAddress address = next.RevisionAddress;

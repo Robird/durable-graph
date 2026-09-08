@@ -1,6 +1,6 @@
 # DurableGraph 产品开发工作集
 
-> 校准：2026-09-08，最近产品施工及验收见 [DB-039](../docs/design-branches/0039-composable-value-upgrade-design.md)。本文只维护当前能力、边界与续工入口。
+> 校准：2026-09-08，最近产品施工及验收见 [DB-041](../docs/design-branches/0041-object-id-state-representation.md)。本文只维护当前能力、边界与续工入口。
 > 文档不是实现授权；事实以当前源码、测试和工具输出为准。
 
 ## 从这里继续
@@ -18,15 +18,11 @@
 
 ## 当前焦点
 
-[DB-039 可组合值 Upgrade](../docs/design-branches/0039-composable-value-upgrade-design.md)
-已完成方法级依赖声明、显式规则集、Context typed 工具和 provider 子作用域，完整验收映射见其 §8。
-它沿用 DB-038 的泛型 Schema/history/Family DTO 与整条 owner 链预绑定，业务函数显式调用转换。
-DB-036 同实例 GraphSession/发布协议、DB-037 inline 布局与 DB-038 持久格式继续沿用。
-真实包三代构建已验证开放 owner/Pair 复用值规则、删除旧 inline 领域声明后的升级与强制 Base/稳定续写。
-有限数组等其他方向从[路线图](../docs/DurableGraph-research-roadmap.md)进入，已有 ref 元素循环仍不等于数组对象支持。
-
-当前设计调研为 [DB-040 typed ObjectId](../docs/design-branches/0040-typed-object-id-representation-research.md)：
-已比较 DTO/nominal 品牌、物理字段与 typed 属性的 CLR 可行性；尚未选定重构，产品引用槽仍为 uint。
+[DB-041 非泛型 ObjectId](../docs/design-branches/0041-object-id-state-representation.md)
+已完成 DTO、Runtime 和 StateStore 的语义 ID 包装，普通 uint 数值与持久格式不变；完整测试及真实包回归通过。
+DB-039 可组合值 Upgrade 及此前的同实例 GraphSession、泛型/inline Schema/history 能力继续沿用。
+[DB-040](../docs/design-branches/0040-typed-object-id-representation-research.md) 的泛型目标品牌暂缓，保留 CLR 与历史语义调研证据。
+后继扩展从[路线图](../docs/DurableGraph-research-roadmap.md)选片；已有 ref 元素循环仍不等于数组对象支持。
 
 ## 当前能力与实际边界
 
@@ -40,7 +36,7 @@ DB-036 同实例 GraphSession/发布协议、DB-037 inline 布局与 DB-038 持�
 
 容易混淆的限制：
 
-- SG DTO/body 支持递归 inline struct 与 13 种标量：bool、byte/sbyte、short/ushort、int/uint、long/ulong、char、Half、float、double；string 和受支持 durable class 字段保存 UInt32 ID。
+- SG DTO/body 支持递归 inline struct 与 13 种标量：bool、byte/sbyte、short/ushort、int/uint、long/ulong、char、Half、float、double；string 和受支持 durable class 字段保存非泛型 ObjectId；字节层仍编码 UInt32。
   裸 `[DurableType]` 限同编译、顶层、非 record 的 partial class 链或显式 partial struct（包括 readonly），支持泛型；
   支持 readonly 持久字段和没有无参构造器的领域类。RuntimeHelpers 分配、SG Hydrate/声明层 UnsafeAccessor
   不执行实例构造器或字段初始化表达式；Transient 由用户交付后重建。
@@ -157,6 +153,7 @@ DurableGraph runtime 也引用 Serialization，单一 runtime PackageReference �
 
 | 准备修改 | 先查源码/测试，再按需读合同 |
 |---|---|
+| 引用槽与对象身份包装 | [DB-041](../docs/design-branches/0041-object-id-state-representation.md)、[ObjectId](DurableGraph/ObjectId.cs)、[静态引用操作](DurableGraph/BuiltinStateValues.cs) |
 | 可组合值 Upgrade / 规则集 / Context 子作用域 | [DB-039](../docs/design-branches/0039-composable-value-upgrade-design.md)、[值绑定](DurableGraph/StateBindingContext.ValueUpgrade.cs)、[SG 属性](DurableGraph.Generator/DurableSchemaGenerator.ValueUpgrades.cs)、[历史包](../experiments/PackageConsumerProbe/ValueUpgradeConsumer/README.md) |
 | 泛型/历史绑定/UpgradeContext | [DB-038](../docs/design-branches/0038-generic-schema-state-and-binding-design.md)、[绑定上下文](DurableGraph/StateBindingContext.cs)、[生成模板](DurableGraph.Generator/DurableSchemaGenerator.GenericState.cs)、[三代历史包](../experiments/PackageConsumerProbe/GenericConsumer/README.md) |
 | inline struct/嵌套 DTO/Schema DAG | [DB-037](../docs/design-branches/0037-inline-struct-state-slice.md)、[生成值 helper](DurableGraph.Generator/DurableSchemaGenerator.InlineState.cs)、[真实生成图](../tests/DurableGraph.Tests/InlineStructGraphTests.cs)、[历史包](../experiments/PackageConsumerProbe/InlineStructConsumer) |

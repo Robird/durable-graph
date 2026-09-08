@@ -19,7 +19,7 @@ public sealed class GraphSession<TWorld> : IDisposable where TWorld : DurableBas
 
     public TWorld World => _workspace.World;
     /// <summary>The last installed World ID; null before the first successful Commit.</summary>
-    public uint? WorldId => _workspace.WorldId == 0 ? null : _workspace.WorldId;
+    public ObjectId? WorldId => _workspace.WorldId.IsNull ? null : _workspace.WorldId;
     public FrameAddress? ParentRevisionAddress => _workspace.ParentRevisionAddress;
     public bool IsFaulted => _repository.IsFaulted;
 

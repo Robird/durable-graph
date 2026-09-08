@@ -9,7 +9,7 @@ public abstract partial class StateBindingContext {
     public TCurrent Normalize<TCurrent>(ObjectStateRecord source, DurableSchema current) where TCurrent : unmanaged {
         ArgumentNullException.ThrowIfNull(source);
         ArgumentNullException.ThrowIfNull(current);
-        if (source.Kind != ObjectStateKind.Durable || source.Id == 0 || source.Schema!.Type != current.Type ||
+        if (source.Kind != ObjectStateKind.Durable || source.Id.IsNull || source.Schema!.Type != current.Type ||
             source.Schema.Version > current.Version || current.Kind != SchemaKind.ReferenceObject) {
             throw new InvalidDataException("Upgrade requires an older exact DTO in the same closed object family.");
         }
@@ -148,7 +148,7 @@ public abstract partial class StateBindingContext {
         if (nominal.Kind != TypeExprKind.Named || !nominal.IsClosed) { throw new InvalidDataException("A value operand must have a closed nominal identity."); }
         StateDefinitionBinding definition = GetDefinition(nominal.DefinitionId!);
         if (definition.Kind == SchemaKind.ReferenceObject) {
-            if (stateType != typeof(uint)) { throw new InvalidDataException("A durable reference DTO operand must contain an object ID."); }
+            if (stateType != typeof(ObjectId)) { throw new InvalidDataException("A durable reference DTO operand must contain an object ID."); }
             return DurableFieldInfo.Reference(1, nominal);
         }
         Type stateDefinition = stateType.IsGenericType ? stateType.GetGenericTypeDefinition() : stateType;

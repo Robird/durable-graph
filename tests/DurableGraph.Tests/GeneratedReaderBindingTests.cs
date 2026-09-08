@@ -99,9 +99,9 @@ public sealed partial class DurableSchemaGeneratorTests {
         string generated = GeneratedSource(run, "DurableStates.g.cs");
         Assert.Contains("StateReaderBinding<V1> ReaderV1 = new(V1.Schema, ReadBaseBodyV1, ApplyDeltaBodyV1, VisitReferences);", generated);
         Assert.Contains("writer.WriteInt32(value.Segment0Field1);", generated);
-        Assert.Contains("writer.WriteUInt32(value.Segment0Field2);", generated);
+        Assert.Contains("writer.WriteUInt32(value.Segment0Field2.Value);", generated);
         Assert.Contains("reader.ReadInt32();", generated);
-        Assert.Contains("reader.ReadUInt32();", generated);
+        Assert.Contains("new global::Atelia.DurableGraph.ObjectId(reader.ReadUInt32())", generated);
         Assert.Contains("table.ResolveString(state.Segment0Field2);", generated);
         foreach (string forbidden in new[] { "ValueSlotCodec", "PrimitiveSlotCodecs", "DynamicInvoke", "System.Reflection", "Dictionary<", "StateStore.Storage" }) {
             Assert.DoesNotContain(forbidden, generated);

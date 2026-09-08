@@ -177,7 +177,7 @@ public sealed partial class DurableSchemaGeneratorTests {
                 second.Change("second also changed after Seal", 92);
                 var secondBytes = Encode(secondGraph);
                 session.Discard(secondGraph);
-                return (firstGraph.RootIds.ToArray(), firstBytes, secondBytes);
+                return (firstGraph.RootIds.Select(id => id.Value).ToArray(), firstBytes, secondBytes);
             }
 
             private static (uint Id, bool IsString, DurableSchema? Schema, byte[] Body)[] Encode(CapturedGraph graph) {
@@ -191,7 +191,7 @@ public sealed partial class DurableSchemaGeneratorTests {
                         var state = entry.GetState<Owner.__DurableState.V1>();
                         Owner.__DurableState.WriteBaseBody(ref writer, in state);
                     }
-                    return (entry.Id, isString, entry.Schema, buffer.WrittenSpan.ToArray());
+                    return (entry.Id.Value, isString, entry.Schema, buffer.WrittenSpan.ToArray());
                 }).ToArray();
             }
 
@@ -213,7 +213,7 @@ public sealed partial class DurableSchemaGeneratorTests {
                         throw new InvalidDataException("Unknown or non-durable fixture root.");
                 }
                 var strings = StringReadTable.Decode(metadata.Where(entry => entry.IsString)
-                    .Select(entry => (entry.Id, (ReadOnlyMemory<byte>)bodies[entry.Id])));
+                    .Select(entry => (new ObjectId(entry.Id), (ReadOnlyMemory<byte>)bodies[entry.Id])));
                 var owners = new Dictionary<uint, Owner.__DurableState.V1>();
                 foreach (var entry in metadata.Where(entry => !entry.IsString)) {
                     var reader = new BinaryPayloadReader(bodies[entry.Id]);
@@ -232,7 +232,7 @@ public sealed partial class DurableSchemaGeneratorTests {
                     ReferenceEquals(shared, strings.ResolveString(first.Segment0Field2)) &&
                     ReferenceEquals(shared, strings.ResolveString(second.Segment0Field2)) &&
                     strings.ResolveString(first.Segment0Field3) is null && strings.ResolveString(second.Segment0Field3) is null &&
-                    first.Segment0Field4 != 0 && first.Segment0Field4 == second.Segment0Field4 &&
+                    !first.Segment0Field4.IsNull && first.Segment0Field4 == second.Segment0Field4 &&
                     ReferenceEquals(strings.ResolveString(first.Segment0Field4), string.Empty);
             }
         }

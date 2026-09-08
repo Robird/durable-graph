@@ -7,8 +7,8 @@ namespace Atelia.DurableGraph.StateStore.Tests;
 
 public sealed class PublicationLogTests : IDisposable {
     private readonly List<string> _paths = [];
-    private static readonly PublicationHead First = new(Address(1, 4), 7);
-    private static readonly PublicationHead Second = new(Address(1, 32), 7);
+    private static readonly PublicationHead First = new(Address(1, 4), new ObjectId(7));
+    private static readonly PublicationHead Second = new(Address(1, 32), new ObjectId(7));
 
     [Fact]
     public void IndependentGoldenBytesFreezeCanonicalRecordAndAddressOrder() {
@@ -73,13 +73,13 @@ public sealed class PublicationLogTests : IDisposable {
         var recording = new RecordingFile(file);
         var log = new PublicationLog(recording, (_, _) => { });
         Assert.Throws<InvalidDataException>(() => log.Publish(First.RevisionAddress, Second));
-        Assert.Throws<InvalidDataException>(() => log.Publish(null, new(default, 7)));
-        Assert.Throws<InvalidDataException>(() => log.Publish(null, First with { WorldId = 0 }));
-        Assert.Throws<InvalidDataException>(() => log.Publish(null, new(new FrameAddress(1, SizedPtr.Create(0, 24)), 7)));
+        Assert.Throws<InvalidDataException>(() => log.Publish(null, new(default, new ObjectId(7))));
+        Assert.Throws<InvalidDataException>(() => log.Publish(null, First with { WorldId = new ObjectId(0) }));
+        Assert.Throws<InvalidDataException>(() => log.Publish(null, new(new FrameAddress(1, SizedPtr.Create(0, 24)), new ObjectId(7))));
         Assert.Equal(0, recording.Appends);
         log.Publish(null, First);
         Assert.Throws<InvalidDataException>(() => log.Publish(null, Second));
-        Assert.Throws<InvalidDataException>(() => log.Publish(First.RevisionAddress, Second with { WorldId = 8 }));
+        Assert.Throws<InvalidDataException>(() => log.Publish(First.RevisionAddress, Second with { WorldId = new ObjectId(8) }));
         Assert.Throws<InvalidDataException>(() => log.Publish(First.RevisionAddress, First));
         Assert.Equal(1, recording.Appends);
         Assert.False(log.IsFaulted);
@@ -96,7 +96,7 @@ public sealed class PublicationLogTests : IDisposable {
         byte[] bad = damage switch {
             "duplicate" => PublicationLog.Encode(null, First),
             "disconnected" => PublicationLog.Encode(Address(1, 8), Second),
-            _ => PublicationLog.Encode(First.RevisionAddress, Second with { WorldId = 8 }),
+            _ => PublicationLog.Encode(First.RevisionAddress, Second with { WorldId = new ObjectId(8) }),
         };
         file.Append(PublicationLog.RbfTag, bad).Unwrap();
         file.DurableFlush();
@@ -207,11 +207,11 @@ public sealed class PublicationLogTests : IDisposable {
         using IRbfFile file = RbfFile.CreateNew(NewPath());
         var log = new PublicationLog(file, (_, _) => { });
         log.Publish(null, Second);
-        var laterFile = new PublicationHead(Address(2, 4), 7);
+        var laterFile = new PublicationHead(Address(2, 4), new ObjectId(7));
         log.Publish(Second.RevisionAddress, laterFile);
         Assert.Equal(laterFile, log.Head);
         Assert.Throws<InvalidDataException>(() => log.Publish(laterFile.RevisionAddress,
-            new PublicationHead(Address(1, 64), 7)));
+            new PublicationHead(Address(1, 64), new ObjectId(7))));
         Assert.False(log.IsFaulted);
     }
 

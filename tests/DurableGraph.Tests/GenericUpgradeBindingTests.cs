@@ -13,9 +13,9 @@ public sealed class GenericUpgradeBindingTests {
         var context = BoxContext(Provider(nameof(First), 1), Provider(nameof(Second), 2));
         DurableSchema source = BoxSchema(TypeExpr.Builtin(TypeTag.Int32), 1, new(1, TypeTag.Int32));
         DurableSchema target = BoxSchema(TypeExpr.Builtin(TypeTag.Int32), 3, new(1, TypeTag.Int32));
-        Assert.Equal(new Box3<int>(8, 2), context.Normalize<Box3<int>>(new(11, source, new Box1<int>(8)), target));
-        Assert.Equal(new Box3<int>(9, 2), context.Normalize<Box3<int>>(new(22, source, new Box1<int>(9)), target));
-        Assert.Equal(new uint[] { 11, 11, 22, 22 }, Invocations.Select(item => item.ObjectId));
+        Assert.Equal(new Box3<int>(8, 2), context.Normalize<Box3<int>>(new(new ObjectId(11), source, new Box1<int>(8)), target));
+        Assert.Equal(new Box3<int>(9, 2), context.Normalize<Box3<int>>(new(new ObjectId(22), source, new Box1<int>(9)), target));
+        Assert.Equal(new uint[] { 11, 11, 22, 22 }, Invocations.Select(item => item.ObjectId.Value));
         Assert.Equal(new[] { 1, 2, 1, 2 }, Invocations.Select(item => item.SourceObjectSchema.Version));
         Assert.Equal(new[] { 2, 3, 2, 3 }, Invocations.Select(item => item.TargetObjectSchema.Version));
         Assert.Equal(4, Invocations.Distinct(ReferenceEqualityComparer.Instance).Count());
@@ -27,10 +27,10 @@ public sealed class GenericUpgradeBindingTests {
         DurableSchema source = BoxSchema(TypeExpr.Builtin(TypeTag.Int32), 1, new(1, TypeTag.Int32));
         DurableSchema current = BoxSchema(TypeExpr.Builtin(TypeTag.Int32), 3, new(1, TypeTag.Int32));
         var missing = BoxContext(Provider(nameof(First), 1));
-        Assert.Throws<InvalidDataException>(() => missing.Normalize<Box3<int>>(new(1, source, new Box1<int>(3)), current));
+        Assert.Throws<InvalidDataException>(() => missing.Normalize<Box3<int>>(new(new ObjectId(1), source, new Box1<int>(3)), current));
         Assert.Empty(Invocations);
         var constrained = BoxContext(Provider(nameof(Constrained), 1), Provider(nameof(Second), 2));
-        Assert.Throws<InvalidDataException>(() => constrained.Normalize<Box3<int>>(new(1, source, new Box1<int>(3)), current));
+        Assert.Throws<InvalidDataException>(() => constrained.Normalize<Box3<int>>(new(new ObjectId(1), source, new Box1<int>(3)), current));
         Assert.Empty(Invocations);
     }
 
@@ -43,7 +43,7 @@ public sealed class GenericUpgradeBindingTests {
         DurableSchema oldPoint = PointSchema(1), newPoint = PointSchema(2);
         DurableSchema source = BoxSchema(point, 1, new(1, TypeTag.InlineValue, inlineSchema: oldPoint));
         DurableSchema target = BoxSchema(point, 2, new(1, TypeTag.InlineValue, inlineSchema: newPoint));
-        var value = context.Normalize<Box2<Point2>>(new(7, source, new Box1<Point1>(new(3))), target);
+        var value = context.Normalize<Box2<Point2>>(new(new ObjectId(7), source, new Box1<Point1>(new(3))), target);
         Assert.Equal(new Box2<Point2>(new(30), 7), value);
         Assert.Single(Invocations);
         Assert.Equal(oldPoint, Invocations[0].SourceObjectSchema.Fields[0].InlineSchema);
@@ -57,11 +57,11 @@ public sealed class GenericUpgradeBindingTests {
         DurableSchema source = BoxSchema(point, 1, new(1, TypeTag.InlineValue, inlineSchema: PointSchema(2)));
         DurableSchema target = BoxSchema(point, 2, new(1, TypeTag.InlineValue, inlineSchema: PointSchema(2)));
         var wrong = BoxContext(Provider(nameof(First), 1), Provider(nameof(ClosedPoint), 1, owner));
-        Assert.Throws<InvalidDataException>(() => wrong.Normalize<Box2<Point2>>(new(1, source, new Box1<Point2>(new(4))), target));
+        Assert.Throws<InvalidDataException>(() => wrong.Normalize<Box2<Point2>>(new(new ObjectId(1), source, new Box1<Point2>(new(4))), target));
         Assert.Empty(Invocations);
         var fails = BoxContext(Provider(nameof(First), 1), Provider(nameof(ThrowingPoint), 1, owner));
         source = BoxSchema(point, 1, new(1, TypeTag.InlineValue, inlineSchema: PointSchema(1)));
-        Assert.Throws<ArithmeticException>(() => fails.Normalize<Box2<Point2>>(new(1, source, new Box1<Point1>(new(4))), target));
+        Assert.Throws<ArithmeticException>(() => fails.Normalize<Box2<Point2>>(new(new ObjectId(1), source, new Box1<Point1>(new(4))), target));
         Assert.Empty(Invocations);
     }
 
@@ -71,7 +71,7 @@ public sealed class GenericUpgradeBindingTests {
         DurableSchema source = BoxSchema(TypeExpr.Builtin(TypeTag.Int32), 1, new(1, TypeTag.Int32));
         DurableSchema target = BoxSchema(TypeExpr.Builtin(TypeTag.Int32), 2, new(1, TypeTag.Int32));
         var duplicate = BoxContext(Provider(nameof(First), 1), Provider(nameof(First), 1));
-        Assert.Equal(4, duplicate.Normalize<Box2<int>>(new(1, source, new Box1<int>(4)), target).Value);
+        Assert.Equal(4, duplicate.Normalize<Box2<int>>(new(new ObjectId(1), source, new Box1<int>(4)), target).Value);
         Invocations.Clear();
         Assert.Throws<ArgumentException>(() => BoxContext(Provider(nameof(First), 1), Provider(nameof(OtherFirst), 1)));
         Assert.Empty(Invocations);
@@ -92,34 +92,40 @@ public sealed class GenericUpgradeBindingTests {
         StateUpgradeProvider last = new("Phantom", 2, Method(nameof(PhantomLast)), owner);
         DurableSchema source = new(owner, 1), target = new(owner, 3, new DurableFieldInfo(1, TypeTag.InlineValue, inlineSchema: PointSchema(2)));
         var missing = new TestContext(new("Phantom", SchemaKind.ReferenceObject, 1, null, templates, upgrades: [first, last]), PointDefinition());
-        Assert.Throws<InvalidDataException>(() => missing.Normalize<Phantom3<Point2>>(new(4, source, new Phantom1()), target));
+        Assert.Throws<InvalidDataException>(() => missing.Normalize<Phantom3<Point2>>(new(new ObjectId(4), source, new Phantom1()), target));
         Assert.Empty(Invocations);
 
         StateUpgradeProvider selected = new("Phantom", 1, Method(nameof(PhantomFirstClosed)), owner);
         var explicitContext = new TestContext(new("Phantom", SchemaKind.ReferenceObject, 1, null, templates, upgrades: [first, selected, last]), PointDefinition());
-        Assert.Equal(new Point2(50), explicitContext.Normalize<Phantom3<Point2>>(new(4, source, new Phantom1()), target).Value);
+        Assert.Equal(new Point2(50), explicitContext.Normalize<Phantom3<Point2>>(new(new ObjectId(4), source, new Phantom1()), target).Value);
         Assert.Equal(2, Invocations.Count);
         Invocations.Clear();
         // The same cached plan is no longer acceptable if the repository later registers
         // a different exact middle layout under that key.
         explicitContext.Registered[(owner, 2)] = new(owner, 2, new DurableFieldInfo(1, TypeTag.InlineValue, inlineSchema: PointSchema(2)));
-        Assert.Throws<InvalidDataException>(() => explicitContext.Normalize<Phantom3<Point2>>(new(8, source, new Phantom1()), target));
+        Assert.Throws<InvalidDataException>(() => explicitContext.Normalize<Phantom3<Point2>>(new(new ObjectId(8), source, new Phantom1()), target));
         Assert.Empty(Invocations);
         explicitContext.Registered.Remove((owner, 2));
         explicitContext.Registered[(TypeExpr.Named("Point"), 1)] = new("Point", 1, SchemaKind.InlineValue, new DurableFieldInfo(1, TypeTag.Int64));
-        Assert.Throws<InvalidDataException>(() => explicitContext.Normalize<Phantom3<Point2>>(new(9, source, new Phantom1()), target));
+        Assert.Throws<InvalidDataException>(() => explicitContext.Normalize<Phantom3<Point2>>(new(new ObjectId(9), source, new Phantom1()), target));
         Assert.Empty(Invocations);
     }
 
     [Fact]
-    public void NominalOperandsRetainStringAndDurableSemanticsEvenWhenBothUseUInt32() {
+    public void NominalOperandsRetainStringAndDurableSemanticsEvenWhenBothUseObjectId() {
         var context = BoxContext();
         context.Definitions.Add("Node", new("Node", SchemaKind.ReferenceObject, 0, null, [new("Node", 1, SchemaKind.ReferenceObject, 0, [])]));
-        DurableSchema text = context.InferSchemaFromState(TypeExpr.Named("Box", TypeExpr.Builtin(TypeTag.String)), 1, typeof(Box1<uint>));
-        DurableSchema reference = context.InferSchemaFromState(TypeExpr.Named("Box", TypeExpr.Named("Node")), 1, typeof(Box1<uint>));
+        DurableSchema text = context.InferSchemaFromState(TypeExpr.Named("Box", TypeExpr.Builtin(TypeTag.String)), 1, typeof(Box1<ObjectId>));
+        DurableSchema reference = context.InferSchemaFromState(TypeExpr.Named("Box", TypeExpr.Named("Node")), 1, typeof(Box1<ObjectId>));
         Assert.Equal(TypeTag.String, text.Fields[0].TypeTag);
         Assert.Equal(TypeExpr.Named("Node"), reference.Fields[0].TargetType);
         Assert.NotEqual(text, reference);
+        DurableSchema number = context.InferSchemaFromState(TypeExpr.Named("Box", TypeExpr.Builtin(TypeTag.UInt32)), 1, typeof(Box1<uint>));
+        Assert.Equal(TypeTag.UInt32, number.Fields[0].TypeTag);
+        Assert.Throws<InvalidDataException>(() => context.InferSchemaFromState(
+            TypeExpr.Named("Box", TypeExpr.Builtin(TypeTag.String)), 1, typeof(Box1<uint>)));
+        Assert.Throws<InvalidDataException>(() => context.InferSchemaFromState(
+            TypeExpr.Named("Box", TypeExpr.Builtin(TypeTag.UInt32)), 1, typeof(Box1<ObjectId>)));
     }
 
     [Fact]
@@ -137,7 +143,7 @@ public sealed class GenericUpgradeBindingTests {
             new("Phantom", 1, Method(nameof(PhantomFirst))), new("Phantom", 2, Method(nameof(PhantomGenericLast))),
         ]));
         DurableSchema source = new(owner, 1), target = new(owner, 3, new DurableFieldInfo(1, TypeTag.Int32));
-        Assert.Equal(0, context.Normalize<Phantom3<int>>(new(2, source, new Phantom1()), target).Value);
+        Assert.Equal(0, context.Normalize<Phantom3<int>>(new(new ObjectId(2), source, new Phantom1()), target).Value);
         Assert.Equal(2, Invocations.Count);
     }
 
@@ -164,7 +170,7 @@ public sealed class GenericUpgradeBindingTests {
         DurableSchema pairSchema = new(TypeExpr.Named("Pair", point), 1, SchemaKind.InlineValue,
             new DurableFieldInfo(1, TypeTag.InlineValue, inlineSchema: PointSchema(1)));
         DurableSchema current = new(owner, 3, new DurableFieldInfo(1, TypeTag.InlineValue, inlineSchema: pairSchema), new DurableFieldInfo(2, TypeTag.Int32));
-        var result = context.Normalize<Box3<Pair1<Point1>>>(new(5, source, new Box1<Point1>(new(8))), current);
+        var result = context.Normalize<Box3<Pair1<Point1>>>(new(new ObjectId(5), source, new Box1<Point1>(new(8))), current);
         Assert.Equal(2, Invocations.Count);
         Assert.Equal(2, result.Generation);
         Assert.Equal(pairSchema, Invocations[0].TargetObjectSchema.Fields[0].InlineSchema);

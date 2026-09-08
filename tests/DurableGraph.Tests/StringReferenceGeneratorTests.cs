@@ -50,7 +50,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             }
             public static class Host {
                 public static bool Check() {
-                    var table = StringReadTable.Decode(Array.Empty<(uint, ReadOnlyMemory<byte>)>());
+                    var table = StringReadTable.Decode(Array.Empty<(ObjectId, ReadOnlyMemory<byte>)>());
                     var empty = Empty.__DurableState.Capture(new Empty());
                     var scalar = Scalar.__DurableState.Capture(new Scalar());
                     Empty.__DurableState.ValidateStringReferences(in empty, table);
@@ -189,9 +189,9 @@ public sealed partial class DurableSchemaGeneratorTests {
                 writer.WriteUInt32(number);
                 writer.WriteUInt32(own);
                 var state = Read(buffer.WrittenSpan.ToArray()); // Pure Read succeeds before resolution, even for invalid IDs.
-                if (state.Segment0Field1 != inherited || state.Segment1Field1 != number || state.Segment1Field2 != own)
+                if (state.Segment0Field1.Value != inherited || state.Segment1Field1 != number || state.Segment1Field2.Value != own)
                     throw new Exception("Body read must remain ID-only.");
-                var table = StringReadTable.Decode(new[] { (3u, (ReadOnlyMemory<byte>)Content("x")) });
+                var table = StringReadTable.Decode(new[] { (new ObjectId(3), (ReadOnlyMemory<byte>)Content("x")) });
                 try { Leaf.__DurableState.ValidateStringReferences(in state, table); return true; }
                 catch (InvalidDataException) { return false; }
             }
@@ -211,9 +211,9 @@ public sealed partial class DurableSchemaGeneratorTests {
                 var buffer = new ArrayBufferWriter<byte>();
                 var writer = new BinaryPayloadWriter(buffer);
                 writer.WriteString("x");
-                var records = new System.Collections.Generic.List<(uint, ReadOnlyMemory<byte>)>();
+                var records = new System.Collections.Generic.List<(ObjectId, ReadOnlyMemory<byte>)>();
                 foreach (uint id in new uint[] { 2, 3 }) {
-                    if (id != omit) records.Add((id, buffer.WrittenMemory));
+                    if (id != omit) records.Add((new ObjectId(id), buffer.WrittenMemory));
                 }
                 return StringReadTable.Decode(records);
             }
@@ -232,7 +232,7 @@ public sealed partial class DurableSchemaGeneratorTests {
                 var reader = new BinaryPayloadReader(buffer.WrittenSpan);
                 state = Leaf.__DurableState.ReadBaseBodyV2(ref reader);
                 reader.EnsureFullyConsumed();
-                var table = StringReadTable.Decode(Array.Empty<(uint, ReadOnlyMemory<byte>)>());
+                var table = StringReadTable.Decode(Array.Empty<(ObjectId, ReadOnlyMemory<byte>)>());
                 Leaf.__DurableState.ValidateStringReferences(in state, table);
                 return state.Segment1Field2 == uint.MaxValue;
             }

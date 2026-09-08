@@ -113,6 +113,7 @@ public sealed partial class DurableSchemaGenerator {
         if (field.DynamicIndex >= 0) return "TState" + Number(field.DynamicIndex);
         if (field.Field.InlineSchema is SchemaReference inline) return FamilyType(inline.SchemaId) + ".V" + Number(inline.Version);
         int tag = field.Pattern.Kind == PatternKind.Builtin ? field.Pattern.BuiltinTag : field.Field.TypeTagValue;
+        if (IsBinaryReference(tag)) return RuntimeName + "ObjectId";
         return "global::System." + GetTypeTagName(GetBinarySlotTypeTag(tag));
     }
 
@@ -122,7 +123,7 @@ public sealed partial class DurableSchemaGenerator {
 
     private static bool UsesGenericOps(GenericField field) => field.DynamicIndex >= 0 || field.Field.InlineSchema.HasValue;
     private static int GenericFieldTag(GenericField field) => field.Pattern.Kind == PatternKind.Builtin ? field.Pattern.BuiltinTag : field.Field.TypeTagValue;
-    private static string GenericFieldRead(GenericField field) => "reader.Read" + GetTypeTagName(GetBinarySlotTypeTag(GenericFieldTag(field))) + "()";
+    private static string GenericFieldRead(GenericField field) => BinarySlotRead(GenericFieldTag(field));
     private static string GenericFieldEquality(GenericField field, string left, string right) {
         string? bits = GenericFieldTag(field) switch { 12 => "HalfToUInt16Bits", 13 => "SingleToUInt32Bits", 14 => "DoubleToUInt64Bits", _ => null };
         return bits is null ? left + " == " + right : "global::System.BitConverter." + bits + "(" + left + ") == global::System.BitConverter." + bits + "(" + right + ")";
@@ -162,7 +163,7 @@ public sealed partial class DurableSchemaGenerator {
             if (UsesGenericOps(field)) output.Append("            ").Append(GenericFieldOps(field)).Append(".WriteBase(ref writer, in value.")
                 .Append(field.Name).Append(", ").Append(field.Slot()).AppendLine(");");
             else output.Append("            writer.Write").Append(GetTypeTagName(GetBinarySlotTypeTag(GenericFieldTag(field))))
-                .Append("(value.").Append(field.Name).AppendLine(");");
+                .Append('(').Append(BinarySlotWireValue(GenericFieldTag(field), "value." + field.Name)).AppendLine(");");
         }
         output.AppendLine("        }");
         output.Append("        public static ").Append(dto).Append(" Read(ref ").Append(PayloadNamespace).Append("BinaryPayloadReader reader, ")
@@ -225,7 +226,7 @@ public sealed partial class DurableSchemaGenerator {
             output.Append("            if ((mask").Append(index / 8).Append(" & ").Append(1 << (index % 8)).Append(") != 0) ");
             if (UsesGenericOps(field)) output.Append("writer.WriteSpan(delta").Append(index).AppendLine(".Body);");
             else output.Append("writer.Write").Append(GetTypeTagName(GetBinarySlotTypeTag(GenericFieldTag(field))))
-                .Append("(current.").Append(field.Name).AppendLine(");");
+                .Append('(').Append(BinarySlotWireValue(GenericFieldTag(field), "current." + field.Name)).AppendLine(");");
         }
         output.Append("            return new ").Append(PayloadNamespace).Append("PreparedDeltaBody(")
             .Append(masks == 0 ? "false" : string.Join(" || ", Enumerable.Range(0, masks).Select(i => "mask" + Number(i) + " != 0")))

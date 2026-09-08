@@ -53,7 +53,7 @@ public sealed class InlineSchemaContractTests {
         DurableSchema point = Value("point", 1);
         Assert.Throws<ArgumentException>(() => new StateReaderBinding<int>(point, Read, Apply, Visit));
         Assert.Throws<ArgumentException>(() => new CapturedStatePreparation<int>(point, PrepareBase, PrepareDelta));
-        Assert.Throws<ArgumentException>(() => new ObjectStateRecord(1, point, 42));
+        Assert.Throws<ArgumentException>(() => new ObjectStateRecord(new ObjectId(1), point, 42));
         CaptureSession session = new();
         using CaptureContext context = session.BeginCapture();
         Assert.Throws<ArgumentException>(() => context.AddRoot<Domain, int>(new Domain(), point, (_, _) => 42));

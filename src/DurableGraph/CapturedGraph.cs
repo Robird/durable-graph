@@ -2,13 +2,13 @@ namespace Atelia.DurableGraph;
 
 /// <summary>A sealed capture result, independent of mutable domain instances and session bindings.</summary>
 public sealed class CapturedGraph {
-    internal CapturedGraph(IEnumerable<uint> rootIds, IEnumerable<ObjectStateRecord> objects) {
-        RootIds = new FrozenList<uint>(rootIds);
+    internal CapturedGraph(IEnumerable<ObjectId> rootIds, IEnumerable<ObjectStateRecord> objects) {
+        RootIds = new FrozenList<ObjectId>(rootIds);
         Objects = new FrozenList<ObjectStateRecord>(objects.OrderBy(static item => item.Id));
     }
 
     /// <summary>Root IDs in registration order, including duplicates and zero for null roots.</summary>
-    public IReadOnlyList<uint> RootIds { get; }
+    public IReadOnlyList<ObjectId> RootIds { get; }
 
     /// <summary>The complete candidate object set in ascending ID order.</summary>
     public IReadOnlyList<ObjectStateRecord> Objects { get; }

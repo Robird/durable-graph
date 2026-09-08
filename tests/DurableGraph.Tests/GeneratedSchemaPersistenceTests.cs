@@ -104,7 +104,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         var session = (CaptureSession)host.GetField("Session")!.GetValue(null)!;
         CapturedGraph first = capture(0);
         PreparedCapturedGraph initial = session.Prepare(first);
-        uint ownerId = first.RootIds[0];
+        ObjectId ownerId = first.RootIds[0];
 
         using RawBaseDirectory directory = new();
         using RawBaseDirectory schemaDirectory = new();
@@ -130,12 +130,12 @@ public sealed partial class DurableSchemaGeneratorTests {
                 break;
             case "membership":
                 selectedParent = store.Append(StateRevision.CreateObjectHeadMapDelta(parent, [],
-                    [first.Objects.First(item => item.Kind == ObjectStateKind.String).Id]));
+                    [first.Objects.First(item => item.Kind == ObjectStateKind.String).Id.Value]));
                 break;
             case "kind":
                 var text = BaseObjectBodyCodec.EncodeString(StringPayloadCodec.PrepareBase("x"));
                 selectedParent = store.Append(StateRevision.CreateObjectHeadMapDelta(parent,
-                    [ObjectVersionRecord.CreateBase(ownerId, text.Body)], []));
+                    [ObjectVersionRecord.CreateBase(ownerId.Value, text.Body)], []));
                 break;
             case "schema":
                 var owner = initial.Objects.Single(item => item.Current.Id == ownerId);
@@ -144,7 +144,7 @@ public sealed partial class DurableSchemaGeneratorTests {
                 schemas.RegisterBatch([versionTwo]);
                 var differentType = BaseObjectBodyCodec.EncodeDurable(versionTwo, owner.BaseBody);
                 selectedParent = store.Append(StateRevision.CreateObjectHeadMapDelta(parent,
-                    [ObjectVersionRecord.CreateBase(ownerId, differentType.Body)], []));
+                    [ObjectVersionRecord.CreateBase(ownerId.Value, differentType.Body)], []));
                 break;
         }
         long schemaTail = schemaFile.TailOffset;

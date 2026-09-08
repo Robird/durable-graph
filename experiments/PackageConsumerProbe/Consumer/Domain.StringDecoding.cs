@@ -7,12 +7,12 @@ namespace PackageConsumerProbe;
 // A deliberately typed byte witness, not a persistent graph format or runtime registry.
 internal static class StringDecodingExercise {
     private enum BodyKind { Hero, Item, String }
-    private sealed record BodyRecord(uint Id, BodyKind Kind, DurableSchema? Schema, byte[] Body);
-    private sealed record BodyBundle(uint[] Roots, BodyRecord[] Records);
+    private sealed record BodyRecord(ObjectId Id, BodyKind Kind, DurableSchema? Schema, byte[] Body);
+    private sealed record BodyBundle(ObjectId[] Roots, BodyRecord[] Records);
     private sealed record Loaded(
-        uint[] Roots,
-        Dictionary<uint, CaptureHero.__DurableState.V1> Heroes,
-        Dictionary<uint, CaptureItem.__DurableState.V1> Items,
+        ObjectId[] Roots,
+        Dictionary<ObjectId, CaptureHero.__DurableState.V1> Heroes,
+        Dictionary<ObjectId, CaptureItem.__DurableState.V1> Items,
         StringReadTable Strings);
 
     internal static void Run() {
@@ -30,8 +30,8 @@ internal static class StringDecodingExercise {
         Reject(bytes with { Records = bytes.Records.Append(text with { Id = hero.Id }).ToArray() });
         Reject(bytes with { Records = bytes.Records.Append(text).ToArray() });
         Reject(bytes with { Records = bytes.Records.Select(record =>
-            ReferenceEquals(record, text) ? text with { Id = 0 } : record).ToArray() });
-        Reject(bytes with { Roots = [127] });
+            ReferenceEquals(record, text) ? text with { Id = default } : record).ToArray() });
+        Reject(bytes with { Roots = [new ObjectId(127)] });
         Reject(bytes with { Roots = [text.Id] });
         Reject(bytes with { Records = Replace(bytes, hero with { Body = [127, 3, 14] }) });
         Reject(bytes with { Records = Replace(bytes, hero with { Body = [1, 3, 14] }) });
@@ -104,12 +104,12 @@ internal static class StringDecodingExercise {
             CaptureHero.__DurableState.AddRoot(capture, new CaptureHero(firstEmpty));
             CaptureItem.__DurableState.AddRoot(capture, new CaptureItem(firstEmpty, secondEmpty));
             CapturedGraph candidate = capture.Seal();
-            var hero = candidate.Objects.Single(record => record.Id == 1)
+            var hero = candidate.Objects.Single(record => record.Id.Value == 1)
                 .GetState<CaptureHero.__DurableState.V1>();
-            var item = candidate.Objects.Single(record => record.Id == 2)
+            var item = candidate.Objects.Single(record => record.Id.Value == 2)
                 .GetState<CaptureItem.__DurableState.V1>();
-            uint emptyId = hero.Segment0Field1;
-            Require(emptyId != 0 && hero.Segment1Field1 == emptyId && item.Segment0Field1 == emptyId &&
+            ObjectId emptyId = hero.Segment0Field1;
+            Require(!emptyId.IsNull && hero.Segment1Field1 == emptyId && item.Segment0Field1 == emptyId &&
                 item.Segment0Field2 == emptyId && item.Segment0Field5 == emptyId,
                 "Generated Capture must normalize distinct empty instances and string.Empty to one ID.");
             Require(candidate.Objects.Count == 4 && ReferenceEquals(
@@ -118,21 +118,21 @@ internal static class StringDecodingExercise {
             bytes = Encode(candidate);
         }
         Loaded loaded = Load(bytes);
-        Require(ReferenceEquals(loaded.Strings.ResolveString(loaded.Heroes[1].Segment0Field1), string.Empty) &&
-            ReferenceEquals(loaded.Strings.ResolveString(loaded.Items[2].Segment0Field2), string.Empty) &&
-            loaded.Strings.ResolveString(loaded.Items[2].Segment0Field3) is null,
+        Require(ReferenceEquals(loaded.Strings.ResolveString(loaded.Heroes[new ObjectId(1)].Segment0Field1), string.Empty) &&
+            ReferenceEquals(loaded.Strings.ResolveString(loaded.Items[new ObjectId(2)].Segment0Field2), string.Empty) &&
+            loaded.Strings.ResolveString(loaded.Items[new ObjectId(2)].Segment0Field3) is null,
             "Byte-only loading preserves canonical empty and distinguishes null.");
 
         byte[] body = EncodeString(string.Empty);
         StringReadTable aliases = StringReadTable.Decode(new[] {
-            (10u, (ReadOnlyMemory<byte>)body), (11u, (ReadOnlyMemory<byte>)body),
+            (new ObjectId(10), (ReadOnlyMemory<byte>)body), (new ObjectId(11), (ReadOnlyMemory<byte>)body),
         });
-        Require(ReferenceEquals(aliases.ResolveString(10), string.Empty) &&
-            ReferenceEquals(aliases.ResolveString(11), string.Empty) && aliases.ResolveString(0) is null,
+        Require(ReferenceEquals(aliases.ResolveString(new ObjectId(10)), string.Empty) &&
+            ReferenceEquals(aliases.ResolveString(new ObjectId(11)), string.Empty) && aliases.ResolveString(new ObjectId(0)) is null,
             "Distinct IDs with empty bodies intentionally resolve to the same canonical empty instance.");
         try {
             _ = StringReadTable.Decode(new[] {
-                (10u, (ReadOnlyMemory<byte>)body), (10u, (ReadOnlyMemory<byte>)body),
+                (new ObjectId(10), (ReadOnlyMemory<byte>)body), (new ObjectId(10), (ReadOnlyMemory<byte>)body),
             });
         }
         catch (InvalidDataException) { return; }
@@ -141,9 +141,9 @@ internal static class StringDecodingExercise {
 
     private static Loaded Load(BodyBundle bundle) {
         // Preflight the complete heterogeneous directory before decoding or exposing any result.
-        Dictionary<uint, BodyKind> directory = [];
+        Dictionary<ObjectId, BodyKind> directory = [];
         foreach (BodyRecord record in bundle.Records) {
-            if (record.Id == 0 || !directory.TryAdd(record.Id, record.Kind)) {
+            if (record.Id.IsNull || !directory.TryAdd(record.Id, record.Kind)) {
                 throw new InvalidDataException("Object IDs must be nonzero and unique across every kind.");
             }
             bool exactSchema = record.Kind switch {
@@ -154,16 +154,16 @@ internal static class StringDecodingExercise {
             };
             if (!exactSchema) { throw new InvalidDataException("Body binding requires its exact schema."); }
         }
-        foreach (uint root in bundle.Roots) {
-            if (root != 0 && (!directory.TryGetValue(root, out BodyKind kind) || kind == BodyKind.String)) {
+        foreach (ObjectId root in bundle.Roots) {
+            if (!root.IsNull && (!directory.TryGetValue(root, out BodyKind kind) || kind == BodyKind.String)) {
                 throw new InvalidDataException("This typed witness requires a known durable root or null.");
             }
         }
         StringReadTable strings = StringReadTable.Decode(bundle.Records
             .Where(record => record.Kind == BodyKind.String)
             .Select(record => (record.Id, (ReadOnlyMemory<byte>)record.Body)));
-        Dictionary<uint, CaptureHero.__DurableState.V1> heroes = [];
-        Dictionary<uint, CaptureItem.__DurableState.V1> items = [];
+        Dictionary<ObjectId, CaptureHero.__DurableState.V1> heroes = [];
+        Dictionary<ObjectId, CaptureItem.__DurableState.V1> items = [];
         foreach (BodyRecord record in bundle.Records) {
             BinaryPayloadReader reader = new(record.Body);
             if (record.Kind == BodyKind.Hero) {
@@ -182,9 +182,9 @@ internal static class StringDecodingExercise {
     }
 
     private static void AssertTopology(Loaded loaded) {
-        Require(loaded.Roots.SequenceEqual(new uint[] { 1, 2, 1, 0 }), "Decoded root ordering.");
-        var hero = loaded.Heroes[1];
-        var item = loaded.Items[2];
+        Require(loaded.Roots.Select(id => id.Value).SequenceEqual(new uint[] { 1, 2, 1, 0 }), "Decoded root ordering.");
+        var hero = loaded.Heroes[new ObjectId(1)];
+        var item = loaded.Items[new ObjectId(2)];
         string? shared = loaded.Strings.ResolveString(hero.Segment0Field1);
         string? distinct = loaded.Strings.ResolveString(item.Segment0Field2);
         Require(shared == "Ada" && distinct == "Ada" && !ReferenceEquals(shared, distinct),

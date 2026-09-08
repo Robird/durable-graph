@@ -9,44 +9,44 @@ public sealed class RuntimeReferenceGraphTests {
         DurableSchema newBase = new("new-base", 1);
         DurableSchema oldDerived = new("derived", 1, [], oldBase);
         DurableSchema newDerived = new("derived", 2, [], newBase);
-        StateReferenceValidator stored = new(new Dictionary<uint, ObjectStateRecord> {
-            [1] = new(1, oldDerived, 0), [2] = new(2, "text"),
+        StateReferenceValidator stored = new(new Dictionary<ObjectId, ObjectStateRecord> {
+            [new ObjectId(1)] = new(new ObjectId(1), oldDerived, 0), [new ObjectId(2)] = new(new ObjectId(2), "text"),
         });
-        StateReferenceValidator current = new(new Dictionary<uint, ObjectStateRecord> {
-            [1] = new(1, newDerived, 0), [2] = new(2, "text"),
+        StateReferenceValidator current = new(new Dictionary<ObjectId, ObjectStateRecord> {
+            [new ObjectId(1)] = new(new ObjectId(1), newDerived, 0), [new ObjectId(2)] = new(new ObjectId(2), "text"),
         });
-        stored.VisitDurable(1, "old-base");
-        stored.VisitDurable(1, "derived");
-        current.VisitDurable(1, "new-base");
-        Assert.Throws<InvalidDataException>(() => current.VisitDurable(1, "old-base"));
-        Assert.Throws<InvalidDataException>(() => stored.VisitDurable(1, "new-base"));
-        Assert.Throws<InvalidDataException>(() => stored.VisitDurable(1, "Old-base"));
-        Assert.Throws<InvalidDataException>(() => stored.VisitDurable(2, "derived"));
-        Assert.Throws<InvalidDataException>(() => stored.VisitDurable(3, "derived"));
-        Assert.Throws<InvalidDataException>(() => stored.VisitString(1));
-        Assert.Throws<InvalidDataException>(() => stored.VisitString(3));
-        stored.VisitString(2);
-        stored.VisitString(0);
-        stored.VisitDurable(0, "unregistered-family");
-        Assert.Throws<ArgumentException>(() => stored.VisitDurable(0, " "));
+        stored.VisitDurable(new ObjectId(1), "old-base");
+        stored.VisitDurable(new ObjectId(1), "derived");
+        current.VisitDurable(new ObjectId(1), "new-base");
+        Assert.Throws<InvalidDataException>(() => current.VisitDurable(new ObjectId(1), "old-base"));
+        Assert.Throws<InvalidDataException>(() => stored.VisitDurable(new ObjectId(1), "new-base"));
+        Assert.Throws<InvalidDataException>(() => stored.VisitDurable(new ObjectId(1), "Old-base"));
+        Assert.Throws<InvalidDataException>(() => stored.VisitDurable(new ObjectId(2), "derived"));
+        Assert.Throws<InvalidDataException>(() => stored.VisitDurable(new ObjectId(3), "derived"));
+        Assert.Throws<InvalidDataException>(() => stored.VisitString(new ObjectId(1)));
+        Assert.Throws<InvalidDataException>(() => stored.VisitString(new ObjectId(3)));
+        stored.VisitString(new ObjectId(2));
+        stored.VisitString(new ObjectId(0));
+        stored.VisitDurable(new ObjectId(0), "unregistered-family");
+        Assert.Throws<ArgumentException>(() => stored.VisitDurable(new ObjectId(0), " "));
     }
 
     [Fact]
     public void ObjectReadTableCopiesDirectoryAndResolvesSharedTypedInstances() {
         Node first = new(), second = new();
-        Dictionary<uint, DurableBase> source = new() { [1] = first, [2] = second };
+        Dictionary<ObjectId, DurableBase> source = new() { [new ObjectId(1)] = first, [new ObjectId(2)] = second };
         string text = new(['x']);
-        ObjectReadTable table = new(StringReadTable.FromDecoded([(3, text)]), source);
+        ObjectReadTable table = new(StringReadTable.FromDecoded([(new ObjectId(3), text)]), source);
         source.Clear();
-        Assert.Same(first, table.ResolveDurable<Node>(1));
-        Assert.Same(first, table.ResolveDurable<DurableBase>(1));
-        Assert.NotSame(table.ResolveDurable<Node>(1), table.ResolveDurable<Node>(2));
-        Assert.Same(text, table.ResolveString(3));
-        Assert.Null(table.ResolveDurable<Node>(0));
-        Assert.Null(table.ResolveString(0));
-        Assert.Throws<InvalidDataException>(() => table.ResolveDurable<UnknownNode>(1));
-        Assert.Throws<InvalidDataException>(() => table.ResolveDurable<Node>(3));
-        Assert.Throws<InvalidDataException>(() => table.ResolveString(1));
+        Assert.Same(first, table.ResolveDurable<Node>(new ObjectId(1)));
+        Assert.Same(first, table.ResolveDurable<DurableBase>(new ObjectId(1)));
+        Assert.NotSame(table.ResolveDurable<Node>(new ObjectId(1)), table.ResolveDurable<Node>(new ObjectId(2)));
+        Assert.Same(text, table.ResolveString(new ObjectId(3)));
+        Assert.Null(table.ResolveDurable<Node>(new ObjectId(0)));
+        Assert.Null(table.ResolveString(new ObjectId(0)));
+        Assert.Throws<InvalidDataException>(() => table.ResolveDurable<UnknownNode>(new ObjectId(1)));
+        Assert.Throws<InvalidDataException>(() => table.ResolveDurable<Node>(new ObjectId(3)));
+        Assert.Throws<InvalidDataException>(() => table.ResolveString(new ObjectId(1)));
     }
 
     [Fact]
@@ -54,11 +54,11 @@ public sealed class RuntimeReferenceGraphTests {
         Node instance = new();
         StringReadTable strings = StringReadTable.FromDecoded([]);
         Assert.Throws<InvalidDataException>(() => new ObjectReadTable(strings,
-            new Dictionary<uint, DurableBase> { [1] = instance, [2] = instance }));
+            new Dictionary<ObjectId, DurableBase> { [new ObjectId(1)] = instance, [new ObjectId(2)] = instance }));
         Assert.Throws<InvalidDataException>(() => new ObjectReadTable(strings,
-            new Dictionary<uint, DurableBase> { [0] = instance }));
+            new Dictionary<ObjectId, DurableBase> { [new ObjectId(0)] = instance }));
         Assert.Throws<InvalidDataException>(() => new ObjectReadTable(strings,
-            new Dictionary<uint, DurableBase> { [1] = null! }));
+            new Dictionary<ObjectId, DurableBase> { [new ObjectId(1)] = null! }));
     }
 
     [Fact]
@@ -75,7 +75,7 @@ public sealed class RuntimeReferenceGraphTests {
         using CaptureContext context = session.BeginCapture(models);
         // Mutating the caller's catalog after BeginCapture cannot remove the selected binding.
         models.Clear();
-        uint root = model.AddRoot(context, first);
+        ObjectId root = model.AddRoot(context, first);
         CapturedGraph graph = context.Seal();
         Assert.Equal(root, Assert.Single(graph.RootIds));
         Assert.Equal(2, calls);
@@ -104,7 +104,7 @@ public sealed class RuntimeReferenceGraphTests {
         CapturedGraph graph = context.Seal();
         Assert.Equal(count, graph.Objects.Count);
         Assert.Single(graph.RootIds);
-        Assert.Equal(0u, graph.Objects[^1].GetState<NodeState>().Next);
+        Assert.Equal(new ObjectId(0u), graph.Objects[^1].GetState<NodeState>().Next);
     }
 
     [Fact]
@@ -154,7 +154,7 @@ public sealed class RuntimeReferenceGraphTests {
         internal DurableBase? Alias;
     }
     private sealed class UnknownNode : Node { }
-    private readonly record struct NodeState(byte Value, uint Next, uint Alias);
+    private readonly record struct NodeState(byte Value, ObjectId Next, ObjectId Alias);
 
     private static StateModelBinding Model(string schemaId = "node", string? aliasNominal = null, Action? onCapture = null) {
         DurableSchema schema = new(schemaId, 1,

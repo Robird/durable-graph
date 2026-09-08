@@ -23,7 +23,7 @@ public sealed class GraphRepositoryTests : IDisposable {
         FrameAddress first;
         FrameAddress second;
         FrameAddress third;
-        uint rootId;
+        ObjectId rootId;
         using (GraphRepository repository = CreateRepository()) {
             using GraphSession<Node> session = repository.Create(world, Models());
             Assert.Null(repository.HeadRevisionAddress);
@@ -51,7 +51,7 @@ public sealed class GraphRepositoryTests : IDisposable {
             Assert.Equal(first, secondRevision.ParentRevisionAddress);
             ObjectVersionRecord secondWrite = Assert.Single(secondRevision.LocalObjects);
             Assert.Equal(ObjectVersionKind.Delta, secondWrite.Kind);
-            Assert.NotEqual(rootId, secondWrite.ObjectId); // Only the child changed.
+            Assert.NotEqual(rootId.Value, secondWrite.ObjectId); // Only the child changed.
             StateRevision thirdRevision = store.Read(third);
             Assert.Equal(second, thirdRevision.ParentRevisionAddress);
             ObjectVersionRecord thirdWrite = Assert.Single(thirdRevision.LocalObjects);
@@ -98,7 +98,7 @@ public sealed class GraphRepositoryTests : IDisposable {
         FrameAddress first;
         FrameAddress removed;
         FrameAddress reattached;
-        uint rootId;
+        ObjectId rootId;
         using (GraphRepository repository = CreateRepository()) {
             using GraphSession<Node> session = repository.Create(world, Models());
             first = session.Commit(NoRebase);
@@ -111,9 +111,9 @@ public sealed class GraphRepositoryTests : IDisposable {
         }
         using SegmentStore segments = OpenState();
         StateRevisionStore store = new(segments);
-        uint oldId = Assert.Single(store.ReadLiveObjectHeadMap(first).Keys, id => id != rootId);
+        uint oldId = Assert.Single(store.ReadLiveObjectHeadMap(first).Keys, id => id != rootId.Value);
         Assert.Equal(new[] { oldId }, store.Read(removed).RemovedObjectIds);
-        ObjectVersionRecord fresh = Assert.Single(store.Read(reattached).LocalObjects, row => row.ObjectId != rootId);
+        ObjectVersionRecord fresh = Assert.Single(store.Read(reattached).LocalObjects, row => row.ObjectId != rootId.Value);
         Assert.True(fresh.ObjectId > oldId);
         Assert.Equal(ObjectVersionKind.Base, fresh.Kind);
         Assert.DoesNotContain(oldId, store.ReadLiveObjectHeadMap(reattached).Keys);
@@ -352,7 +352,7 @@ public sealed class GraphRepositoryTests : IDisposable {
     [InlineData("missing-world", "Published World is absent from the selected Revision.")]
     public void ValidPublicationFramesWithInvalidStateRelationshipFailWithoutModifyingFiles(string damage, string expectedError) {
         FrameAddress first;
-        uint worldId;
+        ObjectId worldId;
         using (GraphRepository repository = CreateRepository()) {
             using GraphSession<Node> session = repository.Create(new Node { Value = 1 }, Models());
             first = session.Commit(NoRebase);
@@ -363,7 +363,7 @@ public sealed class GraphRepositoryTests : IDisposable {
             StateRevisionStore store = new(segments);
             StateRevision next = damage == "wrong-state-parent"
                 ? StateRevision.CreateObjectHeadMapBase(null, store.Read(first).LocalObjects, [])
-                : StateRevision.CreateObjectHeadMapDelta(first, [], [worldId]);
+                : StateRevision.CreateObjectHeadMapDelta(first, [], [worldId.Value]);
             invalidCandidate = store.AppendDurably(next);
         }
         using (IRbfFile publication = RbfFile.OpenExisting(Path.Combine(_root, "publication.rbf"))) {
@@ -427,7 +427,9 @@ public sealed class GraphRepositoryTests : IDisposable {
         internal string? Text;
         internal byte Value;
     }
-    private readonly record struct State(uint Left, uint Right, uint Text, byte Value);
+    private readonly record struct State(ObjectId Left, ObjectId Right, ObjectId Text, byte Value) {
+        internal State(uint left, uint right, uint text, byte value) : this(new ObjectId(left), new ObjectId(right), new ObjectId(text), value) { }
+    }
 
     private static StateModelRegistry Models(Action<Node>? onCapture = null, bool upgrade = false) {
         DurableSchema current = upgrade ? new(Schema.SchemaId, 2, Schema.Fields.ToArray()) : Schema;
@@ -465,9 +467,9 @@ public sealed class GraphRepositoryTests : IDisposable {
     private static PreparedBaseBody Base(State state) {
         ArrayBufferWriter<byte> bytes = new();
         BinaryPayloadWriter writer = new(bytes);
-        writer.WriteUInt32(state.Left);
-        writer.WriteUInt32(state.Right);
-        writer.WriteUInt32(state.Text);
+        writer.WriteUInt32(state.Left.Value);
+        writer.WriteUInt32(state.Right.Value);
+        writer.WriteUInt32(state.Text.Value);
         writer.WriteByte(state.Value);
         return new(bytes.WrittenSpan);
     }
@@ -477,17 +479,17 @@ public sealed class GraphRepositoryTests : IDisposable {
         ArrayBufferWriter<byte> bytes = new();
         BinaryPayloadWriter writer = new(bytes);
         writer.WriteByte(mask);
-        if ((mask & 1) != 0) writer.WriteUInt32(next.Left);
-        if ((mask & 2) != 0) writer.WriteUInt32(next.Right);
-        if ((mask & 4) != 0) writer.WriteUInt32(next.Text);
+        if ((mask & 1) != 0) writer.WriteUInt32(next.Left.Value);
+        if ((mask & 2) != 0) writer.WriteUInt32(next.Right.Value);
+        if ((mask & 4) != 0) writer.WriteUInt32(next.Text.Value);
         if ((mask & 8) != 0) writer.WriteByte(next.Value);
         return new(mask != 0, bytes.WrittenSpan);
     }
     private static State Apply(ref BinaryPayloadReader input, State prior) {
         byte mask = input.ReadByte();
-        return new((mask & 1) != 0 ? input.ReadUInt32() : prior.Left,
-            (mask & 2) != 0 ? input.ReadUInt32() : prior.Right,
-            (mask & 4) != 0 ? input.ReadUInt32() : prior.Text,
+        return new((mask & 1) != 0 ? new ObjectId(input.ReadUInt32()) : prior.Left,
+            (mask & 2) != 0 ? new ObjectId(input.ReadUInt32()) : prior.Right,
+            (mask & 4) != 0 ? new ObjectId(input.ReadUInt32()) : prior.Text,
             (mask & 8) != 0 ? input.ReadByte() : prior.Value);
     }
     private GraphRepository CreateRepository() => GraphRepository.CreateNew(_root,

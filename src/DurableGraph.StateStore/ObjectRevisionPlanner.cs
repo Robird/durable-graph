@@ -15,7 +15,7 @@ internal static class ObjectRevisionPlanner {
         ArgumentNullException.ThrowIfNull(store);
         ArgumentNullException.ThrowIfNull(objects);
         PreparedObject[] rows = objects.ToArray();
-        Dictionary<uint, PreparedObject> byId = [];
+        Dictionary<ObjectId, PreparedObject> byId = [];
         foreach (PreparedObject row in rows) {
             if (row is null) {
                 throw new ArgumentException("Prepared objects cannot contain null rows.", nameof(objects));
@@ -26,9 +26,9 @@ internal static class ObjectRevisionPlanner {
         }
         Array.Sort(rows, static (left, right) => left.ObjectId.CompareTo(right.ObjectId));
 
-        IReadOnlyDictionary<uint, FrameAddress> parentHeads = parentRevisionAddress is { } parent
-            ? store.ReadLiveObjectHeadMap(parent)
-            : new Dictionary<uint, FrameAddress>();
+        IReadOnlyDictionary<ObjectId, FrameAddress> parentHeads = parentRevisionAddress is { } parent
+            ? store.ReadLiveObjectHeadMap(parent).ToDictionary(static pair => new ObjectId(pair.Key), static pair => pair.Value)
+            : new Dictionary<ObjectId, FrameAddress>();
         foreach (PreparedObject row in rows) {
             bool exists = parentHeads.TryGetValue(row.ObjectId, out FrameAddress head);
             if (row.ChangeKind == ObjectSaveChangeKind.Insert) {
@@ -51,7 +51,7 @@ internal static class ObjectRevisionPlanner {
                 : null;
             // TODO(DB-029): Measure repeated object-chain reads before adding batch/cache support.
             long? reconstructionBytes = row.ChangeKind is ObjectSaveChangeKind.Update or ObjectSaveChangeKind.NoChange
-                ? store.ReadObjectVersionChain(parentRevisionAddress!.Value, row.ObjectId).ReconstructionPayloadBytes
+                ? store.ReadObjectVersionChain(parentRevisionAddress!.Value, row.ObjectId.Value).ReconstructionPayloadBytes
                 : null;
             estimates[index] = new(row.ObjectId, row.ChangeKind,
                 ObjectVersionPayloadSize.GetBasePayloadBytes(row.EncodedBaseBody.Body.Length), deltaBytes, reconstructionBytes);
@@ -62,12 +62,12 @@ internal static class ObjectRevisionPlanner {
         foreach (ObjectWriteDecision decision in plan.Writes) {
             PreparedObject row = byId[decision.ObjectId];
             records.Add(decision.Mode == ObjectRepresentationMode.Base
-                ? ObjectVersionRecord.CreateBase(row.ObjectId, row.EncodedBaseBody.Body)
-                : ObjectVersionRecord.CreateDelta(row.ObjectId, row.PriorAddress!.Value, row.DeltaBody!.Body));
+                ? ObjectVersionRecord.CreateBase(row.ObjectId.Value, row.EncodedBaseBody.Body)
+                : ObjectVersionRecord.CreateDelta(row.ObjectId.Value, row.PriorAddress!.Value, row.DeltaBody!.Body));
         }
 
         StateRevision revision = parentRevisionAddress is { } exactParent
-            ? StateRevision.CreateObjectHeadMapDelta(exactParent, records, parentHeads.Keys.Where(id => !byId.ContainsKey(id)))
+            ? StateRevision.CreateObjectHeadMapDelta(exactParent, records, parentHeads.Keys.Where(id => !byId.ContainsKey(id)).Select(static id => id.Value))
             : StateRevision.CreateObjectHeadMapBase(null, records, []);
         return new(revision, estimates, plan);
     }

@@ -134,7 +134,7 @@ public abstract partial class StateBindingContext {
     private sealed class UpgradeDependencies(KeyValuePair<string, ValueUpgradePlan>[] plans) {
         internal int Height { get; } = plans.Length == 0 ? 0 : plans.Max(static item => item.Value.Height);
 
-        internal UpgradeContext CreateContext(uint objectId, DurableSchema sourceObject, DurableSchema targetObject,
+        internal UpgradeContext CreateContext(ObjectId objectId, DurableSchema sourceObject, DurableSchema targetObject,
             Dictionary<ValueUpgradePlan, Delegate>? invocationTools = null) {
             invocationTools ??= new(ReferenceEqualityComparer.Instance);
             Dictionary<string, Delegate> tools = new(StringComparer.Ordinal);
@@ -164,14 +164,14 @@ public abstract partial class StateBindingContext {
             Dependencies.CheckRegistered(context, visited);
         }
 
-        internal abstract Delegate CreateTool(uint objectId, DurableSchema sourceObject, DurableSchema targetObject,
+        internal abstract Delegate CreateTool(ObjectId objectId, DurableSchema sourceObject, DurableSchema targetObject,
             Dictionary<ValueUpgradePlan, Delegate> invocationTools);
     }
 
     private sealed class TypedValueUpgradePlan<TPrior, TNext>(DurableFieldInfo source, DurableFieldInfo target,
         UpgradeAction<TPrior, TNext> action, UpgradeDependencies dependencies) : ValueUpgradePlan(source, target, dependencies)
         where TPrior : unmanaged where TNext : unmanaged {
-        internal override Delegate CreateTool(uint objectId, DurableSchema sourceObject, DurableSchema targetObject,
+        internal override Delegate CreateTool(ObjectId objectId, DurableSchema sourceObject, DurableSchema targetObject,
             Dictionary<ValueUpgradePlan, Delegate> invocationTools) {
             // Invocation state is built here, never retained in snapshot plans. Each child
             // receives its own local table while retaining the current owner edge facts.

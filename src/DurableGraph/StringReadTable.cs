@@ -7,9 +7,9 @@ namespace Atelia.DurableGraph;
 /// nonempty strings with different IDs retain distinct instances. This is not a graph loader.
 /// </summary>
 public sealed class StringReadTable {
-    private readonly Dictionary<uint, string> _strings;
+    private readonly Dictionary<ObjectId, string> _strings;
 
-    private StringReadTable(Dictionary<uint, string> strings) {
+    private StringReadTable(Dictionary<ObjectId, string> strings) {
         _strings = strings;
     }
 
@@ -19,12 +19,12 @@ public sealed class StringReadTable {
     /// IDs must be nonzero and unique. A failure returns no partially decoded table.
     /// The caller separately validates the full object directory and its exact schema bindings.
     /// </summary>
-    public static StringReadTable Decode(IEnumerable<(uint Id, ReadOnlyMemory<byte> Body)> records) {
+    public static StringReadTable Decode(IEnumerable<(ObjectId Id, ReadOnlyMemory<byte> Body)> records) {
         ArgumentNullException.ThrowIfNull(records);
-        Dictionary<uint, string> strings = [];
+        Dictionary<ObjectId, string> strings = [];
         HashSet<string> nonemptyInstances = new(ReferenceEqualityComparer.Instance);
-        foreach ((uint id, ReadOnlyMemory<byte> body) in records) {
-            if (id == 0 || strings.ContainsKey(id)) {
+        foreach ((ObjectId id, ReadOnlyMemory<byte> body) in records) {
+            if (id.IsNull || strings.ContainsKey(id)) {
                 throw new InvalidDataException("String object IDs must be nonzero and unique.");
             }
 
@@ -37,22 +37,22 @@ public sealed class StringReadTable {
     }
 
     /// <summary>Copies completed decoded bindings without decoding or replacing nonempty instances.</summary>
-    internal static StringReadTable FromDecoded(IEnumerable<(uint Id, string Value)> records) {
+    internal static StringReadTable FromDecoded(IEnumerable<(ObjectId Id, string Value)> records) {
         ArgumentNullException.ThrowIfNull(records);
-        Dictionary<uint, string> strings = [];
+        Dictionary<ObjectId, string> strings = [];
         HashSet<string> nonemptyInstances = new(ReferenceEqualityComparer.Instance);
-        foreach ((uint id, string value) in records) {
+        foreach ((ObjectId id, string value) in records) {
             AddDecoded(strings, nonemptyInstances, id, value);
         }
         return new(strings);
     }
 
     private static void AddDecoded(
-        Dictionary<uint, string> strings,
+        Dictionary<ObjectId, string> strings,
         HashSet<string> nonemptyInstances,
-        uint id,
+        ObjectId id,
         string value) {
-        if (id == 0 || strings.ContainsKey(id)) {
+        if (id.IsNull || strings.ContainsKey(id)) {
             throw new InvalidDataException("String object IDs must be nonzero and unique.");
         }
         if (value is null) {
@@ -67,8 +67,8 @@ public sealed class StringReadTable {
     }
 
     /// <summary>Resolves a string ID in this view. Zero is null; any other absent ID is invalid.</summary>
-    public string? ResolveString(uint id) {
-        if (id == 0) {
+    public string? ResolveString(ObjectId id) {
+        if (id.IsNull) {
             return null;
         }
         return _strings.TryGetValue(id, out string? value)

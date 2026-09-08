@@ -17,7 +17,7 @@ public sealed class ObjectRevisionPlannerTests : IDisposable {
         using SegmentStore segments = NewStore();
         StateRevisionStore store = new(segments);
         byte[] bytes = [10, 20];
-        List<PreparedObject> rows = [PreparedObject.New(2, new(bytes)), PreparedObject.New(1, new([]))];
+        List<PreparedObject> rows = [PreparedObject.New(new ObjectId(2), new(bytes)), PreparedObject.New(new ObjectId(1), new([]))];
         PreparedObjectRevision result = Plan(store, null, rows);
         bytes.AsSpan().Fill(99);
         rows.Clear();
@@ -40,8 +40,8 @@ public sealed class ObjectRevisionPlannerTests : IDisposable {
         StateRevisionStore store = new(segments);
         FrameAddress parent = store.Append(StateRevision.CreateObjectHeadMapBase(null, [B(1, new byte[100]), B(2, [7])], []));
         PreparedObjectRevision result = Plan(store, parent, [
-            PreparedObject.Compared(1, parent, Base(100), new(false, [0, 0])),
-            PreparedObject.Unchanged(2, parent, new([7])),
+            PreparedObject.Compared(new ObjectId(1), parent, Base(100), new(false, [0, 0])),
+            PreparedObject.Unchanged(new ObjectId(2), parent, new([7])),
         ]);
         Assert.Empty(result.Revision.LocalObjects);
         Assert.Empty(result.Revision.RemovedObjectIds);
@@ -63,9 +63,9 @@ public sealed class ObjectRevisionPlannerTests : IDisposable {
         FrameAddress parent = store.Append(StateRevision.CreateObjectHeadMapDelta(first, [D(1, first, [4])], []));
         byte[] deltaBytes = [5];
         PreparedObjectRevision result = Plan(store, parent, [
-            PreparedObject.Compared(1, parent, Base(100), new(true, deltaBytes)),
-            PreparedObject.Unchanged(2, first, new([2])),
-            PreparedObject.New(4, new([4])),
+            PreparedObject.Compared(new ObjectId(1), parent, Base(100), new(true, deltaBytes)),
+            PreparedObject.Unchanged(new ObjectId(2), first, new([2])),
+            PreparedObject.New(new ObjectId(4), new([4])),
         ]);
         deltaBytes[0] = 99;
         Assert.Equal(ObjectHeadMapKind.Delta, result.Revision.ObjectHeadMapKind);
@@ -103,7 +103,7 @@ public sealed class ObjectRevisionPlannerTests : IDisposable {
         StateRevisionStore store = new(segments);
         FrameAddress first = store.Append(StateRevision.CreateObjectHeadMapBase(null, [B(1, new byte[20]), B(2, new byte[20])], []));
         FrameAddress parent = store.Append(StateRevision.CreateObjectHeadMapDelta(first, [D(1, first, new byte[30]), D(2, first, new byte[30])], []));
-        PreparedObject[] rows = [PreparedObject.Unchanged(1, parent, Base(20)), PreparedObject.Unchanged(2, parent, Base(20))];
+        PreparedObject[] rows = [PreparedObject.Unchanged(new ObjectId(1), parent, Base(20)), PreparedObject.Unchanged(new ObjectId(2), parent, Base(20))];
         Assert.Empty(Plan(store, parent, rows, 10, 100).Revision.LocalObjects);
         Assert.Equal(new uint[] { 1 }, Plan(store, parent, rows, 1, 1).Revision.LocalObjectIds);
         PreparedObjectRevision both = Plan(store, parent, rows, 1, 100);
@@ -123,7 +123,7 @@ public sealed class ObjectRevisionPlannerTests : IDisposable {
             [B(1, new byte[20]), B(2, new byte[20]), B(3, new byte[1000])], []));
         FrameAddress parent = store.Append(StateRevision.CreateObjectHeadMapDelta(first, [D(1, first, new byte[30]), D(2, first, new byte[30])], []));
         PreparedObjectRevision result = Plan(store, parent, [
-            PreparedObject.Unchanged(1, parent, Base(20)), PreparedObject.Unchanged(2, parent, Base(20)),
+            PreparedObject.Unchanged(new ObjectId(1), parent, Base(20)), PreparedObject.Unchanged(new ObjectId(2), parent, Base(20)),
         ], 1, 10);
         Assert.Equal(new uint[] { 1 }, result.Revision.LocalObjectIds);
         Assert.Equal(new uint[] { 3 }, result.Revision.RemovedObjectIds);
@@ -139,7 +139,7 @@ public sealed class ObjectRevisionPlannerTests : IDisposable {
         int actual = store.ReadObjectVersionChain(actualDelta, 1).Records[1].ObjectVersionPayloadBytes;
         // With a one-byte body length, Base body = actual-1 gives B=actual+1.
         PreparedObjectRevision result = Plan(store, original,
-            [PreparedObject.Compared(1, original, Base(actual - 1), new(true, [2]))], int.MaxValue, 1);
+            [PreparedObject.Compared(new ObjectId(1), original, Base(actual - 1), new(true, [2]))], int.MaxValue, 1);
         ObjectSaveEstimate estimate = Assert.Single(result.Estimates);
         Assert.True(actual < estimate.BasePayloadBytes);
         Assert.True(estimate.BasePayloadBytes <= estimate.DeltaPayloadBytesUpperBound);
@@ -156,10 +156,10 @@ public sealed class ObjectRevisionPlannerTests : IDisposable {
         FrameAddress wrongTicket = new(parent.FileNumber, SizedPtr.Create(parent.FrameTicket.Offset, parent.FrameTicket.Length + 4));
         uint active = segments.ActiveSegmentNumber;
         foreach (FrameAddress wrong in new[] { first, other, wrongTicket }) {
-            Assert.Throws<ArgumentException>(() => Plan(store, parent, [PreparedObject.BaseOnlyUpdate(1, wrong, new([4]))]));
+            Assert.Throws<ArgumentException>(() => Plan(store, parent, [PreparedObject.BaseOnlyUpdate(new ObjectId(1), wrong, new([4]))]));
             Assert.Equal(active, segments.ActiveSegmentNumber);
         }
-        PreparedObjectRevision good = Plan(store, parent, [PreparedObject.BaseOnlyUpdate(1, parent, new([4]))]);
+        PreparedObjectRevision good = Plan(store, parent, [PreparedObject.BaseOnlyUpdate(new ObjectId(1), parent, new([4]))]);
         Assert.Equal(active, segments.ActiveSegmentNumber);
         FrameAddress appended = store.Append(good.Revision);
         Assert.Equal(active + 1, appended.FileNumber);
@@ -172,16 +172,16 @@ public sealed class ObjectRevisionPlannerTests : IDisposable {
         StateRevisionStore store = new(segments);
         FrameAddress parent = store.Append(StateRevision.CreateObjectHeadMapBase(null, [B(1, [1])], []));
         PreparedObject[][] invalid = [
-            [PreparedObject.New(1, new([1]))],
-            [PreparedObject.Unchanged(2, parent, new([2]))],
-            [PreparedObject.New(2, new([2])), PreparedObject.New(2, new([2]))],
+            [PreparedObject.New(new ObjectId(1), new([1]))],
+            [PreparedObject.Unchanged(new ObjectId(2), parent, new([2]))],
+            [PreparedObject.New(new ObjectId(2), new([2])), PreparedObject.New(new ObjectId(2), new([2]))],
             [null!],
         ];
         long before = Tail(segments);
         foreach (PreparedObject[] rows in invalid) {
             Assert.Throws<ArgumentException>(() => Plan(store, parent, rows));
         }
-        Assert.Throws<ArgumentException>(() => Plan(store, null, [PreparedObject.Unchanged(1, parent, new([1]))]));
+        Assert.Throws<ArgumentException>(() => Plan(store, null, [PreparedObject.Unchanged(new ObjectId(1), parent, new([1]))]));
         Assert.Throws<ArgumentNullException>(() => Plan(null!, parent, []));
         Assert.Throws<ArgumentNullException>(() => Plan(store, parent, null!));
         Assert.Throws<ArgumentOutOfRangeException>(() => Plan(store, default(FrameAddress), []));
@@ -198,10 +198,10 @@ public sealed class ObjectRevisionPlannerTests : IDisposable {
         FrameAddress latest = store.Append(StateRevision.CreateObjectHeadMapDelta(first, [B(1, [2])], []));
         FrameAddress corrupt = AppendWrongPrior(segments, latest, first);
         Assert.Throws<InvalidDataException>(() => store.ReadObjectVersionChain(corrupt, 1));
-        Assert.Throws<InvalidDataException>(() => Plan(store, corrupt, [PreparedObject.Unchanged(1, corrupt, new([3]))]));
-        Assert.Throws<InvalidDataException>(() => Plan(store, corrupt, [PreparedObject.Compared(1, corrupt, new([3]), new(true, [3]))]));
-        Assert.Throws<InvalidDataException>(() => Plan(store, corrupt, [PreparedObject.Compared(1, corrupt, new([3]), new(false, [0]))]));
-        PreparedObjectRevision result = Plan(store, corrupt, [PreparedObject.BaseOnlyUpdate(1, corrupt, new([3]))]);
+        Assert.Throws<InvalidDataException>(() => Plan(store, corrupt, [PreparedObject.Unchanged(new ObjectId(1), corrupt, new([3]))]));
+        Assert.Throws<InvalidDataException>(() => Plan(store, corrupt, [PreparedObject.Compared(new ObjectId(1), corrupt, new([3]), new(true, [3]))]));
+        Assert.Throws<InvalidDataException>(() => Plan(store, corrupt, [PreparedObject.Compared(new ObjectId(1), corrupt, new([3]), new(false, [0]))]));
+        PreparedObjectRevision result = Plan(store, corrupt, [PreparedObject.BaseOnlyUpdate(new ObjectId(1), corrupt, new([3]))]);
         ObjectSaveEstimate estimate = Assert.Single(result.Estimates);
         Assert.Equal(ObjectSaveChangeKind.BaseOnlyUpdate, estimate.ChangeKind);
         Assert.Null(estimate.ReconstructionPayloadBytes);
@@ -216,7 +216,7 @@ public sealed class ObjectRevisionPlannerTests : IDisposable {
         using SegmentStore segments = NewStore();
         StateRevisionStore store = new(segments);
         FrameAddress parent = store.Append(StateRevision.CreateObjectHeadMapBase(null, [B(1, new byte[100])], []));
-        PreparedObjectRevision result = Plan(store, parent, [PreparedObject.Compared(1, parent, Base(100), new(true, [2]))]);
+        PreparedObjectRevision result = Plan(store, parent, [PreparedObject.Compared(new ObjectId(1), parent, Base(100), new(true, [2]))]);
         FrameAddress other = store.Append(StateRevision.CreateObjectHeadMapDelta(parent, [B(1, [9])], []));
         FrameAddress saved = store.Append(result.Revision);
         Assert.Equal(parent, store.Read(saved).ParentRevisionAddress);
@@ -227,14 +227,14 @@ public sealed class ObjectRevisionPlannerTests : IDisposable {
     [Fact]
     public void Factories_reject_invalid_ids_addresses_and_missing_contents_without_mutable_shape_flags() {
         FrameAddress valid = new(1, SizedPtr.Create(8, 4));
-        Assert.Throws<ArgumentOutOfRangeException>(() => PreparedObject.New(0, new([])));
-        Assert.Throws<ArgumentOutOfRangeException>(() => PreparedObject.Unchanged(1, default, new([])));
-        Assert.Throws<ArgumentOutOfRangeException>(() => PreparedObject.Compared(1, default, new([]), new(true, [])));
-        Assert.Throws<ArgumentOutOfRangeException>(() => PreparedObject.BaseOnlyUpdate(1, default, new([])));
-        Assert.Throws<ArgumentNullException>(() => PreparedObject.New(1, null!));
-        Assert.Throws<ArgumentNullException>(() => PreparedObject.Compared(1, valid, new([]), null!));
-        Assert.Equal(ObjectSaveChangeKind.Update, PreparedObject.Compared(1, valid, new([]), new(true, [])).ChangeKind);
-        Assert.Equal(ObjectSaveChangeKind.NoChange, PreparedObject.Compared(1, valid, new([]), new(false, [0])).ChangeKind);
+        Assert.Throws<ArgumentOutOfRangeException>(() => PreparedObject.New(new ObjectId(0), new([])));
+        Assert.Throws<ArgumentOutOfRangeException>(() => PreparedObject.Unchanged(new ObjectId(1), default, new([])));
+        Assert.Throws<ArgumentOutOfRangeException>(() => PreparedObject.Compared(new ObjectId(1), default, new([]), new(true, [])));
+        Assert.Throws<ArgumentOutOfRangeException>(() => PreparedObject.BaseOnlyUpdate(new ObjectId(1), default, new([])));
+        Assert.Throws<ArgumentNullException>(() => PreparedObject.New(new ObjectId(1), null!));
+        Assert.Throws<ArgumentNullException>(() => PreparedObject.Compared(new ObjectId(1), valid, new([]), null!));
+        Assert.Equal(ObjectSaveChangeKind.Update, PreparedObject.Compared(new ObjectId(1), valid, new([]), new(true, [])).ChangeKind);
+        Assert.Equal(ObjectSaveChangeKind.NoChange, PreparedObject.Compared(new ObjectId(1), valid, new([]), new(false, [0])).ChangeKind);
         Assert.DoesNotContain(typeof(PreparedObject).GetProperties(System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic), p => p.SetMethod is not null);
     }
 

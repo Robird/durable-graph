@@ -34,26 +34,26 @@ public sealed class RevisionDecoderTests : IDisposable {
             decoded = RevisionDecoder.Read(store, schemas, latest, readers);
             Assert.Equal(schemaTail, file.TailOffset);
             Assert.Equal(stateTail, Tail(segments));
-            Assert.Equal(new NodeState(4, 3), RevisionDecoder.Read(store, schemas, original, readers).GetRequired(1).GetState<NodeState>());
+            Assert.Equal(new NodeState(4, 3), RevisionDecoder.Read(store, schemas, original, readers).GetRequired(new ObjectId(1)).GetState<NodeState>());
         }
         Assert.Equal(latest, decoded.RevisionAddress);
-        Assert.Equal(new uint[] { 1, 2, 3, 4, 5, 6 }, decoded.Objects.Select(static row => row.Id));
-        Assert.Equal(new NodeState(9, 3), decoded.GetRequired(1).GetState<NodeState>());
-        Assert.Equal(new NodeState(5, 3), decoded.GetRequired(2).GetState<NodeState>());
-        Assert.Same(decoded.GetRequired(3).StringContent, decoded.Strings.ResolveString(3));
-        Assert.Same(decoded.Strings.ResolveString(3), decoded.Strings.ResolveString(decoded.GetRequired(2).GetState<NodeState>().TextId));
-        Assert.Equal(decoded.Strings.ResolveString(3), decoded.Strings.ResolveString(4));
-        Assert.NotSame(decoded.Strings.ResolveString(3), decoded.Strings.ResolveString(4));
-        Assert.Same(string.Empty, decoded.Strings.ResolveString(5));
-        Assert.Same(string.Empty, decoded.GetRequired(6).StringContent);
-        Assert.Null(decoded.Strings.ResolveString(0));
-        Assert.Throws<InvalidDataException>(() => decoded.GetRequired(0));
-        Assert.Throws<InvalidDataException>(() => decoded.GetRequired(99));
+        Assert.Equal(new uint[] { 1, 2, 3, 4, 5, 6 }, decoded.Objects.Select(static row => row.Id.Value));
+        Assert.Equal(new NodeState(9, 3), decoded.GetRequired(new ObjectId(1)).GetState<NodeState>());
+        Assert.Equal(new NodeState(5, 3), decoded.GetRequired(new ObjectId(2)).GetState<NodeState>());
+        Assert.Same(decoded.GetRequired(new ObjectId(3)).StringContent, decoded.Strings.ResolveString(new ObjectId(3)));
+        Assert.Same(decoded.Strings.ResolveString(new ObjectId(3)), decoded.Strings.ResolveString(decoded.GetRequired(new ObjectId(2)).GetState<NodeState>().TextId));
+        Assert.Equal(decoded.Strings.ResolveString(new ObjectId(3)), decoded.Strings.ResolveString(new ObjectId(4)));
+        Assert.NotSame(decoded.Strings.ResolveString(new ObjectId(3)), decoded.Strings.ResolveString(new ObjectId(4)));
+        Assert.Same(string.Empty, decoded.Strings.ResolveString(new ObjectId(5)));
+        Assert.Same(string.Empty, decoded.GetRequired(new ObjectId(6)).StringContent);
+        Assert.Null(decoded.Strings.ResolveString(new ObjectId(0)));
+        Assert.Throws<InvalidDataException>(() => decoded.GetRequired(new ObjectId(0)));
+        Assert.Throws<InvalidDataException>(() => decoded.GetRequired(new ObjectId(99)));
         Assert.False(decoded.Objects is System.Collections.ICollection);
         Assert.False(decoded.Objects is IList<ObjectStateRecord>);
-        NodeState copy = decoded.GetRequired(1).GetState<NodeState>();
+        NodeState copy = decoded.GetRequired(new ObjectId(1)).GetState<NodeState>();
         copy = copy with { Value = 99 };
-        Assert.Equal((byte)9, decoded.GetRequired(1).GetState<NodeState>().Value);
+        Assert.Equal((byte)9, decoded.GetRequired(new ObjectId(1)).GetState<NodeState>().Value);
     }
 
     [Fact]
@@ -65,7 +65,7 @@ public sealed class RevisionDecoderTests : IDisposable {
         FrameAddress address = store.Append(StateRevision.CreateObjectHeadMapBase(null, [], []));
         DecodedRevision result = RevisionDecoder.Read(store, schemas, address, new());
         Assert.Empty(result.Objects);
-        Assert.Null(result.Strings.ResolveString(0));
+        Assert.Null(result.Strings.ResolveString(new ObjectId(0)));
         Assert.Throws<ArgumentOutOfRangeException>(() => RevisionDecoder.Read(store, schemas, default, new()));
     }
 
@@ -91,8 +91,8 @@ public sealed class RevisionDecoderTests : IDisposable {
         Assert.Null(result);
         Assert.Equal(stateTail, Tail(segments));
         Assert.Equal(schemaTail, file.TailOffset);
-        Assert.Equal("value", previous.Strings.ResolveString(2));
-        Assert.Equal("value", RevisionDecoder.Read(store, schemas, original, readers).Strings.ResolveString(2));
+        Assert.Equal("value", previous.Strings.ResolveString(new ObjectId(2)));
+        Assert.Equal("value", RevisionDecoder.Read(store, schemas, original, readers).Strings.ResolveString(new ObjectId(2)));
     }
 
     [Theory]
@@ -158,7 +158,7 @@ public sealed class RevisionDecoderTests : IDisposable {
         Assert.Null(result);
         Assert.Equal(1, calls); // Object-first processing permits earlier pure callbacks.
         DecodedRevision retried = RevisionDecoder.Read(store, schemas, address, readers);
-        Assert.Equal((byte)8, retried.GetRequired(2).GetState<byte>());
+        Assert.Equal((byte)8, retried.GetRequired(new ObjectId(2)).GetState<byte>());
     }
 
     [Theory]
@@ -202,7 +202,9 @@ public sealed class RevisionDecoderTests : IDisposable {
         Assert.Throws<InvalidDataException>(() => RevisionDecoder.Read(store, schemas, corrupt, new()));
     }
 
-    private readonly record struct NodeState(byte Value, uint TextId);
+    private readonly record struct NodeState(byte Value, ObjectId TextId) {
+        internal NodeState(byte value, uint textId) : this(value, new ObjectId(textId)) { }
+    }
 
     private static StateReaderRegistry NodeReaders() {
         StateReaderRegistry readers = new();
@@ -212,7 +214,7 @@ public sealed class RevisionDecoderTests : IDisposable {
                 byte bitmap = reader.ReadByte();
                 if (bitmap == 0 || bitmap > 3) { throw new InvalidDataException("Invalid test DTO Delta bitmap."); }
                 byte value = (bitmap & 1) != 0 ? reader.ReadByte() : prior.Value;
-                uint textId = (bitmap & 2) != 0 ? reader.ReadUInt32() : prior.TextId;
+                ObjectId textId = (bitmap & 2) != 0 ? new ObjectId(reader.ReadUInt32()) : prior.TextId;
                 return new(value, textId);
             },
             static (in NodeState state, IStateReferenceVisitor visitor) => { visitor.VisitString(state.TextId); }));

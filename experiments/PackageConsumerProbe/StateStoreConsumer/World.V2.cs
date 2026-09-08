@@ -30,7 +30,7 @@ public sealed partial class World : DurableBase {
     internal static void Exercise(string directory) {
         string schemaPath = Path.Combine(directory, "schemas.rbf");
         string statePath = Path.Combine(directory, "state");
-        (FrameAddress oldRevision, uint worldId) = ReadV1Address(Path.Combine(directory, "v1-revision.txt"));
+        (FrameAddress oldRevision, ObjectId worldId) = ReadV1Address(Path.Combine(directory, "v1-revision.txt"));
         RbfSegmentStoreOptions options = new() { NewStoreLayout = RbfSegmentStoreLayout.Flat };
         FrameAddress upgradedRevision, finalRevision;
         StateModelRegistry models = new();
@@ -43,7 +43,7 @@ public sealed partial class World : DurableBase {
         using (SegmentStore segments = SegmentStore.OpenExisting(statePath, options)) {
             SchemaStore schemas = new(file);
             StateRevisionStore store = new(segments);
-            Require(store.ReadObjectVersionChain(oldRevision, worldId).Records.Count == 3, "Old Delta chain missing.");
+            Require(store.ReadObjectVersionChain(oldRevision, worldId.Value).Records.Count == 3, "Old Delta chain missing.");
             LoadedWorld<World> loaded = LoadedWorld.Load<World>(store, schemas, oldRevision, worldId, models);
             Require(loaded.ParentRevisionAddress == oldRevision && loaded.WorldId == worldId && _upgradeCalls == 1,
                 "Loading lost Parent/World identity or upgraded more than once.");
@@ -76,20 +76,20 @@ public sealed partial class World : DurableBase {
             Require(final.World._score == 110 && final.World._generation == 73 && final.World._name == "A" &&
                 final.World._cache == 0 && _constructorCalls == 0 && _upgradeCalls == 1,
                 "Cold reopening failed to restore the current Base plus Delta.");
-            Require(store.ReadObjectVersionChain(finalRevision, worldId).Records.Count == 2,
+            Require(store.ReadObjectVersionChain(finalRevision, worldId.Value).Records.Count == 2,
                 "Forced Base failed to cut the historical content chain.");
             LoadedWorld<World> oldAgain = LoadedWorld.Load<World>(store, schemas, oldRevision, worldId, models);
             Require(oldAgain.World._score == 109 && _upgradeCalls == 2, "The original historical revision was not preserved.");
         }
     }
 
-    private static (FrameAddress Revision, uint WorldId) ReadV1Address(string path) {
+    private static (FrameAddress Revision, ObjectId WorldId) ReadV1Address(string path) {
         string[] parts = File.ReadAllText(path).Split(':');
         if (parts.Length != 3 || !uint.TryParse(parts[0], out uint fileNumber) ||
             !ulong.TryParse(parts[1], out ulong packedTicket) || !uint.TryParse(parts[2], out uint worldId)) {
             throw new InvalidDataException("Invalid V1 Revision address handoff.");
         }
-        return (new FrameAddress(fileNumber, SizedPtr.FromPacked(packedTicket)), worldId);
+        return (new FrameAddress(fileNumber, SizedPtr.FromPacked(packedTicket)), new ObjectId(worldId));
     }
 
     private static void Require(bool condition, string message) {

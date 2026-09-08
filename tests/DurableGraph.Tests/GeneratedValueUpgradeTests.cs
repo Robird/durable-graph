@@ -32,13 +32,13 @@ public sealed partial class DurableSchemaGeneratorTests {
         object prior = assembly.GetType("Host")!.GetMethod("Prior")!.CreateDelegate<Func<object>>()();
         DurableSchema source = snapshot.InferSchemaFromState(model.CurrentSchema.Type, 1, prior.GetType());
         foreach (uint id in new uint[] { 7, 11 }) {
-            ObjectStateRecord current = model.Normalize(new(id, source, prior));
+            ObjectStateRecord current = model.Normalize(new(new(id), source, prior));
             object value = StateModelField(current, "Segment0Field1")!;
             Assert.Equal(20L, ValueStateField(ValueStateField(value, "Segment0Field1"), "Segment0Field1"));
             Assert.Equal(30L, ValueStateField(ValueStateField(value, "Segment0Field2"), "Segment0Field1"));
         }
         UpgradeContext[] contexts = assembly.GetType("Host")!.GetMethod("Contexts")!.CreateDelegate<Func<UpgradeContext[]>>()();
-        Assert.Equal<uint>([7, 7, 7, 7, 11, 11, 11, 11], contexts.Select(context => context.ObjectId));
+        Assert.Equal<uint>([7, 7, 7, 7, 11, 11, 11, 11], contexts.Select(context => context.ObjectId.Value));
         Assert.All(contexts, context => {
             Assert.Equal(source, context.SourceObjectSchema);
             Assert.Equal(model.CurrentSchema, context.TargetObjectSchema);
@@ -48,7 +48,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         StateModelBinding numbers = snapshot.ResolveCurrentModel(assembly.GetType("Box`1")!.MakeGenericType(typeof(int)));
         object number = assembly.GetType("Host")!.GetMethod("Number")!.CreateDelegate<Func<object>>()();
         DurableSchema oldNumbers = snapshot.InferSchemaFromState(numbers.CurrentSchema.Type, 1, number.GetType());
-        Assert.Equal(5, StateModelField(numbers.Normalize(new(23, oldNumbers, number)), "Segment0Field1"));
+        Assert.Equal(5, StateModelField(numbers.Normalize(new(new(23), oldNumbers, number)), "Segment0Field1"));
     }
 
     [Fact]
@@ -136,7 +136,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         StateModelBinding model = snapshot.ResolveCurrentModel(assembly.GetType("World")!);
         object prior = assembly.GetType("Host")!.GetMethod("Prior")!.CreateDelegate<Func<object>>()();
         DurableSchema source = snapshot.InferSchemaFromState(model.CurrentSchema.Type, 1, prior.GetType());
-        ObjectStateRecord next = model.Normalize(new(5, source, prior));
+        ObjectStateRecord next = model.Normalize(new(new(5), source, prior));
         Assert.Equal(20, ValueStateField(StateModelField(next, "Segment0Field1")!, "Segment0Field1"));
         Assert.Equal(102, ValueStateField(StateModelField(next, "Segment0Field2")!, "Segment0Field1"));
     }

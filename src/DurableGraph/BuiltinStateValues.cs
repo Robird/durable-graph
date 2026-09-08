@@ -59,7 +59,7 @@ internal static class BuiltinStateValues {
             return true;
         }
         if (domainType == typeof(string)) {
-            binding = new(new(1, TypeTag.String), typeof(uint), typeof(StringIdStateOps), domainType, typeof(StringValueProjection));
+            binding = new(new(1, TypeTag.String), typeof(ObjectId), typeof(StringIdStateOps), domainType, typeof(StringValueProjection));
             return true;
         }
         binding = null!;
@@ -81,8 +81,8 @@ internal static class BuiltinStateValues {
             TypeTag.Half => new(slot, typeof(Half), typeof(HalfStateOps)),
             TypeTag.Single => new(slot, typeof(float), typeof(SingleStateOps)),
             TypeTag.Double => new(slot, typeof(double), typeof(DoubleStateOps)),
-            TypeTag.String => new(slot, typeof(uint), typeof(StringIdStateOps)),
-            TypeTag.DurableReference => new(slot, typeof(uint), typeof(DurableIdStateOps)),
+            TypeTag.String => new(slot, typeof(ObjectId), typeof(StringIdStateOps)),
+            TypeTag.DurableReference => new(slot, typeof(ObjectId), typeof(DurableIdStateOps)),
             _ => null!,
         };
         return binding is not null;
@@ -96,15 +96,15 @@ public readonly struct IdentityValueProjection<T> : IValueProjection<T, T> where
 }
 
 /// <summary>Projects string references through the capture and restore identity tables.</summary>
-public readonly struct StringValueProjection : IValueProjection<string?, uint> {
-    public static uint Capture(in string? value, CaptureContext context, DurableFieldInfo slot) => context.CaptureString(value);
-    public static void Hydrate(ref string? target, in uint state, ObjectReadTable objects, DurableFieldInfo slot) => target = objects.ResolveString(state);
+public readonly struct StringValueProjection : IValueProjection<string?, ObjectId> {
+    public static ObjectId Capture(in string? value, CaptureContext context, DurableFieldInfo slot) => context.CaptureString(value);
+    public static void Hydrate(ref string? target, in ObjectId state, ObjectReadTable objects, DurableFieldInfo slot) => target = objects.ResolveString(state);
 }
 
 /// <summary>Projects a durable reference without expanding the target object's body.</summary>
-public readonly struct DurableValueProjection<TDomain> : IValueProjection<TDomain?, uint> where TDomain : DurableBase {
-    public static uint Capture(in TDomain? value, CaptureContext context, DurableFieldInfo slot) => context.CaptureDurable(value, slot.TargetType!);
-    public static void Hydrate(ref TDomain? target, in uint state, ObjectReadTable objects, DurableFieldInfo slot) => target = objects.ResolveDurable<TDomain>(state);
+public readonly struct DurableValueProjection<TDomain> : IValueProjection<TDomain?, ObjectId> where TDomain : DurableBase {
+    public static ObjectId Capture(in TDomain? value, CaptureContext context, DurableFieldInfo slot) => context.CaptureDurable(value, slot.TargetType!);
+    public static void Hydrate(ref TDomain? target, in ObjectId state, ObjectReadTable objects, DurableFieldInfo slot) => target = objects.ResolveDurable<TDomain>(state);
 }
 
 internal static class ScalarDelta {
@@ -304,20 +304,27 @@ public readonly struct DoubleStateOps : IStateOps<double> {
     public static void VisitReferences(in double state, IStateReferenceVisitor visitor, DurableFieldInfo slot) { }
 }
 
-/// <summary>UInt32 reference slots retain their string semantics.</summary>
-public readonly struct StringIdStateOps : IStateOps<uint> {
-    public static void WriteBase(ref BinaryPayloadWriter writer, in uint state, DurableFieldInfo slot) => writer.WriteUInt32(state);
-    public static uint ReadBase(ref BinaryPayloadReader reader, DurableFieldInfo slot) => reader.ReadUInt32();
-    public static PreparedDeltaBody PrepareDelta(in uint prior, in uint current, DurableFieldInfo slot) => UInt32StateOps.PrepareDelta(in prior, in current, slot);
-    public static uint ApplyDelta(ref BinaryPayloadReader reader, in uint prior, DurableFieldInfo slot) => UInt32StateOps.ApplyDelta(ref reader, in prior, slot);
-    public static void VisitReferences(in uint state, IStateReferenceVisitor visitor, DurableFieldInfo slot) => visitor.VisitString(state);
+/// <summary>Object ID slots retain their string semantics.</summary>
+public readonly struct StringIdStateOps : IStateOps<ObjectId> {
+    public static void WriteBase(ref BinaryPayloadWriter writer, in ObjectId state, DurableFieldInfo slot) => writer.WriteUInt32(state.Value);
+    public static ObjectId ReadBase(ref BinaryPayloadReader reader, DurableFieldInfo slot) => new(reader.ReadUInt32());
+    public static PreparedDeltaBody PrepareDelta(in ObjectId prior, in ObjectId current, DurableFieldInfo slot) =>
+        ScalarDelta.Prepare<ObjectId, StringIdStateOps>(in current, slot, prior == current);
+    public static ObjectId ApplyDelta(ref BinaryPayloadReader reader, in ObjectId prior, DurableFieldInfo slot) {
+        ObjectId current = ReadBase(ref reader, slot);
+        ScalarDelta.RequireChange(prior == current);
+        return current;
+    }
+    public static void VisitReferences(in ObjectId state, IStateReferenceVisitor visitor, DurableFieldInfo slot) => visitor.VisitString(state);
 }
 
-/// <summary>UInt32 reference slots retain their constructed nominal semantics.</summary>
-public readonly struct DurableIdStateOps : IStateOps<uint> {
-    public static void WriteBase(ref BinaryPayloadWriter writer, in uint state, DurableFieldInfo slot) => writer.WriteUInt32(state);
-    public static uint ReadBase(ref BinaryPayloadReader reader, DurableFieldInfo slot) => reader.ReadUInt32();
-    public static PreparedDeltaBody PrepareDelta(in uint prior, in uint current, DurableFieldInfo slot) => UInt32StateOps.PrepareDelta(in prior, in current, slot);
-    public static uint ApplyDelta(ref BinaryPayloadReader reader, in uint prior, DurableFieldInfo slot) => UInt32StateOps.ApplyDelta(ref reader, in prior, slot);
-    public static void VisitReferences(in uint state, IStateReferenceVisitor visitor, DurableFieldInfo slot) => visitor.VisitDurable(state, slot.TargetType!);
+/// <summary>Object ID slots retain their constructed nominal semantics.</summary>
+public readonly struct DurableIdStateOps : IStateOps<ObjectId> {
+    public static void WriteBase(ref BinaryPayloadWriter writer, in ObjectId state, DurableFieldInfo slot) => writer.WriteUInt32(state.Value);
+    public static ObjectId ReadBase(ref BinaryPayloadReader reader, DurableFieldInfo slot) => new(reader.ReadUInt32());
+    public static PreparedDeltaBody PrepareDelta(in ObjectId prior, in ObjectId current, DurableFieldInfo slot) =>
+        StringIdStateOps.PrepareDelta(in prior, in current, slot);
+    public static ObjectId ApplyDelta(ref BinaryPayloadReader reader, in ObjectId prior, DurableFieldInfo slot) =>
+        StringIdStateOps.ApplyDelta(ref reader, in prior, slot);
+    public static void VisitReferences(in ObjectId state, IStateReferenceVisitor visitor, DurableFieldInfo slot) => visitor.VisitDurable(state, slot.TargetType!);
 }

@@ -9,11 +9,11 @@ public sealed class CaptureContext : IDisposable {
 
     private CaptureSession? _session;
     private Phase _phase;
-    private Dictionary<object, uint>? _bindings = new(ReferenceEqualityComparer.Instance);
+    private Dictionary<object, ObjectId>? _bindings = new(ReferenceEqualityComparer.Instance);
     private readonly Dictionary<object, RootCapture> _durables = new(ReferenceEqualityComparer.Instance);
     private readonly IStateModelResolver _models;
     private readonly List<RootCapture> _queue = [];
-    private readonly List<uint> _rootIds = [];
+    private readonly List<ObjectId> _rootIds = [];
     private readonly List<ObjectStateRecord> _objects = [];
 
     internal CaptureContext(CaptureSession session, IStateModelResolver models) {
@@ -24,7 +24,7 @@ public sealed class CaptureContext : IDisposable {
     internal CapturedGraph? Candidate { get; private set; }
 
     /// <summary>Registers an exact concrete root; null contributes a zero root ID.</summary>
-    public uint AddRoot<TDomain, TState>(
+    public ObjectId AddRoot<TDomain, TState>(
         TDomain? value,
         DurableSchema schema,
         Func<TDomain, CaptureContext, TState> capture)
@@ -32,7 +32,7 @@ public sealed class CaptureContext : IDisposable {
         where TState : unmanaged => AddRootCore(value, schema, capture, preparation: null);
 
     /// <summary>Registers an exact root together with stable frozen-state preparation operations.</summary>
-    public uint AddRoot<TDomain, TState>(
+    public ObjectId AddRoot<TDomain, TState>(
         TDomain? value,
         DurableSchema schema,
         Func<TDomain, CaptureContext, TState> capture,
@@ -49,7 +49,7 @@ public sealed class CaptureContext : IDisposable {
         }
     }
 
-    private uint AddRootCore<TDomain, TState>(
+    private ObjectId AddRootCore<TDomain, TState>(
         TDomain? value,
         DurableSchema schema,
         Func<TDomain, CaptureContext, TState> capture,
@@ -65,8 +65,8 @@ public sealed class CaptureContext : IDisposable {
                 throw new ArgumentException("Preparation requires the registered root's exact Schema.", nameof(preparation));
             }
             if (value is null) {
-                _rootIds.Add(0);
-                return 0;
+                _rootIds.Add(default);
+                return default;
             }
             if (value.GetType() != typeof(TDomain)) {
                 throw new ArgumentException("Root capture requires the exact concrete domain type.", nameof(value));
@@ -84,7 +84,7 @@ public sealed class CaptureContext : IDisposable {
                 _rootIds.Add(existing.Id);
                 return existing.Id;
             }
-            uint id = _session!.GetOrAllocateId(value);
+            ObjectId id = _session!.GetOrAllocateId(value);
             RootCapture<TDomain, TState> root = new(id, value, schema, capture, preparation);
             _bindings!.Add(value, id);
             _durables.Add(value, root);
@@ -99,13 +99,13 @@ public sealed class CaptureContext : IDisposable {
     }
 
     /// <summary>Registers a durable reference by reference identity, validates its nominal constraint, and queues its capture.</summary>
-    public uint CaptureDurable(DurableBase? value, string nominalSchemaId) {
+    public ObjectId CaptureDurable(DurableBase? value, string nominalSchemaId) {
         try { return CaptureDurable(value, TypeExpr.Named(nominalSchemaId)); }
         catch { AbortBuild(); throw; }
     }
 
     /// <summary>Captures a reference constrained by a complete constructed nominal type.</summary>
-    public uint CaptureDurable(DurableBase? value, TypeExpr nominalType) {
+    public ObjectId CaptureDurable(DurableBase? value, TypeExpr nominalType) {
         try {
             RequirePhase(Phase.Capturing);
             ArgumentNullException.ThrowIfNull(nominalType);
@@ -113,7 +113,7 @@ public sealed class CaptureContext : IDisposable {
                 throw new ArgumentException("A durable reference requires a closed named constraint.", nameof(nominalType));
             }
             if (value is null) {
-                return 0;
+                return default;
             }
             if (!_models.TryGetCurrentModel(value.GetType(), out StateModelBinding? model)) {
                 throw new InvalidOperationException($"No current model is registered for actual domain type {value.GetType()}.");
@@ -128,7 +128,7 @@ public sealed class CaptureContext : IDisposable {
                 }
                 return existing.Id;
             }
-            uint id = _session!.GetOrAllocateId(value);
+            ObjectId id = _session!.GetOrAllocateId(value);
             ModelCapture registration = new(id, value, model);
             _bindings!.Add(value, id);
             _durables.Add(value, registration);
@@ -142,16 +142,16 @@ public sealed class CaptureContext : IDisposable {
     }
 
     /// <summary>Captures a string reference. Empty strings share one identity; nonempty strings use reference identity.</summary>
-    public uint CaptureString(string? value) {
+    public ObjectId CaptureString(string? value) {
         try {
             RequirePhase(Phase.Capturing);
             if (value is null) {
-                return 0;
+                return default;
             }
             if (value.Length == 0) {
                 value = string.Empty;
             }
-            if (_bindings!.TryGetValue(value, out uint id)) {
+            if (_bindings!.TryGetValue(value, out ObjectId id)) {
                 return id;
             }
             id = _session!.GetOrAllocateId(value);
@@ -190,8 +190,8 @@ public sealed class CaptureContext : IDisposable {
     /// <summary>Abandons an unfinished or unresolved capture. Safe after accept/discard and repeated calls.</summary>
     public void Dispose() => Resolve();
 
-    internal Dictionary<object, uint> DetachBindings() {
-        Dictionary<object, uint> result = _bindings!;
+    internal Dictionary<object, ObjectId> DetachBindings() {
+        Dictionary<object, ObjectId> result = _bindings!;
         // Ownership transfer must not allocate after a durable publication. Resolve sees null
         // and therefore cannot clear the dictionary now owned by the session.
         _bindings = null;
@@ -228,14 +228,14 @@ public sealed class CaptureContext : IDisposable {
         _objects.Clear();
     }
 
-    private abstract class RootCapture(uint id) {
-        public uint Id { get; } = id;
+    private abstract class RootCapture(ObjectId id) {
+        public ObjectId Id { get; } = id;
         public abstract ObjectStateRecord Invoke(CaptureContext context);
         public abstract bool Matches(StateModelBinding model);
     }
 
     private sealed class RootCapture<TDomain, TState>(
-        uint id, TDomain source, DurableSchema schema, Func<TDomain, CaptureContext, TState> capture,
+        ObjectId id, TDomain source, DurableSchema schema, Func<TDomain, CaptureContext, TState> capture,
         CapturedStatePreparation<TState>? preparation)
         : RootCapture(id)
         where TDomain : DurableBase
@@ -250,7 +250,7 @@ public sealed class CaptureContext : IDisposable {
         public override bool Matches(StateModelBinding model) => model.MatchesCapture(Schema, Capture, Preparation);
     }
 
-    private sealed class ModelCapture(uint id, DurableBase source, StateModelBinding model) : RootCapture(id) {
+    private sealed class ModelCapture(ObjectId id, DurableBase source, StateModelBinding model) : RootCapture(id) {
         public override ObjectStateRecord Invoke(CaptureContext context) => model.Capture(Id, source, context);
         public override bool Matches(StateModelBinding other) => ReferenceEquals(model, other);
     }

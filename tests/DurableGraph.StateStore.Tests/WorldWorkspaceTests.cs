@@ -32,7 +32,7 @@ public sealed class WorldWorkspaceTests : IDisposable {
         StateModelRegistry models = Registry(Model());
         WorldWorkspace<World> workspace = WorldWorkspace<World>.Create(_store, _schemas, world, models);
         Assert.Null(workspace.ParentRevisionAddress);
-        Assert.Equal(0u, workspace.WorldId);
+        Assert.Equal(new ObjectId(0), workspace.WorldId);
         FrameAddress first;
         using (PreparedWorldSave<World> pending = workspace.Stage(NoRebase)) {
             Assert.Throws<InvalidOperationException>(() => workspace.Stage(NoRebase));
@@ -108,8 +108,8 @@ public sealed class WorldWorkspaceTests : IDisposable {
     [Fact]
     public void UpgradeRewriteAndCompleteSourceMembershipSurviveDiscardThenClearOnInstall() {
         FrameAddress old = Seed(Old, new(5, 100, 0), Text(100, "orphan after upgrade"));
-        StateModelRegistry models = Registry(Model(upgrade: state => state with { TextId = 0 }));
-        WorldWorkspace<World> workspace = WorldWorkspace<World>.Load(_store, _schemas, old, 1, models);
+        StateModelRegistry models = Registry(Model(upgrade: state => state with { TextId = new ObjectId(0) }));
+        WorldWorkspace<World> workspace = WorldWorkspace<World>.Load(_store, _schemas, old, new ObjectId(1), models);
         World instance = workspace.World;
         using (PreparedWorldSave<World> abandoned = workspace.Stage(NoRebase)) {
             Assert.Equal(ObjectVersionKind.Base, Assert.Single(abandoned.Revision.LocalObjects).Kind);
@@ -139,7 +139,7 @@ public sealed class WorldWorkspaceTests : IDisposable {
     [Fact]
     public void EmptyAliasesCollapseOnlyAtSuccessfulInstallAndThenRemainStable() {
         FrameAddress old = Seed(Current, new(5, 9, 0), Text(3, ""), Text(9, ""));
-        WorldWorkspace<World> workspace = WorldWorkspace<World>.Load(_store, _schemas, old, 1, Registry(Model()));
+        WorldWorkspace<World> workspace = WorldWorkspace<World>.Load(_store, _schemas, old, new ObjectId(1), Registry(Model()));
         using (PreparedWorldSave<World> first = workspace.Stage(NoRebase)) {
             Assert.Equal(new uint[] { 9 }, first.Revision.RemovedObjectIds);
             Install(first);
@@ -159,7 +159,7 @@ public sealed class WorldWorkspaceTests : IDisposable {
         Assert.Throws<InvalidOperationException>(() => workspace.Stage(NoRebase));
         recurse = false;
         using PreparedWorldSave<World> retry = workspace.Stage(NoRebase);
-        Assert.True(retry.WorldId > 1);
+        Assert.True(retry.WorldId.Value > 1);
         Install(retry);
     }
 
@@ -221,19 +221,21 @@ public sealed class WorldWorkspaceTests : IDisposable {
         }
         Assert.Same(child, root.Next);
         Assert.Equal((byte)7, RevisionDecoder.ReadSnapshot(_store, _schemas, first, models.Snapshot().Readers)
-            .GetRequired(2).GetState<NodeState>().Value);
+            .GetRequired(new ObjectId(2)).GetState<NodeState>().Value);
     }
 
     private sealed class Node : DurableBase {
         internal Node? Next;
         internal byte Value;
     }
-    private readonly record struct NodeState(uint NextId, byte Value);
+    private readonly record struct NodeState(ObjectId NextId, byte Value) {
+        internal NodeState(uint nextId, byte value) : this(new ObjectId(nextId), value) { }
+    }
     private static void VisitNode(in NodeState state, IStateReferenceVisitor visitor) => visitor.VisitDurable(state.NextId, "Node");
     private static PreparedBaseBody NodeBase(NodeState state) {
         ArrayBufferWriter<byte> bytes = new();
         BinaryPayloadWriter writer = new(bytes);
-        writer.WriteUInt32(state.NextId);
+        writer.WriteUInt32(state.NextId.Value);
         writer.WriteByte(state.Value);
         return new(bytes.WrittenSpan);
     }
@@ -245,7 +247,7 @@ public sealed class WorldWorkspaceTests : IDisposable {
         return address;
     }
 
-    private State Read(FrameAddress address, uint id, StateModelRegistry models) =>
+    private State Read(FrameAddress address, ObjectId id, StateModelRegistry models) =>
         RevisionDecoder.ReadSnapshot(_store, _schemas, address, models.Snapshot().Readers).GetRequired(id).GetState<State>();
 
     private class World : DurableBase {
@@ -256,7 +258,9 @@ public sealed class WorldWorkspaceTests : IDisposable {
         internal World(int unused = 0) { }
     }
     private sealed class OtherWorld() : World(0) { }
-    private readonly record struct State(byte Value, uint TextId, uint AliasId);
+    private readonly record struct State(byte Value, ObjectId TextId, ObjectId AliasId) {
+        internal State(byte value, uint textId, uint aliasId) : this(value, new ObjectId(textId), new ObjectId(aliasId)) { }
+    }
 
     private static StateModelBinding Model(Func<State, State>? upgrade = null, Action? beforePrepare = null,
         Action? onRead = null, DurableSchema? current = null, DurableSchema? old = null) =>
@@ -309,8 +313,8 @@ public sealed class WorldWorkspaceTests : IDisposable {
         ArrayBufferWriter<byte> bytes = new();
         BinaryPayloadWriter writer = new(bytes);
         writer.WriteByte(state.Value);
-        writer.WriteUInt32(state.TextId);
-        writer.WriteUInt32(state.AliasId);
+        writer.WriteUInt32(state.TextId.Value);
+        writer.WriteUInt32(state.AliasId.Value);
         return new(bytes.WrittenSpan);
     }
     private static State Read(ref BinaryPayloadReader reader) => new(reader.ReadByte(), reader.ReadUInt32(), reader.ReadUInt32());
@@ -320,16 +324,16 @@ public sealed class WorldWorkspaceTests : IDisposable {
         BinaryPayloadWriter writer = new(bytes);
         writer.WriteByte(mask);
         if ((mask & 1) != 0) writer.WriteByte(next.Value);
-        if ((mask & 2) != 0) writer.WriteUInt32(next.TextId);
-        if ((mask & 4) != 0) writer.WriteUInt32(next.AliasId);
+        if ((mask & 2) != 0) writer.WriteUInt32(next.TextId.Value);
+        if ((mask & 4) != 0) writer.WriteUInt32(next.AliasId.Value);
         return new(mask != 0, bytes.WrittenSpan);
     }
     private static State Apply(ref BinaryPayloadReader reader, State prior) {
         byte mask = reader.ReadByte();
         if (mask == 0 || mask > 7) throw new InvalidDataException("Invalid test bitmap.");
         return new((mask & 1) != 0 ? reader.ReadByte() : prior.Value,
-            (mask & 2) != 0 ? reader.ReadUInt32() : prior.TextId,
-            (mask & 4) != 0 ? reader.ReadUInt32() : prior.AliasId);
+            (mask & 2) != 0 ? new ObjectId(reader.ReadUInt32()) : prior.TextId,
+            (mask & 4) != 0 ? new ObjectId(reader.ReadUInt32()) : prior.AliasId);
     }
     private long Tail() {
         using RbfSegmentWriterLease writer = _segments.OpenActiveWriter();

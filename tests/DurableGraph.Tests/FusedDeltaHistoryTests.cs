@@ -178,8 +178,8 @@ public sealed partial class DurableSchemaGeneratorTests {
                 if (same.HasChanges || same.Body[0] != 0 || !delta.HasChanges || delta.Body[0] != 0x16)
                     throw new Exception("Only alias, optional and score changed.");
                 if (prior.Segment0Field1 != prior.Segment1Field1 || prior.Segment0Field1 != current.Segment0Field1 ||
-                    current.Segment0Field1 == current.Segment1Field1 || prior.Segment1Field9 != 0 ||
-                    current.Segment1Field9 == 0 || current.Segment1Field9 != current.Segment1Field10 ||
+                    current.Segment0Field1 == current.Segment1Field1 || !prior.Segment1Field9.IsNull ||
+                    current.Segment1Field9.IsNull || current.Segment1Field9 != current.Segment1Field10 ||
                     prior.Segment1Field10 != current.Segment1Field10 || prior.Segment1Field20 != 1 || current.Segment1Field20 != 2)
                     throw new Exception("Frozen candidate identity or values.");
                 var restored = Apply(in prior, delta);
@@ -194,12 +194,12 @@ public sealed partial class DurableSchemaGeneratorTests {
                     throw new Exception("Reference identity after decoding.");
 
                 // The inherited base slot did not change, but must still resolve in the target table.
-                uint inheritedId = restored.Segment0Field1;
+                ObjectId inheritedId = restored.Segment0Field1;
                 var missing = StringReadTable.Decode(records.Where(record => record.Id != inheritedId));
                 if (!Rejects(in restored, missing)) throw new Exception("Missing inherited target accepted.");
 
                 // A durable owner's ID in that same unchanged slot is not a string target.
-                uint ownerId = after.RootIds[0];
+                ObjectId ownerId = after.RootIds[0];
                 var wrongPrior = new Leaf.__DurableState.V1(ownerId, prior.Segment1Field1,
                     prior.Segment1Field9, prior.Segment1Field10, prior.Segment1Field20);
                 var wrongCurrent = new Leaf.__DurableState.V1(ownerId, current.Segment1Field1,

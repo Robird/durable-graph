@@ -8,7 +8,7 @@ namespace Atelia.DurableGraph;
 /// </summary>
 public sealed class CaptureSession {
     private ulong _nextObjectId;
-    private Dictionary<object, uint> _bindings = new(ReferenceEqualityComparer.Instance);
+    private Dictionary<object, ObjectId> _bindings = new(ReferenceEqualityComparer.Instance);
     private CaptureContext? _pending;
     private bool _preparing;
     private bool _beginningCapture;
@@ -22,14 +22,14 @@ public sealed class CaptureSession {
     }
 
     // Identity-only import for the controlled loader. Does not fabricate Capture provenance.
-    internal CaptureSession(ulong firstObjectId, IReadOnlyDictionary<object, uint> bindings) {
+    internal CaptureSession(ulong firstObjectId, IReadOnlyDictionary<object, ObjectId> bindings) {
         ArgumentNullException.ThrowIfNull(bindings);
         if (firstObjectId == 0 || firstObjectId > (ulong)uint.MaxValue + 1) {
             throw new ArgumentOutOfRangeException(nameof(firstObjectId));
         }
-        HashSet<uint> ids = [];
-        foreach ((object instance, uint id) in bindings) {
-            if (id == 0 || id >= firstObjectId || !ids.Add(id)) {
+        HashSet<ObjectId> ids = [];
+        foreach ((object instance, ObjectId id) in bindings) {
+            if (id.IsNull || id.Value >= firstObjectId || !ids.Add(id)) {
                 throw new ArgumentException("Imported IDs must be unique, nonzero and below the allocation cursor.", nameof(bindings));
             }
             _bindings.Add(instance, id);
@@ -48,7 +48,7 @@ public sealed class CaptureSession {
         _preparing = true;
         try {
             CapturedGraph? previous = Current;
-            Dictionary<uint, ObjectStateRecord> priorObjects = previous?.Objects.ToDictionary(static item => item.Id) ?? [];
+            Dictionary<ObjectId, ObjectStateRecord> priorObjects = previous?.Objects.ToDictionary(static item => item.Id) ?? [];
 
             return new PreparedCapturedGraph(previous, candidate, PrepareObjects(candidate, priorObjects));
         }
@@ -59,7 +59,7 @@ public sealed class CaptureSession {
 
     // Loaded baselines describe source-live rows, not a previously captured graph.
     internal IReadOnlyList<PreparedCapturedObject> PrepareAgainst(
-        CapturedGraph candidate, IReadOnlyDictionary<uint, ObjectStateRecord> previous) {
+        CapturedGraph candidate, IReadOnlyDictionary<ObjectId, ObjectStateRecord> previous) {
         RequireCandidate(candidate);
         ArgumentNullException.ThrowIfNull(previous);
         _preparing = true;
@@ -72,7 +72,7 @@ public sealed class CaptureSession {
     }
 
     private static List<PreparedCapturedObject> PrepareObjects(
-        CapturedGraph candidate, IReadOnlyDictionary<uint, ObjectStateRecord> previous) {
+        CapturedGraph candidate, IReadOnlyDictionary<ObjectId, ObjectStateRecord> previous) {
         // Validate the entire comparison set before invoking any user body operation.
         foreach (ObjectStateRecord current in candidate.Objects) {
             previous.TryGetValue(current.Id, out ObjectStateRecord? prior);
@@ -140,7 +140,7 @@ public sealed class CaptureSession {
     /// <summary>Installs the actual candidate and its live bindings without recapturing domain data.</summary>
     public void Accept(CapturedGraph candidate) {
         CaptureContext context = RequireCandidate(candidate);
-        Dictionary<object, uint> bindings = context.DetachBindings();
+        Dictionary<object, ObjectId> bindings = context.DetachBindings();
         _bindings = bindings;
         Current = candidate;
         context.Resolve();
@@ -151,14 +151,14 @@ public sealed class CaptureSession {
         RequireCandidate(candidate).Resolve();
     }
 
-    internal uint GetOrAllocateId(object source) {
-        if (_bindings.TryGetValue(source, out uint id)) {
+    internal ObjectId GetOrAllocateId(object source) {
+        if (_bindings.TryGetValue(source, out ObjectId id)) {
             return id;
         }
         if (_nextObjectId > uint.MaxValue) {
             throw new InvalidOperationException("The session's object ID space is exhausted.");
         }
-        return (uint)_nextObjectId++;
+        return new ObjectId((uint)_nextObjectId++);
     }
 
     internal void Release(CaptureContext context) {

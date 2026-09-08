@@ -7,15 +7,15 @@ internal static class LoadedRevisionPlanner {
     internal static PreparedObjectRevision Prepare(StateRevisionStore store, SchemaStore schemas,
         NormalizedRevision source, IReadOnlyList<PreparedCapturedObject> contents,
         ReadAmplificationBaseBudgetParameters parameters) {
-        IReadOnlyDictionary<uint, FrameAddress> heads = store.ReadLiveObjectHeadMap(source.RevisionAddress);
+        IReadOnlyDictionary<ObjectId, FrameAddress> heads = store.ReadLiveObjectHeadMap(source.RevisionAddress).ToDictionary(static pair => new ObjectId(pair.Key), static pair => pair.Value);
         if (heads.Count != source.Objects.Count || source.Objects.Keys.Any(id => !heads.ContainsKey(id))) {
             throw new InvalidDataException("Loaded source membership no longer matches the exact Parent.");
         }
         // Verify complete source provenance before registering any current Schema. This includes
         // source rows no longer reachable from World and every NoChange survivor.
         // TODO(DB-033): Measure these repeated chain reads before sharing a scoped cache with planning.
-        foreach ((uint id, NormalizedObject row) in source.Objects) {
-            ObjectVersionChain chain = store.ReadObjectVersionChain(source.RevisionAddress, id);
+        foreach ((ObjectId id, NormalizedObject row) in source.Objects) {
+            ObjectVersionChain chain = store.ReadObjectVersionChain(source.RevisionAddress, id.Value);
             DecodedBaseObjectBody stored = BaseObjectBodyCodec.Decode(chain.Records[0].Record.Body);
             if (stored.Kind != row.Current.Kind) {
                 throw new InvalidDataException($"Loaded object {id} no longer has its source kind.");

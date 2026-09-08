@@ -151,7 +151,7 @@ internal sealed class StateModelSnapshot : StateBindingContext {
         TypeExpr nominal = GetTypeExpr(domainType);
         // Reference metadata must not recursively close the referenced object's body.
         if (typeof(DurableBase).IsAssignableFrom(domainType)) {
-            StateValueBinding reference = new(DurableFieldInfo.Reference(1, nominal), typeof(uint), typeof(DurableIdStateOps),
+            StateValueBinding reference = new(DurableFieldInfo.Reference(1, nominal), typeof(ObjectId), typeof(DurableIdStateOps),
                 domainType, typeof(DurableValueProjection<>).MakeGenericType(domainType));
             _currentValues.Add(domainType, reference);
             return reference;

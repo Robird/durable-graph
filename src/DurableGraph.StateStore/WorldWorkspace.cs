@@ -13,7 +13,7 @@ internal sealed class WorldWorkspace<TWorld> where TWorld : DurableBase {
     private PreparedWorldSave<TWorld>? _pending;
     private bool _staging;
 
-    private WorldWorkspace(StateRevisionStore store, SchemaStore schemas, TWorld world, uint worldId,
+    private WorldWorkspace(StateRevisionStore store, SchemaStore schemas, TWorld world, ObjectId worldId,
         StateModelBinding model, StateModelSnapshot models, NormalizedRevision? baseline, CaptureSession capture) {
         _store = store;
         _schemas = schemas;
@@ -26,7 +26,7 @@ internal sealed class WorldWorkspace<TWorld> where TWorld : DurableBase {
     }
 
     internal TWorld World { get; }
-    internal uint WorldId { get; private set; }
+    internal ObjectId WorldId { get; private set; }
     internal FrameAddress? ParentRevisionAddress => _baseline?.RevisionAddress;
 
     internal static WorldWorkspace<TWorld> Create(StateRevisionStore store, SchemaStore schemas,
@@ -39,15 +39,15 @@ internal sealed class WorldWorkspace<TWorld> where TWorld : DurableBase {
         if (world.GetType() != typeof(TWorld) || !snapshot.TryGetCurrentModel(typeof(TWorld), out StateModelBinding? model)) {
             throw new ArgumentException("World must have its requested exact domain type registered.", nameof(world));
         }
-        return new(store, schemas, world, 0, model!, snapshot, null, new());
+        return new(store, schemas, world, default, model!, snapshot, null, new());
     }
 
     internal static WorldWorkspace<TWorld> Load(StateRevisionStore store, SchemaStore schemas,
-        FrameAddress revisionAddress, uint worldId, StateModelRegistry models) {
+        FrameAddress revisionAddress, ObjectId worldId, StateModelRegistry models) {
         ArgumentNullException.ThrowIfNull(store);
         ArgumentNullException.ThrowIfNull(schemas);
         ArgumentNullException.ThrowIfNull(models);
-        ArgumentOutOfRangeException.ThrowIfZero(worldId);
+        ArgumentOutOfRangeException.ThrowIfZero(worldId.Value, nameof(worldId));
         StateModelSnapshot snapshot = models.Snapshot(schemas);
         DecodedRevision decoded = RevisionDecoder.ReadSnapshot(store, schemas, revisionAddress, snapshot);
         NormalizedRevision normalized = NormalizedRevision.Create(decoded, snapshot);
@@ -55,12 +55,12 @@ internal sealed class WorldWorkspace<TWorld> where TWorld : DurableBase {
             root.Model is not { } model || model.DomainType != typeof(TWorld) || typeof(TWorld).IsAbstract) {
             throw new InvalidDataException("World ID must select a durable object of the requested exact current domain type.");
         }
-        IReadOnlyList<uint> reachable = FindReachable(normalized, worldId);
-        Dictionary<uint, DurableBase> instances = [];
-        Dictionary<object, uint> bindings = new(ReferenceEqualityComparer.Instance);
+        IReadOnlyList<ObjectId> reachable = FindReachable(normalized, worldId);
+        Dictionary<ObjectId, DurableBase> instances = [];
+        Dictionary<object, ObjectId> bindings = new(ReferenceEqualityComparer.Instance);
         // Allocate the complete reachable durable set before any field assignment. This
         // preserves forward/shared/cyclic references without recursive materialization.
-        foreach (uint id in reachable) {
+        foreach (ObjectId id in reachable) {
             if (normalized.Objects[id].Model is not { } actualModel) {
                 continue;
             }
@@ -71,7 +71,7 @@ internal sealed class WorldWorkspace<TWorld> where TWorld : DurableBase {
             instances.Add(id, allocated);
         }
         ObjectReadTable table = new(normalized.Strings, instances);
-        foreach ((uint id, DurableBase instance) in instances) {
+        foreach ((ObjectId id, DurableBase instance) in instances) {
             NormalizedObject row = normalized.Objects[id];
             row.Model!.Hydrate(instance, row.Current, table);
         }
@@ -86,7 +86,7 @@ internal sealed class WorldWorkspace<TWorld> where TWorld : DurableBase {
                 bindings.TryAdd(row.Current.StringContent, row.Current.Id);
             }
         }
-        ulong nextId = (ulong)normalized.Objects.Keys.Max() + 1;
+        ulong nextId = (ulong)normalized.Objects.Keys.Max().Value + 1;
         return new(store, schemas, world, worldId, model, snapshot, normalized, new(nextId, bindings));
     }
 
@@ -98,8 +98,8 @@ internal sealed class WorldWorkspace<TWorld> where TWorld : DurableBase {
         CaptureContext? context = null;
         try {
             context = _capture.BeginCapture(_models);
-            uint worldId = _model.AddRoot(context, World);
-            if (WorldId != 0 && worldId != WorldId) {
+            ObjectId worldId = _model.AddRoot(context, World);
+            if (!WorldId.IsNull && worldId != WorldId) {
                 throw new InvalidOperationException("Capture did not preserve the World ID.");
             }
             CapturedGraph candidate = context.Seal();
@@ -140,7 +140,7 @@ internal sealed class WorldWorkspace<TWorld> where TWorld : DurableBase {
         }
     }
 
-    private static IReadOnlyList<uint> FindReachable(NormalizedRevision normalized, uint worldId) {
+    private static IReadOnlyList<ObjectId> FindReachable(NormalizedRevision normalized, ObjectId worldId) {
         ReachableVisitor visitor = new();
         visitor.Add(worldId);
         for (int index = 0; index < visitor.Ids.Count; index++) {
@@ -153,15 +153,15 @@ internal sealed class WorldWorkspace<TWorld> where TWorld : DurableBase {
     // All references were already checked against the complete current directory.
     // This visitor only computes membership; it owns no second field/type description.
     private sealed class ReachableVisitor : IStateReferenceVisitor {
-        private readonly HashSet<uint> _seen = [];
-        internal List<uint> Ids { get; } = [];
-        internal void Add(uint id) {
-            if (id != 0 && _seen.Add(id)) {
+        private readonly HashSet<ObjectId> _seen = [];
+        internal List<ObjectId> Ids { get; } = [];
+        internal void Add(ObjectId id) {
+            if (!id.IsNull && _seen.Add(id)) {
                 Ids.Add(id);
             }
         }
-        public void VisitString(uint objectId) => Add(objectId);
-        public void VisitDurable(uint objectId, string nominalSchemaId) => Add(objectId);
-        public void VisitDurable(uint objectId, TypeExpr nominalType) => Add(objectId);
+        public void VisitString(ObjectId objectId) => Add(objectId);
+        public void VisitDurable(ObjectId objectId, string nominalSchemaId) => Add(objectId);
+        public void VisitDurable(ObjectId objectId, TypeExpr nominalType) => Add(objectId);
     }
 }

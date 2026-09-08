@@ -135,10 +135,18 @@ public sealed partial class DurableSchemaGenerator {
     private static bool IsBinaryField(int typeTagValue) =>
         typeTagValue >= 1 && typeTagValue <= 16;
 
-    // Schema tags describe domain fields. Every reference DTO slot stores UInt32 identity.
+    // Schema tags describe domain fields. Reference DTO slots use ObjectId, whose wire value is UInt32.
     private static int GetBinarySlotTypeTag(int typeTagValue) => IsBinaryReference(typeTagValue) ? 9 : typeTagValue;
 
     private static bool IsBinaryReference(int typeTagValue) => typeTagValue == 4 || typeTagValue == 15;
+
+    private static string BinarySlotRead(int typeTagValue) {
+        string read = "reader.Read" + GetTypeTagName(GetBinarySlotTypeTag(typeTagValue)) + "()";
+        return IsBinaryReference(typeTagValue) ? "new " + RuntimeName + "ObjectId(" + read + ")" : read;
+    }
+
+    private static string BinarySlotWireValue(int typeTagValue, string expression) =>
+        IsBinaryReference(typeTagValue) ? expression + ".Value" : expression;
 
     private static void ReportInvalidGeneratedState(
         SourceProductionContext context, INamedTypeSymbol type, string message, Location? location = null) {
@@ -279,7 +287,7 @@ public sealed partial class DurableSchemaGenerator {
     private static void AppendBinaryAddRoot(
         StringBuilder source, DurableTypeModel type, BinaryVersionModel version, string indent) {
         string domainType = type.Symbol.ToDisplayString(FullyQualifiedNameFormat);
-        source.Append(indent).Append("internal static uint AddRoot(global::Atelia.DurableGraph.CaptureContext context, ")
+        source.Append(indent).Append("internal static global::Atelia.DurableGraph.ObjectId AddRoot(global::Atelia.DurableGraph.CaptureContext context, ")
             .Append(domainType).AppendLine("? value) {");
         source.Append(indent).AppendLine("    global::System.ArgumentNullException.ThrowIfNull(context);");
         source.Append(indent).Append("    return context.AddRoot<").Append(domainType).Append(", ")
@@ -333,7 +341,7 @@ public sealed partial class DurableSchemaGenerator {
                     .Append(".WriteBaseBody(ref writer, in value.").Append(field.Name).AppendLine(");");
             } else {
                 source.Append(indent).Append("    writer.Write").Append(GetTypeTagName(GetBinarySlotTypeTag(field.TypeTagValue)))
-                    .Append("(value.").Append(field.Name).AppendLine(");");
+                    .Append('(').Append(BinarySlotWireValue(field.TypeTagValue, "value." + field.Name)).AppendLine(");");
             }
         }
 
@@ -360,7 +368,7 @@ public sealed partial class DurableSchemaGenerator {
             source.Append(indent).Append("    var ").Append(field.ParameterName).Append(" = ");
             if (field.InlineSchema.HasValue) source.Append(InlineHelperName(field.InlineSchema.Value))
                 .Append(".ReadBaseBodyV").Append(field.InlineSchema.Value.Version).AppendLine("(ref reader);");
-            else source.Append("reader.Read").Append(GetTypeTagName(GetBinarySlotTypeTag(field.TypeTagValue))).AppendLine("();");
+            else source.Append(BinarySlotRead(field.TypeTagValue)).AppendLine(";");
         }
 
         source.Append(indent).Append("    return new ").Append(version.Name).Append('(');
@@ -433,7 +441,7 @@ public sealed partial class DurableSchemaGenerator {
             } else {
                 source.Append(indent).Append("        writer.Write")
                     .Append(GetTypeTagName(GetBinarySlotTypeTag(field.TypeTagValue)))
-                    .Append("(current.").Append(field.Name).AppendLine(");");
+                    .Append('(').Append(BinarySlotWireValue(field.TypeTagValue, "current." + field.Name)).AppendLine(");");
             }
             source.Append(indent).AppendLine("    }");
         }
@@ -495,8 +503,8 @@ public sealed partial class DurableSchemaGenerator {
                     .Append(field.InlineSchema.Value.Version).Append("(ref reader, in prior.")
                     .Append(field.Name).AppendLine(", true);");
             } else {
-                source.Append(indent).Append("        ").Append(field.ParameterName).Append(" = reader.Read")
-                    .Append(GetTypeTagName(GetBinarySlotTypeTag(field.TypeTagValue))).AppendLine("();");
+                source.Append(indent).Append("        ").Append(field.ParameterName).Append(" = ")
+                    .Append(BinarySlotRead(field.TypeTagValue)).AppendLine(";");
                 source.Append(indent).Append("        if (");
                 AppendBinarySlotEquality(source, field, "prior." + field.Name, field.ParameterName);
                 source.AppendLine(") {");

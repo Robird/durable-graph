@@ -44,12 +44,12 @@ public sealed class ReadAmplificationBaseBudgetPolicyTests {
     [Fact]
     public void Base_only_updates_contribute_budget_without_spending_it_or_needing_history() {
         AssertWrites(Plan([
-            new(1, ObjectSaveChangeKind.BaseOnlyUpdate, 180, null, null),
+            new(new ObjectId(1), ObjectSaveChangeKind.BaseOnlyUpdate, 180, null, null),
             Cold(2, 10, 50), Cold(3, 10, 40),
         ], 3, 10), Base(1), Base(2), Base(3));
-        AssertWrites(Plan([new(1, ObjectSaveChangeKind.BaseOnlyUpdate, 0, null, null)]), Base(1));
+        AssertWrites(Plan([new(new ObjectId(1), ObjectSaveChangeKind.BaseOnlyUpdate, 0, null, null)]), Base(1));
         Assert.Throws<OverflowException>(() => Plan([
-            new(1, ObjectSaveChangeKind.BaseOnlyUpdate, long.MaxValue, null, null), Insert(2, 1),
+            new(new ObjectId(1), ObjectSaveChangeKind.BaseOnlyUpdate, long.MaxValue, null, null), Insert(2, 1),
         ]));
     }
 
@@ -201,7 +201,7 @@ public sealed class ReadAmplificationBaseBudgetPolicyTests {
     [Fact]
     public void Unknown_change_kind_is_rejected() {
         Assert.Throws<ArgumentOutOfRangeException>(() => Plan([
-            new(1, (ObjectSaveChangeKind)int.MaxValue, 1, null, null),
+            new(new ObjectId(1), (ObjectSaveChangeKind)int.MaxValue, 1, null, null),
         ]));
     }
 
@@ -210,7 +210,7 @@ public sealed class ReadAmplificationBaseBudgetPolicyTests {
         ObjectSaveEstimate[] invalid = [
             Insert(1, -1), Update(1, -1, 0, 0), Cold(1, -1, 0),
             Update(1, 1, -1, 0), Update(1, 1, 0, -1), Cold(1, 1, -1),
-            new(1, ObjectSaveChangeKind.BaseOnlyUpdate, -1, null, null),
+            new(new ObjectId(1), ObjectSaveChangeKind.BaseOnlyUpdate, -1, null, null),
         ];
         foreach (ObjectSaveEstimate row in invalid) {
             Assert.Throws<ArgumentOutOfRangeException>(() => Plan([row]));
@@ -220,18 +220,18 @@ public sealed class ReadAmplificationBaseBudgetPolicyTests {
     [Fact]
     public void Every_inapplicable_or_missing_nullable_field_shape_is_rejected() {
         ObjectSaveEstimate[] invalid = [
-            new(1, ObjectSaveChangeKind.Insert, 1, 0, null),
-            new(1, ObjectSaveChangeKind.Insert, 1, null, 0),
-            new(1, ObjectSaveChangeKind.Insert, 1, 0, 0),
-            new(1, ObjectSaveChangeKind.Update, 1, null, 0),
-            new(1, ObjectSaveChangeKind.Update, 1, 0, null),
-            new(1, ObjectSaveChangeKind.Update, 1, null, null),
-            new(1, ObjectSaveChangeKind.NoChange, 1, 0, 0),
-            new(1, ObjectSaveChangeKind.NoChange, 1, null, null),
-            new(1, ObjectSaveChangeKind.NoChange, 1, 0, null),
-            new(1, ObjectSaveChangeKind.BaseOnlyUpdate, 1, 0, null),
-            new(1, ObjectSaveChangeKind.BaseOnlyUpdate, 1, null, 0),
-            new(1, ObjectSaveChangeKind.BaseOnlyUpdate, 1, 0, 0),
+            new(new ObjectId(1), ObjectSaveChangeKind.Insert, 1, 0, null),
+            new(new ObjectId(1), ObjectSaveChangeKind.Insert, 1, null, 0),
+            new(new ObjectId(1), ObjectSaveChangeKind.Insert, 1, 0, 0),
+            new(new ObjectId(1), ObjectSaveChangeKind.Update, 1, null, 0),
+            new(new ObjectId(1), ObjectSaveChangeKind.Update, 1, 0, null),
+            new(new ObjectId(1), ObjectSaveChangeKind.Update, 1, null, null),
+            new(new ObjectId(1), ObjectSaveChangeKind.NoChange, 1, 0, 0),
+            new(new ObjectId(1), ObjectSaveChangeKind.NoChange, 1, null, null),
+            new(new ObjectId(1), ObjectSaveChangeKind.NoChange, 1, 0, null),
+            new(new ObjectId(1), ObjectSaveChangeKind.BaseOnlyUpdate, 1, 0, null),
+            new(new ObjectId(1), ObjectSaveChangeKind.BaseOnlyUpdate, 1, null, 0),
+            new(new ObjectId(1), ObjectSaveChangeKind.BaseOnlyUpdate, 1, 0, 0),
         ];
         foreach (ObjectSaveEstimate row in invalid) {
             Assert.Throws<ArgumentException>(() => Plan([row]));
@@ -270,18 +270,18 @@ public sealed class ReadAmplificationBaseBudgetPolicyTests {
         int percent = 25) => ReadAmplificationBaseBudgetPolicy.Plan(objects, new(limit, percent));
 
     private static ObjectSaveEstimate Insert(uint id, long basePayloadBytes) =>
-        new(id, ObjectSaveChangeKind.Insert, basePayloadBytes, null, null);
+        new(new ObjectId(id), ObjectSaveChangeKind.Insert, basePayloadBytes, null, null);
 
     private static ObjectSaveEstimate Update(
         uint id, long basePayloadBytes, long deltaPayloadBytesUpperBound, long reconstructionPayloadBytes) =>
-        new(id, ObjectSaveChangeKind.Update, basePayloadBytes, deltaPayloadBytesUpperBound, reconstructionPayloadBytes);
+        new(new ObjectId(id), ObjectSaveChangeKind.Update, basePayloadBytes, deltaPayloadBytesUpperBound, reconstructionPayloadBytes);
 
     private static ObjectSaveEstimate Cold(uint id, long basePayloadBytes, long reconstructionPayloadBytes) =>
-        new(id, ObjectSaveChangeKind.NoChange, basePayloadBytes, null, reconstructionPayloadBytes);
+        new(new ObjectId(id), ObjectSaveChangeKind.NoChange, basePayloadBytes, null, reconstructionPayloadBytes);
 
-    private static ObjectWriteDecision Base(uint id) => new(id, ObjectRepresentationMode.Base);
+    private static ObjectWriteDecision Base(uint id) => new(new ObjectId(id), ObjectRepresentationMode.Base);
 
-    private static ObjectWriteDecision Delta(uint id) => new(id, ObjectRepresentationMode.Delta);
+    private static ObjectWriteDecision Delta(uint id) => new(new ObjectId(id), ObjectRepresentationMode.Delta);
 
     private static void AssertWrites(ObjectRepresentationPlan plan, params ObjectWriteDecision[] expected) =>
         Assert.Equal(expected, plan.Writes);

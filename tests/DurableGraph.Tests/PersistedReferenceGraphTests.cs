@@ -20,7 +20,8 @@ public sealed partial class DurableSchemaGeneratorTests {
         string schemaPath = Path.Combine(schemaDirectory.Path, "schemas.rbf");
         RbfSegmentStoreOptions options = new() { NewStoreLayout = RbfSegmentStoreLayout.Flat, SegmentSizeThresholdBytes = 8 };
         FrameAddress first, changed, detached;
-        uint worldId, characterId;
+        ObjectId worldId;
+        uint characterId;
         uint[] allIds;
         using (var schemaFile = RbfFile.CreateNew(schemaPath))
         using (SegmentStore segments = SegmentStore.CreateNew(directory.Path, options)) {
@@ -67,11 +68,11 @@ public sealed partial class DurableSchemaGeneratorTests {
             fixture.Detach(loaded);
             PreparedWorldRevision removal = fixture.Prepare(loaded);
             Assert.Equal(changed, removal.Revision.ParentRevisionAddress);
-            Assert.Equal(allIds.Where(id => id != worldId).Order(), removal.Revision.RemovedObjectIds);
+            Assert.Equal(allIds.Where(id => id != worldId.Value).Order(), removal.Revision.RemovedObjectIds);
             ObjectVersionRecord worldChange = Assert.Single(removal.Revision.LocalObjects);
-            Assert.Equal(worldId, worldChange.ObjectId);
+            Assert.Equal(worldId.Value, worldChange.ObjectId);
             detached = store.Append(removal.Revision);
-            Assert.Equal<uint>([worldId], store.ReadLiveObjectHeadMap(detached).Keys);
+            Assert.Equal<uint>([worldId.Value], store.ReadLiveObjectHeadMap(detached).Keys);
         }
 
         using (var schemaFile = RbfFile.OpenExisting(schemaPath))
@@ -83,7 +84,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             fixture.Check(fixture.Load(store, schemas, changed, worldId), 8);
             Assert.Equal(allIds.Order(), store.ReadLiveObjectHeadMap(first).Keys.Order());
             Assert.Equal(2, store.ReadObjectVersionChain(changed, characterId).Records.Count);
-            Assert.Single(store.ReadObjectVersionChain(changed, worldId).Records);
+            Assert.Single(store.ReadObjectVersionChain(changed, worldId.Value).Records);
             Assert.NotEqual(first.FileNumber, detached.FileNumber);
         }
     }
@@ -145,8 +146,8 @@ public sealed partial class DurableSchemaGeneratorTests {
         Assert.Contains(previousCharacter, replacement.Revision.RemovedObjectIds);
         Assert.Contains(previousItem, replacement.Revision.RemovedObjectIds);
         Assert.Equal(3, replacement.Revision.RemovedObjectIds.Count); // Old Character, Item and distinct name string.
-        Assert.Single(replacement.Revision.LocalObjects, row => row.ObjectId == initial.WorldId);
-        ObjectVersionRecord[] newRows = replacement.Revision.LocalObjects.Where(row => row.ObjectId != initial.WorldId).ToArray();
+        Assert.Single(replacement.Revision.LocalObjects, row => row.ObjectId == initial.WorldId.Value);
+        ObjectVersionRecord[] newRows = replacement.Revision.LocalObjects.Where(row => row.ObjectId != initial.WorldId.Value).ToArray();
         Assert.Equal(3, newRows.Length);
         Assert.All(newRows, row => {
             Assert.True(row.ObjectId > sourceMaximum);
@@ -175,7 +176,8 @@ public sealed partial class DurableSchemaGeneratorTests {
         Directory.CreateDirectory(schemaDirectory.Path);
         string schemaPath = Path.Combine(schemaDirectory.Path, "schemas.rbf");
         FrameAddress first, second, third, rewritten;
-        uint worldId, nodeId;
+        ObjectId worldId;
+        uint nodeId;
         uint[] ids;
         using (var schemaFile = RbfFile.CreateNew(schemaPath))
         using (SegmentStore segments = SegmentStore.CreateNew(directory.Path)) {
@@ -239,8 +241,8 @@ public sealed partial class DurableSchemaGeneratorTests {
         public object Create() => _host.GetMethod("Create")!.CreateDelegate<Func<object>>()();
         public PreparedWorldRevision PrepareNew(StateRevisionStore store, SchemaStore schemas, object world) =>
             _host.GetMethod("PrepareNew")!.CreateDelegate<Func<StateRevisionStore, SchemaStore, object, PreparedWorldRevision>>()(store, schemas, world);
-        public object Load(StateRevisionStore store, SchemaStore schemas, FrameAddress address, uint worldId) =>
-            _host.GetMethod("Load")!.CreateDelegate<Func<StateRevisionStore, SchemaStore, FrameAddress, uint, object>>()(store, schemas, address, worldId);
+        public object Load(StateRevisionStore store, SchemaStore schemas, FrameAddress address, ObjectId worldId) =>
+            _host.GetMethod("Load")!.CreateDelegate<Func<StateRevisionStore, SchemaStore, FrameAddress, ObjectId, object>>()(store, schemas, address, worldId);
         public PreparedWorldRevision Prepare(object loaded) => _host.GetMethod("Prepare")!.CreateDelegate<Func<object, PreparedWorldRevision>>()(loaded);
         public void Check(object loaded, int expected) => _host.GetMethod("Check")!.CreateDelegate<Action<object, int>>()(loaded, expected);
         public void Change(object loaded, int value) => _host.GetMethod("Change")!.CreateDelegate<Action<object, int>>()(loaded, value);
@@ -255,7 +257,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             Atelia.DurableGraph.StateStore.SchemaStore schemas, object world) =>
             Atelia.DurableGraph.StateStore.LoadedWorld.PrepareNew(store, schemas, (World)world, Models(), new(1000000, 1));
         public static object Load(Atelia.DurableGraph.StateStore.Storage.StateRevisionStore store,
-            Atelia.DurableGraph.StateStore.SchemaStore schemas, Atelia.DurableGraph.StateStore.Storage.FrameAddress address, uint worldId) {
+            Atelia.DurableGraph.StateStore.SchemaStore schemas, Atelia.DurableGraph.StateStore.Storage.FrameAddress address, ObjectId worldId) {
             World.ConstructorCalls = 0;
             return Atelia.DurableGraph.StateStore.LoadedWorld.Load<World>(store, schemas, address, worldId, Models());
         }

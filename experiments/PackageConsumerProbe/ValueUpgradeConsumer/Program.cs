@@ -51,7 +51,7 @@ internal static class Program {
         World world = new();
         FrameAddress initial;
         FrameAddress historical;
-        uint worldId;
+        ObjectId worldId;
         using (GraphRepository repository = GraphRepository.CreateNew(directory, Options)) {
             using GraphSession<World> session = repository.Create(world, Models());
             initial = session.Commit(Policy);
@@ -67,9 +67,9 @@ internal static class Program {
                 "Only World, four Box instances and string may have object rows; inline values have no IDs.");
             var state = CheckHistoricalDto(store, schemas, historical, worldId);
             StateRevision delta = store.Read(historical);
-            Require(delta.LocalObjects.Count == 1 && delta.LocalObjects[0].ObjectId == state.Segment0Field1 &&
+            Require(delta.LocalObjects.Count == 1 && delta.LocalObjects[0].ObjectId == state.Segment0Field1.Value &&
                 delta.LocalObjects[0].Kind == ObjectVersionKind.Delta &&
-                store.ReadObjectVersionChain(historical, state.Segment0Field1).Records.Count == 2,
+                store.ReadObjectVersionChain(historical, state.Segment0Field1.Value).Records.Count == 2,
                 "One generic field edit must produce its object's persisted Base/Delta chain.");
         });
         WriteAddress(directory, historical, worldId);
@@ -183,7 +183,7 @@ internal static class Program {
     }
 
     private static WorldV1 CheckHistoricalDto(StateRevisionStore store, SchemaStore schemas,
-        FrameAddress historical, uint worldId) {
+        FrameAddress historical, ObjectId worldId) {
         DecodedRevision decoded = RevisionDecoder.Read(store, schemas, historical, Readers());
         var world = decoded.GetRequired(worldId).GetState<WorldV1>();
         var first = decoded.GetRequired(world.Segment0Field1).GetState<BoxStates.V1<int>>();
@@ -206,19 +206,19 @@ internal static class Program {
     }
 
     private static void RequireForcedBaseAndStableDelta(StateRevisionStore store, FrameAddress upgraded,
-        FrameAddress unchanged, FrameAddress changed, uint changedId) {
+        FrameAddress unchanged, FrameAddress changed, ObjectId changedId) {
         StateRevision rewrite = store.Read(upgraded);
         Require(rewrite.LocalObjects.Count == 5 && rewrite.LocalObjects.All(row => row.Kind == ObjectVersionKind.Base),
             "All five upgraded durable objects must force Base, including KeepExact Box<int>.");
         Require(store.Read(unchanged).LocalObjects.Count == 0, "The installed DTO baseline must compare unchanged.");
         StateRevision delta = store.Read(changed);
-        Require(delta.LocalObjects.Count == 1 && delta.LocalObjects[0].ObjectId == changedId &&
+        Require(delta.LocalObjects.Count == 1 && delta.LocalObjects[0].ObjectId == changedId.Value &&
             delta.LocalObjects[0].Kind == ObjectVersionKind.Delta, "A subsequent same-Schema edit must produce ordinary Delta.");
     }
 
     private static void CheckContexts(SchemaStore schemas, int expectedEdges) {
         var groups = UpgradeTrace.Calls.GroupBy(call => call.ObjectId).ToArray();
-        Require(groups.Length == 5 && groups.All(group => group.Key != 0), "Context leaked an owner's object identity.");
+        Require(groups.Length == 5 && groups.All(group => !group.Key.IsNull), "Context leaked an owner's object identity.");
         foreach (var group in groups) {
             var edges = group.GroupBy(call => call.Source.Version).ToArray();
             Require(edges.Length == expectedEdges, "Context retained the wrong owner edge count.");
@@ -243,14 +243,14 @@ internal static class Program {
         }
     }
 
-    private static void CheckNestedCallbacks(WorldV1 world, uint worldId) {
+    private static void CheckNestedCallbacks(WorldV1 world, ObjectId worldId) {
         Require(Providers(world.Segment0Field1).SequenceEqual(new[] { "box-value" }) &&
             Providers(world.Segment0Field2).SequenceEqual(new[] { "box-value" }) &&
             Providers(world.Segment0Field4).SequenceEqual(new[] { "box-value", "point-leaf" }) &&
             Providers(world.Segment0Field3).SequenceEqual(new[] { "box-value", "pair-value", "point-leaf", "point-leaf" }) &&
             Providers(worldId).SequenceEqual(new[] { "world-value", "pair-value", "legacy-leaf", "legacy-leaf" }),
             "Open owner/Pair composition lost local key scopes, leaf reuse or per-object invocation state.");
-        IEnumerable<string> Providers(uint id) => UpgradeTrace.Calls
+        IEnumerable<string> Providers(ObjectId id) => UpgradeTrace.Calls
             .Where(call => call.ObjectId == id && call.Source.Version == 1).Select(call => call.Provider);
     }
 
@@ -263,13 +263,13 @@ internal static class Program {
         action(new StateRevisionStore(segments), new SchemaStore(file, readOnly: true));
     }
 
-    private static void WriteAddress(string directory, FrameAddress revision, uint worldId) =>
-        File.WriteAllText(Path.Combine(directory, "historical.txt"), $"{revision.FileNumber}:{revision.FrameTicket.Packed}:{worldId}");
+    private static void WriteAddress(string directory, FrameAddress revision, ObjectId worldId) =>
+        File.WriteAllText(Path.Combine(directory, "historical.txt"), $"{revision.FileNumber}:{revision.FrameTicket.Packed}:{worldId.Value}");
 
-    private static (FrameAddress Revision, uint WorldId) ReadAddress(string directory) {
+    private static (FrameAddress Revision, ObjectId WorldId) ReadAddress(string directory) {
         string[] parts = File.ReadAllText(Path.Combine(directory, "historical.txt")).Split(':');
         Require(parts.Length == 3, "Malformed probe address handoff.");
-        return (new FrameAddress(uint.Parse(parts[0]), SizedPtr.FromPacked(ulong.Parse(parts[1]))), uint.Parse(parts[2]));
+        return (new FrameAddress(uint.Parse(parts[0]), SizedPtr.FromPacked(ulong.Parse(parts[1]))), new ObjectId(uint.Parse(parts[2])));
     }
 
     private static void Require(bool condition, string message) {

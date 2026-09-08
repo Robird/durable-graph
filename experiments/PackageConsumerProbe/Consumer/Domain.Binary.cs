@@ -89,12 +89,12 @@ public sealed partial class Character : BinaryBase {
         }
         CaptureSession session = new();
         CaptureContext context = session.BeginCapture();
-        uint id = __DurableState.AddRoot(context, source);
+        ObjectId id = __DurableState.AddRoot(context, source);
         CapturedGraph graph = context.Seal();
         var state = __DurableState.Normalize(graph.Objects.Single(row => row.Id == id));
         int constructors = _constructorCalls, baseConstructors = BaseConstructorCalls;
         Character restored = __DurableState.Allocate();
-        __DurableState.Hydrate(restored, in state, new ObjectReadTable(StringReadTable.Decode([]), new Dictionary<uint, DurableBase>()));
+        __DurableState.Hydrate(restored, in state, new ObjectReadTable(StringReadTable.Decode([]), new Dictionary<ObjectId, DurableBase>()));
         if (ReferenceEquals(source, restored) || !restored.HasExpectedBase || restored._total != 42 ||
             restored._sentinel != 0 || _constructorCalls != constructors || BaseConstructorCalls != baseConstructors) {
             throw new InvalidOperationException("Generated allocation/hydration ran constructors or lost private readonly base fields.");

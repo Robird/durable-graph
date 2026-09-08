@@ -25,7 +25,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         foreach (string forbidden in new[] { "ValueSlotCodec", "PrimitiveSlotCodecs", "DynamicInvoke", "System.Reflection", "Dictionary<" }) {
             Assert.DoesNotContain(forbidden, generated);
         }
-        Assert.Contains("writer.WriteUInt32(value.Segment0Field1)", generated);
+        Assert.Contains("writer.WriteUInt32(value.Segment0Field1.Value)", generated);
         Assert.Contains("reader.ReadUInt32()", generated);
     }
 
@@ -69,7 +69,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         Type item = EmitAndLoad(run.OutputCompilation).GetType("Item")!;
         Assert.Equal(TypeTag.String, Assert.Single(ReadSchemaOnly(item, 1).Fields).TypeTag);
         Type body = item.GetNestedType("__DurableState", BindingFlags.NonPublic)!;
-        Assert.Equal(typeof(uint), body.GetNestedType("V1", BindingFlags.NonPublic)!
+        Assert.Equal(typeof(ObjectId), body.GetNestedType("V1", BindingFlags.NonPublic)!
             .GetField("Segment0Field1", BindingFlags.Instance | BindingFlags.NonPublic)!.FieldType);
         Assert.Equal(2, body.GetMethod("Capture", BindingFlags.Static | BindingFlags.NonPublic)!.GetParameters().Length);
     }
@@ -159,7 +159,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         GeneratorTestRun initial = RunGenerator(ReferenceCaptureHistoryInitialSource);
         AssertSchemaOnlyCompiles(initial);
         publisher.Publish(files.WriteManifest(initial), files.History);
-        // The current CLR field changes to UInt32, which happens to have identical DTO storage.
+        // The current CLR field changes to UInt32, which happens to have identical wire bytes.
         // The declaration schema must nevertheless change; DTO representation is not schema identity.
         string changed = ReferenceCaptureHistoryInitialSource.Replace(
             "private string _other = new string(new[] { 'x' });", "private uint _other = 3;");
@@ -221,7 +221,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         public sealed partial class Derived : Concrete { [DurableField(1)] private bool _flag = true; }
         public static class Host {
             private static void Check(bool value, string message) { if (!value) throw new Exception(message); }
-            private static ObjectStateRecord Find(CapturedGraph graph, uint id) => graph.Objects.Single(entry => entry.Id == id);
+            private static ObjectStateRecord Find(CapturedGraph graph, uint id) => graph.Objects.Single(entry => entry.Id.Value == id);
             private static (CaptureSession Session, CapturedGraph Graph, Leaf Leaf, Item Item, string Shared, string Other) Fixture() {
                 string shared = new string(new[] { 'x' });
                 string other = new string(new[] { 'x' });
@@ -230,10 +230,10 @@ public sealed partial class DurableSchemaGeneratorTests {
                 var item = new Item(shared);
                 var session = new CaptureSession();
                 using var context = session.BeginCapture();
-                Check(Leaf.__DurableState.AddRoot(context, leaf) == 1, "First root ID.");
-                Check(Item.__DurableState.AddRoot(context, item) == 2, "Second root ID.");
-                Check(Leaf.__DurableState.AddRoot(context, leaf) == 1, "Repeated root ID.");
-                Check(Leaf.__DurableState.AddRoot(context, null) == 0, "Null root ID.");
+                Check(Leaf.__DurableState.AddRoot(context, leaf).Value == 1, "First root ID.");
+                Check(Item.__DurableState.AddRoot(context, item).Value == 2, "Second root ID.");
+                Check(Leaf.__DurableState.AddRoot(context, leaf).Value == 1, "Repeated root ID.");
+                Check(Leaf.__DurableState.AddRoot(context, null).Value == 0, "Null root ID.");
                 var graph = context.Seal();
                 session.Accept(graph);
                 return (session, graph, leaf, item, shared, other);
@@ -241,16 +241,16 @@ public sealed partial class DurableSchemaGeneratorTests {
             public static bool IdentityAndLayout() {
                 var f = Fixture();
                 var graph = f.Graph;
-                Check(graph.RootIds.SequenceEqual(new uint[] { 1, 2, 1, 0 }), "Root input order and null/repeats.");
-                Check(graph.Objects.Select(entry => entry.Id).SequenceEqual(new uint[] { 1, 2, 3, 4, 5, 6 }), "Sorted object IDs.");
+                Check(graph.RootIds.Select(id => id.Value).SequenceEqual(new uint[] { 1, 2, 1, 0 }), "Root input order and null/repeats.");
+                Check(graph.Objects.Select(entry => entry.Id.Value).SequenceEqual(new uint[] { 1, 2, 3, 4, 5, 6 }), "Sorted object IDs.");
                 var leaf = Find(graph, 1).GetState<Leaf.__DurableState.V1>();
                 var item = Find(graph, 2).GetState<Item.__DurableState.V1>();
-                Check(leaf.Segment0Field1 == 3 && leaf.Segment0Field2 == 0 && leaf.Segment1Field1 == -1, "Private base fields.");
-                Check(leaf.Segment1Field3 == 3 && item.Segment0Field1 == 3 && leaf.Segment1Field4 == 4, "Shared vs equal string IDs.");
+                Check(leaf.Segment0Field1.Value == 3 && leaf.Segment0Field2.Value == 0 && leaf.Segment1Field1 == -1, "Private base fields.");
+                Check(leaf.Segment1Field3.Value == 3 && item.Segment0Field1.Value == 3 && leaf.Segment1Field4.Value == 4, "Shared vs equal string IDs.");
                 Check(Find(graph, 3).Kind == ObjectStateKind.String && Find(graph, 3).Schema is null, "String record kind.");
                 Check(ReferenceEquals(Find(graph, 3).StringContent, f.Shared), "Immutable content identity.");
                 Check(ReferenceEquals(Find(graph, 4).StringContent, f.Other), "Distinct equal content retained.");
-                Check(Find(graph, 5).StringContent.Length == 0 && leaf.Segment1Field5 == 5, "Empty is non-null.");
+                Check(Find(graph, 5).StringContent.Length == 0 && leaf.Segment1Field5.Value == 5, "Empty is non-null.");
                 Check(Find(graph, 6).StringContent.Length == 1 && Find(graph, 6).StringContent[0] == '\uD800', "Unpaired surrogate preserved.");
                 Check(Find(graph, 1).Kind == ObjectStateKind.Durable && ReferenceEquals(Find(graph, 1).Schema, Leaf.Schema), "Exact root schema.");
                 Check(Leaf.Schema.BaseSchema!.Fields.All(field => field.TypeTag == TypeTag.String), "Schema still String.");
@@ -270,8 +270,8 @@ public sealed partial class DurableSchemaGeneratorTests {
                 var reader = new BinaryPayloadReader(new byte[] { 255, 255, 255, 255, 15, 0, 1, 128, 1, 1, 0, 0 });
                 var state = Leaf.__DurableState.ReadBaseBodyV1(ref reader);
                 reader.EnsureFullyConsumed();
-                Check(state.Segment0Field1 == uint.MaxValue && state.Segment0Field2 == 0 && state.Segment1Field1 == -1 &&
-                    state.Segment1Field3 == 128 && state.Segment1Field4 == 1, "ID-only read layout.");
+                Check(state.Segment0Field1.Value == uint.MaxValue && state.Segment0Field2.Value == 0 && state.Segment1Field1 == -1 &&
+                    state.Segment1Field3.Value == 128 && state.Segment1Field4.Value == 1, "ID-only read layout.");
                 var buffer = new ArrayBufferWriter<byte>();
                 var writer = new BinaryPayloadWriter(buffer);
                 Leaf.__DurableState.WriteBaseBody(ref writer, in state);
@@ -286,13 +286,13 @@ public sealed partial class DurableSchemaGeneratorTests {
                     f.Leaf.Mutate(new string(new[] { 'y' }));
                     f.Item.Change(new string(new[] { 'z' }));
                     Check(Find(next, 1).GetState<Leaf.__DurableState.V1>().Segment1Field1 == -1, "Sealed scalar unchanged.");
-                    Check(Find(next, 1).GetState<Leaf.__DurableState.V1>().Segment1Field3 == 3, "Sealed reference unchanged.");
+                    Check(Find(next, 1).GetState<Leaf.__DurableState.V1>().Segment1Field3.Value == 3, "Sealed reference unchanged.");
                     f.Session.Accept(next);
                     Check(ReferenceEquals(f.Session.Current, next), "Accept installs exact candidate.");
-                    Check(Find(f.Session.Current!, 2).GetState<Item.__DurableState.V1>().Segment0Field1 == 3, "Accept does not recapture.");
+                    Check(Find(f.Session.Current!, 2).GetState<Item.__DurableState.V1>().Segment0Field1.Value == 3, "Accept does not recapture.");
                 }
                 var parent = f.Session.Current;
-                uint burned;
+                ObjectId burned;
                 var fresh = new Item(new string(new[] { 'q' }));
                 using (var capture = f.Session.BeginCapture()) {
                     burned = Item.__DurableState.AddRoot(capture, fresh);
@@ -301,13 +301,13 @@ public sealed partial class DurableSchemaGeneratorTests {
                     Check(ReferenceEquals(f.Session.Current, parent), "Discard leaves parent unchanged.");
                 }
                 using (var capture = f.Session.BeginCapture()) {
-                    uint retried = Item.__DurableState.AddRoot(capture, fresh);
-                    Check(retried > burned + 1, "Discard burns both domain and string IDs.");
+                    ObjectId retried = Item.__DurableState.AddRoot(capture, fresh);
+                    Check(retried.Value > burned.Value + 1, "Discard burns both domain and string IDs.");
                     f.Session.Accept(capture.Seal());
                 }
                 using (var capture = f.Session.BeginCapture()) {
-                    uint returned = Item.__DurableState.AddRoot(capture, f.Item);
-                    Check(returned > burned, "Retired root cannot recover old ID 2.");
+                    ObjectId returned = Item.__DurableState.AddRoot(capture, f.Item);
+                    Check(returned.Value > burned.Value, "Retired root cannot recover old ID 2.");
                     f.Session.Accept(capture.Seal());
                 }
                 Check(Find(f.Graph, 1).GetState<Leaf.__DurableState.V1>().Segment1Field1 == -1, "Retained old graph stays frozen.");
@@ -324,9 +324,9 @@ public sealed partial class DurableSchemaGeneratorTests {
                 }
                 Check(rejected && session.Current is null, "Root binding rejects derived slicing.");
                 using (var capture = session.BeginCapture()) {
-                    uint id = Derived.__DurableState.AddRoot(capture, value);
+                    ObjectId id = Derived.__DurableState.AddRoot(capture, value);
                     var graph = capture.Seal();
-                    Check(Find(graph, id).GetState<Derived.__DurableState.V1>().Segment1Field1, "Exact derived root succeeds.");
+                    Check(Find(graph, id.Value).GetState<Derived.__DurableState.V1>().Segment1Field1, "Exact derived root succeeds.");
                     session.Accept(graph);
                 }
                 return true;
@@ -356,7 +356,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             public static byte[] Capture() {
                 var session = new CaptureSession();
                 using var capture = session.BeginCapture();
-                uint id = Leaf.__DurableState.AddRoot(capture, new Leaf(new string(new[] { 'x' })));
+                ObjectId id = Leaf.__DurableState.AddRoot(capture, new Leaf(new string(new[] { 'x' })));
                 var graph = capture.Seal();
                 var state = graph.Objects.Single(entry => entry.Id == id).GetState<Leaf.__DurableState.V1>();
                 var buffer = new ArrayBufferWriter<byte>();
@@ -386,7 +386,7 @@ public sealed partial class DurableSchemaGeneratorTests {
                 var reader = new BinaryPayloadReader(bytes);
                 var state = Leaf.__DurableState.ReadBaseBodyV1(ref reader);
                 reader.EnsureFullyConsumed();
-                if (state.Segment0Field1 != 2u || state.Segment1Field1 != 2u || state.Segment1Field2 != 3u ||
+                if (state.Segment0Field1.Value != 2u || state.Segment1Field1.Value != 2u || state.Segment1Field2.Value != 3u ||
                     !ReferenceEquals(Leaf.__DurableState.V1.Schema, Leaf.GetSchema(1)) ||
                     Leaf.__DurableState.V1.Schema.BaseSchema!.SchemaId != "reference-history.base" ||
                     Leaf.__DurableState.V1.Schema.BaseSchema!.Fields[0].TypeTag != TypeTag.String) {

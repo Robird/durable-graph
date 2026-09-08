@@ -12,7 +12,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         InlineGraphFixture fixture = CompileInlineGraph();
         using RawBaseDirectory directory = new();
         FrameAddress first, unchanged, nested, childOnly, removed;
-        uint worldId;
+        ObjectId worldId;
         object originalWorld, originalChild;
         using (GraphRepository repository = GraphRepository.CreateNew(directory.Path)) {
             using IDisposable session = (IDisposable)fixture.CreateSession(repository);
@@ -47,7 +47,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             Assert.Empty(store.Read(unchanged).LocalObjects);
             Assert.Empty(store.Read(unchanged).RemovedObjectIds);
             ObjectVersionRecord ownerDelta = Assert.Single(store.Read(nested).LocalObjects);
-            Assert.Equal(worldId, ownerDelta.ObjectId);
+            Assert.Equal(worldId.Value, ownerDelta.ObjectId);
             Assert.Equal(ObjectVersionKind.Delta, ownerDelta.Kind);
             // Owner field 1 -> Envelope field 1 -> Leaf field 1 -> signed int 8.
             Assert.Equal<byte>([1, 1, 1, 16], ownerDelta.Body.ToArray());
@@ -114,7 +114,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         Directory.CreateDirectory(schemaDirectory.Path);
         string schemaPath = Path.Combine(schemaDirectory.Path, "schemas.rbf");
         FrameAddress first;
-        uint worldId;
+        ObjectId worldId;
         using (SegmentStore segments = SegmentStore.CreateNew(directory.Path))
         using (var schemaFile = RbfFile.CreateNew(schemaPath)) {
             StateRevisionStore store = new(segments);
@@ -150,7 +150,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         SchemaStore schemas = new(schemaFile);
         PreparedWorldRevision initial = fixture.PrepareNew(store, schemas, fixture.NewWorld());
         ObjectVersionRecord owner = Assert.Single(initial.Revision.LocalObjects,
-            record => record.ObjectId == initial.WorldId);
+            record => record.ObjectId == initial.WorldId.Value);
         DecodedBaseObjectBody envelope = BaseObjectBodyCodec.Decode(owner.Body);
         byte[] body = envelope.Body.ToArray();
         uint childId = FindGraphObject(initial.Revision, "inline.graph.child");
@@ -162,10 +162,10 @@ public sealed partial class DurableSchemaGeneratorTests {
             : initial.Revision.LocalObjectIds.Max() + 1;
         Assert.InRange(replacement, 1u, 127u);
         body[1] = (byte)replacement; // Canonical one-byte ID; no broken wire/framing to mask visitor failure.
-        ObjectVersionRecord invalidOwner = ObjectVersionRecord.CreateBase(initial.WorldId,
+        ObjectVersionRecord invalidOwner = ObjectVersionRecord.CreateBase(initial.WorldId.Value,
             BaseObjectBodyCodec.EncodeDurable(schemas.GetRequired(envelope.SchemaKey!.Value), new(body)).Body);
         FrameAddress address = store.Append(StateRevision.CreateObjectHeadMapBase(null,
-            initial.Revision.LocalObjects.Select(record => record.ObjectId == initial.WorldId ? invalidOwner : record), []));
+            initial.Revision.LocalObjects.Select(record => record.ObjectId == initial.WorldId.Value ? invalidOwner : record), []));
 
         // Exact DTO reading itself must reject; rejection cannot be deferred until domain Hydrate.
         Assert.Throws<InvalidDataException>(() => fixture.ReadStored(store, schemas, address));
@@ -185,7 +185,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         public object NewWorld() => Method<Func<object>>("NewWorld")();
         public object World(object session) => Method<Func<object, object>>("World")(session);
         public object? Child(object world) => Method<Func<object, object?>>("Child")(world);
-        public uint WorldId(object session) => Method<Func<object, uint>>("WorldId")(session);
+        public ObjectId WorldId(object session) => Method<Func<object, ObjectId>>("WorldId")(session);
         public FrameAddress Commit(object session) => Method<Func<object, FrameAddress>>("Commit")(session);
         public void ChangeNested(object world, int value) => Method<Action<object, int>>("ChangeNested")(world, value);
         public void ChangeChild(object world, int value) => Method<Action<object, int>>("ChangeChild")(world, value);
@@ -196,8 +196,8 @@ public sealed partial class DurableSchemaGeneratorTests {
             => Method<Action<object, int, int, bool>>("Check")(world, value, childValue, cold);
         public PreparedWorldRevision PrepareNew(StateRevisionStore states, SchemaStore schemas, object world)
             => Method<Func<StateRevisionStore, SchemaStore, object, PreparedWorldRevision>>("PrepareNew")(states, schemas, world);
-        public object LoadOld(StateRevisionStore states, SchemaStore schemas, FrameAddress address, uint worldId)
-            => Method<Func<StateRevisionStore, SchemaStore, FrameAddress, uint, object>>("LoadOld")(states, schemas, address, worldId);
+        public object LoadOld(StateRevisionStore states, SchemaStore schemas, FrameAddress address, ObjectId worldId)
+            => Method<Func<StateRevisionStore, SchemaStore, FrameAddress, ObjectId, object>>("LoadOld")(states, schemas, address, worldId);
         public DecodedRevision ReadStored(StateRevisionStore states, SchemaStore schemas, FrameAddress address)
             => Method<Func<StateRevisionStore, SchemaStore, FrameAddress, DecodedRevision>>("ReadStored")(states, schemas, address);
     }
@@ -298,7 +298,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             public static object LoadSession(GraphRepository repository) => repository.Load<World>(Models());
             public static object World(object session) => ((GraphSession<World>)session).World;
             public static object? Child(object world) => ((World)world).Value.Inner.Child;
-            public static uint WorldId(object session) => ((GraphSession<World>)session).WorldId!.Value;
+            public static ObjectId WorldId(object session) => ((GraphSession<World>)session).WorldId!.Value;
             public static FrameAddress Commit(object session) => ((GraphSession<World>)session).Commit(new(1000000, 1));
             public static void ChangeNested(object world, int value) => ((World)world).ChangeNested(value);
             public static void ChangeChild(object world, int value) => ((World)world).Value.Inner.Child!.Value = value;
@@ -314,7 +314,7 @@ public sealed partial class DurableSchemaGeneratorTests {
                 => ((World)world).Check(value, childValue, cold);
             public static PreparedWorldRevision PrepareNew(StateRevisionStore states, SchemaStore schemas, object world)
                 => LoadedWorld.PrepareNew(states, schemas, (World)world, Models(), new(1000000, 1));
-            public static object LoadOld(StateRevisionStore states, SchemaStore schemas, FrameAddress address, uint worldId)
+            public static object LoadOld(StateRevisionStore states, SchemaStore schemas, FrameAddress address, ObjectId worldId)
                 => LoadedWorld.Load<World>(states, schemas, address, worldId, Models()).World;
             public static DecodedRevision ReadStored(StateRevisionStore states, SchemaStore schemas, FrameAddress address) {
                 StateReaderRegistry readers = new();

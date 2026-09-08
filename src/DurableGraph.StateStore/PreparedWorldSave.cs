@@ -11,7 +11,7 @@ internal sealed class PreparedWorldSave<TWorld> : IDisposable where TWorld : Dur
     private NormalizedRevision? _installation;
 
     internal PreparedWorldSave(WorldWorkspace<TWorld> owner, CaptureContext context,
-        CapturedGraph candidate, uint worldId, StateRevision revision, NormalizedRevision next) {
+        CapturedGraph candidate, ObjectId worldId, StateRevision revision, NormalizedRevision next) {
         _owner = owner;
         _context = context;
         _candidate = candidate;
@@ -20,7 +20,7 @@ internal sealed class PreparedWorldSave<TWorld> : IDisposable where TWorld : Dur
         _next = next;
     }
 
-    internal uint WorldId { get; }
+    internal ObjectId WorldId { get; }
     internal StateRevision Revision { get; }
 
     /// <summary>Completes the last address-dependent allocation before publishing the head.</summary>

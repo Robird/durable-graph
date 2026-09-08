@@ -141,7 +141,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         AssertSchemaOnlyCompiles(run);
         Type body = EmitAndLoad(run.OutputCompilation).GetType("Item")!
             .GetNestedType("__DurableState", BindingFlags.NonPublic)!;
-        Assert.Equal(typeof(uint), body.GetNestedType("V1", BindingFlags.NonPublic)!
+        Assert.Equal(typeof(ObjectId), body.GetNestedType("V1", BindingFlags.NonPublic)!
             .GetField("Segment0Field1", BindingFlags.Instance | BindingFlags.NonPublic)!.FieldType);
         Assert.Single(body.GetMethod("Capture", BindingFlags.Static | BindingFlags.NonPublic)!.GetParameters());
     }
@@ -158,7 +158,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         AssertSchemaOnlyCompiles(run);
         Assembly assembly = EmitAndLoad(run.OutputCompilation);
         Type baseBody = assembly.GetType("Base")!.GetNestedType("__DurableState", BindingFlags.NonPublic)!;
-        Assert.Equal(typeof(uint), baseBody.GetNestedType("V1", BindingFlags.NonPublic)!
+        Assert.Equal(typeof(ObjectId), baseBody.GetNestedType("V1", BindingFlags.NonPublic)!
             .GetField("Segment0Field1", BindingFlags.Instance | BindingFlags.NonPublic)!.FieldType);
         Type leafBody = assembly.GetType("Leaf")!.GetNestedType("__DurableState", BindingFlags.NonPublic)!;
         Assert.Single(leafBody.GetMethod("Capture", BindingFlags.Static | BindingFlags.NonPublic)!.GetParameters());

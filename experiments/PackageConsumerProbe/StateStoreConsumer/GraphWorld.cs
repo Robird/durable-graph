@@ -30,7 +30,7 @@ public sealed partial class GraphWorld : DurableBase {
         __DurableState.RegisterModel(models);
         GraphCharacter.__DurableState.RegisterModel(models);
         GraphItem.__DurableState.RegisterModel(models);
-        uint worldId, characterId;
+        ObjectId worldId, characterId;
         uint[] initialIds;
         FrameAddress initialRevision, childRevision, removedRevision;
         int constructed;
@@ -70,7 +70,7 @@ public sealed partial class GraphWorld : DurableBase {
             Require(changed.Revision.LocalObjects.Count == 1 && changed.Revision.RemovedObjectIds.Count == 0,
                 "Changing only Child must leave the World, Item and string unchanged.");
             ObjectVersionRecord delta = changed.Revision.LocalObjects[0];
-            characterId = delta.ObjectId;
+            characterId = new ObjectId(delta.ObjectId);
             Require(delta.Kind == ObjectVersionKind.Delta &&
                 repeated.Revision.LocalObjects.Count == 1 &&
                 repeated.Revision.LocalObjects[0].Body.SequenceEqual(delta.Body),
@@ -81,8 +81,8 @@ public sealed partial class GraphWorld : DurableBase {
                 "Host Append must not advance the original loaded baseline.");
             var current = LoadedWorld.Load<GraphWorld>(store, schemas, childRevision, worldId, models);
             AssertGraph(current.World, 8, constructed);
-            Require(store.ReadLiveObjectHeadMap(childRevision)[worldId] == initialRevision &&
-                store.ReadObjectVersionChain(childRevision, characterId).Records.Count == 2,
+            Require(store.ReadLiveObjectHeadMap(childRevision)[worldId.Value] == initialRevision &&
+                store.ReadObjectVersionChain(childRevision, characterId.Value).Records.Count == 2,
                 "A child-only edit must reuse the World head and extend only the child's content chain.");
             var unchanged = current.Prepare(policy);
             Require(unchanged.Revision.LocalObjects.Count == 0 && unchanged.Revision.RemovedObjectIds.Count == 0,
@@ -90,8 +90,8 @@ public sealed partial class GraphWorld : DurableBase {
 
             current.World.Disconnect();
             PreparedWorldRevision removed = current.Prepare(policy);
-            Require(removed.Revision.LocalObjects.Count == 1 && removed.Revision.LocalObjects[0].ObjectId == worldId &&
-                removed.Revision.RemovedObjectIds.Order().SequenceEqual(initialIds.Where(id => id != worldId).Order()),
+            Require(removed.Revision.LocalObjects.Count == 1 && removed.Revision.LocalObjects[0].ObjectId == worldId.Value &&
+                removed.Revision.RemovedObjectIds.Order().SequenceEqual(initialIds.Where(id => id != worldId.Value).Order()),
                 "Disconnecting the last World paths must remove the cyclic island and its string.");
             removedRevision = store.Append(removed.Revision);
         }
@@ -102,7 +102,7 @@ public sealed partial class GraphWorld : DurableBase {
             StateRevisionStore store = new(segments);
             var removed = LoadedWorld.Load<GraphWorld>(store, schemas, removedRevision, worldId, models);
             Require(removed.World._primary is null && removed.World._alias is null &&
-                store.ReadLiveObjectHeadMap(removedRevision).Keys.SequenceEqual(new[] { worldId }),
+                store.ReadLiveObjectHeadMap(removedRevision).Keys.SequenceEqual(new[] { worldId.Value }),
                 "Cold reopening must retain the removed graph's exact membership.");
             AssertGraph(LoadedWorld.Load<GraphWorld>(store, schemas, initialRevision, worldId, models).World, 7, constructed);
             AssertGraph(LoadedWorld.Load<GraphWorld>(store, schemas, childRevision, worldId, models).World, 8, constructed);

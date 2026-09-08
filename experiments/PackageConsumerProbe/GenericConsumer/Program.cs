@@ -51,7 +51,7 @@ internal static class Program {
         World world = new();
         FrameAddress initial;
         FrameAddress historical;
-        uint worldId;
+        ObjectId worldId;
         using (GraphRepository repository = GraphRepository.CreateNew(directory, Options)) {
             using GraphSession<World> session = repository.Create(world, Models());
             initial = session.Commit(Policy);
@@ -67,9 +67,9 @@ internal static class Program {
                 "Only World, three Box instances and string may have object rows.");
             var state = CheckHistoricalDto(store, schemas, historical, worldId);
             StateRevision delta = store.Read(historical);
-            Require(delta.LocalObjects.Count == 1 && delta.LocalObjects[0].ObjectId == state.Segment0Field1 &&
+            Require(delta.LocalObjects.Count == 1 && delta.LocalObjects[0].ObjectId == state.Segment0Field1.Value &&
                 delta.LocalObjects[0].Kind == ObjectVersionKind.Delta, "One generic field edit must produce its object's Delta.");
-            Require(store.ReadObjectVersionChain(historical, state.Segment0Field1).Records.Count == 2,
+            Require(store.ReadObjectVersionChain(historical, state.Segment0Field1.Value).Records.Count == 2,
                 "The generic object lacks the persisted Base/Delta chain.");
         });
         WriteAddress(directory, "historical", historical, worldId);
@@ -99,7 +99,7 @@ internal static class Program {
         FrameAddress upgraded;
         FrameAddress unchanged;
         FrameAddress changed;
-        uint changedId = 0;
+        ObjectId changedId = default;
         using (GraphRepository repository = GraphRepository.OpenExisting(directory, Options)) {
             using GraphSession<World> session = repository.Load<World>(Models());
             World world = session.World;
@@ -186,7 +186,7 @@ internal static class Program {
     }
 
     private static WorldV1 CheckHistoricalDto(StateRevisionStore store, SchemaStore schemas,
-        FrameAddress historical, uint worldId) {
+        FrameAddress historical, ObjectId worldId) {
         DecodedRevision decoded = RevisionDecoder.Read(store, schemas, historical, Readers());
         var world = decoded.GetRequired(worldId).GetState<WorldV1>();
         var first = decoded.GetRequired(world.Segment0Field1).GetState<BoxStates.V1<int>>();
@@ -207,19 +207,19 @@ internal static class Program {
     }
 
     private static void RequireForcedBaseAndStableDelta(StateRevisionStore store, FrameAddress upgraded,
-        FrameAddress unchanged, FrameAddress changed, uint changedId) {
+        FrameAddress unchanged, FrameAddress changed, ObjectId changedId) {
         StateRevision rewrite = store.Read(upgraded);
         Require(rewrite.LocalObjects.Count == 4 && rewrite.LocalObjects.All(row => row.Kind == ObjectVersionKind.Base),
             "All four upgraded durable objects, including layout-equivalent Box<int>, must force Base.");
         Require(store.Read(unchanged).LocalObjects.Count == 0, "The installed DTO baseline must compare unchanged.");
         StateRevision delta = store.Read(changed);
-        Require(delta.LocalObjects.Count == 1 && delta.LocalObjects[0].ObjectId == changedId &&
+        Require(delta.LocalObjects.Count == 1 && delta.LocalObjects[0].ObjectId == changedId.Value &&
             delta.LocalObjects[0].Kind == ObjectVersionKind.Delta, "The next same-Schema edit must use ordinary Delta.");
     }
 
     private static void CheckContexts(SchemaStore schemas, int expectedObjectCount, int expectedEdgesPerObject) {
         var groups = UpgradeTrace.Calls.GroupBy(call => call.ObjectId).ToArray();
-        Require(groups.Length == expectedObjectCount && groups.All(group => group.Key != 0 && group.Count() == expectedEdgesPerObject),
+        Require(groups.Length == expectedObjectCount && groups.All(group => !group.Key.IsNull && group.Count() == expectedEdgesPerObject),
             "UpgradeContext has stale object identity or the wrong edge count.");
         foreach (var group in groups) {
             DurableSchema? previousTarget = null;
@@ -243,13 +243,13 @@ internal static class Program {
         action(new StateRevisionStore(segments), new SchemaStore(file, readOnly: true));
     }
 
-    private static void WriteAddress(string directory, string name, FrameAddress revision, uint worldId) =>
-        File.WriteAllText(Path.Combine(directory, name + ".txt"), $"{revision.FileNumber}:{revision.FrameTicket.Packed}:{worldId}");
+    private static void WriteAddress(string directory, string name, FrameAddress revision, ObjectId worldId) =>
+        File.WriteAllText(Path.Combine(directory, name + ".txt"), $"{revision.FileNumber}:{revision.FrameTicket.Packed}:{worldId.Value}");
 
-    private static (FrameAddress Revision, uint WorldId) ReadAddress(string directory, string name) {
+    private static (FrameAddress Revision, ObjectId WorldId) ReadAddress(string directory, string name) {
         string[] parts = File.ReadAllText(Path.Combine(directory, name + ".txt")).Split(':');
         Require(parts.Length == 3, "Malformed probe address handoff.");
-        return (new FrameAddress(uint.Parse(parts[0]), SizedPtr.FromPacked(ulong.Parse(parts[1]))), uint.Parse(parts[2]));
+        return (new FrameAddress(uint.Parse(parts[0]), SizedPtr.FromPacked(ulong.Parse(parts[1]))), new ObjectId(uint.Parse(parts[2])));
     }
 
     private static void Require(bool condition, string message) {

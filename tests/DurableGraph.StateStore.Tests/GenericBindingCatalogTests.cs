@@ -120,7 +120,7 @@ public sealed class GenericBindingCatalogTests : IDisposable {
     }
 
     [Fact]
-    public void InheritedOrdinalsAreSubstitutedBeforeBindingAndUInt32SemanticsStayDistinct() {
+    public void InheritedOrdinalsAreSubstitutedBeforeBindingAndReferenceKindsStayDistinct() {
         StateModelRegistry registry = new();
         registry.Register(new StateDefinitionBinding("Node", SchemaKind.ReferenceObject, 0, null,
             [new("Node", 1, SchemaKind.ReferenceObject, 0, [])]));
@@ -136,8 +136,8 @@ public sealed class GenericBindingCatalogTests : IDisposable {
         StateSchemaBinding binding = registry.Snapshot().BindSchema(leaf);
         StateValueBinding own = binding.GetValue(TypeExpr.Parameter(0));
         StateValueBinding inherited = binding.GetValue(TypeExpr.Parameter(1));
-        Assert.Equal(typeof(uint), own.StateType);
-        Assert.Equal(typeof(uint), inherited.StateType);
+        Assert.Equal(typeof(ObjectId), own.StateType);
+        Assert.Equal(typeof(ObjectId), inherited.StateType);
         Assert.Equal(TypeTag.String, own.Slot.TypeTag);
         Assert.Equal(node, inherited.Slot.TargetType);
         Assert.NotEqual(own.StateOpsType, inherited.StateOpsType);
@@ -178,7 +178,7 @@ public sealed class GenericBindingCatalogTests : IDisposable {
             currentModelFactory: (_, _) => { bodyFactories++; throw new InvalidOperationException("No object body is needed for a reference slot."); }));
         StateValueBinding value = registry.Snapshot().ResolveCurrentValue(typeof(Box<Box<int>>));
         Assert.Equal(TypeExpr.Named("Box", TypeExpr.Named("Box", TypeExpr.Builtin(TypeTag.Int32))), value.Slot.TargetType);
-        Assert.Equal(typeof(uint), value.StateType);
+        Assert.Equal(typeof(ObjectId), value.StateType);
         Assert.Equal(0, bodyFactories);
     }
 

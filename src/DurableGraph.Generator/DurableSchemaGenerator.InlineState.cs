@@ -22,6 +22,7 @@ public sealed partial class DurableSchemaGenerator {
 
     private static string BinaryFieldTypeName(BinaryFieldModel field) {
         if (field.InlineSchema.HasValue) return InlineDtoTypeName(field.InlineSchema.Value);
+        if (IsBinaryReference(field.TypeTagValue)) return RuntimeName + "ObjectId";
         TryGetFieldTypeName(GetBinarySlotTypeTag(field.TypeTagValue), out string? name);
         return name!;
     }

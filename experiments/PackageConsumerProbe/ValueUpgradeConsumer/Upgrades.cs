@@ -12,7 +12,7 @@ using WorldV2 = Atelia.DurableGraph.Generated.Family_576F726C64.V2<Atelia.Durabl
 namespace ValueUpgradePackageConsumerProbe;
 
 internal static class UpgradeTrace {
-    internal static readonly List<(uint ObjectId, DurableSchema Source, DurableSchema Target, string Provider)> Calls = [];
+    internal static readonly List<(ObjectId ObjectId, DurableSchema Source, DurableSchema Target, string Provider)> Calls = [];
     internal static void Record(UpgradeContext context, string provider) =>
         Calls.Add((context.ObjectId, context.SourceObjectSchema, context.TargetObjectSchema, provider));
 }

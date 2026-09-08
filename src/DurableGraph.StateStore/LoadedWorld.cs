@@ -28,7 +28,7 @@ public static class LoadedWorld {
         StateRevisionStore store,
         SchemaStore schemas,
         FrameAddress revisionAddress,
-        uint worldId,
+        ObjectId worldId,
         StateModelRegistry models) where TWorld : DurableBase {
         return new(WorldWorkspace<TWorld>.Load(store, schemas, revisionAddress, worldId, models));
     }
@@ -45,7 +45,7 @@ public sealed class LoadedWorld<TWorld> where TWorld : DurableBase {
     internal LoadedWorld(WorldWorkspace<TWorld> workspace) => _workspace = workspace;
 
     public TWorld World => _workspace.World;
-    public uint WorldId => _workspace.WorldId;
+    public ObjectId WorldId => _workspace.WorldId;
     public FrameAddress ParentRevisionAddress => _workspace.ParentRevisionAddress!.Value;
 
     /// <summary>
@@ -61,11 +61,11 @@ public sealed class LoadedWorld<TWorld> where TWorld : DurableBase {
 /// <summary>Owned frozen State contents with a fixed Parent and the selected World ID.</summary>
 /// <remarks>Pass Revision to Storage.Append; the returned address still needs host publication.</remarks>
 public sealed class PreparedWorldRevision {
-    internal PreparedWorldRevision(uint worldId, StateRevision revision) {
+    internal PreparedWorldRevision(ObjectId worldId, StateRevision revision) {
         WorldId = worldId;
         Revision = revision;
     }
 
-    public uint WorldId { get; }
+    public ObjectId WorldId { get; }
     public StateRevision Revision { get; }
 }

@@ -53,7 +53,7 @@ internal static class Program {
         World world = new(node, equal);
         FrameAddress initial;
         FrameAddress historical;
-        uint worldId;
+        ObjectId worldId;
         using (GraphRepository repository = GraphRepository.CreateNew(directory, Options)) {
             using GraphSession<World> session = repository.Create(world, Models());
             initial = session.Commit(Policy);
@@ -69,10 +69,10 @@ internal static class Program {
             Require(first.LocalObjects.Count == 4 && first.LocalObjects.All(row => row.Kind == ObjectVersionKind.Base),
                 "Only World, Node and two identity-distinct strings may have object rows.");
             StateRevision second = store.Read(historical);
-            Require(second.LocalObjects.Count == 1 && second.LocalObjects[0].ObjectId == worldId &&
+            Require(second.LocalObjects.Count == 1 && second.LocalObjects[0].ObjectId == worldId.Value &&
                 second.LocalObjects[0].Kind == ObjectVersionKind.Delta,
                 "One nested leaf edit must produce exactly one owner Delta.");
-            Require(store.ReadObjectVersionChain(historical, worldId).Records.Count == 2, "Missing owner Base/Delta chain.");
+            Require(store.ReadObjectVersionChain(historical, worldId.Value).Records.Count == 2, "Missing owner Base/Delta chain.");
             CheckHistoricalDto(store, schemas, historical, worldId);
         });
         WriteAddress(directory, "historical", historical, worldId);
@@ -100,7 +100,7 @@ internal static class Program {
         Inspect(directory, (store, schemas) => {
             StateRevision rewrite = store.Read(upgraded);
             Require(rewrite.LocalObjects.Count == 2 && rewrite.LocalObjects.All(row => row.Kind == ObjectVersionKind.Base) &&
-                rewrite.LocalObjectIds.Contains(worldId), "Schema upgrades must force current World and Node Base objects.");
+                rewrite.LocalObjectIds.Contains(worldId.Value), "Schema upgrades must force current World and Node Base objects.");
             Require(store.Read(unchanged).LocalObjects.Count == 0, "The installed current DTO baseline must compare unchanged.");
             CheckHistoricalDto(store, schemas, historical, worldId);
             var dto = RevisionDecoder.Read(store, schemas, upgraded, Readers()).GetRequired(worldId).GetState<World.__DurableState.V2>();
@@ -125,7 +125,7 @@ internal static class Program {
         }
         Inspect(directory, (store, schemas) => {
             StateRevision revision = store.Read(upgraded);
-            Require(revision.LocalObjects.Count == 1 && revision.LocalObjects[0].ObjectId != worldId &&
+            Require(revision.LocalObjects.Count == 1 && revision.LocalObjects[0].ObjectId != worldId.Value &&
                 revision.LocalObjects[0].Kind == ObjectVersionKind.Base, "Only the upgraded child must be rewritten.");
             Require(store.Read(unchanged).LocalObjects.Count == 0, "Child baseline did not settle after publish.");
             Require(RevisionDecoder.Read(store, schemas, upgraded, Readers()).GetRequired(worldId).Schema!.Version == 2,
@@ -157,7 +157,7 @@ internal static class Program {
         }
         Inspect(directory, (store, schemas) => {
             StateRevision revision = store.Read(removed);
-            Require(revision.LocalObjects.Count == 1 && revision.LocalObjects[0].ObjectId == worldId &&
+            Require(revision.LocalObjects.Count == 1 && revision.LocalObjects[0].ObjectId == worldId.Value &&
                 revision.LocalObjects[0].Kind == ObjectVersionKind.Base && revision.RemovedObjectIds.Count == 3,
                 "Removing nested reference slots must rewrite World and remove Node plus both strings.");
             Require(RevisionDecoder.Read(store, schemas, removed, Readers()).Objects.Count == 1, "New membership retains the old inline-referenced graph.");
@@ -184,7 +184,7 @@ internal static class Program {
     }
 #endif
 
-    private static void CheckHistoricalDto(StateRevisionStore store, SchemaStore schemas, FrameAddress historical, uint worldId) {
+    private static void CheckHistoricalDto(StateRevisionStore store, SchemaStore schemas, FrameAddress historical, ObjectId worldId) {
         DecodedRevision decoded = RevisionDecoder.Read(store, schemas, historical, Readers());
         var state = decoded.GetRequired(worldId).GetState<World.__DurableState.V1>();
         Require(decoded.Objects.Count == 4 && decoded.GetRequired(worldId).Schema!.Version == 1 &&
@@ -199,13 +199,13 @@ internal static class Program {
         action(new StateRevisionStore(segments), new SchemaStore(file, readOnly: true));
     }
 
-    private static void WriteAddress(string directory, string name, FrameAddress revision, uint worldId) =>
-        File.WriteAllText(Path.Combine(directory, name + ".txt"), $"{revision.FileNumber}:{revision.FrameTicket.Packed}:{worldId}");
+    private static void WriteAddress(string directory, string name, FrameAddress revision, ObjectId worldId) =>
+        File.WriteAllText(Path.Combine(directory, name + ".txt"), $"{revision.FileNumber}:{revision.FrameTicket.Packed}:{worldId.Value}");
 
-    private static (FrameAddress Revision, uint WorldId) ReadAddress(string directory, string name) {
+    private static (FrameAddress Revision, ObjectId WorldId) ReadAddress(string directory, string name) {
         string[] parts = File.ReadAllText(Path.Combine(directory, name + ".txt")).Split(':');
         Require(parts.Length == 3, "Malformed probe address handoff.");
-        return (new FrameAddress(uint.Parse(parts[0]), SizedPtr.FromPacked(ulong.Parse(parts[1]))), uint.Parse(parts[2]));
+        return (new FrameAddress(uint.Parse(parts[0]), SizedPtr.FromPacked(ulong.Parse(parts[1]))), new ObjectId(uint.Parse(parts[2])));
     }
 
     private static void Require(bool condition, string message) {

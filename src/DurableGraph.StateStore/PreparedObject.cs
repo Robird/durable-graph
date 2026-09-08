@@ -8,9 +8,9 @@ namespace Atelia.DurableGraph.StateStore;
 /// The producer owns the DTO/Schema correspondence; this row cannot authenticate it.
 /// </summary>
 internal sealed class PreparedObject {
-    private PreparedObject(uint objectId, FrameAddress? priorAddress, EncodedBaseObjectBody encodedBaseBody,
+    private PreparedObject(ObjectId objectId, FrameAddress? priorAddress, EncodedBaseObjectBody encodedBaseBody,
         PreparedDeltaBody? deltaBody, ObjectSaveChangeKind changeKind) {
-        ArgumentOutOfRangeException.ThrowIfZero(objectId);
+        ArgumentOutOfRangeException.ThrowIfZero(objectId.Value, nameof(objectId));
         ArgumentNullException.ThrowIfNull(encodedBaseBody);
         if (priorAddress is { } prior && (prior.FileNumber == 0 || prior.FrameTicket.Length == 0)) {
             throw new ArgumentOutOfRangeException(nameof(priorAddress), "The prior must be a valid Frame address.");
@@ -22,24 +22,24 @@ internal sealed class PreparedObject {
         ChangeKind = changeKind;
     }
 
-    internal uint ObjectId { get; }
+    internal ObjectId ObjectId { get; }
     internal FrameAddress? PriorAddress { get; }
     internal EncodedBaseObjectBody EncodedBaseBody { get; }
     internal PreparedDeltaBody? DeltaBody { get; }
     internal ObjectSaveChangeKind ChangeKind { get; }
 
-    internal static PreparedObject New(uint id, EncodedBaseObjectBody encodedBaseBody) =>
+    internal static PreparedObject New(ObjectId id, EncodedBaseObjectBody encodedBaseBody) =>
         new(id, null, encodedBaseBody, null, ObjectSaveChangeKind.Insert);
 
-    internal static PreparedObject Unchanged(uint id, FrameAddress prior, EncodedBaseObjectBody encodedBaseBody) =>
+    internal static PreparedObject Unchanged(ObjectId id, FrameAddress prior, EncodedBaseObjectBody encodedBaseBody) =>
         new(id, prior, encodedBaseBody, null, ObjectSaveChangeKind.NoChange);
 
-    internal static PreparedObject Compared(uint id, FrameAddress prior, EncodedBaseObjectBody encodedBaseBody, PreparedDeltaBody deltaBody) {
+    internal static PreparedObject Compared(ObjectId id, FrameAddress prior, EncodedBaseObjectBody encodedBaseBody, PreparedDeltaBody deltaBody) {
         ArgumentNullException.ThrowIfNull(deltaBody);
         return new(id, prior, encodedBaseBody, deltaBody,
             deltaBody.HasChanges ? ObjectSaveChangeKind.Update : ObjectSaveChangeKind.NoChange);
     }
 
-    internal static PreparedObject BaseOnlyUpdate(uint id, FrameAddress prior, EncodedBaseObjectBody encodedBaseBody) =>
+    internal static PreparedObject BaseOnlyUpdate(ObjectId id, FrameAddress prior, EncodedBaseObjectBody encodedBaseBody) =>
         new(id, prior, encodedBaseBody, null, ObjectSaveChangeKind.BaseOnlyUpdate);
 }

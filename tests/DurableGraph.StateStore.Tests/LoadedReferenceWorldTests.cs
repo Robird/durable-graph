@@ -37,15 +37,15 @@ public sealed class LoadedReferenceWorldTests : IDisposable {
         StateModelBinding target = Model<Node>(currentTarget, () => { allocations++; return new Node(); }, oldTarget,
             upgrade: state => { upgrades++; return state; });
         StateModelRegistry unchangedOwner = Registry(Model<World>(ownerV1, () => { allocations++; return new World(); }), target);
-        Assert.Throws<InvalidDataException>(() => LoadedWorld.Load<World>(_store, _schemas, source, 1, unchangedOwner));
+        Assert.Throws<InvalidDataException>(() => LoadedWorld.Load<World>(_store, _schemas, source, new ObjectId(1), unchangedOwner));
         Assert.Equal(1, upgrades); // Stored B ancestry was accepted, then current C ancestry rejected.
         Assert.Equal(0, allocations);
 
         int targetAllocations = 0;
         StateModelRegistry clearedOwner = Registry(
-            Model<World>(ownerV2, () => new World(), ownerV1, upgrade: state => state with { NextId = 0 }),
+            Model<World>(ownerV2, () => new World(), ownerV1, upgrade: state => state with { NextId = new ObjectId(0) }),
             Model<Node>(currentTarget, () => { targetAllocations++; return new Node(); }, oldTarget));
-        LoadedWorld<World> loaded = LoadedWorld.Load<World>(_store, _schemas, source, 1, clearedOwner);
+        LoadedWorld<World> loaded = LoadedWorld.Load<World>(_store, _schemas, source, new ObjectId(1), clearedOwner);
         Assert.Null(loaded.World.Next);
         Assert.Equal(0, targetAllocations);
         PreparedWorldRevision prepared = loaded.Prepare(NoRebase);
@@ -64,7 +64,7 @@ public sealed class LoadedReferenceWorldTests : IDisposable {
         int upgrades = 0;
         StateModelRegistry models = Registry(Model<World>(owner, () => new World()),
             Model<Node>(currentTarget, () => new Node(), oldTarget, upgrade: state => { upgrades++; return state; }));
-        Assert.Throws<InvalidDataException>(() => LoadedWorld.Load<World>(_store, _schemas, source, 1, models));
+        Assert.Throws<InvalidDataException>(() => LoadedWorld.Load<World>(_store, _schemas, source, new ObjectId(1), models));
         Assert.Equal(0, upgrades);
     }
 
@@ -78,11 +78,11 @@ public sealed class LoadedReferenceWorldTests : IDisposable {
         FrameAddress source = Seed((1, worldSchema, new State(0, 1)), (9, oldOrphan, new State(0, 2)));
         StateModelRegistry models = Registry(Model<World>(worldSchema, () => new World()),
             Model<AbstractNode>(currentOrphan, () => throw new Exception("Must not allocate an unreachable abstract row"), oldOrphan,
-                upgrade: state => state with { NextId = orphanReference }));
+                upgrade: state => state with { NextId = new ObjectId(orphanReference) }));
         if (orphanReference != 0) {
-            Assert.Throws<InvalidDataException>(() => LoadedWorld.Load<World>(_store, _schemas, source, 1, models));
+            Assert.Throws<InvalidDataException>(() => LoadedWorld.Load<World>(_store, _schemas, source, new ObjectId(1), models));
         } else {
-            LoadedWorld<World> loaded = LoadedWorld.Load<World>(_store, _schemas, source, 1, models);
+            LoadedWorld<World> loaded = LoadedWorld.Load<World>(_store, _schemas, source, new ObjectId(1), models);
             Assert.Equal(new uint[] { 9 }, loaded.Prepare(NoRebase).Revision.RemovedObjectIds);
         }
     }
@@ -102,7 +102,7 @@ public sealed class LoadedReferenceWorldTests : IDisposable {
         int allocated = 0;
         StateModelRegistry models = Registry(Model<World>(worldSchema, () => { allocated++; return new World(); }),
             Model<Node>(otherSchema, () => { allocated++; return new Node(); }));
-        Assert.Throws<InvalidDataException>(() => LoadedWorld.Load<World>(_store, _schemas, source, 1, models));
+        Assert.Throws<InvalidDataException>(() => LoadedWorld.Load<World>(_store, _schemas, source, new ObjectId(1), models));
         Assert.Equal(0, allocated);
     }
 
@@ -119,7 +119,7 @@ public sealed class LoadedReferenceWorldTests : IDisposable {
             () => ++allocations == 2 && nullAllocation ? null! : singleton,
             onHydrate: () => hydrations++));
         LoadedWorld<World>? delivered = null;
-        Assert.Throws<InvalidDataException>(() => delivered = LoadedWorld.Load<World>(_store, _schemas, source, 1, models));
+        Assert.Throws<InvalidDataException>(() => delivered = LoadedWorld.Load<World>(_store, _schemas, source, new ObjectId(1), models));
         Assert.Null(delivered);
         Assert.Equal(2, allocations);
         Assert.Equal(0, hydrations);
@@ -131,7 +131,7 @@ public sealed class LoadedReferenceWorldTests : IDisposable {
         FrameAddress source = Seed((1, schema, new State(0, 1)));
         int hydrations = 0;
         StateModelRegistry models = Registry(Model<World>(schema, () => new DerivedWorld(), onHydrate: () => hydrations++));
-        Assert.Throws<InvalidDataException>(() => LoadedWorld.Load<World>(_store, _schemas, source, 1, models));
+        Assert.Throws<InvalidDataException>(() => LoadedWorld.Load<World>(_store, _schemas, source, new ObjectId(1), models));
         Assert.Equal(0, hydrations);
     }
 
@@ -148,7 +148,7 @@ public sealed class LoadedReferenceWorldTests : IDisposable {
         long stateTail = Tail();
         long schemaTail = _file.TailOffset;
         LoadedWorld<World>? delivered = null;
-        Assert.Throws<InvalidDataException>(() => delivered = LoadedWorld.Load<World>(_store, _schemas, source, 1, models));
+        Assert.Throws<InvalidDataException>(() => delivered = LoadedWorld.Load<World>(_store, _schemas, source, new ObjectId(1), models));
         Assert.Null(delivered);
         Assert.Equal(2, hydrations);
         Assert.Equal(stateTail, Tail());
@@ -176,9 +176,9 @@ public sealed class LoadedReferenceWorldTests : IDisposable {
         FrameAddress removed = _store.Append(StateRevision.CreateObjectHeadMapDelta(original, [], [2]));
         int allocations = 0;
         StateModelRegistry models = Registry(Model<World>(schema, () => { allocations++; return new World(); }));
-        Assert.Throws<InvalidDataException>(() => LoadedWorld.Load<World>(_store, _schemas, removed, 1, models));
+        Assert.Throws<InvalidDataException>(() => LoadedWorld.Load<World>(_store, _schemas, removed, new ObjectId(1), models));
         Assert.Equal(0, allocations);
-        LoadedWorld<World> oldView = LoadedWorld.Load<World>(_store, _schemas, original, 1, models);
+        LoadedWorld<World> oldView = LoadedWorld.Load<World>(_store, _schemas, original, new ObjectId(1), models);
         Assert.Equal((byte)2, Assert.IsType<World>(oldView.World.Next).Value);
         Assert.Equal(2, allocations);
     }
@@ -229,7 +229,7 @@ public sealed class LoadedReferenceWorldTests : IDisposable {
             Assert.Equal(count, allocations);
             hydrations++;
         }));
-        LoadedWorld<World> loaded = LoadedWorld.Load<World>(_store, _schemas, address, 1, models);
+        LoadedWorld<World> loaded = LoadedWorld.Load<World>(_store, _schemas, address, new ObjectId(1), models);
         Domain? cursor = loaded.World;
         for (int id = 1; id <= count; id++) {
             Assert.NotNull(cursor);
@@ -248,7 +248,9 @@ public sealed class LoadedReferenceWorldTests : IDisposable {
     private sealed class DerivedWorld : World { }
     private sealed class Node : Domain { }
     private abstract class AbstractNode : Domain { }
-    private readonly record struct State(uint NextId, byte Value);
+    private readonly record struct State(ObjectId NextId, byte Value) {
+        internal State(uint nextId, byte value) : this(new ObjectId(nextId), value) { }
+    }
 
     private static DurableSchema Schema(string id, int version, string nominal, DurableSchema? parent = null) =>
         new(id, version, [new(1, TypeTag.DurableReference, nominal), new(2, TypeTag.Byte)], parent);
@@ -294,7 +296,7 @@ public sealed class LoadedReferenceWorldTests : IDisposable {
     private static PreparedBaseBody Base(State state) {
         ArrayBufferWriter<byte> bytes = new();
         BinaryPayloadWriter writer = new(bytes);
-        writer.WriteUInt32(state.NextId);
+        writer.WriteUInt32(state.NextId.Value);
         writer.WriteByte(state.Value);
         return new(bytes.WrittenSpan);
     }

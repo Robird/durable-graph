@@ -21,10 +21,11 @@ public sealed class GenericValueOperationTests {
     public void UInt32NumberStringIdAndDurableIdHaveDistinctReferenceSemantics() {
         TypeExpr family = TypeExpr.Named("Box", TypeExpr.Builtin(TypeTag.Int32));
         DurableSchema schema = new(family, 1, []);
-        StateReferenceValidator visitor = new(new Dictionary<uint, ObjectStateRecord> {
-            [1] = new(1, schema, 0), [2] = new(2, "value"),
+        StateReferenceValidator visitor = new(new Dictionary<ObjectId, ObjectStateRecord> {
+            [new ObjectId(1)] = new(new ObjectId(1), schema, 0), [new ObjectId(2)] = new(new ObjectId(2), "value"),
         });
-        uint durable = 1, text = 2, unknown = 999;
+        ObjectId durable = new(1), text = new(2);
+        uint unknown = 999;
         UInt32StateOps.VisitReferences(in unknown, visitor, new(1, TypeTag.UInt32));
         StringIdStateOps.VisitReferences(in text, visitor, new(1, TypeTag.String));
         DurableIdStateOps.VisitReferences(in durable, visitor, DurableFieldInfo.Reference(1, family));
@@ -43,13 +44,13 @@ public sealed class GenericValueOperationTests {
         DurableSchema newBase = new(nodeBase, 1, []);
         DurableSchema oldDerived = new(TypeExpr.Named("Derived"), 1, [], oldBase);
         DurableSchema newDerived = new(TypeExpr.Named("Derived"), 2, [], newBase);
-        StateReferenceValidator oldView = new(new Dictionary<uint, ObjectStateRecord> { [1] = new(1, oldDerived, 0) });
-        StateReferenceValidator newView = new(new Dictionary<uint, ObjectStateRecord> { [1] = new(1, newDerived, 0) });
-        oldView.VisitDurable(1, stringBase);
-        newView.VisitDurable(1, nodeBase);
-        Assert.Throws<InvalidDataException>(() => oldView.VisitDurable(1, nodeBase));
-        Assert.Throws<InvalidDataException>(() => newView.VisitDurable(1, stringBase));
-        Assert.Throws<ArgumentException>(() => newView.VisitDurable(0, TypeExpr.Parameter(0)));
+        StateReferenceValidator oldView = new(new Dictionary<ObjectId, ObjectStateRecord> { [new ObjectId(1)] = new(new ObjectId(1), oldDerived, 0) });
+        StateReferenceValidator newView = new(new Dictionary<ObjectId, ObjectStateRecord> { [new ObjectId(1)] = new(new ObjectId(1), newDerived, 0) });
+        oldView.VisitDurable(new ObjectId(1), stringBase);
+        newView.VisitDurable(new ObjectId(1), nodeBase);
+        Assert.Throws<InvalidDataException>(() => oldView.VisitDurable(new ObjectId(1), nodeBase));
+        Assert.Throws<InvalidDataException>(() => newView.VisitDurable(new ObjectId(1), stringBase));
+        Assert.Throws<ArgumentException>(() => newView.VisitDurable(new ObjectId(0), TypeExpr.Parameter(0)));
     }
 
     private static void CheckChange<T, TOps>(TypeTag tag, T prior, T current)

@@ -57,8 +57,8 @@ internal static class Program {
         StateRevisionStore store = new(segments);
         StateModelRegistry models = Models();
         PreparedWorldRevision initial = LoadedWorld.PrepareNew(store, schemas, new World(7, new Legacy(11)), models, Policy);
-        uint worldId = initial.WorldId;
-        uint legacyId = initial.Revision.LocalObjectIds.Single(id => id != worldId);
+        ObjectId worldId = initial.WorldId;
+        ObjectId legacyId = new ObjectId(initial.Revision.LocalObjectIds.Single(id => id != worldId.Value));
         Require(initial.Revision.LocalObjects.Count == 2 &&
             initial.Revision.LocalObjects.All(row => row.Kind == ObjectVersionKind.Base), "Expected two initial Base objects.");
         FrameAddress initialRevision = store.Append(initial.Revision);
@@ -66,10 +66,10 @@ internal static class Program {
         Require(loaded.World.Legacy.HasSelfCycle, "V1 self-cycle was not restored.");
         loaded.World.Legacy.Change(12);
         PreparedWorldRevision prepared = loaded.Prepare(Policy);
-        Require(prepared.Revision.LocalObjects.Count == 1 && prepared.Revision.LocalObjects[0].ObjectId == legacyId &&
+        Require(prepared.Revision.LocalObjects.Count == 1 && prepared.Revision.LocalObjects[0].ObjectId == legacyId.Value &&
             prepared.Revision.LocalObjects[0].Kind == ObjectVersionKind.Delta, "Expected a child-only Legacy Delta.");
         FrameAddress historical = store.Append(prepared.Revision);
-        Require(store.ReadObjectVersionChain(historical, legacyId).Records.Count == 2, "Legacy Base/Delta chain missing.");
+        Require(store.ReadObjectVersionChain(historical, legacyId.Value).Records.Count == 2, "Legacy Base/Delta chain missing.");
         WriteAddress(directory, "historical", historical, worldId, legacyId);
     }
 #elif READERS_ONLY
@@ -113,12 +113,12 @@ internal static class Program {
         catch (InvalidOperationException) { allocationRejected = true; }
         Require(allocationRejected, "Abstract shell allocation must fail, so successful Load proves it was not allocated.");
         PreparedWorldRevision prepared = loaded.Prepare(Policy);
-        Require(prepared.Revision.RemovedObjectIds.SequenceEqual(new[] { legacyId }) &&
-            prepared.Revision.LocalObjects.Count == 1 && prepared.Revision.LocalObjects[0].ObjectId == worldId &&
+        Require(prepared.Revision.RemovedObjectIds.SequenceEqual(new[] { legacyId.Value }) &&
+            prepared.Revision.LocalObjects.Count == 1 && prepared.Revision.LocalObjects[0].ObjectId == worldId.Value &&
             prepared.Revision.LocalObjects[0].Kind == ObjectVersionKind.Base,
             "Migration must force the upgraded World Base and remove the complete orphaned Legacy object.");
         FrameAddress migrated = store.Append(prepared.Revision);
-        Require(store.ReadLiveObjectHeadMap(migrated).Keys.SequenceEqual(new[] { worldId }), "Migrated membership retains Legacy.");
+        Require(store.ReadLiveObjectHeadMap(migrated).Keys.SequenceEqual(new[] { worldId.Value }), "Migrated membership retains Legacy.");
         Require(RevisionDecoder.Read(store, schemas, historical, Readers()).Objects.Count == 2,
             "Removing Legacy from the new Revision altered the historical Revision.");
         WriteAddress(directory, "migrated", migrated, worldId, legacyId);
@@ -147,15 +147,15 @@ internal static class Program {
     }
 #endif
 
-    private static void WriteAddress(string directory, string name, FrameAddress revision, uint worldId, uint legacyId) =>
+    private static void WriteAddress(string directory, string name, FrameAddress revision, ObjectId worldId, ObjectId legacyId) =>
         File.WriteAllText(Path.Combine(directory, name + ".txt"),
-            $"{revision.FileNumber}:{revision.FrameTicket.Packed}:{worldId}:{legacyId}");
+            $"{revision.FileNumber}:{revision.FrameTicket.Packed}:{worldId.Value}:{legacyId.Value}");
 
-    private static (FrameAddress Revision, uint WorldId, uint LegacyId) ReadAddress(string directory, string name) {
+    private static (FrameAddress Revision, ObjectId WorldId, ObjectId LegacyId) ReadAddress(string directory, string name) {
         string[] parts = File.ReadAllText(Path.Combine(directory, name + ".txt")).Split(':');
         Require(parts.Length == 4, "Malformed address handoff.");
         return (new FrameAddress(uint.Parse(parts[0]), SizedPtr.FromPacked(ulong.Parse(parts[1]))),
-            uint.Parse(parts[2]), uint.Parse(parts[3]));
+            new ObjectId(uint.Parse(parts[2])), new ObjectId(uint.Parse(parts[3])));
     }
 
     private static void ExpectInvalidData(Action action, string? message = null) {

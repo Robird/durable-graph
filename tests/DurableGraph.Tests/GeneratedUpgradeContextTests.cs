@@ -36,10 +36,10 @@ public sealed partial class DurableSchemaGeneratorTests {
         Type host = EmitAndLoad(run.OutputCompilation).GetType("StateModels.Host")!;
         StateModelBinding model = host.GetMethod("Model")!.CreateDelegate<Func<StateModelBinding>>()();
         object prior = host.GetMethod("Prior")!.CreateDelegate<Func<object>>()();
-        model.Normalize(new(31, model.Readers[0].Schema, prior));
-        model.Normalize(new(42, model.Readers[0].Schema, prior));
+        model.Normalize(new(new(31), model.Readers[0].Schema, prior));
+        model.Normalize(new(new(42), model.Readers[0].Schema, prior));
         UpgradeContext[] contexts = host.GetMethod("Contexts")!.CreateDelegate<Func<UpgradeContext[]>>()();
-        Assert.Equal<uint>([31, 31, 42, 42], contexts.Select(context => context.ObjectId));
+        Assert.Equal<uint>([31, 31, 42, 42], contexts.Select(context => context.ObjectId.Value));
         Assert.Equal<int>([1, 2, 1, 2], contexts.Select(context => context.SourceObjectSchema.Version));
         Assert.Equal<int>([2, 3, 2, 3], contexts.Select(context => context.TargetObjectSchema.Version));
         Assert.Equal(4, contexts.Distinct(ReferenceEqualityComparer.Instance).Count());

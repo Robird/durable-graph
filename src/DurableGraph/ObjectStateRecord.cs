@@ -13,7 +13,7 @@ public enum ObjectStateKind {
 public sealed class ObjectStateRecord {
     private readonly object _content;
 
-    internal ObjectStateRecord(uint id, DurableSchema schema, object state, ICapturedStatePreparation? preparation = null) {
+    internal ObjectStateRecord(ObjectId id, DurableSchema schema, object state, ICapturedStatePreparation? preparation = null) {
         ArgumentNullException.ThrowIfNull(schema);
         schema.RequireReferenceObject();
         Id = id;
@@ -23,13 +23,13 @@ public sealed class ObjectStateRecord {
         Preparation = preparation;
     }
 
-    internal ObjectStateRecord(uint id, string content) {
+    internal ObjectStateRecord(ObjectId id, string content) {
         Id = id;
         Kind = ObjectStateKind.String;
         _content = content;
     }
 
-    public uint Id { get; }
+    public ObjectId Id { get; }
     public ObjectStateKind Kind { get; }
     public DurableSchema? Schema { get; }
     internal ICapturedStatePreparation? Preparation { get; }

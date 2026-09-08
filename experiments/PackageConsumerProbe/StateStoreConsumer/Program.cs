@@ -46,7 +46,7 @@ public sealed partial class Character : NamedObject {
         string schemaPath = Path.Combine(directory, "schemas.rbf");
         string statePath = Path.Combine(directory, "state");
         FrameAddress firstRevision, secondRevision;
-        uint characterId, stringId;
+        ObjectId characterId, stringId;
         RbfSegmentStoreOptions options = new() { NewStoreLayout = RbfSegmentStoreLayout.Flat };
         ReadAmplificationBaseBudgetParameters policy = new(int.MaxValue, 1);
         StateModelRegistry models = new();
@@ -61,7 +61,7 @@ public sealed partial class Character : NamedObject {
 
             PreparedWorldRevision first = LoadedWorld.PrepareNew(store, schemas, source, models, policy);
             characterId = first.WorldId;
-            stringId = first.Revision.LocalObjectIds.Single(id => id != characterId);
+            stringId = new ObjectId(first.Revision.LocalObjectIds.Single(id => id != characterId.Value));
             Require(first.Revision.ParentRevisionAddress is null && first.Revision.LocalObjects.Count == 2 &&
                 first.Revision.LocalObjects.All(record => record.Kind == ObjectVersionKind.Base),
                 "A new Character and its shared string must be prepared as Base records.");
@@ -89,7 +89,7 @@ public sealed partial class Character : NamedObject {
             Require(changed.Revision.LocalObjects.Count == 1 && changed.Revision.RemovedObjectIds.Count == 0,
                 "Changing only the score must prepare one object update.");
             ObjectVersionRecord delta = changed.Revision.LocalObjects[0];
-            Require(delta.ObjectId == characterId && delta.Kind == ObjectVersionKind.Delta &&
+            Require(delta.ObjectId == characterId.Value && delta.Kind == ObjectVersionKind.Delta &&
                 delta.Body.SequenceEqual(new byte[] { 2, 16 }), "Unexpected raw Delta body.");
             secondRevision = store.Append(changed.Revision);
         }
@@ -100,7 +100,7 @@ public sealed partial class Character : NamedObject {
         StateRevisionStore cold = new(coldSegments);
         Require(coldSchemas.Count == 2 && coldSchemas.GetRequired(Schema.SchemaId, 1).BaseSchema!.Equals(NamedObject.Schema),
             "Cold Schema recovery lost its exact ancestor.");
-        ObjectVersionChain characterChain = cold.ReadObjectVersionChain(secondRevision, characterId);
+        ObjectVersionChain characterChain = cold.ReadObjectVersionChain(secondRevision, characterId.Value);
         Require(characterChain.Records.Count == 2 && characterChain.Records[1].Record.Kind == ObjectVersionKind.Delta &&
             characterChain.Records[1].Record.Body.SequenceEqual(new byte[] { 2, 16 }),
             "Persisted Delta acquired a Base type header.");

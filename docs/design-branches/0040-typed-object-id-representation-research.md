@@ -1,6 +1,6 @@
 # DB-040：以 DTO 或 nominal 标记参数化 ObjectId 的调研
 
-> 状态：Open / Research — 2026-09-08。完成可行性调查，未选择或实施产品重构。
+> 状态：Research / Generic target deferred — 2026-09-08。调研完成；后续已选择先实施[非泛型 ObjectId（DB-041）](0041-object-id-state-representation.md)。下文保留本轮候选与见证。
 > 基线：`8515de7`（DB-039 已实施）。用户提议 `ObjectId<TTargetDTO>`，T 使用生成的版本化 DTO 或 string，不使用领域 CLR 类型。
 > 本文保存候选含义、源代码证据与独立 CLR 见证；实际能力仍以 [PROJECT-STATE](../../src/PROJECT-STATE.md) 为准。
 
@@ -181,7 +181,7 @@ visitor.VisitDurable(id.Value, slot.TargetType!);
 3. **ObjectId<TCurrentDTO> 外观 + uint backing**：保留用户直观的 DTO 类型写法与强检查；
    需明确其品牌是声明/期望视图，完成 current 表示选择与历史 reader 能力边界设计。
 
-未采纳任何重构。尤其不因局部 loader 失败就把所有 DTO 改为 class；该控制组只证明另一技术路径存在。
+本轮研究结束时未采纳重构；后续选择非泛型包装见 DB-041。尤其不因局部 loader 失败就把所有 DTO 改为 class；该控制组只证明另一技术路径存在。
 后续若选择 typed target，需要明确多态 upcast/受控重标记、phantom nominal 保留和历史表示依赖，
 然后验证真实 SG、两阶段读取/Upgrade、目标独立升版、删除旧声明以及原 bytes 不变。
 

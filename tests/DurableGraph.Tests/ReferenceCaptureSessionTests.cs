@@ -21,8 +21,8 @@ public sealed class ReferenceCaptureSessionTests {
     private sealed class Derived : Domain { }
     private struct State {
         public int Value;
-        public uint First;
-        public uint Second;
+        public ObjectId First;
+        public ObjectId Second;
     }
 
     private static State Capture(Domain source, CaptureContext context) => new() {
@@ -31,7 +31,7 @@ public sealed class ReferenceCaptureSessionTests {
         Second = context.CaptureString(source.Second),
     };
 
-    private static uint Add(CaptureContext context, Domain? source) =>
+    private static ObjectId Add(CaptureContext context, Domain? source) =>
         context.AddRoot<Domain, State>(source, Schema, Capture);
 
     private static CapturedGraph CaptureGraph(CaptureSession session, params Domain?[] roots) {
@@ -53,14 +53,14 @@ public sealed class ReferenceCaptureSessionTests {
         CaptureSession session = new();
         CapturedGraph graph = CaptureGraph(session, first, null, second, first);
 
-        Assert.Equal<uint>([1, 0, 2, 1], graph.RootIds);
-        Assert.Equal<uint>([1, 2, 3, 4], graph.Objects.Select(item => item.Id));
+        Assert.Equal<uint>([1, 0, 2, 1], graph.RootIds.Select(id => id.Value));
+        Assert.Equal<uint>([1, 2, 3, 4], graph.Objects.Select(item => item.Id).Select(id => id.Value));
         State firstState = graph.Objects[0].GetState<State>();
         State secondState = graph.Objects[1].GetState<State>();
         Assert.Equal(7, firstState.Value);
-        Assert.Equal(3u, firstState.First);
+        Assert.Equal(new ObjectId(3u), firstState.First);
         Assert.Equal(firstState.First, firstState.Second);
-        Assert.Equal(4u, secondState.First);
+        Assert.Equal(new ObjectId(4u), secondState.First);
         Assert.Equal(firstState.First, secondState.Second);
         Assert.Same(shared, graph.Objects[2].StringContent);
         Assert.Same(equal, graph.Objects[3].StringContent);
@@ -78,9 +78,9 @@ public sealed class ReferenceCaptureSessionTests {
             new Domain { First = null, Second = string.Empty },
             new Domain { First = surrogate, Second = string.Empty });
         Assert.Equal(4, graph.Objects.Count);
-        Assert.Equal(0u, graph.Objects[0].GetState<State>().First);
-        Assert.Equal(3u, graph.Objects[0].GetState<State>().Second);
-        Assert.Equal(3u, graph.Objects[1].GetState<State>().Second);
+        Assert.Equal(new ObjectId(0u), graph.Objects[0].GetState<State>().First);
+        Assert.Equal(new ObjectId(3u), graph.Objects[0].GetState<State>().Second);
+        Assert.Equal(new ObjectId(3u), graph.Objects[1].GetState<State>().Second);
         Assert.Same(string.Empty, graph.Objects[2].StringContent);
         Assert.Same(surrogate, graph.Objects[3].StringContent);
         session.Discard(graph);
@@ -94,13 +94,13 @@ public sealed class ReferenceCaptureSessionTests {
             new Domain { First = firstEmpty, Second = secondEmpty },
             new Domain { First = string.Empty, Second = null });
 
-        Assert.Equal<uint>([1, 2, 3], graph.Objects.Select(item => item.Id));
+        Assert.Equal<uint>([1, 2, 3], graph.Objects.Select(item => item.Id).Select(id => id.Value));
         State first = graph.Objects[0].GetState<State>();
         State second = graph.Objects[1].GetState<State>();
-        Assert.Equal(3u, first.First);
+        Assert.Equal(new ObjectId(3u), first.First);
         Assert.Equal(first.First, first.Second);
         Assert.Equal(first.First, second.First);
-        Assert.Equal(0u, second.Second);
+        Assert.Equal(new ObjectId(0u), second.Second);
         Assert.Same(string.Empty, graph.Objects[2].StringContent);
         session.Accept(graph);
     }
@@ -112,13 +112,13 @@ public sealed class ReferenceCaptureSessionTests {
         Domain source = new() { First = firstEmpty };
         CapturedGraph first = CaptureGraph(session, source);
         session.Accept(first);
-        Assert.Equal(2u, first.Objects[0].GetState<State>().First);
+        Assert.Equal(new ObjectId(2u), first.Objects[0].GetState<State>().First);
 
         foreach (string replacement in new[] { secondEmpty, string.Empty, firstEmpty }) {
             source.First = replacement;
             CapturedGraph unchanged = CaptureGraph(session, source);
-            Assert.Equal<uint>([1, 2], unchanged.Objects.Select(item => item.Id));
-            Assert.Equal(2u, unchanged.Objects[0].GetState<State>().First);
+            Assert.Equal<uint>([1, 2], unchanged.Objects.Select(item => item.Id).Select(id => id.Value));
+            Assert.Equal(new ObjectId(2u), unchanged.Objects[0].GetState<State>().First);
             Assert.Same(string.Empty, unchanged.Objects[1].StringContent);
             session.Accept(unchanged);
         }
@@ -126,17 +126,17 @@ public sealed class ReferenceCaptureSessionTests {
         source.First = null;
         CapturedGraph retired = CaptureGraph(session, source);
         Assert.Single(retired.Objects);
-        Assert.Equal(0u, retired.Objects[0].GetState<State>().First);
+        Assert.Equal(new ObjectId(0u), retired.Objects[0].GetState<State>().First);
         session.Accept(retired);
 
         source.First = secondEmpty;
         CapturedGraph reintroduced = CaptureGraph(session, source);
         // No replacement consumed an ID; empty identities are still subject to ordinary retirement.
-        Assert.Equal<uint>([1, 3], reintroduced.Objects.Select(item => item.Id));
-        Assert.Equal(3u, reintroduced.Objects[0].GetState<State>().First);
+        Assert.Equal<uint>([1, 3], reintroduced.Objects.Select(item => item.Id).Select(id => id.Value));
+        Assert.Equal(new ObjectId(3u), reintroduced.Objects[0].GetState<State>().First);
         Assert.Same(string.Empty, reintroduced.Objects[1].StringContent);
         session.Accept(reintroduced);
-        Assert.Equal(2u, first.Objects[0].GetState<State>().First);
+        Assert.Equal(new ObjectId(2u), first.Objects[0].GetState<State>().First);
         Assert.Same(string.Empty, first.Objects[1].StringContent);
     }
 
@@ -185,20 +185,20 @@ public sealed class ReferenceCaptureSessionTests {
     public void ReferenceCaptureSealedCollectionsAndKindAccessCannotExposeMutableState() {
         CaptureSession session = new();
         CapturedGraph graph = CaptureGraph(session, new Domain { First = "value" });
-        Assert.False(graph.RootIds is uint[]);
+        Assert.False(graph.RootIds is ObjectId[]);
         Assert.False(graph.Objects is ObjectStateRecord[]);
         // ReadOnlyCollection over an array exposes that array through ICollection.SyncRoot.
         // A sealed result must not expose this mutation path either.
         Assert.False(graph.RootIds is ICollection);
         Assert.False(graph.Objects is ICollection);
-        Assert.False(graph.RootIds is IList<uint>);
+        Assert.False(graph.RootIds is IList<ObjectId>);
         Assert.False(graph.Objects is IList<ObjectStateRecord>);
         Assert.Throws<InvalidOperationException>(() => graph.Objects[0].GetState<long>());
         Assert.Throws<InvalidOperationException>(() => graph.Objects[1].GetState<State>());
         Assert.Throws<InvalidOperationException>(() => graph.Objects[0].StringContent);
         session.Discard(graph);
         Assert.Equal("value", graph.Objects[1].StringContent);
-        Assert.Equal(2u, graph.Objects[0].GetState<State>().First);
+        Assert.Equal(new ObjectId(2u), graph.Objects[0].GetState<State>().First);
     }
 
     [Fact]
@@ -210,23 +210,23 @@ public sealed class ReferenceCaptureSessionTests {
         CapturedGraph old = CaptureGraph(session, retired, survivor);
         session.Accept(old);
         CapturedGraph next = CaptureGraph(session, survivor);
-        Assert.Equal<uint>([2], next.RootIds);
-        Assert.Equal<uint>([2, 3], next.Objects.Select(item => item.Id));
+        Assert.Equal<uint>([2], next.RootIds.Select(id => id.Value));
+        Assert.Equal<uint>([2, 3], next.Objects.Select(item => item.Id).Select(id => id.Value));
         session.Accept(next);
 
         CapturedGraph reintroduced = CaptureGraph(session, retired, survivor);
-        Assert.Equal<uint>([4, 2], reintroduced.RootIds);
-        Assert.Equal(3u, reintroduced.Objects.Single(item => item.Id == 4).GetState<State>().First);
+        Assert.Equal<uint>([4, 2], reintroduced.RootIds.Select(id => id.Value));
+        Assert.Equal(new ObjectId(3u), reintroduced.Objects.Single(item => item.Id == new ObjectId(4)).GetState<State>().First);
         session.Accept(reintroduced);
 
         CapturedGraph empty = CaptureGraph(session);
         session.Accept(empty);
         Assert.Empty(empty.Objects);
         CapturedGraph returned = CaptureGraph(session, retired);
-        Assert.Equal<uint>([5], returned.RootIds);
-        Assert.Equal(6u, returned.Objects[0].GetState<State>().First);
+        Assert.Equal<uint>([5], returned.RootIds.Select(id => id.Value));
+        Assert.Equal(new ObjectId(6u), returned.Objects[0].GetState<State>().First);
         session.Accept(returned);
-        Assert.Equal<uint>([1, 2], old.RootIds);
+        Assert.Equal<uint>([1, 2], old.RootIds.Select(id => id.Value));
         Assert.Same(shared, old.Objects[2].StringContent);
     }
 
@@ -238,12 +238,12 @@ public sealed class ReferenceCaptureSessionTests {
         session.Accept(parent);
         Domain pending = new() { First = new(['p']) };
         CapturedGraph discarded = CaptureGraph(session, survivor, pending);
-        Assert.Equal<uint>([1, 3], discarded.RootIds);
+        Assert.Equal<uint>([1, 3], discarded.RootIds.Select(id => id.Value));
         session.Discard(discarded);
         Assert.Same(parent, session.Current);
         CapturedGraph retry = CaptureGraph(session, pending, survivor);
-        Assert.Equal<uint>([5, 1], retry.RootIds);
-        Assert.Equal<uint>([1, 2, 5, 6], retry.Objects.Select(item => item.Id));
+        Assert.Equal<uint>([5, 1], retry.RootIds.Select(id => id.Value));
+        Assert.Equal<uint>([1, 2, 5, 6], retry.Objects.Select(item => item.Id).Select(id => id.Value));
         session.Accept(retry);
     }
 
@@ -263,8 +263,8 @@ public sealed class ReferenceCaptureSessionTests {
         Assert.Same(parent, session.Current);
         Assert.Throws<InvalidOperationException>(() => failed.Seal());
         CapturedGraph retry = CaptureGraph(session, pending, survivor);
-        Assert.Equal<uint>([4, 1], retry.RootIds);
-        Assert.Equal<uint>([1, 4, 5], retry.Objects.Select(item => item.Id));
+        Assert.Equal<uint>([4, 1], retry.RootIds.Select(id => id.Value));
+        Assert.Equal<uint>([1, 4, 5], retry.Objects.Select(item => item.Id).Select(id => id.Value));
         session.Accept(retry);
     }
 
@@ -285,7 +285,7 @@ public sealed class ReferenceCaptureSessionTests {
             Assert.Equal("text", abandoned.Objects[1].StringContent);
         }
         CapturedGraph retry = CaptureGraph(session, source);
-        Assert.Equal(seal ? 3u : 2u, retry.RootIds[0]);
+        Assert.Equal(new ObjectId(seal ? 3u : 2u), retry.RootIds[0]);
         session.Accept(retry);
         context.Dispose();
         Assert.Same(retry, session.Current);
@@ -349,7 +349,7 @@ public sealed class ReferenceCaptureSessionTests {
         });
         Assert.Throws<InvalidOperationException>(() => context.Seal());
         CapturedGraph retry = CaptureGraph(session, new Domain());
-        Assert.Equal(2u, retry.RootIds[0]);
+        Assert.Equal(new ObjectId(2u), retry.RootIds[0]);
         session.Accept(retry);
     }
 
@@ -377,7 +377,7 @@ public sealed class ReferenceCaptureSessionTests {
         });
         Assert.Throws<InvalidOperationException>(() => context.Seal());
         CapturedGraph retry = CaptureGraph(session, new Domain());
-        Assert.Equal(3u, retry.RootIds[0]);
+        Assert.Equal(new ObjectId(3u), retry.RootIds[0]);
         session.Accept(retry);
     }
 
@@ -392,7 +392,7 @@ public sealed class ReferenceCaptureSessionTests {
         using CaptureContext third = session.BeginCapture();
         Assert.Throws<ArgumentNullException>(() => third.AddRoot<Domain, State>(null, Schema, null!));
         CapturedGraph retry = CaptureGraph(session, new Domain());
-        Assert.Equal(2u, retry.RootIds[0]);
+        Assert.Equal(new ObjectId(2u), retry.RootIds[0]);
         session.Accept(retry);
     }
 
@@ -402,7 +402,7 @@ public sealed class ReferenceCaptureSessionTests {
         CaptureSession session = new(uint.MaxValue - 1);
         Domain root = new() { First = new(['l', 'a', 's', 't']) };
         CapturedGraph parent = CaptureGraph(session, root);
-        Assert.Equal<uint>([uint.MaxValue - 1, uint.MaxValue], parent.Objects.Select(item => item.Id));
+        Assert.Equal<uint>([uint.MaxValue - 1, uint.MaxValue], parent.Objects.Select(item => item.Id).Select(id => id.Value));
         session.Accept(parent);
         CapturedGraph stable = CaptureGraph(session, root);
         session.Accept(stable); // Existing identities remain usable after exhaustion.
@@ -410,7 +410,7 @@ public sealed class ReferenceCaptureSessionTests {
         Assert.Throws<InvalidOperationException>(() => Add(failing, new Domain()));
         Assert.Same(stable, session.Current);
         CapturedGraph unchanged = CaptureGraph(session, root);
-        Assert.Equal<uint>([uint.MaxValue - 1], unchanged.RootIds);
+        Assert.Equal<uint>([uint.MaxValue - 1], unchanged.RootIds.Select(id => id.Value));
         session.Discard(unchanged);
 
         CaptureSession failedLast = new(uint.MaxValue);

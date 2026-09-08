@@ -37,7 +37,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         CapturedGraph seed = type.GetMethod("Seed")!.CreateDelegate<Func<CapturedGraph>>()();
         ObjectStateRecord expected = Assert.Single(seed.Objects);
         DurableBase instance = model.Allocate();
-        model.Hydrate(instance, model.Normalize(expected), new ObjectReadTable(StringReadTable.FromDecoded([]), new Dictionary<uint, DurableBase>()));
+        model.Hydrate(instance, model.Normalize(expected), new ObjectReadTable(StringReadTable.FromDecoded([]), new Dictionary<ObjectId, DurableBase>()));
         CaptureSession session = new();
         using CaptureContext context = session.BeginCapture();
         model.AddRoot(context, instance);

@@ -62,8 +62,8 @@ public sealed partial class DurableSchemaGeneratorTests {
         Assert.Equal(4, results.Length);
         var initial = results[0];
         Assert.Null(initial.Previous);
-        Assert.Equal<uint>([1, 2, 1, 0], initial.Candidate.RootIds);
-        Assert.Equal<uint>([1, 2, 3, 4], initial.Objects.Select(row => row.Current.Id));
+        Assert.Equal<uint>([1, 2, 1, 0], initial.Candidate.RootIds.Select(id => id.Value));
+        Assert.Equal<uint>([1, 2, 3, 4], initial.Objects.Select(row => row.Current.Id).Select(id => id.Value));
         Assert.Equal(new[] { "212A03", "0304", "0341", "00" },
             initial.Objects.Select(row => Convert.ToHexString(row.BaseBody.Body)));
         Assert.All(initial.Objects, row => { Assert.Null(row.Previous); Assert.Null(row.DeltaBody); });
@@ -73,7 +73,7 @@ public sealed partial class DurableSchemaGeneratorTests {
 
         var changed = results[2];
         Assert.Same(initial.Candidate, changed.Previous);
-        Assert.Equal<uint>([1, 2, 3, 4, 5], changed.Objects.Select(row => row.Current.Id));
+        Assert.Equal<uint>([1, 2, 3, 4, 5], changed.Objects.Select(row => row.Current.Id).Select(id => id.Value));
         Assert.Equal(new[] { "212B05", "0304", "0341", "00", "0341" },
             changed.Objects.Select(row => Convert.ToHexString(row.BaseBody.Body)));
         Assert.Equal<byte>([0x06, 0x2B, 0x05], changed.Objects[0].DeltaBody!.Body.ToArray());

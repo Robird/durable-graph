@@ -186,10 +186,10 @@ public sealed partial class DurableSchemaGeneratorTests {
         Type host=assembly.GetType("Host")!;
         StateModelRegistry models=host.GetMethod("Models")!.CreateDelegate<Func<StateModelRegistry>>()();
         StateModelBinding model=models.Snapshot().ResolveCurrentModel(assembly.GetType("World")!);
-        ObjectStateRecord prior=new(19,new DurableSchema("World",1,new DurableFieldInfo(1,TypeTag.Int32)),
+        ObjectStateRecord prior=new(new(19),new DurableSchema("World",1,new DurableFieldInfo(1,TypeTag.Int32)),
             host.GetMethod("Prior")!.CreateDelegate<Func<object>>()());
         ObjectStateRecord current=model.Normalize(prior);
-        Assert.Equal(19u,current.Id);
+        Assert.Equal(new ObjectId(19),current.Id);
         Assert.Equal(12L,StateModelField(current,"Segment0Field1"));
         Assert.Equal(5,StateModelField(prior,"Segment0Field1"));
     }
@@ -225,7 +225,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             internal static class Upgrades {
                 [DurableUpgrade(typeof(World),1)]
                 internal static void Upgrade(in WorldStates.V1 prior,out WorldStates.V2 next,UpgradeContext context) {
-                    if (context.ObjectId!=31 || context.SourceObjectSchema.Version!=1 || context.TargetObjectSchema.Version!=2)
+                    if (context.ObjectId.Value!=31 || context.SourceObjectSchema.Version!=1 || context.TargetObjectSchema.Version!=2)
                         throw new System.InvalidOperationException("wrong invocation context");
                     next=new(prior.Segment0Field1+11L);
                 }
@@ -241,7 +241,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         Type host=assembly.GetType("Host")!;
         StateModelRegistry models=host.GetMethod("Models")!.CreateDelegate<Func<StateModelRegistry>>()();
         StateModelBinding model=models.Snapshot().ResolveCurrentModel(assembly.GetType("World")!);
-        ObjectStateRecord source=new(31,new DurableSchema("World",1,new DurableFieldInfo(1,TypeTag.Int32)),
+        ObjectStateRecord source=new(new(31),new DurableSchema("World",1,new DurableFieldInfo(1,TypeTag.Int32)),
             host.GetMethod("Prior")!.CreateDelegate<Func<object>>()());
         Assert.Equal(16L,StateModelField(model.Normalize(source),"Segment0Field1"));
     }

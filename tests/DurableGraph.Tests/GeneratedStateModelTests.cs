@@ -40,9 +40,9 @@ public sealed partial class DurableSchemaGeneratorTests {
         Type host = EmitAndLoad(run.OutputCompilation).GetType("StateModels.Host")!;
         StateModelBinding model = host.GetMethod("Model")!.CreateDelegate<Func<StateModelBinding>>()();
         var state = host.GetMethod("State")!.CreateDelegate<Func<int, int, object>>();
-        ObjectStateRecord old = new(23, model.Readers[0].Schema, state(1, 5));
+        ObjectStateRecord old = new(new(23), model.Readers[0].Schema, state(1, 5));
         ObjectStateRecord normalized = model.Normalize(old);
-        Assert.Equal(23u, normalized.Id);
+        Assert.Equal(new ObjectId(23), normalized.Id);
         Assert.Equal(3, normalized.Schema!.Version);
         Assert.Equal(12, StateModelField(normalized, "Segment0Field1"));
         Assert.Equal((byte)9, StateModelField(normalized, "Segment0Field2"));
@@ -50,13 +50,13 @@ public sealed partial class DurableSchemaGeneratorTests {
         Assert.Equal(5, StateModelField(old, "Segment0Field1"));
         Assert.Null(old.Preparation);
         Assert.NotNull(normalized.Preparation);
-        ObjectStateRecord current = model.Normalize(new(23, model.CurrentSchema, state(3, 42)));
+        ObjectStateRecord current = model.Normalize(new(new(23), model.CurrentSchema, state(3, 42)));
         Assert.Equal(42, StateModelField(current, "Segment0Field1"));
         Assert.Equal(false, StateModelField(current, "Segment0Field3"));
         Assert.Same(normalized.Preparation, current.Preparation);
-        Assert.Throws<InvalidOperationException>(() => model.Normalize(new(23, old.Schema!, state(1, -1))));
-        Assert.Throws<InvalidDataException>(() => model.Normalize(new(23, new DurableSchema("state.model", 4, []), state(3, 1))));
-        Assert.Throws<InvalidDataException>(() => model.Normalize(new(23, new DurableSchema("state.model", 1, []), state(1, 1))));
+        Assert.Throws<InvalidOperationException>(() => model.Normalize(new(new(23), old.Schema!, state(1, -1))));
+        Assert.Throws<InvalidDataException>(() => model.Normalize(new(new(23), new DurableSchema("state.model", 4, []), state(3, 1))));
+        Assert.Throws<InvalidDataException>(() => model.Normalize(new(new(23), new DurableSchema("state.model", 1, []), state(1, 1))));
         foreach ((string name, string contents) in before) Assert.Equal(contents, File.ReadAllText(Path.Combine(files.History, name)));
     }
 
@@ -93,8 +93,8 @@ public sealed partial class DurableSchemaGeneratorTests {
         var state = host.GetMethod("State")!.CreateDelegate<Func<int, object>>();
         Assert.Equal(8, host.GetMethod("ReadOld")!.CreateDelegate<Func<int>>()());
         Assert.Contains("UpgradeStateV1ToV2", Assert.Throws<InvalidDataException>(() =>
-            model.Normalize(new(1, model.Readers[0].Schema, state(1)))).Message);
-        Assert.Equal(8, StateModelField(model.Normalize(new(1, model.Readers[1].Schema, state(2))), "Segment0Field1"));
+            model.Normalize(new(new(1), model.Readers[0].Schema, state(1)))).Message);
+        Assert.Equal(8, StateModelField(model.Normalize(new(new(1), model.Readers[1].Schema, state(2))), "Segment0Field1"));
     }
 
     [Fact]
@@ -128,7 +128,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             }
             public static class Host {
                 public static StateModelBinding Model() => Leaf.__DurableState.Model;
-                public static object Old() => new Leaf.__DurableState.V1(7, 99);
+                public static object Old() => new Leaf.__DurableState.V1(7, new(99));
             }
             """, files.ReadAdditionalTexts());
         AssertSchemaOnlyCompiles(run);
@@ -137,12 +137,12 @@ public sealed partial class DurableSchemaGeneratorTests {
         Type host = assembly.GetType("StateModels.Host")!;
         StateModelBinding model = host.GetMethod("Model")!.CreateDelegate<Func<StateModelBinding>>()();
         object old = host.GetMethod("Old")!.CreateDelegate<Func<object>>()();
-        ObjectStateRecord current = model.Normalize(new(1, model.Readers[0].Schema, old));
+        ObjectStateRecord current = model.Normalize(new(new(1), model.Readers[0].Schema, old));
         Assert.Equal((byte)8, StateModelField(current, "Segment0Field9"));
-        Assert.Equal(99u, StateModelField(current, "Segment1Field1"));
+        Assert.Equal(new ObjectId(99), StateModelField(current, "Segment1Field1"));
         DurableBase domain = model.Allocate();
         string name = new(new[] { 'N' });
-        model.Hydrate(domain, current, new ObjectReadTable(StringReadTable.FromDecoded([(99, name)]), new Dictionary<uint, DurableBase>()));
+        model.Hydrate(domain, current, new ObjectReadTable(StringReadTable.FromDecoded([(new ObjectId(99), name)]), new Dictionary<ObjectId, DurableBase>()));
         Assert.Equal((byte)8, domain.GetType().BaseType!.GetField("_small", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(domain));
         Assert.Same(name, domain.GetType().GetField("_name", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(domain));
     }
@@ -172,14 +172,14 @@ public sealed partial class DurableSchemaGeneratorTests {
             }
             public static class Host {
                 public static StateModelBinding Model() => Leaf.__DurableState.Model;
-                public static object State() => new Leaf.__DurableState.V1(17, 7, 7, 8, 9, 10, 0, 91);
+                public static object State() => new Leaf.__DurableState.V1(17, new(7), new(7), new(8), new(9), new(10), default, 91);
             }
             """);
         AssertSchemaOnlyCompiles(run);
         Assembly assembly = EmitAndLoad(run.OutputCompilation);
         Type host = assembly.GetType("StateModels.Host")!;
         StateModelBinding model = host.GetMethod("Model")!.CreateDelegate<Func<StateModelBinding>>()();
-        ObjectStateRecord current = model.Normalize(new(1, model.CurrentSchema, host.GetMethod("State")!.CreateDelegate<Func<object>>()()));
+        ObjectStateRecord current = model.Normalize(new(new(1), model.CurrentSchema, host.GetMethod("State")!.CreateDelegate<Func<object>>()()));
         DurableBase domain = model.Allocate();
         Type leaf = domain.GetType(), parent = leaf.BaseType!;
         const BindingFlags fields = BindingFlags.Instance | BindingFlags.NonPublic;
@@ -188,10 +188,10 @@ public sealed partial class DurableSchemaGeneratorTests {
         Assert.Equal(0, leaf.GetField("_mutable", fields)!.GetValue(domain));
         // Loading validates the complete DTO view before allocating or hydrating any domain instance.
         Assert.Throws<InvalidDataException>(() => model.VisitReferences(current,
-            new StateReferenceValidator(new Dictionary<uint, ObjectStateRecord>())));
+            new StateReferenceValidator(new Dictionary<ObjectId, ObjectStateRecord>())));
         Assert.Equal(0, parent.GetField("_number", fields)!.GetValue(domain));
         string first = new(new[] { 'S' }), second = new(new[] { 'S' });
-        model.Hydrate(domain, current, new ObjectReadTable(StringReadTable.FromDecoded([(7, first), (8, second), (9, ""), (10, "")]), new Dictionary<uint, DurableBase>()));
+        model.Hydrate(domain, current, new ObjectReadTable(StringReadTable.FromDecoded([(new ObjectId(7), first), (new ObjectId(8), second), (new ObjectId(9), ""), (new ObjectId(10), "")]), new Dictionary<ObjectId, DurableBase>()));
         Assert.Equal(0, parent.GetField("Calls")!.GetValue(null));
         Assert.Equal(17, parent.GetField("_number", fields)!.GetValue(domain));
         Assert.Equal(91, leaf.GetField("_mutable", fields)!.GetValue(domain));
@@ -217,7 +217,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         CapturedGraph nextGraph = nextCapture.Seal();
         PreparedCapturedGraph changed = session.Prepare(nextGraph);
         Assert.True(changed.Objects[0].DeltaBody!.HasChanges);
-        ObjectStateRecord replayed = model.Readers[0].Read(1, new StateModelBodySource(
+        ObjectStateRecord replayed = model.Readers[0].Read(new(1), new StateModelBodySource(
             prepared.Objects[0].BaseBody.Body.ToArray(), changed.Objects[0].DeltaBody!.Body.ToArray()));
         Assert.Equal(92, StateModelField(replayed, "Segment1Field6"));
         Assert.Equal(StateModelField(nextGraph.Objects[0], "Segment0Field2"), StateModelField(replayed, "Segment0Field2"));
@@ -283,7 +283,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         AssertSchemaOnlyCompiles(run);
         Type host = EmitAndLoad(run.OutputCompilation).GetType("StateModels.Host")!;
         StateModelBinding model = host.GetMethod("Model")!.CreateDelegate<Func<StateModelBinding>>()();
-        ObjectStateRecord old = new(1, model.Readers[0].Schema, host.GetMethod("Old")!.CreateDelegate<Func<object>>()());
+        ObjectStateRecord old = new(new(1), model.Readers[0].Schema, host.GetMethod("Old")!.CreateDelegate<Func<object>>()());
         Assert.Equal(8, StateModelField(old, "Segment0Field1"));
         Assert.Contains("UpgradeStateV2ToV3", Assert.Throws<InvalidDataException>(() => model.Normalize(old)).Message);
     }

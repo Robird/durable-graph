@@ -22,9 +22,9 @@ internal static class CapturedRevisionPlanner {
             throw new ArgumentException("Parent and the previous captured graph must either both exist or both be absent.", nameof(input));
         }
 
-        IReadOnlyDictionary<uint, FrameAddress> parentHeads = parentRevisionAddress is { } parent
-            ? store.ReadLiveObjectHeadMap(parent)
-            : new Dictionary<uint, FrameAddress>();
+        IReadOnlyDictionary<ObjectId, FrameAddress> parentHeads = parentRevisionAddress is { } parent
+            ? store.ReadLiveObjectHeadMap(parent).ToDictionary(static pair => new ObjectId(pair.Key), static pair => pair.Value)
+            : new Dictionary<ObjectId, FrameAddress>();
         if (input.Previous is { } previous &&
             (previous.Objects.Count != parentHeads.Count || previous.Objects.Any(item => !parentHeads.ContainsKey(item.Id)))) {
             throw new ArgumentException("The previous graph must describe the exact Parent's complete live membership.", nameof(input));
@@ -46,7 +46,7 @@ internal static class CapturedRevisionPlanner {
 
             // TODO(DB-031): Measure duplicate chain reads here and in the policy
             // planner before introducing an operation-scoped cache.
-            ObjectVersionChain chain = store.ReadObjectVersionChain(parentRevisionAddress!.Value, row.Current.Id);
+            ObjectVersionChain chain = store.ReadObjectVersionChain(parentRevisionAddress!.Value, row.Current.Id.Value);
             DecodedBaseObjectBody stored = BaseObjectBodyCodec.Decode(chain.Records[0].Record.Body);
             if (stored.Kind != row.Current.Kind) {
                 throw new InvalidDataException($"Object {row.Current.Id} changed its stored type kind.");

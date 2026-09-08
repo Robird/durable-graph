@@ -106,8 +106,8 @@ public sealed partial class DurableSchemaGeneratorTests {
                 var reader = new BinaryPayloadReader(Convert.FromHexString("01020000008001"));
                 var state = Item.__DurableState.ReadBaseBodyV1(ref reader);
                 reader.EnsureFullyConsumed();
-                var objects = new ObjectReadTable(StringReadTable.Decode(Array.Empty<(uint, ReadOnlyMemory<byte>)>()),
-                    new System.Collections.Generic.Dictionary<uint, DurableBase>());
+                var objects = new ObjectReadTable(StringReadTable.Decode(Array.Empty<(ObjectId, ReadOnlyMemory<byte>)>()),
+                    new System.Collections.Generic.Dictionary<ObjectId, DurableBase>());
                 var item = Item.__DurableState.Allocate();
                 Item.__DurableState.Hydrate(item, in state, objects);
                 var array = new Middle[1];

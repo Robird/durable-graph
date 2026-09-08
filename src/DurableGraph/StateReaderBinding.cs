@@ -29,7 +29,7 @@ public abstract class StateReaderBinding {
     public DurableSchema Schema { get; }
     public abstract Type StateType { get; }
 
-    internal abstract ObjectStateRecord Read(uint objectId, IStateBodySource source);
+    internal abstract ObjectStateRecord Read(ObjectId objectId, IStateBodySource source);
     internal abstract void VisitReferences(ObjectStateRecord item, IStateReferenceVisitor visitor);
 }
 
@@ -54,8 +54,8 @@ public sealed class StateReaderBinding<TState> : StateReaderBinding where TState
         _visitReferences = visitReferences;
     }
 
-    internal override ObjectStateRecord Read(uint objectId, IStateBodySource source) {
-        if (objectId == 0) {
+    internal override ObjectStateRecord Read(ObjectId objectId, IStateBodySource source) {
+        if (objectId.IsNull) {
             throw new InvalidDataException("A durable object ID must be nonzero.");
         }
         TState state = StateBodyDecoder.Read(source, _readBase, _applyDelta);

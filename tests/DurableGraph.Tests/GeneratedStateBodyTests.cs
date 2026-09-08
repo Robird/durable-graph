@@ -212,7 +212,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         Assert.Contains("CaptureString(value._text)", generated);
         Type body = EmitAndLoad(run.OutputCompilation).GetType("Leaf")!
             .GetNestedType("__DurableState", BindingFlags.NonPublic)!;
-        Assert.Equal(typeof(uint), body.GetNestedType("V1", BindingFlags.NonPublic)!
+        Assert.Equal(typeof(ObjectId), body.GetNestedType("V1", BindingFlags.NonPublic)!
             .GetField("Segment0Field1", BindingFlags.Instance | BindingFlags.NonPublic)!.FieldType);
         Assert.Equal(2, body.GetMethod("Capture", BindingFlags.Static | BindingFlags.NonPublic)!.GetParameters().Length);
     }

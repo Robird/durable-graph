@@ -19,7 +19,7 @@ internal enum ObjectSaveChangeKind {
 /// the complete input.
 /// </summary>
 internal readonly record struct ObjectSaveEstimate(
-    uint ObjectId,
+    ObjectId ObjectId,
     ObjectSaveChangeKind ChangeKind,
     long BasePayloadBytes,
     long? DeltaPayloadBytesUpperBound,

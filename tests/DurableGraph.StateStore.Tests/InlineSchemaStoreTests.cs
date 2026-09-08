@@ -218,7 +218,7 @@ public sealed class InlineSchemaStoreTests : IDisposable {
         }
         using (IRbfFile publication = RbfFile.OpenExisting(Path.Combine(repositoryPath, "publication.rbf"))) {
             PublicationLog log = new(publication, static (_, _) => { });
-            log.Publish(null, new(address, 1));
+            log.Publish(null, new(address, new ObjectId(1)));
         }
         Dictionary<string, byte[]> before = Directory.GetFiles(repositoryPath, "*", SearchOption.AllDirectories)
             .ToDictionary(static path => path, File.ReadAllBytes);

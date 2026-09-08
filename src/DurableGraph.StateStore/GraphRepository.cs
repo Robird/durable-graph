@@ -38,7 +38,7 @@ public sealed class GraphRepository : IDisposable {
 
     public bool IsFaulted { get; private set; }
     public FrameAddress? HeadRevisionAddress { get { RequireAvailable(); return _publication.Head?.RevisionAddress; } }
-    public uint? WorldId { get { RequireAvailable(); return _publication.Head?.WorldId; } }
+    public ObjectId? WorldId { get { RequireAvailable(); return _publication.Head?.WorldId; } }
     internal Action<CommitCheckpoint>? Checkpoint { get; set; }
 
     /// <summary>Creates a new repository directory. Existing paths are never overwritten or adopted.</summary>
@@ -119,7 +119,7 @@ public sealed class GraphRepository : IDisposable {
         StateRevision revision = _states.Read(head.RevisionAddress);
         if (revision.ParentRevisionAddress != parent) { throw new InvalidDataException("Publication disagrees with the State Revision Parent."); }
         var objects = _states.ReadLiveObjectHeadMap(head.RevisionAddress);
-        if (!objects.ContainsKey(head.WorldId)) { throw new InvalidDataException("Published World is absent from the selected Revision."); }
+        if (!objects.ContainsKey(head.WorldId.Value)) { throw new InvalidDataException("Published World is absent from the selected Revision."); }
         // Check the complete reconstruction closure and exact Schema references without model callbacks.
         // TODO: Measure startup cost before caching repeated historical map/chain validation.
         foreach (uint id in objects.Keys) {
@@ -131,7 +131,7 @@ public sealed class GraphRepository : IDisposable {
                 }
             }
             else if (chain.Records.Count != 1) { throw new InvalidDataException("String cannot have a Delta chain."); }
-            if (id == head.WorldId && body.Kind != ObjectStateKind.Durable) { throw new InvalidDataException("World must be a durable object."); }
+            if (id == head.WorldId.Value && body.Kind != ObjectStateKind.Durable) { throw new InvalidDataException("World must be a durable object."); }
         }
     }
 

@@ -4,9 +4,9 @@ namespace Atelia.DurableGraph.StateStore;
 
 /// <summary>One current DTO baseline, with complete source membership and migration provenance.</summary>
 internal sealed class NormalizedRevision {
-    private readonly Dictionary<uint, NormalizedObject> _objects;
+    private readonly Dictionary<ObjectId, NormalizedObject> _objects;
 
-    private NormalizedRevision(FrameAddress address, Dictionary<uint, NormalizedObject> objects, StringReadTable strings, IReadOnlyDictionary<uint, ObjectStateRecord>? currentDtos = null) {
+    private NormalizedRevision(FrameAddress address, Dictionary<ObjectId, NormalizedObject> objects, StringReadTable strings, IReadOnlyDictionary<ObjectId, ObjectStateRecord>? currentDtos = null) {
         RevisionAddress = address;
         _objects = objects;
         Strings = strings;
@@ -14,14 +14,14 @@ internal sealed class NormalizedRevision {
     }
 
     internal FrameAddress RevisionAddress { get; }
-    internal IReadOnlyDictionary<uint, NormalizedObject> Objects => _objects;
+    internal IReadOnlyDictionary<ObjectId, NormalizedObject> Objects => _objects;
     internal StringReadTable Strings { get; }
-    internal IReadOnlyDictionary<uint, ObjectStateRecord> CurrentDtos { get; }
+    internal IReadOnlyDictionary<ObjectId, ObjectStateRecord> CurrentDtos { get; }
 
     // Candidate rows and provenance are prepared before any State append. Only the outer
     // address wrapper is completed once Append returns, still before publication.
     internal static NormalizedRevision FromCandidate(CapturedGraph candidate, StateModelSnapshot models) {
-        Dictionary<uint, NormalizedObject> rows = [];
+        Dictionary<ObjectId, NormalizedObject> rows = [];
         foreach (ObjectStateRecord row in candidate.Objects) {
             StateModelBinding? model = row.Kind == ObjectStateKind.Durable
                 ? models.ResolveCurrentModel(row.Schema!.Type) : null;
@@ -37,7 +37,7 @@ internal sealed class NormalizedRevision {
         new(address, _objects, Strings, CurrentDtos);
 
     internal static NormalizedRevision Create(DecodedRevision source, StateModelSnapshot models) {
-        Dictionary<uint, NormalizedObject> normalized = [];
+        Dictionary<ObjectId, NormalizedObject> normalized = [];
         foreach (ObjectStateRecord row in source.Objects) {
             if (row.Kind == ObjectStateKind.String) {
                 normalized.Add(row.Id, new(row, null, false, null));

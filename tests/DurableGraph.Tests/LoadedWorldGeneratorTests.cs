@@ -54,7 +54,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             fixture.Check(loaded, 3);
             Assert.Equal(1, fixture.UpgradeCalls()); // One upgrade after both old Deltas have been applied.
             PreparedWorldRevision plan = fixture.Prepare(loaded);
-            Assert.Equal(1u, plan.WorldId);
+            Assert.Equal(new ObjectId(1), plan.WorldId);
             Assert.Equal(third, plan.Revision.ParentRevisionAddress);
             Assert.Equal<uint>([20], plan.Revision.RemovedObjectIds);
             ObjectVersionRecord rewrite = Assert.Single(plan.Revision.LocalObjects);
@@ -260,7 +260,7 @@ public sealed partial class DurableSchemaGeneratorTests {
                 Atelia.DurableGraph.StateStore.SchemaStore schemas, Atelia.DurableGraph.StateStore.Storage.FrameAddress revision) {
                 var models = new Atelia.DurableGraph.StateStore.StateModelRegistry();
                 Leaf.__DurableState.RegisterModel(models);
-                return Atelia.DurableGraph.StateStore.LoadedWorld.Load<Leaf>(store, schemas, revision, 1, models);
+                return Atelia.DurableGraph.StateStore.LoadedWorld.Load<Leaf>(store, schemas, revision, new(1), models);
             }
             public static Atelia.DurableGraph.StateStore.PreparedWorldRevision Prepare(object loaded) =>
                 ((Atelia.DurableGraph.StateStore.LoadedWorld<Leaf>)loaded).Prepare(new(1000000, 1));
@@ -274,7 +274,7 @@ public sealed partial class DurableSchemaGeneratorTests {
                 var readers = new Atelia.DurableGraph.StateStore.StateReaderRegistry();
                 Leaf.__DurableState.RegisterReaders(readers);
                 var decoded = Atelia.DurableGraph.StateStore.RevisionDecoder.Read(store, schemas, revision, readers);
-                var old = decoded.GetRequired(1).GetState<Leaf.__DurableState.V1>();
+                var old = decoded.GetRequired(new(1)).GetState<Leaf.__DurableState.V1>();
                 return Leaf.__DurableState.PrepareBaseBody(in old).Body.ToArray();
             }
         }

@@ -19,7 +19,7 @@ internal static class ReadAmplificationBaseBudgetPolicy {
                 nameof(parameters), parameters, "Base budget percent must be between one and one hundred.");
         }
 
-        HashSet<uint> objectIds = new();
+        HashSet<ObjectId> objectIds = new();
         List<ObjectWriteDecision> writes = new();
         List<Candidate> candidates = new();
         long graphBaseBytes = 0;
@@ -88,7 +88,7 @@ internal static class ReadAmplificationBaseBudgetPolicy {
 
     private static void ValidateEstimate(ObjectSaveEstimate estimate) {
         const string parameterName = "objects";
-        if (estimate.ObjectId == 0) {
+        if (estimate.ObjectId.IsNull) {
             throw new ArgumentException("ObjectIds must be nonzero.", parameterName);
         }
 
@@ -137,7 +137,7 @@ internal static class ReadAmplificationBaseBudgetPolicy {
     }
 
     private readonly record struct Candidate(
-        uint ObjectId,
+        ObjectId ObjectId,
         long BasePayloadBytes,
         long ProspectiveReconstructionPayloadBytes,
         int WriteIndex);

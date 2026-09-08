@@ -42,11 +42,12 @@ public static class RevisionDecoder {
         Func<DurableSchema, StateReaderBinding> resolveReader) {
         List<ObjectStateRecord> objects = [];
         List<(ObjectStateRecord Row, StateReaderBinding Binding)> durableRows = [];
-        List<(uint Id, string Value)> strings = [];
+        List<(ObjectId Id, string Value)> strings = [];
 
         // Object-first reconstruction: only one raw chain is retained at a time.
-        foreach (uint id in store.ReadLiveObjectHeadMap(revisionAddress).Keys.Order()) {
-            ObjectVersionChain chain = store.ReadObjectVersionChain(revisionAddress, id);
+        foreach (uint rawId in store.ReadLiveObjectHeadMap(revisionAddress).Keys.Order()) {
+            ObjectId id = new(rawId);
+            ObjectVersionChain chain = store.ReadObjectVersionChain(revisionAddress, rawId);
             DecodedBaseObjectBody body = TypedObjectVersionReader.DecodeBase(chain);
             if (body.Kind == ObjectStateKind.String) {
                 string value = TypedObjectVersionReader.ReadString(chain, body);

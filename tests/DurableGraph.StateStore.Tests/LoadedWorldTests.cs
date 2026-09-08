@@ -35,19 +35,19 @@ public sealed class LoadedWorldTests : IDisposable {
             [ObjectVersionRecord.CreateDelta(1, first, Delta(new(2, 8, 0), new(3, 8, 0)).Body)], []));
         FrameAddress third = _store.Append(StateRevision.CreateObjectHeadMapDelta(second,
             [ObjectVersionRecord.CreateDelta(1, second, Delta(new(3, 8, 0), new(4, 8, 0)).Body)], []));
-        StateModelRegistry models = Registry(Model(upgrade: state => state with { Value = (byte)(state.Value + 10), TextId = 0 }));
+        StateModelRegistry models = Registry(Model(upgrade: state => state with { Value = (byte)(state.Value + 10), TextId = new ObjectId(0) }));
         StateModelSnapshot snapshot = models.Snapshot();
         DecodedRevision decoded = RevisionDecoder.ReadSnapshot(_store, _schemas, third, snapshot.Readers);
         long schemaTail = _file.TailOffset;
         long stateTail = Tail();
         NormalizedRevision normalized = NormalizedRevision.Create(decoded, snapshot);
-        Assert.Equal(new State(4, 8, 0), decoded.GetRequired(1).GetState<State>());
-        Assert.Equal(new State(14, 0, 0), normalized.Objects[1].Current.GetState<State>());
-        Assert.True(normalized.Objects[1].RequiresRewrite);
-        Assert.Equal(Old, normalized.Objects[1].SourceSchema);
-        Assert.Equal(Current, normalized.Objects[1].Current.Schema);
-        Assert.Contains(8u, normalized.Objects.Keys);
-        Assert.Same(decoded.GetRequired(8).StringContent, normalized.Objects[8].Current.StringContent);
+        Assert.Equal(new State(4, 8, 0), decoded.GetRequired(new ObjectId(1)).GetState<State>());
+        Assert.Equal(new State(14, 0, 0), normalized.Objects[new ObjectId(1)].Current.GetState<State>());
+        Assert.True(normalized.Objects[new ObjectId(1)].RequiresRewrite);
+        Assert.Equal(Old, normalized.Objects[new ObjectId(1)].SourceSchema);
+        Assert.Equal(Current, normalized.Objects[new ObjectId(1)].Current.Schema);
+        Assert.Contains(new ObjectId(8), normalized.Objects.Keys);
+        Assert.Same(decoded.GetRequired(new ObjectId(8)).StringContent, normalized.Objects[new ObjectId(8)].Current.StringContent);
         Assert.Equal(schemaTail, _file.TailOffset);
         Assert.Equal(stateTail, Tail());
     }
@@ -57,11 +57,11 @@ public sealed class LoadedWorldTests : IDisposable {
     [InlineData(99u)]
     public void InvalidUpgradeReferenceFailsBeforeWorldDeliveryAndDoesNotWrite(uint badId) {
         FrameAddress address = Seed(Old, new(1, 0, 0));
-        StateModelRegistry models = Registry(Model(upgrade: state => state with { TextId = badId }));
+        StateModelRegistry models = Registry(Model(upgrade: state => state with { TextId = new ObjectId(badId) }));
         long schemaTail = _file.TailOffset;
         long stateTail = Tail();
         LoadedWorld<World>? delivered = null;
-        Assert.Throws<InvalidDataException>(() => delivered = LoadedWorld.Load<World>(_store, _schemas, address, 1, models));
+        Assert.Throws<InvalidDataException>(() => delivered = LoadedWorld.Load<World>(_store, _schemas, address, new ObjectId(1), models));
         Assert.Null(delivered);
         Assert.Equal(schemaTail, _file.TailOffset);
         Assert.Equal(stateTail, Tail());
@@ -71,20 +71,20 @@ public sealed class LoadedWorldTests : IDisposable {
     public void CurrentRowsAreNotUpgradedAndLateUnknownSourceFamilyStillFails() {
         FrameAddress address = Seed(Current, new(7, 0, 0));
         StateModelRegistry models = Registry(Model(upgrade: _ => throw new Exception("must not run")));
-        LoadedWorld<World> loaded = LoadedWorld.Load<World>(_store, _schemas, address, 1, models);
+        LoadedWorld<World> loaded = LoadedWorld.Load<World>(_store, _schemas, address, new ObjectId(1), models);
         Assert.Equal((byte)7, loaded.World.Value);
         Assert.Empty(loaded.Prepare(NoRebase).Revision.LocalObjects);
         DurableSchema unknown = Schema("Unknown", 1);
         _schemas.Register(unknown);
         FrameAddress bad = _store.Append(StateRevision.CreateObjectHeadMapDelta(address, [Durable(99, unknown, new(1, 0, 0))], []));
-        Assert.Throws<InvalidDataException>(() => LoadedWorld.Load<World>(_store, _schemas, bad, 1, models));
+        Assert.Throws<InvalidDataException>(() => LoadedWorld.Load<World>(_store, _schemas, bad, new ObjectId(1), models));
     }
 
     [Fact]
     public void EmptyAliasKeepsOriginalBaselineSlotUntilRealDeltaAndRemoveArePersisted() {
         FrameAddress address = Seed(Current, new(7, 9, 0), Text(3, ""), Text(9, ""));
         StateModelRegistry models = Registry(Model());
-        LoadedWorld<World> loaded = LoadedWorld.Load<World>(_store, _schemas, address, 1, models);
+        LoadedWorld<World> loaded = LoadedWorld.Load<World>(_store, _schemas, address, new ObjectId(1), models);
         Assert.Same(string.Empty, loaded.World.Text);
         PreparedWorldRevision plan = loaded.Prepare(NoRebase);
         ObjectVersionRecord write = Assert.Single(plan.Revision.LocalObjects);
@@ -93,17 +93,17 @@ public sealed class LoadedWorldTests : IDisposable {
         Assert.Equal(new uint[] { 9 }, plan.Revision.RemovedObjectIds);
         FrameAddress next = _store.Append(plan.Revision);
         DecodedRevision decoded = RevisionDecoder.ReadSnapshot(_store, _schemas, next, models.Snapshot().Readers);
-        Assert.Equal(3u, decoded.GetRequired(1).GetState<State>().TextId);
-        Assert.Equal(9u, RevisionDecoder.ReadSnapshot(_store, _schemas, address, models.Snapshot().Readers).GetRequired(1).GetState<State>().TextId);
+        Assert.Equal(new ObjectId(3), decoded.GetRequired(new ObjectId(1)).GetState<State>().TextId);
+        Assert.Equal(new ObjectId(9), RevisionDecoder.ReadSnapshot(_store, _schemas, address, models.Snapshot().Readers).GetRequired(new ObjectId(1)).GetState<State>().TextId);
         Assert.Same(string.Empty, LoadedWorld.Load<World>(_store, _schemas, next, plan.WorldId, models).World.Text);
-        Assert.Empty(LoadedWorld.Load<World>(_store, _schemas, next, 1, models).Prepare(NoRebase).Revision.LocalObjects);
+        Assert.Empty(LoadedWorld.Load<World>(_store, _schemas, next, new ObjectId(1), models).Prepare(NoRebase).Revision.LocalObjects);
     }
 
     [Fact]
     public void UpgradedUnchangedWorldForcesBaseAndNewLoadClearsRewriteObligation() {
         FrameAddress address = Seed(Old, new(5, 0, 0));
         StateModelRegistry models = Registry(Model());
-        LoadedWorld<World> loaded = LoadedWorld.Load<World>(_store, _schemas, address, 1, models);
+        LoadedWorld<World> loaded = LoadedWorld.Load<World>(_store, _schemas, address, new ObjectId(1), models);
         PreparedWorldRevision plan = loaded.Prepare(NoRebase);
         Assert.Equal(ObjectVersionKind.Base, Assert.Single(plan.Revision.LocalObjects).Kind);
         Assert.Equal(address, plan.Revision.ParentRevisionAddress);
@@ -123,8 +123,8 @@ public sealed class LoadedWorldTests : IDisposable {
     [Fact]
     public void AllocationStartsAboveCompleteSourceMembershipEvenAfterUpgradeCutsTheLargestId() {
         FrameAddress address = Seed(Old, new(1, 100, 0), Text(100, "old"));
-        LoadedWorld<World> loaded = LoadedWorld.Load<World>(_store, _schemas, address, 1,
-            Registry(Model(upgrade: state => state with { TextId = 0 })));
+        LoadedWorld<World> loaded = LoadedWorld.Load<World>(_store, _schemas, address, new ObjectId(1),
+            Registry(Model(upgrade: state => state with { TextId = new ObjectId(0) })));
         Assert.Null(loaded.World.Text);
         loaded.World.Text = new string('n', 1);
         PreparedWorldRevision first = loaded.Prepare(NoRebase);
@@ -140,7 +140,7 @@ public sealed class LoadedWorldTests : IDisposable {
     [InlineData(true)]
     public void ExhaustedCursorAllowsLoadAndExistingPrepareButRejectsNewStrings(bool upgrade) {
         FrameAddress address = Seed(upgrade ? Old : Current, new(1, uint.MaxValue, 0), Text(uint.MaxValue, "retained"));
-        LoadedWorld<World> loaded = LoadedWorld.Load<World>(_store, _schemas, address, 1, Registry(Model()));
+        LoadedWorld<World> loaded = LoadedWorld.Load<World>(_store, _schemas, address, new ObjectId(1), Registry(Model()));
         string retained = loaded.World.Text!;
         PreparedWorldRevision valid = loaded.Prepare(NoRebase);
         Assert.Equal(upgrade ? 1 : 0, valid.Revision.LocalObjects.Count);
@@ -155,7 +155,7 @@ public sealed class LoadedWorldTests : IDisposable {
     public void EncodingFailureReleasesCaptureAndRetainsUpgradeRewriteAndBaseline() {
         bool fail = true;
         FrameAddress address = Seed(Old, new(5, 0, 0));
-        LoadedWorld<World> loaded = LoadedWorld.Load<World>(_store, _schemas, address, 1,
+        LoadedWorld<World> loaded = LoadedWorld.Load<World>(_store, _schemas, address, new ObjectId(1),
             Registry(Model(beforePrepare: () => { if (fail) throw new InvalidOperationException("test encoding failure"); })));
         Assert.Throws<InvalidOperationException>(() => loaded.Prepare(NoRebase));
         fail = false;
@@ -167,7 +167,7 @@ public sealed class LoadedWorldTests : IDisposable {
     [Fact]
     public void CurrentSchemaConflictDoesNotAppendStateOrAdvanceLoadedParent() {
         FrameAddress address = Seed(Old, new(5, 0, 0));
-        LoadedWorld<World> loaded = LoadedWorld.Load<World>(_store, _schemas, address, 1, Registry(Model()));
+        LoadedWorld<World> loaded = LoadedWorld.Load<World>(_store, _schemas, address, new ObjectId(1), Registry(Model()));
         _schemas.Register(new DurableSchema("World", 2, new DurableFieldInfo(1, TypeTag.Int64)));
         long tail = Tail();
         // The frozen model resolver detects the newly registered conflict before Schema registration.
@@ -185,23 +185,23 @@ public sealed class LoadedWorldTests : IDisposable {
         FrameAddress address = Seed(Current, new(1, 9, 0), Text(9, "text"));
         StateModelRegistry models = Registry(Model());
         if (id == 0) {
-            Assert.Throws<ArgumentOutOfRangeException>(() => LoadedWorld.Load<World>(_store, _schemas, address, id, models));
+            Assert.Throws<ArgumentOutOfRangeException>(() => LoadedWorld.Load<World>(_store, _schemas, address, new ObjectId(id), models));
         } else {
-            Assert.Throws<InvalidDataException>(() => LoadedWorld.Load<World>(_store, _schemas, address, id, models));
+            Assert.Throws<InvalidDataException>(() => LoadedWorld.Load<World>(_store, _schemas, address, new ObjectId(id), models));
         }
-        Assert.Throws<InvalidDataException>(() => LoadedWorld.Load<OtherWorld>(_store, _schemas, address, 1, models));
+        Assert.Throws<InvalidDataException>(() => LoadedWorld.Load<OtherWorld>(_store, _schemas, address, new ObjectId(1), models));
     }
 
     [Fact]
     public void HydrationPreservesSharedAndEqualIndependentStringIdentityWithoutConstructorInitializers() {
         FrameAddress shared = Seed(Current, new(1, 8, 8), Text(8, "same"));
         StateModelRegistry models = Registry(Model());
-        LoadedWorld<World> first = LoadedWorld.Load<World>(_store, _schemas, shared, 1, models);
+        LoadedWorld<World> first = LoadedWorld.Load<World>(_store, _schemas, shared, new ObjectId(1), models);
         Assert.Same(first.World.Text, first.World.Alias);
         Assert.Equal(0, first.World.TransientMarker);
         FrameAddress distinct = _store.Append(StateRevision.CreateObjectHeadMapDelta(shared,
             [Durable(1, Current, new(1, 8, 9)), Text(9, "same")], []));
-        LoadedWorld<World> second = LoadedWorld.Load<World>(_store, _schemas, distinct, 1, models);
+        LoadedWorld<World> second = LoadedWorld.Load<World>(_store, _schemas, distinct, new ObjectId(1), models);
         Assert.Equal(second.World.Text, second.World.Alias);
         Assert.NotSame(second.World.Text, second.World.Alias);
     }
@@ -211,7 +211,7 @@ public sealed class LoadedWorldTests : IDisposable {
         FrameAddress address = Seed(Old, new(5, 0, 0));
         StateModelRegistry models = Registry(Model(upgrade: _ => throw new InvalidOperationException("upgrade failure")));
         LoadedWorld<World>? result = null;
-        Assert.Throws<InvalidOperationException>(() => result = LoadedWorld.Load<World>(_store, _schemas, address, 1, models));
+        Assert.Throws<InvalidOperationException>(() => result = LoadedWorld.Load<World>(_store, _schemas, address, new ObjectId(1), models));
         Assert.Null(result);
 
         DurableSchema other = Schema("Other", 1);
@@ -220,8 +220,8 @@ public sealed class LoadedWorldTests : IDisposable {
         StateModelBinding late = ModelCore<OtherWorld>(current: other, old: other);
         StateModelRegistry changing = new();
         changing.Register(Model(onRead: () => changing.Register(late)));
-        Assert.Throws<InvalidDataException>(() => LoadedWorld.Load<World>(_store, _schemas, withOther, 1, changing));
-        Assert.Equal((byte)5, LoadedWorld.Load<World>(_store, _schemas, withOther, 1, changing).World.Value);
+        Assert.Throws<InvalidDataException>(() => LoadedWorld.Load<World>(_store, _schemas, withOther, new ObjectId(1), changing));
+        Assert.Equal((byte)5, LoadedWorld.Load<World>(_store, _schemas, withOther, new ObjectId(1), changing).World.Value);
     }
 
     [Fact]
@@ -234,7 +234,7 @@ public sealed class LoadedWorldTests : IDisposable {
         StateModelRegistry models = Registry(Model());
         models.Register(ModelCore<OtherWorld>(upgrade: _ => throw new InvalidOperationException("unreachable upgrade fails"), current: otherCurrent, old: otherOld));
         LoadedWorld<World>? delivered = null;
-        Assert.Throws<InvalidOperationException>(() => delivered = LoadedWorld.Load<World>(_store, _schemas, withOther, 1, models));
+        Assert.Throws<InvalidOperationException>(() => delivered = LoadedWorld.Load<World>(_store, _schemas, withOther, new ObjectId(1), models));
         Assert.Null(delivered);
     }
 
@@ -243,7 +243,7 @@ public sealed class LoadedWorldTests : IDisposable {
         FrameAddress address = Seed(Old, new(5, 0, 0));
         bool reenter = true;
         LoadedWorld<World>? loaded = null;
-        loaded = LoadedWorld.Load<World>(_store, _schemas, address, 1,
+        loaded = LoadedWorld.Load<World>(_store, _schemas, address, new ObjectId(1),
             Registry(Model(beforePrepare: () => { if (reenter) loaded!.Prepare(NoRebase); })));
         Assert.Throws<InvalidOperationException>(() => loaded.Prepare(NoRebase));
         reenter = false;
@@ -260,7 +260,7 @@ public sealed class LoadedWorldTests : IDisposable {
         models.Register(original);
         Assert.Throws<InvalidOperationException>(() => models.Register(Model()));
         Assert.Same(original, models.Snapshot().Models[TypeExpr.Named("World")]);
-        Assert.Equal((byte)5, LoadedWorld.Load<World>(_store, _schemas, address, 1, models).World.Value);
+        Assert.Equal((byte)5, LoadedWorld.Load<World>(_store, _schemas, address, new ObjectId(1), models).World.Value);
     }
 
     [Fact]
@@ -287,7 +287,7 @@ public sealed class LoadedWorldTests : IDisposable {
     [Fact]
     public void DefiniteAppendFailureDoesNotAdvanceTheLoadedBaseline() {
         FrameAddress address = Seed(Old, new(5, 0, 0));
-        LoadedWorld<World> loaded = LoadedWorld.Load<World>(_store, _schemas, address, 1, Registry(Model()));
+        LoadedWorld<World> loaded = LoadedWorld.Load<World>(_store, _schemas, address, new ObjectId(1), Registry(Model()));
         PreparedWorldRevision plan = loaded.Prepare(NoRebase);
         using (RbfSegmentWriterLease occupied = _segments.OpenActiveWriter()) {
             long tail = occupied.File.TailOffset;
@@ -310,7 +310,9 @@ public sealed class LoadedWorldTests : IDisposable {
         internal World(int unused) => throw new InvalidOperationException("Constructors must not run.");
     }
     private sealed class OtherWorld() : World(0) { }
-    private readonly record struct State(byte Value, uint TextId, uint AliasId);
+    private readonly record struct State(byte Value, ObjectId TextId, ObjectId AliasId) {
+        internal State(byte value, uint textId, uint aliasId) : this(value, new ObjectId(textId), new ObjectId(aliasId)) { }
+    }
 
     private static StateModelBinding Model(Func<State, State>? upgrade = null, Action? beforePrepare = null,
         Action? onRead = null, DurableSchema? current = null, DurableSchema? old = null) =>
@@ -363,8 +365,8 @@ public sealed class LoadedWorldTests : IDisposable {
         ArrayBufferWriter<byte> bytes = new();
         BinaryPayloadWriter writer = new(bytes);
         writer.WriteByte(state.Value);
-        writer.WriteUInt32(state.TextId);
-        writer.WriteUInt32(state.AliasId);
+        writer.WriteUInt32(state.TextId.Value);
+        writer.WriteUInt32(state.AliasId.Value);
         return new(bytes.WrittenSpan);
     }
     private static State Read(ref BinaryPayloadReader reader) => new(reader.ReadByte(), reader.ReadUInt32(), reader.ReadUInt32());
@@ -374,16 +376,16 @@ public sealed class LoadedWorldTests : IDisposable {
         BinaryPayloadWriter writer = new(bytes);
         writer.WriteByte(mask);
         if ((mask & 1) != 0) writer.WriteByte(next.Value);
-        if ((mask & 2) != 0) writer.WriteUInt32(next.TextId);
-        if ((mask & 4) != 0) writer.WriteUInt32(next.AliasId);
+        if ((mask & 2) != 0) writer.WriteUInt32(next.TextId.Value);
+        if ((mask & 4) != 0) writer.WriteUInt32(next.AliasId.Value);
         return new(mask != 0, bytes.WrittenSpan);
     }
     private static State Apply(ref BinaryPayloadReader reader, State prior) {
         byte mask = reader.ReadByte();
         if (mask == 0 || mask > 7) throw new InvalidDataException("Invalid test bitmap.");
         return new((mask & 1) != 0 ? reader.ReadByte() : prior.Value,
-            (mask & 2) != 0 ? reader.ReadUInt32() : prior.TextId,
-            (mask & 4) != 0 ? reader.ReadUInt32() : prior.AliasId);
+            (mask & 2) != 0 ? new ObjectId(reader.ReadUInt32()) : prior.TextId,
+            (mask & 4) != 0 ? new ObjectId(reader.ReadUInt32()) : prior.AliasId);
     }
     private long Tail() {
         using RbfSegmentWriterLease writer = _segments.OpenActiveWriter();

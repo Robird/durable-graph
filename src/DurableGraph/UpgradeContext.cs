@@ -8,8 +8,8 @@ public delegate TNext ValueUpgrade<TPrior, TNext>(in TPrior prior) where TPrior 
 public sealed class UpgradeContext {
     private readonly IReadOnlyDictionary<string, Delegate> _tools;
 
-    public UpgradeContext(uint objectId, DurableSchema sourceObjectSchema, DurableSchema targetObjectSchema) {
-        ArgumentOutOfRangeException.ThrowIfZero(objectId);
+    public UpgradeContext(ObjectId objectId, DurableSchema sourceObjectSchema, DurableSchema targetObjectSchema) {
+        ArgumentOutOfRangeException.ThrowIfZero(objectId.Value, nameof(objectId));
         ArgumentNullException.ThrowIfNull(sourceObjectSchema);
         ArgumentNullException.ThrowIfNull(targetObjectSchema);
         sourceObjectSchema.RequireReferenceObject();
@@ -24,10 +24,10 @@ public sealed class UpgradeContext {
         _tools = new Dictionary<string, Delegate>(StringComparer.Ordinal);
     }
 
-    internal UpgradeContext(uint objectId, DurableSchema sourceObjectSchema, DurableSchema targetObjectSchema,
+    internal UpgradeContext(ObjectId objectId, DurableSchema sourceObjectSchema, DurableSchema targetObjectSchema,
         IReadOnlyDictionary<string, Delegate> tools) : this(objectId, sourceObjectSchema, targetObjectSchema) => _tools = tools;
 
-    public uint ObjectId { get; }
+    public ObjectId ObjectId { get; }
     public DurableSchema SourceObjectSchema { get; }
     public DurableSchema TargetObjectSchema { get; }
 

@@ -55,25 +55,25 @@ public sealed partial class DurableSchemaGeneratorTests {
                 }
                 Assert.Same(accepted, session.Current);
                 Assert.Throws<InvalidOperationException>(() => session.BeginCapture());
-                roots[stage] = graph.RootIds.ToArray();
+                roots[stage] = graph.RootIds.Select(id => id.Value).ToArray();
                 if (stage is 1 or 2) {
-                    tagId = graph.RootIds[3];
-                    Assert.Equal(new[] { graph.RootIds[0], graph.RootIds[0], 0u, tagId, tagId, 0u }, roots[stage]);
+                    tagId = graph.RootIds[3].Value;
+                    Assert.Equal(new[] { graph.RootIds[0].Value, graph.RootIds[0].Value, 0u, tagId, tagId, 0u }, roots[stage]);
                 }
-                else Assert.Equal(new[] { graph.RootIds[0], graph.RootIds[0], 0u }, roots[stage]);
+                else Assert.Equal(new[] { graph.RootIds[0].Value, graph.RootIds[0].Value, 0u }, roots[stage]);
                 var owner = Assert.Single(input.Objects, row => row.Current.Id == graph.RootIds[0]);
                 if (stage == 0) {
-                    ownerId = owner.Current.Id;
+                    ownerId = owner.Current.Id.Value;
                     originalStringId = Assert.Single(graph.Objects,
-                        item => item.Kind == ObjectStateKind.String && item.StringContent == "x").Id;
+                        item => item.Kind == ObjectStateKind.String && item.StringContent == "x").Id.Value;
                     emptyId = Assert.Single(graph.Objects,
-                        item => item.Kind == ObjectStateKind.String && item.StringContent == string.Empty).Id;
+                        item => item.Kind == ObjectStateKind.String && item.StringContent == string.Empty).Id.Value;
                     Assert.NotEqual(0u, originalStringId);
                     Assert.NotEqual(0u, emptyId);
                 }
                 if (stage == 1) {
                     equalStringId = Assert.Single(graph.Objects,
-                        item => item.Kind == ObjectStateKind.String && item.StringContent == "x" && item.Id != originalStringId).Id;
+                        item => item.Kind == ObjectStateKind.String && item.StringContent == "x" && item.Id.Value != originalStringId).Id.Value;
                     Assert.NotEqual(originalStringId, equalStringId);
                 }
                 uint name = stage < 2 ? originalStringId : equalStringId;
@@ -97,7 +97,7 @@ public sealed partial class DurableSchemaGeneratorTests {
                 }
 
                 if (stage is 1 or 2) {
-                    var tag = Assert.Single(input.Objects, row => row.Current.Id == tagId);
+                    var tag = Assert.Single(input.Objects, row => row.Current.Id.Value == tagId);
                     Assert.NotNull(tag.Current.Schema!.BaseSchema);
                     Assert.Equal<byte>([checked((byte)equalStringId), 7], tag.BaseBody.Body.ToArray());
                     if (stage == 1) Assert.Null(tag.Previous);
@@ -117,7 +117,7 @@ public sealed partial class DurableSchemaGeneratorTests {
                 Assert.Same(accepted, session.Current); // Planning never installs a candidate or baseline.
                 Assert.Equal(parent, prepared.Revision.ParentRevisionAddress);
                 // Envelope v2 adds the Named tag and zero-argument count to this non-generic key.
-                Assert.Equal(99, Assert.Single(prepared.Estimates, item => item.ObjectId == ownerId).BasePayloadBytes);
+                Assert.Equal(99, Assert.Single(prepared.Estimates, item => item.ObjectId.Value == ownerId).BasePayloadBytes);
                 if (stage == 0) {
                     Assert.Equal(input.Objects.Count, prepared.Revision.LocalObjects.Count);
                     Assert.All(prepared.Revision.LocalObjects, record => Assert.Equal(ObjectVersionKind.Base, record.Kind));
@@ -148,7 +148,7 @@ public sealed partial class DurableSchemaGeneratorTests {
                 revisions[stage] = store.Append(prepared.Revision);
                 Assert.Same(accepted, session.Current); // Append produces an address, not a publication or Capture.Accept.
                 var heads = store.ReadLiveObjectHeadMap(revisions[stage]);
-                Assert.Equal(input.Objects.Select(row => row.Current.Id).Order(), heads.Keys.Order());
+                Assert.Equal(input.Objects.Select(row => row.Current.Id.Value).Order(), heads.Keys.Order());
                 Assert.Equal(stage == 0 ? revisions[0] : priorHeads[emptyId], heads[emptyId]);
                 if (stage == 1) Assert.Equal(revisions[0], heads[originalStringId]);
                 if (stage >= 2) Assert.False(heads.ContainsKey(originalStringId));
@@ -276,7 +276,7 @@ public sealed partial class DurableSchemaGeneratorTests {
                 Dictionary<uint, byte[]> stringBodies, bool expectDistinct, ObjectVersionChain? tagChain) {
                 var state = TypedObjectVersionReader.ReadDurable(chain, schemas, Owner.__DurableState.V1.Schema,
                     Owner.__DurableState.ReadBaseBodyV1, Owner.__DurableState.ApplyDeltaBodyV1);
-                var strings = StringReadTable.Decode(stringBodies.Select(item => (item.Key, (ReadOnlyMemory<byte>)item.Value)));
+                var strings = StringReadTable.Decode(stringBodies.Select(item => (new ObjectId(item.Key), (ReadOnlyMemory<byte>)item.Value)));
                 Owner.__DurableState.ValidateStringReferences(in state, strings);
                 string name = strings.ResolveString(state.Segment0Field1)!;
                 string alias = strings.ResolveString(state.Segment0Field2)!;

@@ -13,11 +13,11 @@ public sealed class CapturedGraphPreparationTests {
         public string? Text;
     }
 
-    private readonly record struct State(int Value, uint Text);
+    private readonly record struct State(int Value, ObjectId Text);
     private static State Capture(Domain value, CaptureContext context) => new(value.Value, context.CaptureString(value.Text));
-    private static PreparedBaseBody Base(in State state) => new([(byte)state.Value, (byte)state.Text]);
+    private static PreparedBaseBody Base(in State state) => new([(byte)state.Value, (byte)state.Text.Value]);
     private static PreparedDeltaBody Delta(in State prior, in State current) => prior == current
-        ? new(false, [0]) : new(true, [1, (byte)current.Value, (byte)current.Text]);
+        ? new(false, [0]) : new(true, [1, (byte)current.Value, (byte)current.Text.Value]);
 
     private static CapturedGraph CaptureGraph(CaptureSession session, params Domain?[] roots) {
         CaptureContext context = session.BeginCapture();
@@ -113,7 +113,7 @@ public sealed class CapturedGraphPreparationTests {
         CaptureSession session = new();
         PreparedCapturedGraph initial = session.Prepare(CaptureGraph(session, null, null));
         Assert.Empty(initial.Objects);
-        Assert.Equal<uint>([0, 0], initial.Candidate.RootIds);
+        Assert.Equal<uint>([0, 0], initial.Candidate.RootIds.Select(id => id.Value));
         session.Accept(initial.Candidate);
         session.Accept(CaptureGraph(session, new Domain()));
         PreparedCapturedGraph empty = session.Prepare(CaptureGraph(session));
@@ -182,11 +182,11 @@ public sealed class CapturedGraphPreparationTests {
     public void NullPreparationAbortsRegistrationButKeepsAllocatedIdsConsumed() {
         CaptureSession session = new();
         CaptureContext context = session.BeginCapture();
-        Assert.Equal(1u, context.AddRoot(new Domain(), Schema, Capture, Binding));
+        Assert.Equal(new ObjectId(1u), context.AddRoot(new Domain(), Schema, Capture, Binding));
         Assert.Throws<ArgumentNullException>(() => context.AddRoot(new Domain(), Schema, Capture, null!));
         Assert.Throws<InvalidOperationException>(() => context.Seal());
         using CaptureContext next = session.BeginCapture();
-        Assert.Equal(2u, next.AddRoot(new Domain(), Schema, Capture, Binding));
+        Assert.Equal(new ObjectId(2u), next.AddRoot(new Domain(), Schema, Capture, Binding));
     }
 
     [Fact]
@@ -251,15 +251,15 @@ public sealed class CapturedGraphPreparationTests {
             1 => Binding,
             _ => binding,
         };
-        ObjectStateRecord prior = mismatch == 5 ? new ObjectStateRecord(2, "x")
-            : new ObjectStateRecord(2, priorSchema, mismatch == 4 ? (object)7L : new State(1, 0), priorBinding);
+        ObjectStateRecord prior = mismatch == 5 ? new ObjectStateRecord(new ObjectId(2), "x")
+            : new ObjectStateRecord(new ObjectId(2), priorSchema, mismatch == 4 ? (object)7L : new State(1, default), priorBinding);
         CaptureSession session = new();
         // Deliberately forge only the private test seam to exercise states ordinary registration cannot create.
         typeof(CaptureSession).GetProperty(nameof(CaptureSession.Current))!.SetValue(session,
             new CapturedGraph([], [prior]));
         CaptureContext context = session.BeginCapture();
-        CapturedGraph candidate = new([], [new ObjectStateRecord(1, Schema, new State(1, 0), binding),
-            new ObjectStateRecord(2, Schema, new State(1, 0), binding)]);
+        CapturedGraph candidate = new([], [new ObjectStateRecord(new ObjectId(1), Schema, new State(1, default), binding),
+            new ObjectStateRecord(new ObjectId(2), Schema, new State(1, default), binding)]);
         typeof(CaptureContext).GetProperty("Candidate", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
             .SetValue(context, candidate);
         Assert.Throws<InvalidOperationException>(() => session.Prepare(candidate));
@@ -271,7 +271,7 @@ public sealed class CapturedGraphPreparationTests {
     public void CurrentDtoMismatchAlsoFailsBeforeAnyBody() {
         CaptureSession session = new();
         CaptureContext context = session.BeginCapture();
-        CapturedGraph candidate = new([], [new ObjectStateRecord(1, Schema, 7L, Binding)]);
+        CapturedGraph candidate = new([], [new ObjectStateRecord(new ObjectId(1), Schema, 7L, Binding)]);
         typeof(CaptureContext).GetProperty("Candidate", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
             .SetValue(context, candidate);
         Assert.Throws<InvalidOperationException>(() => session.Prepare(candidate));
@@ -311,7 +311,7 @@ public sealed class CapturedGraphPreparationTests {
         Assert.Equal(2, session.Prepare(candidate).Objects.Count);
         session.Accept(candidate);
         using CaptureContext next = session.BeginCapture();
-        Assert.Equal(3u, next.AddRoot(new Domain(), Schema, Capture, binding));
+        Assert.Equal(new ObjectId(3u), next.AddRoot(new Domain(), Schema, Capture, binding));
     }
 
     [Theory]

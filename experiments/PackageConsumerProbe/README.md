@@ -8,6 +8,11 @@ This experiment verifies the reusable delivery boundary rather than project-to-p
 The consumer project has one `PackageReference` to `Atelia.DurableGraph`; it contains no manual
 analyzer reference, `AdditionalFiles`, build hook, or `Import`.
 
+Consumers use the runtime's non-generic `ObjectId` for captured/decoded identities, reference DTO
+slots and UpgradeContext tracing. Storage rows and probe-owned address sidecars retain numeric
+`uint` IDs; those boundaries use `.Value` or `new ObjectId(...)` explicitly. Ordinary numeric
+`uint` fields and the independently specified reference-body golden bytes remain unchanged.
+
 Run from the repository root:
 
 ```powershell

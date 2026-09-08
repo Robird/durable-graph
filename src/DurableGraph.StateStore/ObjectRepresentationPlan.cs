@@ -6,7 +6,7 @@ internal enum ObjectRepresentationMode {
 }
 
 internal readonly record struct ObjectWriteDecision(
-    uint ObjectId,
+    ObjectId ObjectId,
     ObjectRepresentationMode Mode);
 
 /// <summary>

@@ -105,7 +105,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             for (int stage = 0; stage < retained.Length; stage++) {
                 check(retained[stage], stage);
                 Assert.Equal(new[] { first, second, third, newBase }[stage], retained[stage].RevisionAddress);
-                Assert.Equal<uint>([1, 2, 10, 11, 12, 13, 99], retained[stage].Objects.Select(row => row.Id));
+                Assert.Equal<uint>([1, 2, 10, 11, 12, 13, 99], retained[stage].Objects.Select(row => row.Id).Select(id => id.Value));
             }
             Assert.Equal(3, store.ReadObjectVersionChain(third, 1).Records.Count);
             Assert.Single(store.ReadObjectVersionChain(newBase, 1).Records);
@@ -157,31 +157,31 @@ public sealed partial class DurableSchemaGeneratorTests {
                 return readers;
             }
             public static void Check(Atelia.DurableGraph.StateStore.DecodedRevision view, int stage) {
-                var old = view.GetRequired(1).GetState<Leaf.__DurableState.V1>();
-                var current = view.GetRequired(2).GetState<Leaf.__DurableState.V2>();
-                var other = view.GetRequired(99).GetState<Other.__DurableState.V1>();
-                if (old.Segment0Field9 != (stage == 3 ? 11u : 10u) ||
+                var old = view.GetRequired(new ObjectId(1)).GetState<Leaf.__DurableState.V1>();
+                var current = view.GetRequired(new ObjectId(2)).GetState<Leaf.__DurableState.V2>();
+                var other = view.GetRequired(new ObjectId(99)).GetState<Other.__DurableState.V1>();
+                if (old.Segment0Field9.Value != (stage == 3 ? 11u : 10u) ||
                     old.Segment1Field3 != (stage == 0 ? 1 : stage == 3 ? 3 : 2) ||
-                    old.Segment1Field8 != (stage < 2 ? 11u : stage == 2 ? 10u : 12u) ||
-                    current.Segment0Field2 != 7 || current.Segment1Field1 != 8 || current.Segment1Field8 != 12 ||
-                    other.Segment0Field1 != 11 || other.Segment0Field2 != 9 || other.Segment0Field3 != 13)
+                    old.Segment1Field8.Value != (stage < 2 ? 11u : stage == 2 ? 10u : 12u) ||
+                    current.Segment0Field2 != 7 || current.Segment1Field1 != 8 || current.Segment1Field8.Value != 12 ||
+                    other.Segment0Field1.Value != 11 || other.Segment0Field2 != 9 || other.Segment0Field3.Value != 13)
                     throw new Exception("Stored exact DTO values or dispatch differ.");
-                if (!view.GetRequired(1).Schema.Equals(Leaf.__DurableState.V1.Schema) ||
-                    !view.GetRequired(2).Schema.Equals(Leaf.__DurableState.V2.Schema) ||
-                    !view.GetRequired(99).Schema.Equals(Other.__DurableState.V1.Schema))
+                if (!view.GetRequired(new ObjectId(1)).Schema.Equals(Leaf.__DurableState.V1.Schema) ||
+                    !view.GetRequired(new ObjectId(2)).Schema.Equals(Leaf.__DurableState.V2.Schema) ||
+                    !view.GetRequired(new ObjectId(99)).Schema.Equals(Other.__DurableState.V1.Schema))
                     throw new Exception("The stored exact Schema was replaced.");
-                string shared = view.Strings.ResolveString(10);
-                string equal = view.Strings.ResolveString(11);
+                string shared = view.Strings.ResolveString(new ObjectId(10));
+                string equal = view.Strings.ResolveString(new ObjectId(11));
                 if (shared != "same" || equal != "same" || ReferenceEquals(shared, equal) ||
                     !ReferenceEquals(equal, view.Strings.ResolveString(other.Segment0Field1)) ||
-                    !ReferenceEquals(view.Strings.ResolveString(12), string.Empty) ||
-                    !ReferenceEquals(view.Strings.ResolveString(13), string.Empty) || view.Strings.ResolveString(0) != null)
+                    !ReferenceEquals(view.Strings.ResolveString(new ObjectId(12)), string.Empty) ||
+                    !ReferenceEquals(view.Strings.ResolveString(new ObjectId(13)), string.Empty) || view.Strings.ResolveString(new ObjectId(0)) != null)
                     throw new Exception("String value or identity differs.");
                 foreach (uint id in new uint[] { 10, 11, 12, 13 })
-                    if (!ReferenceEquals(view.GetRequired(id).StringContent, view.Strings.ResolveString(id)))
+                    if (!ReferenceEquals(view.GetRequired(new ObjectId(id)).StringContent, view.Strings.ResolveString(new ObjectId(id))))
                         throw new Exception("Rows and the reference table decoded different instances.");
                 old = default; // GetState returns a copy; changing the local cannot alter the retained row.
-                if (view.GetRequired(1).GetState<Leaf.__DurableState.V1>().Segment0Field9 == 0)
+                if (view.GetRequired(new ObjectId(1)).GetState<Leaf.__DurableState.V1>().Segment0Field9.IsNull)
                     throw new Exception("A returned DTO copy changed the stored state.");
             }
         }

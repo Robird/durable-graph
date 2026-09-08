@@ -55,8 +55,8 @@ public abstract class StateModelBinding {
     internal abstract void VisitReferences(ObjectStateRecord current, IStateReferenceVisitor visitor);
     internal abstract DurableBase Allocate();
     internal abstract void Hydrate(DurableBase domain, ObjectStateRecord current, ObjectReadTable objects);
-    internal abstract uint AddRoot(CaptureContext context, DurableBase domain);
-    internal abstract ObjectStateRecord Capture(uint id, DurableBase domain, CaptureContext context);
+    internal abstract ObjectId AddRoot(CaptureContext context, DurableBase domain);
+    internal abstract ObjectStateRecord Capture(ObjectId id, DurableBase domain, CaptureContext context);
     internal abstract bool MatchesCapture(DurableSchema schema, Delegate capture, ICapturedStatePreparation? preparation);
 
     private sealed class ReaderList(StateReaderBinding[] readers) : IReadOnlyList<StateReaderBinding> {
@@ -126,12 +126,12 @@ public sealed class StateModelBinding<TDomain, TState> : StateModelBinding
         _hydrate((TDomain)domain, in state, objects);
     }
 
-    internal override uint AddRoot(CaptureContext context, DurableBase domain) {
+    internal override ObjectId AddRoot(CaptureContext context, DurableBase domain) {
         RequireDomain(domain);
         return context.AddRoot((TDomain)domain, CurrentSchema, _capture, _preparation);
     }
 
-    internal override ObjectStateRecord Capture(uint id, DurableBase domain, CaptureContext context) {
+    internal override ObjectStateRecord Capture(ObjectId id, DurableBase domain, CaptureContext context) {
         RequireDomain(domain);
         return new ObjectStateRecord(id, CurrentSchema, _capture((TDomain)domain, context), _preparation);
     }
