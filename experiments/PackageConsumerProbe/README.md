@@ -209,7 +209,7 @@ child and strings and reopens normally. Shared historical value DTO/body helpers
 of the deleted domain CLR names; this does not provide readers for deleted reference-object families.
 
 The script requires all stage markers and history counts `5 -> 10 -> 11 -> 13`, rejects deletion or
-modification of previously published `.dgschema` files, and checks that new history uses text format v3.
+modification of previously published `.dgschema` files, and checks that new history uses text format v4.
 It packs the same eight-package dependency closure by default; `-PackageSource <feed> -Version <version>`
 reuses an existing feed. Generated artifacts and probe-owned address sidecars remain under the unique
 ignored `obj` run directory.
@@ -232,7 +232,7 @@ domain struct. A missing closed conversion leaves exact decoding available while
 fails before that object's first business callback. The consumer also checks that UpgradeContext
 identifies the actual object and each adjacent owner edge; it does not exercise DB-039 value tools.
 
-The runner preserves accepted history hashes and requires v3 for new history. It packs an isolated
+The runner preserves accepted history hashes and requires v4 for new history. It packs an isolated
 dependency feed by default, or reuses one through `-PackageSource <feed> -Version <version>`.
 Run instructions, stage details and limitations live in the consumer README; the implementation
 record is [DB-038 §12](../../docs/design-branches/0038-generic-schema-state-and-binding-design.md#12-产品施工跟踪).
@@ -261,3 +261,15 @@ The runner packs an isolated eight-package feed by default; use `-PackageSource 
 to reuse a matching feed. Exact stage markers and boundaries live in the consumer README;
 construction and acceptance evidence are recorded in
 [DB-039 §8](../../docs/design-branches/0039-composable-value-upgrade-design.md#8-产品施工合同与验收映射).
+
+## Composable arrays and array-owned upgrades
+
+```powershell
+./experiments/PackageConsumerProbe/Run-ArrayProbe.ps1
+```
+
+The [array consumer](ArrayConsumer/README.md) uses two real package builds to exercise all four
+supported ranks, jagged sharing, generic array operands and generic struct elements, and a cycle
+through a World array. A historical inline element Upgrade runs once per shared array, forces one
+Base rewrite, then resumes ordinary Delta saving on the same domain instances. The old Revision
+still decodes its exact old element DTO. The runner publishes and verifies immutable history v4.

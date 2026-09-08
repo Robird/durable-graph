@@ -23,14 +23,14 @@ public readonly record struct DurableFieldInfo {
                 "The type tag must identify a supported durable field type.");
         }
 
-        if (typeTag == TypeTag.DurableReference) {
+        if (typeTag == TypeTag.ObjectReference) {
             ArgumentNullException.ThrowIfNull(targetType);
-            if (targetType.Kind != TypeExprKind.Named || !targetType.IsClosed) {
-                throw new ArgumentException("A durable reference requires a closed nominal named type.", nameof(targetType));
+            if ((targetType.Kind != TypeExprKind.Named && !targetType.IsArray) || !targetType.IsClosed) {
+                throw new ArgumentException("An object reference requires a closed named or array type.", nameof(targetType));
             }
         }
         else if (targetType is not null) {
-            throw new ArgumentException("Only durable references have a nominal target Schema identity.", nameof(targetType));
+            throw new ArgumentException("Only object references have a nominal target type.", nameof(targetType));
         }
 
         if (typeTag == TypeTag.InlineValue) {
@@ -53,14 +53,14 @@ public readonly record struct DurableFieldInfo {
 
     public TypeTag TypeTag { get; }
 
-    /// <summary>Gets the stable nominal target family for a durable reference, without binding its version.</summary>
+    /// <summary>Gets the target definition identifier for a named reference; array references have no definition identifier.</summary>
     public string? TargetSchemaId => TargetType?.DefinitionId;
 
     /// <summary>Gets the complete closed nominal reference constraint, without binding a version.</summary>
     public TypeExpr? TargetType { get; }
 
     public static DurableFieldInfo Reference(int fieldId, TypeExpr targetType) =>
-        new(fieldId, TypeTag.DurableReference, targetType, inlineSchema: null);
+        new(fieldId, TypeTag.ObjectReference, targetType, inlineSchema: null);
 
     /// <summary>Gets the immutable exact layout of an inline value, including its value dependencies.</summary>
     public DurableSchema? InlineSchema { get; }

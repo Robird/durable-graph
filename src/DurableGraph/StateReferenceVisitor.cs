@@ -5,6 +5,14 @@ public interface IStateReferenceVisitor {
     void VisitString(ObjectId id);
     void VisitDurable(ObjectId id, string nominalSchemaId);
 
+    /// <summary>Visits a slot constrained to a supported reference family.</summary>
+    void VisitObject(ObjectId id, TypeExpr declaredType) {
+        StateReferenceValidator.RequireReferenceType(declaredType);
+        if (declaredType.Kind == TypeExprKind.Builtin) { VisitString(id); }
+        else if (declaredType.Kind == TypeExprKind.Named) { VisitDurable(id, declaredType); }
+        else { throw new NotSupportedException("This visitor does not support array reference types."); }
+    }
+
     /// <summary>Visits a reference constrained by a complete constructed nominal identity.</summary>
     void VisitDurable(ObjectId id, TypeExpr nominalType) {
         ArgumentNullException.ThrowIfNull(nominalType);
@@ -32,23 +40,30 @@ public sealed class StateReferenceValidator : IStateReferenceVisitor {
         _objects = objects;
     }
 
-    public void VisitString(ObjectId id) {
-        if (!id.IsNull && (!_objects.TryGetValue(id, out ObjectStateRecord? item) || item.Kind != ObjectStateKind.String)) {
-            throw new InvalidDataException($"Object ID {id} is not a string in this DTO view.");
-        }
-    }
+    public void VisitString(ObjectId id) => VisitObject(id, TypeExpr.Builtin(TypeTag.String));
 
     public void VisitDurable(ObjectId id, string nominalSchemaId) => VisitDurable(id, TypeExpr.Named(nominalSchemaId));
 
-    public void VisitDurable(ObjectId id, TypeExpr nominalType) {
-        RequireNominal(nominalType);
+    public void VisitDurable(ObjectId id, TypeExpr nominalType) => VisitObject(id, nominalType);
+
+    public void VisitObject(ObjectId id, TypeExpr declaredType) {
+        RequireReferenceType(declaredType);
         if (id.IsNull) {
             return;
         }
-        if (!_objects.TryGetValue(id, out ObjectStateRecord? item) || item.Kind != ObjectStateKind.Durable ||
-            !Accepts(item.Schema!, nominalType)) {
-            throw new InvalidDataException($"Object ID {id} does not satisfy nominal Schema {nominalType} in this DTO view.");
+        if (!_objects.TryGetValue(id, out ObjectStateRecord? item) || !Accepts(item.Layout, declaredType)) {
+            throw new InvalidDataException($"Object ID {id} does not satisfy reference type {declaredType} in this DTO view.");
         }
+    }
+
+    internal static bool Accepts(ObjectLayout layout, TypeExpr declaredType) {
+        RequireReferenceType(declaredType);
+        return layout.Kind switch {
+            ObjectStateKind.String => declaredType == TypeExpr.Builtin(TypeTag.String),
+            ObjectStateKind.Durable => declaredType.Kind == TypeExprKind.Named && Accepts(layout.Schema!, declaredType),
+            ObjectStateKind.Array => declaredType.IsArray && layout.Array!.Type == declaredType,
+            _ => false,
+        };
     }
 
     internal static bool Accepts(DurableSchema schema, string nominalSchemaId) => Accepts(schema, TypeExpr.Named(nominalSchemaId));
@@ -68,6 +83,14 @@ public sealed class StateReferenceValidator : IStateReferenceVisitor {
         ArgumentNullException.ThrowIfNull(nominalType);
         if (nominalType.Kind != TypeExprKind.Named || !nominalType.IsClosed) {
             throw new ArgumentException("A reference requires a closed named type.", nameof(nominalType));
+        }
+    }
+
+    internal static void RequireReferenceType(TypeExpr declaredType) {
+        ArgumentNullException.ThrowIfNull(declaredType);
+        if (!declaredType.IsClosed || !(declaredType.Kind == TypeExprKind.Named || declaredType.IsArray ||
+            declaredType == TypeExpr.Builtin(TypeTag.String))) {
+            throw new ArgumentException("A reference requires a closed named, array, or string type.", nameof(declaredType));
         }
     }
 }

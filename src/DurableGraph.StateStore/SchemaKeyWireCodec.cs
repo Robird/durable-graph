@@ -9,8 +9,8 @@ internal static class SchemaKeyWireCodec {
         writer.WriteUInt32((uint)key.Version);
     }
 
-    internal static SchemaKey Read(ref BinaryPayloadReader reader) {
-        TypeExpr type = TypeExprWireCodec.Read(ref reader);
+    internal static SchemaKey Read(ref BinaryPayloadReader reader, bool allowArrays = true) {
+        TypeExpr type = TypeExprWireCodec.Read(ref reader, allowArrays);
         uint version = reader.ReadUInt32();
         if (type.Kind != TypeExprKind.Named || version is 0 or > int.MaxValue) {
             throw new InvalidDataException("Schema keys require a closed named type and a positive Int32 version.");

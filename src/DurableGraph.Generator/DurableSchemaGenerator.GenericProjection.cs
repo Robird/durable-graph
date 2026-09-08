@@ -73,7 +73,7 @@ public sealed partial class DurableSchemaGenerator {
             else if (stateField.Field.InlineSchema.HasValue) output.Append(field.DomainType).Append(".__DurableProjection.Capture(in field").Append(index)
                 .Append(", context, ").Append(stateField.Slot()).Append(')');
             else if (GenericFieldTag(stateField) == 4) output.Append("context.CaptureString(field").Append(index).Append(')');
-            else if (GenericFieldTag(stateField) == 15) output.Append("context.CaptureDurable(field").Append(index).Append(", ").Append(stateField.Slot()).Append(".TargetType!)");
+            else if (GenericFieldTag(stateField) == 15) output.Append("context.CaptureObject(field").Append(index).Append(", ").Append(stateField.Slot()).Append(".TargetType!)");
             else output.Append("field").Append(index);
             output.AppendLine(";");
         }
@@ -138,7 +138,7 @@ public sealed partial class DurableSchemaGenerator {
                 output.Append("        ").Append(stateField.DynamicIndex >= 0 ? "TProjection" + Number(stateField.DynamicIndex) : field.DomainType + ".__DurableProjection")
                     .Append(".Hydrate(ref field").Append(index).Append(", in state.").Append(stateField.Name).Append(", objects, ").Append(stateField.Slot()).AppendLine(");");
             } else if (GenericFieldTag(stateField) == 4) output.Append("objects.ResolveString(state.").Append(stateField.Name).AppendLine(")!;");
-            else if (GenericFieldTag(stateField) == 15) output.Append("objects.ResolveDurable<").Append(field.DomainType).Append(">(state.").Append(stateField.Name).AppendLine(")!;");
+            else if (GenericFieldTag(stateField) == 15) output.Append("objects.ResolveObject<").Append(field.DomainType).Append(">(state.").Append(stateField.Name).AppendLine(")!;");
             else output.Append("state.").Append(stateField.Name).AppendLine(";");
         }
         for (int index = 0; index < fields.Count; index++) output.Append("        ").Append(fields[index].OwnerType).Append(".__DurableWrite_").Append(fields[index].Suffix)

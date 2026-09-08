@@ -10,7 +10,7 @@ public sealed class CaptureContext : IDisposable {
     private CaptureSession? _session;
     private Phase _phase;
     private Dictionary<object, ObjectId>? _bindings = new(ReferenceEqualityComparer.Instance);
-    private readonly Dictionary<object, RootCapture> _durables = new(ReferenceEqualityComparer.Instance);
+    private readonly Dictionary<object, RootCapture> _registrations = new(ReferenceEqualityComparer.Instance);
     private readonly IStateModelResolver _models;
     private readonly List<RootCapture> _queue = [];
     private readonly List<ObjectId> _rootIds = [];
@@ -75,7 +75,7 @@ public sealed class CaptureContext : IDisposable {
                 !model!.MatchesCapture(schema, capture, preparation)) {
                 throw new ArgumentException("Root capture must match its registered model binding.", nameof(capture));
             }
-            if (_durables.TryGetValue(value, out RootCapture? existing)) {
+            if (_registrations.TryGetValue(value, out RootCapture? existing)) {
                 if (existing is not RootCapture<TDomain, TState> typed ||
                     !typed.Schema.Equals(schema) || !typed.Capture.Equals(capture) ||
                     !ReferenceEquals(typed.Preparation, preparation)) {
@@ -87,7 +87,7 @@ public sealed class CaptureContext : IDisposable {
             ObjectId id = _session!.GetOrAllocateId(value);
             RootCapture<TDomain, TState> root = new(id, value, schema, capture, preparation);
             _bindings!.Add(value, id);
-            _durables.Add(value, root);
+            _registrations.Add(value, root);
             _queue.Add(root);
             _rootIds.Add(id);
             return id;
@@ -105,24 +105,25 @@ public sealed class CaptureContext : IDisposable {
     }
 
     /// <summary>Captures a reference constrained by a complete constructed nominal type.</summary>
-    public ObjectId CaptureDurable(DurableBase? value, TypeExpr nominalType) {
+    public ObjectId CaptureDurable(DurableBase? value, TypeExpr nominalType) => CaptureObject(value, nominalType);
+
+    /// <summary>Validates every incoming reference and captures the actual supported CLR object by reference identity.</summary>
+    public ObjectId CaptureObject(object? value, TypeExpr declaredType) {
         try {
             RequirePhase(Phase.Capturing);
-            ArgumentNullException.ThrowIfNull(nominalType);
-            if (nominalType.Kind != TypeExprKind.Named || !nominalType.IsClosed) {
-                throw new ArgumentException("A durable reference requires a closed named constraint.", nameof(nominalType));
-            }
+            StateReferenceValidator.RequireReferenceType(declaredType);
             if (value is null) {
                 return default;
             }
-            if (!_models.TryGetCurrentModel(value.GetType(), out StateModelBinding? model)) {
-                throw new InvalidOperationException($"No current model is registered for actual domain type {value.GetType()}.");
+            if (value is string { Length: 0 }) { value = string.Empty; }
+            if (!_models.TryGetCurrentObjectBinding(value.GetType(), out ObjectBinding? model)) {
+                throw new InvalidOperationException($"No current object binding is registered for actual domain type {value.GetType()}.");
             }
             // Validate every edge before interning, including aliases of an already queued root or child.
-            if (!StateReferenceValidator.Accepts(model!.CurrentSchema, nominalType)) {
-                throw new InvalidOperationException($"The actual domain type does not satisfy nominal Schema {nominalType}.");
+            if (!StateReferenceValidator.Accepts(model!.CurrentLayout, declaredType)) {
+                throw new InvalidOperationException($"The actual domain type does not satisfy declared reference type {declaredType}.");
             }
-            if (_durables.TryGetValue(value, out RootCapture? existing)) {
+            if (_registrations.TryGetValue(value, out RootCapture? existing)) {
                 if (!existing.Matches(model)) {
                     throw new InvalidOperationException("The existing object capture disagrees with its registered model binding.");
                 }
@@ -131,7 +132,7 @@ public sealed class CaptureContext : IDisposable {
             ObjectId id = _session!.GetOrAllocateId(value);
             ModelCapture registration = new(id, value, model);
             _bindings!.Add(value, id);
-            _durables.Add(value, registration);
+            _registrations.Add(value, registration);
             _queue.Add(registration);
             return id;
         }
@@ -142,28 +143,7 @@ public sealed class CaptureContext : IDisposable {
     }
 
     /// <summary>Captures a string reference. Empty strings share one identity; nonempty strings use reference identity.</summary>
-    public ObjectId CaptureString(string? value) {
-        try {
-            RequirePhase(Phase.Capturing);
-            if (value is null) {
-                return default;
-            }
-            if (value.Length == 0) {
-                value = string.Empty;
-            }
-            if (_bindings!.TryGetValue(value, out ObjectId id)) {
-                return id;
-            }
-            id = _session!.GetOrAllocateId(value);
-            _bindings!.Add(value, id);
-            _objects.Add(new ObjectStateRecord(id, value));
-            return id;
-        }
-        catch {
-            AbortBuild();
-            throw;
-        }
-    }
+    public ObjectId CaptureString(string? value) => CaptureObject(value, TypeExpr.Builtin(TypeTag.String));
 
     /// <summary>Copies the reachable closure of all registered roots into a complete immutable graph.</summary>
     public CapturedGraph Seal() {
@@ -222,7 +202,7 @@ public sealed class CaptureContext : IDisposable {
     }
 
     private void ClearBuildData() {
-        _durables.Clear();
+        _registrations.Clear();
         _queue.Clear();
         _rootIds.Clear();
         _objects.Clear();
@@ -231,7 +211,7 @@ public sealed class CaptureContext : IDisposable {
     private abstract class RootCapture(ObjectId id) {
         public ObjectId Id { get; } = id;
         public abstract ObjectStateRecord Invoke(CaptureContext context);
-        public abstract bool Matches(StateModelBinding model);
+        public abstract bool Matches(ObjectBinding model);
     }
 
     private sealed class RootCapture<TDomain, TState>(
@@ -247,11 +227,11 @@ public sealed class CaptureContext : IDisposable {
         public override ObjectStateRecord Invoke(CaptureContext context) =>
             new(Id, Schema, Capture(source, context), Preparation);
 
-        public override bool Matches(StateModelBinding model) => model.MatchesCapture(Schema, Capture, Preparation);
+        public override bool Matches(ObjectBinding model) => model is StateModelBinding durable && durable.MatchesCapture(Schema, Capture, Preparation);
     }
 
-    private sealed class ModelCapture(ObjectId id, DurableBase source, StateModelBinding model) : RootCapture(id) {
+    private sealed class ModelCapture(ObjectId id, object source, ObjectBinding model) : RootCapture(id) {
         public override ObjectStateRecord Invoke(CaptureContext context) => model.Capture(Id, source, context);
-        public override bool Matches(StateModelBinding other) => ReferenceEquals(model, other);
+        public override bool Matches(ObjectBinding other) => ReferenceEquals(model, other);
     }
 }

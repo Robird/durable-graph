@@ -3,31 +3,51 @@ namespace Atelia.DurableGraph;
 /// <summary>Resolves references after the loader has validated DTOs and allocated every reachable domain object.</summary>
 /// <remarks>Construction copies the directory. Instances remain unpublished until all hydration succeeds.</remarks>
 public sealed class ObjectReadTable {
-    private readonly StringReadTable _strings;
-    private readonly Dictionary<ObjectId, DurableBase> _objects;
+    private readonly Dictionary<ObjectId, object> _objects;
 
-    public ObjectReadTable(StringReadTable strings, IReadOnlyDictionary<ObjectId, DurableBase> objects) {
-        ArgumentNullException.ThrowIfNull(strings);
+    public ObjectReadTable(StringReadTable strings, IReadOnlyDictionary<ObjectId, DurableBase> objects)
+        : this(Merge(strings, objects)) { }
+
+    /// <summary>Copies one unified directory. Only empty strings may share an instance across distinct IDs.</summary>
+    public ObjectReadTable(IReadOnlyDictionary<ObjectId, object> objects) {
         ArgumentNullException.ThrowIfNull(objects);
-        _strings = strings;
         _objects = [];
-        HashSet<DurableBase> instances = new(ReferenceEqualityComparer.Instance);
-        foreach ((ObjectId id, DurableBase instance) in objects) {
-            if (id.IsNull || instance is null || !instances.Add(instance) || !_objects.TryAdd(id, instance)) {
-                throw new InvalidDataException("Allocated durable IDs and instances must be nonzero, non-null and unique.");
+        HashSet<object> instances = new(ReferenceEqualityComparer.Instance);
+        foreach ((ObjectId id, object instance) in objects) {
+            if (id.IsNull || instance is null || instance.GetType().IsValueType) {
+                throw new InvalidDataException("Allocated object IDs and reference instances must be nonzero and non-null.");
+            }
+            object canonical = instance is string { Length: 0 } ? string.Empty : instance;
+            if ((canonical is not string { Length: 0 } && !instances.Add(canonical)) || !_objects.TryAdd(id, canonical)) {
+                throw new InvalidDataException("Different object IDs require distinct instances, except empty strings.");
             }
         }
     }
 
-    public string? ResolveString(ObjectId id) => _strings.ResolveString(id);
+    public string? ResolveString(ObjectId id) => ResolveObject<string>(id);
 
     /// <summary>Resolves null or an already allocated instance compatible with the declared CLR type.</summary>
-    public TDomain? ResolveDurable<TDomain>(ObjectId id) where TDomain : DurableBase {
+    public TDomain? ResolveDurable<TDomain>(ObjectId id) where TDomain : DurableBase => ResolveObject<TDomain>(id);
+
+    /// <summary>Resolves a reference from the common allocated-object directory.</summary>
+    public T? ResolveObject<T>(ObjectId id) where T : class {
         if (id.IsNull) {
             return null;
         }
-        return _objects.TryGetValue(id, out DurableBase? instance) && instance is TDomain typed
+        return _objects.TryGetValue(id, out object? instance) && instance is T typed &&
+            (!typeof(T).IsArray || instance.GetType() == typeof(T))
             ? typed
-            : throw new InvalidDataException($"Object ID {id} is not an allocated {typeof(TDomain)} in this loading view.");
+            : throw new InvalidDataException($"Object ID {id} is not an allocated {typeof(T)} in this loading view.");
+    }
+
+    private static Dictionary<ObjectId, object> Merge(StringReadTable strings, IReadOnlyDictionary<ObjectId, DurableBase> objects) {
+        ArgumentNullException.ThrowIfNull(strings);
+        ArgumentNullException.ThrowIfNull(objects);
+        Dictionary<ObjectId, object> merged = [];
+        foreach ((ObjectId id, string value) in strings.Entries) { merged.Add(id, value); }
+        foreach ((ObjectId id, DurableBase value) in objects) {
+            if (!merged.TryAdd(id, value)) { throw new InvalidDataException("String and durable directories contain the same object ID."); }
+        }
+        return merged;
     }
 }

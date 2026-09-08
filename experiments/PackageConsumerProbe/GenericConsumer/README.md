@@ -18,7 +18,7 @@ pwsh -NoProfile -File experiments/PackageConsumerProbe/Run-GenericProbe.ps1
 | V2 | 同定义统一升版；`Box<int>` 通用透传、`Box<Point>` 闭合业务转换、World 显式转换 inline 状态；强制 Base 后 NoChange 和普通 Delta |
 | V3 | 编译中排除 `LegacyPoint.cs`；旧历史 DTO/显式 owner Upgrade 仍可工作；从 V1 执行两跳、从 V2 执行一跳；逐对象及逐边完整 Context Schema；再次保存稳定 |
 
-runner 检查新增 history 使用 v3 格式，并逐阶段验证已有 `.dgschema` 的文件存在性和 SHA256 不变。
+runner 检查新增 history 使用 v4 格式，并逐阶段验证已有 `.dgschema` 的文件存在性和 SHA256 不变。
 每代进程独立运行，通过磁盘 repository 传递状态。历史状态类型使用生成的独立 Family 宿主。
 
 删除旧 inline 领域类型与删除独立对象族的恢复能力是不同边界：V3 删除 `LegacyPoint`，但保留独立

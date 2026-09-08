@@ -33,7 +33,7 @@ public sealed class InlineSchemaHistoryToolTests {
         Assert.Equal(3, fixture.HistoryContents().Length);
         Assert.Contains(before[0], fixture.HistoryContents());
         Assert.Equal(2, Directory.GetFiles(fixture.History).Count(path =>
-            File.ReadAllText(path).StartsWith("// durable-graph-schema-history:3\n", StringComparison.Ordinal)));
+            File.ReadAllText(path).StartsWith("// durable-graph-schema-history:4\n", StringComparison.Ordinal)));
         string[] accepted = fixture.HistoryContents();
         fixture.Verify(old, Record("Point", kind: 2));
         fixture.Publish(old);
@@ -201,8 +201,8 @@ public sealed class InlineSchemaHistoryToolTests {
             return path;
         }
         private string Manifest(SchemaHistoryRecord[] records) => Write("manifest.g.cs",
-            "// durable-graph-schema-history-manifest:3\n" + string.Concat(records.Select(record =>
-                SchemaHistoryDocument.RenderHistory(record).Replace("// durable-graph-schema-history:3\n", ""))));
+            "// durable-graph-schema-history-manifest:4\n" + string.Concat(records.Select(record =>
+                SchemaHistoryDocument.RenderHistory(record).Replace("// durable-graph-schema-history:4\n", ""))));
         public void Publish(params SchemaHistoryRecord[] records) => _tool.Publish(Manifest(records), History);
         public void Verify(params SchemaHistoryRecord[] records) => _tool.Verify(Manifest(records), History);
         public void Accept(SchemaHistoryRecord record, string? content = null) {

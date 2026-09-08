@@ -23,9 +23,8 @@ internal sealed class NormalizedRevision {
     internal static NormalizedRevision FromCandidate(CapturedGraph candidate, StateModelSnapshot models) {
         Dictionary<ObjectId, NormalizedObject> rows = [];
         foreach (ObjectStateRecord row in candidate.Objects) {
-            StateModelBinding? model = row.Kind == ObjectStateKind.Durable
-                ? models.ResolveCurrentModel(row.Schema!.Type) : null;
-            rows.Add(row.Id, new(row, row.Schema, false, model));
+            ObjectBinding model = ResolveModel(models, row.Layout);
+            rows.Add(row.Id, new(row, row.Layout, false, model));
         }
         StringReadTable strings = StringReadTable.FromDecoded(candidate.Objects
             .Where(static row => row.Kind == ObjectStateKind.String)
@@ -39,18 +38,13 @@ internal sealed class NormalizedRevision {
     internal static NormalizedRevision Create(DecodedRevision source, StateModelSnapshot models) {
         Dictionary<ObjectId, NormalizedObject> normalized = [];
         foreach (ObjectStateRecord row in source.Objects) {
-            if (row.Kind == ObjectStateKind.String) {
-                normalized.Add(row.Id, new(row, null, false, null));
-                continue;
-            }
-            DurableSchema storedSchema = row.Schema!;
-            StateModelBinding model = models.ResolveCurrentModel(storedSchema.Type);
+            ObjectBinding model = ResolveModel(models, row.Layout);
             ObjectStateRecord current = model.Normalize(row);
-            if (current.Id != row.Id || current.Kind != ObjectStateKind.Durable ||
-                !model.CurrentSchema.Equals(current.Schema)) {
-                throw new InvalidDataException("Normalization must preserve object identity and produce the exact current Schema.");
+            if (current.Id != row.Id || current.Kind != row.Kind ||
+                !model.CurrentLayout.Equals(current.Layout)) {
+                throw new InvalidDataException("Normalization must preserve object identity and produce the exact current layout.");
             }
-            normalized.Add(row.Id, new(current, storedSchema, !storedSchema.Equals(current.Schema), model));
+            normalized.Add(row.Id, new(current, row.Layout, !row.Layout.Equals(current.Layout), model));
         }
         // The complete old chains were decoded first. Validate current references only after
         // every single-object Upgrade completed; source rows remain live even after an edge is cut.
@@ -60,10 +54,16 @@ internal sealed class NormalizedRevision {
         }
         return new(source.RevisionAddress, normalized, source.Strings);
     }
+
+    private static ObjectBinding ResolveModel(StateModelSnapshot models, ObjectLayout layout) =>
+        models.TryGetCurrentObjectBinding(models.GetDomainType(layout.Type), out ObjectBinding? binding) ? binding! :
+        throw new InvalidDataException($"No current object binding exists for {layout.Type}.");
 }
 
 internal sealed record NormalizedObject(
     ObjectStateRecord Current,
-    DurableSchema? SourceSchema,
+    ObjectLayout SourceLayout,
     bool RequiresRewrite,
-    StateModelBinding? Model);
+    ObjectBinding Model) {
+    internal DurableSchema? SourceSchema => SourceLayout.Schema;
+}

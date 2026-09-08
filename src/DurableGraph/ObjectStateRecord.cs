@@ -4,6 +4,7 @@ namespace Atelia.DurableGraph;
 public enum ObjectStateKind {
     Durable,
     String,
+    Array,
 }
 
 /// <summary>
@@ -17,21 +18,31 @@ public sealed class ObjectStateRecord {
         ArgumentNullException.ThrowIfNull(schema);
         schema.RequireReferenceObject();
         Id = id;
-        Kind = ObjectStateKind.Durable;
-        Schema = schema;
+        Layout = ObjectLayout.ForDurable(schema);
         _content = state;
         Preparation = preparation;
     }
 
     internal ObjectStateRecord(ObjectId id, string content) {
         Id = id;
-        Kind = ObjectStateKind.String;
-        _content = content;
+        ArgumentNullException.ThrowIfNull(content);
+        Layout = ObjectLayout.String;
+        _content = content.Length == 0 ? string.Empty : content;
+    }
+
+    internal ObjectStateRecord(ObjectId id, ArrayLayout layout, object state, ICapturedStatePreparation? preparation = null) {
+        ArgumentNullException.ThrowIfNull(state);
+        Id = id;
+        Layout = ObjectLayout.ForArray(layout);
+        _content = state;
+        Preparation = preparation;
     }
 
     public ObjectId Id { get; }
-    public ObjectStateKind Kind { get; }
-    public DurableSchema? Schema { get; }
+    public ObjectLayout Layout { get; }
+    public ObjectStateKind Kind => Layout.Kind;
+    public DurableSchema? Schema => Layout.Schema;
+    internal object Content => _content;
     internal ICapturedStatePreparation? Preparation { get; }
 
     /// <summary>Returns a copy of the exact DTO, never the stored box.</summary>
@@ -45,4 +56,9 @@ public sealed class ObjectStateRecord {
     public string StringContent => Kind == ObjectStateKind.String
         ? (string)_content
         : throw new InvalidOperationException("The record is not a string.");
+
+    /// <summary>Returns the immutable exact array state, without exposing a writable buffer.</summary>
+    public FrozenArrayState<TState> GetArrayState<TState>() where TState : unmanaged =>
+        Kind == ObjectStateKind.Array && _content is FrozenArrayState<TState> state
+            ? state : throw new InvalidOperationException("The record does not contain the requested exact array state type.");
 }

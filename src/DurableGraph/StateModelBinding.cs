@@ -11,18 +11,18 @@ public interface IStateModelRegistration : IStateDefinitionRegistration {
 
 /// <summary>Code capabilities for one model family, independent of storage and publication.</summary>
 /// <remarks>Use stable generated bindings. Callbacks must not publish partial objects or mutate input DTOs.</remarks>
-public abstract class StateModelBinding {
+public abstract class StateModelBinding : ObjectBinding {
     private readonly StateReaderBinding[] _readers;
     private readonly Func<DurableSchema, StateReaderBinding>? _sourceReaderResolver;
 
     private protected StateModelBinding(DurableSchema currentSchema, Type domainType, IEnumerable<StateReaderBinding> readers,
-        Func<DurableSchema, StateReaderBinding>? sourceReaderResolver = null) {
+        Func<DurableSchema, StateReaderBinding>? sourceReaderResolver = null)
+        : base(domainType, ObjectLayout.ForDurable(currentSchema)) {
         ArgumentNullException.ThrowIfNull(currentSchema);
         currentSchema.RequireReferenceObject();
         ArgumentNullException.ThrowIfNull(domainType);
         ArgumentNullException.ThrowIfNull(readers);
         CurrentSchema = currentSchema;
-        DomainType = domainType;
         _sourceReaderResolver = sourceReaderResolver;
         _readers = readers.ToArray();
         HashSet<int> versions = [];
@@ -39,7 +39,6 @@ public abstract class StateModelBinding {
     }
 
     public DurableSchema CurrentSchema { get; }
-    public Type DomainType { get; }
     public IReadOnlyList<StateReaderBinding> Readers { get; }
 
     internal void RequireSource(ObjectStateRecord source) {
@@ -51,12 +50,12 @@ public abstract class StateModelBinding {
         }
     }
 
-    internal abstract ObjectStateRecord Normalize(ObjectStateRecord source);
-    internal abstract void VisitReferences(ObjectStateRecord current, IStateReferenceVisitor visitor);
     internal abstract DurableBase Allocate();
-    internal abstract void Hydrate(DurableBase domain, ObjectStateRecord current, ObjectReadTable objects);
+    internal override object Allocate(ObjectStateRecord current) {
+        if (!CurrentLayout.Equals(current.Layout)) { throw new InvalidDataException("Allocation requires the current exact object layout."); }
+        return Allocate();
+    }
     internal abstract ObjectId AddRoot(CaptureContext context, DurableBase domain);
-    internal abstract ObjectStateRecord Capture(ObjectId id, DurableBase domain, CaptureContext context);
     internal abstract bool MatchesCapture(DurableSchema schema, Delegate capture, ICapturedStatePreparation? preparation);
 
     private sealed class ReaderList(StateReaderBinding[] readers) : IReadOnlyList<StateReaderBinding> {
@@ -118,7 +117,7 @@ public sealed class StateModelBinding<TDomain, TState> : StateModelBinding
         return domain;
     }
 
-    internal override void Hydrate(DurableBase domain, ObjectStateRecord current, ObjectReadTable objects) {
+    internal override void Hydrate(object domain, ObjectStateRecord current, ObjectReadTable objects) {
         RequireDomain(domain);
         ArgumentNullException.ThrowIfNull(objects);
         ((ICapturedStatePreparation)_preparation).Validate(current);
@@ -131,7 +130,7 @@ public sealed class StateModelBinding<TDomain, TState> : StateModelBinding
         return context.AddRoot((TDomain)domain, CurrentSchema, _capture, _preparation);
     }
 
-    internal override ObjectStateRecord Capture(ObjectId id, DurableBase domain, CaptureContext context) {
+    internal override ObjectStateRecord Capture(ObjectId id, object domain, CaptureContext context) {
         RequireDomain(domain);
         return new ObjectStateRecord(id, CurrentSchema, _capture((TDomain)domain, context), _preparation);
     }
@@ -139,7 +138,7 @@ public sealed class StateModelBinding<TDomain, TState> : StateModelBinding
     internal override bool MatchesCapture(DurableSchema schema, Delegate capture, ICapturedStatePreparation? preparation) =>
         CurrentSchema.Equals(schema) && _capture.Equals(capture) && ReferenceEquals(_preparation, preparation);
 
-    private static void RequireDomain(DurableBase? domain) {
+    private static void RequireDomain(object? domain) {
         if (domain is null || domain.GetType() != typeof(TDomain)) {
             throw new InvalidDataException("Restoration requires a non-null exact domain type.");
         }

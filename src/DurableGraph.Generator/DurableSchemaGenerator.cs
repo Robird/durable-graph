@@ -23,7 +23,7 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
     private const string DurableBaseMetadataName =
         "Atelia.DurableGraph.DurableBase";
     private const string SchemaHistoryManifestHeader =
-        "// durable-graph-schema-history-manifest:3";
+        "// durable-graph-schema-history-manifest:4";
     private const string SchemaHistoryHeader =
         "// durable-graph-schema-history:1";
     private static readonly UTF8Encoding StrictUtf8 = new(
@@ -391,7 +391,7 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
         }
 
         string[] lines = normalized.Split('\n');
-        if (lines.Length > 0 && lines[0] == "// durable-graph-schema-history:3") {
+        if (lines.Length > 0 && (lines[0] == "// durable-graph-schema-history:3" || lines[0] == "// durable-graph-schema-history:4")) {
             return TryParseTemplateHistory(file.Path, lines, out model, out error);
         }
         if (lines.Length < 5 ||
@@ -736,7 +736,8 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
                     context.CancellationToken, out typeTag, out typeTagValue, out fieldTypeName, out targetSchemaId) &&
                 !TryGetInlineValue(field.Type, type, context.CancellationToken,
                     out typeTag, out typeTagValue, out fieldTypeName, out inlineSchema) &&
-                !TryGetParameterField(field.Type, out typeTag, out typeTagValue, out fieldTypeName)) {
+                !TryGetParameterField(field.Type, out typeTag, out typeTagValue, out fieldTypeName) &&
+                !TryGetArrayField(field.Type, out typeTag, out typeTagValue, out fieldTypeName)) {
                 context.ReportDiagnostic(Diagnostic.Create(
                     UnsupportedFieldType,
                     GetSourceLocation(field),
@@ -889,7 +890,7 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
             string.IsNullOrWhiteSpace(identity) || !CanEncodeStrictUtf8(identity)) {
             return false;
         }
-        typeTag = "DurableReference";
+        typeTag = "ObjectReference";
         typeTagValue = 15;
         fieldTypeName = fieldType.ToDisplayString(QualifiedNameFormat);
         targetSchemaId = identity;
@@ -1017,7 +1018,7 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
             case 14:
                 return "Double";
             case 15:
-                return "DurableReference";
+                return "ObjectReference";
             case 16:
                 return "InlineValue";
             default:

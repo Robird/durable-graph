@@ -19,18 +19,14 @@ public interface IStateReaderRegistration : IStateDefinitionRegistration {
 
 /// <summary>One exact Schema and its typed body reader, erased only at the object boundary.</summary>
 /// <remarks>Reading does not create a capture candidate or install a session baseline.</remarks>
-public abstract class StateReaderBinding {
-    private protected StateReaderBinding(DurableSchema schema) {
+public abstract class StateReaderBinding : ObjectReaderBinding {
+    private protected StateReaderBinding(DurableSchema schema) : base(ObjectLayout.ForDurable(schema)) {
         ArgumentNullException.ThrowIfNull(schema);
         schema.RequireReferenceObject();
         Schema = schema;
     }
 
     public DurableSchema Schema { get; }
-    public abstract Type StateType { get; }
-
-    internal abstract ObjectStateRecord Read(ObjectId objectId, IStateBodySource source);
-    internal abstract void VisitReferences(ObjectStateRecord item, IStateReferenceVisitor visitor);
 }
 
 /// <summary>Reconstructs one exact-version unmanaged DTO before boxing the completed value once.</summary>

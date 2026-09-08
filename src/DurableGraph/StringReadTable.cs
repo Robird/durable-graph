@@ -8,6 +8,7 @@ namespace Atelia.DurableGraph;
 /// </summary>
 public sealed class StringReadTable {
     private readonly Dictionary<ObjectId, string> _strings;
+    internal IEnumerable<KeyValuePair<ObjectId, string>> Entries => _strings;
 
     private StringReadTable(Dictionary<ObjectId, string> strings) {
         _strings = strings;

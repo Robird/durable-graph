@@ -18,19 +18,19 @@ public sealed class GenericSchemaPersistenceTests {
         Assert.Equal(key, SchemaKeyWireCodec.Read(ref reader));
         reader.EnsureFullyConsumed();
         var encoded = BaseObjectBodyCodec.EncodeDurable(new(type, 128), new([0xAB]));
-        Assert.Equal(Convert.FromHexString("0202020342020102020350008001AB"), encoded.Body.ToArray());
+        Assert.Equal(Convert.FromHexString("0302020342020102020350008001AB"), encoded.Body.ToArray());
         var decoded = BaseObjectBodyCodec.Decode(encoded.Body);
         Assert.Equal(key, decoded.SchemaKey);
         Assert.Equal(new byte[] { 0xAB }, decoded.Body.ToArray());
     }
 
     [Fact]
-    public void BatchV3GoldenSeparatesClosuresAndKeepsNominalReferenceArguments() {
+    public void BatchV4GoldenSeparatesClosuresAndKeepsNominalReferenceArguments() {
         TypeExpr intType = TypeExpr.Named("B", TypeExpr.Builtin(TypeTag.Int32));
         TypeExpr stringType = TypeExpr.Named("B", TypeExpr.Builtin(TypeTag.String));
         DurableSchema intBox = new(intType, 1, DurableFieldInfo.Reference(1, stringType));
         DurableSchema stringBox = new(stringType, 1);
-        byte[] golden = Convert.FromHexString("030202034201010201010001010F02034201010402034201010401010000");
+        byte[] golden = Convert.FromHexString("040202034201010201010001010F02034201010402034201010401010000");
         Assert.Equal(golden, SchemaBatchWireCodec.Write([stringBox, intBox]));
         var decoded = SchemaBatchWireCodec.Read(golden, new Dictionary<SchemaKey, DurableSchema>());
         Assert.Equal(intBox, decoded[new(intType, 1)]);
@@ -41,6 +41,7 @@ public sealed class GenericSchemaPersistenceTests {
     [Theory]
     [InlineData("010103410100010102")]
     [InlineData("02010341010100010102")]
+    [InlineData("030102034100010100010102")]
     public void OldBatchVersionsRemainExactZeroArgumentDefinitions(string hex) {
         var schema = SchemaBatchWireCodec.Read(Convert.FromHexString(hex), new Dictionary<SchemaKey, DurableSchema>())[new("A", 1)];
         Assert.Equal(TypeExpr.Named("A"), schema.Type);

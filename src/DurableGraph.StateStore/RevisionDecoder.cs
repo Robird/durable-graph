@@ -25,7 +25,9 @@ public static class RevisionDecoder {
         StateRevisionStore store,
         SchemaStore schemas,
         FrameAddress revisionAddress,
-        IReadOnlyDictionary<SchemaKey, StateReaderBinding> bindings) => ReadCore(store, schemas, revisionAddress, schema => {
+        IReadOnlyDictionary<SchemaKey, StateReaderBinding> bindings) => ReadCore(store, schemas, revisionAddress, layout => {
+            if (layout.Kind == ObjectStateKind.String) { return StringObjectReader.Instance; }
+            DurableSchema schema = layout.Schema ?? throw new InvalidDataException("Array readers require a model catalog.");
             SchemaKey key = new(schema.Type, schema.Version);
             if (!bindings.TryGetValue(key, out StateReaderBinding? binding)) {
                 throw new InvalidDataException($"No reader is registered for {key.Type} v{key.Version}.");
@@ -35,43 +37,34 @@ public static class RevisionDecoder {
 
     internal static DecodedRevision ReadSnapshot(
         StateRevisionStore store, SchemaStore schemas, FrameAddress revisionAddress, StateBindingContext bindings) =>
-        ReadCore(store, schemas, revisionAddress, bindings.ResolveReader);
+        ReadCore(store, schemas, revisionAddress, bindings.ResolveObjectReader);
 
     private static DecodedRevision ReadCore(
         StateRevisionStore store, SchemaStore schemas, FrameAddress revisionAddress,
-        Func<DurableSchema, StateReaderBinding> resolveReader) {
+        Func<ObjectLayout, ObjectReaderBinding> resolveReader) {
         List<ObjectStateRecord> objects = [];
-        List<(ObjectStateRecord Row, StateReaderBinding Binding)> durableRows = [];
+        List<(ObjectStateRecord Row, ObjectReaderBinding Binding)> boundRows = [];
         List<(ObjectId Id, string Value)> strings = [];
 
         // Object-first reconstruction: only one raw chain is retained at a time.
         foreach (uint rawId in store.ReadLiveObjectHeadMap(revisionAddress).Keys.Order()) {
             ObjectId id = new(rawId);
             ObjectVersionChain chain = store.ReadObjectVersionChain(revisionAddress, rawId);
-            DecodedBaseObjectBody body = TypedObjectVersionReader.DecodeBase(chain);
-            if (body.Kind == ObjectStateKind.String) {
-                string value = TypedObjectVersionReader.ReadString(chain, body);
-                objects.Add(new ObjectStateRecord(id, value));
-                strings.Add((id, value));
-            } else {
-                SchemaKey key = body.SchemaKey
-                    ?? throw new InvalidDataException("A durable Base requires an exact Schema key.");
-                // The persisted full layout selects the historical execution representation.
-                // Current CLR arguments cannot substitute for old inline state versions.
-                DurableSchema schema = schemas.GetRequired(key);
-                StateReaderBinding binding = resolveReader(schema);
-                if (!schema.Equals(binding.Schema)) {
-                    throw new InvalidDataException("The selected reader does not match the complete stored Schema.");
-                }
-                ObjectStateRecord row = binding.Read(id, TypedObjectVersionReader.CreateBodySource(chain, body));
-                objects.Add(row);
-                durableRows.Add((row, binding));
+            DecodedBaseObjectBody body = TypedObjectVersionReader.DecodeBase(chain, schemas);
+            ObjectLayout layout = ObjectPersistence.GetLayout(body, schemas);
+            ObjectReaderBinding binding = resolveReader(layout);
+            if (!layout.Equals(binding.Layout)) {
+                throw new InvalidDataException("The selected reader does not match the complete stored layout.");
             }
+            ObjectStateRecord row = binding.Read(id, TypedObjectVersionReader.CreateBodySource(chain, body));
+            objects.Add(row);
+            boundRows.Add((row, binding));
+            if (row.Kind == ObjectStateKind.String) { strings.Add((id, row.StringContent)); }
         }
 
         StringReadTable table = StringReadTable.FromDecoded(strings);
         StateReferenceValidator validator = new(objects.ToDictionary(static row => row.Id));
-        foreach ((ObjectStateRecord row, StateReaderBinding binding) in durableRows) {
+        foreach ((ObjectStateRecord row, ObjectReaderBinding binding) in boundRows) {
             binding.VisitReferences(row, validator);
         }
         return new DecodedRevision(revisionAddress, objects, table);

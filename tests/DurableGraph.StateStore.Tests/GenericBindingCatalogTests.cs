@@ -156,7 +156,7 @@ public sealed class GenericBindingCatalogTests : IDisposable {
         Assert.Equal(TypeTag.String, own.Slot.TypeTag);
         Assert.Equal(node, inherited.Slot.TargetType);
         Assert.NotEqual(own.StateOpsType, inherited.StateOpsType);
-        Assert.Equal(TypeTag.DurableReference, binding.FieldSlots[0].TypeTag);
+        Assert.Equal(TypeTag.ObjectReference, binding.FieldSlots[0].TypeTag);
         Assert.Equal(TypeTag.String, binding.FieldSlots[1].TypeTag);
     }
 

@@ -16,7 +16,7 @@ internal static class LoadedRevisionPlanner {
         // TODO(DB-033): Measure these repeated chain reads before sharing a scoped cache with planning.
         foreach ((ObjectId id, NormalizedObject row) in source.Objects) {
             ObjectVersionChain chain = store.ReadObjectVersionChain(source.RevisionAddress, id.Value);
-            DecodedBaseObjectBody stored = BaseObjectBodyCodec.Decode(chain.Records[0].Record.Body);
+            DecodedBaseObjectBody stored = BaseObjectBodyCodec.Decode(chain.Records[0].Record.Body, schemas);
             if (stored.Kind != row.Current.Kind) {
                 throw new InvalidDataException($"Loaded object {id} no longer has its source kind.");
             }
@@ -25,11 +25,11 @@ internal static class LoadedRevisionPlanner {
                     throw new InvalidDataException("String source provenance is invalid.");
                 }
             } else {
-                DurableSchema schema = schemas.GetRequired(stored.SchemaKey!.Value);
-                if (!schema.Equals(row.SourceSchema) ||
-                    row.RequiresRewrite != !schema.Equals(row.Current.Schema) ||
-                    row.Model is null || !row.Model.CurrentSchema.Equals(row.Current.Schema)) {
-                    throw new InvalidDataException($"Loaded object {id} no longer matches its exact source Schema and normalized model.");
+                ObjectLayout layout = ObjectPersistence.GetLayout(stored, schemas);
+                if (!layout.Equals(row.SourceLayout) ||
+                    row.RequiresRewrite != !layout.Equals(row.Current.Layout) ||
+                    !row.Model.CurrentLayout.Equals(row.Current.Layout)) {
+                    throw new InvalidDataException($"Loaded object {id} no longer matches its exact source layout and normalized model.");
                 }
             }
         }
@@ -38,17 +38,14 @@ internal static class LoadedRevisionPlanner {
             if (existed != (row.Previous is not null) ||
                 (existed && (!ReferenceEquals(row.Previous, prior!.Current) ||
                     row.Current.Kind != prior.Current.Kind ||
-                    !Equals(row.Current.Schema, prior.Current.Schema)))) {
+                    !row.Current.Layout.Equals(prior.Current.Layout)))) {
                 throw new InvalidDataException("Prepared contents do not match the controlled normalized baseline.");
             }
         }
-        schemas.RegisterBatch(contents.Where(static row => row.Current.Kind == ObjectStateKind.Durable)
-            .Select(static row => row.Current.Schema!));
+        ObjectPersistence.RegisterSchemas(schemas, contents.Select(static row => row.Current));
         List<PreparedObject> rows = [];
         foreach (PreparedCapturedObject row in contents) {
-            EncodedBaseObjectBody encodedBaseBody = row.Current.Kind == ObjectStateKind.String
-                ? BaseObjectBodyCodec.EncodeString(row.BaseBody)
-                : BaseObjectBodyCodec.EncodeDurable(row.Current.Schema!, row.BaseBody);
+            EncodedBaseObjectBody encodedBaseBody = ObjectPersistence.Encode(row.Current, row.BaseBody);
             if (row.Previous is null) {
                 rows.Add(PreparedObject.New(row.Current.Id, encodedBaseBody));
             } else if (source.Objects[row.Current.Id].RequiresRewrite) {

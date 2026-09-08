@@ -45,7 +45,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             """, new InMemoryAdditionalText("a.dgschema", NominalHistory));
         AssertSchemaOnlyCompiles(run);
         Type owner = EmitAndLoad(run.OutputCompilation).GetType("A")!;
-        Assert.Equal(new DurableFieldInfo(1, TypeTag.DurableReference, "B"), Assert.Single(ReadSchemaOnly(owner, 1).Fields));
+        Assert.Equal(new DurableFieldInfo(1, TypeTag.ObjectReference, "B"), Assert.Single(ReadSchemaOnly(owner, 1).Fields));
         Assert.Equal(TypeTag.Int32, Assert.Single(ReadSchemaOnly(owner, 2).Fields).TypeTag);
     }
 
@@ -57,7 +57,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             string file = Path.Combine(directory, "a.dgschema");
             File.WriteAllText(file, NominalHistory, new UTF8Encoding(false));
             SchemaHistoryRecord record = SchemaHistoryDocument.ParseHistory(file);
-            Assert.Equal(NominalHistory.Replace("history:1", "history:3").Replace("// version:1\n", "// version:1\n// kind:1\n// arity:0\n")
+            Assert.Equal(NominalHistory.Replace("history:1", "history:4").Replace("// version:1\n", "// version:1\n// kind:1\n// arity:0\n")
                     .Replace("|15|Qg==", "|15|nQg==()"),
                 SchemaHistoryDocument.RenderHistory(record));
             Assert.Equal("B", Assert.Single(record.Fields).TargetSchemaId);

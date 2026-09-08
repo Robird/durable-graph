@@ -18,7 +18,7 @@ public sealed class BaseObjectBodyCodecTests {
     [Fact]
     public void HeadersHaveIndependentGoldenBytesAndPreserveOpaqueBodies() {
         EncodedBaseObjectBody text = BaseObjectBodyCodec.EncodeString(new([0xFF, 0x80]));
-        Assert.Equal(new byte[] { 2, 1, 0xFF, 0x80 }, text.Body.ToArray());
+        Assert.Equal(new byte[] { 3, 1, 0xFF, 0x80 }, text.Body.ToArray());
         DecodedBaseObjectBody decodedText = BaseObjectBodyCodec.Decode(text.Body);
         Assert.Equal(ObjectStateKind.String, decodedText.Kind);
         Assert.Null(decodedText.SchemaKey);
@@ -27,7 +27,7 @@ public sealed class BaseObjectBodyCodecTests {
         DurableSchema schema = new("A", 128, new DurableFieldInfo(1, TypeTag.Int32));
         EncodedBaseObjectBody durable = BaseObjectBodyCodec.EncodeDurable(schema, new([0xFF, 0]));
         // String "A": UTF8 header 3, ASCII 65; positive UInt32 128: 80 01.
-        Assert.Equal(new byte[] { 2, 2, 2, 3, 65, 0, 0x80, 1, 0xFF, 0 }, durable.Body.ToArray());
+        Assert.Equal(new byte[] { 3, 2, 2, 3, 65, 0, 0x80, 1, 0xFF, 0 }, durable.Body.ToArray());
         DecodedBaseObjectBody decoded = BaseObjectBodyCodec.Decode(durable.Body);
         Assert.Equal(ObjectStateKind.Durable, decoded.Kind);
         Assert.Equal(new SchemaKey("A", 128), decoded.SchemaKey);
@@ -46,7 +46,7 @@ public sealed class BaseObjectBodyCodecTests {
 
     [Theory]
     [InlineData(new byte[] { 0, 1 })]
-    [InlineData(new byte[] { 3, 1 })]
+    [InlineData(new byte[] { 4, 1 })]
     [InlineData(new byte[] { 1, 0 })]
     [InlineData(new byte[] { 1, 3 })]
     [InlineData(new byte[] { 1, 2, 0, 1 })] // Empty SchemaId.

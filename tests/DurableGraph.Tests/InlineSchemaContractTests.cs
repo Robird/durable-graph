@@ -25,7 +25,7 @@ public sealed class InlineSchemaContractTests {
         Assert.Throws<ArgumentException>(() => new DurableFieldInfo(1, TypeTag.InlineValue, inlineSchema: reference));
         Assert.Throws<ArgumentException>(() => new DurableFieldInfo(1, TypeTag.InlineValue, "point", point));
         Assert.Throws<ArgumentException>(() => new DurableFieldInfo(1, TypeTag.Int32, inlineSchema: point));
-        Assert.Throws<ArgumentException>(() => new DurableFieldInfo(1, TypeTag.DurableReference, "node", point));
+        Assert.Throws<ArgumentException>(() => new DurableFieldInfo(1, TypeTag.ObjectReference, "node", point));
         Assert.Throws<ArgumentException>(() => new DurableSchema("point", 1, [], reference, SchemaKind.InlineValue));
         Assert.Throws<ArgumentException>(() => new DurableSchema("node", 1, [], point));
         Assert.Throws<ArgumentOutOfRangeException>(() => new DurableSchema("point", 1, (SchemaKind)0));

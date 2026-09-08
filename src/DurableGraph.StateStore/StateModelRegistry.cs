@@ -8,6 +8,20 @@ public sealed class StateModelRegistry : IStateModelRegistration {
     private readonly Dictionary<SchemaKey, StateReaderBinding> _readers = [];
     private readonly Dictionary<string, StateDefinitionBinding> _definitions = new(StringComparer.Ordinal);
     private readonly Dictionary<Type, StateValueUpgradeRuleSet> _valueUpgradeRules = [];
+    private Type? _arrayElementUpgradeRuleSet;
+
+    /// <summary>Selects the registered explicit value rules used when an array's element layout changes.</summary>
+    /// <remarks>The array owns this choice independently of its incoming fields. One frozen catalog selects one ruleset.</remarks>
+    public void UseArrayElementUpgrades(Type ruleSet) {
+        ArgumentNullException.ThrowIfNull(ruleSet);
+        if (!_valueUpgradeRules.ContainsKey(ruleSet)) {
+            throw new InvalidOperationException($"Register the value upgrade ruleset for {ruleSet} before selecting it for arrays.");
+        }
+        if (_arrayElementUpgradeRuleSet is not null && _arrayElementUpgradeRuleSet != ruleSet) {
+            throw new InvalidOperationException("A different array element upgrade ruleset is already selected.");
+        }
+        _arrayElementUpgradeRuleSet = ruleSet;
+    }
 
     /// <summary>Registers one stable ruleset; repeated registration of that instance is harmless.</summary>
     public void Register(StateValueUpgradeRuleSet ruleSet) =>
@@ -64,5 +78,5 @@ public sealed class StateModelRegistry : IStateModelRegistration {
         new Dictionary<Type, StateModelBinding>(_types),
         new Dictionary<SchemaKey, StateReaderBinding>(_readers),
         new Dictionary<string, StateDefinitionBinding>(_definitions, StringComparer.Ordinal), schemas,
-        new Dictionary<Type, StateValueUpgradeRuleSet>(_valueUpgradeRules));
+        new Dictionary<Type, StateValueUpgradeRuleSet>(_valueUpgradeRules), _arrayElementUpgradeRuleSet);
 }

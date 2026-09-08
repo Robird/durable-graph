@@ -48,6 +48,15 @@ public sealed class TypeExpr : IEquatable<TypeExpr>, IComparable<TypeExpr> {
     public int ParameterOrdinal { get; }
     public bool IsClosed { get; }
 
+    /// <summary>Gets whether this expression is a supported array constructor.</summary>
+    public bool IsArray => Kind is >= TypeExprKind.VectorArray and <= TypeExprKind.Rank4Array;
+
+    /// <summary>Gets the array rank, or zero for a non-array expression.</summary>
+    public int ArrayRank => IsArray ? (int)Kind - (int)TypeExprKind.VectorArray + 1 : 0;
+
+    /// <summary>Gets the element expression, or null for a non-array expression.</summary>
+    public TypeExpr? ElementType => IsArray ? Arguments[0] : null;
+
     public static TypeExpr Builtin(TypeTag tag) {
         if (tag is < TypeTag.Boolean or > TypeTag.Double) {
             throw new ArgumentOutOfRangeException(nameof(tag), "Only the supported scalar and string tags are built-in types.");
@@ -69,6 +78,19 @@ public sealed class TypeExpr : IEquatable<TypeExpr>, IComparable<TypeExpr> {
             throw new ArgumentOutOfRangeException(nameof(ordinal));
         }
         return new(TypeExprKind.Parameter, TypeTag.Invalid, null, ImmutableArray<TypeExpr>.Empty, ordinal);
+    }
+
+    /// <summary>Constructs a zero-based, single-dimensional vector type.</summary>
+    public static TypeExpr VectorArray(TypeExpr element) {
+        ArgumentNullException.ThrowIfNull(element);
+        return new(TypeExprKind.VectorArray, TypeTag.Invalid, null, [element], -1);
+    }
+
+    /// <summary>Constructs a zero-based rectangular array type of rank two through four.</summary>
+    public static TypeExpr MultiDimArray(TypeExpr element, int rank) {
+        ArgumentNullException.ThrowIfNull(element);
+        if (rank is < 2 or > 4) { throw new ArgumentOutOfRangeException(nameof(rank)); }
+        return new((TypeExprKind)((int)TypeExprKind.VectorArray + rank - 1), TypeTag.Invalid, null, [element], -1);
     }
 
     public bool Equals(TypeExpr? other) => CompareTo(other) == 0;
@@ -97,7 +119,12 @@ public sealed class TypeExpr : IEquatable<TypeExpr>, IComparable<TypeExpr> {
     public override string ToString() => Kind switch {
         TypeExprKind.Builtin => BuiltinTag.ToString(),
         TypeExprKind.Parameter => $"!{ParameterOrdinal}",
-        _ => Arguments.IsEmpty ? DefinitionId! : $"{DefinitionId}<{string.Join(",", Arguments)}>",
+        TypeExprKind.Named => Arguments.IsEmpty ? DefinitionId! : $"{DefinitionId}<{string.Join(",", Arguments)}>",
+        TypeExprKind.VectorArray => $"{ElementType}[]",
+        TypeExprKind.Rank2Array => $"{ElementType}[,]",
+        TypeExprKind.Rank3Array => $"{ElementType}[,,]",
+        TypeExprKind.Rank4Array => $"{ElementType}[,,,]",
+        _ => throw new InvalidOperationException("Unknown type expression constructor."),
     };
 
     public static bool operator ==(TypeExpr? left, TypeExpr? right) => Equals(left, right);
@@ -108,4 +135,8 @@ public enum TypeExprKind : byte {
     Builtin = 1,
     Named = 2,
     Parameter = 3,
+    VectorArray = 4,
+    Rank2Array = 5,
+    Rank3Array = 6,
+    Rank4Array = 7,
 }

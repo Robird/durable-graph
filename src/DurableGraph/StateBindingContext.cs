@@ -5,6 +5,13 @@ namespace Atelia.DurableGraph;
 /// <summary>Resolves current models inside one frozen operation catalog.</summary>
 public interface IStateModelResolver {
     bool TryGetCurrentModel(Type domainType, out StateModelBinding? model);
+    bool TryGetCurrentObjectBinding(Type domainType, out ObjectBinding? binding) {
+        ArgumentNullException.ThrowIfNull(domainType);
+        if (domainType == typeof(string)) { binding = StringObjectBinding.Instance; return true; }
+        bool found = TryGetCurrentModel(domainType, out StateModelBinding? model);
+        binding = model;
+        return found;
+    }
 }
 
 /// <summary>Cold-path closure services for generated factories in one immutable code catalog.</summary>
@@ -13,9 +20,21 @@ public abstract partial class StateBindingContext : IStateModelResolver {
     private readonly Dictionary<(TypeExpr Type, int Version), StateSchemaBinding> _schemaBindings = [];
 
     public abstract bool TryGetCurrentModel(Type domainType, out StateModelBinding? model);
+    public virtual bool TryGetCurrentObjectBinding(Type domainType, out ObjectBinding? binding) {
+        ArgumentNullException.ThrowIfNull(domainType);
+        if (domainType == typeof(string)) { binding = StringObjectBinding.Instance; return true; }
+        bool found = TryGetCurrentModel(domainType, out StateModelBinding? model);
+        binding = model;
+        return found;
+    }
     public abstract StateValueBinding ResolveCurrentValue(Type domainType);
     public abstract StateValueBinding ResolveStoredValue(DurableFieldInfo slot);
     public abstract StateReaderBinding ResolveReader(DurableSchema schema);
+    public virtual ObjectReaderBinding ResolveObjectReader(ObjectLayout layout) => layout.Kind switch {
+        ObjectStateKind.String => StringObjectReader.Instance,
+        ObjectStateKind.Durable => ResolveReader(layout.Schema!),
+        _ => throw new InvalidDataException("No historical object reader is available for this layout."),
+    };
     public abstract TypeExpr GetTypeExpr(Type domainType);
     public abstract Type GetDomainType(TypeExpr type);
     public abstract StateDefinitionBinding GetDefinition(string definitionId);
@@ -209,17 +228,21 @@ public abstract partial class StateBindingContext : IStateModelResolver {
             return arguments[expression.ParameterOrdinal];
         }
         if (expression.Kind == TypeExprKind.Builtin || expression.Arguments.IsEmpty) { return expression; }
+        if (expression.IsArray) {
+            TypeExpr element = Substitute(expression.ElementType!, arguments);
+            return expression.ArrayRank == 1 ? TypeExpr.VectorArray(element) : TypeExpr.MultiDimArray(element, expression.ArrayRank);
+        }
         return TypeExpr.Named(expression.DefinitionId!, expression.Arguments.Select(argument => Substitute(argument, arguments)).ToArray());
     }
 
     public static DurableFieldInfo WithFieldId(DurableFieldInfo slot, int fieldId) => slot.TypeTag switch {
-        TypeTag.DurableReference => DurableFieldInfo.Reference(fieldId, slot.TargetType!),
+        TypeTag.ObjectReference => DurableFieldInfo.Reference(fieldId, slot.TargetType!),
         TypeTag.InlineValue => new(fieldId, TypeTag.InlineValue, inlineSchema: slot.InlineSchema),
         _ => new(fieldId, slot.TypeTag),
     };
 
     public static TypeExpr NominalType(DurableFieldInfo slot) => slot.TypeTag switch {
-        TypeTag.DurableReference => slot.TargetType!,
+        TypeTag.ObjectReference => slot.TargetType!,
         TypeTag.InlineValue => slot.InlineSchema!.Type,
         _ => TypeExpr.Builtin(slot.TypeTag),
     };

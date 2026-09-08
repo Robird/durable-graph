@@ -11,8 +11,8 @@ public sealed class GraphRepositoryTests : IDisposable {
     private readonly string _root = Path.Combine(Path.GetTempPath(), $"durable-graph-repository-{Guid.NewGuid():N}");
     private static readonly ReadAmplificationBaseBudgetParameters NoRebase = new(1000000, 1);
     private static readonly DurableSchema Schema = new("RepositoryNode", 1,
-        new DurableFieldInfo(1, TypeTag.DurableReference, "RepositoryNode"),
-        new DurableFieldInfo(2, TypeTag.DurableReference, "RepositoryNode"),
+        new DurableFieldInfo(1, TypeTag.ObjectReference, "RepositoryNode"),
+        new DurableFieldInfo(2, TypeTag.ObjectReference, "RepositoryNode"),
         new DurableFieldInfo(3, TypeTag.String), new DurableFieldInfo(4, TypeTag.Byte));
 
     [Fact]

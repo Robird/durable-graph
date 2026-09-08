@@ -124,13 +124,13 @@ public sealed class GraphRepository : IDisposable {
         // TODO: Measure startup cost before caching repeated historical map/chain validation.
         foreach (uint id in objects.Keys) {
             ObjectVersionChain chain = _states.ReadObjectVersionChain(head.RevisionAddress, id);
-            DecodedBaseObjectBody body = BaseObjectBodyCodec.Decode(chain.Records[0].Record.Body);
+            DecodedBaseObjectBody body = BaseObjectBodyCodec.Decode(chain.Records[0].Record.Body, _schemas);
             if (body.Kind == ObjectStateKind.Durable) {
                 if (_schemas.GetRequired(body.SchemaKey!.Value).Kind != SchemaKind.ReferenceObject) {
                     throw new InvalidDataException("An object Base cannot refer to an inline Schema.");
                 }
             }
-            else if (chain.Records.Count != 1) { throw new InvalidDataException("String cannot have a Delta chain."); }
+            else if (body.Kind == ObjectStateKind.String && chain.Records.Count != 1) { throw new InvalidDataException("String cannot have a Delta chain."); }
             if (id == head.WorldId.Value && body.Kind != ObjectStateKind.Durable) { throw new InvalidDataException("World must be a durable object."); }
         }
     }

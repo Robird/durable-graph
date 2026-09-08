@@ -253,7 +253,7 @@ public sealed class LoadedReferenceWorldTests : IDisposable {
     }
 
     private static DurableSchema Schema(string id, int version, string nominal, DurableSchema? parent = null) =>
-        new(id, version, [new(1, TypeTag.DurableReference, nominal), new(2, TypeTag.Byte)], parent);
+        new(id, version, [new(1, TypeTag.ObjectReference, nominal), new(2, TypeTag.Byte)], parent);
 
     private static StateModelBinding Model<T>(DurableSchema current, Func<T> allocate, DurableSchema? old = null,
         Func<State, State>? upgrade = null, Action? onHydrate = null, Action<T>? onCapture = null) where T : Domain {

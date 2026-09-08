@@ -23,7 +23,7 @@ Point 转换被 `Box<Point>` 与 `Box<Pair<Point>>` 复用；Pair 的同一开�
 Box 和 Pair 故意同时采用局部 key `value`，其完整槽语义由各自的声明段与 FieldId 决定。
 V3 删除的只有 inline 领域声明；独立 `Box<Point>` 行仍保留其 current CLR 闭合所需的 Point 类型。
 
-runner 检查 history 格式 v3，数量依次为 5、10、10、12，并核对先前 `.dgschema` 的存在性与 SHA256。
+runner 检查新增 history 格式 v4，数量依次为 5、10、10、12，并核对先前 `.dgschema` 的存在性与 SHA256。
 三个版本通过磁盘 repository 交接，每次运行都是独立进程。
 更细的歧义、错误完整槽语义、依赖深度及异常不回退由产品 Runtime/SG 单元测试覆盖。
 

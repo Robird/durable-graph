@@ -49,7 +49,7 @@ public sealed class GenericSchemaIdentityTests {
         Assert.NotEqual(text, reference);
         Assert.NotEqual(reference, DurableFieldInfo.Reference(1, TypeExpr.Named("Box", TypeExpr.Builtin(TypeTag.UInt32))));
         Assert.Equal("Box", reference.TargetSchemaId);
-        Assert.Equal(new DurableFieldInfo(1, TypeTag.DurableReference, "Plain"),
+        Assert.Equal(new DurableFieldInfo(1, TypeTag.ObjectReference, "Plain"),
             DurableFieldInfo.Reference(1, TypeExpr.Named("Plain")));
     }
 
@@ -64,7 +64,7 @@ public sealed class GenericSchemaIdentityTests {
         TypeExpr wide = TypeExpr.Named("N", Enumerable.Repeat(TypeExpr.Builtin(TypeTag.Int32), 32).ToArray());
         TypeExpr shared = TypeExpr.Named("N", Enumerable.Repeat(wide, 32).ToArray());
         Assert.Throws<ArgumentException>(() => TypeExpr.Named("N", Enumerable.Repeat(shared, 4).ToArray()));
-        Assert.Throws<ArgumentOutOfRangeException>(() => TypeExpr.Builtin(TypeTag.DurableReference));
+        Assert.Throws<ArgumentOutOfRangeException>(() => TypeExpr.Builtin(TypeTag.ObjectReference));
         Assert.Throws<ArgumentOutOfRangeException>(() => TypeExpr.Builtin(TypeTag.InlineValue));
     }
 }

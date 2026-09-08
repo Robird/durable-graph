@@ -5,13 +5,15 @@ namespace Atelia.DurableGraph.StateStore;
 internal sealed class DecodedBaseObjectBody {
     private readonly byte[] _body;
 
-    internal DecodedBaseObjectBody(ObjectStateKind kind, SchemaKey? schemaKey, ReadOnlySpan<byte> body) {
+    internal DecodedBaseObjectBody(ObjectStateKind kind, SchemaKey? schemaKey, ReadOnlySpan<byte> body, ArrayLayout? arrayLayout = null) {
         Kind = kind;
         SchemaKey = schemaKey;
+        ArrayLayout = arrayLayout;
         _body = body.ToArray();
     }
 
     internal ObjectStateKind Kind { get; }
     internal SchemaKey? SchemaKey { get; }
+    internal ArrayLayout? ArrayLayout { get; }
     internal ReadOnlySpan<byte> Body => _body;
 }

@@ -9,6 +9,13 @@ using Microsoft.CodeAnalysis.CSharp;
 namespace Atelia.DurableGraph.Generator;
 
 public sealed partial class DurableSchemaGenerator {
+    private static bool TryGetArrayField(ITypeSymbol type, out string? tag, out int number, out string? name) {
+        tag = null; number = 0; name = null;
+        if (type is not IArrayTypeSymbol array || array.Rank > 4 || (array.Rank == 1 && !array.IsSZArray)) return false;
+        tag = "ObjectReference"; number = 15; name = type.ToDisplayString(FullyQualifiedNameFormat);
+        return true;
+    }
+
     private static bool TryGetParameterField(ITypeSymbol type, out string? tag, out int number, out string? name) {
         tag = null; number = 0; name = null;
         if (type is not ITypeParameterSymbol parameter || parameter.Ordinal >= 32 || parameter.AllowsRefLikeType) return false;
@@ -24,6 +31,12 @@ public sealed partial class DurableSchemaGenerator {
         if (type is ITypeParameterSymbol parameter) {
             if (parameter.Ordinal >= owner.Arity || parameter.AllowsRefLikeType) return false;
             pattern = TypePattern.Parameter(parameter.Ordinal); return true;
+        }
+        if (type is IArrayTypeSymbol array) {
+            if (array.Rank > 4 || (array.Rank == 1 && !array.IsSZArray) ||
+                !TryGetTypePattern(array.ElementType, owner, halfType, out TypePattern? element)) return false;
+            try { pattern = TypePattern.ArrayOf(element!, array.Rank); return true; }
+            catch (ArgumentException) { return false; }
         }
         if (type is not INamedTypeSymbol named || named.Arity > 32 || named.IsRefLikeType || named.ContainingType is not null ||
             !SymbolEqualityComparer.Default.Equals(named.ContainingAssembly, owner.ContainingAssembly)) return false;
@@ -46,6 +59,7 @@ public sealed partial class DurableSchemaGenerator {
         TypePattern ConvertType(ITypeSymbol item) {
             if (item is ITypeParameterSymbol parameter) return TypePattern.Parameter(parameter.Ordinal);
             if (TryGetTypeTag(item, half, out _, out int tag, out _)) return TypePattern.Builtin(tag);
+            if (item is IArrayTypeSymbol array) return TypePattern.ArrayOf(ConvertType(array.ElementType), array.Rank);
             INamedTypeSymbol named = (INamedTypeSymbol)item;
             AttributeData attribute = GetAttribute(named.GetAttributes(), DurableTypeAttributeMetadataName)!;
             TypePattern[] arguments = new TypePattern[named.TypeArguments.Length];
@@ -61,6 +75,11 @@ public sealed partial class DurableSchemaGenerator {
             text.Append(prefix).Append("Builtin((global::Atelia.DurableGraph.TypeTag)").Append(pattern.BuiltinTag).Append(')');
         } else if (pattern.Kind == PatternKind.Parameter) {
             text.Append(prefix).Append("Parameter(").Append(pattern.ParameterOrdinal).Append(')');
+        } else if (pattern.IsArray) {
+            text.Append(prefix).Append(pattern.ArrayRank == 1 ? "VectorArray(" : "MultiDimArray(");
+            AppendTypePatternExpression(text, pattern.ElementType!);
+            if (pattern.ArrayRank != 1) text.Append(", ").Append(pattern.ArrayRank);
+            text.Append(')');
         } else {
             text.Append(prefix).Append("Named(").Append(SymbolDisplay.FormatLiteral(pattern.DefinitionId!, true));
             foreach (TypePattern argument in pattern.Arguments) {
@@ -149,7 +168,7 @@ public sealed partial class DurableSchemaGenerator {
         return true;
 
         bool Check(TypePattern pattern, int rootKind) {
-            if (rootKind != 0 && !Require(kinds, pattern.DefinitionId!, rootKind)) return false;
+            if (rootKind != 0 && pattern.Kind == PatternKind.Named && !Require(kinds, pattern.DefinitionId!, rootKind)) return false;
             foreach (TypePattern named in pattern.NamedNodes()) {
                 if (!Require(arities, named.DefinitionId!, named.Arguments.Count)) return false;
             }
@@ -165,7 +184,8 @@ public sealed partial class DurableSchemaGenerator {
 
     private static bool TryParseTemplateHistory(string path, string[] lines, out SchemaHistoryModel model, out string? error) {
         model = default;
-        error = "format 3 requires canonical kind, arity, and type-pattern records";
+        bool allowArrays = lines[0] == "// durable-graph-schema-history:4";
+        error = "format 3/4 requires canonical kind, arity, and type-pattern records";
         if (lines.Length < 7 || lines[1] != "// schema-begin" || lines[lines.Length - 1] != "// schema-end" ||
             !lines[2].StartsWith("// schema-id-base64:", StringComparison.Ordinal) ||
             !TryDecodeSchemaId(lines[2].Substring(20), out string? id) ||
@@ -177,7 +197,7 @@ public sealed partial class DurableSchemaGenerator {
         SchemaReference? baseSchema = null;
         if (lines[cursor].StartsWith("// base:", StringComparison.Ordinal)) {
             string[] parts = lines[cursor++].Substring(8).Split('|');
-            if (parts.Length != 2 || !TypePattern.TryParse(parts[0], arity, out TypePattern? pattern) || pattern!.Kind != PatternKind.Named ||
+            if (parts.Length != 2 || !TypePattern.TryParse(parts[0], arity, out TypePattern? pattern, allowArrays) || pattern!.Kind != PatternKind.Named ||
                 !TryParsePositiveCanonicalInt(parts[1], out int baseVersion)) return false;
             baseSchema = new SchemaReference(pattern.DefinitionId!, baseVersion, pattern);
         }
@@ -197,8 +217,10 @@ public sealed partial class DurableSchemaGenerator {
                 if (parts.Length != 2) return false;
                 pattern = TypePattern.Builtin(tag);
             } else {
-                if (parts.Length != (tag == 16 ? 4 : 3) || !TypePattern.TryParse(parts[2], arity, out pattern) ||
-                    pattern!.Kind != (tag == 17 ? PatternKind.Parameter : PatternKind.Named)) return false;
+                if (parts.Length != (tag == 16 ? 4 : 3) || !TypePattern.TryParse(parts[2], arity, out pattern, allowArrays)) return false;
+                bool expectedKind = tag == 17 ? pattern!.Kind == PatternKind.Parameter :
+                    pattern!.Kind == PatternKind.Named || (tag == 15 && pattern.IsArray);
+                if (!expectedKind) return false;
                 if (tag == 16) {
                     if (!TryParsePositiveCanonicalInt(parts[3], out int inlineVersion)) return false;
                     inline = new SchemaReference(pattern.DefinitionId!, inlineVersion, pattern);

@@ -10,7 +10,7 @@ public sealed class GenericTemplateHistoryTests {
         string text = History("Box", arity: 2,
             body: "// base:nQmFzZQ==(p1)|3\n// field:1|17|p0\n// field:2|15|nQm94(p1,p0)\n// field:3|16|nUGFpcg==(p0)|2\n");
         SchemaHistoryRecord parsed = fixture.Parse(text);
-        Assert.Equal(text, SchemaHistoryDocument.RenderHistory(parsed));
+        Assert.Equal(text, SchemaHistoryDocument.RenderHistory(parsed, 3));
         Assert.Equal(2, parsed.Arity);
         Assert.Equal(new SchemaHistoryKey("Base", 3), parsed.BaseSchema);
         Assert.Equal("nQmFzZQ==(p1)", parsed.BaseType!.ToString());

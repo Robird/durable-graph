@@ -52,26 +52,27 @@ internal sealed class WorldWorkspace<TWorld> where TWorld : DurableBase {
         DecodedRevision decoded = RevisionDecoder.ReadSnapshot(store, schemas, revisionAddress, snapshot);
         NormalizedRevision normalized = NormalizedRevision.Create(decoded, snapshot);
         if (!normalized.Objects.TryGetValue(worldId, out NormalizedObject? root) ||
-            root.Model is not { } model || model.DomainType != typeof(TWorld) || typeof(TWorld).IsAbstract) {
+            root.Model is not StateModelBinding model || model.DomainType != typeof(TWorld) || typeof(TWorld).IsAbstract) {
             throw new InvalidDataException("World ID must select a durable object of the requested exact current domain type.");
         }
         IReadOnlyList<ObjectId> reachable = FindReachable(normalized, worldId);
-        Dictionary<ObjectId, DurableBase> instances = [];
+        Dictionary<ObjectId, object> instances = [];
         Dictionary<object, ObjectId> bindings = new(ReferenceEqualityComparer.Instance);
-        // Allocate the complete reachable durable set before any field assignment. This
+        // Allocate the complete reachable object set before any field assignment. This
         // preserves forward/shared/cyclic references without recursive materialization.
         foreach (ObjectId id in reachable) {
-            if (normalized.Objects[id].Model is not { } actualModel) {
-                continue;
-            }
-            DurableBase allocated = actualModel.Allocate();
-            if (allocated is null || allocated.GetType() != actualModel.DomainType || !bindings.TryAdd(allocated, id)) {
-                throw new InvalidDataException("Each durable ID must allocate a distinct instance of its exact current domain type.");
+            NormalizedObject row = normalized.Objects[id];
+            ObjectBinding actualModel = row.Model;
+            object allocated = actualModel.Allocate(row.Current);
+            bool canonicalEmpty = row.Current.Kind == ObjectStateKind.String && row.Current.StringContent.Length == 0;
+            if (allocated is null || allocated.GetType() != actualModel.DomainType ||
+                (!canonicalEmpty && !bindings.TryAdd(allocated, id))) {
+                throw new InvalidDataException("Each nonempty object ID must allocate a distinct instance of its exact current type.");
             }
             instances.Add(id, allocated);
         }
-        ObjectReadTable table = new(normalized.Strings, instances);
-        foreach ((ObjectId id, DurableBase instance) in instances) {
+        ObjectReadTable table = new(instances);
+        foreach ((ObjectId id, object instance) in instances) {
             NormalizedObject row = normalized.Objects[id];
             row.Model!.Hydrate(instance, row.Current, table);
         }
@@ -163,5 +164,6 @@ internal sealed class WorldWorkspace<TWorld> where TWorld : DurableBase {
         public void VisitString(ObjectId objectId) => Add(objectId);
         public void VisitDurable(ObjectId objectId, string nominalSchemaId) => Add(objectId);
         public void VisitDurable(ObjectId objectId, TypeExpr nominalType) => Add(objectId);
+        public void VisitObject(ObjectId objectId, TypeExpr declaredType) => Add(objectId);
     }
 }

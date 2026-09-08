@@ -50,9 +50,9 @@ public static class TypedObjectVersionReader {
         return value;
     }
 
-    internal static DecodedBaseObjectBody DecodeBase(ObjectVersionChain chain) {
+    internal static DecodedBaseObjectBody DecodeBase(ObjectVersionChain chain, SchemaStore? schemas = null) {
         ValidateShape(chain);
-        return BaseObjectBodyCodec.Decode(chain.Records[0].Record.Body);
+        return BaseObjectBodyCodec.Decode(chain.Records[0].Record.Body, schemas);
     }
 
     internal static void MatchSchema(SchemaStore schemas, SchemaKey key, DurableSchema expectedSchema) {

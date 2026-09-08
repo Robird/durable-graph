@@ -165,7 +165,7 @@ public sealed class WorldWorkspaceTests : IDisposable {
 
     [Fact]
     public void DurableCycleChildOnlyChangesPreserveInstancesAndRetiredChildGetsNewId() {
-        DurableSchema schema = new("Node", 1, new DurableFieldInfo(1, TypeTag.DurableReference, "Node"),
+        DurableSchema schema = new("Node", 1, new DurableFieldInfo(1, TypeTag.ObjectReference, "Node"),
             new DurableFieldInfo(2, TypeTag.Byte));
         int restores = 0;
         CapturedStatePreparation<NodeState> preparation = new(schema,

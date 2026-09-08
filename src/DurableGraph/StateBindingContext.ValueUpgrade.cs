@@ -77,6 +77,8 @@ public abstract partial class StateBindingContext {
                 UpgradeDependencies dependencies = PrepareDependencies(provider.Dependencies, source.InlineSchema, target.InlineSchema, depth + 1);
                 plan = CreateValueUpgradePlan(priorType, nextType, method, dependencies);
             }
+            plan.Source = source;
+            plan.Target = target;
             _valueUpgradePlans.Add(key, plan);
             return plan;
         } finally { _bindingValueUpgrades.Remove(key); }
@@ -134,37 +136,57 @@ public abstract partial class StateBindingContext {
         internal int Height { get; } = plans.Length == 0 ? 0 : plans.Max(static item => item.Value.Height);
 
         internal UpgradeContext CreateContext(ObjectId objectId, DurableSchema sourceObject, DurableSchema targetObject,
+            Dictionary<ValueUpgradePlan, Delegate>? invocationTools = null) =>
+            CreateContext(new UpgradeContext(objectId, sourceObject, targetObject), invocationTools);
+
+        internal UpgradeContext CreateContext(UpgradeContext owner,
             Dictionary<ValueUpgradePlan, Delegate>? invocationTools = null) {
             invocationTools ??= new(ReferenceEqualityComparer.Instance);
             Dictionary<string, Delegate> tools = new(StringComparer.Ordinal);
             foreach ((string key, ValueUpgradePlan plan) in plans) {
                 if (!invocationTools.TryGetValue(plan, out Delegate? tool)) {
-                    tool = plan.CreateTool(objectId, sourceObject, targetObject, invocationTools);
+                    tool = plan.CreateTool(owner, invocationTools);
                     invocationTools.Add(plan, tool);
                 }
                 tools.Add(key, tool);
             }
-            return new(objectId, sourceObject, targetObject, tools);
+            return owner.WithTools(tools);
         }
 
+        internal void CollectRequirements(ExactSchemaRequirementSet.Builder requirements, string path,
+            HashSet<ValueUpgradePlan> visited) {
+            foreach ((string key, ValueUpgradePlan plan) in plans) {
+                plan.CollectRequirements(requirements, $"{path}.tool[{key}]", visited);
+            }
+        }
     }
 
     private abstract class ValueUpgradePlan(UpgradeDependencies dependencies) {
         internal int Height { get; } = dependencies.Height + 1;
         protected UpgradeDependencies Dependencies { get; } = dependencies;
+        internal DurableFieldInfo Source { get; set; }
+        internal DurableFieldInfo Target { get; set; }
 
-        internal abstract Delegate CreateTool(ObjectId objectId, DurableSchema sourceObject, DurableSchema targetObject,
+        internal abstract Delegate CreateTool(UpgradeContext owner,
             Dictionary<ValueUpgradePlan, Delegate> invocationTools);
+
+        internal void CollectRequirements(ExactSchemaRequirementSet.Builder requirements, string path,
+            HashSet<ValueUpgradePlan> visited) {
+            if (!visited.Add(this)) { return; }
+            if (Source.InlineSchema is { } source) { requirements.Add(source, $"{path}.source"); }
+            if (Target.InlineSchema is { } target) { requirements.Add(target, $"{path}.target"); }
+            Dependencies.CollectRequirements(requirements, path, visited);
+        }
     }
 
     private sealed class TypedValueUpgradePlan<TPrior, TNext>(UpgradeAction<TPrior, TNext> action,
         UpgradeDependencies dependencies) : ValueUpgradePlan(dependencies)
         where TPrior : unmanaged where TNext : unmanaged {
-        internal override Delegate CreateTool(ObjectId objectId, DurableSchema sourceObject, DurableSchema targetObject,
+        internal override Delegate CreateTool(UpgradeContext owner,
             Dictionary<ValueUpgradePlan, Delegate> invocationTools) {
             // Invocation state is built here, never retained in snapshot plans. Each child
             // receives its own local table while retaining the current owner edge facts.
-            UpgradeContext child = Dependencies.CreateContext(objectId, sourceObject, targetObject, invocationTools);
+            UpgradeContext child = Dependencies.CreateContext(owner, invocationTools);
             return new ValueUpgrade<TPrior, TNext>((in TPrior prior) => {
                 action(in prior, out TNext next, child);
                 return next;

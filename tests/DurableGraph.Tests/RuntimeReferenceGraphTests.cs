@@ -159,8 +159,8 @@ public sealed class RuntimeReferenceGraphTests {
     private static StateModelBinding Model(string schemaId = "node", string? aliasNominal = null, Action? onCapture = null) {
         DurableSchema schema = new(schemaId, 1,
             new DurableFieldInfo(1, TypeTag.Byte),
-            new DurableFieldInfo(2, TypeTag.DurableReference, schemaId),
-            new DurableFieldInfo(3, TypeTag.DurableReference, aliasNominal ?? schemaId));
+            new DurableFieldInfo(2, TypeTag.ObjectReference, schemaId),
+            new DurableFieldInfo(3, TypeTag.ObjectReference, aliasNominal ?? schemaId));
         CapturedStatePreparation<NodeState> preparation = new(schema,
             static (in NodeState state) => throw new NotSupportedException("Capture tests do not prepare payloads."),
             static (in NodeState prior, in NodeState next) => throw new NotSupportedException("Capture tests do not prepare payloads."));

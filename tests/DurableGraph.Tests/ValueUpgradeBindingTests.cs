@@ -124,7 +124,7 @@ public sealed class ValueUpgradeBindingTests {
             foreach (DurableFieldInfo next in slots.Where(slot => slot != prior)) {
                 TestContext context = SemanticContext(prior, next);
                 context.AddRules(new(typeof(KeepRules), [], allowKeepExact: true));
-                ObjectStateRecord source = new(new(1), new("Semantic", 1, prior),
+                ObjectStateRecord source = new(new(1), new DurableSchema("Semantic", 1, prior),
                     prior.TypeTag == TypeTag.UInt32 ? (object)new Box1<uint>(7) : new Box1<ObjectId>(new(7)));
                 DurableSchema target = new("Semantic", 2, next);
                 if (next.TypeTag == TypeTag.UInt32) {
@@ -138,7 +138,7 @@ public sealed class ValueUpgradeBindingTests {
         TestContext explicitConversion = SemanticContext(new(1, TypeTag.String), new(1, TypeTag.UInt32));
         explicitConversion.AddRules(new(typeof(KeepRules), [BuiltinRule(TypeTag.String, TypeTag.UInt32, nameof(CopyId))]));
         Assert.Equal(7u, explicitConversion.Normalize<Box2<uint>>(
-            new(new ObjectId(1), new("Semantic", 1, new DurableFieldInfo(1, TypeTag.String)), new Box1<ObjectId>(new(7))),
+            new(new ObjectId(1), new DurableSchema("Semantic", 1, new DurableFieldInfo(1, TypeTag.String)), new Box1<ObjectId>(new(7))),
             new("Semantic", 2, new DurableFieldInfo(1, TypeTag.UInt32))).Value);
     }
 

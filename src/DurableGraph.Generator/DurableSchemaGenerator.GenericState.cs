@@ -187,7 +187,7 @@ public sealed partial class DurableSchemaGenerator {
             if (UsesGenericOps(field)) output.Append("            ").Append(GenericFieldOps(field)).Append(".VisitReferences(in state.").Append(field.Name)
                 .Append(", visitor, ").Append(field.Slot()).AppendLine(");");
             else if (GenericFieldTag(field) == 4) output.Append("            visitor.VisitString(state.").Append(field.Name).AppendLine(");");
-            else if (GenericFieldTag(field) == 15) output.Append("            visitor.VisitDurable(state.").Append(field.Name).Append(", ")
+            else if (GenericFieldTag(field) == 15) output.Append("            visitor.VisitObject(state.").Append(field.Name).Append(", ")
                 .Append(field.Slot()).AppendLine(".TargetType!);");
         }
         output.AppendLine("        }");

@@ -8,7 +8,7 @@ namespace Atelia.DurableGraph.StateStore;
 /// Models, readers, definitions and Upgrade providers are frozen. The optional SchemaStore remains
 /// a live, repository-wide monotonic authority, so cached closures recheck definitions registered later.
 /// </remarks>
-internal sealed class StateModelSnapshot : StateBindingContext {
+internal sealed partial class StateModelSnapshot : StateBindingContext {
     private readonly Dictionary<TypeExpr, StateModelBinding> _models;
     private readonly Dictionary<Type, StateModelBinding> _types;
     private readonly Dictionary<SchemaKey, StateReaderBinding> _readers;
@@ -25,12 +25,14 @@ internal sealed class StateModelSnapshot : StateBindingContext {
     internal StateModelSnapshot(Dictionary<TypeExpr, StateModelBinding> models,
         Dictionary<Type, StateModelBinding> types, Dictionary<SchemaKey, StateReaderBinding> readers,
         Dictionary<string, StateDefinitionBinding>? definitions = null, SchemaStore? schemas = null,
-        Dictionary<Type, StateValueUpgradeRuleSet>? valueUpgradeRules = null) {
+        Dictionary<Type, StateValueUpgradeRuleSet>? valueUpgradeRules = null,
+        Type? arrayElementUpgradeRuleSet = null) {
         _models = models;
         _types = types;
         _readers = readers;
         _definitions = definitions ?? new(StringComparer.Ordinal);
         _valueUpgradeRules = valueUpgradeRules ?? [];
+        ArrayElementUpgradeRuleSet = arrayElementUpgradeRuleSet;
         _schemas = schemas;
         foreach (StateDefinitionBinding definition in _definitions.Values) {
             if (definition.DomainTypeDefinition is { } domain && !_domainDefinitions.TryAdd(domain, definition)) {
@@ -42,6 +44,7 @@ internal sealed class StateModelSnapshot : StateBindingContext {
     internal IReadOnlyDictionary<TypeExpr, StateModelBinding> Models => _models;
     internal IReadOnlyDictionary<Type, StateModelBinding> Types => _types;
     internal IReadOnlyDictionary<SchemaKey, StateReaderBinding> Readers => _readers;
+    public override Type? ArrayElementUpgradeRuleSet { get; }
 
     internal static void RegisterValueUpgradeRuleSet(Dictionary<Type, StateValueUpgradeRuleSet> rules,
         StateValueUpgradeRuleSet ruleSet) {
@@ -154,9 +157,9 @@ internal sealed class StateModelSnapshot : StateBindingContext {
         }
         TypeExpr nominal = GetTypeExpr(domainType);
         // Reference metadata must not recursively close the referenced object's body.
-        if (typeof(DurableBase).IsAssignableFrom(domainType)) {
-            StateValueBinding reference = new(DurableFieldInfo.Reference(1, nominal), typeof(ObjectId), typeof(DurableIdStateOps),
-                domainType, typeof(DurableValueProjection<>).MakeGenericType(domainType));
+        if (domainType.IsArray || typeof(DurableBase).IsAssignableFrom(domainType)) {
+            StateValueBinding reference = new(DurableFieldInfo.Reference(1, nominal), typeof(ObjectId), typeof(ObjectIdStateOps),
+                domainType, typeof(ObjectValueProjection<>).MakeGenericType(domainType));
             _currentValues.Add(domainType, reference);
             return reference;
         }
@@ -201,6 +204,10 @@ internal sealed class StateModelSnapshot : StateBindingContext {
     public override TypeExpr GetTypeExpr(Type domainType) {
         RequireClosed(domainType);
         if (BuiltinStateValues.TryBindCurrent(domainType, out StateValueBinding builtin)) { return NominalType(builtin.Slot); }
+        if (domainType.IsArray) {
+            TypeExpr element = GetTypeExpr(domainType.GetElementType()!);
+            return domainType.IsSZArray ? TypeExpr.VectorArray(element) : TypeExpr.MultiDimArray(element, domainType.GetArrayRank());
+        }
         if (_types.TryGetValue(domainType, out StateModelBinding? model)) { return model.CurrentSchema.Type; }
         if (!TryDefinition(domainType, out StateDefinitionBinding? definition)) {
             throw new InvalidDataException($"No supported declaration is registered for {domainType}.");
@@ -212,6 +219,12 @@ internal sealed class StateModelSnapshot : StateBindingContext {
     public override Type GetDomainType(TypeExpr type) {
         ArgumentNullException.ThrowIfNull(type);
         if (!type.IsClosed) { throw new InvalidDataException("A current domain lookup requires a closed nominal type."); }
+        if (type.IsArray) {
+            Type element = GetDomainType(type.ElementType!);
+            Type array = type.Kind == TypeExprKind.VectorArray ? element.MakeArrayType() : element.MakeArrayType(type.ArrayRank);
+            RequireClosed(array);
+            return array;
+        }
         if (type.Kind == TypeExprKind.Builtin) {
             return type.BuiltinTag switch {
                 TypeTag.Boolean => typeof(bool), TypeTag.Byte => typeof(byte), TypeTag.SByte => typeof(sbyte),
@@ -249,8 +262,15 @@ internal sealed class StateModelSnapshot : StateBindingContext {
     private void RequireClosed(Type type) {
         ArgumentNullException.ThrowIfNull(type);
         if (_validatedDomainTypes.Contains(type)) { return; }
-        if (type.ContainsGenericParameters || type.IsByRefLike || type.IsPointer || type.IsByRef || type.IsArray) {
+        if (type.ContainsGenericParameters || type.IsByRefLike || type.IsPointer || type.IsByRef) {
             throw new InvalidDataException("The domain type is not a supported closed value or durable declaration.");
+        }
+        if (type.IsArray) {
+            int rank = type.GetArrayRank();
+            if (!type.IsSZArray && rank is < 2 or > 4) {
+                throw new InvalidDataException("Only SZ arrays and rank 2 through 4 multidimensional arrays are supported.");
+            }
+            RequireClosed(type.GetElementType()!);
         }
         if (type.IsGenericType) {
             Type[] arguments = type.GetGenericArguments();

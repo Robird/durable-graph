@@ -1,0 +1,24 @@
+# Array package consumer
+
+Run `../Run-ArrayProbe.ps1` from this directory, or run
+`./experiments/PackageConsumerProbe/Run-ArrayProbe.ps1` from the repository root.
+The optional `-PackageSource <feed> -Version <version>` pair reuses an already packed dependency feed.
+
+This DB-043 witness builds two application versions against actual Runtime and StateStore packages,
+without project references or manual generator/build wiring. The first writes a shared `Point[]`,
+`int[][]`, `Pair<int,string>[,]`, rank-three and rank-four arrays, a `Box<int[]>` exercising both `T`
+and `T[]` fields, and a World/array cycle. One in-place element edit persists one array Delta;
+the original Revision remains frozen and reopening restores sharing and all four shapes.
+
+The second changes only Point's inline Schema from an integer field to a long field. World, Box
+and Pair retain their versions because the array reference is nominal. It selects one explicit
+array element rule set. The shared array owns one conversion of each element, receives array
+layout/shape facts, keeps its ObjectId and is the only object forced to Base on the next Commit.
+An unchanged Commit writes no objects, and a later element edit uses Delta while preserving the
+same domain instances. Cold reopening performs no further Upgrade. The consumer also reads the
+original Revision as `FrozenArrayState<Point.V1>` after current Point has changed.
+
+The runner publishes and verifies canonical history v4, checks counts `4 -> 5`, and preserves all
+previous file names and hashes. It retains feed/cache/history/database artifacts in its unique
+ignored `obj` directory. Broader malformed-input, unsupported-shape and upgrade-failure coverage
+belongs to the product tests; this lane proves package delivery and two-process history continuity.

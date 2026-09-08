@@ -150,6 +150,10 @@ public abstract partial class StateBindingContext {
             if (ResolveStoredValue(slot).StateType != stateType) { throw new InvalidDataException("A DTO value does not match its nominal built-in semantics."); }
             return slot;
         }
+        if (nominal.IsArray && nominal.IsClosed) {
+            if (stateType != typeof(ObjectId)) { throw new InvalidDataException("An array reference DTO operand must contain an object ID."); }
+            return DurableFieldInfo.Reference(1, nominal);
+        }
         if (nominal.Kind != TypeExprKind.Named || !nominal.IsClosed) { throw new InvalidDataException("A value operand must have a closed nominal identity."); }
         StateDefinitionBinding definition = GetDefinition(nominal.DefinitionId!);
         if (definition.Kind == SchemaKind.ReferenceObject) {
@@ -191,6 +195,7 @@ public abstract partial class StateBindingContext {
         if (selections.TryGetValue((expression, version), out DurableFieldInfo selected)) { return selected; }
         TypeExpr nominal = Substitute(expression, ownerArguments);
         if (nominal.Kind == TypeExprKind.Builtin) { return new(1, nominal.BuiltinTag); }
+        if (nominal.IsArray) { return DurableFieldInfo.Reference(1, nominal); }
         StateDefinitionBinding definition = GetDefinition(nominal.DefinitionId!);
         if (definition.Kind == SchemaKind.ReferenceObject) { return DurableFieldInfo.Reference(1, nominal); }
         if (!version.HasValue) {

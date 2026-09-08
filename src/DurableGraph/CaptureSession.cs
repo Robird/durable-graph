@@ -84,7 +84,7 @@ public sealed class CaptureSession {
             PreparedBaseBody body = current.Kind == ObjectStateKind.String
                 ? StringPayloadCodec.PrepareBase(current.StringContent)
                 : current.Preparation!.PrepareBase(current);
-            PreparedDeltaBody? delta = prior is not null && current.Kind == ObjectStateKind.Durable
+            PreparedDeltaBody? delta = prior is not null && current.Kind != ObjectStateKind.String
                 ? current.Preparation!.PrepareDelta(prior, current)
                 : null;
             objects.Add(new PreparedCapturedObject(current, prior, body, delta));
@@ -174,8 +174,12 @@ public sealed class CaptureSession {
     }
 
     private static void ValidatePreparation(ObjectStateRecord current, ObjectStateRecord? prior) {
-        if (prior is not null && current.Kind != prior.Kind) {
-            throw new InvalidOperationException("An existing captured ID changed content kind.");
+        if (prior is not null && !current.Layout.Equals(prior.Layout)) {
+            throw new InvalidOperationException("An existing captured ID changed its exact object layout.");
+        }
+        if (prior is not null && current.Kind == ObjectStateKind.Array &&
+            !((IFrozenArrayState)current.Content).Shape.Equals(((IFrozenArrayState)prior.Content).Shape)) {
+            throw new InvalidOperationException("An existing captured array ID changed its shape.");
         }
         if (current.Kind == ObjectStateKind.String) {
             if (prior is not null && !ReferenceEquals(current.StringContent, prior.StringContent)) {
@@ -184,11 +188,11 @@ public sealed class CaptureSession {
             return;
         }
         ICapturedStatePreparation preparation = current.Preparation
-            ?? throw new InvalidOperationException("The captured durable object has no preparation binding.");
+            ?? throw new InvalidOperationException("The captured object has no preparation binding.");
         preparation.Validate(current);
         if (prior is not null) {
             if (!ReferenceEquals(preparation, prior.Preparation)) {
-                throw new InvalidOperationException("An existing durable object changed preparation binding.");
+                throw new InvalidOperationException("An existing object changed preparation binding.");
             }
             preparation.Validate(prior);
         }

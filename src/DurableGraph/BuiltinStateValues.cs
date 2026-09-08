@@ -82,7 +82,7 @@ internal static class BuiltinStateValues {
             TypeTag.Single => new(slot, typeof(float), typeof(SingleStateOps)),
             TypeTag.Double => new(slot, typeof(double), typeof(DoubleStateOps)),
             TypeTag.String => new(slot, typeof(ObjectId), typeof(StringIdStateOps)),
-            TypeTag.DurableReference => new(slot, typeof(ObjectId), typeof(DurableIdStateOps)),
+            TypeTag.ObjectReference => new(slot, typeof(ObjectId), typeof(ObjectIdStateOps)),
             _ => null!,
         };
         return binding is not null;
@@ -105,6 +105,12 @@ public readonly struct StringValueProjection : IValueProjection<string?, ObjectI
 public readonly struct DurableValueProjection<TDomain> : IValueProjection<TDomain?, ObjectId> where TDomain : DurableBase {
     public static ObjectId Capture(in TDomain? value, CaptureContext context, DurableFieldInfo slot) => context.CaptureDurable(value, slot.TargetType!);
     public static void Hydrate(ref TDomain? target, in ObjectId state, ObjectReadTable objects, DurableFieldInfo slot) => target = objects.ResolveDurable<TDomain>(state);
+}
+
+/// <summary>Projects a supported reference slot without expanding its target body.</summary>
+public readonly struct ObjectValueProjection<TDomain> : IValueProjection<TDomain?, ObjectId> where TDomain : class {
+    public static ObjectId Capture(in TDomain? value, CaptureContext context, DurableFieldInfo slot) => context.CaptureObject(value, slot.TargetType!);
+    public static void Hydrate(ref TDomain? target, in ObjectId state, ObjectReadTable objects, DurableFieldInfo slot) => target = objects.ResolveObject<TDomain>(state);
 }
 
 internal static class ScalarDelta {
@@ -327,4 +333,13 @@ public readonly struct DurableIdStateOps : IStateOps<ObjectId> {
     public static ObjectId ApplyDelta(ref BinaryPayloadReader reader, in ObjectId prior, DurableFieldInfo slot) =>
         StringIdStateOps.ApplyDelta(ref reader, in prior, slot);
     public static void VisitReferences(in ObjectId state, IStateReferenceVisitor visitor, DurableFieldInfo slot) => visitor.VisitDurable(state, slot.TargetType!);
+}
+
+/// <summary>Static ID operations paired with a complete nominal reference constraint.</summary>
+public readonly struct ObjectIdStateOps : IStateOps<ObjectId> {
+    public static void WriteBase(ref BinaryPayloadWriter writer, in ObjectId state, DurableFieldInfo slot) => writer.WriteUInt32(state.Value);
+    public static ObjectId ReadBase(ref BinaryPayloadReader reader, DurableFieldInfo slot) => new(reader.ReadUInt32());
+    public static PreparedDeltaBody PrepareDelta(in ObjectId prior, in ObjectId current, DurableFieldInfo slot) => StringIdStateOps.PrepareDelta(in prior, in current, slot);
+    public static ObjectId ApplyDelta(ref BinaryPayloadReader reader, in ObjectId prior, DurableFieldInfo slot) => StringIdStateOps.ApplyDelta(ref reader, in prior, slot);
+    public static void VisitReferences(in ObjectId state, IStateReferenceVisitor visitor, DurableFieldInfo slot) => visitor.VisitObject(state, slot.TargetType!);
 }

@@ -41,6 +41,6 @@ public sealed class PreparedCapturedObject {
     /// <summary>Null for a new object; otherwise the same ID from the previous in-memory graph.</summary>
     public ObjectStateRecord? Previous { get; }
     public PreparedBaseBody BaseBody { get; }
-    /// <summary>Present for existing durable objects; existing immutable strings need no Delta.</summary>
+    /// <summary>Present for existing mutable objects; existing immutable strings need no Delta.</summary>
     public PreparedDeltaBody? DeltaBody { get; }
 }

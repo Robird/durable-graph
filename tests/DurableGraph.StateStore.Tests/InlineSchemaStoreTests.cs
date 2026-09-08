@@ -14,10 +14,10 @@ public sealed class InlineSchemaStoreTests : IDisposable {
     public InlineSchemaStoreTests() => Directory.CreateDirectory(_root);
 
     [Fact]
-    public void V3IndependentGoldenBindsExactForwardInlineSchemaAndV2RemainsReadable() {
+    public void V4IndependentGoldenBindsExactForwardInlineSchemaAndV2RemainsReadable() {
         DurableSchema value = new("Z", 2, SchemaKind.InlineValue, new DurableFieldInfo(1, TypeTag.Int32));
         DurableSchema owner = new("A", 1, new DurableFieldInfo(1, TypeTag.InlineValue, inlineSchema: value));
-        byte[] golden = Convert.FromHexString("03020203410001010001011002035A000202035A00020200010102");
+        byte[] golden = Convert.FromHexString("04020203410001010001011002035A000202035A00020200010102");
         Assert.Equal(golden, SchemaBatchWireCodec.Write([value, owner]));
         var read = SchemaBatchWireCodec.Read(golden, Empty);
         Assert.Equal(owner, read[new("A", 1)]);
@@ -33,7 +33,7 @@ public sealed class InlineSchemaStoreTests : IDisposable {
     }
 
     [Fact]
-    public void V1RemainsReadableAndV3AppendsWithoutRewritingOldBytes() {
+    public void V1RemainsReadableAndV4AppendsWithoutRewritingOldBytes() {
         string path = NextPath();
         byte[] legacy = Convert.FromHexString("010203410101035A020201010809035A0200010304");
         byte[] original;
@@ -57,7 +57,7 @@ public sealed class InlineSchemaStoreTests : IDisposable {
             Assert.Equal(legacy, first.PayloadAndMeta.ToArray());
             Assert.True(scan.MoveNext());
             using RbfPooledFrame second = file.ReadPooledFrame(scan.Current.Ticket).Unwrap();
-            Assert.Equal(3, second.PayloadAndMeta[0]);
+            Assert.Equal(4, second.PayloadAndMeta[0]);
         }
         Assert.Equal(original, File.ReadAllBytes(path)[..original.Length]);
         using IRbfFile reopened = RbfFile.OpenReadOnlyExisting(path);
@@ -72,7 +72,7 @@ public sealed class InlineSchemaStoreTests : IDisposable {
         DurableSchema pair = new("Pair", 1, SchemaKind.InlineValue,
             new DurableFieldInfo(1, TypeTag.InlineValue, inlineSchema: point),
             new DurableFieldInfo(2, TypeTag.InlineValue, inlineSchema: point),
-            new DurableFieldInfo(3, TypeTag.DurableReference, "Owner"));
+            new DurableFieldInfo(3, TypeTag.ObjectReference, "Owner"));
         DurableSchema ancestor = new("Ancestor", 1, new DurableFieldInfo(1, TypeTag.InlineValue, inlineSchema: point));
         DurableSchema owner = new("Owner", 1, [new(1, TypeTag.InlineValue, inlineSchema: pair)], ancestor);
         string path = NextPath();

@@ -1,0 +1,141 @@
+using Atelia.Data;
+using Atelia.DurableGraph;
+using Atelia.DurableGraph.StateStore;
+using Atelia.DurableGraph.StateStore.Storage;
+using Atelia.Rbf;
+using Atelia.RbfSegmentStore;
+using PointStates = Atelia.DurableGraph.Generated.Family_506F696E74;
+using WorldStates = Atelia.DurableGraph.Generated.Family_576F726C64;
+using SegmentStore = Atelia.RbfSegmentStore.RbfSegmentStore;
+
+namespace ArrayPackageConsumerProbe;
+
+internal static class Program {
+    private static readonly RbfSegmentStoreOptions Options = new() { NewStoreLayout = RbfSegmentStoreLayout.Flat };
+    private static readonly ReadAmplificationBaseBudgetParameters Policy = new(int.MaxValue, 1);
+
+    private static void Main(string[] args) {
+        string directory = Path.GetFullPath(args.Single());
+#if HISTORY_V1
+        Seed(directory);
+        Console.WriteLine("ArraySeed:True:FourRanks:True:GenericJaggedCycles:True:FrozenDelta:True");
+#else
+        Upgrade(directory);
+        Console.WriteLine("ArrayUpgrade:True:SharedOwnerOnce:True:ForcedBaseThenDelta:True:HistoricalExact:True:ColdReopen:True");
+#endif
+    }
+
+    private static StateModelRegistry Models() {
+        StateModelRegistry models = new();
+        Atelia.DurableGraph.Generated.DurableDefinitions.Register(models);
+#if HISTORY_V2
+        models.UseArrayElementUpgrades(typeof(ArrayRules));
+#endif
+        return models;
+    }
+
+    private static StateReaderRegistry Readers() {
+        StateReaderRegistry readers = new();
+        Atelia.DurableGraph.Generated.DurableDefinitions.Register(readers);
+        return readers;
+    }
+
+#if HISTORY_V1
+    private static void Seed(string directory) {
+        World world = World.Seed();
+        FrameAddress first, historical;
+        ObjectId worldId;
+        using (GraphRepository repository = GraphRepository.CreateNew(directory, Options)) {
+            using GraphSession<World> session = repository.Create(world, Models());
+            first = session.Commit(Policy);
+            worldId = session.WorldId!.Value;
+            world.Points[0].Value = 101;
+            historical = session.Commit(Policy);
+            Require(ReferenceEquals(world, session.World), "Commit replaced World.");
+        }
+        Inspect(directory, (store, schemas) => {
+            ObjectId pointsId = CheckHistorical(store, schemas, historical, worldId);
+            StateRevision delta = store.Read(historical);
+            Require(delta.LocalObjects.Count == 1 && delta.LocalObjects[0].ObjectId == pointsId.Value &&
+                delta.LocalObjects[0].Kind == ObjectVersionKind.Delta, "One element edit should produce one array Delta.");
+            var initial = RevisionDecoder.Read(store, schemas, first, Readers());
+            Require(initial.GetRequired(pointsId).GetArrayState<PointStates.V1>()[0].Segment0Field1 == 100,
+                "Later domain mutation altered the original array snapshot.");
+        });
+        File.WriteAllText(Path.Combine(directory, "historical.txt"), $"{historical.FileNumber}:{historical.FrameTicket.Packed}:{worldId.Value}");
+        using GraphRepository reopened = GraphRepository.OpenExisting(directory, Options);
+        using GraphSession<World> restored = reopened.Load<World>(Models());
+        CheckGraph(restored.World, 101);
+    }
+#else
+    private static void Upgrade(string directory) {
+        string[] parts = File.ReadAllText(Path.Combine(directory, "historical.txt")).Split(':');
+        FrameAddress historical = new(uint.Parse(parts[0]), SizedPtr.FromPacked(ulong.Parse(parts[1])));
+        ObjectId worldId = new(uint.Parse(parts[2]));
+        ObjectId pointsId = default;
+        Inspect(directory, (store, schemas) => pointsId = CheckHistorical(store, schemas, historical, worldId));
+        Require(Upgrades.Calls.Count == 0, "Stored-exact decoding invoked business Upgrade.");
+        FrameAddress upgraded, unchanged, changed;
+        using (GraphRepository repository = GraphRepository.OpenExisting(directory, Options)) {
+            using GraphSession<World> session = repository.Load<World>(Models());
+            World world = session.World;
+            Point[] points = world.Points;
+            CheckGraph(world, 1101);
+            Require(Upgrades.Calls.Count == 32 && Upgrades.Calls.All(id => id == pointsId),
+                "The shared array must be upgraded once, independently of its two incoming edges.");
+            upgraded = session.Commit(Policy);
+            unchanged = session.Commit(Policy);
+            world.Points[0].Value = 1102;
+            changed = session.Commit(Policy);
+            Require(ReferenceEquals(world, session.World) && ReferenceEquals(points, session.World.Points) && Upgrades.Calls.Count == 32,
+                "Successful commits must retain all domain instances and clear rewrite obligations.");
+        }
+        Inspect(directory, (store, schemas) => {
+            StateRevision rewrite = store.Read(upgraded);
+            Require(rewrite.LocalObjects.Count == 1 && rewrite.LocalObjects[0].ObjectId == pointsId.Value &&
+                rewrite.LocalObjects[0].Kind == ObjectVersionKind.Base, "Only the upgraded array must force Base.");
+            Require(store.Read(unchanged).LocalObjects.Count == 0, "The installed upgraded baseline should compare unchanged.");
+            StateRevision delta = store.Read(changed);
+            Require(delta.LocalObjects.Count == 1 && delta.LocalObjects[0].ObjectId == pointsId.Value &&
+                delta.LocalObjects[0].Kind == ObjectVersionKind.Delta, "A subsequent edit should use ordinary array Delta.");
+            CheckHistorical(store, schemas, historical, worldId);
+        });
+        using GraphRepository reopened = GraphRepository.OpenExisting(directory, Options);
+        using GraphSession<World> restored = reopened.Load<World>(Models());
+        CheckGraph(restored.World, 1102);
+        Require(Upgrades.Calls.Count == 32 && reopened.HeadRevisionAddress == changed,
+            "Current Base/Delta cold reopen should not re-run element Upgrade.");
+    }
+#endif
+
+    private static ObjectId CheckHistorical(StateRevisionStore store, SchemaStore schemas, FrameAddress address, ObjectId worldId) {
+        DecodedRevision decoded = RevisionDecoder.Read(store, schemas, address, Readers());
+        WorldStates.V1 world = decoded.GetRequired(worldId).GetState<WorldStates.V1>();
+        Require(world.Segment0Field1 == world.Segment0Field2, "Historical sharing lost the shared array ID.");
+        ObjectStateRecord record = decoded.GetRequired(world.Segment0Field1);
+        var points = record.GetArrayState<PointStates.V1>();
+        Require(record.Layout.Array!.ElementSlot.InlineSchema!.Version == 1 && points.Shape.Count == 32 &&
+            points[0].Segment0Field1 == 101 && points[31].Segment0Field1 == 131,
+            "Historical array must decode its exact old element DTO and Base/Delta chain.");
+        return world.Segment0Field1;
+    }
+
+    private static void CheckGraph(World world, long first) {
+        Require(world.Points[0].Value == first && world.Points.Length == 32 && ReferenceEquals(world.Points, world.Alias), "Point values or sharing lost.");
+        Require(ReferenceEquals(world.Jagged[0], world.Jagged[1]) && ReferenceEquals(world.Jagged[0], world.Box.Value) &&
+            ReferenceEquals(world.Jagged[0], world.Box.Items[0]) && world.Box.Value[2] == 7, "Open T[] and T-to-array projection lost identity.");
+        Require(world.Grid[0, 0].First == 9 && world.Grid[0, 0].Second == "array graph" &&
+            world.Cube[0, 1, 0] == 13 && world.Hyper[0, 0, 0, 1] == 19, "Rank or generic struct element layout lost.");
+        Require(ReferenceEquals(world.Cycle[0], world), "Array/domain cycle restoration failed.");
+    }
+
+    private static void Inspect(string directory, Action<StateRevisionStore, SchemaStore> action) {
+        using var file = RbfFile.OpenReadOnlyExisting(Path.Combine(directory, "schemas.rbf"));
+        using SegmentStore segments = SegmentStore.OpenReadOnlyExisting(Path.Combine(directory, "state"), Options);
+        action(new StateRevisionStore(segments), new SchemaStore(file, readOnly: true));
+    }
+
+    private static void Require(bool condition, string message) {
+        if (!condition) throw new InvalidOperationException(message);
+    }
+}

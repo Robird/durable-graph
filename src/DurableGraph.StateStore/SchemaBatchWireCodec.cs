@@ -6,7 +6,7 @@ namespace Atelia.DurableGraph.StateStore;
 
 internal static class SchemaBatchWireCodec {
     internal const uint RbfTag = 0x31424753; // SGB1 in little-endian byte order.
-    internal const byte Version = 3;
+    internal const byte Version = 4;
     internal const int MaximumDepth = 256;
 
     internal static byte[] Write(IReadOnlyCollection<DurableSchema> schemas) {
@@ -28,7 +28,7 @@ internal static class SchemaBatchWireCodec {
             foreach (DurableFieldInfo field in schema.Fields) {
                 writer.WriteUInt32((uint)field.FieldId);
                 writer.WriteByte(EncodeType(field.TypeTag));
-                if (field.TypeTag == TypeTag.DurableReference) {
+                if (field.TypeTag == TypeTag.ObjectReference) {
                     TypeExprWireCodec.Write(ref writer, field.TargetType!);
                 }
                 else if (field.TypeTag == TypeTag.InlineValue) {
@@ -44,7 +44,7 @@ internal static class SchemaBatchWireCodec {
         IReadOnlyDictionary<SchemaKey, DurableSchema> registered) {
         var reader = new BinaryPayloadReader(payload);
         byte version = reader.ReadByte();
-        if (version is not 1 and not 2 and not Version) {
+        if (version is < 1 or > Version) {
             throw new InvalidDataException("Unknown Schema batch version.");
         }
         uint count = reader.ReadUInt32();
@@ -98,7 +98,7 @@ internal static class SchemaBatchWireCodec {
                     throw new InvalidDataException("Version 1 Schema batches cannot contain inline fields.");
                 }
                 TypeExpr? targetType = null;
-                if (tag == TypeTag.DurableReference) {
+                if (tag == TypeTag.ObjectReference) {
                     if (version < 3) {
                         string targetId = reader.ReadString();
                         if (string.IsNullOrWhiteSpace(targetId)) {
@@ -106,9 +106,9 @@ internal static class SchemaBatchWireCodec {
                         }
                         targetType = TypeExpr.Named(targetId);
                     }
-                    else { targetType = TypeExprWireCodec.Read(ref reader); }
-                    if (targetType.Kind != TypeExprKind.Named) {
-                        throw new InvalidDataException("A durable reference requires a named nominal type.");
+                    else { targetType = TypeExprWireCodec.Read(ref reader, allowArrays: version >= 4); }
+                    if (targetType.Kind != TypeExprKind.Named && !targetType.IsArray) {
+                        throw new InvalidDataException("An object reference requires a named or array nominal type.");
                     }
                     ValidateDeclaration(familyKinds, familyArities, targetType, SchemaKind.ReferenceObject);
                 }
@@ -131,7 +131,7 @@ internal static class SchemaBatchWireCodec {
         foreach (SchemaKey key in order) {
             Declaration row = declarations[key];
             DurableSchema? ancestor = row.BaseKey is { } baseKey ? merged[baseKey] : null;
-            DurableFieldInfo[] fields = row.Fields.Select(field => field.Tag == TypeTag.DurableReference
+            DurableFieldInfo[] fields = row.Fields.Select(field => field.Tag == TypeTag.ObjectReference
                 ? DurableFieldInfo.Reference(field.FieldId, field.TargetType!)
                 : new DurableFieldInfo(field.FieldId, field.Tag,
                     inlineSchema: field.InlineKey is { } inlineKey ? merged[inlineKey] : null)).ToArray();
@@ -190,6 +190,12 @@ internal static class SchemaBatchWireCodec {
 
     internal static void ValidateDeclaration(Dictionary<string, SchemaKind> families, Dictionary<string, int> arities,
         TypeExpr type, SchemaKind kind) {
+        if (type.IsArray) {
+            // A nominal array reference does not assert its element's Schema kind:
+            // a named element can itself be either a reference or an inline value.
+            ValidateTypeArities(arities, type);
+            return;
+        }
         string schemaId = type.DefinitionId!;
         if (families.TryGetValue(schemaId, out SchemaKind previous) && previous != kind) {
             throw new InvalidDataException($"Schema family '{schemaId}' cannot change kind across versions.");
@@ -199,6 +205,10 @@ internal static class SchemaBatchWireCodec {
     }
 
     internal static void ValidateTypeArities(Dictionary<string, int> arities, TypeExpr type) {
+        if (type.IsArray) {
+            ValidateTypeArities(arities, type.ElementType!);
+            return;
+        }
         if (type.Kind != TypeExprKind.Named) { return; }
         string id = type.DefinitionId!;
         if (arities.TryGetValue(id, out int arity) && arity != type.Arguments.Length) {
@@ -211,7 +221,7 @@ internal static class SchemaBatchWireCodec {
     internal static SchemaKey Key(DurableSchema schema) => new(schema.Type, schema.Version);
 
     private static SchemaKey ReadKey(ref BinaryPayloadReader reader, byte version) =>
-        version < 3 ? SchemaKeyWireCodec.ReadLegacy(ref reader) : SchemaKeyWireCodec.Read(ref reader);
+        version < 3 ? SchemaKeyWireCodec.ReadLegacy(ref reader) : SchemaKeyWireCodec.Read(ref reader, allowArrays: version >= 4);
 
     private static int Compare(SchemaKey left, SchemaKey right) {
         int identity = left.Type.CompareTo(right.Type);
@@ -224,7 +234,7 @@ internal static class SchemaBatchWireCodec {
         TypeTag.Int16 => 7, TypeTag.UInt16 => 8, TypeTag.UInt32 => 9,
         TypeTag.UInt64 => 10, TypeTag.Char => 11, TypeTag.Half => 12,
         TypeTag.Single => 13, TypeTag.Double => 14,
-        TypeTag.DurableReference => 15, TypeTag.InlineValue => 16,
+        TypeTag.ObjectReference => 15, TypeTag.InlineValue => 16,
         _ => throw new ArgumentException("Unsupported Schema field type.", nameof(tag)),
     };
 
@@ -234,7 +244,7 @@ internal static class SchemaBatchWireCodec {
         7 => TypeTag.Int16, 8 => TypeTag.UInt16, 9 => TypeTag.UInt32,
         10 => TypeTag.UInt64, 11 => TypeTag.Char, 12 => TypeTag.Half,
         13 => TypeTag.Single, 14 => TypeTag.Double,
-        15 => TypeTag.DurableReference, 16 => TypeTag.InlineValue,
+        15 => TypeTag.ObjectReference, 16 => TypeTag.InlineValue,
         _ => throw new InvalidDataException($"Unknown Schema field type code {tag}."),
     };
 

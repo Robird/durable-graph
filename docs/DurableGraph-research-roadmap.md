@@ -9,8 +9,8 @@
 
 当前能力与已完成分片的验收从 PROJECT-STATE/其账本进入；这里仅保留后续增量。
 
-后续方向按依赖而非承诺日期安排：已建立的引用图/inline 值/泛型组合与值 Upgrade → 有限数组对象；
-BCL 内容恢复在所需引用/值/类型表达可用后逐类型推进。
+后续方向按依赖而非承诺日期安排：基于 DB-043 已完成的数组和统一对象路径，评估 BCL 内容恢复的第一个具体消费者；
+既有引用图、inline 值、泛型与数组组合提供其基础，不预先引入通用容器平台。
 DB-036 单 World/单 head 工作会话已实现；branch/Reset、联合 Store 视图及更强恢复保证仍独立排期。
 MVP 库内加载顺序为 exact 重建 → 单对象 Upgrade → 分配实例 → 填充/连接引用 → 完整交付 World；
 Transient 由用户在交付后处理，约束维护在[目标设计](DurableGraph-target-design-v0.md#恢复transient-与宿主边界)。
@@ -20,10 +20,9 @@ GraphSession 的正常同实例 Commit 与严格重开从 PROJECT-STATE/DB-036 �
 当前只支持单活动会话、固定非空 World，发布故障范围为正常关闭/进程中止和明确的 I/O 异常。
 DB-038 的泛型 Schema/history、开放生成、保存恢复与通用/闭合 owner Upgrade 从 PROJECT-STATE/施工记录查证，不再列为未实现机制。
 可组合值 Upgrade 的验收与实际范围见 [DB-039](design-branches/0039-composable-value-upgrade-design.md#8-产品施工合同与验收映射)。
-推荐下一片为 [DB-043 可组合数组与统一引用对象路径](design-branches/0043-vector-array-object-slice.md)：
-统一 object 实例分派 string/class/array，闭合 SZ/rank 2–4、开放泛型数组、jagged、inline/generic struct 元素、
-融合 Delta、数组独立 owner Upgrade 与真实 GraphSession 冷重开。已撤回初稿 closed-only 白名单；
-DB-043 当前为施工级 Proposed，本条不自动授权实施。
+[DB-043 可组合数组与统一引用对象路径](design-branches/0043-vector-array-object-slice.md) 已通过整体验收；
+完成证据集中维护在该分片，不再将数组组合列为待施工架构。
+版本化表示头统一寻址、协变和加载内存预算继续按下文的独立触发条件推进。
 
 ## 2. 已采纳方向中的未完成能力
 
@@ -33,9 +32,8 @@ B/D/H 分别指本轮精确 Base payload、Delta payload 上界、已有对象�
 
 | 工作项 | 最小应回答的问题 | 设计或证据入口 |
 |---|---|---|
-| TypeCodec 与 exact Schema 绑定 | 一般类型组合与内建复合类型 codec；已有 nominal class 引用及 exact reader 分派不等于一般 TypeCodec，也不自动复活已删除模型族 | [DB-034](design-branches/0034-durable-reference-graph-batch.md)、[DB-018](design-branches/0018-generated-graph-codec-shape.md)、[DB-001](design-branches/0001-schema-authority-and-runtime-representation.md) |
-| 复合类型的 DTO 升级与恢复 | 将单对象 Upgrade/Restore 扩展到数组与容器内容；保持完整 source 目录、强制 Base、当前版本 DTO 图的可达分析和失败不交付 | [DB-034](design-branches/0034-durable-reference-graph-batch.md)、[DB-018](design-branches/0018-generated-graph-codec-shape.md) |
-| 完整数组对象与共同引用入口 | DB-043 用统一 object 路径接入 string/class/array；SZ/rank 2–4 与所有已支持槽递归组合，冻结/稀疏 Delta/两阶段恢复/显式元素 Upgrade/冷重开一并验收。数组 exact 赋值约束暂保留，协变历史 witness 独立后继 | [DB-043](design-branches/0043-vector-array-object-slice.md)、[MVP 边界](DurableGraph-target-design-v0.md#mvp-功能边界)、[DB-020](design-branches/0020-typed-slot-array-binding-slice.md) |
+| BCL 内容适配与恢复 | 复用统一 ObjectBinding 生命周期和静态值槽能力，逐类型明确内容、comparer、key/index 建立时机及内容 Upgrade；不保存 CLR 内部字段布局 | [DB-043](design-branches/0043-vector-array-object-slice.md)、[目标引用对象模型](DurableGraph-target-design-v0.md) |
+| 版本化表示头与 exact Schema 寻址 | 当前 TypeExpr 递归表达标量/string/用户泛型/数组，Base 分别持有 SchemaKey 或内建 ArrayLayout；是否统一由 VersionedSchema 身份寻址仍未裁决 | [统一寻址待办](#31-版本化表示类型头的统一寻址) |
 
 ## 3. 尚待裁决的机制
 
@@ -45,11 +43,9 @@ B/D/H 分别指本轮精确 Base payload、Delta payload 上界、已有对象�
 | 对象版本解释与保存来源 | 已登记模型族可按 Base exact Schema 自动读取；完整 ObjectHeadMap 中 external object heads 的来源、候选对象身份连续性仍需产品 Save/Load 合同，不能由 Revision Parent 声明一致推导全局身份认证 |
 | 保存相等性与真实估算 | 同版 DTO 的浮点按位、引用槽按 ID、inline 值递归融合 Delta 已采纳；DB-043 数组复用元素操作，BCL 容器另定。已准备 body 与当前 v3 envelope 计量见 [DB-029](design-branches/0029-prepared-object-revision-planning-slice.md)；新增类型头/容器布局继续按实际对象 payload 计量 |
 | Schema 规范表示和持久引用 | canonical 注册批次与逻辑 SchemaKey 已闭合；未来 SchemaHash、紧凑引用及一般类型家族约束随消费者裁决，不用 GetHashCode 作持久身份 |
-| 泛型与数组组合绑定 | 自定义 class/struct 的领域/状态参数及历史绑定已落地；剩余为数组对象引入的类型构造、shape 和元素操作，与已选数组范围一并验证，不要求全面切换 DynamicMethod |
 | 跨程序集与一般类型形状 | 跨编译 helper 可见性、外部历史祖先、enum/nullable/decimal/native int 等支持范围；当前同编译泛型支持边界见 DB-038，boxed value identity 已排除 MVP |
 | 多态与运行时注册扩展 | 已标记 class 基类到登记派生实例按 DB-034 合同；DB-043 统一框架 object 参数不授予 object/interface 通配字段。数组协变还需空数组的历史元素 ancestry 证据，和跨程序集发现分别后继；不能自动回退成声明基类的 codec |
-| 捕获复合值的所有权 | 数组/容器如何真正冻结候选；inline struct 已递归捕获成标量/ID 的 unmanaged DTO，不能据此推导一般容器浅复制足够 |
-| 数组完整形状与分配 | 非零下界与非 SZ rank-1 已明确不支持；DB-043 推荐上界 4、有限构造码与静态 ref 循环，验收合法空维形状、元素数溢出和分配失败；零字段 struct 的零字节 body 不能作为内存预算依据 |
+| 捕获 BCL 内容的所有权 | 数组使用 owned frozen 元素 buffer，inline struct 递归捕获成标量/ID；后续容器同样不能以浅复制代替冻结，须按其内容模型验证 |
 | 根与持久目录扩展 | 单 WorldId/Revision 发布已闭合；后续仅在真实需求下选择 null/清空/替换、命名 branch 与 Reset，不建设多根 API |
 
 设计证据：[DB-006](design-branches/0006-flat-graph-delta-prototype.md)、

@@ -47,7 +47,7 @@ internal static class CapturedRevisionPlanner {
             // TODO(DB-031): Measure duplicate chain reads here and in the policy
             // planner before introducing an operation-scoped cache.
             ObjectVersionChain chain = store.ReadObjectVersionChain(parentRevisionAddress!.Value, row.Current.Id.Value);
-            DecodedBaseObjectBody stored = BaseObjectBodyCodec.Decode(chain.Records[0].Record.Body);
+            DecodedBaseObjectBody stored = BaseObjectBodyCodec.Decode(chain.Records[0].Record.Body, schemas);
             if (stored.Kind != row.Current.Kind) {
                 throw new InvalidDataException($"Object {row.Current.Id} changed its stored type kind.");
             }
@@ -57,23 +57,19 @@ internal static class CapturedRevisionPlanner {
                 }
             }
             else {
-                DurableSchema storedSchema = schemas.GetRequired(stored.SchemaKey!.Value);
-                if (!storedSchema.Equals(row.Current.Schema)) {
-                    throw new InvalidDataException($"Object {row.Current.Id} cannot extend a different exact Schema. A controlled migration must write a new Base.");
+                ObjectLayout storedLayout = ObjectPersistence.GetLayout(stored, schemas);
+                if (!storedLayout.Equals(row.Current.Layout)) {
+                    throw new InvalidDataException($"Object {row.Current.Id} cannot extend a different exact layout. A controlled migration must write a new Base.");
                 }
             }
         }
 
         // Register the complete current schema closure even if no body changed.
         // SchemaStore preflights the entire batch before its first append.
-        schemas.RegisterBatch(input.Objects
-            .Where(static row => row.Current.Kind == ObjectStateKind.Durable)
-            .Select(static row => row.Current.Schema!));
+        ObjectPersistence.RegisterSchemas(schemas, input.Objects.Select(static row => row.Current));
 
         PreparedObject[] rows = input.Objects.Select(row => {
-            EncodedBaseObjectBody encodedBaseBody = row.Current.Kind == ObjectStateKind.String
-                ? BaseObjectBodyCodec.EncodeString(row.BaseBody)
-                : BaseObjectBodyCodec.EncodeDurable(row.Current.Schema!, row.BaseBody);
+            EncodedBaseObjectBody encodedBaseBody = ObjectPersistence.Encode(row.Current, row.BaseBody);
             if (row.Previous is null) {
                 return PreparedObject.New(row.Current.Id, encodedBaseBody);
             }

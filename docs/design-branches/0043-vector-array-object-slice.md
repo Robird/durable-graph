@@ -1,7 +1,7 @@
 # DB-043：可组合数组与统一引用对象路径
 
-> 状态：Proposed — 2026-09-08 施工级修订，尚未实现。用户已采纳统一 `object` 路径与数组独立 owner Upgrade 方向；
-> 本文给出其余细节的推荐施工合同，实施状态仍以源码和验收为准。
+> 状态：Implemented — 2026-09-08，G0–G5 已完成并通过根构建、完整测试及真实包验收。
+> 本文保留施工合同；实现映射、验证和审查修复见 §10。
 > 当前基线：[PROJECT-STATE](../../src/PROJECT-STATE.md)；已选 [MVP 边界](../DurableGraph-target-design-v0.md#mvp-功能边界)。
 
 ## 1. 问题、证据与成功标准
@@ -302,4 +302,43 @@ Windows 最终 build/test 串行执行。若实现暴露会改变用户业务语
 
 2026-09-08：主线程和独立子代理对照旧 Robird 与当前源码，确认字段/元素静态能力可组合；修订
 closed-only/无 inline/无 jagged 的初稿限制。用户要求统一 object 实例分派、同意数组独立 owner Upgrade，
-并将版本化表示类型头归入待办。本轮仅修订设计及活跃文档，尚无新的产品数组验收结果。
+并将版本化表示类型头归入待办。该次设计复核只修订文档；后续施工映射如下。
+
+### 10.1 实施追踪
+
+以下为本轮新增或改动的代码与验收入口；各波次均已通过集成验证，命令与审查结论见 §10.2。
+
+| 波次 | 实现入口 | 验收入口与当前状态 |
+|---|---|---|
+| G0 类型/格式 | [TypeExpr](../../src/DurableGraph/TypeExpr.cs)、[共享 TypePattern](../../src/Shared/SchemaHistoryTypePattern.cs)、[SchemaBatchWireCodec](../../src/DurableGraph.StateStore/SchemaBatchWireCodec.cs)、[BaseObjectBodyCodec](../../src/DurableGraph.StateStore/BaseObjectBodyCodec.cs) | [ArrayTypeExprTests](../../tests/DurableGraph.Tests/ArrayTypeExprTests.cs)、[ArrayTemplateHistoryTests](../../tests/DurableGraph.Tests/ArrayTemplateHistoryTests.cs)、[ArrayWireFormatTests](../../tests/DurableGraph.StateStore.Tests/ArrayWireFormatTests.cs)；已通过 |
+| G1 统一引用对象 | [ObjectBinding](../../src/DurableGraph/ObjectBinding.cs)、[ObjectLayout](../../src/DurableGraph/ObjectLayout.cs)、[CaptureContext](../../src/DurableGraph/CaptureContext.cs)、[ObjectReadTable](../../src/DurableGraph/ObjectReadTable.cs) | [ArrayGraphTests](../../tests/DurableGraph.Tests/ArrayGraphTests.cs) 与现有 string/class 回归；已通过 |
+| G2 数组核心 | [FrozenArrayState](../../src/DurableGraph/FrozenArrayState.cs)、[ArrayObjectBinding](../../src/DurableGraph/ArrayObjectBinding.cs)、[ArrayStateReader](../../src/DurableGraph/ArrayStateReader.cs) | [ArrayBodyTests](../../tests/DurableGraph.Tests/ArrayBodyTests.cs)；已通过 |
+| G3 SG/持久图 | [SG generic projection](../../src/DurableGraph.Generator/DurableSchemaGenerator.GenericProjection.cs)、[StateModelSnapshot.Arrays](../../src/DurableGraph.StateStore/StateModelSnapshot.Arrays.cs)、[RevisionDecoder](../../src/DurableGraph.StateStore/RevisionDecoder.cs)、[WorldWorkspace](../../src/DurableGraph.StateStore/WorldWorkspace.cs) | [ArrayBindingCatalogTests](../../tests/DurableGraph.StateStore.Tests/ArrayBindingCatalogTests.cs) 及 G5 包消费者；已通过 |
+| G4 元素 Upgrade | [StateBindingContext.ArrayUpgrade](../../src/DurableGraph/StateBindingContext.ArrayUpgrade.cs)、[UpgradeContext](../../src/DurableGraph/UpgradeContext.cs)、[StateModelRegistry](../../src/DurableGraph.StateStore/StateModelRegistry.cs) | [ArrayUpgradeTests](../../tests/DurableGraph.Tests/ArrayUpgradeTests.cs)；已通过 |
+| G5 产品闭环 | [ArrayConsumer](../../experiments/PackageConsumerProbe/ArrayConsumer/ArrayConsumer.csproj) 的历史模型及独立进程程序 | 真实 PackageReference 两代执行、根 build/完整 tests、文档链接及独立 review；已通过 |
+
+本次格式演进的新写版本为 SchemaBatch/history v4、Base envelope v3；兼读旧版本保持原语法，
+旧 Schema/history 内容不重写。包回归脚本针对新发布文件检查 v4，并继续验证既有 history 的文件存在性与 SHA256。
+
+### 10.2 验收与审查结果
+
+2026-09-08：根 `dotnet build DurableGraph.slnx --no-restore` 通过，零警告、零错误；
+`dotnet test DurableGraph.slnx --no-restore --no-build` 全部通过：Runtime/Generator 636、StateStore 353、
+Serialization 103、Storage 155，共 1247 项，零跳过。
+
+- [Run-ArrayProbe](../../experiments/PackageConsumerProbe/Run-ArrayProbe.ps1) 从当前源码打包，两代真实 NuGet
+  消费者分别 Publish/Verify，history 数量 4→5，旧文件哈希不变。覆盖四 rank、泛型/交错/共享/循环、
+  一次数组 owner Upgrade、强制 Base 后恢复 Delta、旧 Revision exact 读取和冷重开。
+- 原 [Generic](../../experiments/PackageConsumerProbe/Run-GenericProbe.ps1) 与
+  [ValueUpgrade](../../experiments/PackageConsumerProbe/Run-ValueUpgradeProbe.ps1) 包回归通过，保留删除旧 inline
+  领域类型后的历史能力与相邻 owner Context。
+- [基础包消费回归](../../experiments/PackageConsumerProbe/Run-Probe.ps1) 从当前源码重新打包并通过，
+  包含普通非泛型生成、运行时 API 和 history 发布/校验的既有交付边界。
+- 生成图回归验证同一现有数组由原策略先选择稀疏 Delta、再选择密集 Base；Base 截断内容链，
+  数组类型头计入完整 payload/H；rank-4 引用元素 Delta 冷读保持身份。
+- 独立审查发现并修复空数组没有元素回调时的声明校验缺口：reader 绑定前递归验证名义类型 kind/arity，
+  包括嵌套类型，仍不要求 current CLR 或目标 body；传统显式 model/reader 可提供声明元数据。
+  后续复核无剩余阻塞。另补齐迟登记嵌套 Schema 冲突、未使用的坏子工具在首回调前拒绝的回归。
+
+实现保持 §9 的独立后继边界：未加入 BCL 容器、数组协变、统一表示头或通用加载内存预算。
+收尾检查：10 份变动 Markdown 的 369 个本地链接/锚点全部有效，`git diff --check` 通过。
