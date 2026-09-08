@@ -8,6 +8,7 @@
 |---|---|
 | 修改 Generator 输出、runtime 公共 API、history/build 或 package 接线，需要验证真实单包消费者 | [PackageConsumerProbe](PackageConsumerProbe/README.md)：活动产品回归 |
 | 验证泛型 class/struct、定义历史、通用/闭合 Upgrade 与多代冷重开的真实包交付 | [GenericConsumer](PackageConsumerProbe/GenericConsumer/README.md)：由 [Run-GenericProbe.ps1](PackageConsumerProbe/Run-GenericProbe.ps1) 执行的产品回归；施工记录见 [DB-038 §12](../docs/design-branches/0038-generic-schema-state-and-binding-design.md#12-产品施工跟踪) |
+| 验证通用 owner 显式复用值规则、嵌套工具作用域与删除旧 inline 领域声明后的历史升级 | [ValueUpgradeConsumer](PackageConsumerProbe/ValueUpgradeConsumer/README.md)：由 [Run-ValueUpgradeProbe.ps1](PackageConsumerProbe/Run-ValueUpgradeProbe.ps1) 执行；施工与验收见 [DB-039 §8](../docs/design-branches/0039-composable-value-upgrade-design.md#8-产品施工合同与验收映射) |
 | 重访泛型 DTO/静态 helper、工厂闭合、readonly accessor 与历史 Upgrade 代码形状的选择依据 | [GenericBindingShapeProbe](GenericBindingShapeProbe/README.md)：独立机制见证；实际产品验证使用上述 GenericConsumer 与 src/tests |
 | 验证单 writer 进程中止、RBF 发布可见性与严格坏尾拒绝 | [PublicationCrashProbe](PublicationCrashProbe/README.md)：DB-036 底层故障见证，非断电保证 |
 

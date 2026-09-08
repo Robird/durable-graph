@@ -9,6 +9,10 @@ namespace Atelia.DurableGraph.StateStore;
 public sealed class StateReaderRegistry : IStateReaderRegistration {
     private readonly Dictionary<SchemaKey, StateReaderBinding> _bindings = [];
     private readonly Dictionary<string, StateDefinitionBinding> _definitions = new(StringComparer.Ordinal);
+    private readonly Dictionary<Type, StateValueUpgradeRuleSet> _valueUpgradeRules = [];
+
+    public void Register(StateValueUpgradeRuleSet ruleSet) =>
+        StateModelSnapshot.RegisterValueUpgradeRuleSet(_valueUpgradeRules, ruleSet);
 
     public void Register(StateDefinitionBinding definition) => StateModelSnapshot.RegisterDefinition(_definitions, definition);
 
@@ -30,5 +34,6 @@ public sealed class StateReaderRegistry : IStateReaderRegistration {
 
     internal Dictionary<SchemaKey, StateReaderBinding> Snapshot() => new(_bindings);
 
-    internal StateModelSnapshot Snapshot(SchemaStore schemas) => new([], [], new(_bindings), new(_definitions, StringComparer.Ordinal), schemas);
+    internal StateModelSnapshot Snapshot(SchemaStore schemas) => new([], [], new(_bindings), new(_definitions, StringComparer.Ordinal), schemas,
+        new(_valueUpgradeRules));
 }

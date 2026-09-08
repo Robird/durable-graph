@@ -81,6 +81,7 @@ public sealed partial class DurableSchemaGenerator {
                 output.Append(", closedOwner: ");
                 AppendTypePatternExpression(output, entry.ClosedOwner);
             }
+            AppendUpgradeDependencies(output, entry.Method);
             output.AppendLine("),");
         }
         output.Append("    }");
@@ -96,6 +97,11 @@ public sealed partial class DurableSchemaGenerator {
             return false;
         }
         bool legacy = allowLegacy && method.Arity == 0 && method.Parameters.Length == 2;
+        if (legacy && HasUpgradeDependencies(method)) {
+            ReportInvalidGeneratedState(context, owner.Symbol,
+                "A two-parameter owner upgrade cannot declare value dependencies; add UpgradeContext", GetSourceLocation(method));
+            return false;
+        }
         bool valid = fromVersion > 0 && fromVersion < owner.Version && method.IsStatic && method.ReturnsVoid &&
             method.Parameters.Length >= 2 && method.Parameters[0].RefKind == RefKind.In && method.Parameters[1].RefKind == RefKind.Out &&
             (legacy || (method.Parameters.Length == 3 && method.Parameters[2].RefKind == RefKind.None &&

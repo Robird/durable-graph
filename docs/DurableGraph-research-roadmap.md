@@ -9,7 +9,7 @@
 
 当前能力与已完成分片的验收从 PROJECT-STATE/其账本进入；这里仅保留后续增量。
 
-后续方向按依赖而非承诺日期安排：已建立的引用图/inline 值/泛型组合 → 可组合值 Upgrade 与有限数组对象；
+后续方向按依赖而非承诺日期安排：已建立的引用图/inline 值/泛型组合与值 Upgrade → 有限数组对象；
 BCL 内容恢复在所需引用/值/类型表达可用后逐类型推进。
 DB-036 单 World/单 head 工作会话已实现；branch/Reset、联合 Store 视图及更强恢复保证仍独立排期。
 MVP 库内加载顺序为 exact 重建 → 单对象 Upgrade → 分配实例 → 填充/连接引用 → 完整交付 World；
@@ -19,10 +19,9 @@ Transient 由用户在交付后处理，约束维护在[目标设计](DurableGra
 GraphSession 的正常同实例 Commit 与严格重开从 PROJECT-STATE/DB-036 查证；不再列为未完成能力。
 当前只支持单活动会话、固定非空 World，发布故障范围为正常关闭/进程中止和明确的 I/O 异常。
 DB-038 的泛型 Schema/history、开放生成、保存恢复与通用/闭合 owner Upgrade 从 PROJECT-STATE/施工记录查证，不再列为未实现机制。
-下一片为 [DB-039](design-branches/0039-composable-value-upgrade-design.md)：
-在已有最小 UpgradeContext 上增加方法级依赖声明、预绑定 typed 值工具、规则集和 provider 子作用域。
-owner 继续显式控制转换；不重开持久类型格式，不追加新的用户方法参数，不用值工具选择未知的历史中间版本。
-有限数组仍为独立候选；本片不自动授权开始任一后继。
+可组合值 Upgrade 的验收与实际范围见 [DB-039](design-branches/0039-composable-value-upgrade-design.md#8-产品施工合同与验收映射)。
+下一个候选为有限数组对象：把已选 shape 边界、引用身份、冻结内容与元素静态操作接到共同对象链。
+具体施工需先确定类型码和内容布局；已有值工具不替数组定义历史中间布局。本片不自动授权后继实施。
 
 ## 2. 已采纳方向中的未完成能力
 
@@ -34,7 +33,6 @@ B/D/H 分别指本轮精确 Base payload、Delta payload 上界、已有对象�
 |---|---|---|
 | TypeCodec 与 exact Schema 绑定 | 一般类型组合与内建复合类型 codec；已有 nominal class 引用及 exact reader 分派不等于一般 TypeCodec，也不自动复活已删除模型族 | [DB-034](design-branches/0034-durable-reference-graph-batch.md)、[DB-018](design-branches/0018-generated-graph-codec-shape.md)、[DB-001](design-branches/0001-schema-authority-and-runtime-representation.md) |
 | 复合类型的 DTO 升级与恢复 | 将单对象 Upgrade/Restore 扩展到数组与容器内容；保持完整 source 目录、强制 Base、当前版本 DTO 图的可达分析和失败不交付 | [DB-034](design-branches/0034-durable-reference-graph-batch.md)、[DB-018](design-branches/0018-generated-graph-codec-shape.md) |
-| 可组合值 Upgrade | 在 DB-038 的统一 Context 和整链预绑定上实现具名依赖及工具查询，支持开放值 provider 显式组合子转换 | [DB-039](design-branches/0039-composable-value-upgrade-design.md) |
 | 完整数组对象 | 在已选零下界 SZ/有限多维 rank 范围内，实现 identity、shape、分配与元素循环，并拒绝不支持的形状；不能把现有元素模板视为完整数组支持 | [MVP 边界](DurableGraph-target-design-v0.md#mvp-功能边界)、[DB-020](design-branches/0020-typed-slot-array-binding-slice.md) |
 
 ## 3. 尚待裁决的机制
@@ -45,7 +43,6 @@ B/D/H 分别指本轮精确 Base payload、Delta payload 上界、已有对象�
 | 保存相等性与真实估算 | 同版 DTO 的浮点按位、引用槽按 ID、inline 值递归融合 Delta 已采纳；未来数组/容器相等性另定。已准备 body 与当前 v3 envelope 计量见 [DB-029](design-branches/0029-prepared-object-revision-planning-slice.md)；Base 类型头已计入 B/H。未来新增类型头/容器布局时继续按实际对象 payload 计量 |
 | Schema 规范表示和持久引用 | canonical 注册批次与逻辑 SchemaKey 已闭合；未来 SchemaHash、紧凑引用及一般类型家族约束随消费者裁决，不用 GetHashCode 作持久身份 |
 | 泛型与数组组合绑定 | 自定义 class/struct 的领域/状态参数及历史绑定已落地；剩余为数组对象引入的类型构造、shape 和元素操作，与已选数组范围一并验证，不要求全面切换 DynamicMethod |
-| 泛型 Upgrade 的显式值依赖 | 最小 Context 和逐对象/边信息已有产品验证；剩余为方法级 key/规则声明及 provider 子作用域。声明错误预绑定拒绝，用户 Get 错 key/类型只能调用时拒绝。见 [DB-039](design-branches/0039-composable-value-upgrade-design.md) |
 | 跨程序集与一般类型形状 | 跨编译 helper 可见性、外部历史祖先、enum/nullable/decimal/native int 等支持范围；当前同编译泛型支持边界见 DB-038，boxed value identity 已排除 MVP |
 | 多态与运行时注册扩展 | 已标记 class 基类到登记派生实例按 DB-034 合同；interface/object 通配引用、开放组合与跨程序集发现仍后续裁决，不能自动回退成声明基类的 codec |
 | 捕获复合值的所有权 | 数组/容器如何真正冻结候选；inline struct 已递归捕获成标量/ID 的 unmanaged DTO，不能据此推导一般容器浅复制足够 |
@@ -79,7 +76,8 @@ DB-009/010 的旧 no-reuse 前提不能沿用；借用 Base 共享 prior 等结�
 | 跨对象升级与外部副作用 | MVP 仅单对象字段转换；读取其他对象、拆分/合并及创建持久新对象均延后。MVP 后有真实迁移案例时，再讨论图访问、新 ID 与失败隔离；不借普通升级默认授权 |
 | 无 CLR 迁移壳的 current Normalize | Family 路径可以保留 state-only exact reader，但 editable Load 仍需要 source 对象族的 current/migration CLR 模型。应用需要删除这层模型而继续加载旧 Revision 时，再设计独立 Normalize/退休协议；不能借 World 删除引用跳过 source 行 |
 | 历史工具/升级调用优化 | 有 package/history 或升级调用的真实限制后，再重访 DB-003 的 Try/result/ABI 和 DB-004 的多 writer/多 TFM 与批次原子性，不顺带做兼容框架 |
-| UpgradeContext 的动态工具与生命周期扩展 | 当前只提供调用信息，DB-039 计划只查询已声明、已绑定工具；具体迁移确需执行中解析时，再裁决首个业务回调前失败保证。池化/异步或合法跨回调工具复用有消费者后，再设计生命周期；不提前添加服务定位器、租约或通用工具平台 |
+| UpgradeContext 的动态工具与生命周期扩展 | 当前查询已声明、已绑定的值工具；具体迁移确需执行中解析时，再裁决首个业务回调前失败保证。池化/异步或合法跨回调工具复用有消费者后，再设计生命周期；不提前添加服务定位器、租约或通用工具平台 |
+| 值规则的跨程序集与更广生成外观 | Runtime 已能显式表达 builtin/引用/闭合模式；SG 当前为同编译、同 inline family 的历史端点属性。真实应用需要跨程序集保留规则或更广属性入口时，再扩展显式登记/诊断，不能接受后静默漏登记 |
 | 泛型闭合历史账本/独立版本 | 用户已选 MVP 仓库内严格一致；要求共享 build history 对所有空库也锁住闭合布局、跨程序集独立演化或跨库交换时，再比较闭合目录与布局身份，见 [DB-038 §3.3](design-branches/0038-generic-schema-state-and-binding-design.md#33-必须明确的保证作用域两个空仓库) |
 
 ### 4.1 SchemaStore 复用 StateStore 与联合版本视图

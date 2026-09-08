@@ -122,6 +122,11 @@ Source Generator 负责可在编译期确定的类型知识与机械代码，框
   当前采用预声明/预绑定能力，只在执行时查询已选工具；不由 Context 动态选择业务规则，也不扩张单对象操作边界。
   最小调用信息与后续工具组合分别由 [DB-038](design-branches/0038-generic-schema-state-and-binding-design.md)
   和 [DB-039](design-branches/0039-composable-value-upgrade-design.md) 承接；当前实现范围从 PROJECT-STATE 查证。
+- 值工具按 provider 局部 key、显式规则集和两端声明段/FieldId 绑定；完整槽语义包括引用类别与 nominal 约束，
+  不仅是 DTO CLR 类型。显式候选的布局、签名或子依赖失败必须拒绝，不能回退为透传；
+  KeepExact 仅在作者明确启用、没有显式候选且完整槽等价时成立。
+  整条对象升级链及其声明依赖在首个业务调用前绑定。snapshot 缓存不含调用状态，
+  子工具保持自己的依赖表并继承当前 owner 的 ID/相邻端点；Context 与工具不跨同步调用保留。
 - 自定义泛型的持久身份是定义 ID、有序 nominal 实参与定义版本；领域参数、冻结状态表示和静态操作参数分开。
   历史 DTO/body 位于纯状态宿主，按 stored 完整布局闭合，不要求旧领域值 CLR 类型继续存在。
   单对象整条相邻 Upgrade 链先绑定再执行；中间 exact 布局不足以唯一确定时明确拒绝，不能用 current/latest 补齐。

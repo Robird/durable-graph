@@ -1,7 +1,7 @@
 # DB-039：owner 显式调用的可组合值 Upgrade
 
-> 状态：Proposed — 2026-09-08。用户已采纳统一 UpgradeContext 外观及当前预绑定方案；产品实施另行调度。
-> 后继接缝：DB-038 的产品代码，实际验收见其 §12；本片尚未实施。
+> 状态：Chosen / Implemented — 2026-09-08。G0–G3 已完成，施工接缝与实际验收映射见 §8。
+> 后继接缝：DB-038 的产品代码，实际验收见其 §12。
 > 本文细化并修订 [DB-038 §6](0038-generic-schema-state-and-binding-design.md#6-upgrade通用方法与显式闭合边)；泛型身份、历史及仓库一致性继续由 DB-038 说明。
 > 排期：DB-038 独立完成泛型闭环和最小 Context 后，再实施本片。原逐参数注入委托改为从 Context 获取；旧 Probe 仍只证明原机制，未验证新外观。
 
@@ -23,7 +23,7 @@ DB-038 的闭合 owner Upgrade 可以正确表达 `Box<PointV1State> → Box<Poi
 
 最小观察标准：同一 Point 规则被开放 Box/Pair 复用并可嵌套；同 DTO 类型的不同业务规则可以明确区分；
 声明的依赖槽错绑、缺依赖和歧义在该对象整条链的业务 callback 之前失败。
-本轮只研究代码形状、绑定合同和独立实验；不改产品 SG、wire、SchemaStore 或 Normalize。
+本片实施生成声明、值依赖绑定和 Normalize 调用工具；不改变 wire 或 SchemaStore 的持久格式。
 
 ## 2. 推荐的执行形状
 
@@ -131,7 +131,7 @@ owner 定义时一次声明每个能力 key 的**规则选择及 source/target �
 槽位置基于历史 Schema 声明段与 FieldId，继承中必须保留声明段，不能仅用可能重复的数字。
 模板按本次 exact Schema 解析后，才得到两端完整槽语义。重复 T、相同 TS 都不抹掉字段的选择位置。
 
-以下为待 SG 验证的用户写法草图，属性名不是已存在 API：
+以下保留设计期的用户写法草图，实际落地的属性名称与选择器见 §8：
 
 ```csharp
 [OwnerUpgrade("Box", 1, 2)]
@@ -155,7 +155,7 @@ static void PointToMillimetres(
 依赖从原来的参数 attribute 移到方法元数据；不通过扫描函数体的 Get 调用发现依赖。
 key 可先采用区分大小写的 provider 局部字符串与生成常量，不建立全局持久 ID 或 public key 类型框架。
 例如 `BoxUpgradeSlots.Value` 是本方法依赖名称 `"value"` 的生成常量；定位仍由 Context 的 provider scope 决定。
-具体属性、selector 表达及规则集登记外观应在本片真实 SG 首闸门冻结，不能把示意语法视作已验收 API。
+具体属性、selector 表达及规则集登记外观已在本片真实 SG 首闸门冻结，见 §8；不能把上述示意语法当作实际 API。
 新值 provider 采用三参形状；DB-038 保留的旧二参 owner 不允许声明 Context 工具依赖，SG 明确诊断，
 需要工具时将该方法改为三参。不会因为无法访问 Context 就悄悄忽略依赖声明。
 泛型 Pair 可在该规则集中登记一个开放值 provider，声明一份 element 依赖，由用户函数重复调用。
@@ -223,9 +223,9 @@ M 个叶子规则，加上各模板一次性的依赖声明。开放 Pair 组合
 本片只增加声明的值依赖/规则集、Context 工具获取、开放值 provider 组合及其验证。
 DB-038 的 Context 入参、TypeExpr/wire 和通用/闭合 owner 规则保持；不再借此重开类型格式。
 
-现有 [SG StateModel](../../src/DurableGraph.Generator/DurableSchemaGenerator.StateModel.cs) 只接受
-非泛型两参数 `in/out` Upgrade；其 DTO 符号在当前生成轮尚未存在，采用发出强类型调用后由编译器校验的办法。
-这是产品当前基线，不表示 DB-038 尚未落地时本片就可直接施工。两片须沿用这条原则：先读取显式 family/version/槽选择的元数据与 history，
+DB-038 的 [SG Upgrade](../../src/DurableGraph.Generator/DurableSchemaGenerator.GenericUpgrades.cs) 已接受
+显式三参数方法并适配旧非泛型二参数方法；其 DTO 符号在当前生成轮尚未存在，采用发出强类型调用后由编译器校验的办法。
+本片沿用这条原则：先读取显式 family/version/槽选择的元数据与 history，
 发出 expected typed adapter，再让最终编译器检查用户方法，不能依赖初轮不完整的 DTO Roslyn 符号推断全部绑定。
 
 | 验证层级 | 要回答的问题 |
@@ -239,7 +239,7 @@ DB-038 的 Context 入参、TypeExpr/wire 和通用/闭合 owner 规则保持；
 
 独立实验的入口和证据边界见 [GenericBindingShapeProbe](../../experiments/GenericBindingShapeProbe/README.md)。
 手写 generated-like adapter 和实验槽 record 不证明真 SG、产品 Schema 匹配或整套 Normalize 已实现。
-本次为文档修订，不推进产品泛型实施或新增 wire 版本；实施本片时按 G0→G3 完成后停止，不自动进入数组/BCL。
+实施本片时按 G0→G3 完成后停止，不自动进入数组/BCL，也不新增 wire 版本。
 
 语言事实参考：[C# 泛型方法推导](https://learn.microsoft.com/en-us/dotnet/csharp/programming-guide/generics/generic-methods)
 说明不能只从返回类型或约束推导类型参数；[静态接口成员](https://learn.microsoft.com/en-us/dotnet/csharp/advanced-topics/interface-implementation/static-virtual-interface-members)
@@ -279,3 +279,61 @@ Pair 的重复 T 一致性复用现有替换检查，不另增委托使用位置
 三位审阅者确认两片可独立交付：没有要求重新裁决泛型主干的结构性短板。
 语义审阅提出的 invocation lease 经反例检查延后：当前没有池化/异步/合法跨回调消费者，
 框架只缓存计划、用户不得逃逸本次 Context 的合同已经足够，不为假想扩展增加失效状态。
+
+## 8. 产品施工合同与验收映射
+
+2026-09-08 开工基线为 `888bd74`：根 solution build 零警告/错误，1077 项测试通过；工作树干净。
+交付目标是通用 owner 显式调用可组合值工具的真实历史升级闭环。依赖顺序为元数据与冻结目录 →
+SG adapter/运行时预绑定 → 调用作用域 → 真实包跨版恢复。不同时统一 DB-038 的两条生成 API 路径。
+
+本次冻结的代码接缝：
+
+- `[ValueUpgradeRuleSet(AllowKeepExact = true)]` 标记应用选择的代码规则集；Type 是本地代码目录的身份，
+  不成为持久 ID。`StateValueUpgradeRuleSet` 与定义一起经已有登记入口进入冻结 snapshot。
+- `[DurableValueUpgrade(typeof(Rules), "Point", 1, 2)]` 生成同一 inline 定义的值 provider；
+  字符串定义 ID 与历史 DTO 允许删去旧领域 struct。开放 Pair 的 nominal 参数由 retained history arity 生成。
+  Runtime 元数据还可显式表达 builtin、引用、闭合 nominal 子集与完整 expected 槽；不通过扫描程序集发现规则。
+- `[UpgradeDependency("value", typeof(Rules), "Box", 1, "Box", 1)]` 用两端声明定义 ID + FieldId 定位槽。
+  沿 exact 祖先链选择声明段后读取其直接字段，避免展平后重号。key 按 provider 局部、区分大小写解释。
+- SG 生成 `Generated.UpgradeSlots_<UTF8HostHex>_<UTF8MethodHex>` 常量类；属性 key 必须是合法 C# 标识符，
+  关键字会转义。Runtime key 只要求非空。Context 的字符串入口仍可直接使用相同 key。
+- 规则集、provider 和依赖元数据不可变；snapshot 只缓存无调用状态的计划。
+  每对象/相邻边创建 Context，子值工具绑定独立依赖表并继承同一 owner 信息。
+- 完整候选筛选先于 Schema/CLR 签名校验；显式候选失败不透传。KeepExact 须明确开启且零候选、完整槽相等。
+  整条 owner 链及全部声明依赖在首个业务 callback 前绑定，并在使用缓存时复核完整 exact 闭包。
+
+施工中确认的简化与边界：
+
+- 值工具两端已经由 exact 字段确定；绑定完整 Schema、取得其状态类型并严格统一所选方法签名即可。
+  不再次从实际 DTO 反推同一布局；DB-038 用于确定未知 owner 中间布局的反推机制保留。
+- 依赖只能选择当前值的子字段，合法 exact 布局本身是有界无环 DAG，因此有效输入不能另构造值工具绑定环。
+  代码保留递归/深度防护；验收以完整 Schema 深度合同和共享依赖 DAG 为据，不宣称实际构造了合法环。
+- 同一对象/升级边内对同一完整子计划复用调用工具，避免把共享 DAG 展开成重复 Context 子树；
+  该调用级缓存不进入 snapshot，后续对象或边另建 Context。
+- SG 属性的规则 marker 必须来自同一编译，避免接受后未生成登记材料；跨程序集生成仍属后续范围。
+  显式值规则可仅依赖保留的 history，不要求编译中仍有对应领域声明；这不提供已删除对象族的 current Normalize。
+
+| 要求 | 实施责任/接缝 | 集成验收 | 状态 |
+|---|---|---|---|
+| G0 用户属性、局部 key、typed adapter、旧二参工具诊断 | [SG](../../src/DurableGraph.Generator/DurableSchemaGenerator.ValueUpgrades.cs) / [metadata](../../src/DurableGraph/StateValueUpgradeProvider.cs) | [真实 SG 编译与调用](../../tests/DurableGraph.Tests/GeneratedValueUpgradeTests.cs)、错误签名/孤立依赖/别名/外部 marker；纯历史与纯规则登记 | 已验证 |
+| G1 候选与完整槽匹配、递归依赖、KeepExact | [值绑定](../../src/DurableGraph/StateBindingContext.ValueUpgrade.cs)；StateStore 冻结目录 | [值绑定反例](../../tests/DurableGraph.Tests/ValueUpgradeBindingTests.cs)、[snapshot 隔离](../../tests/DurableGraph.StateStore.Tests/ValueUpgradeCatalogTests.cs) | 已验证 |
+| G2 子作用域与整链预绑定 | [Context](../../src/DurableGraph/UpgradeContext.cs) / [owner 计划](../../src/DurableGraph/StateBindingContext.Upgrade.cs) | 嵌套 Box→Pair→Point、两个对象/多跳、未知 key/类型、抛错不回退、28 层共享依赖 DAG | 已验证 |
+| G3 历史包闭环 | [真实包消费者](../../experiments/PackageConsumerProbe/ValueUpgradeConsumer/README.md) | 三代历史/四次构建、删除旧 inline 领域类型、强制 Base 与稳定续写 | 已验证 |
+| 不变合同与独立审阅 | 主代理集成 / 独立审阅代理 | 根 build/full tests、六项真实包回归、格式未变、文档检查；独立审阅无剩余阻断 | 已验证 |
+
+主代理实际执行：
+
+- `dotnet build DurableGraph.slnx --no-restore --verbosity quiet`：零警告、零错误。
+- 根 solution tests：**1106/1106**，零失败、零跳过；Runtime/SG 531、StateStore 317、Storage 155、Serialization 103。
+  本片新增 29 项；初次接合的测试夹具问题已修复，最终验收是在重建后执行。
+- `Run-ValueUpgradeProbe.ps1`：自打包八个依赖包，三个历史版本、四次构建/进程全部通过。
+  history 数量 5→10→10→12，先前 SHA256 不变，缺规则的失败 Load 不修改仓库文件集合或 bytes。
+  产物目录 `experiments/PackageConsumerProbe/obj/value-upgrade-20260908052950-35340-107b3438`，
+  包版本 `0.0.0-value-e2e.20260908052950.35340`；执行日志位于同一 `obj` 下的 `db039-value-package.log`。
+- 既有 `Run-GenericProbe.ps1`、`Run-InlineStructProbe.ps1`、`Run-HistoryCapabilityProbe.ps1` 复用上述最终 feed 全部通过；
+  `Run-Probe.ps1` 和 `Run-StateStoreProbe.ps1` 分别自打包运行通过。连同新增值工具回归，共六项真实包脚本通过。
+  对应日志为 `obj/db039-{Generic,InlineStruct,HistoryCapability,runtime,state}-package.log`。
+- 集成文档检查：10 份 UTF8 Markdown、330 个本地链接/锚点通过；`git diff --check` 通过。
+
+独立审阅促成并复核了调用级 DAG 复用、固定值端点免重复逆推、外部 marker 明确拒绝，以及无当前领域声明的登记修复。
+本片没有更改 TypeExpr、Schema/history、Base/Delta 或 Storage 持久格式；没有新增程序集或自动值 Normalize 阶段。

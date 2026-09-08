@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using System.Reflection;
 
 namespace Atelia.DurableGraph;
@@ -23,9 +24,25 @@ public sealed class DurableUpgradeAttribute : Attribute {
 /// <remarks>Metadata describes one execution capability; it does not select a graph-wide migration path.</remarks>
 public sealed class StateUpgradeProvider {
     public StateUpgradeProvider(string definitionId, int fromVersion, MethodInfo method,
-        TypeExpr? closedOwner = null, bool allowLegacyTwoParameter = false) {
+        TypeExpr? closedOwner = null, bool allowLegacyTwoParameter = false,
+        IEnumerable<StateUpgradeDependency>? dependencies = null) {
         ArgumentException.ThrowIfNullOrWhiteSpace(definitionId);
         if (fromVersion is <= 0 or int.MaxValue) { throw new ArgumentOutOfRangeException(nameof(fromVersion)); }
+        bool legacy = ValidateMethod(method, allowLegacyTwoParameter);
+        if (closedOwner is not null && (closedOwner.Kind != TypeExprKind.Named || !closedOwner.IsClosed ||
+            closedOwner.DefinitionId != definitionId || method.ContainsGenericParameters)) {
+            throw new ArgumentException("A closed owner provider requires that closed nominal family and concrete state parameters.", nameof(closedOwner));
+        }
+        DefinitionId = definitionId;
+        FromVersion = fromVersion;
+        Method = method;
+        ClosedOwner = closedOwner;
+        IsLegacyTwoParameter = legacy;
+        Dependencies = StateUpgradeDependency.Freeze(dependencies);
+        if (legacy && !Dependencies.IsEmpty) { throw new ArgumentException("A legacy two-parameter upgrade cannot declare Context tools.", nameof(dependencies)); }
+    }
+
+    internal static bool ValidateMethod(MethodInfo method, bool allowLegacyTwoParameter) {
         ArgumentNullException.ThrowIfNull(method);
         if (!method.IsStatic || method.ReturnType != typeof(void) || method.DeclaringType?.ContainsGenericParameters == true) {
             throw new ArgumentException("An upgrade requires a static void method on a closed CLR host.", nameof(method));
@@ -38,15 +55,7 @@ public sealed class StateUpgradeProvider {
             (!legacy && parameters[2].ParameterType != typeof(UpgradeContext))) {
             throw new ArgumentException("An upgrade requires (in prior, out next, UpgradeContext).", nameof(method));
         }
-        if (closedOwner is not null && (closedOwner.Kind != TypeExprKind.Named || !closedOwner.IsClosed ||
-            closedOwner.DefinitionId != definitionId || method.ContainsGenericParameters)) {
-            throw new ArgumentException("A closed owner provider requires that closed nominal family and concrete state parameters.", nameof(closedOwner));
-        }
-        DefinitionId = definitionId;
-        FromVersion = fromVersion;
-        Method = method;
-        ClosedOwner = closedOwner;
-        IsLegacyTwoParameter = legacy;
+        return legacy;
     }
 
     public string DefinitionId { get; }
@@ -55,11 +64,12 @@ public sealed class StateUpgradeProvider {
     public MethodInfo Method { get; }
     public TypeExpr? ClosedOwner { get; }
     public bool IsLegacyTwoParameter { get; }
+    public ImmutableArray<StateUpgradeDependency> Dependencies { get; }
 
     internal Type PriorType => Method.GetParameters()[0].ParameterType.GetElementType()!;
     internal Type NextType => Method.GetParameters()[1].ParameterType.GetElementType()!;
 
     internal bool IsSameCapability(StateUpgradeProvider other) =>
         DefinitionId == other.DefinitionId && FromVersion == other.FromVersion && ClosedOwner == other.ClosedOwner &&
-        Method.Equals(other.Method) && IsLegacyTwoParameter == other.IsLegacyTwoParameter;
+        Method.Equals(other.Method) && IsLegacyTwoParameter == other.IsLegacyTwoParameter && Dependencies.SequenceEqual(other.Dependencies);
 }

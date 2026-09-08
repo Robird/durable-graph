@@ -9,6 +9,7 @@ internal sealed class StateModelSnapshot : StateBindingContext {
     private readonly Dictionary<Type, StateModelBinding> _types;
     private readonly Dictionary<SchemaKey, StateReaderBinding> _readers;
     private readonly Dictionary<string, StateDefinitionBinding> _definitions;
+    private readonly Dictionary<Type, StateValueUpgradeRuleSet> _valueUpgradeRules;
     private readonly Dictionary<Type, StateDefinitionBinding> _domainDefinitions = [];
     private readonly Dictionary<Type, StateValueBinding> _currentValues = [];
     private readonly Dictionary<SchemaKey, StateValueBinding> _storedValues = [];
@@ -19,11 +20,13 @@ internal sealed class StateModelSnapshot : StateBindingContext {
 
     internal StateModelSnapshot(Dictionary<TypeExpr, StateModelBinding> models,
         Dictionary<Type, StateModelBinding> types, Dictionary<SchemaKey, StateReaderBinding> readers,
-        Dictionary<string, StateDefinitionBinding>? definitions = null, SchemaStore? schemas = null) {
+        Dictionary<string, StateDefinitionBinding>? definitions = null, SchemaStore? schemas = null,
+        Dictionary<Type, StateValueUpgradeRuleSet>? valueUpgradeRules = null) {
         _models = models;
         _types = types;
         _readers = readers;
         _definitions = definitions ?? new(StringComparer.Ordinal);
+        _valueUpgradeRules = valueUpgradeRules ?? [];
         _schemas = schemas;
         foreach (StateDefinitionBinding definition in _definitions.Values) {
             if (definition.DomainTypeDefinition is { } domain && !_domainDefinitions.TryAdd(domain, definition)) {
@@ -35,6 +38,22 @@ internal sealed class StateModelSnapshot : StateBindingContext {
     internal IReadOnlyDictionary<TypeExpr, StateModelBinding> Models => _models;
     internal IReadOnlyDictionary<Type, StateModelBinding> Types => _types;
     internal IReadOnlyDictionary<SchemaKey, StateReaderBinding> Readers => _readers;
+
+    internal static void RegisterValueUpgradeRuleSet(Dictionary<Type, StateValueUpgradeRuleSet> rules,
+        StateValueUpgradeRuleSet ruleSet) {
+        ArgumentNullException.ThrowIfNull(ruleSet);
+        if (rules.TryGetValue(ruleSet.RuleSet, out StateValueUpgradeRuleSet? prior)) {
+            if (!ReferenceEquals(prior, ruleSet)) {
+                throw new InvalidOperationException($"A different value upgrade ruleset is already registered for {ruleSet.RuleSet}.");
+            }
+            return;
+        }
+        rules.Add(ruleSet.RuleSet, ruleSet);
+    }
+
+    public override StateValueUpgradeRuleSet GetValueUpgradeRuleSet(Type ruleSet) =>
+        _valueUpgradeRules.TryGetValue(ruleSet, out StateValueUpgradeRuleSet? rules) ? rules :
+        throw new InvalidDataException($"No value upgrade ruleset is registered for {ruleSet}.");
 
     internal static void RegisterDefinition(Dictionary<string, StateDefinitionBinding> definitions, StateDefinitionBinding definition) {
         ArgumentNullException.ThrowIfNull(definition);

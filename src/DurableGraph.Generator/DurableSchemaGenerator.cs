@@ -228,6 +228,9 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
         if (!ValidateUpgradeRegistrations(context, validTypes, compilation, out bool hasUpgradeRegistrations)) {
             return;
         }
+        if (!ValidateValueUpgradeRegistrations(context, validTypes, history, compilation, out bool hasValueUpgradeRegistrations)) {
+            return;
+        }
 
         if (validTypes.Count > 0 || types.Count == 0) {
             string manifestSource = RenderSchemaHistoryManifest(validTypes)
@@ -237,8 +240,8 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
                 SourceText.From(manifestSource, Encoding.UTF8));
         }
 
-        if (validTypes.Count > 0) {
-            if (hasUpgradeRegistrations || UsesGenericTemplates(validTypes, history)) {
+        if (validTypes.Count > 0 || (types.Count == 0 && hasValueUpgradeRegistrations)) {
+            if (hasUpgradeRegistrations || hasValueUpgradeRegistrations || UsesGenericTemplates(validTypes, history)) {
                 if (ValidateGenericTemplateHistory(context, validTypes, history)) {
                     GenerateGenericStates(context, validTypes, history, historyParsedSuccessfully, compilation);
                 }

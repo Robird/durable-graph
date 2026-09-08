@@ -231,3 +231,28 @@ The runner preserves accepted history hashes and requires v3 for new history. It
 dependency feed by default, or reuses one through `-PackageSource <feed> -Version <version>`.
 Run instructions, stage details and limitations live in the consumer README; the implementation
 record is [DB-038 §12](../../docs/design-branches/0038-generic-schema-state-and-binding-design.md#12-产品施工跟踪).
+
+## Composable value upgrades
+
+```powershell
+./experiments/PackageConsumerProbe/Run-ValueUpgradeProbe.ps1
+```
+
+The separate [value-upgrade consumer](ValueUpgradeConsumer/README.md) exercises the DB-039
+Context tools through actual runtime and StateStore packages. One open Box owner requests an
+explicitly declared value dependency: Box<int> uses the opted-in KeepExact rule, Box<Point> invokes
+the Point conversion, and Box<Pair<Point>> composes the open Pair provider with that same leaf rule.
+Box and Pair deliberately reuse the local key `value` to check their independent Context scopes.
+Nested callbacks check the current ObjectId and complete adjacent owner Schema endpoints.
+
+The runner builds three application versions plus a V2 missing-rule variant. That negative build
+retains exact decoding but rejects the affected owner's editable Load before its first business
+callback, and the runner checks that repository files and hashes remain unchanged. V3 removes an
+old inline domain struct while retaining its generated history DTO and value provider. The fixture
+checks multi-step loading from V1, forced Base, unchanged resave, ordinary Delta, and cold reopening.
+It preserves accepted history hashes across builds; it does not change any persistent format.
+
+The runner packs an isolated eight-package feed by default; use `-PackageSource <feed> -Version <version>`
+to reuse a matching feed. Exact stage markers and boundaries live in the consumer README;
+construction and acceptance evidence are recorded in
+[DB-039 §8](../../docs/design-branches/0039-composable-value-upgrade-design.md#8-产品施工合同与验收映射).

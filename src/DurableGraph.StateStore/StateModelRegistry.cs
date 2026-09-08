@@ -7,6 +7,11 @@ public sealed class StateModelRegistry : IStateModelRegistration {
     private readonly Dictionary<Type, StateModelBinding> _types = [];
     private readonly Dictionary<SchemaKey, StateReaderBinding> _readers = [];
     private readonly Dictionary<string, StateDefinitionBinding> _definitions = new(StringComparer.Ordinal);
+    private readonly Dictionary<Type, StateValueUpgradeRuleSet> _valueUpgradeRules = [];
+
+    /// <summary>Registers one stable ruleset; repeated registration of that instance is harmless.</summary>
+    public void Register(StateValueUpgradeRuleSet ruleSet) =>
+        StateModelSnapshot.RegisterValueUpgradeRuleSet(_valueUpgradeRules, ruleSet);
 
     public void Register(StateDefinitionBinding definition) {
         ArgumentNullException.ThrowIfNull(definition);
@@ -58,5 +63,6 @@ public sealed class StateModelRegistry : IStateModelRegistration {
         new Dictionary<TypeExpr, StateModelBinding>(_models),
         new Dictionary<Type, StateModelBinding>(_types),
         new Dictionary<SchemaKey, StateReaderBinding>(_readers),
-        new Dictionary<string, StateDefinitionBinding>(_definitions, StringComparer.Ordinal), schemas);
+        new Dictionary<string, StateDefinitionBinding>(_definitions, StringComparer.Ordinal), schemas,
+        new Dictionary<Type, StateValueUpgradeRuleSet>(_valueUpgradeRules));
 }

@@ -42,8 +42,12 @@ public sealed partial class DurableSchemaGenerator {
         output.Append("    public static void Register(").Append(RuntimeName).AppendLine("IStateDefinitionRegistration definitions) {");
         output.AppendLine("        global::System.ArgumentNullException.ThrowIfNull(definitions);");
         foreach (string id in families.Keys) output.Append("        definitions.Register(").Append(FamilyName(id)).AppendLine(".Definition);");
+        foreach (INamedTypeSymbol rules in GetValueRuleSets(compilation)) {
+            output.Append("        definitions.Register(").Append(ValueRuleSetClassName(rules)).AppendLine(".Rules);");
+        }
         output.AppendLine("    }");
         output.AppendLine("}");
+        AppendValueUpgradeRuleSets(output, types, history, compilation, context);
         output.AppendLine("}");
         foreach (DurableTypeModel type in types) {
             GenericLayout layout = families[type.SchemaId].Single(item => item.Shape.Version == type.Version);

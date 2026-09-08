@@ -69,7 +69,8 @@ public abstract partial class StateBindingContext {
             Type nextState = ResolveReader(next).StateType;
             UnifyStateType(provider.NextType, nextState, variables);
             MethodInfo method = CloseUpgradeMethod(provider.Method, variables);
-            steps.Add(CreateUpgradeStep(prior, next, priorState, nextState, provider, method));
+            UpgradeDependencies dependencies = PrepareDependencies(provider.Dependencies, prior, next, 1);
+            steps.Add(CreateUpgradeStep(prior, next, priorState, nextState, provider, method, dependencies));
             prior = next;
         }
         return new(steps.ToArray());
@@ -254,15 +255,15 @@ public abstract partial class StateBindingContext {
     }
 
     private static UpgradeStep CreateUpgradeStep(DurableSchema source, DurableSchema target, Type priorType, Type nextType,
-        StateUpgradeProvider provider, MethodInfo method) {
+        StateUpgradeProvider provider, MethodInfo method, UpgradeDependencies dependencies) {
         MethodInfo factory = typeof(StateBindingContext).GetMethod(nameof(CreateUpgradeStepTyped), BindingFlags.NonPublic | BindingFlags.Static)!
             .MakeGenericMethod(priorType, nextType);
-        return factory.CreateDelegate<Func<DurableSchema, DurableSchema, StateUpgradeProvider, MethodInfo, UpgradeStep>>()(source, target, provider, method);
+        return factory.CreateDelegate<Func<DurableSchema, DurableSchema, StateUpgradeProvider, MethodInfo, UpgradeDependencies, UpgradeStep>>()(source, target, provider, method, dependencies);
     }
 
     private static UpgradeStep CreateUpgradeStepTyped<TPrior, TNext>(DurableSchema source, DurableSchema target,
-        StateUpgradeProvider provider, MethodInfo method) where TPrior : unmanaged where TNext : unmanaged =>
-        new TypedUpgradeStep<TPrior, TNext>(source, target, provider, method);
+        StateUpgradeProvider provider, MethodInfo method, UpgradeDependencies dependencies) where TPrior : unmanaged where TNext : unmanaged =>
+        new TypedUpgradeStep<TPrior, TNext>(source, target, provider, method, dependencies);
 
     private sealed record UpgradePlan(UpgradeStep[] Steps);
     private abstract class UpgradeStep {
@@ -278,10 +279,12 @@ public abstract partial class StateBindingContext {
         private readonly DurableSchema _source;
         private readonly DurableSchema _target;
         private readonly UpgradeAction<TPrior, TNext> _action;
+        private readonly UpgradeDependencies _dependencies;
 
-        internal TypedUpgradeStep(DurableSchema source, DurableSchema target, StateUpgradeProvider provider, MethodInfo method) {
+        internal TypedUpgradeStep(DurableSchema source, DurableSchema target, StateUpgradeProvider provider, MethodInfo method, UpgradeDependencies dependencies) {
             _source = source;
             _target = target;
+            _dependencies = dependencies;
             if (provider.IsLegacyTwoParameter) {
                 LegacyUpgradeAction<TPrior, TNext> oldAction = method.CreateDelegate<LegacyUpgradeAction<TPrior, TNext>>();
                 _action = (in TPrior prior, out TNext next, UpgradeContext _) => oldAction(in prior, out next);
@@ -291,6 +294,7 @@ public abstract partial class StateBindingContext {
         internal override void CheckRegistered(StateBindingContext context) {
             context.CheckRegistered(_source);
             context.CheckRegistered(_target);
+            _dependencies.CheckRegistered(context, new(ReferenceEqualityComparer.Instance));
         }
 
         internal override ObjectStateRecord Apply(ObjectStateRecord source) {
@@ -298,7 +302,7 @@ public abstract partial class StateBindingContext {
             TPrior prior;
             try { prior = source.GetState<TPrior>(); }
             catch (InvalidOperationException error) { throw new InvalidDataException("The bound upgrade received a different source DTO.", error); }
-            UpgradeContext context = new(source.Id, _source, _target);
+            UpgradeContext context = _dependencies.CreateContext(source.Id, _source, _target);
             _action(in prior, out TNext next, context);
             return new(source.Id, _target, next);
         }

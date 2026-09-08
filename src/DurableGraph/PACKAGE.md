@@ -40,8 +40,8 @@ otherwise unsupported closed value serializable.
 
 ### Definition registration and generic state hosts
 
-A compilation containing generic durable declarations/history or explicit `[DurableUpgrade]`
-registrations uses the generated Family surface for all its durable declarations. Register the
+A compilation containing generic durable declarations/history, explicit `[DurableUpgrade]`
+registrations, or value-upgrade declarations uses the generated Family surface for all its durable declarations. Register the
 definition factories once; the operation snapshot closes actual supported types as needed:
 
 ```csharp
@@ -93,8 +93,8 @@ its first business callback. Missing or ambiguous intermediate exact layouts req
 historical endpoints; the current value version is not substituted for an unknown old one.
 
 `UpgradeContext` provides the current ObjectId and exact SourceObjectSchema/TargetObjectSchema for
-that adjacent edge. Do not retain it after the synchronous call. It exposes no object-graph reads,
-ID allocation or composable value tools; those tools remain the separate DB-039 follow-up. Business
+that adjacent edge, plus any declared value tools described below. Do not retain it or its tools
+after the synchronous call. It exposes no object-graph reads or ID allocation. Business
 code explicitly converts inline values. When such a dependency advances, the owner definition must
 also advance, including closures such as `Box<int>` whose physical fields did not change.
 
@@ -102,9 +102,76 @@ For a complete package consumer, see the
 [generic history probe](../../experiments/PackageConsumerProbe/GenericConsumer/README.md).
 The implementation record is [DB-038 §12](../../docs/design-branches/0038-generic-schema-state-and-binding-design.md#12-产品施工跟踪).
 
+### Composable value upgrades
+
+An owner can reuse a value conversion across its closed generic families. For the same `Box` history
+above, replace the pass-through method with an explicit dependency and a two-state-parameter method:
+
+```csharp
+using BoxStates = Atelia.DurableGraph.Generated.Family_426F78;
+using PointStates = Atelia.DurableGraph.Generated.Family_506F696E74;
+
+[ValueUpgradeRuleSet(AllowKeepExact = true)]
+internal sealed class Coordinates { }
+
+internal static class Upgrades {
+    [DurableUpgrade(typeof(Box<>), 1)]
+    [UpgradeDependency("value", typeof(Coordinates), "Box", 1, "Box", 1)]
+    internal static void UpgradeBox<A, B>(
+        in BoxStates.V1<A> oldValue, out BoxStates.V2<B> newValue,
+        UpgradeContext context) where A : unmanaged where B : unmanaged {
+        var convert = context.GetValueUpgrade<A, B>("value");
+        newValue = new(convert(in oldValue.Segment0Field1), 0);
+    }
+
+    [DurableValueUpgrade(typeof(Coordinates), "Point", 1, 2)]
+    internal static void UpgradePoint(
+        in PointStates.V1 oldValue, out PointStates.V2 newValue,
+        UpgradeContext context) {
+        newValue = new(oldValue.Segment0Field1 * 1000L);
+    }
+}
+```
+
+This example assumes `Point` V1 has one int field and V2 has one long field. The rule-set marker is
+an accessible top-level non-generic class in the same compilation. Value methods use the same accessible top-level static
+host and three-parameter shape as explicit owner methods. The string definition ID selects retained
+inline history, so a value provider can continue referring to historical state DTOs after the old
+domain struct is deleted, even when no current durable declarations remain. The Generator supports same-inline-family endpoints, including an open
+generic `Pair` provider that declares and calls its own element dependency. It does not choose a
+business rule or automatically walk inline fields.
+
+Each dependency names a source and target **declaration ID plus FieldId**. This selects the correct
+inheritance segment even when base and derived declarations both use FieldId 1. Keys are ordinal,
+case-sensitive and local to the provider: a Pair tool cannot obtain a Box dependency by using the
+same name. The Generator emits `Generated.UpgradeSlots_<UTF8HostHex>_<UTF8MethodHex>` string constants
+and `Generated.ValueUpgradeRules_<UTF8MarkerHex>.Rules`; host and marker encodings include their
+namespace. Normal using aliases can shorten these generated names. Attribute keys must be C#
+identifiers (keywords are escaped); the string lookup API accepts the same key directly.
+`Generated.DurableDefinitions.Register(models)` registers the generated rules together with the
+definitions. Runtime-only registration can instead supply immutable `StateValueUpgradeRuleSet`
+and `StateValueUpgradeProvider` metadata explicitly; this lower-level API also represents builtin,
+reference and closed nominal patterns with full expected slot semantics. Those broader patterns
+are not additional `DurableValueUpgrade` attribute forms.
+
+`AllowKeepExact` is opt-in: it permits `Box<int>` to preserve its value only when there are no
+explicit candidates and the complete source/target slot semantics agree. It cannot conflate a
+numeric uint, string ID and durable-object ID, or hide an invalid explicit candidate. Multiple
+matching candidates are an error. All declared tools for every adjacent owner step bind before
+that object's first business callback, including tools unused by a particular data branch.
+`GetValueUpgrade` only retrieves those bindings; an unknown key or wrong requested state type fails
+when the call executes. Framework prebinding does not inspect arbitrary C# method bodies.
+
+A nested value call receives its own dependency table and the same owner ObjectId and exact
+adjacent object Schemas. Cached plans contain no invocation Context or captured per-object tools.
+These synchronous tools do not search version paths, repair missing historical layouts, read
+other objects, allocate IDs, or alter persistence formats. Legacy two-parameter owner methods must
+add `UpgradeContext` before declaring dependencies. The construction contract and acceptance
+evidence are recorded in [DB-039 §8](../../docs/design-branches/0039-composable-value-upgrade-design.md#8-产品施工合同与验收映射).
+
 ### Retained non-generic generated helpers
 
-Pure non-generic compilations without explicit DurableUpgrade registration retain the established
+Pure non-generic compilations without explicit owner/value upgrade declarations retain the established
 generated API below. Introducing the Family path above changes generated names for the whole
 compilation; update direct DTO/helper references to Family aliases and definition registration.
 Existing non-generic two-parameter Upgrade methods can still be adapted to the common invocation
