@@ -22,7 +22,12 @@
 单整数 InlineValue Schema、Family DTO/body 与外置静态投影，贯通泛型、Nullable、数组/List 及历史显式升级。
 常量表不进入 Schema；底层整数类型变化须升版，业务数值重解释由作者显式负责。
 history v6、SCB1 v2 等格式继续沿用；旧 CLR enum 删除后的 exact 读取及升级续存已验证。
-完整验收集中在该分片；下一片未选定，不自动扩展 Dictionary 或其他 CLR 类型。
+完整验收集中在该分片。
+
+下一片推荐 [DB-054 Dictionary 内容对象](../docs/design-branches/0054-dictionary-content-object-slice.md)，
+目前仅完成设计、尚未实施：双槽冻结、无序映射、canonical key body 寻址的 Remove/Add/PatchValue。
+待采纳的主要边界是 key/comparer 白名单；TValue 保持完整已有槽闭包。
+其他映射容器的复用范围与自定义 key 比较的后继问题见该设计，不自动扩展实施。
 
 [DB-052 可组合 Nullable 值槽](../docs/design-branches/0052-nullable-value-slot-slice.md) 的 exact child、
 unmanaged NullableState 与显式值升级提升继续沿用，enum 作为其已有 inline child 组合。

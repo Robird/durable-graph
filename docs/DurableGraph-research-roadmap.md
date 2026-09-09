@@ -15,7 +15,9 @@
 [DB-052 可组合 Nullable 值槽](design-branches/0052-nullable-value-slot-slice.md) 已贯通字段、泛型、数组/List 的历史表示与显式升级。
 [DB-053 显式 enum 内联状态](design-branches/0053-enum-inline-state-slice.md) 已贯通单整数布局、组合与历史显式升级；
 常量表不入 Schema 的已选合同维护在目标设计，验收以该分片为入口。
-下一片尚未选定；Dictionary/其他 BCL、其他 CLR 类型与具体应用接入分别按需求裁决，不预先引入通用容器平台。
+下一片推荐 [DB-054 Dictionary 内容对象](design-branches/0054-dictionary-content-object-slice.md)，目前为待采纳设计：
+TValue 完整槽闭包、明确 key/comparer 白名单、按持久 key body 寻址的稀疏 Delta。
+比较器恢复与 Sorted/OrderedDictionary 的复用边界集中在该文档；不预先引入通用容器平台。
 开放模板方案的评估结论与重访条件见 §3.1。
 DB-036 单 World/单 head 工作会话已实现；branch/Reset、联合 Store 视图及更强恢复保证仍独立排期。
 MVP 库内加载顺序为 exact 重建 → 单对象 Upgrade → 分配实例 → 填充/连接引用 → 完整交付 World；
@@ -38,7 +40,7 @@ B/D/H 分别指本轮精确 Base payload、Delta payload 上界、已有对象�
 
 | 工作项 | 最小应回答的问题 | 设计或证据入口 |
 |---|---|---|
-| 后续 BCL 内容适配与恢复 | List 已闭合；Dictionary/Set 等仍须逐类型裁决 comparer、key/index 重建与内容 Upgrade | [目标引用对象模型](DurableGraph-target-design-v0.md)、[§4](#4-明确延后及重访条件) |
+| Dictionary 内容适配与恢复 | 双槽/键寻址 Delta 已有推荐设计；待采纳 key/comparer 矩阵后实施，须闭合完整图键唯一性与历史 Upgrade | [DB-054](design-branches/0054-dictionary-content-object-slice.md) |
 
 List 高效 Diff/Patch 已完成；额外性能工作按 [§3.2](#32-list-差分算法选型与设计)的实测条件重访。
 
@@ -115,7 +117,7 @@ DB-051 之外的性能工作以实际轨迹或测量问题触发，不自动扩�
 | 延后项 | 何时重访 / 届时要回答的问题 |
 |---|---|
 | ObjectId 数字回收 | 单调分配配合其他机制开发后，再定义候选隔离、retire/reuse 时机与恢复；可评估 StateJournal SlabBitmap/SlotPool，不能复用旧对象 Delta 链 |
-| 后续 BCL 集合 | List 已实现；Dictionary/Set 等在具体消费者出现时逐类型定义 comparer、共享、内容 Upgrade 和 key/index 建立时机，不随 List 自动加入范围 |
+| 后续映射与 BCL 集合 | Dictionary 进入 DB-054 设计；自定义 struct/class 值相等键、custom comparer、Nullable key 的后继以实际需求触发。SortedDictionary 另定排序比较，OrderedDictionary 另定顺序状态，Set 等逐类型排期；具体复用界线见 [DB-054](design-branches/0054-dictionary-content-object-slice.md) |
 | SchemaStore 后续能力 | MVP 单调注册已实现；联合 Commit/Ref 及复用 StateStore 的演进候选见下节，Dictionary 与内建类型 codec 完整后重访。多 writer、压缩/GC 另待真实需求 |
 | Schema/表示日志自动修复与分段 | 遇到真实坏尾恢复或容量需求时；无额外确认水位不能自动区分未完成尾部和已确认末帧损坏，当前严格拒绝。重访时先冻结故障模型，不绕过完整注册一致性 |
 | 发布恢复保证扩展 | DB-036 已闭合同实例 Commit、expected Parent、数据/发布屏障及严格重开；遇到真实可用性要求时再设计坏尾自动修复、OS crash/power loss 与目录持久性，不能默默回退旧 head |
