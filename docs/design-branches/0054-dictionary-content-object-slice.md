@@ -1,9 +1,10 @@
 # DB-054：Dictionary<TKey, TValue> 内容对象与键寻址 Delta
 
-> 状态：**Proposed / 设计待采纳，尚未实施**，2026-09-09。
+> 状态：**Proposed / 白名单试验方向已采纳，尚未实施**，2026-09-09。
 > 问题：利用确定的键对应关系，接入普通 BCL Dictionary 的冻结、增量保存、历史读取、显式升级与领域恢复，是否能避免 List 的序列匹配复杂性？
 > 最小成功见证：同一个共享 `Dictionary<string, Point>` 连续增删改并 Commit；冷重开保留键引用、值状态和 comparer 语义；Point 升版后只归一化一次、强制 Base，随后恢复 Delta/NoChange。
-> 本轮仅获设计授权。下述支持矩阵、comparer 合同与 wire grammar 是推荐方案，不是已经批准的格式或实现事实。
+> 用户采纳先用白名单建设主体，并明确 BCL Dictionary 适配仍为实验性；复合值 Key 是后续重点。
+> 本轮维护设计，不开始产品施工；下述具体 API/码位仍须在施工 G0 固定，不是实现事实或长期容器承诺。
 
 ## 1. 结论与现有依据
 
@@ -45,7 +46,7 @@ TKey 的**可表示性**和**可恢复的键比较能力**分别判定。推荐�
 可规范化的是列出的策略，不承诺恢复 comparer 实例本身的引用身份、内部优化或 hash 数值。
 字符串大小写语义由受支持 .NET 比较器实现；本片不提供跨运行库 Unicode 版本的独立比较器实现。
 
-首片不支持自定义 struct 的默认/自定义 comparer，也不支持 durable class 自定义值相等 comparer。
+首片暂不支持自定义 struct 的默认/自定义 comparer，也不支持 durable class 自定义值相等 comparer。
 这不是它们无法形成 DTO：历史 key body、值升级和 Delta 已能表达它们；欠缺的是可验证的领域索引重建合同。
 例如 `GetHashCode()` 读取 Transient、另一个尚未填充的字典，或者持久字段相同而只按 Transient 区分两个键。
 即使增加“所有普通对象 Hydrate 后再 Add”的第三阶段，也不能解决任意容器依赖环。
@@ -59,7 +60,47 @@ Nullable key 暂不列入首片矩阵：BCL 声明 `TKey : notnull`，但这不�
 如有使用需求，可单独接入非空包装及编译诊断。Nullable TValue 完整支持。
 null key 一律拒绝，nullable reference 注解不授予 null key 支持。
 
-**待用户采纳的主要功能选择就是这份 key/comparer 矩阵。** 不缩减 TValue 闭包，也不把上述局部边界宣称为架构不可扩展。
+该矩阵是先建设主体的阶段性范围，不是产品最终 Key 能力的上限。TValue 闭包不缩减。
+标量、enum、string 是首片主要使用见证；表中明确 ReferenceIdentity 的直通路径可以保留，
+但 string 以外引用 Key 的进一步能力优先级低于复合值 Key，不为其增加内容比较、可变键追踪或索引调度。
+纯 ReferenceIdentity 本身不受目标字段变化影响；可变性困难在于以目标内容决定 hash/equality，不能混称。
+
+### 2.1 复合值 Key 是明确后续能力
+
+用户确认组合多个字段构成键是典型领域需求，不能把它留在“有消费者才考虑”的末端。
+本片主体完成后，优先设计至少一条方便、可恢复的复合值 Key 路径；允许有限支持，
+不要求第一次就接受任意用户比较逻辑。候选包括已有 Durable struct 的受控结构比较、有限 record struct，
+以及随后可评估的 `ValueTuple<...>` 系列；先选哪条由生成器改造量与调用方使用成本决定。
+
+`record struct` 是有价值的候选，但该关键字本身不是安全比较能力的证明。
+其合成 Equals/GetHashCode 使用每个实例字段的默认比较器，也允许用户提供相应实现；
+这套字段集合不自动等于 Durable 持久字段集合。见 [C# record struct 比较规则](https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/language-specification/structs#16533-equality-members)。
+ValueTuple 同样逐分量使用默认比较器，不能仅凭外壳名称放行任意分量，见 [ValueTuple.Equals](https://learn.microsoft.com/en-us/dotnet/api/system.valuetuple-2.equals?view=net-10.0)。
+
+当前 SG 的 [形状检查](../../src/DurableGraph.Generator/DurableSchemaGenerator.Ancestry.cs) 拒绝 IsRecord，
+[成员枚举](../../src/DurableGraph.Generator/DurableSchemaGenerator.cs) 跳过隐式字段。
+支持位置式 record struct 因而还须明确主构造参数/自动属性的持久成员标注、FieldId 与历史映射；
+不能只移除 IsRecord 检查，也不意味着要为其执行用户构造器或 getter/setter。
+已有普通 inline struct 路径则可作为较小改造的候选。
+
+后继应比较两条路线：验证一个默认比较行为可恢复的有限键类型集合，或由框架生成按明确规则工作的强类型 comparer。
+后者需要明确字段集合、string 内容/其他引用身份、浮点、递归组合及 hash 一致性，
+不能把普通 EqualityComparer.Default 或整块 struct 内存比较称为框架受控语义。
+首个复合 Key 见证至少含 `(int, int)` 与 `(string, enum)` 等实际组合、同值新建键查询、
+非关键状态差异的裁决，以及键布局升级/碰撞拒绝；元组记号在此仅表示需求，不表示已选 ValueTuple 外观。
+
+### 2.2 BCL 外观保持实验性
+
+需要持久化的无序映射能力，与最终采用哪个 CLR 容器外观，是两个选择。
+本片先适配 BCL Dictionary；后继可以保留它、提供固定 comparer 的工厂，或改为近似 API 的自定义 IDictionary 实现。
+单纯薄包装加 EqualityComparer.Default 不能封堵键类型自己提供的比较逻辑；
+若采用包装，其收益应来自明确的比较规则和更早的防误用，而非名称变化。
+
+冻结双槽、key-body 寻址 Delta 和 owner Upgrade 应尽量保留为可复用机制；不预建通用 Map 插件体系，
+不为将来可能的替换新增程序集或接口层。实现首个 BCL binding 时在其 XML doc 标明实验性，
+并用一条 TODO 链到本节及复合 Key 后继；不把这种代码文档标记扩大成警告属性或新的分析器。
+未来容器替换仍须裁决 nominal 类型、注册绑定与历史表示的关系；接口近似不等于可透明互换、可无条件读取旧格式，
+也不因此现在授予任意 IDictionary 接口字段持久化能力。
 
 ## 3. 类型、状态与 comparer 位置
 
@@ -240,5 +281,7 @@ subagents 可在 G0 合同固定后分别承担 Runtime body、SG/history、图/
 
 两路 subagent 分别检查 key/comparer 恢复语义和 List/StateStore 管线复用，主线程核对源码后形成方案；
 双方又各审阅一遍完整草稿。交叉审查修正了 ordinal 与安装基线的顺序耦合、历史 enum 来源不可判定，
-并明确完整 source/current 字典验证的位置。修订后未发现设计阻塞；§2 的功能矩阵仍待用户采纳。
-本轮仅修改五份 Markdown，403 个本地链接和 36 个锚点检查通过；未运行产品 build/tests。
+并明确完整 source/current 字典验证的位置。初稿修订后未发现设计阻塞。
+初稿提交 `336d97b` 修改五份 Markdown，403 个本地链接和 36 个锚点检查通过；未运行产品 build/tests。
+后续用户讨论采纳白名单试验路线，明确复合 Key 的优先级与 BCL 容器外观可替换性；本次据此补充 §2.1–2.2，
+没有将 record struct/ValueTuple 或自定义容器描述为现有能力。

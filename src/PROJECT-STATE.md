@@ -24,10 +24,11 @@
 history v6、SCB1 v2 等格式继续沿用；旧 CLR enum 删除后的 exact 读取及升级续存已验证。
 完整验收集中在该分片。
 
-下一片推荐 [DB-054 Dictionary 内容对象](../docs/design-branches/0054-dictionary-content-object-slice.md)，
-目前仅完成设计、尚未实施：双槽冻结、无序映射、canonical key body 寻址的 Remove/Add/PatchValue。
-待采纳的主要边界是 key/comparer 白名单；TValue 保持完整已有槽闭包。
-其他映射容器的复用范围与自定义 key 比较的后继问题见该设计，不自动扩展实施。
+下一片 [DB-054 Dictionary 内容对象](../docs/design-branches/0054-dictionary-content-object-slice.md) 已采纳先用白名单建设主体的方向，
+尚未实施：双槽冻结、无序映射、canonical key body 寻址的 Remove/Add/PatchValue；TValue 保持完整已有槽闭包。
+BCL Dictionary 适配保持实验性，最终可改为固定语义的近似 IDictionary 实现。
+主体之后优先解决有限复合值 Key（普通/record struct、后续 ValueTuple 为候选），不因非 string 引用 Key 的扩展延后；
+生成器/比较语义边界及施工衔接见该设计 §2，尚未支持的 record 等类型不会随 Dictionary 自动开放。
 
 [DB-052 可组合 Nullable 值槽](../docs/design-branches/0052-nullable-value-slot-slice.md) 的 exact child、
 unmanaged NullableState 与显式值升级提升继续沿用，enum 作为其已有 inline child 组合。
