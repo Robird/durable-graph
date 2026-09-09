@@ -28,7 +28,7 @@ internal sealed record Settings(int[] Counts, int Repeats, int Rounds, int DiffR
         int y = int.Parse(Get("--y", "5"));
         string output = Path.GetFullPath(Get("--output", Path.Combine("experiments", "ListDeltaReplayProbe", "obj", "run-" + DateTime.UtcNow.ToString("yyyyMMddHHmmss") + "-" + Guid.NewGuid().ToString("N")[..8])));
         string baseline = Get("--baseline", "not-supplied");
-        if (values.Count != 0 || suite is not ("ordinary" or "whitebox") ||
+        if (values.Count != 0 || suite is not ("ordinary" or "whitebox" or "fallback") ||
             (suite == "whitebox" && (counts.Any(count => count < 512) || rounds != 1)) ||
             counts.Length == 0 || counts.Any(count => count is < 8 or > 50_000) ||
             repeats is < 1 or > 20 || rounds is < 1 or > 20 || diffRepeats is < 1 or > 100 || x < 1 || y is < 1 or > 100) {
@@ -48,6 +48,7 @@ internal static class Program {
         if (Directory.Exists(settings.Output) || File.Exists(settings.Output)) { throw new IOException("Output must be a fresh path; no previous repository may be reused."); }
         Directory.CreateDirectory(settings.Output);
         if (settings.Suite == "whitebox") { Whitebox.Run(settings); return; }
+        if (settings.Suite == "fallback") { FallbackTrial.Run(settings); return; }
         Edit[] script = Scripts.Create(settings.Seed, settings.Rounds);
         List<RunResult> runs = [];
         List<object> warmups = [];

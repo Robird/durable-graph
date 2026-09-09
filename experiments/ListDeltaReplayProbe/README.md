@@ -4,6 +4,7 @@ DB-049's current-product experiment compares Position, LocalResync and BoundedMy
 List codec. It references product projects and the real source generator, and copies no matcher.
 The first completed matrix and current default decision are recorded in [RESULTS.md](RESULTS.md).
 Two white-box adverse families and boundary controls are described in [WHITEBOX.md](WHITEBOX.md).
+Research-only complementary fallback coordinators and byte-cost counterexamples are in [FALLBACK.md](FALLBACK.md).
 The executable uses Runtime/StateStore test friendship only for obtaining closed element operations
 and directly measuring their List body implementation. This is not a package delivery test.
 
@@ -21,6 +22,9 @@ Run from the repository root, with no competing builds or benchmark processes:
 
 # Two white-box families: local window and global edit-depth boundaries, with controls.
 ./experiments/ListDeltaReplayProbe/Run-Probe.ps1 -Suite whitebox -Counts '4096,16384' -Repeats 3 -DiffRepeats 31
+
+# Research on identical captured frozen pairs; raw payloads, no repository publication.
+./experiments/ListDeltaReplayProbe/Run-Probe.ps1 -Suite fallback -Counts '32,512,4096' -Repeats 3 -DiffRepeats 9
 ```
 
 The runner builds Release unless `-NoBuild` is supplied. `-Output` must name a new directory;
@@ -40,6 +44,15 @@ It reuses the same Commit, historical Load, candidate Apply and frozen-input che
 independent relaxed-bound diagnostics and isolated matcher time/allocation; `whitebox.md` summarizes
 them. Counters are excluded from timing. Saved data always uses the unmodified product budgets.
 See WHITEBOX for the run with tiered compilation disabled to reduce JIT phase interference.
+
+`-Suite fallback` retains three baseline writers and compares two experiment-only coordinators.
+It uses the same generated captured DTO pairs, internal shared matching kernels and product body
+writer/decoder. `fallback.json` / `fallback.md` report raw bytes, comparisons, diagnostics, time and
+current-thread allocation; no repositories are created and X/Y are unused. The output directory
+must still be fresh. Existing Counts/Repeats/Rounds/DiffRepeats limits apply; integer adverse cases
+use at least 512 elements and wide-value cases at most 512, while the fixed Marker cases have 34/48/65
+elements. This suite does not add public algorithms or change the default. See FALLBACK for
+acceptance, exact measurement boundaries, formal runs and the remaining byte-cost decision.
 
 Workloads and script:
 

@@ -3,6 +3,9 @@ namespace Atelia.DurableGraph;
 /// <summary>A consecutive target range paired with prior contents, or new contents when OldStart is -1.</summary>
 internal readonly record struct ListDeltaRange(int OldStart, int NewStart, int Count);
 
+/// <summary>Why the resumable local search stopped; only Complete consumes the terminal gap.</summary>
+internal enum ListDeltaLocalStatus { Complete, WindowMiss, BudgetExhausted }
+
 /// <summary>Finds reusable coordinates without encoding elements or invoking their Delta preparation.</summary>
 internal static class ListDeltaMatcher<TState, TOps> where TState : unmanaged where TOps : IStateOps<TState> {
     internal const int LocalLookahead = 32;
@@ -41,8 +44,12 @@ internal static class ListDeltaMatcher<TState, TOps> where TState : unmanaged wh
         int oldEnd = prior.Length - suffix;
         int newEnd = current.Length - suffix;
         if (algorithm == ListDeltaAlgorithm.LocalResync) {
-            Local(prior, current, slot, prefix, oldEnd, prefix, newEnd, ref comparisonBudget, result);
-        } else if (!Myers(prior[prefix..oldEnd], current[prefix..newEnd], slot, prefix,
+            int oldIndex = prefix, newIndex = prefix;
+            if (TryLocal(prior, current, slot, ref oldIndex, oldEnd, ref newIndex, newEnd,
+                    ref comparisonBudget, result) != ListDeltaLocalStatus.Complete) {
+                AddGap(result, oldIndex, oldEnd, newIndex, newEnd);
+            }
+        } else if (!Myers(prior[prefix..oldEnd], current[prefix..newEnd], slot, prefix, prefix,
                 ref comparisonBudget, maximumEditDepth, maximumTraceBytes, result)) {
             AddGap(result, prefix, oldEnd, prefix, newEnd);
         }
@@ -50,10 +57,13 @@ internal static class ListDeltaMatcher<TState, TOps> where TState : unmanaged wh
         return result;
     }
 
-    private static void Local(ReadOnlySpan<TState> prior, ReadOnlySpan<TState> current, DurableFieldInfo slot,
-        int oldIndex, int oldEnd, int newIndex, int newEnd, ref int remaining, List<ListDeltaRange> result) {
+    // Internal kernels allow bounded matcher experiments to share the production comparison and tie rules.
+    // A miss leaves its pair unconsumed; a caller can append that pair before resuming to avoid re-searching it.
+    internal static ListDeltaLocalStatus TryLocal(ReadOnlySpan<TState> prior, ReadOnlySpan<TState> current,
+        DurableFieldInfo slot, ref int oldIndex, int oldEnd, ref int newIndex, int newEnd,
+        ref int remaining, List<ListDeltaRange> result, bool stopAtWindowMiss = false) {
         while (oldIndex < oldEnd && newIndex < newEnd) {
-            if (remaining == 0) { break; }
+            if (remaining == 0) { return ListDeltaLocalStatus.BudgetExhausted; }
             remaining--;
             if (TOps.StateEquals(in prior[oldIndex], in current[newIndex], slot)) {
                 Add(result, oldIndex++, newIndex++, 1);
@@ -67,10 +77,7 @@ internal static class ListDeltaMatcher<TState, TOps> where TState : unmanaged wh
             for (int sum = 1; sum <= maxOld + maxNew && !found; sum++) {
                 for (int candidateOld = Math.Max(0, sum - maxNew); candidateOld <= Math.Min(maxOld, sum); candidateOld++) {
                     int candidateNew = sum - candidateOld;
-                    if (remaining == 0) {
-                        AddGap(result, oldIndex, oldEnd, newIndex, newEnd);
-                        return;
-                    }
+                    if (remaining == 0) { return ListDeltaLocalStatus.BudgetExhausted; }
                     remaining--;
                     if (!TOps.StateEquals(in prior[oldIndex + candidateOld], in current[newIndex + candidateNew], slot)) { continue; }
                     oldOffset = candidateOld;
@@ -85,16 +92,22 @@ internal static class ListDeltaMatcher<TState, TOps> where TState : unmanaged wh
                 newIndex += newOffset;
                 Add(result, oldIndex++, newIndex++, 1); // The anchor is already known equal.
             } else {
+                if (stopAtWindowMiss) { return ListDeltaLocalStatus.WindowMiss; }
                 Add(result, oldIndex++, newIndex++, 1);
             }
         }
         AddGap(result, oldIndex, oldEnd, newIndex, newEnd);
+        oldIndex = oldEnd;
+        newIndex = newEnd;
+        return ListDeltaLocalStatus.Complete;
     }
 
-    private static bool Myers(ReadOnlySpan<TState> prior, ReadOnlySpan<TState> current, DurableFieldInfo slot,
-        int offset, ref int remaining, int maximumDepth, int maximumTraceBytes, List<ListDeltaRange> result) {
+    // The input spans are local slices; output coordinates use independent offsets. Failure never changes result.
+    internal static bool Myers(ReadOnlySpan<TState> prior, ReadOnlySpan<TState> current, DurableFieldInfo slot,
+        int oldOffset, int newOffset, ref int remaining, int maximumDepth, int maximumTraceBytes,
+        List<ListDeltaRange> result) {
         if (prior.IsEmpty || current.IsEmpty) {
-            AddGap(result, offset, offset + prior.Length, offset, offset + current.Length);
+            AddGap(result, oldOffset, oldOffset + prior.Length, newOffset, newOffset + current.Length);
             return true;
         }
         if (Math.Abs((long)prior.Length - current.Length) > maximumDepth) { return false; }
@@ -131,15 +144,15 @@ internal static class ListDeltaMatcher<TState, TOps> where TState : unmanaged wh
                 frontier[diagonalIndex] = x;
                 if (x == prior.Length && y == current.Length) {
                     trace.Add(frontier);
-                    List<ListDeltaRange> matches = Recover(trace, prior.Length, current.Length, depth, offset);
-                    int oldIndex = offset, newIndex = offset;
+                    List<ListDeltaRange> matches = Recover(trace, prior.Length, current.Length, depth, oldOffset, newOffset);
+                    int oldIndex = oldOffset, newIndex = newOffset;
                     foreach (ListDeltaRange match in matches) {
                         AddGap(result, oldIndex, match.OldStart, newIndex, match.NewStart);
                         Add(result, match.OldStart, match.NewStart, match.Count);
                         oldIndex = match.OldStart + match.Count;
                         newIndex = match.NewStart + match.Count;
                     }
-                    AddGap(result, oldIndex, offset + prior.Length, newIndex, offset + current.Length);
+                    AddGap(result, oldIndex, oldOffset + prior.Length, newIndex, newOffset + current.Length);
                     return true;
                 }
             }
@@ -151,7 +164,8 @@ internal static class ListDeltaMatcher<TState, TOps> where TState : unmanaged wh
     private static bool SelectInsertion(int[] previous, int index, int depth) =>
         index == 0 || (index != depth && previous[index - 1] < previous[index]);
 
-    private static List<ListDeltaRange> Recover(List<int[]> trace, int oldLength, int newLength, int depth, int offset) {
+    private static List<ListDeltaRange> Recover(List<int[]> trace, int oldLength, int newLength, int depth,
+        int oldOffset, int newOffset) {
         List<ListDeltaRange> reverse = [];
         int x = oldLength, y = newLength;
         for (int d = depth; d > 0; d--) {
@@ -164,22 +178,22 @@ internal static class ListDeltaMatcher<TState, TOps> where TState : unmanaged wh
             int previousY = previousX - previousDiagonal;
             int snakeX = previousX + (insert ? 0 : 1);
             int snakeY = previousY + (insert ? 1 : 0);
-            if (x > snakeX) { reverse.Add(new(offset + snakeX, offset + snakeY, x - snakeX)); }
+            if (x > snakeX) { reverse.Add(new(oldOffset + snakeX, newOffset + snakeY, x - snakeX)); }
             x = previousX;
             y = previousY;
         }
-        if (x > 0) { reverse.Add(new(offset, offset, x)); }
+        if (x > 0) { reverse.Add(new(oldOffset, newOffset, x)); }
         reverse.Reverse();
         return reverse;
     }
 
-    private static void AddGap(List<ListDeltaRange> result, int oldStart, int oldEnd, int newStart, int newEnd) {
+    internal static void AddGap(List<ListDeltaRange> result, int oldStart, int oldEnd, int newStart, int newEnd) {
         int common = Math.Min(oldEnd - oldStart, newEnd - newStart);
         Add(result, oldStart, newStart, common);
         Add(result, -1, newStart + common, newEnd - newStart - common);
     }
 
-    private static void Add(List<ListDeltaRange> result, int oldStart, int newStart, int count) {
+    internal static void Add(List<ListDeltaRange> result, int oldStart, int newStart, int count) {
         if (count == 0) { return; }
         if (result.Count > 0) {
             ListDeltaRange previous = result[^1];

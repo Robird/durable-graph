@@ -43,6 +43,10 @@ internal sealed class ListStateReader<TState, TOps> : ListStateReader
     }
 }
 
+// Internal experiment seam: alternative matchers feed the same writer, without a public policy or format change.
+internal delegate List<ListDeltaRange> ListDeltaPlanFactory<TState>(ReadOnlySpan<TState> prior,
+    ReadOnlySpan<TState> current, DurableFieldInfo slot) where TState : unmanaged;
+
 internal static class ListStateBody<TState, TOps> where TState : unmanaged where TOps : IStateOps<TState> {
     private const byte Copy = 1;
     private const byte New = 2;
@@ -65,7 +69,8 @@ internal static class ListStateBody<TState, TOps> where TState : unmanaged where
     }
 
     internal static PreparedDeltaBody PrepareDelta(FrozenListState<TState> prior, FrozenListState<TState> current,
-        ListLayout layout, ListDeltaAlgorithm algorithm = ListDeltaAlgorithm.LocalResync) {
+        ListLayout layout, ListDeltaAlgorithm algorithm = ListDeltaAlgorithm.LocalResync,
+        ListDeltaPlanFactory<TState>? planFactory = null) {
         if (algorithm is not (ListDeltaAlgorithm.Position or ListDeltaAlgorithm.LocalResync or ListDeltaAlgorithm.BoundedMyers)) {
             throw new ArgumentOutOfRangeException(nameof(algorithm));
         }
@@ -87,7 +92,9 @@ internal static class ListStateBody<TState, TOps> where TState : unmanaged where
             return new(false, buffer.WrittenSpan);
         }
 
-        List<ListDeltaRange> ranges = ListDeltaMatcher<TState, TOps>.Plan(prior.Elements, current.Elements, layout.ElementSlot, algorithm);
+        List<ListDeltaRange> ranges = planFactory is null
+            ? ListDeltaMatcher<TState, TOps>.Plan(prior.Elements, current.Elements, layout.ElementSlot, algorithm)
+            : planFactory(prior.Elements, current.Elements, layout.ElementSlot);
         foreach (ListDeltaRange range in ranges) {
             if (range.OldStart < 0) {
                 writer.WriteByte(New);
