@@ -46,6 +46,7 @@ public sealed partial class DurableSchemaGenerator {
     private static string CurrentBody(DurableTypeModel type, GenericLayout layout) => FamilyType(type.SchemaId) + "." + layout.Body;
 
     private static void AppendGenericDomainProjection(StringBuilder output, DurableTypeModel type, GenericLayout layout, List<DurableTypeModel> types) {
+        if (type.IsEnum) { AppendEnumDomainProjection(output, type, layout); return; }
         bool hasNamespace = !type.Symbol.ContainingNamespace.IsGlobalNamespace;
         if (hasNamespace) output.Append("namespace ").Append(type.Symbol.ContainingNamespace.ToDisplayString()).AppendLine(" {");
         string domain = type.Symbol.ToDisplayString(GenericQualifiedNameFormat);
@@ -70,7 +71,7 @@ public sealed partial class DurableSchemaGenerator {
             output.Append("        var ").Append(stateField.Argument).Append(" = ");
             if (stateField.DynamicIndex >= 0) output.Append("TProjection").Append(stateField.DynamicIndex).Append(".Capture(in field").Append(index)
                 .Append(", context, ").Append(stateField.Slot()).Append(')');
-            else if (stateField.Field.InlineSchema.HasValue) output.Append(field.DomainType).Append(".__DurableProjection.Capture(in field").Append(index)
+            else if (stateField.Field.InlineSchema.HasValue) output.Append(CurrentInlineProjection(field.Symbol.Type)).Append(".Capture(in field").Append(index)
                 .Append(", context, ").Append(stateField.Slot()).Append(')');
             else if (GenericFieldTag(stateField) == 4) output.Append("context.CaptureString(field").Append(index).Append(')');
             else if (GenericFieldTag(stateField) == 15) output.Append("context.CaptureObject(field").Append(index).Append(", ").Append(stateField.Slot()).Append(".TargetType!)");
@@ -135,7 +136,7 @@ public sealed partial class DurableSchemaGenerator {
             output.Append("        ").Append(field.DomainType).Append(" field").Append(index).Append(" = ");
             if (stateField.DynamicIndex >= 0 || stateField.Field.InlineSchema.HasValue) {
                 output.AppendLine("default!;");
-                output.Append("        ").Append(stateField.DynamicIndex >= 0 ? "TProjection" + Number(stateField.DynamicIndex) : field.DomainType + ".__DurableProjection")
+                output.Append("        ").Append(stateField.DynamicIndex >= 0 ? "TProjection" + Number(stateField.DynamicIndex) : CurrentInlineProjection(field.Symbol.Type))
                     .Append(".Hydrate(ref field").Append(index).Append(", in state.").Append(stateField.Name).Append(", objects, ").Append(stateField.Slot()).AppendLine(");");
             } else if (GenericFieldTag(stateField) == 4) output.Append("objects.ResolveString(state.").Append(stateField.Name).AppendLine(")!;");
             else if (GenericFieldTag(stateField) == 15) output.Append("objects.ResolveObject<").Append(field.DomainType).Append(">(state.").Append(stateField.Name).AppendLine(")!;");

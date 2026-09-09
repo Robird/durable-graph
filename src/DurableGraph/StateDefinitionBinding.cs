@@ -103,11 +103,11 @@ public sealed class StateDefinitionBinding {
             (arity != 0 && (!domainTypeDefinition.IsGenericTypeDefinition || domainTypeDefinition.GetGenericArguments().Length != arity)))) {
             throw new ArgumentException("The CLR declaration must have the registered generic arity.", nameof(domainTypeDefinition));
         }
-        if (domainTypeDefinition is not null && (domainTypeDefinition.IsByRefLike || domainTypeDefinition.IsEnum ||
+        if (domainTypeDefinition is not null && (domainTypeDefinition.IsByRefLike ||
             BuiltinStateValues.TryBindCurrent(domainTypeDefinition, out _) ||
             (kind == SchemaKind.InlineValue ? !domainTypeDefinition.IsValueType :
                 !typeof(DurableBase).IsAssignableFrom(domainTypeDefinition)))) {
-            throw new ArgumentException("The CLR declaration must match the supported durable class or inline struct kind.", nameof(domainTypeDefinition));
+            throw new ArgumentException("The CLR declaration must match the supported durable class, inline struct or enum kind.", nameof(domainTypeDefinition));
         }
         DefinitionId = definitionId;
         Kind = kind;
@@ -117,6 +117,28 @@ public sealed class StateDefinitionBinding {
         if (Templates.IsEmpty || Templates.Any(template => template.DefinitionId != definitionId || template.Arity != arity || template.Kind != kind) ||
             Templates.Select(static template => template.Version).Distinct().Count() != Templates.Length) {
             throw new ArgumentException("Definition history requires unique versions of the same declaration.", nameof(templates));
+        }
+        if (domainTypeDefinition?.IsEnum == true) {
+            // This is a current CLR projection constraint, not an enum marker in
+            // retained history. Earlier layouts may use another integer width
+            // or come from an equivalent inline struct declaration.
+            TypeTag underlyingTag = Type.GetTypeCode(Enum.GetUnderlyingType(domainTypeDefinition)) switch {
+                TypeCode.SByte => TypeTag.SByte,
+                TypeCode.Byte => TypeTag.Byte,
+                TypeCode.Int16 => TypeTag.Int16,
+                TypeCode.UInt16 => TypeTag.UInt16,
+                TypeCode.Int32 => TypeTag.Int32,
+                TypeCode.UInt32 => TypeTag.UInt32,
+                TypeCode.Int64 => TypeTag.Int64,
+                TypeCode.UInt64 => TypeTag.UInt64,
+                _ => TypeTag.Invalid,
+            };
+            StateSchemaTemplate current = Templates[^1];
+            if (underlyingTag == TypeTag.Invalid || current.Fields.Length != 1 ||
+                current.Fields[0].FieldId != 1 || current.Fields[0].ValueType != TypeExpr.Builtin(underlyingTag) ||
+                !current.StateParameters.IsEmpty) {
+                throw new ArgumentException("The current enum template requires only field 1 with its CLR underlying integer type and no state parameters.", nameof(templates));
+            }
         }
         CurrentValueFactory = currentValueFactory;
         HistoricalValueFactory = historicalValueFactory;

@@ -1,4 +1,8 @@
 using Atelia.DurableGraph;
+#if HISTORY_V3
+using OwnerStates = Atelia.DurableGraph.Generated.Family_7061636B6167652E696E6C696E652D6F776E6572;
+using WorldStates = Atelia.DurableGraph.Generated.Family_7061636B6167652E696E6C696E652D776F726C64;
+#endif
 
 namespace InlineStructPackageConsumerProbe;
 
@@ -21,7 +25,11 @@ public abstract partial class Owner : DurableBase {
     [Transient] private readonly int _transient = 77;
     internal int TransientValue => _transient;
 #if !HISTORY_V1
+#if HISTORY_V3
+    private static void UpgradeStateV1ToV2(in OwnerStates.V1 old, out OwnerStates.V2 next) {
+#else
     private static void UpgradeStateV1ToV2(in __DurableState.V1 old, out __DurableState.V2 next) {
+#endif
         // No Point/Links CLR name or helper is used. This remains compiled after their deletion.
         next = new(new(
             new(old.Segment0Field1.Segment0Field1.Segment0Field1 + 1000L,
@@ -32,7 +40,7 @@ public abstract partial class Owner : DurableBase {
     }
 #endif
 #if HISTORY_V3
-    private static void UpgradeStateV2ToV3(in __DurableState.V2 old, out __DurableState.V3 next) =>
+    private static void UpgradeStateV2ToV3(in OwnerStates.V2 old, out OwnerStates.V3 next) =>
         next = new(old.Segment0Field1.Segment0Field1.Segment0Field1 + old.Segment0Field1.Segment0Field2.Segment0Field1);
 #endif
 }
@@ -63,7 +71,11 @@ public sealed partial class World : Owner {
     private World(int unused) { _score = unused; }
 #endif
 #if !HISTORY_V1
+#if HISTORY_V3
+    private static void UpgradeStateV1ToV2(in WorldStates.V1 old, out WorldStates.V2 next) {
+#else
     private static void UpgradeStateV1ToV2(in __DurableState.V1 old, out __DurableState.V2 next) {
+#endif
         UpgradeCalls++;
         // The leaf owns the complete upgrade, including its inherited inline layout.
         next = new(new(
@@ -75,7 +87,7 @@ public sealed partial class World : Owner {
     }
 #endif
 #if HISTORY_V3
-    private static void UpgradeStateV2ToV3(in __DurableState.V2 old, out __DurableState.V3 next) {
+    private static void UpgradeStateV2ToV3(in WorldStates.V2 old, out WorldStates.V3 next) {
         UpgradeCalls++;
         next = new(old.Segment0Field1.Segment0Field1.Segment0Field1 + old.Segment0Field1.Segment0Field2.Segment0Field1,
             old.Segment1Field1 + 1000);

@@ -35,7 +35,7 @@ public sealed class DurableMetadataContractTests {
     }
 
     [Theory]
-    [InlineData(typeof(DurableTypeAttribute), AttributeTargets.Class | AttributeTargets.Struct)]
+    [InlineData(typeof(DurableTypeAttribute), AttributeTargets.Class | AttributeTargets.Struct | AttributeTargets.Enum)]
     [InlineData(typeof(DurableFieldAttribute), AttributeTargets.Field)]
     [InlineData(typeof(TransientAttribute), AttributeTargets.Field)]
     public void AttributesAreRestrictedToTheirDeclarationKinds(

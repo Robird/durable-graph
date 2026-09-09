@@ -2,8 +2,10 @@ namespace Atelia.DurableGraph;
 
 /// <summary>
 /// Assigns a stable schema identity and version to a durable CLR type.
+/// For enums, the schema records one underlying integer value; names, aliases,
+/// and flags declarations are not part of the persistent layout.
 /// </summary>
-[AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct, AllowMultiple = false, Inherited = false)]
+[AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct | AttributeTargets.Enum, AllowMultiple = false, Inherited = false)]
 public sealed class DurableTypeAttribute : Attribute {
     public DurableTypeAttribute(string schemaId, int version) {
         ArgumentException.ThrowIfNullOrWhiteSpace(schemaId);

@@ -140,8 +140,12 @@ public sealed partial class DurableSchemaGenerator {
             string callback = latest.Kind == 2 ? "currentValueFactory" : "currentModelFactory";
             string result = RuntimeName + (latest.Kind == 2 ? "StateValueBinding" : "StateModelBinding");
             output.Append("    ").Append(callback).AppendLine(": static (domain, context) => {");
-            output.Append("        var method = domain.GetMethod(\"__DurableCreateCurrent\", global::System.Reflection.BindingFlags.Static | global::System.Reflection.BindingFlags.NonPublic | global::System.Reflection.BindingFlags.DeclaredOnly)!;").AppendLine();
-            output.Append("        return method.CreateDelegate<global::System.Func<").Append(RuntimeName).Append("StateBindingContext, ").Append(result).AppendLine(">>()(context);");
+            if (domain.Value.IsEnum) {
+                output.Append("        return ").Append(EnumProjectionHost(domain.Value.SchemaId)).AppendLine(".CreateCurrent(context);");
+            } else {
+                output.Append("        var method = domain.GetMethod(\"__DurableCreateCurrent\", global::System.Reflection.BindingFlags.Static | global::System.Reflection.BindingFlags.NonPublic | global::System.Reflection.BindingFlags.DeclaredOnly)!;").AppendLine();
+                output.Append("        return method.CreateDelegate<global::System.Func<").Append(RuntimeName).Append("StateBindingContext, ").Append(result).AppendLine(">>()(context);");
+            }
             output.AppendLine("    },");
         }
         output.Append("    ").Append(latest.Kind == 2 ? "historicalValueFactory" : "historicalReaderFactory").AppendLine(": static (schema, context) => schema.Version switch {");

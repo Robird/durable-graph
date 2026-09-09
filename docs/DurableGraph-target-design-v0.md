@@ -40,10 +40,17 @@ Source Generator 负责可在编译期确定的类型知识与机械代码，框
 - 首个 BCL 内容对象选择 exact `System.Collections.Generic.List<T>`，元素复用全部受支持槽，
   并允许 List、数组及用户泛型递归组合。List 子类、接口集合字段、任意 object 槽和其他 BCL 容器不随之开放。
   List 的泛型实参不协变；`List<Base>` 内的已登记 Derived 实例继续遵循已有 class 多态约束。
-- 支持 CLR `Nullable<T>`，T 为受支持标量或 Durable inline struct，包括泛型 struct；可作为字段、
+- 支持 CLR `Nullable<T>`，T 为受支持标量、Durable inline struct 或显式登记 enum，包括泛型 struct；可作为字段、
   泛型实参和数组/List 元素。DTO 使用 unmanaged `NullableState<TState>`，absent 不访问内部状态或产生引用边。
   Nullable 无独立对象身份或业务版本，内部 exact 布局变化沿原 inline 规则传播到 owner；
-  不随之开放 enum、其他 CLR 值类型或 boxed value。具体合同见 [DB-052](design-branches/0052-nullable-value-slot-slice.md)。
+  不随之开放其他 CLR 值类型或 boxed value。包装合同见 [DB-052](design-branches/0052-nullable-value-slot-slice.md)。
+- 用户 enum 显式标记 DurableType；支持同编译、顶层 public/internal 声明及八种 C# 整数底层类型，
+  无需 partial。Schema 复用 InlineValue：独立 nominal 身份/版本，单一 FieldId=1 的底层整数槽；
+  生成版本化 DTO 与外置静态投影，不把 enum 擦成普通整数身份，不新增持久格式或对象行。
+  常量名称、别名、赋值表和 Flags 属性不进入 Schema/history；未命名数值与未定义 bits 原样保存恢复。
+  底层整数类型变化必须升版；业务数值含义变化由作者显式升版和 Upgrade，框架不从常量表猜测迁移。
+  版本传播、Nullable/泛型/容器组合及 owner 控制的值升级复用 inline 规则。
+  具体合同见 [DB-053](design-branches/0053-enum-inline-state-slice.md)。
 - Upgrade 仅转换单个对象的字段，从旧 DTO 产生下一版 DTO；不读取其他对象，不拆分/合并对象，
   不创建带持久身份的新对象。创建下一版 DTO 值本身不属于这一禁令。已有引用槽可以保留、调整或
   清空，但必须满足输出类型与引用合法性；不提供遍历其他对象内容或分配新 ObjectId 的升级上下文。

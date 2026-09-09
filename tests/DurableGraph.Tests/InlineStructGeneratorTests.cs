@@ -108,12 +108,13 @@ public sealed partial class DurableSchemaGeneratorTests {
     public void HistoricalStructDeclarationCanDisappearWhileOwnerUpgradeChainStillCompiles() {
         GeneratorTestRun run = RunGenerator("""
             using Atelia.DurableGraph;
+            using States=Atelia.DurableGraph.Generated.Family_776F726C64;
             [DurableType("world",3)] public partial class World : DurableBase {
                 [DurableField(1)] public int X;
-                static void UpgradeStateV1ToV2(in __DurableState.V1 prior, out __DurableState.V2 next) => next = new(new(prior.Segment0Field1.Segment0Field1 + 1));
-                static void UpgradeStateV2ToV3(in __DurableState.V2 prior, out __DurableState.V3 next) => next = new(prior.Segment0Field1.Segment0Field1 + 1);
+                static void UpgradeStateV1ToV2(in States.V1 prior, out States.V2 next) => next = new(new(prior.Segment0Field1.Segment0Field1 + 1));
+                static void UpgradeStateV2ToV3(in States.V2 prior, out States.V3 next) => next = new(prior.Segment0Field1.Segment0Field1 + 1);
                 public static int Probe() {
-                    var first = new __DurableState.V1(new(10));
+                    var first = new States.V1(new(10));
                     UpgradeStateV1ToV2(in first, out var second);
                     UpgradeStateV2ToV3(in second, out var third);
                     return third.Segment0Field1;

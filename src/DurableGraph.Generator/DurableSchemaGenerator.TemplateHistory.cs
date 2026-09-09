@@ -143,7 +143,10 @@ public sealed partial class DurableSchemaGenerator {
     }
 
     private static bool UsesGenericTemplates(List<DurableTypeModel> types, List<SchemaHistoryModel> history) {
-        foreach (DurableTypeModel type in types) if (UsesGenericTemplate(CurrentShape(type))) return true;
+        foreach (DurableTypeModel type in types) if (type.IsEnum || UsesGenericTemplate(CurrentShape(type))) return true;
+        if (types.Count > 0) foreach (SchemaHistoryModel shape in history) {
+            if (shape.Kind == 2 && !types.Exists(type => type.SchemaId == shape.SchemaId)) return true;
+        }
         foreach (SchemaHistoryModel shape in history) if (UsesGenericTemplate(shape)) return true;
         return false;
     }

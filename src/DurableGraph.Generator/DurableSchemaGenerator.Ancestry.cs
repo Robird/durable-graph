@@ -36,12 +36,16 @@ public sealed partial class DurableSchemaGenerator {
     private static bool HasDurableTypeShape(
         INamedTypeSymbol type,
         System.Threading.CancellationToken cancellationToken) {
-        if ((type.TypeKind != TypeKind.Class && type.TypeKind != TypeKind.Struct) || type.IsRefLikeType || type.IsRecord || type.Arity > 32 ||
+        if ((type.TypeKind != TypeKind.Class && type.TypeKind != TypeKind.Struct && type.TypeKind != TypeKind.Enum) || type.IsRefLikeType || type.IsRecord || type.Arity > 32 ||
             type.ContainingType is not null || type.DeclaringSyntaxReferences.Length == 0) {
             return false;
         }
 
         foreach (SyntaxReference syntaxReference in type.DeclaringSyntaxReferences) {
+            if (type.TypeKind == TypeKind.Enum) {
+                if (syntaxReference.GetSyntax(cancellationToken) is not EnumDeclarationSyntax enumDeclaration || HasFileModifier(enumDeclaration.Modifiers)) return false;
+                continue;
+            }
             if (syntaxReference.GetSyntax(cancellationToken) is not TypeDeclarationSyntax declaration ||
                 !HasPartialModifier(declaration.Modifiers) || HasFileModifier(declaration.Modifiers)) {
                 return false;
@@ -118,7 +122,7 @@ public sealed partial class DurableSchemaGenerator {
 
     private static SchemaReference? GetCurrentBaseReference(DurableTypeModel model) {
         INamedTypeSymbol type = model.Symbol;
-        if (type.TypeKind == TypeKind.Struct || HasMetadataName(type.BaseType, DurableBaseMetadataName)) {
+        if (model.IsInline || HasMetadataName(type.BaseType, DurableBaseMetadataName)) {
             return null;
         }
 

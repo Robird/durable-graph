@@ -1,0 +1,62 @@
+using System.Text;
+using Microsoft.CodeAnalysis;
+
+namespace Atelia.DurableGraph.Generator;
+
+public sealed partial class DurableSchemaGenerator {
+    private static DurableTypeModel? CreateEnumModel(SourceProductionContext context, INamedTypeSymbol type,
+        string? schemaId, int version, bool hasErrors, INamedTypeSymbol? listType) {
+        foreach (IFieldSymbol constant in GetDirectFields(type)) {
+            if (!HasAttribute(constant.GetAttributes(), DurableFieldAttributeMetadataName) &&
+                !HasAttribute(constant.GetAttributes(), TransientAttributeMetadataName)) continue;
+            context.ReportDiagnostic(Diagnostic.Create(ClassifiedStaticField, GetSourceLocation(constant), constant.Name));
+            hasErrors = true;
+        }
+        if (hasErrors || type.EnumUnderlyingType is null) return null;
+        if (!TryGetTypeTag(type.EnumUnderlyingType, null, out string? tag, out int number, out string? name)) return null;
+        // The schema describes one integer value; enum constants and the CLR's value__ field are not its layout.
+        return new DurableTypeModel(type, schemaId!, version,
+            new() { new DurableFieldModel(null, 1, tag!, number, name!) }, listType);
+    }
+
+    private static string EnumProjectionHost(string schemaId) =>
+        "global::Atelia.DurableGraph.Generated.EnumProjection_" + FamilyName(schemaId);
+
+    private static string CurrentInlineProjection(ITypeSymbol domainType) {
+        if (domainType.TypeKind != TypeKind.Enum) return domainType.ToDisplayString(GenericQualifiedNameFormat) + ".__DurableProjection";
+        AttributeData attribute = GetAttribute(domainType.GetAttributes(), DurableTypeAttributeMetadataName)!;
+        return EnumProjectionHost((string)attribute.ConstructorArguments[0].Value!) + ".Projection";
+    }
+
+    private static void AppendEnumDomainProjection(StringBuilder output, DurableTypeModel type, GenericLayout layout) {
+        string domain = type.Symbol.ToDisplayString(GenericQualifiedNameFormat);
+        string dto = CurrentDto(type, layout);
+        string body = CurrentBody(type, layout);
+        string scalar = type.Symbol.EnumUnderlyingType!.ToDisplayString(GenericQualifiedNameFormat);
+        output.AppendLine("namespace Atelia.DurableGraph.Generated {");
+        output.Append(type.Symbol.DeclaredAccessibility == Accessibility.Public ? "public" : "internal")
+            .Append(" static class EnumProjection_").Append(FamilyName(type.SchemaId)).AppendLine(" {");
+        output.Append("    internal static ").Append(RuntimeName).Append("StateValueBinding CreateCurrent(")
+            .Append(RuntimeName).AppendLine("StateBindingContext context) {");
+        output.Append("        var schema = new ").Append(RuntimeName).Append("DurableSchema(context.GetTypeExpr(typeof(").Append(domain)
+            .Append(")), ").Append(type.Version).Append(", new ").Append(RuntimeName).Append("DurableFieldInfo[] { new(1, ")
+            .Append(RuntimeName).Append("TypeTag.").Append(type.Fields[0].TypeTag).Append(") }, baseSchema: null, kind: ")
+            .Append(RuntimeName).AppendLine("SchemaKind.InlineValue);");
+        output.AppendLine("        context.BindSchema(schema);");
+        output.Append("        return new ").Append(RuntimeName).Append("StateValueBinding(new ").Append(RuntimeName)
+            .Append("DurableFieldInfo(1, ").Append(RuntimeName).Append("TypeTag.InlineValue, inlineSchema: schema), typeof(")
+            .Append(dto).Append("), typeof(").Append(body).Append("), typeof(").Append(domain).AppendLine("), typeof(Projection));");
+        output.AppendLine("    }");
+        output.Append("    public readonly struct Projection : ").Append(RuntimeName).Append("IValueProjection<")
+            .Append(domain).Append(", ").Append(dto).AppendLine("> {");
+        output.Append("        public static ").Append(dto).Append(" Capture(in ").Append(domain).Append(" value, ")
+            .Append(RuntimeName).Append("CaptureContext context, ").Append(RuntimeName).Append("DurableFieldInfo slot) => new((")
+            .Append(scalar).AppendLine(")value);");
+        output.Append("        public static void Hydrate(ref ").Append(domain).Append(" target, in ").Append(dto).Append(" state, ")
+            .Append(RuntimeName).Append("ObjectReadTable objects, ").Append(RuntimeName).Append("DurableFieldInfo slot) => target = (")
+            .Append(domain).Append(")state.").Append(layout.Fields[0].Name).AppendLine(";");
+        output.AppendLine("    }");
+        output.AppendLine("}");
+        output.AppendLine("}");
+    }
+}

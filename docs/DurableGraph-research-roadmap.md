@@ -13,7 +13,9 @@
 [DB-047 List<T> 内容对象](design-branches/0047-list-content-object-slice.md) 已完成；功能与验收以该分片为入口。
 [DB-051](design-branches/0051-bounded-list-delta-competition.md) 已完成默认 Adaptive，§3.2 只保留实测触发的后续优化。
 [DB-052 可组合 Nullable 值槽](design-branches/0052-nullable-value-slot-slice.md) 已贯通字段、泛型、数组/List 的历史表示与显式升级。
-下一片尚未选定；enum 的 nominal/history 合同、其他 BCL 和具体应用接入分别按需求裁决，不预先引入通用容器平台。
+[DB-053 显式 enum 内联状态](design-branches/0053-enum-inline-state-slice.md) 已贯通单整数布局、组合与历史显式升级；
+常量表不入 Schema 的已选合同维护在目标设计，验收以该分片为入口。
+下一片尚未选定；Dictionary/其他 BCL、其他 CLR 类型与具体应用接入分别按需求裁决，不预先引入通用容器平台。
 开放模板方案的评估结论与重访条件见 §3.1。
 DB-036 单 World/单 head 工作会话已实现；branch/Reset、联合 Store 视图及更强恢复保证仍独立排期。
 MVP 库内加载顺序为 exact 重建 → 单对象 Upgrade → 分配实例 → 填充/连接引用 → 完整交付 World；
@@ -48,7 +50,7 @@ List 高效 Diff/Patch 已完成；额外性能工作按 [§3.2](#32-list-差分
 | 对象版本解释与保存来源 | Base 表示 ID 可解析 exact 布局与已登记历史 reader；完整 ObjectHeadMap 中 external object heads 的来源、候选对象身份连续性仍需产品 Save/Load 合同，不能由 Revision Parent 声明一致推导全局身份认证 |
 | 保存相等性与真实估算 | 同版 DTO 的浮点按位、引用槽按 ID、inline 值递归融合 Delta 已采纳；DB-043 数组复用元素操作，BCL 容器另定。已准备 body 计量见 [DB-029](design-branches/0029-prepared-object-revision-planning-slice.md)，ID 头见 [DB-045](design-branches/0045-persisted-representation-id-slice.md)；新增容器继续按实际对象 payload 计量 |
 | Schema 规范表示和持久引用 | 开放模板/参数与绑定模型的剩余问题见 §3.1；不再将已统一的闭合目录作为待办。未来 SchemaHash 与一般类型家族约束随消费者裁决，不用 GetHashCode 作持久身份 |
-| 跨程序集与一般类型形状 | Nullable 已按 DB-052 支持；enum 的 nominal 身份、底层表示及历史演化合同仍独立裁决。跨编译 helper 可见性、外部历史祖先、decimal/native int 等分别待定；当前同编译泛型支持边界见 DB-038，boxed value identity 已排除 MVP |
+| 跨程序集与一般类型形状 | Nullable 与显式 enum 已按 DB-052/053 支持。跨编译 helper 可见性、外部历史祖先、decimal/native int 等分别待定；当前同编译泛型支持边界见 DB-038，boxed value identity 已排除 MVP |
 | 多态与运行时注册扩展 | 已标记 class 基类到登记派生实例按 DB-034 合同；DB-043 统一框架 object 参数不授予 object/interface 通配字段。数组协变还需空数组的历史元素 ancestry 证据，和跨程序集发现分别后继；不能自动回退成声明基类的 codec |
 | 捕获 BCL 内容的所有权 | 数组使用 owned frozen 元素 buffer，inline struct 递归捕获成标量/ID；后续容器同样不能以浅复制代替冻结，须按其内容模型验证 |
 | 根与持久目录扩展 | 单 WorldId/Revision 发布已闭合；后续仅在真实需求下选择 null/清空/替换、命名 branch 与 Reset，不建设多根 API |

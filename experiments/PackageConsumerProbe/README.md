@@ -13,6 +13,14 @@ slots and UpgradeContext tracing. Storage rows and probe-owned address sidecars 
 `uint` IDs; those boundaries use `.Value` or `new ObjectId(...)` explicitly. Ordinary numeric
 `uint` fields and the independently specified reference-body golden bytes remain unchanged.
 
+The [Enum consumer](EnumConsumer/README.md) adds explicit durable enum coverage through
+`Run-EnumProbe.ps1`: unknown integer values, generic/Nullable/array/List composition,
+retained history after deleting the old CLR enum, and explicit upgrades followed by Base/Delta resaves.
+It uses the existing history v6 and catalog v2 formats.
+The InlineStruct consumer keeps the ordinary generated API in V1/V2; after deleting the
+inline CLR declarations in V3, it uses Family DTO aliases and unified definition registration.
+This exercises the retained orphan-inline-history selection rule without changing its saved history.
+
 Run from the repository root:
 
 ```powershell

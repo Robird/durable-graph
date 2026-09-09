@@ -23,6 +23,7 @@ DB-045 持久表示 ID、DB-046 统一闭合目录、DB-047 List 基础能力和
 
 | 文档 | 状态 | 实施范围 |
 |---|---|---|
+| [DB-053 显式 enum 内联状态](0053-enum-inline-state-slice.md) | Implemented / G0–G3 | 有 nominal 身份的单整数 InlineValue、外置静态投影与完整组合/历史升级；常量表不入 Schema、无新增格式，八整数和跨版本真实包验证 |
 | [DB-052 可组合 Nullable 值槽](0052-nullable-value-slot-slice.md) | Implemented / G0–G4 已验收 | exact child、unmanaged 状态包装、字段/泛型/数组/List 与显式升级提升；history v6、SCB1 v2、完整tests/真实包/独立审查通过；不含 enum 或 Dictionary |
 | [DB-051 完整基准与限长竞争的默认 List Delta](0051-bounded-list-delta-competition.md) | Implemented / G0–G5 已验收 | 流式 patch、完整 Local 基准、独立有界 Myers 与严格长度竞争；默认 Adaptive、根 tests/真实包/白盒落盘/双 seed 矩阵及独立审查通过 |
 | [DB-050 List 匹配回退研究](0050-list-fallback-research.md) | Research / 实验已验证，后继 DB-051 | 共享有界 kernel、双向单次救援及反证；保留原共享/半预算实验条件，字节代价验收转入完整基准与限长竞争计划，未增加公开策略或改变默认 |

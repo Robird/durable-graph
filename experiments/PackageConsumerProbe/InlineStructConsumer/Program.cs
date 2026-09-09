@@ -5,6 +5,9 @@ using Atelia.DurableGraph.StateStore.Storage;
 using Atelia.Rbf;
 using Atelia.RbfSegmentStore;
 using SegmentStore = Atelia.RbfSegmentStore.RbfSegmentStore;
+#if HISTORY_V3
+using WorldStates = Atelia.DurableGraph.Generated.Family_7061636B6167652E696E6C696E652D776F726C64;
+#endif
 
 namespace InlineStructPackageConsumerProbe;
 
@@ -32,15 +35,23 @@ internal static class Program {
 
     private static StateModelRegistry Models() {
         StateModelRegistry models = new();
+#if HISTORY_V3
+        Atelia.DurableGraph.Generated.DurableDefinitions.Register(models);
+#else
         World.__DurableState.RegisterModel(models);
         Node.__DurableState.RegisterModel(models);
+#endif
         return models;
     }
 
     private static StateReaderRegistry Readers() {
         StateReaderRegistry readers = new();
+#if HISTORY_V3
+        Atelia.DurableGraph.Generated.DurableDefinitions.Register(readers);
+#else
         World.__DurableState.RegisterReaders(readers);
         Node.__DurableState.RegisterReaders(readers);
+#endif
         return readers;
     }
 
@@ -186,7 +197,11 @@ internal static class Program {
 
     private static void CheckHistoricalDto(StateRevisionStore store, SchemaStore schemas, FrameAddress historical, ObjectId worldId) {
         DecodedRevision decoded = RevisionDecoder.Read(store, schemas, historical, Readers());
+#if HISTORY_V3
+        var state = decoded.GetRequired(worldId).GetState<WorldStates.V1>();
+#else
         var state = decoded.GetRequired(worldId).GetState<World.__DurableState.V1>();
+#endif
         Require(decoded.Objects.Count == 4 && decoded.GetRequired(worldId).Schema!.Version == 1 &&
             state.Segment0Field1.Segment0Field1.Segment0Field1 == 12 &&
             state.Segment0Field1.Segment0Field2.Segment0Field1 == 21 && state.Segment1Field1 == World.InitialScore,

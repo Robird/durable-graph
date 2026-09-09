@@ -1,4 +1,7 @@
 using Atelia.DurableGraph;
+#if HISTORY_V3
+using NodeStates = Atelia.DurableGraph.Generated.Family_7061636B6167652E696E6C696E652D6E6F6465;
+#endif
 
 namespace InlineStructPackageConsumerProbe;
 
@@ -21,13 +24,21 @@ public sealed partial class Node : DurableBase {
     internal string Label => _label;
     internal static int UpgradeCalls = 0;
 #if !CHILD_V1
+#if HISTORY_V3
+    private static void UpgradeStateV1ToV2(in NodeStates.V1 old, out NodeStates.V2 next) {
+#else
     private static void UpgradeStateV1ToV2(in __DurableState.V1 old, out __DurableState.V2 next) {
+#endif
         UpgradeCalls++;
         next = new(old.Segment0Field1 + 100L, old.Segment0Field2);
     }
 #endif
 #if CHILD_V3
+#if HISTORY_V3
+    private static void UpgradeStateV2ToV3(in NodeStates.V2 old, out NodeStates.V3 next) {
+#else
     private static void UpgradeStateV2ToV3(in __DurableState.V2 old, out __DurableState.V3 next) {
+#endif
         UpgradeCalls++;
         next = new(old.Segment0Field1 + 100L, old.Segment0Field2);
     }

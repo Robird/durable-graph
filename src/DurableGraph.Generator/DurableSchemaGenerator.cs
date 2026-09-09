@@ -33,7 +33,7 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
     internal static readonly DiagnosticDescriptor InvalidTypeShape = new(
         id: "DG0001",
         title: "Invalid durable type shape",
-        messageFormat: "Type '{0}' must be a top-level, non-record partial struct or partial class with supported generic constraints in an attributed hierarchy ending at Atelia.DurableGraph.DurableBase",
+        messageFormat: "Type '{0}' must be a top-level enum, non-record partial struct, or partial class with supported generic constraints in an attributed hierarchy ending at Atelia.DurableGraph.DurableBase",
         category: "DurableGraph.Generator",
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true);
@@ -172,7 +172,7 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
         IncrementalValuesProvider<INamedTypeSymbol> durableTypes =
             context.SyntaxProvider.ForAttributeWithMetadataName(
                 DurableTypeAttributeMetadataName,
-                static (node, _) => node is TypeDeclarationSyntax,
+                static (node, _) => node is TypeDeclarationSyntax or EnumDeclarationSyntax,
                 static (attributeContext, _) =>
                     (INamedTypeSymbol)attributeContext.TargetSymbol);
 
@@ -651,6 +651,8 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
             version = candidateVersion;
         }
 
+        if (type.TypeKind == TypeKind.Enum) return CreateEnumModel(context, type, schemaId, version, hasErrors, listType);
+
         ImmutableArray<ISymbol> schemaMembers = type.GetMembers("Schema");
         if (StringComparer.Ordinal.Equals(type.Name, "Schema") ||
             !schemaMembers.IsEmpty) {
@@ -907,7 +909,7 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
         System.Threading.CancellationToken cancellationToken,
         out string? typeTag, out int typeTagValue, out string? fieldTypeName, out SchemaReference? inlineSchema) {
         typeTag = null; typeTagValue = 0; fieldTypeName = null; inlineSchema = null;
-        if (fieldType is not INamedTypeSymbol target || target.TypeKind != TypeKind.Struct ||
+        if (fieldType is not INamedTypeSymbol target || (target.TypeKind != TypeKind.Struct && target.TypeKind != TypeKind.Enum) ||
             !HasDurableTypeShape(target, cancellationToken) ||
             !SymbolEqualityComparer.Default.Equals(target.ContainingAssembly, owner.ContainingAssembly)) return false;
         AttributeData? attribute = GetAttribute(target.GetAttributes(), DurableTypeAttributeMetadataName);
@@ -1093,14 +1095,14 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
 
     private readonly struct DurableFieldModel {
         public DurableFieldModel(
-            IFieldSymbol symbol,
+            IFieldSymbol? symbol,
             int fieldId,
             string typeTag,
             int typeTagValue,
             string fieldTypeName,
             string? targetSchemaId = null, SchemaReference? inlineSchema = null, TypePattern? valuePattern = null) {
             InlineSchema = inlineSchema;
-            Symbol = symbol;
+            _symbol = symbol;
             FieldId = fieldId;
             TypeTag = typeTag;
             TypeTagValue = typeTagValue;
@@ -1109,7 +1111,9 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
             ValuePattern = valuePattern ?? (inlineSchema?.Type ?? (targetSchemaId is not null ? TypePattern.Named(targetSchemaId) : TypePattern.Builtin(typeTagValue)));
         }
 
-        public IFieldSymbol Symbol { get; }
+        // Synthetic enum representation fields have no CLR instance field.
+        private readonly IFieldSymbol? _symbol;
+        public IFieldSymbol Symbol => _symbol ?? throw new InvalidOperationException("A synthetic representation field has no domain field symbol.");
 
         public int FieldId { get; }
 
@@ -1144,7 +1148,8 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
         public int Version { get; }
 
         public List<DurableFieldModel> Fields { get; }
-        public bool IsInline => Symbol.TypeKind == TypeKind.Struct;
+        public bool IsEnum => Symbol.TypeKind == TypeKind.Enum;
+        public bool IsInline => Symbol.TypeKind is TypeKind.Struct or TypeKind.Enum;
         public int Arity => Symbol.Arity;
     }
 

@@ -1,6 +1,6 @@
 # DurableGraph 产品开发工作集
 
-> 校准：2026-09-09，[DB-052](../docs/design-branches/0052-nullable-value-slot-slice.md) 已完成 Nullable 全链实现及真实包见证。本文只维护当前能力、边界与续工入口。
+> 校准：2026-09-09，[DB-053](../docs/design-branches/0053-enum-inline-state-slice.md) 已完成显式 enum 内联状态及跨版本真实包见证。本文只维护当前能力、边界与续工入口。
 > 文档不是实现授权；事实以当前源码、测试和工具输出为准。
 
 ## 从这里继续
@@ -18,10 +18,14 @@
 
 ## 当前焦点
 
-[DB-052 可组合 Nullable 值槽](../docs/design-branches/0052-nullable-value-slot-slice.md) 已实现：
-字段、泛型、数组/List 共用 exact child、unmanaged NullableState 与显式值升级提升；
-history v6、SCB1 v2、旧领域 CLR 删除后的历史读回和升级续存已贯通。
-完整验收在该分片维护；下一个分片未选定，按路线图和具体消费者需求继续，不自动扩展 enum 或 Dictionary。
+[DB-053 显式 enum 内联状态](../docs/design-branches/0053-enum-inline-state-slice.md) 已实现：
+单整数 InlineValue Schema、Family DTO/body 与外置静态投影，贯通泛型、Nullable、数组/List 及历史显式升级。
+常量表不进入 Schema；底层整数类型变化须升版，业务数值重解释由作者显式负责。
+history v6、SCB1 v2 等格式继续沿用；旧 CLR enum 删除后的 exact 读取及升级续存已验证。
+完整验收集中在该分片；下一片未选定，不自动扩展 Dictionary 或其他 CLR 类型。
+
+[DB-052 可组合 Nullable 值槽](../docs/design-branches/0052-nullable-value-slot-slice.md) 的 exact child、
+unmanaged NullableState 与显式值升级提升继续沿用，enum 作为其已有 inline child 组合。
 
 [DB-051](../docs/design-branches/0051-bounded-list-delta-competition.md) 已完成默认 Adaptive：
 完整 Local Delta 作基准，停滞时尝试独立有界 Myers；只有严格更短的完整 body 胜出，达到基准长度即停止竞争编码。
@@ -50,7 +54,7 @@ Position/LocalResync/BoundedMyers 共用 decoder，配置随模型 snapshot 冻�
 | 层 | 已验证能力 | 尚未闭合的边界 |
 |---|---|---|
 | [DurableGraph](DurableGraph/DurableGraph.csproj) | immutable Schema/exact DAG；统一 ObjectBinding、ObjectLayout、Capture/refs/恢复目录；SZ/rank 2–4 数组与 List owned 状态；静态 StateEquals、数组稀疏/列表区间 Delta、默认 Adaptive 与三种显式 List writer；独立 historical reader | 其他 BCL、数组协变；持久发布由 StateStore 拥有 |
-| [Generator](DurableGraph.Generator/DurableGraph.Generator.csproj) / [Build](DurableGraph.Build/DurableGraph.Build.csproj) | class/struct 开放模板、readonly DTO/静态 body、Capture/Hydrate、泛型继承与递归 Nullable/数组/List 组合；history v6；三参 Upgrade/旧二参适配、值规则/局部依赖 adapter | enum/其他 CLR 值类型、其他 BCL；跨程序集生成规则 |
+| [Generator](DurableGraph.Generator/DurableGraph.Generator.csproj) / [Build](DurableGraph.Build/DurableGraph.Build.csproj) | class/struct 开放模板、显式 enum、readonly DTO/静态 body、Capture/Hydrate、泛型继承与递归 Nullable/数组/List 组合；history v6；三参 Upgrade/旧二参适配、值规则/局部依赖 adapter | 其他 CLR 值类型、其他 BCL；跨程序集生成规则 |
 | [StateStore](DurableGraph.StateStore/DurableGraph.StateStore.csproj) | 统一闭合 Schema/数组/List 目录与整数依赖、单批次登记、Base v4 ID 头；完整 stored/current 引用验证、可达图两阶段恢复；公开 PrepareNew/fixed-Parent Prepare；GraphRepository 单 head/持久 WorldId 与 GraphSession 同实例 Commit；升级 Base/Remove | 无 branch/Reset/根替换或联合 Store 视图 |
 | [Storage](DurableGraph.StateStore.Storage/DurableGraph.StateStore.Storage.csproj) | AppendDurably 原 lease 屏障；local Base/Delta records、wire v3、exact Revision live map、Parent/prior 校验、object-first 原始重建链及实际 payload H；Base 精确/Delta 上界计量；真实 Segment/RBF 冷重开 | 不解码 typed body；不拥有持久 roots、类型目录或发布 head；重复读取暂未缓存 |
 | [Serialization](DurableGraph.StateStore.Serialization/DurableGraph.StateStore.Serialization.csproj) | 字节原语、string 内容 codec、拥有 raw bytes 的 PreparedBaseBody/PreparedDeltaBody、显式 body 的 typed slot、早期元素 ref 循环 | 完整数组/List 对象操作位于 Runtime；其他 BCL 内容 codec 尚无 |
@@ -58,10 +62,15 @@ Position/LocalResync/BoundedMyers 共用 decoder，配置随模型 snapshot 冻�
 容易混淆的限制：
 
 - SG DTO/body 支持递归 inline struct 与 13 种标量：bool、byte/sbyte、short/ushort、int/uint、long/ulong、char、Half、float、double；string、受支持 durable class、数组和 List 引用槽保存非泛型 ObjectId；字节层仍编码 UInt32。
-  裸 `[DurableType]` 限同编译、顶层、非 record 的 partial class 链或显式 partial struct（包括 readonly），支持泛型；
+  `[DurableType]` class/struct 限同编译、顶层、非 record 的 partial class 链或显式 partial struct（包括 readonly），支持泛型；
   支持 readonly 持久字段和没有无参构造器的领域类。RuntimeHelpers 分配、SG Hydrate/声明层 UnsafeAccessor
   不执行实例构造器或字段初始化表达式；Transient 由用户交付后重建。
-- Nullable<T> 支持上述标量与 Durable inline struct，包括泛型。DTO 使用 NullableState<TState>，
+- enum 显式标记 DurableType，支持同编译顶层 public/internal 声明及八种整数底层类型，不要求 partial。
+  使用有独立 nominal/版本的单整数 InlineValue Schema（合成 FieldId=1），复用 Family DTO/body；外置投影直接 cast。
+  不新建 TypeTag、history/catalog 格式或对象行；unknown 数值/Flags bits 原样保留，常量名称、别名、赋值表与 Flags 不参与 history。
+  底层类型变化须升版；业务数值重解释由显式版本/Upgrade 负责。Runtime 当前模板核对真实底层类型，历史不受当前宽度限制。
+  可组合泛型/Nullable/数组/List，enum 版本依赖及显式 owner/值升级沿用 inline 规则；未标记/nested/file-local enum、常量误标持久属性拒绝。
+- Nullable<T> 支持上述标量、Durable inline struct 与 enum，包括泛型组合。DTO 使用 NullableState<TState>，
   exact 槽持有规范 child；absent 不捕获/读取/比较/遍历内部值。Base 0/1、Delta Clear/Set/Patch 校验 prior，
   present 使用 child 静态操作。Nullable 不独立占用对象 ID；含 Nullable 的声明进入现有 Family 生成路径。
   构建 history 的 q(child) 保留固定 inline child 版本；T? 与 T 恰好闭合 Nullable 保留不同参数来源。
@@ -77,7 +86,8 @@ Position/LocalResync/BoundedMyers 共用 decoder，配置随模型 snapshot 冻�
   SchemaId 只表示定义 ID，不能用来区分闭合族。base/inline 显式升版仍沿定义传播；Box<int> 也随 Box 定义升版。
   目标仓库内同 key 完整布局严格一致；两个独立空库仍可能首次登记同 key 异形，不提供闭合历史账本或跨库 key 互换保证。
   TypeExpr depth≤64、展开 nodes≤4096、arity≤32，exact 布局 DAG depth≤256。
-- 含泛型当前定义/历史、显式 DurableUpgrade 或值规则/依赖属性的编译使用 `Generated.Family_<UTF8HexId>.Vn<TState...>`，
+- 含泛型/Nullable 当前定义或历史、当前 enum、显式 DurableUpgrade 或值规则/依赖属性的编译，
+  以及有当前声明且保留无当前声明的 inline history 的编译，使用 `Generated.Family_<UTF8HexId>.Vn<TState...>`，
   `Generated.DurableDefinitions.Register` 显式登记生成定义；亦可单独登记 Family.Definition。
   历史 DTO/body 不携带领域泛型参数，phantom 参数不产生状态参数。已知叶子直接调用，未知槽使用 IStateOps/IValueProjection 静态约束调用。
   旧纯非泛型编译保留 Schema/GetSchema/__DurableState；迁入 Family 路径后，内部 DTO 类型引用需改用 Family alias。
@@ -205,6 +215,7 @@ DurableGraph runtime 也引用 Serialization，单一 runtime PackageReference �
 
 | 准备修改 | 先查源码/测试，再按需读合同 |
 |---|---|
+| enum 表示、外置投影与历史升级 | [DB-053](../docs/design-branches/0053-enum-inline-state-slice.md)、[生成接缝](DurableGraph.Generator/DurableSchemaGenerator.Enums.cs)、[当前模板校验](DurableGraph/StateDefinitionBinding.cs)、[真实包](../experiments/PackageConsumerProbe/EnumConsumer/README.md) |
 | Nullable 值槽、history 与显式升级提升 | [DB-052](../docs/design-branches/0052-nullable-value-slot-slice.md)、[静态值操作](DurableGraph/NullableStateValues.cs)、[完整 child 布局](DurableGraph/NullableValueLayout.cs)、[真实包](../experiments/PackageConsumerProbe/NullableConsumer/README.md) |
 | List 区间 Delta、匹配与配置 | [DB-049](../docs/design-branches/0049-list-range-delta-and-matcher-trial-slice.md)、[matcher](DurableGraph/ListDeltaMatcher.cs)、[reader/body](DurableGraph/ListStateReader.cs)、[重放实验](../experiments/ListDeltaReplayProbe/README.md) |
 | List 内容、冻结与历史元素 Upgrade | [DB-047](../docs/design-branches/0047-list-content-object-slice.md)、[当前投影](DurableGraph/ListObjectBinding.cs)、[List 升级](DurableGraph/StateBindingContext.ListUpgrade.cs)、[真实包](../experiments/PackageConsumerProbe/ListConsumer/README.md) |
