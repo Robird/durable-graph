@@ -20,7 +20,9 @@
 
 [DB-047 List<T> 内容对象](../docs/design-branches/0047-list-content-object-slice.md) 已完成根构建、各测试项目、七组真实包和独立审查。
 完整受支持元素闭包、同实例长度变化、冻结/恢复及列表 owner Upgrade 均已接入统一对象路径与目录；history 新写 v5。
-位置差分是正确可用的效率基线；下一步按已选安排进行[高效 List Diff/Patch 选型与设计](../docs/DurableGraph-research-roadmap.md#32-list-差分算法选型与设计)，尚未选择算法。
+位置差分是正确可用的效率基线；[DB-048 调研](../docs/design-branches/0048-list-delta-algorithm-research.md)已梳理前人工作与评价指标，
+推荐先验证“旧区间复用及稀疏 Patch＋新元素区间”，比较局部重同步/有界 Myers。
+下一步是元素匹配成本、候选和实际策略冷读链的局部实验；尚无性能排名或最终算法/格式裁决，见[路线图](../docs/DurableGraph-research-roadmap.md#32-list-差分算法选型与设计)。
 施工证据集中维护在 DB-047。
 
 [DB-046 统一闭合目录](../docs/design-branches/0046-unified-schema-catalog-slice.md) 的单批次登记、exact 整数依赖，
