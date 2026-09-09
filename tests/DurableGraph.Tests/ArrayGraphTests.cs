@@ -129,7 +129,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         DecodedBaseObjectBody decoded = BaseObjectBodyCodec.Decode(replacementBase.Body, schemas);
         Assert.Equal(ObjectStateKind.Array, decoded.Kind);
         // This small directory has a one-byte ID; v4 plus that ID is exactly two bytes.
-        Assert.InRange(decoded.RepresentationId!.Value.Value, 2u, 127u);
+        Assert.InRange(decoded.RepresentationId.Value, 2u, 127u);
         Assert.Equal(2, replacementBase.Body.Length - decoded.Body.Length);
         Assert.Equal(ObjectVersionPayloadSize.GetBasePayloadBytes(replacementBase.Body.Length), baseChain.ReconstructionPayloadBytes);
         Assert.True(baseChain.ReconstructionPayloadBytes > ObjectVersionPayloadSize.GetBasePayloadBytes(decoded.Body.Length));

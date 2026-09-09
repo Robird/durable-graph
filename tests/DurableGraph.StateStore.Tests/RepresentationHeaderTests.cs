@@ -79,18 +79,30 @@ public sealed class RepresentationHeaderTests : IDisposable {
         Assert.Throws<InvalidDataException>(() => BaseObjectBodyCodec.Decode(Convert.FromHexString("0403AB")));
     }
 
-    [Theory]
-    [InlineData("0101AB", false)]
-    [InlineData("0201AB", false)]
-    [InlineData("0301AB", false)]
-    [InlineData("0401AB", true)]
-    public void AllStringHeadersResolveWithoutSchemaStore(string hex, bool hasPersistentId) {
-        var decoded = BaseObjectBodyCodec.Decode(Convert.FromHexString(hex));
+    [Fact]
+    public void StringHeaderResolvesWithoutSchemaStore() {
+        var decoded = BaseObjectBodyCodec.Decode(Convert.FromHexString("0401AB"));
         Assert.Same(ObjectLayout.String, decoded.Layout);
         Assert.Equal(ObjectStateKind.String, decoded.Kind);
-        Assert.Equal(hasPersistentId ? RepresentationId.String : (RepresentationId?)null, decoded.RepresentationId);
+        Assert.Equal(RepresentationId.String, decoded.RepresentationId);
         Assert.Equal(new byte[] { 0xAB }, decoded.Body.ToArray());
         Assert.Equal(Convert.FromHexString("0401AB"), BaseObjectBodyCodec.EncodeString(new([0xAB])).Body.ToArray());
+    }
+
+    [Theory]
+    [InlineData("0101AB")]
+    [InlineData("0201AB")]
+    [InlineData("0301AB")]
+    [InlineData("0102034101AB")]
+    [InlineData("02020203410001AB")]
+    [InlineData("03020203410001AB")]
+    [InlineData("0303010402AB")]
+    public void RetiredBaseFormatsFailClosedEvenWhenSchemasAreAvailable(string hex) {
+        using IRbfFile file = RbfFile.CreateNew(NewPath());
+        SchemaStore schemas = new(file);
+        schemas.RegisterRepresentations([ObjectLayout.ForDurable(new DurableSchema("A", 1))]);
+        Assert.Throws<InvalidDataException>(() => BaseObjectBodyCodec.Decode(Convert.FromHexString(hex), schemas));
+        Assert.Throws<InvalidDataException>(() => BaseObjectBodyCodec.Decode(Convert.FromHexString(hex)));
     }
 
     [Theory]

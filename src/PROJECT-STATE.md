@@ -21,7 +21,8 @@
 [DB-045 持久表示 ID](../docs/design-branches/0045-persisted-representation-id-slice.md)
 已完成，根构建、完整测试、真实包与独立审查通过。
 SchemaStore 为完整 ObjectLayout 登记持久整数 ID，新 Base v4 仅写 ID，通过同一目录解析布局与历史 reader；
-旧 Base v1–v3 仅保留读取，不改泛型闭合、SchemaKey/TypeExpr 和版本传播合同。
+Base 仅支持 v4，旧 v1–v3 明确拒绝；不改泛型闭合、SchemaKey/TypeExpr 和版本传播合同。
+移除兼容分支的范围与验证见 [DB-045 后续清理](../docs/design-branches/0045-persisted-representation-id-slice.md#7-后续清理移除旧-base-读取兼容)。
 施工与验收证据集中维护在 DB-045。下一片尚未排期；内部描述重整仍是后继问题。
 前序匿名比较见 [DB-044](../docs/design-branches/0044-type-header-blind-review/README.md)；
 其余表示模型决策及后继范围由[路线图](../docs/DurableGraph-research-roadmap.md#31-版本化表示类型头的统一寻址)维护。
@@ -140,7 +141,7 @@ SchemaStore 为完整 ObjectLayout 登记持久整数 ID，新 Base v4 仅写 ID
   严格重放全部帧/CRC；坏尾、tombstone、未知格式拒绝且不自动截断。写入不确定后 faulted，须重开；
   可写非空重开先 flush 再交付，readonly 不确认新屏障。尚无 Schema 分段、联合版本目录或自动修复。
 - StateStore 内部 BaseObjectBodyCodec 为 raw Base body 加 v4 类型头：格式版本 + canonical RepresentationId，返回 `EncodedBaseObjectBody`。
-  新头统一经 SchemaStore 取得完整 ObjectLayout；string 固定 ID 可无目录解析。旧 v1–v3 描述只读，返回空 RepresentationId，不偷偷登记。
+  统一经 SchemaStore 取得完整 ObjectLayout；string 固定 ID 可无目录解析。仅支持 v4，每个解码结果都有 RepresentationId，旧格式明确拒绝。
   State 类型头不再编码 SchemaKey/TypeExpr/数组元素描述，描述语法集中在目录一侧；当前 DTO/SG/body/history/Upgrade 合同不变。
   SchemaStore.ResolveReader 使用本次操作的冻结目录，完整匹配布局；不全局缓存另一个 snapshot 的 CLR reader。
   Delta 沿终止 Base 继承 exact 表示，仍为裸 body。TypedObjectVersionReader 在 callbacks 前匹配持久完整布局，逐 body 全消费；string 拒绝 Delta。

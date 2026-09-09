@@ -45,40 +45,32 @@ public sealed class BaseObjectBodyCodecTests : IDisposable {
 
     [Fact]
     public void EmptyBodyIsValidAtTheHeaderBoundaryAndDecodeOwnsItsBody() {
-        Assert.Empty(BaseObjectBodyCodec.Decode(new byte[] { 1, 1 }).Body.ToArray());
+        Assert.Empty(BaseObjectBodyCodec.Decode(new byte[] { 4, 1 }).Body.ToArray());
         using IRbfFile file = RbfFile.CreateNew(_path);
         SchemaStore schemas = new(file);
         DurableSchema schema = new("A", 1);
-        schemas.Register(schema);
-        // Retained v1 golden is a read-only compatibility witness, with no representation ID.
-        byte[] wire = [1, 2, 3, 65, 1, 7, 8];
+        RepresentationId id = schemas.RegisterRepresentations([ObjectLayout.ForDurable(schema)])[0];
+        byte[] wire = [4, 2, 7, 8];
         DecodedBaseObjectBody decoded = BaseObjectBodyCodec.Decode(wire, schemas);
         wire.AsSpan().Fill(0);
         Assert.Equal(schema, decoded.Layout.Schema);
-        Assert.Null(decoded.RepresentationId);
+        Assert.Equal(id, decoded.RepresentationId);
         Assert.Equal(new byte[] { 7, 8 }, decoded.Body.ToArray());
     }
 
     [Theory]
     [InlineData(new byte[] { 0, 1 })]
     [InlineData(new byte[] { 5, 1 })]
-    [InlineData(new byte[] { 1, 0 })]
-    [InlineData(new byte[] { 1, 3 })]
-    [InlineData(new byte[] { 1, 2, 0, 1 })] // Empty SchemaId.
-    [InlineData(new byte[] { 1, 2, 3, 32, 1 })] // Whitespace SchemaId.
-    [InlineData(new byte[] { 1, 2, 3, 65, 0 })] // Zero version.
-    [InlineData(new byte[] { 1, 2, 3, 65, 0x81, 0 })] // Noncanonical version.
-    [InlineData(new byte[] { 1, 2, 3, 65, 0x80, 0x80, 0x80, 0x80, 8 })] // > Int32.MaxValue.
+    [InlineData(new byte[] { 4, 0 })]
+    [InlineData(new byte[] { 4, 0x81, 0 })] // Noncanonical ID.
     public void UnknownAndNoncanonicalHeadersAreRejected(byte[] wire) {
         Assert.Throws<InvalidDataException>(() => BaseObjectBodyCodec.Decode(wire));
     }
 
     [Theory]
     [InlineData(new byte[] { })]
-    [InlineData(new byte[] { 1 })]
-    [InlineData(new byte[] { 1, 2 })]
-    [InlineData(new byte[] { 1, 2, 3, 65 })]
-    [InlineData(new byte[] { 1, 2, 3, 65, 0x80 })]
+    [InlineData(new byte[] { 4 })]
+    [InlineData(new byte[] { 4, 0x80 })]
     public void TruncatedHeadersAreRejected(byte[] wire) {
         Assert.Throws<EndOfStreamException>(() => BaseObjectBodyCodec.Decode(wire));
     }

@@ -38,9 +38,7 @@ public static class RevisionDecoder {
 
     internal static DecodedRevision ReadSnapshot(
         StateRevisionStore store, SchemaStore schemas, FrameAddress revisionAddress, StateBindingContext bindings) =>
-        ReadCore(store, schemas, revisionAddress, body => body.RepresentationId is { } id
-            ? schemas.ResolveReader(id, bindings)
-            : bindings.ResolveObjectReader(body.Layout));
+        ReadCore(store, schemas, revisionAddress, body => schemas.ResolveReader(body.RepresentationId, bindings));
 
     private static DecodedRevision ReadCore(
         StateRevisionStore store, SchemaStore schemas, FrameAddress revisionAddress,

@@ -4,6 +4,8 @@
 完整表示登记、新 Base ID 头与历史读取已贯通；根构建、完整测试及真实包回归通过，证据见 §6.2。
 前序比较：[DB-044](0044-type-header-blind-review/README.md)；当前实现：[PROJECT-STATE](../../src/PROJECT-STATE.md)。
 
+后续修订：初次验收时保留的 Base v1–v3 兼容已决定移除，当前合同见 [§7](#7-后续清理移除旧-base-读取兼容)；下文初次施工与验收记录保留历史含义。
+
 ## 1. 本片只回答什么
 
 问题：能否复用完整的现有 ObjectLayout，把新写 Base 的类型信息缩成一个持久 ID，
@@ -164,7 +166,25 @@ G0–G1 需要测试以下容易被 DTO 类型相等掩盖的案例：不同 nom
 专测 Delta 的场景增加真实稳定字段并在历史 Upgrade 中透传，非 Delta 职责场景接受合法 Base。
 上述最终回归均基于修订后的样本；产品策略未修改。
 
-## 7. 后继才处理什么
+## 7. 后续清理：移除旧 Base 读取兼容
+
+2026-09-09 用户确认项目尚未投入使用、没有旧数据兼容需求，选择移除初次实现中的 Base v1–v3 只读路径。
+这减少旧描述解析、可空表示 ID 和 reader fallback 三处维护面，不影响当前格式中历史 Schema 的解码与 Upgrade。
+
+范围：BaseObjectBodyCodec 仅接受 v4；DecodedBaseObjectBody 的 RepresentationId 必填；
+RepresentationDescriptorCodec 只服务当前目录描述，删除旧 Base 专用参数；RevisionDecoder 主读取路径统一经 ID 解析 reader。
+当前 v4 字节不变，旧版本立即 InvalidDataException，不提供迁移器。
+SchemaBatch、`.dgschema` history 的格式兼容不是本次范围，保留其现有行为。
+
+验收：旧 Base v1/v2/v3 拒绝；当前 v4 的冷重开、历史 DTO 与 Delta 链仍可读；根构建与完整测试通过。
+验证结果：根 solution build 为 0 warnings / 0 errors；四个测试项目共 1350 项通过
+（Runtime 636、StateStore 456、Serialization 103、Storage 155），无跳过。
+首次完整测试发现新截断测试漏计泛型 arity 的最少剩余字节检查；仅修正测试的精确异常预期后，
+重新构建并重跑全部 StateStore tests 通过，其余三个项目已在完整测试中通过。
+独立审查无阻断问题；4 份修改文档的 296 个本地文件链接和新增锚点检查通过，git diff --check 通过。
+本次未更改公开 API、当前编码字节或包交付方式，未重复真实包回归；初次 DB-045 包证据仍见 §6.2。
+
+## 8. 后继才处理什么
 
 SchemaKey、TypeExpr 目前确实是 public 类型，并用于 SG/runtime/history/binding；本片不删除或改变其公开含义。
 ID 令新的 State 类型头不暴露它们的组合细节，并不证明“名义约束”和“exact 版本”两类信息可以丢掉。

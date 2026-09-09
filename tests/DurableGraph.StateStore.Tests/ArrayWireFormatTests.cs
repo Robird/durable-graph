@@ -67,110 +67,93 @@ public sealed class ArrayWireFormatTests {
     }
 
     [Theory]
-    [InlineData(TypeExprKind.VectorArray, "0303010402AB")]
-    [InlineData(TypeExprKind.Rank2Array, "0303010502AB")]
-    [InlineData(TypeExprKind.Rank3Array, "0303010602AB")]
-    [InlineData(TypeExprKind.Rank4Array, "0303010702AB")]
-    public void LegacyArrayBaseAndDirectoryDescriptorPreserveExactShapeConstructor(TypeExprKind constructor, string hex) {
+    [InlineData(TypeExprKind.VectorArray, "03010402")]
+    [InlineData(TypeExprKind.Rank2Array, "03010502")]
+    [InlineData(TypeExprKind.Rank3Array, "03010602")]
+    [InlineData(TypeExprKind.Rank4Array, "03010702")]
+    public void DirectoryDescriptorPreservesExactShapeConstructor(TypeExprKind constructor, string hex) {
         ArrayLayout layout = new(constructor, new DurableFieldInfo(1, TypeTag.Int32));
         byte[] golden = Convert.FromHexString(hex);
-        Assert.Equal(golden[1..^1], WriteDescriptor(ObjectLayout.ForArray(layout)));
-        var decoded = BaseObjectBodyCodec.Decode(golden);
+        Assert.Equal(golden, WriteDescriptor(ObjectLayout.ForArray(layout)));
+        var decoded = ReadDescriptor(golden);
         Assert.Equal(ObjectStateKind.Array, decoded.Kind);
-        Assert.Equal(layout, decoded.Layout.Array);
-        Assert.Null(decoded.RepresentationId);
-        Assert.Equal(new byte[] { 0xAB }, decoded.Body.ToArray());
-        byte[] old = (byte[])golden.Clone();
-        old[0] = 2;
-        Assert.Throws<InvalidDataException>(() => BaseObjectBodyCodec.Decode(old));
+        Assert.Equal(layout, decoded.Array);
     }
 
     [Fact]
-    public void ReferenceElementHeaderSupportsJaggedGenericComposition() {
+    public void ReferenceElementDescriptorSupportsJaggedGenericComposition() {
         ArrayLayout layout = new(TypeExprKind.VectorArray, DurableFieldInfo.Reference(1,
             TypeExpr.VectorArray(TypeExpr.Named("B", TypeExpr.MultiDimArray(TypeExpr.Builtin(TypeTag.String), 4)))));
-        byte[] golden = Convert.FromHexString("030301040F0402034201070104AB");
-        Assert.Equal(golden[1..^1], WriteDescriptor(ObjectLayout.ForArray(layout)));
-        Assert.Equal(layout, BaseObjectBodyCodec.Decode(golden).Layout.Array);
+        byte[] golden = Convert.FromHexString("0301040F0402034201070104");
+        Assert.Equal(golden, WriteDescriptor(ObjectLayout.ForArray(layout)));
+        Assert.Equal(layout, ReadDescriptor(golden).Array);
         ArrayLayout strings = new(TypeExprKind.VectorArray, new DurableFieldInfo(1, TypeTag.String));
         Assert.Equal(Convert.FromHexString("03010404"), WriteDescriptor(ObjectLayout.ForArray(strings)));
         // A second representation of the same string slot is deliberately noncanonical.
-        Assert.Throws<InvalidDataException>(() => BaseObjectBodyCodec.Decode(Convert.FromHexString("030301040F0104")));
+        Assert.Throws<InvalidDataException>(() => ReadDescriptor(Convert.FromHexString("0301040F0104")));
     }
 
     [Fact]
-    public void InlineElementHeaderUsesStoredExactSchemaAndColdReopens() {
+    public void InlineElementDescriptorUsesStoredExactSchemaAndColdReopens() {
         string path = Path.Combine(Path.GetTempPath(), $"durable-array-wire-{Guid.NewGuid():N}.rbf");
         try {
             DurableSchema point1 = new("P", 1, SchemaKind.InlineValue, new DurableFieldInfo(1, TypeTag.Int32));
             DurableSchema point2 = new("P", 2, SchemaKind.InlineValue, new DurableFieldInfo(1, TypeTag.Int64));
             ArrayLayout layout = new(TypeExprKind.VectorArray, new DurableFieldInfo(1, TypeTag.InlineValue, inlineSchema: point1));
-            byte[] golden = Convert.FromHexString("03030104100203500001AB");
-            Assert.Equal(golden[1..^1], WriteDescriptor(ObjectLayout.ForArray(layout)));
-            Assert.Throws<InvalidDataException>(() => BaseObjectBodyCodec.Decode(golden));
+            byte[] golden = Convert.FromHexString("030104100203500001");
+            Assert.Equal(golden, WriteDescriptor(ObjectLayout.ForArray(layout)));
+            Assert.Throws<InvalidDataException>(() => ReadDescriptor(golden));
             using (IRbfFile file = RbfFile.CreateNew(path)) {
                 var schemas = new SchemaStore(file);
                 schemas.Register(point2);
-                Assert.Throws<InvalidDataException>(() => BaseObjectBodyCodec.Decode(golden, schemas));
+                Assert.Throws<InvalidDataException>(() => ReadDescriptor(golden, schemas));
                 schemas.Register(point1);
                 schemas.Register(new DurableSchema("R", 1));
-                Assert.Throws<InvalidDataException>(() => BaseObjectBodyCodec.Decode(Convert.FromHexString("03030104100203520001"), schemas));
+                Assert.Throws<InvalidDataException>(() => ReadDescriptor(Convert.FromHexString("030104100203520001"), schemas));
             }
             using (IRbfFile file = RbfFile.OpenExisting(path)) {
                 var schemas = new SchemaStore(file, readOnly: true);
-                var decoded = BaseObjectBodyCodec.Decode(golden, schemas);
-                Assert.Equal(layout, decoded.Layout.Array);
-                Assert.Null(decoded.RepresentationId);
-                Assert.Same(schemas.GetRequired("P", 1), decoded.Layout.Array!.ElementSlot.InlineSchema);
+                var decoded = ReadDescriptor(golden, schemas);
+                Assert.Equal(layout, decoded.Array);
+                Assert.Same(schemas.GetRequired("P", 1), decoded.Array!.ElementSlot.InlineSchema);
             }
         }
         finally { if (File.Exists(path)) { File.Delete(path); } }
     }
 
     [Theory]
-    [InlineData("0303000402")] // Unknown codec zero.
-    [InlineData("0303020402")] // Future codec.
-    [InlineData("030381000402")] // Noncanonical codec.
-    [InlineData("0303010302")] // Open type is not an array constructor.
-    [InlineData("0303010802")] // Unknown rank.
-    [InlineData("0303010400")] // Invalid element slot.
-    [InlineData("0303010411")] // Template parameter is not a closed element slot.
-    [InlineData("030301040F040300")] // Open reference element operand.
-    [InlineData("0303010410010201")] // Builtin cannot identify an inline Schema.
-    public void MalformedArrayHeadersFailClosed(string hex) {
-        Assert.Throws<InvalidDataException>(() => BaseObjectBodyCodec.Decode(Convert.FromHexString(hex)));
+    [InlineData("03000402")] // Unknown codec zero.
+    [InlineData("03020402")] // Future codec.
+    [InlineData("0381000402")] // Noncanonical codec.
+    [InlineData("03010302")] // Open type is not an array constructor.
+    [InlineData("03010802")] // Unknown rank.
+    [InlineData("03010400")] // Invalid element slot.
+    [InlineData("03010411")] // Template parameter is not a closed element slot.
+    [InlineData("0301040F040300")] // Open reference element operand.
+    [InlineData("03010410010201")] // Builtin cannot identify an inline Schema.
+    public void MalformedArrayDescriptorsFailClosed(string hex) {
+        Assert.Throws<InvalidDataException>(() => ReadDescriptor(Convert.FromHexString(hex)));
     }
 
     [Fact]
-    public void EveryTruncatedReferenceArrayHeaderFails() {
-        byte[] golden = Convert.FromHexString("030301040F0402034201070104");
+    public void EveryTruncatedReferenceArrayDescriptorFails() {
+        byte[] golden = Convert.FromHexString("0301040F0402034201070104");
         for (int length = 0; length < golden.Length; length++) {
             byte[] prefix = golden[..length];
-            Assert.ThrowsAny<Exception>(() => BaseObjectBodyCodec.Decode(prefix));
+            // Partial string payload, or arity whose minimum operand bytes are absent.
+            Type expected = length is 7 or 9 or 10 ? typeof(InvalidDataException) : typeof(EndOfStreamException);
+            Assert.Throws(expected, () => ReadDescriptor(prefix));
         }
-        Assert.Empty(BaseObjectBodyCodec.Decode(golden).Body.ToArray());
+        Assert.Equal(ObjectStateKind.Array, ReadDescriptor(golden).Kind);
     }
 
-    [Fact]
-    public void LegacyBaseV2RejectsArrayArgumentsAndKeepsNonArrayBodies() {
-        DurableSchema schema = new(TypeExpr.Named("B", TypeExpr.VectorArray(TypeExpr.Builtin(TypeTag.Int32))), 1);
-        byte[] golden = Convert.FromHexString("03020203420104010201");
-        string path = Path.Combine(Path.GetTempPath(), $"durable-array-legacy-{Guid.NewGuid():N}.rbf");
-        try {
-            using IRbfFile file = RbfFile.CreateNew(path);
-            SchemaStore schemas = new(file);
-            schemas.RegisterBatch([schema, new DurableSchema("A", 1)]);
-            var decoded = BaseObjectBodyCodec.Decode(golden, schemas);
-            Assert.Equal(schema, decoded.Layout.Schema);
-            Assert.Null(decoded.RepresentationId);
-            golden[0] = 2;
-            Assert.Throws<InvalidDataException>(() => BaseObjectBodyCodec.Decode(golden, schemas));
-            var legacy = BaseObjectBodyCodec.Decode(Convert.FromHexString("02020203410001AB"), schemas);
-            Assert.Equal(new DurableSchema("A", 1), legacy.Layout.Schema);
-            Assert.Equal(new byte[] { 0xAB }, legacy.Body.ToArray());
-            Assert.Null(legacy.RepresentationId);
-        }
-        finally { File.Delete(path); }
+    private static ObjectLayout ReadDescriptor(byte[] bytes, SchemaStore? schemas = null) {
+        BinaryPayloadReader reader = new(bytes);
+        ObjectLayout result = RepresentationDescriptorCodec.Read(ref reader, key =>
+            schemas is not null && schemas.TryGet(key, out DurableSchema? schema)
+                ? schema! : throw new InvalidDataException("Missing exact Schema."));
+        reader.EnsureFullyConsumed();
+        return result;
     }
 
     private static byte[] WriteDescriptor(ObjectLayout layout) {

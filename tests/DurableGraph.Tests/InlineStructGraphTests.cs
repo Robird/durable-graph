@@ -163,7 +163,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         Assert.InRange(replacement, 1u, 127u);
         body[1] = (byte)replacement; // Canonical one-byte ID; no broken wire/framing to mask visitor failure.
         ObjectVersionRecord invalidOwner = ObjectVersionRecord.CreateBase(initial.WorldId.Value,
-            BaseObjectBodyCodec.Encode(envelope.RepresentationId!.Value, new(body)).Body);
+            BaseObjectBodyCodec.Encode(envelope.RepresentationId, new(body)).Body);
         FrameAddress address = store.Append(StateRevision.CreateObjectHeadMapBase(null,
             initial.Revision.LocalObjects.Select(record => record.ObjectId == initial.WorldId.Value ? invalidOwner : record), []));
 

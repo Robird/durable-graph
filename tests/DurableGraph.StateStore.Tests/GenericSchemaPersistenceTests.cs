@@ -29,11 +29,8 @@ public sealed class GenericSchemaPersistenceTests {
             Assert.Equal(schema, decoded.Layout.Schema);
             Assert.Equal(id, decoded.RepresentationId);
             Assert.Equal(new byte[] { 0xAB }, decoded.Body.ToArray());
-            // The former complete generic envelope remains independently readable.
-            var legacy = BaseObjectBodyCodec.Decode(Convert.FromHexString("0302020342020102020350008001AB"), schemas);
-            Assert.Equal(schema, legacy.Layout.Schema);
-            Assert.Null(legacy.RepresentationId);
-            Assert.Equal(new byte[] { 0xAB }, legacy.Body.ToArray());
+            Assert.Throws<InvalidDataException>(() => BaseObjectBodyCodec.Decode(
+                Convert.FromHexString("0302020342020102020350008001AB"), schemas));
         }
         finally { File.Delete(path); }
     }

@@ -57,17 +57,6 @@ public sealed class RepresentationBatchWireCodecTests : IDisposable {
         Assert.Equal(composed, ReadDescriptor(composedGolden));
     }
 
-    [Fact]
-    public void LegacyGrammarUsesSameResolverWithoutAcceptingNewConstructors() {
-        Assert.Equal(ObjectLayout.ForDurable(A), ReadDescriptor(Convert.FromHexString("02034101"), false, true));
-        Assert.Equal(ObjectLayout.ForDurable(A), ReadDescriptor(Convert.FromHexString("020203410001"), false));
-        Assert.Equal(ObjectLayout.String, ReadDescriptor([1], false, true));
-        Assert.Throws<InvalidDataException>(() => ReadDescriptor([3, 1, 4, 2], false));
-        Assert.Throws<InvalidDataException>(() => ReadDescriptor([3, 1, 4, 2], true, true));
-        byte[] arrayArgument = Convert.FromHexString("020203420104010201");
-        Assert.Throws<InvalidDataException>(() => ReadDescriptor(arrayArgument, false));
-    }
-
     [Theory]
     [InlineData("02010203010402")] // Unknown batch version.
     [InlineData("0100")] // Empty physical batch.
@@ -202,9 +191,9 @@ public sealed class RepresentationBatchWireCodecTests : IDisposable {
         RepresentationDescriptorCodec.Write(ref writer, layout);
         return buffer.WrittenSpan.ToArray();
     }
-    private static ObjectLayout ReadDescriptor(byte[] bytes, bool allowArrays = true, bool legacySchemaKeys = false) {
+    private static ObjectLayout ReadDescriptor(byte[] bytes) {
         BinaryPayloadReader reader = new(bytes);
-        ObjectLayout result = RepresentationDescriptorCodec.Read(ref reader, Resolve, allowArrays, legacySchemaKeys);
+        ObjectLayout result = RepresentationDescriptorCodec.Read(ref reader, Resolve);
         reader.EnsureFullyConsumed();
         return result;
     }

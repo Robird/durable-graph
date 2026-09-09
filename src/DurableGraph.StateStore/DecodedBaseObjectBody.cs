@@ -1,11 +1,10 @@
 namespace Atelia.DurableGraph.StateStore;
 
 /// <summary>An owned raw Base body with its fully resolved historical layout.</summary>
-/// <remarks>Legacy headers have no representation ID; reading never registers or invents one.</remarks>
 internal sealed class DecodedBaseObjectBody {
     private readonly byte[] _body;
 
-    internal DecodedBaseObjectBody(ObjectLayout layout, RepresentationId? representationId, ReadOnlySpan<byte> body) {
+    internal DecodedBaseObjectBody(ObjectLayout layout, RepresentationId representationId, ReadOnlySpan<byte> body) {
         ArgumentNullException.ThrowIfNull(layout);
         Layout = layout;
         RepresentationId = representationId;
@@ -14,6 +13,6 @@ internal sealed class DecodedBaseObjectBody {
 
     internal ObjectLayout Layout { get; }
     internal ObjectStateKind Kind => Layout.Kind;
-    internal RepresentationId? RepresentationId { get; }
+    internal RepresentationId RepresentationId { get; }
     internal ReadOnlySpan<byte> Body => _body;
 }

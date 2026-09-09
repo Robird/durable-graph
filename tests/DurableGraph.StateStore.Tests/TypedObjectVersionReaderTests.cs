@@ -106,24 +106,24 @@ public sealed class TypedObjectVersionReaderTests : IDisposable {
     [InlineData("010203410121")]
     [InlineData("0202020341000121")]
     [InlineData("0302020341000121")]
-    public void HistoricalInlineHeadersResolveCompleteSchemaWithoutRegisteringIds(string hex) {
+    public void RetiredBaseHeadersFailBeforeBodyCallbacks(string hex) {
         using IRbfFile file = RbfFile.CreateNew(NextPath());
         SchemaStore schemas = new(file);
         DurableSchema schema = new("A", 1, new DurableFieldInfo(1, TypeTag.Byte));
         schemas.Register(schema);
         long tail = file.TailOffset;
         ObjectVersionChain chain = Chain(new(Convert.FromHexString(hex)), [1, 42]);
-        byte Read(ref BinaryPayloadReader reader) => reader.ReadByte();
+        int calls = 0;
+        byte Read(ref BinaryPayloadReader reader) { calls++; return reader.ReadByte(); }
         byte Apply(ref BinaryPayloadReader reader, in byte prior) {
+            calls++;
             Assert.Equal(1, reader.ReadByte());
             return reader.ReadByte();
         }
-        Assert.Equal((byte)42, TypedObjectVersionReader.ReadDurable<byte>(chain, schemas, schema, Read, Apply));
-        DecodedBaseObjectBody decoded = TypedObjectVersionReader.DecodeBase(chain, schemas);
-        Assert.Equal(schema, decoded.Layout.Schema);
-        Assert.Null(decoded.RepresentationId);
+        Assert.Throws<InvalidDataException>(() => TypedObjectVersionReader.ReadDurable<byte>(chain, schemas, schema, Read, Apply));
+        Assert.Equal(0, calls);
         Assert.Equal(tail, file.TailOffset);
-        // Reading old data must not silently allocate the next persistent ID.
+        // Rejected data must not silently allocate the next persistent ID.
         Assert.Equal(new RepresentationId(2), schemas.RegisterRepresentations([ObjectLayout.ForDurable(schema)])[0]);
     }
 

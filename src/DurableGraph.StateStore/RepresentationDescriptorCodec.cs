@@ -2,7 +2,7 @@ using Atelia.DurableGraph.StateStore.Serialization;
 
 namespace Atelia.DurableGraph.StateStore;
 
-/// <summary>The SchemaStore-owned descriptor grammar; also reads the old inline Base descriptors.</summary>
+/// <summary>The SchemaStore-owned object representation descriptor grammar.</summary>
 internal static class RepresentationDescriptorCodec {
     internal static void Write(ref BinaryPayloadWriter writer, ObjectLayout layout) {
         ArgumentNullException.ThrowIfNull(layout);
@@ -34,17 +34,16 @@ internal static class RepresentationDescriptorCodec {
     }
 
     internal static ObjectLayout Read(ref BinaryPayloadReader reader,
-        Func<SchemaKey, DurableSchema> resolveSchema, bool allowArrays = true, bool legacySchemaKeys = false) {
+        Func<SchemaKey, DurableSchema> resolveSchema) {
         ArgumentNullException.ThrowIfNull(resolveSchema);
         byte kind = reader.ReadByte();
         if (kind == 1) { return ObjectLayout.String; }
         if (kind == 2) {
-            SchemaKey key = legacySchemaKeys ? SchemaKeyWireCodec.ReadLegacy(ref reader)
-                : SchemaKeyWireCodec.Read(ref reader, allowArrays);
+            SchemaKey key = SchemaKeyWireCodec.Read(ref reader);
             DurableSchema schema = ResolveExact(key, resolveSchema, SchemaKind.ReferenceObject);
             return ObjectLayout.ForDurable(schema);
         }
-        if (kind != 3 || !allowArrays || legacySchemaKeys) {
+        if (kind != 3) {
             throw new InvalidDataException($"Unsupported object representation tag {kind}.");
         }
         uint codecVersion = reader.ReadUInt32();
