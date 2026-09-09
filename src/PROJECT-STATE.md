@@ -21,6 +21,7 @@
 [DB-049](../docs/design-branches/0049-list-range-delta-and-matcher-trial-slice.md) 已实现静态 StateEquals、统一 List codec 2，
 Position/LocalResync/BoundedMyers 共用 decoder，配置随模型 snapshot 冻结；根构建/tests、相关真实包和独立审查通过。
 [ListDeltaReplayProbe](../experiments/ListDeltaReplayProbe/README.md) 已完成独立库同领域历史 smoke 与正式重复矩阵；[结果](../experiments/ListDeltaReplayProbe/RESULTS.md)显示写入改善与算法间的时间/分配取舍。
+[白盒对照](../experiments/ListDeltaReplayProbe/WHITEBOX.md)另验证了 Local 窗口外位移与 Myers 编辑深度越界；失配后的位置回退会放大 Delta 准备分配，后选 Base 只兜底实际写入。
 默认 LocalResync；保存成本与实际字节为主要评价，冷读优化最低优先级。证据集中在 DB-049，后继问题在[路线图](../docs/DurableGraph-research-roadmap.md#32-list-差分算法选型与设计)。
 [DB-047](../docs/design-branches/0047-list-content-object-slice.md) 的完整元素闭包、冻结/恢复、List owner Upgrade 与 history v5 继续沿用。
 

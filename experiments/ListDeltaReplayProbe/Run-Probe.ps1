@@ -1,5 +1,7 @@
 [CmdletBinding()]
 param(
+    [ValidateSet('ordinary', 'whitebox')]
+    [string] $Suite = 'ordinary',
     [string] $Counts = '32',
     [int] $Repeats = 1,
     [int] $Rounds = 1,
@@ -11,6 +13,7 @@ param(
     [switch] $NoBuild
 )
 $ErrorActionPreference = 'Stop'
+if ($Suite -eq 'whitebox' -and -not $PSBoundParameters.ContainsKey('Counts')) { $Counts = '4096' }
 $repository = (Resolve-Path (Join-Path $PSScriptRoot '../..')).Path
 $project = Join-Path $PSScriptRoot 'ListDeltaReplayProbe.csproj'
 if ([string]::IsNullOrWhiteSpace($Output)) {
@@ -27,7 +30,7 @@ try {
         if ($LASTEXITCODE -ne 0) { throw 'Replay probe build failed.' }
     }
     & dotnet (Join-Path $PSScriptRoot 'bin/Release/net10.0/Atelia.ListDeltaReplayProbe.dll') `
-        --counts $Counts --repeats $Repeats --rounds $Rounds --diff-repeats $DiffRepeats --seed $Seed `
+        --suite $Suite --counts $Counts --repeats $Repeats --rounds $Rounds --diff-repeats $DiffRepeats --seed $Seed `
         --x $ReadAmplification --y $BaseBudgetPercent --output $Output --baseline $baseline
     if ($LASTEXITCODE -ne 0) { throw 'Replay probe failed; preserve artifacts for inspection.' }
 }

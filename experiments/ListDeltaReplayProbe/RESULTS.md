@@ -1,5 +1,7 @@
 # DB-049 首轮重放结果
 
+后续针对性退化与边界控制见 [白盒实验](WHITEBOX.md)；本文保留首轮普通轨迹的证据。
+
 2026-09-09，Release / .NET 10.0.5 / Windows 10.0.22000 / x64，16 个逻辑处理器，workstation GC。
 代码基线记录为 `55045b4+working-tree-changes`，即本片待提交实现；完整 JSON 另含实际程序集 SHA-256。
 

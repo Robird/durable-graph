@@ -25,7 +25,7 @@ internal static class Replay {
     private delegate DiffResult DiffRunner(ObjectStateRecord prior, ObjectStateRecord current, ListDeltaAlgorithm algorithm, int repeats);
 
     internal static RunResult Run<T>(Workload<T> workload, int count, int repeat, ListDeltaAlgorithm algorithm,
-        string directory, Edit[] script, Settings settings, int? operationLimit = null) {
+        string directory, Edit[] script, Settings settings, int? operationLimit = null, Action<World<T>, Edit>? applyEdit = null) {
         World<T> world = workload.Seed(count);
         StateModelRegistry models = Models(algorithm);
         List<Saved> saved = [];
@@ -43,7 +43,8 @@ internal static class Replay {
             Save("Initial");
             worldId = session.WorldId!.Value;
             foreach (Edit edit in script.Take(operationLimit ?? script.Length)) {
-                workload.Apply(world, edit);
+                if (applyEdit is null) { workload.Apply(world, edit); }
+                else { applyEdit(world, edit); }
                 Save($"{edit.Round}:{edit.Kind}");
                 if (!ReferenceEquals(world, session.World) || !ReferenceEquals(world.Items, session.World.Alias)) {
                     throw new InvalidOperationException("Commit replaced a domain instance.");

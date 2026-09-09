@@ -3,6 +3,7 @@
 DB-049's current-product experiment compares Position, LocalResync and BoundedMyers under one
 List codec. It references product projects and the real source generator, and copies no matcher.
 The first completed matrix and current default decision are recorded in [RESULTS.md](RESULTS.md).
+Two white-box adverse families and boundary controls are described in [WHITEBOX.md](WHITEBOX.md).
 The executable uses Runtime/StateStore test friendship only for obtaining closed element operations
 and directly measuring their List body implementation. This is not a package delivery test.
 
@@ -17,6 +18,9 @@ Run from the repository root, with no competing builds or benchmark processes:
 
 # A larger targeted repetition; avoid an unrestricted largest-width/count Cartesian product.
 ./experiments/ListDeltaReplayProbe/Run-Probe.ps1 -Counts '8192' -Repeats 3 -Rounds 2 -DiffRepeats 5
+
+# Two white-box families: local window and global edit-depth boundaries, with controls.
+./experiments/ListDeltaReplayProbe/Run-Probe.ps1 -Suite whitebox -Counts '4096,16384' -Repeats 3 -DiffRepeats 31
 ```
 
 The runner builds Release unless `-NoBuild` is supplied. `-Output` must name a new directory;
@@ -27,6 +31,15 @@ executes 225 measured plus 60 warmup Commit calls. No timeout changes the algori
 Count accepts 8–50,000, Repeats 1–20, Rounds 1–20, DiffRepeats 1–100. `-Seed`,
 `-ReadAmplification` (X, default 8) and `-BaseBudgetPercent` (Y, default 5) are recorded unchanged
 for every algorithm. The widest inline workload caps count at 512 and deduplicates capped sizes.
+
+`-Suite ordinary` is the default. `-Suite whitebox` defaults to Count 4096, requires Count >= 512
+and Rounds = 1, and uses deterministic single-edit histories without Seed. It runs five cases
+(two adverse cases and three controls), each in its own repository, plus 15 warmup repositories.
+It reuses the same Commit, historical Load, candidate Apply and frozen-input checks. In addition,
+`whitebox.json` records instrumented comparison counts, known optimal unchanged-pair counts,
+independent relaxed-bound diagnostics and isolated matcher time/allocation; `whitebox.md` summarizes
+them. Counters are excluded from timing. Saved data always uses the unmodified product budgets.
+See WHITEBOX for the run with tiered compilation disabled to reduce JIT phase interference.
 
 Workloads and script:
 
