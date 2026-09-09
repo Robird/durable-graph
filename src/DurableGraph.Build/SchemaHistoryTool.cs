@@ -364,7 +364,7 @@ internal static class SchemaHistoryDocument {
         return record;
     }
 
-    public static string RenderHistory(SchemaHistoryRecord record, int formatVersion = 6) {
+    public static string RenderHistory(SchemaHistoryRecord record, int formatVersion = 7) {
         StringBuilder builder = new();
         builder.Append(HistoryHeader).AppendLine(formatVersion.ToString(CultureInfo.InvariantCulture));
         AppendSchemaRecord(builder, record, formatVersion);
@@ -392,8 +392,9 @@ internal static class SchemaHistoryDocument {
              !StringComparer.Ordinal.Equals(lines[0], expectedHeader + "3") &&
              !StringComparer.Ordinal.Equals(lines[0], expectedHeader + "4") &&
              !StringComparer.Ordinal.Equals(lines[0], expectedHeader + "5") &&
-             !StringComparer.Ordinal.Equals(lines[0], expectedHeader + "6"))) {
-            throw Invalid(path, $"expected header '{expectedHeader}1', '{expectedHeader}2', '{expectedHeader}3', '{expectedHeader}4', '{expectedHeader}5', or '{expectedHeader}6'");
+             !StringComparer.Ordinal.Equals(lines[0], expectedHeader + "6") &&
+             !StringComparer.Ordinal.Equals(lines[0], expectedHeader + "7"))) {
+            throw Invalid(path, $"expected header '{expectedHeader}1', '{expectedHeader}2', '{expectedHeader}3', '{expectedHeader}4', '{expectedHeader}5', '{expectedHeader}6', or '{expectedHeader}7'");
         }
         int formatVersion = lines[0][lines[0].Length - 1] - '0';
 
@@ -641,6 +642,9 @@ internal static class SchemaHistoryDocument {
         StringBuilder builder,
         SchemaHistoryRecord record,
         int formatVersion) {
+        if (formatVersion < 7 && (record.BaseType?.ContainsDictionary == true || record.Fields.Any(field => field.ValuePattern.ContainsDictionary))) {
+            throw new SchemaHistoryException("Dictionary requires history format v7.");
+        }
         builder.AppendLine(SchemaBegin);
         builder.Append(SchemaIdPrefix).AppendLine(record.SchemaIdBase64);
         builder.Append(VersionPrefix)
@@ -694,8 +698,8 @@ internal static class SchemaHistoryDocument {
     }
 
     private static TypePattern ParsePattern(string path, string text, int arity, PatternKind expectedKind, int formatVersion, bool arrayReference = false) {
-        if (!TypePattern.TryParse(text, arity, out TypePattern? pattern, formatVersion >= 4, formatVersion >= 5, formatVersion >= 6) ||
-            (pattern!.Kind != expectedKind && !(arrayReference && (pattern.IsArray || pattern.IsList)))) {
+        if (!TypePattern.TryParse(text, arity, out TypePattern? pattern, formatVersion >= 4, formatVersion >= 5, formatVersion >= 6, formatVersion >= 7) ||
+            (pattern!.Kind != expectedKind && !(arrayReference && (pattern.IsArray || pattern.IsList || pattern.IsDictionary)))) {
             throw Invalid(path, "invalid or unbound canonical type pattern");
         }
         return pattern;
@@ -741,7 +745,7 @@ internal sealed class SchemaHistoryRecord {
     public int Arity { get; }
     public TypePattern? BaseType { get; }
 
-    internal int SourceFormatVersion { get; init; } = 6;
+    internal int SourceFormatVersion { get; init; } = 7;
 
     public SchemaHistoryKey Key => new(SchemaId, Version);
 

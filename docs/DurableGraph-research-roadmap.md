@@ -15,9 +15,9 @@
 [DB-052 可组合 Nullable 值槽](design-branches/0052-nullable-value-slot-slice.md) 已贯通字段、泛型、数组/List 的历史表示与显式升级。
 [DB-053 显式 enum 内联状态](design-branches/0053-enum-inline-state-slice.md) 已贯通单整数布局、组合与历史显式升级；
 常量表不入 Schema 的已选合同维护在目标设计，验收以该分片为入口。
-下一片 [DB-054 Dictionary 内容对象](design-branches/0054-dictionary-content-object-slice.md) 已采纳白名单试验方向，尚未实施：
-TValue 完整槽闭包、按持久 key body 寻址的稀疏 Delta；BCL Dictionary 外观允许后继替换。
-主体之后优先设计有限复合值 Key，比较器与具体容器方案见该文档 §2；不预先引入通用容器平台。
+[DB-054 Dictionary 内容对象](design-branches/0054-dictionary-content-object-slice.md) 已完成白名单范围的保存、键寻址 Delta 与历史双槽升级。
+接下来优先设计有限复合值 Key，比较器与具体容器方案见该文档 §2；BCL Dictionary 外观仍可后继替换，
+不预先引入通用容器平台。
 开放模板方案的评估结论与重访条件见 §3.1。
 DB-036 单 World/单 head 工作会话已实现；branch/Reset、联合 Store 视图及更强恢复保证仍独立排期。
 MVP 库内加载顺序为 exact 重建 → 单对象 Upgrade → 分配实例 → 填充/连接引用 → 完整交付 World；
@@ -40,8 +40,7 @@ B/D/H 分别指本轮精确 Base payload、Delta payload 上界、已有对象�
 
 | 工作项 | 最小应回答的问题 | 设计或证据入口 |
 |---|---|---|
-| Dictionary 内容适配与恢复 | 先用 key/comparer 白名单建设实验性 BCL 适配，须闭合完整图键唯一性与历史 Upgrade | [DB-054](design-branches/0054-dictionary-content-object-slice.md) |
-| 复合值 Key | Dictionary 主体完成后优先设计至少一条易用的有限支持路径；比较已有 struct、record struct 与框架 comparer，ValueTuple 为后续候选；复核是否保留 BCL 外观或采用近似 IDictionary 实现 | [DB-054 §2.1–2.2](design-branches/0054-dictionary-content-object-slice.md#21-复合值-key-是明确后续能力) |
+| 复合值 Key | 优先设计至少一条易用的有限支持路径；比较已有 struct、record struct 与框架 comparer，ValueTuple 为后续候选；复核是否保留 BCL 外观或采用近似 IDictionary 实现 | [DB-054 §2.1–2.2](design-branches/0054-dictionary-content-object-slice.md#21-复合值-key-是明确后续能力) |
 
 List 高效 Diff/Patch 已完成；额外性能工作按 [§3.2](#32-list-差分算法选型与设计)的实测条件重访。
 

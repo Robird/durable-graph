@@ -163,6 +163,11 @@ public sealed class SchemaStore {
                 if (list.ElementSlot.ValueSchema is { } inline) { AddClosure(inline, 1); }
                 if (!ids.ContainsKey(layout)) { Add(SchemaCatalogEntry.ForList(Allocate(), list)); }
             }
+            else if (layout.Dictionary is { } dictionary) {
+                if (dictionary.KeySlot.ValueSchema is { } keyInline) { AddClosure(keyInline, 1); }
+                if (dictionary.ValueSlot.ValueSchema is { } valueInline) { AddClosure(valueInline, 1); }
+                if (!ids.ContainsKey(layout)) { Add(SchemaCatalogEntry.ForDictionary(Allocate(), dictionary)); }
+            }
         }
         // The shared codec validates nominal kind/arity and all integer dependencies
         // before there is any observable append or ID allocation in this instance.

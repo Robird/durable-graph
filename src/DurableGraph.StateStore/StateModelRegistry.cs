@@ -10,6 +10,8 @@ public sealed class StateModelRegistry : IStateModelRegistration {
     private readonly Dictionary<Type, StateValueUpgradeRuleSet> _valueUpgradeRules = [];
     private Type? _arrayElementUpgradeRuleSet;
     private Type? _listElementUpgradeRuleSet;
+    private Type? _dictionaryKeyUpgradeRuleSet;
+    private Type? _dictionaryValueUpgradeRuleSet;
     private ListDeltaAlgorithm _listDeltaAlgorithm = ListDeltaAlgorithm.Adaptive;
 
     /// <summary>Selects how future operation snapshots prepare List Delta bodies.</summary>
@@ -30,6 +32,26 @@ public sealed class StateModelRegistry : IStateModelRegistration {
             throw new InvalidOperationException("A different List element upgrade ruleset is already selected.");
         }
         _listElementUpgradeRuleSet = ruleSet;
+    }
+
+    /// <summary>Selects explicit value rules for Dictionary keys whose exact layout changes.</summary>
+    /// <remarks>Key and value selections are independent and frozen per operation.</remarks>
+    public void UseDictionaryKeyUpgrades(Type ruleSet) =>
+        SelectDictionaryUpgrades(ref _dictionaryKeyUpgradeRuleSet, ruleSet, "key");
+
+    /// <summary>Selects explicit value rules for Dictionary values whose exact layout changes.</summary>
+    public void UseDictionaryValueUpgrades(Type ruleSet) =>
+        SelectDictionaryUpgrades(ref _dictionaryValueUpgradeRuleSet, ruleSet, "value");
+
+    private void SelectDictionaryUpgrades(ref Type? selected, Type ruleSet, string slot) {
+        ArgumentNullException.ThrowIfNull(ruleSet);
+        if (!_valueUpgradeRules.ContainsKey(ruleSet)) {
+            throw new InvalidOperationException($"Register the value upgrade ruleset for {ruleSet} before selecting it for Dictionary {slot}s.");
+        }
+        if (selected is not null && selected != ruleSet) {
+            throw new InvalidOperationException($"A different Dictionary {slot} upgrade ruleset is already selected.");
+        }
+        selected = ruleSet;
     }
 
     /// <summary>Selects the registered explicit value rules used when an array's element layout changes.</summary>
@@ -101,5 +123,5 @@ public sealed class StateModelRegistry : IStateModelRegistration {
         new Dictionary<SchemaKey, StateReaderBinding>(_readers),
         new Dictionary<string, StateDefinitionBinding>(_definitions, StringComparer.Ordinal), schemas,
         new Dictionary<Type, StateValueUpgradeRuleSet>(_valueUpgradeRules), _arrayElementUpgradeRuleSet, _listElementUpgradeRuleSet,
-        _listDeltaAlgorithm);
+        _listDeltaAlgorithm, _dictionaryKeyUpgradeRuleSet, _dictionaryValueUpgradeRuleSet);
 }

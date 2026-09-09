@@ -42,10 +42,16 @@ internal static class SchemaCatalogWireCodec {
                     writer.WriteByte((byte)array.Constructor);
                     WriteSlot(ref writer, array.ElementSlot, state);
                 }
-                else {
+                else if (entry.List is { } list) {
                     writer.WriteByte(4);
-                    writer.WriteUInt32(entry.List!.CodecVersion);
-                    WriteSlot(ref writer, entry.List.ElementSlot, state);
+                    writer.WriteUInt32(list.CodecVersion);
+                    WriteSlot(ref writer, list.ElementSlot, state);
+                }
+                else {
+                    writer.WriteByte(5);
+                    writer.WriteUInt32(entry.Dictionary!.CodecVersion);
+                    WriteSlot(ref writer, entry.Dictionary.KeySlot, state);
+                    WriteSlot(ref writer, entry.Dictionary.ValueSlot, state);
                 }
                 state.Add(entry);
             }
@@ -106,6 +112,13 @@ internal static class SchemaCatalogWireCodec {
                     uint codecVersion = reader.ReadUInt32();
                     if (codecVersion != 2) { throw new InvalidDataException("Unsupported List codec version."); }
                     entry = SchemaCatalogEntry.ForList(id, new(ReadSlot(ref reader, 1, state), codecVersion));
+                }
+                else if (kind == 5) {
+                    uint codecVersion = reader.ReadUInt32();
+                    if (codecVersion != 1) { throw new InvalidDataException("Unsupported Dictionary codec version."); }
+                    DurableFieldInfo keySlot = ReadSlot(ref reader, 1, state);
+                    DurableFieldInfo valueSlot = ReadSlot(ref reader, 2, state);
+                    entry = SchemaCatalogEntry.ForDictionary(id, new(keySlot, valueSlot, codecVersion));
                 }
                 else { throw new InvalidDataException($"Unknown Schema catalog node kind {kind}."); }
             }
@@ -187,9 +200,11 @@ internal static class SchemaCatalogWireCodec {
                 }
             }
             else {
-                DurableFieldInfo element = entry.Array?.ElementSlot ?? entry.List!.ElementSlot;
-                if (element.TargetType is { } target) { ValidateDeclaration(target, SchemaKind.ReferenceObject); }
-                if (element.ValueSchema is { } inline) { RequireSchema(inline, SchemaKind.InlineValue); }
+                if (entry.Dictionary is { } dictionary) {
+                    ValidateContainerSlot(dictionary.KeySlot);
+                    ValidateContainerSlot(dictionary.ValueSlot);
+                }
+                else { ValidateContainerSlot(entry.Array?.ElementSlot ?? entry.List!.ElementSlot); }
                 if (!_containers.Add(entry.Layout!)) { throw new InvalidDataException("A container representation cannot have more than one ID."); }
             }
             _nodes.Add(entry.Id, entry);
@@ -206,12 +221,17 @@ internal static class SchemaCatalogWireCodec {
                 if (field.TargetType is { } target) { ValidateDeclaration(target, SchemaKind.ReferenceObject); }
                 if (field.ValueSchema is { } inline) { AddDependency(inline, SchemaKind.InlineValue); }
             }
+
+            void ValidateContainerSlot(DurableFieldInfo field) {
+                if (field.TargetType is { } target) { ValidateDeclaration(target, SchemaKind.ReferenceObject); }
+                if (field.ValueSchema is { } inline) { RequireSchema(inline, SchemaKind.InlineValue); }
+            }
         }
 
         private void ValidateDeclaration(TypeExpr type, SchemaKind kind) {
             // Container elements and generic arguments carry nominal identities only;
             // a named argument can represent either a class or an inline value.
-            if (!type.IsArray && !type.IsList) {
+            if (!type.IsArray && !type.IsList && !type.IsDictionary) {
                 string id = type.DefinitionId!;
                 if (_kinds.TryGetValue(id, out SchemaKind previous) && previous != kind) {
                     throw new InvalidDataException($"Schema family '{id}' cannot change kind across versions.");
@@ -229,6 +249,11 @@ internal static class SchemaCatalogWireCodec {
                 return;
             }
             if (type.IsArray || type.IsList) { ValidateArities(type.ElementType!); return; }
+            if (type.IsDictionary) {
+                ValidateArities(type.KeyType!);
+                ValidateArities(type.ValueType!);
+                return;
+            }
             if (type.Kind != TypeExprKind.Named) { return; }
             string id = type.DefinitionId!;
             if (_arities.TryGetValue(id, out int arity) && arity != type.Arguments.Length) {

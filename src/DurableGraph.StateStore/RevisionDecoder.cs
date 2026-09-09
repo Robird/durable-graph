@@ -64,9 +64,18 @@ public static class RevisionDecoder {
         }
 
         StringReadTable table = StringReadTable.FromDecoded(strings);
-        StateReferenceValidator validator = new(objects.ToDictionary(static row => row.Id));
+        Dictionary<ObjectId, ObjectStateRecord> directory = objects.ToDictionary(static row => row.Id);
+        StateReferenceValidator validator = new(directory);
         foreach ((ObjectStateRecord row, ObjectReaderBinding binding) in boundRows) {
             binding.VisitReferences(row, validator);
+        }
+        // Lookup equality can depend on referenced string content. Check every live row
+        // after the complete exact directory exists, before any Upgrade can run.
+        foreach ((ObjectStateRecord row, ObjectReaderBinding binding) in boundRows) {
+            if (binding is DictionaryStateReader dictionary) {
+                dictionary.ValidateLookupKeys(row, id => directory.TryGetValue(id, out ObjectStateRecord? target)
+                    ? target : throw new InvalidDataException($"Dictionary key object {id.Value} is not live."));
+            }
         }
         return new DecodedRevision(revisionAddress, objects, table);
     }

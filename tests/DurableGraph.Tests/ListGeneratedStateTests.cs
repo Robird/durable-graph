@@ -33,7 +33,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         Assert.Contains("objects.ResolveObject<", generated);
         Assert.Contains("global::Atelia.DurableGraph.ObjectId", generated);
         string manifest = GeneratedSource(run, "DurableGraphSchemaHistoryCandidates.g.cs");
-        Assert.Contains("manifest:6", manifest);
+        Assert.Contains("manifest:7", manifest);
         Assert.Contains("// field:1|15|l(l(b2))", manifest);
         Assert.Contains("// field:2|15|l(a2(nUG9pbnQ=()))", manifest);
         Assert.Contains("// field:3|15|a1(l(nV29ybGQ=()))", manifest);

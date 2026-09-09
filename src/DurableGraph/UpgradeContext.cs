@@ -46,21 +46,23 @@ public sealed class UpgradeContext {
         TargetObjectLayout = owner.TargetObjectLayout;
         ArrayShape = owner.ArrayShape;
         ListCount = owner.ListCount;
+        DictionaryCount = owner.DictionaryCount;
         _tools = tools;
     }
 
-    internal UpgradeContext(ObjectId objectId, ObjectLayout source, ObjectLayout target, int listCount) {
+    internal UpgradeContext(ObjectId objectId, ObjectLayout source, ObjectLayout target, int count) {
         ArgumentOutOfRangeException.ThrowIfZero(objectId.Value, nameof(objectId));
-        ArgumentOutOfRangeException.ThrowIfNegative(listCount);
+        ArgumentOutOfRangeException.ThrowIfNegative(count);
         ArgumentNullException.ThrowIfNull(source);
         ArgumentNullException.ThrowIfNull(target);
-        if (source.Kind != ObjectStateKind.List || target.Kind != ObjectStateKind.List || source.Type != target.Type) {
-            throw new ArgumentException("List upgrade endpoints must have the same nominal list type.");
+        if (source.Kind is not (ObjectStateKind.List or ObjectStateKind.Dictionary) || target.Kind != source.Kind || source.Type != target.Type) {
+            throw new ArgumentException("Content-container upgrade endpoints must have the same kind and nominal type.");
         }
         ObjectId = objectId;
         SourceObjectLayout = source;
         TargetObjectLayout = target;
-        ListCount = listCount;
+        if (source.Kind == ObjectStateKind.List) { ListCount = count; }
+        else { DictionaryCount = count; }
         _tools = new Dictionary<string, Delegate>(StringComparer.Ordinal);
     }
 
@@ -76,6 +78,8 @@ public sealed class UpgradeContext {
     public ArrayShape? ArrayShape { get; }
     /// <summary>The preserved source element count for a list owner; null for other owner kinds.</summary>
     public int? ListCount { get; }
+    /// <summary>The preserved source entry count for a dictionary owner; null for other owner kinds.</summary>
+    public int? DictionaryCount { get; }
     public DurableSchema SourceObjectSchema => SourceObjectLayout.Schema ??
         throw new InvalidOperationException("This upgrade owner has no user DurableSchema; inspect SourceObjectLayout instead.");
     public DurableSchema TargetObjectSchema => TargetObjectLayout.Schema ??

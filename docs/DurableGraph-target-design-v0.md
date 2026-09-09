@@ -43,6 +43,10 @@ Source Generator 负责可在编译期确定的类型知识与机械代码，框
 - 领域建模需要易用的复合值 Key；允许从有限结构和明确比较规则做起，不承诺任意用户 Equals/GetHashCode 都能安全恢复。
   映射先以白名单 BCL Dictionary 适配验证主体，但该 CLR 容器选择保持实验性，后续可改为近似的自定义 IDictionary 实现。
   比较机制及 record struct/ValueTuple 等具体外观仍须设计，不把首片键白名单作为最终功能上限；后续工作见[路线图](DurableGraph-research-roadmap.md#2-已采纳方向中的未完成能力)。
+  当前映射合同保存无序逻辑键值和明确的实例 comparer 策略；容量、hash/bucket 与枚举顺序不持久化。
+  字典查找相等性和持久键相等性分开：后者按同 exact key 槽的 canonical Base bytes 对应条目；不同 ID/bits 的键可以 Remove+Add。
+  同键 value 使用融合 Delta，解码不依赖领域 comparer 或 entry ordinal；键和值都保留引用边。
+  完整 source/current 图分别检查 lookup 唯一性，升级后的冲突不得静默覆盖或合并；具体策略与实验边界见 [DB-054](design-branches/0054-dictionary-content-object-slice.md)。
 - 支持 CLR `Nullable<T>`，T 为受支持标量、Durable inline struct 或显式登记 enum，包括泛型 struct；可作为字段、
   泛型实参和数组/List 元素。DTO 使用 unmanaged `NullableState<TState>`，absent 不访问内部状态或产生引用边。
   Nullable 无独立对象身份或业务版本，内部 exact 布局变化沿原 inline 规则传播到 owner；

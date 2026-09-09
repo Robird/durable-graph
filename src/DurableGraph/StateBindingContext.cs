@@ -237,6 +237,9 @@ public abstract partial class StateBindingContext : IStateModelResolver {
         }
         if (expression.Kind == TypeExprKind.Builtin || expression.Arguments.IsEmpty) { return expression; }
         if (expression.IsList) { return TypeExpr.List(Substitute(expression.ElementType!, arguments)); }
+        if (expression.IsDictionary) {
+            return TypeExpr.Dictionary(Substitute(expression.KeyType!, arguments), Substitute(expression.ValueType!, arguments));
+        }
         if (expression.IsNullable) { return TypeExpr.Nullable(Substitute(expression.ElementType!, arguments)); }
         if (expression.IsArray) {
             TypeExpr element = Substitute(expression.ElementType!, arguments);

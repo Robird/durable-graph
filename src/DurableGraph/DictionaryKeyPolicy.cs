@@ -1,0 +1,104 @@
+using Atelia.DurableGraph.StateStore.Serialization;
+
+namespace Atelia.DurableGraph;
+
+// DB-054 deliberately supports a closed set of recoverable comparisons, independently
+// of the broader set of representable value slots. No domain equality runs on old DTOs.
+internal static class DictionaryKeyPolicy {
+    internal static void RequireCurrentKey(Type domainType, DurableFieldInfo slot) {
+        if (domainType.IsEnum) {
+            if (slot.TypeTag != TypeTag.InlineValue || !TryScalarTag(slot, out TypeTag tag) ||
+                tag != EnumUnderlyingTag(domainType)) {
+                throw new ArgumentException("An enum Dictionary key requires its exact single-integer representation.");
+            }
+            return;
+        }
+        if (!domainType.IsValueType && slot.TypeTag is TypeTag.String or TypeTag.ObjectReference) { return; }
+        if (BuiltinStateValues.TryBindCurrent(domainType, out StateValueBinding builtin) &&
+            builtin.Slot.TypeTag != TypeTag.String && slot == StateBindingContext.WithFieldId(builtin.Slot, slot.FieldId)) { return; }
+        throw new ArgumentException("Dictionary keys require a supported scalar, durable enum, or supported reference type; struct and Nullable keys are not supported.");
+    }
+
+    internal static DictionaryComparerKind Identify<TKey>(IEqualityComparer<TKey> comparer, DurableFieldInfo slot) where TKey : notnull {
+        RequireCurrentKey(typeof(TKey), slot);
+        if (!typeof(TKey).IsValueType && ReferenceEquals(comparer, ReferenceEqualityComparer.Instance)) {
+            return DictionaryComparerKind.ReferenceIdentity;
+        }
+        if (typeof(TKey) == typeof(string)) {
+            if (ReferenceEquals(comparer, EqualityComparer<TKey>.Default) || ReferenceEquals(comparer, StringComparer.Ordinal)) {
+                return DictionaryComparerKind.StringOrdinal;
+            }
+            if (ReferenceEquals(comparer, StringComparer.OrdinalIgnoreCase)) { return DictionaryComparerKind.StringOrdinalIgnoreCase; }
+        } else if (typeof(TKey).IsValueType && ReferenceEquals(comparer, EqualityComparer<TKey>.Default)) {
+            return DictionaryComparerKind.ScalarDefault;
+        }
+        throw new InvalidDataException("The Dictionary comparer is not a supported persistent comparison policy.");
+    }
+
+    internal static IEqualityComparer<TKey> CreateComparer<TKey>(DictionaryComparerKind kind, DurableFieldInfo slot) where TKey : notnull {
+        RequireCurrentKey(typeof(TKey), slot);
+        RequireStoredPolicy(kind, slot);
+        return kind switch {
+            DictionaryComparerKind.ScalarDefault => EqualityComparer<TKey>.Default,
+            DictionaryComparerKind.StringOrdinal => (IEqualityComparer<TKey>)(object)StringComparer.Ordinal,
+            DictionaryComparerKind.StringOrdinalIgnoreCase => (IEqualityComparer<TKey>)(object)StringComparer.OrdinalIgnoreCase,
+            DictionaryComparerKind.ReferenceIdentity => (IEqualityComparer<TKey>)(object)ReferenceEqualityComparer.Instance,
+            _ => throw new InvalidDataException("Unknown Dictionary comparison policy."),
+        };
+    }
+
+    internal static void RequireStoredPolicy(DictionaryComparerKind kind, DurableFieldInfo slot) {
+        bool valid = kind switch {
+            DictionaryComparerKind.ScalarDefault => TryScalarTag(slot, out _),
+            DictionaryComparerKind.StringOrdinal or DictionaryComparerKind.StringOrdinalIgnoreCase => slot.TypeTag == TypeTag.String,
+            DictionaryComparerKind.ReferenceIdentity => slot.TypeTag is TypeTag.String or TypeTag.ObjectReference,
+            _ => false,
+        };
+        if (!valid) { throw new InvalidDataException("Dictionary comparison policy is incompatible with its exact key slot."); }
+    }
+
+    internal static bool TryScalarTag(DurableFieldInfo slot, out TypeTag tag) {
+        tag = slot.TypeTag;
+        if (tag is TypeTag.Boolean or TypeTag.Byte or TypeTag.SByte or TypeTag.Int16 or TypeTag.UInt16 or
+            TypeTag.Int32 or TypeTag.UInt32 or TypeTag.Int64 or TypeTag.UInt64 or TypeTag.Char or
+            TypeTag.Half or TypeTag.Single or TypeTag.Double) { return true; }
+        if (tag != TypeTag.InlineValue) { return false; }
+        DurableSchema schema = slot.InlineSchema!;
+        // This validates a representation, not historical CLR enum provenance. An
+        // equivalent single-integer struct has the same persisted schema contract.
+        if (schema.Kind != SchemaKind.InlineValue || schema.BaseSchema is not null ||
+            schema.Type.Arguments.Length != 0 || schema.Fields.Length != 1 || schema.Fields[0].FieldId != 1) { return false; }
+        tag = schema.Fields[0].TypeTag;
+        return tag is TypeTag.Byte or TypeTag.SByte or TypeTag.Int16 or TypeTag.UInt16 or
+            TypeTag.Int32 or TypeTag.UInt32 or TypeTag.Int64 or TypeTag.UInt64;
+    }
+
+    internal static object ReadScalar(ReadOnlySpan<byte> encoded, DurableFieldInfo slot) {
+        if (!TryScalarTag(slot, out TypeTag tag)) { throw new InvalidDataException("Unsupported scalar key representation."); }
+        BinaryPayloadReader reader = new(encoded);
+        object result = tag switch {
+            TypeTag.Boolean => reader.ReadBoolean(), TypeTag.Byte => reader.ReadByte(), TypeTag.SByte => reader.ReadSByte(),
+            TypeTag.Int16 => reader.ReadInt16(), TypeTag.UInt16 => reader.ReadUInt16(), TypeTag.Int32 => reader.ReadInt32(),
+            TypeTag.UInt32 => reader.ReadUInt32(), TypeTag.Int64 => reader.ReadInt64(), TypeTag.UInt64 => reader.ReadUInt64(),
+            TypeTag.Char => reader.ReadChar(), TypeTag.Half => reader.ReadHalf(), TypeTag.Single => reader.ReadSingle(),
+            TypeTag.Double => reader.ReadDouble(), _ => throw new InvalidDataException("Unsupported scalar key."),
+        };
+        reader.EnsureFullyConsumed();
+        return result;
+    }
+
+    internal static ObjectId ReadReference(ReadOnlySpan<byte> encoded) {
+        BinaryPayloadReader reader = new(encoded);
+        ObjectId id = new(reader.ReadUInt32());
+        reader.EnsureFullyConsumed();
+        if (id.IsNull) { throw new InvalidDataException("Dictionary keys cannot be null."); }
+        return id;
+    }
+
+    private static TypeTag EnumUnderlyingTag(Type type) => Type.GetTypeCode(Enum.GetUnderlyingType(type)) switch {
+        TypeCode.Byte => TypeTag.Byte, TypeCode.SByte => TypeTag.SByte, TypeCode.Int16 => TypeTag.Int16,
+        TypeCode.UInt16 => TypeTag.UInt16, TypeCode.Int32 => TypeTag.Int32, TypeCode.UInt32 => TypeTag.UInt32,
+        TypeCode.Int64 => TypeTag.Int64, TypeCode.UInt64 => TypeTag.UInt64,
+        _ => throw new ArgumentException("Unsupported enum underlying type."),
+    };
+}

@@ -55,7 +55,7 @@ public sealed class ListCatalogTests {
     [InlineData("02010204021003")] // Forward dependency.
     [InlineData("02010204020200")] // Extra byte.
     [InlineData("02020204020203040202")] // Duplicate layout at another ID.
-    [InlineData("020102050102")] // Unknown catalog node.
+    [InlineData("020102060102")] // Unknown catalog node.
     public void InvalidListRowsFailClosed(string hex) {
         Assert.Throws<InvalidDataException>(() => SchemaCatalogWireCodec.Read(Convert.FromHexString(hex), CatalogTestData.Empty));
     }
@@ -68,7 +68,7 @@ public sealed class ListCatalogTests {
         byte[] tooDeep = [.. Enumerable.Repeat((byte)8, TypeExpr.MaximumDepth), 1, 2];
         Assert.Throws<InvalidDataException>(() => ReadType(tooDeep));
         Assert.Throws<InvalidDataException>(() => ReadType([8, 3, 0]));
-        Assert.Throws<InvalidDataException>(() => ReadType([10, 1, 2]));
+        Assert.Throws<InvalidDataException>(() => ReadType([11, 1, 2]));
         Assert.Throws<ArgumentException>(() => WriteType(TypeExpr.List(TypeExpr.Parameter(0))));
     }
 

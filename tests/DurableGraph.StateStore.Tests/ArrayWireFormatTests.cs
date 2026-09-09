@@ -31,7 +31,7 @@ public sealed class ArrayWireFormatTests {
         tooDeep[^1] = 2;
         Assert.Throws<InvalidDataException>(() => ReadType(tooDeep));
         Assert.Throws<InvalidDataException>(() => ReadType([4, 3, 0]));
-        Assert.Throws<InvalidDataException>(() => ReadType([10, 1, 2]));
+        Assert.Throws<InvalidDataException>(() => ReadType([11, 1, 2]));
         Assert.Throws<ArgumentException>(() => WriteType(TypeExpr.VectorArray(TypeExpr.Parameter(0))));
     }
 

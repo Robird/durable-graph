@@ -18,16 +18,24 @@ public sealed partial class DurableSchemaGenerator {
     private static bool IsBclList(ITypeSymbol type, INamedTypeSymbol? listType) =>
         listType is not null && type is INamedTypeSymbol named && SymbolEqualityComparer.Default.Equals(named.OriginalDefinition, listType);
 
+    private static INamedTypeSymbol? GetBclDictionaryType(Compilation compilation) {
+        INamedTypeSymbol? symbol = compilation.GetTypeByMetadataName("System.Collections.Generic.Dictionary`2");
+        return symbol is not null && symbol.DeclaringSyntaxReferences.Length == 0 ? symbol : null;
+    }
+
+    private static bool IsBclDictionary(ITypeSymbol type, INamedTypeSymbol? dictionaryType) =>
+        dictionaryType is not null && type is INamedTypeSymbol named && SymbolEqualityComparer.Default.Equals(named.OriginalDefinition, dictionaryType);
+
     private static bool IsNullableValue(ITypeSymbol type) =>
         type is INamedTypeSymbol named && named.OriginalDefinition.SpecialType == SpecialType.System_Nullable_T;
 
     private static bool TryGetNullableField(ITypeSymbol type, INamedTypeSymbol owner,
-        INamedTypeSymbol? halfType, INamedTypeSymbol? listType, System.Threading.CancellationToken cancellationToken,
+        INamedTypeSymbol? halfType, INamedTypeSymbol? listType, INamedTypeSymbol? dictionaryType, System.Threading.CancellationToken cancellationToken,
         out string? tag, out int number, out string? name, out SchemaReference? inline) {
         tag = null; number = 0; name = null; inline = null;
         if (!IsNullableValue(type)) return false;
         ITypeSymbol child = ((INamedTypeSymbol)type).TypeArguments[0];
-        if (!TryGetTypePattern(type, owner, halfType, listType, out _)) return false;
+        if (!TryGetTypePattern(type, owner, halfType, listType, dictionaryType, out _)) return false;
         if (child is INamedTypeSymbol named && GetAttribute(named.GetAttributes(), DurableTypeAttributeMetadataName) is not null &&
             !TryGetInlineValue(child, owner, cancellationToken, out _, out _, out _, out inline)) return false;
         tag = "Nullable"; number = 18; name = type.ToDisplayString(FullyQualifiedNameFormat);
@@ -37,6 +45,13 @@ public sealed partial class DurableSchemaGenerator {
     private static bool TryGetListField(ITypeSymbol type, INamedTypeSymbol? listType, out string? tag, out int number, out string? name) {
         tag = null; number = 0; name = null;
         if (!IsBclList(type, listType)) return false;
+        tag = "ObjectReference"; number = 15; name = type.ToDisplayString(FullyQualifiedNameFormat);
+        return true;
+    }
+
+    private static bool TryGetDictionaryField(ITypeSymbol type, INamedTypeSymbol? dictionaryType, out string? tag, out int number, out string? name) {
+        tag = null; number = 0; name = null;
+        if (!IsBclDictionary(type, dictionaryType)) return false;
         tag = "ObjectReference"; number = 15; name = type.ToDisplayString(FullyQualifiedNameFormat);
         return true;
     }
@@ -55,7 +70,7 @@ public sealed partial class DurableSchemaGenerator {
         return true;
     }
 
-    private static bool TryGetTypePattern(ITypeSymbol type, INamedTypeSymbol owner, INamedTypeSymbol? halfType, INamedTypeSymbol? listType, out TypePattern? pattern) {
+    private static bool TryGetTypePattern(ITypeSymbol type, INamedTypeSymbol owner, INamedTypeSymbol? halfType, INamedTypeSymbol? listType, INamedTypeSymbol? dictionaryType, out TypePattern? pattern) {
         pattern = null;
         if (TryGetTypeTag(type, halfType, out _, out int builtin, out _)) {
             pattern = TypePattern.Builtin(builtin); return true;
@@ -66,19 +81,31 @@ public sealed partial class DurableSchemaGenerator {
         }
         if (IsNullableValue(type)) {
             ITypeSymbol child = ((INamedTypeSymbol)type).TypeArguments[0];
-            if (!child.IsValueType || !TryGetTypePattern(child, owner, halfType, listType, out TypePattern? element)) return false;
+            if (!child.IsValueType || !TryGetTypePattern(child, owner, halfType, listType, dictionaryType, out TypePattern? element)) return false;
             try { pattern = TypePattern.NullableOf(element!); return true; }
             catch (ArgumentException) { return false; }
         }
         if (type is IArrayTypeSymbol array) {
             if (array.Rank > 4 || (array.Rank == 1 && !array.IsSZArray) ||
-                !TryGetTypePattern(array.ElementType, owner, halfType, listType, out TypePattern? element)) return false;
+                !TryGetTypePattern(array.ElementType, owner, halfType, listType, dictionaryType, out TypePattern? element)) return false;
             try { pattern = TypePattern.ArrayOf(element!, array.Rank); return true; }
             catch (ArgumentException) { return false; }
         }
         if (IsBclList(type, listType)) {
-            if (!TryGetTypePattern(((INamedTypeSymbol)type).TypeArguments[0], owner, halfType, listType, out TypePattern? element)) return false;
+            if (!TryGetTypePattern(((INamedTypeSymbol)type).TypeArguments[0], owner, halfType, listType, dictionaryType, out TypePattern? element)) return false;
             try { pattern = TypePattern.ListOf(element!); return true; }
+            catch (ArgumentException) { return false; }
+        }
+        if (IsBclDictionary(type, dictionaryType)) {
+            INamedTypeSymbol dictionary = (INamedTypeSymbol)type;
+            ITypeSymbol keyType = dictionary.TypeArguments[0];
+            // Open keys are checked after Runtime closure. The first current-key matrix accepts
+            // scalar/enum values and supported reference shapes, but not arbitrary struct equality.
+            if (keyType is not ITypeParameterSymbol && !keyType.IsReferenceType && keyType.TypeKind != TypeKind.Enum &&
+                !TryGetTypeTag(keyType, halfType, out _, out _, out _)) return false;
+            if (!TryGetTypePattern(keyType, owner, halfType, listType, dictionaryType, out TypePattern? key) ||
+                !TryGetTypePattern(dictionary.TypeArguments[1], owner, halfType, listType, dictionaryType, out TypePattern? value)) return false;
+            try { pattern = TypePattern.DictionaryOf(key!, value!); return true; }
             catch (ArgumentException) { return false; }
         }
         if (type is not INamedTypeSymbol named || named.Arity > 32 || named.IsRefLikeType || named.ContainingType is not null ||
@@ -88,14 +115,14 @@ public sealed partial class DurableSchemaGenerator {
             attribute.ConstructorArguments[0].Value is not string id || string.IsNullOrWhiteSpace(id) || !CanEncodeStrictUtf8(id)) return false;
         TypePattern[] arguments = new TypePattern[named.TypeArguments.Length];
         for (int index = 0; index < arguments.Length; index++) {
-            if (!TryGetTypePattern(named.TypeArguments[index], owner, halfType, listType, out TypePattern? argument)) return false;
+            if (!TryGetTypePattern(named.TypeArguments[index], owner, halfType, listType, dictionaryType, out TypePattern? argument)) return false;
             arguments[index] = argument!;
         }
         try { pattern = TypePattern.Named(id, arguments); return true; }
         catch (ArgumentException) { return false; }
     }
 
-    private static TypePattern GetNamedTypePattern(INamedTypeSymbol type, INamedTypeSymbol? listType) {
+    private static TypePattern GetNamedTypePattern(INamedTypeSymbol type, INamedTypeSymbol? listType, INamedTypeSymbol? dictionaryType) {
         INamedTypeSymbol root = type;
         while (root.BaseType is not null) root = root.BaseType;
         INamedTypeSymbol? half = root.ContainingAssembly.GetTypeByMetadataName("System.Half");
@@ -105,6 +132,10 @@ public sealed partial class DurableSchemaGenerator {
             if (IsNullableValue(item)) return TypePattern.NullableOf(ConvertType(((INamedTypeSymbol)item).TypeArguments[0]));
             if (item is IArrayTypeSymbol array) return TypePattern.ArrayOf(ConvertType(array.ElementType), array.Rank);
             if (IsBclList(item, listType)) return TypePattern.ListOf(ConvertType(((INamedTypeSymbol)item).TypeArguments[0]));
+            if (IsBclDictionary(item, dictionaryType)) {
+                INamedTypeSymbol dictionary = (INamedTypeSymbol)item;
+                return TypePattern.DictionaryOf(ConvertType(dictionary.TypeArguments[0]), ConvertType(dictionary.TypeArguments[1]));
+            }
             INamedTypeSymbol named = (INamedTypeSymbol)item;
             AttributeData attribute = GetAttribute(named.GetAttributes(), DurableTypeAttributeMetadataName)!;
             TypePattern[] arguments = new TypePattern[named.TypeArguments.Length];
@@ -127,6 +158,12 @@ public sealed partial class DurableSchemaGenerator {
         } else if (pattern.IsList) {
             text.Append(prefix).Append("List(");
             AppendTypePatternExpression(text, pattern.ElementType!);
+            text.Append(')');
+        } else if (pattern.IsDictionary) {
+            text.Append(prefix).Append("Dictionary(");
+            AppendTypePatternExpression(text, pattern.KeyType!);
+            text.Append(", ");
+            AppendTypePatternExpression(text, pattern.ValueType!);
             text.Append(')');
         } else if (pattern.IsArray) {
             text.Append(prefix).Append(pattern.ArrayRank == 1 ? "VectorArray(" : "MultiDimArray(");
@@ -248,10 +285,11 @@ public sealed partial class DurableSchemaGenerator {
 
     private static bool TryParseTemplateHistory(string path, string[] lines, out SchemaHistoryModel model, out string? error) {
         model = default;
-        bool allowNullable = lines[0] == "// durable-graph-schema-history:6";
+        bool allowDictionaries = lines[0] == "// durable-graph-schema-history:7";
+        bool allowNullable = allowDictionaries || lines[0] == "// durable-graph-schema-history:6";
         bool allowLists = allowNullable || lines[0] == "// durable-graph-schema-history:5";
         bool allowArrays = allowLists || lines[0] == "// durable-graph-schema-history:4";
-        error = "format 3/4/5/6 requires canonical kind, arity, and type-pattern records";
+        error = "format 3/4/5/6/7 requires canonical kind, arity, and type-pattern records";
         if (lines.Length < 7 || lines[1] != "// schema-begin" || lines[lines.Length - 1] != "// schema-end" ||
             !lines[2].StartsWith("// schema-id-base64:", StringComparison.Ordinal) ||
             !TryDecodeSchemaId(lines[2].Substring(20), out string? id) ||
@@ -263,7 +301,7 @@ public sealed partial class DurableSchemaGenerator {
         SchemaReference? baseSchema = null;
         if (lines[cursor].StartsWith("// base:", StringComparison.Ordinal)) {
             string[] parts = lines[cursor++].Substring(8).Split('|');
-            if (parts.Length != 2 || !TypePattern.TryParse(parts[0], arity, out TypePattern? pattern, allowArrays, allowLists, allowNullable) || pattern!.Kind != PatternKind.Named ||
+            if (parts.Length != 2 || !TypePattern.TryParse(parts[0], arity, out TypePattern? pattern, allowArrays, allowLists, allowNullable, allowDictionaries) || pattern!.Kind != PatternKind.Named ||
                 !TryParsePositiveCanonicalInt(parts[1], out int baseVersion)) return false;
             baseSchema = new SchemaReference(pattern.DefinitionId!, baseVersion, pattern);
         }
@@ -283,9 +321,9 @@ public sealed partial class DurableSchemaGenerator {
                 if (parts.Length != 2) return false;
                 pattern = TypePattern.Builtin(tag);
             } else {
-                if (parts.Length < 3 || !TypePattern.TryParse(parts[2], arity, out pattern, allowArrays, allowLists, allowNullable)) return false;
+                if (parts.Length < 3 || !TypePattern.TryParse(parts[2], arity, out pattern, allowArrays, allowLists, allowNullable, allowDictionaries)) return false;
                 bool expectedKind = tag == 18 ? pattern!.IsNullable : tag == 17 ? pattern!.Kind == PatternKind.Parameter :
-                    pattern!.Kind == PatternKind.Named || (tag == 15 && (pattern.IsArray || pattern.IsList));
+                    pattern!.Kind == PatternKind.Named || (tag == 15 && (pattern.IsArray || pattern.IsList || pattern.IsDictionary));
                 if (!expectedKind) return false;
                 TypePattern child = tag == 18 ? pattern!.ElementType! : pattern!;
                 bool hasInlineVersion = tag == 16 || (tag == 18 && child.Kind == PatternKind.Named);

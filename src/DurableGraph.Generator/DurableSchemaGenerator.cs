@@ -23,7 +23,7 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
     private const string DurableBaseMetadataName =
         "Atelia.DurableGraph.DurableBase";
     private const string SchemaHistoryManifestHeader =
-        "// durable-graph-schema-history-manifest:6";
+        "// durable-graph-schema-history-manifest:7";
     private const string SchemaHistoryHeader =
         "// durable-graph-schema-history:1";
     private static readonly UTF8Encoding StrictUtf8 = new(
@@ -204,6 +204,7 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
         INamedTypeSymbol? halfType = compilation.GetSpecialType(SpecialType.System_Object)
             .ContainingAssembly.GetTypeByMetadataName("System.Half");
         INamedTypeSymbol? listType = GetBclListType(compilation);
+        INamedTypeSymbol? dictionaryType = GetBclDictionaryType(compilation);
         List<INamedTypeSymbol> types = GetDistinctSortedTypes(candidateTypes);
         List<DurableTypeModel> validTypes = new(types.Count);
         List<SchemaHistoryModel> history = ParseSchemaHistory(
@@ -213,7 +214,7 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
 
         foreach (INamedTypeSymbol type in types) {
             context.CancellationToken.ThrowIfCancellationRequested();
-            DurableTypeModel? model = CreateTypeModel(context, type, halfType, listType);
+            DurableTypeModel? model = CreateTypeModel(context, type, halfType, listType, dictionaryType);
 
             if (model.HasValue) {
                 validTypes.Add(model.Value);
@@ -392,7 +393,7 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
         }
 
         string[] lines = normalized.Split('\n');
-        if (lines.Length > 0 && (lines[0] == "// durable-graph-schema-history:3" || lines[0] == "// durable-graph-schema-history:4" || lines[0] == "// durable-graph-schema-history:5" || lines[0] == "// durable-graph-schema-history:6")) {
+        if (lines.Length > 0 && (lines[0] == "// durable-graph-schema-history:3" || lines[0] == "// durable-graph-schema-history:4" || lines[0] == "// durable-graph-schema-history:5" || lines[0] == "// durable-graph-schema-history:6" || lines[0] == "// durable-graph-schema-history:7")) {
             return TryParseTemplateHistory(file.Path, lines, out model, out error);
         }
         if (lines.Length < 5 ||
@@ -610,7 +611,8 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
         SourceProductionContext context,
         INamedTypeSymbol type,
         INamedTypeSymbol? halfType,
-        INamedTypeSymbol? listType) {
+        INamedTypeSymbol? listType,
+        INamedTypeSymbol? dictionaryType) {
         string typeName = type.ToDisplayString(QualifiedNameFormat);
 
         if (!HasSupportedTypeShape(type, context.CancellationToken)) {
@@ -624,7 +626,7 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
         bool hasErrors = false;
         if (type.TypeKind == TypeKind.Class && type.BaseType is not null && type.BaseType.Arity > 0 &&
             !HasMetadataName(type.BaseType, DurableBaseMetadataName) &&
-            !TryGetTypePattern(type.BaseType, type, halfType, listType, out _)) {
+            !TryGetTypePattern(type.BaseType, type, halfType, listType, dictionaryType, out _)) {
             context.ReportDiagnostic(Diagnostic.Create(InvalidTypeShape, GetSourceLocation(type), typeName));
             return null;
         }
@@ -651,7 +653,7 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
             version = candidateVersion;
         }
 
-        if (type.TypeKind == TypeKind.Enum) return CreateEnumModel(context, type, schemaId, version, hasErrors, listType);
+        if (type.TypeKind == TypeKind.Enum) return CreateEnumModel(context, type, schemaId, version, hasErrors, listType, dictionaryType);
 
         ImmutableArray<ISymbol> schemaMembers = type.GetMembers("Schema");
         if (StringComparer.Ordinal.Equals(type.Name, "Schema") ||
@@ -743,7 +745,8 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
                 !TryGetParameterField(field.Type, out typeTag, out typeTagValue, out fieldTypeName) &&
                 !TryGetArrayField(field.Type, out typeTag, out typeTagValue, out fieldTypeName) &&
                 !TryGetListField(field.Type, listType, out typeTag, out typeTagValue, out fieldTypeName) &&
-                !TryGetNullableField(field.Type, type, halfType, listType, context.CancellationToken,
+                !TryGetDictionaryField(field.Type, dictionaryType, out typeTag, out typeTagValue, out fieldTypeName) &&
+                !TryGetNullableField(field.Type, type, halfType, listType, dictionaryType, context.CancellationToken,
                     out typeTag, out typeTagValue, out fieldTypeName, out inlineSchema)) {
                 context.ReportDiagnostic(Diagnostic.Create(
                     UnsupportedFieldType,
@@ -753,7 +756,7 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
                 hasErrors = true;
                 continue;
             }
-            if (!TryGetTypePattern(field.Type, type, halfType, listType, out valuePattern)) {
+            if (!TryGetTypePattern(field.Type, type, halfType, listType, dictionaryType, out valuePattern)) {
                 context.ReportDiagnostic(Diagnostic.Create(UnsupportedFieldType, GetSourceLocation(field),
                     field.Name, field.Type.ToDisplayString(QualifiedNameFormat)));
                 hasErrors = true;
@@ -776,7 +779,7 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
             return null;
         }
 
-        return new DurableTypeModel(type, schemaId!, version, durableFields, listType);
+        return new DurableTypeModel(type, schemaId!, version, durableFields, listType, dictionaryType);
     }
 
     private static bool HasSupportedTypeShape(
@@ -1132,8 +1135,9 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
             INamedTypeSymbol symbol,
             string schemaId,
             int version,
-            List<DurableFieldModel> fields, INamedTypeSymbol? listType) {
+            List<DurableFieldModel> fields, INamedTypeSymbol? listType, INamedTypeSymbol? dictionaryType) {
             ListType = listType;
+            DictionaryType = dictionaryType;
             Symbol = symbol;
             SchemaId = schemaId;
             Version = version;
@@ -1142,6 +1146,7 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
 
         public INamedTypeSymbol Symbol { get; }
         public INamedTypeSymbol? ListType { get; }
+        public INamedTypeSymbol? DictionaryType { get; }
 
         public string SchemaId { get; }
 

@@ -7,7 +7,7 @@ namespace Atelia.DurableGraph.SchemaHistory;
 
 // Shared source between the compiler and history publisher. This is an open definition
 // pattern, not a Runtime TypeExpr or a second persistent closed-schema identity.
-internal enum PatternKind { Builtin = 1, Named = 2, Parameter = 3, VectorArray = 4, Rank2Array = 5, Rank3Array = 6, Rank4Array = 7, List = 8, Nullable = 9 }
+internal enum PatternKind { Builtin = 1, Named = 2, Parameter = 3, VectorArray = 4, Rank2Array = 5, Rank3Array = 6, Rank4Array = 7, List = 8, Nullable = 9, Dictionary = 10 }
 
 internal sealed class TypePattern : IEquatable<TypePattern> {
     private static readonly UTF8Encoding Utf8 = new(false, true);
@@ -30,6 +30,7 @@ internal sealed class TypePattern : IEquatable<TypePattern> {
         else if (IsArray) text.Append('a').Append(ArrayRank.ToString(CultureInfo.InvariantCulture)).Append('(').Append(arguments[0]._canonical).Append(')');
         else if (IsNullable) text.Append("q(").Append(arguments[0]._canonical).Append(')');
         else if (IsList) text.Append("l(").Append(arguments[0]._canonical).Append(')');
+        else if (IsDictionary) text.Append("d(").Append(arguments[0]._canonical).Append(',').Append(arguments[1]._canonical).Append(')');
         else {
             text.Append('n').Append(Convert.ToBase64String(Utf8.GetBytes(definitionId!))).Append('(');
             for (int index = 0; index < arguments.Length; index++) {
@@ -49,9 +50,19 @@ internal sealed class TypePattern : IEquatable<TypePattern> {
     public bool ContainsParameter { get; }
     public bool IsArray => (int)Kind >= 4 && (int)Kind <= 7;
     public bool IsList => Kind == PatternKind.List;
+    public bool IsDictionary => Kind == PatternKind.Dictionary;
     public bool IsNullable => Kind == PatternKind.Nullable;
     public int ArrayRank => IsArray ? (int)Kind - 3 : 0;
     public TypePattern? ElementType => IsArray || IsList || IsNullable ? _arguments[0] : null;
+    public TypePattern? KeyType => IsDictionary ? _arguments[0] : null;
+    public TypePattern? ValueType => IsDictionary ? _arguments[1] : null;
+    public bool ContainsDictionary {
+        get {
+            if (IsDictionary) return true;
+            foreach (TypePattern argument in _arguments) if (argument.ContainsDictionary) return true;
+            return false;
+        }
+    }
     public bool ContainsNullable {
         get {
             if (IsNullable) return true;
@@ -93,10 +104,19 @@ internal sealed class TypePattern : IEquatable<TypePattern> {
 
     public static TypePattern NullableOf(TypePattern element) {
         if (element is null) throw new ArgumentNullException(nameof(element));
-        if (element.IsArray || element.IsList || element.IsNullable ||
+        if (element.IsArray || element.IsList || element.IsDictionary || element.IsNullable ||
             (element.Kind == PatternKind.Builtin && element.BuiltinTag == 4))
             throw new ArgumentException("Nullable requires a non-nullable value operand.", nameof(element));
         TypePattern result = new(PatternKind.Nullable, 0, null, new[] { element });
+        int nodes = 0;
+        result.ValidateBounds(1, ref nodes);
+        return result;
+    }
+
+    public static TypePattern DictionaryOf(TypePattern key, TypePattern value) {
+        if (key is null) throw new ArgumentNullException(nameof(key));
+        if (value is null) throw new ArgumentNullException(nameof(value));
+        TypePattern result = new(PatternKind.Dictionary, 0, null, new[] { key, value });
         int nodes = 0;
         result.ValidateBounds(1, ref nodes);
         return result;
@@ -130,7 +150,8 @@ internal sealed class TypePattern : IEquatable<TypePattern> {
         if (!ContainsParameter) return this;
         TypePattern[] substituted = new TypePattern[_arguments.Length];
         for (int index = 0; index < substituted.Length; index++) substituted[index] = _arguments[index].Substitute(arguments);
-        return IsArray ? ArrayOf(substituted[0], ArrayRank) : IsList ? ListOf(substituted[0]) : IsNullable ? NullableOf(substituted[0]) : Named(DefinitionId!, substituted);
+        return IsArray ? ArrayOf(substituted[0], ArrayRank) : IsList ? ListOf(substituted[0]) : IsNullable ? NullableOf(substituted[0]) :
+            IsDictionary ? DictionaryOf(substituted[0], substituted[1]) : Named(DefinitionId!, substituted);
     }
 
     public bool ParametersFit(int arity) {
@@ -152,13 +173,13 @@ internal sealed class TypePattern : IEquatable<TypePattern> {
         }
     }
 
-    public static bool TryParse(string text, int arity, out TypePattern? result, bool allowArrays = true, bool allowLists = true, bool allowNullable = true) {
+    public static bool TryParse(string text, int arity, out TypePattern? result, bool allowArrays = true, bool allowLists = true, bool allowNullable = true, bool allowDictionaries = true) {
         result = null;
         if (arity < 0 || arity > 32) return false;
         try {
             int cursor = 0, nodes = 0;
             TypePattern parsed = Parse(text, ref cursor, 1, ref nodes);
-            if (cursor != text.Length || !parsed.ParametersFit(arity) || parsed.ToString() != text || (!allowArrays && parsed.ContainsArray) || (!allowLists && parsed.ContainsList) || (!allowNullable && parsed.ContainsNullable)) return false;
+            if (cursor != text.Length || !parsed.ParametersFit(arity) || parsed.ToString() != text || (!allowArrays && parsed.ContainsArray) || (!allowLists && parsed.ContainsList) || (!allowNullable && parsed.ContainsNullable) || (!allowDictionaries && parsed.ContainsDictionary)) return false;
             result = parsed;
             return true;
         } catch (ArgumentException) { return false; }
@@ -169,6 +190,14 @@ internal sealed class TypePattern : IEquatable<TypePattern> {
     private static TypePattern Parse(string text, ref int cursor, int depth, ref int nodes) {
         if (cursor >= text.Length || depth > 64 || ++nodes > 4096) throw new FormatException();
         char kind = text[cursor++];
+        if (kind == 'd') {
+            if (cursor >= text.Length || text[cursor++] != '(') throw new FormatException();
+            TypePattern key = Parse(text, ref cursor, depth + 1, ref nodes);
+            if (cursor >= text.Length || text[cursor++] != ',') throw new FormatException();
+            TypePattern value = Parse(text, ref cursor, depth + 1, ref nodes);
+            if (cursor >= text.Length || text[cursor++] != ')') throw new FormatException();
+            return DictionaryOf(key, value);
+        }
         if (kind == 'l' || kind == 'q') {
             if (cursor >= text.Length || text[cursor++] != '(') throw new FormatException();
             TypePattern element = Parse(text, ref cursor, depth + 1, ref nodes);

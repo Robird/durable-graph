@@ -9,7 +9,7 @@ public sealed class NullableTemplateHistoryTests {
         using Fixture fixture = new();
         string text = History("Holder", "// field:1|18|q(b2)\n// field:2|18|q(p0)\n// field:3|18|q(nUG9pbnQ=())|2\n", arity: 1);
         SchemaHistoryRecord record = fixture.Parse(text);
-        Assert.Equal(text, SchemaHistoryDocument.RenderHistory(record));
+        Assert.Equal(text, SchemaHistoryDocument.RenderHistory(record, 6));
         Assert.Equal(new SchemaHistoryKey("Point", 2), record.Fields[2].InlineSchema);
         Assert.Equal("q(b2)", record.Fields[1].ValuePattern.Substitute([record.Fields[0].ValuePattern.ElementType!]).ToString());
     }

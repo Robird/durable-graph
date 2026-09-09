@@ -13,10 +13,14 @@ slots and UpgradeContext tracing. Storage rows and probe-owned address sidecars 
 `uint` IDs; those boundaries use `.Value` or `new ObjectId(...)` explicitly. Ordinary numeric
 `uint` fields and the independently specified reference-body golden bytes remain unchanged.
 
+The [Dictionary consumer](DictionaryConsumer/README.md) exercises experimental BCL Dictionary support through
+`Run-DictionaryProbe.ps1`: supported comparer policies, shared key/value references, unordered key-addressed Delta,
+and independent historical enum-key/struct-value upgrades after deleting their old CLR declarations.
+
 The [Enum consumer](EnumConsumer/README.md) adds explicit durable enum coverage through
 `Run-EnumProbe.ps1`: unknown integer values, generic/Nullable/array/List composition,
 retained history after deleting the old CLR enum, and explicit upgrades followed by Base/Delta resaves.
-It uses the existing history v6 and catalog v2 formats.
+The current package writer emits history v7; accepted earlier history remains unchanged. Catalog v2 is retained.
 The InlineStruct consumer keeps the ordinary generated API in V1/V2; after deleting the
 inline CLR declarations in V3, it uses Family DTO aliases and unified definition registration.
 This exercises the retained orphan-inline-history selection rule without changing its saved history.
@@ -217,7 +221,7 @@ child and strings and reopens normally. Shared historical value DTO/body helpers
 of the deleted domain CLR names; this does not provide readers for deleted reference-object families.
 
 The script requires all stage markers and history counts `5 -> 10 -> 11 -> 13`, rejects deletion or
-modification of previously published `.dgschema` files, and checks that new history uses text format v6.
+modification of previously published `.dgschema` files, and checks that new history uses text format v7.
 The unchanged score uses a five-byte integer value so the nested leaf change remains a real Delta
 candidate after Base v4 shortened the type header; the ordinary B/D policy is unchanged.
 It packs the same eight-package dependency closure by default; `-PackageSource <feed> -Version <version>`
@@ -242,7 +246,7 @@ domain struct. A missing closed conversion leaves exact decoding available while
 fails before that object's first business callback. The consumer also checks that UpgradeContext
 identifies the actual object and each adjacent owner edge; it does not exercise DB-039 value tools.
 
-The runner preserves accepted history hashes and requires v6 for new history. It packs an isolated
+The runner preserves accepted history hashes and requires v7 for new history. It packs an isolated
 dependency feed by default, or reuses one through `-PackageSource <feed> -Version <version>`.
 Run instructions, stage details and limitations live in the consumer README; the implementation
 record is [DB-038 §12](../../docs/design-branches/0038-generic-schema-state-and-binding-design.md#12-产品施工跟踪).
@@ -282,7 +286,7 @@ The [array consumer](ArrayConsumer/README.md) uses two real package builds to ex
 supported ranks, jagged sharing, generic array operands and generic struct elements, and a cycle
 through a World array. A historical inline element Upgrade runs once per shared array, forces one
 Base rewrite, then resumes ordinary Delta saving on the same domain instances. The old Revision
-still decodes its exact old element DTO. The runner publishes and verifies immutable history v6.
+still decodes its exact old element DTO. The runner publishes and verifies immutable history v7.
 
 The array consumer also covers DB-045's repository-local representation IDs: new Base v4 headers
 contain only the ID, reopening preserves its layout, and array element Upgrade changes the array's
@@ -304,7 +308,7 @@ Separate prepared Base/Delta plans survive clearing their source lists before ap
 The next build removes the old inline domain CLR declaration while retaining its versioned state
 history. Explicit list-owned value Upgrade runs once for the shared list, forces Base and then
 resumes ordinary Delta. Representation IDs remain persistent, with a new ID only for the upgraded
-list layout. The runner requires stage markers, immutable history hashes and new history v6;
+list layout. The runner requires stage markers, immutable history hashes and new history v7;
 it accepts `-PackageSource <feed> -Version <version>` to reuse the existing eight-package feed.
 The consumer uses DB-049's List range codec 2 and DB-051's default Adaptive writer. Algorithm comparisons
 and same-history measurements live in [ListDeltaReplayProbe](../ListDeltaReplayProbe/README.md); this lane verifies package delivery.
@@ -316,5 +320,5 @@ Run `./experiments/PackageConsumerProbe/Run-NullableProbe.ps1` for the
 a shared List, vector and rank-four array, retaining reference sharing and cycles inside present values.
 The second build deletes the old struct CLR declaration while retaining exact history, explicitly lifts
 the child conversion, rewrites upgraded owners as Base and resumes Delta. Clearing nullable values
-removes the unreachable cyclic island. History v6 hashes and counts are checked in packaged Publish
+removes the unreachable cyclic island. History v7 hashes and counts are checked in packaged Publish
 and Verify modes; the runner also accepts an existing matching eight-package feed.

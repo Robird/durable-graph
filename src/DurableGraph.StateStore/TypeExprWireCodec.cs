@@ -20,6 +20,11 @@ internal static class TypeExprWireCodec {
             WriteNode(ref writer, type.ElementType!);
             return;
         }
+        if (type.IsDictionary) {
+            WriteNode(ref writer, type.KeyType!);
+            WriteNode(ref writer, type.ValueType!);
+            return;
+        }
         writer.WriteString(type.DefinitionId!);
         writer.WriteUInt32((uint)type.Arguments.Length);
         foreach (TypeExpr argument in type.Arguments) { WriteNode(ref writer, argument); }
@@ -49,6 +54,11 @@ internal static class TypeExprWireCodec {
             TypeExpr child = ReadNode(ref reader, depth + 1, ref remainingNodes);
             try { return TypeExpr.Nullable(child); }
             catch (ArgumentException error) { throw new InvalidDataException("Invalid Nullable type operand.", error); }
+        }
+        if (tag == 10) {
+            TypeExpr key = ReadNode(ref reader, depth + 1, ref remainingNodes);
+            TypeExpr value = ReadNode(ref reader, depth + 1, ref remainingNodes);
+            return TypeExpr.Dictionary(key, value);
         }
         if (tag != 2) {
             throw new InvalidDataException("Unknown or open type expression in a closed persisted type.");

@@ -2,11 +2,13 @@ namespace Atelia.DurableGraph;
 
 /// <summary>The exact immutable representation of one reference object, independent of its CLR instance.</summary>
 public sealed class ObjectLayout : IEquatable<ObjectLayout> {
-    private ObjectLayout(ObjectStateKind kind, DurableSchema? schema, ArrayLayout? array, ListLayout? list = null) {
+    private ObjectLayout(ObjectStateKind kind, DurableSchema? schema, ArrayLayout? array, ListLayout? list = null,
+        DictionaryLayout? dictionary = null) {
         Kind = kind;
         Schema = schema;
         Array = array;
         List = list;
+        Dictionary = dictionary;
     }
 
     public static ObjectLayout String { get; } = new(ObjectStateKind.String, null, null);
@@ -25,20 +27,26 @@ public sealed class ObjectLayout : IEquatable<ObjectLayout> {
         ArgumentNullException.ThrowIfNull(list);
         return new(ObjectStateKind.List, null, null, list);
     }
+    public static ObjectLayout ForDictionary(DictionaryLayout dictionary) {
+        ArgumentNullException.ThrowIfNull(dictionary);
+        return new(ObjectStateKind.Dictionary, null, null, dictionary: dictionary);
+    }
     public DurableSchema? Schema { get; }
     public ArrayLayout? Array { get; }
     public ListLayout? List { get; }
+    public DictionaryLayout? Dictionary { get; }
     public TypeExpr Type => Kind switch {
         ObjectStateKind.String => TypeExpr.Builtin(TypeTag.String),
         ObjectStateKind.Durable => Schema!.Type,
         ObjectStateKind.Array => Array!.Type,
         ObjectStateKind.List => List!.Type,
+        ObjectStateKind.Dictionary => Dictionary!.Type,
         _ => throw new InvalidOperationException("Unknown object layout."),
     };
     public bool Equals(ObjectLayout? other) => other is not null && Kind == other.Kind &&
-        Equals(Schema, other.Schema) && Equals(Array, other.Array) && Equals(List, other.List);
+        Equals(Schema, other.Schema) && Equals(Array, other.Array) && Equals(List, other.List) && Equals(Dictionary, other.Dictionary);
     public override bool Equals(object? obj) => obj is ObjectLayout other && Equals(other);
-    public override int GetHashCode() => HashCode.Combine(Kind, Schema, Array, List);
+    public override int GetHashCode() => HashCode.Combine(Kind, Schema, Array, List, Dictionary);
 }
 
 /// <summary>Exact array element representation. Shape belongs to the individual frozen state.</summary>

@@ -6,6 +6,7 @@ public enum ObjectStateKind {
     String,
     Array,
     List,
+    Dictionary,
 }
 
 /// <summary>
@@ -49,6 +50,13 @@ public sealed class ObjectStateRecord {
     }
 
     public ObjectLayout Layout { get; }
+    internal ObjectStateRecord(ObjectId id, DictionaryLayout layout, object state, ICapturedStatePreparation? preparation = null) {
+        ArgumentNullException.ThrowIfNull(state);
+        Id = id;
+        Layout = ObjectLayout.ForDictionary(layout);
+        _content = state;
+        Preparation = preparation;
+    }
     public ObjectStateKind Kind => Layout.Kind;
     public DurableSchema? Schema => Layout.Schema;
     internal object Content => _content;
@@ -75,4 +83,10 @@ public sealed class ObjectStateRecord {
     public FrozenListState<TState> GetListState<TState>() where TState : unmanaged =>
         Kind == ObjectStateKind.List && _content is FrozenListState<TState> state
             ? state : throw new InvalidOperationException("The record does not contain the requested exact List state type.");
+
+    /// <summary>Returns immutable exact Dictionary contents without exposing writable entries.</summary>
+    public FrozenDictionaryState<TKeyState, TValueState> GetDictionaryState<TKeyState, TValueState>()
+        where TKeyState : unmanaged where TValueState : unmanaged =>
+        Kind == ObjectStateKind.Dictionary && _content is FrozenDictionaryState<TKeyState, TValueState> state
+            ? state : throw new InvalidOperationException("The record does not contain the requested exact Dictionary state type.");
 }

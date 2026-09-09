@@ -156,6 +156,23 @@ public sealed class CaptureContext : IDisposable {
                 RequirePhase(Phase.Capturing);
                 _objects.Add(item);
             }
+            // Key projection can intern references queued after the Dictionary itself.
+            // Validate lookup equality only when all captured target contents are available.
+            if (_objects.Any(static row => row.Preparation is DictionaryObjectBinding)) {
+                Dictionary<ObjectId, ObjectStateRecord> directory = _objects.ToDictionary(static row => row.Id);
+                StateReferenceValidator validator = new(directory);
+                foreach (ObjectStateRecord row in _objects) {
+                    if (row.Preparation is DictionaryObjectBinding dictionary) {
+                        dictionary.VisitReferences(row, validator);
+                    }
+                }
+                foreach (ObjectStateRecord row in _objects) {
+                    if (row.Preparation is DictionaryObjectBinding dictionary) {
+                        dictionary.ValidateLookupKeys(row, id => directory.TryGetValue(id, out ObjectStateRecord? target)
+                            ? target : throw new InvalidDataException($"Dictionary key object {id.Value} was not captured."));
+                    }
+                }
+            }
             Candidate = new CapturedGraph(_rootIds, _objects);
             _phase = Phase.Sealed;
             ClearBuildData();

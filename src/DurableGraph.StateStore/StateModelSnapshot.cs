@@ -28,7 +28,8 @@ internal sealed partial class StateModelSnapshot : StateBindingContext {
         Dictionary<string, StateDefinitionBinding>? definitions = null, SchemaStore? schemas = null,
         Dictionary<Type, StateValueUpgradeRuleSet>? valueUpgradeRules = null,
         Type? arrayElementUpgradeRuleSet = null, Type? listElementUpgradeRuleSet = null,
-        ListDeltaAlgorithm listDeltaAlgorithm = ListDeltaAlgorithm.Adaptive) {
+        ListDeltaAlgorithm listDeltaAlgorithm = ListDeltaAlgorithm.Adaptive,
+        Type? dictionaryKeyUpgradeRuleSet = null, Type? dictionaryValueUpgradeRuleSet = null) {
         _models = models;
         _types = types;
         _readers = readers;
@@ -36,6 +37,8 @@ internal sealed partial class StateModelSnapshot : StateBindingContext {
         _valueUpgradeRules = valueUpgradeRules ?? [];
         ArrayElementUpgradeRuleSet = arrayElementUpgradeRuleSet;
         ListElementUpgradeRuleSet = listElementUpgradeRuleSet;
+        DictionaryKeyUpgradeRuleSet = dictionaryKeyUpgradeRuleSet;
+        DictionaryValueUpgradeRuleSet = dictionaryValueUpgradeRuleSet;
         if (!Enum.IsDefined(listDeltaAlgorithm)) { throw new ArgumentOutOfRangeException(nameof(listDeltaAlgorithm)); }
         _listDeltaAlgorithm = listDeltaAlgorithm;
         _schemas = schemas;
@@ -51,6 +54,8 @@ internal sealed partial class StateModelSnapshot : StateBindingContext {
     internal IReadOnlyDictionary<SchemaKey, StateReaderBinding> Readers => _readers;
     public override Type? ArrayElementUpgradeRuleSet { get; }
     public override Type? ListElementUpgradeRuleSet { get; }
+    public override Type? DictionaryKeyUpgradeRuleSet { get; }
+    public override Type? DictionaryValueUpgradeRuleSet { get; }
 
     internal static void RegisterValueUpgradeRuleSet(Dictionary<Type, StateValueUpgradeRuleSet> rules,
         StateValueUpgradeRuleSet ruleSet) {
@@ -172,7 +177,7 @@ internal sealed partial class StateModelSnapshot : StateBindingContext {
         }
         TypeExpr nominal = GetTypeExpr(domainType);
         // Reference metadata must not recursively close the referenced object's body.
-        if (domainType.IsArray || IsListType(domainType) || typeof(DurableBase).IsAssignableFrom(domainType)) {
+        if (domainType.IsArray || IsListType(domainType) || IsDictionaryType(domainType) || typeof(DurableBase).IsAssignableFrom(domainType)) {
             StateValueBinding reference = new(DurableFieldInfo.Reference(1, nominal), typeof(ObjectId), typeof(ObjectIdStateOps),
                 domainType, typeof(ObjectValueProjection<>).MakeGenericType(domainType));
             _currentValues.Add(domainType, reference);
@@ -235,6 +240,10 @@ internal sealed partial class StateModelSnapshot : StateBindingContext {
             return domainType.IsSZArray ? TypeExpr.VectorArray(element) : TypeExpr.MultiDimArray(element, domainType.GetArrayRank());
         }
         if (IsListType(domainType)) { return TypeExpr.List(GetTypeExpr(domainType.GetGenericArguments()[0])); }
+        if (IsDictionaryType(domainType)) {
+            Type[] arguments = domainType.GetGenericArguments();
+            return TypeExpr.Dictionary(GetTypeExpr(arguments[0]), GetTypeExpr(arguments[1]));
+        }
         if (_types.TryGetValue(domainType, out StateModelBinding? model)) { return model.CurrentSchema.Type; }
         if (!TryDefinition(domainType, out StateDefinitionBinding? definition)) {
             throw new InvalidDataException($"No supported declaration is registered for {domainType}.");
@@ -254,6 +263,11 @@ internal sealed partial class StateModelSnapshot : StateBindingContext {
             Type nullable = typeof(Nullable<>).MakeGenericType(child);
             RequireClosed(nullable);
             return nullable;
+        }
+        if (type.IsDictionary) {
+            Type dictionary = typeof(Dictionary<,>).MakeGenericType(GetDomainType(type.KeyType!), GetDomainType(type.ValueType!));
+            RequireClosed(dictionary);
+            return dictionary;
         }
         if (type.IsList) {
             Type list = typeof(List<>).MakeGenericType(GetDomainType(type.ElementType!));
@@ -297,6 +311,7 @@ internal sealed partial class StateModelSnapshot : StateBindingContext {
         _domainDefinitions.TryGetValue(type.IsGenericType ? type.GetGenericTypeDefinition() : type, out definition);
 
     private static bool IsListType(Type type) => type.IsGenericType && type.GetGenericTypeDefinition() == typeof(List<>);
+    private static bool IsDictionaryType(Type type) => type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Dictionary<,>);
 
     private void Begin((string Kind, object Key) active) {
         if (!_closing.Add(active)) { throw new InvalidDataException($"Recursive exact {active.Kind} binding is unsupported."); }

@@ -1,10 +1,10 @@
 # DB-054：Dictionary<TKey, TValue> 内容对象与键寻址 Delta
 
-> 状态：**Proposed / 白名单试验方向已采纳，尚未实施**，2026-09-09。
+> 状态：**Implemented / G0–G4 已通过验收**，2026-09-10。
 > 问题：利用确定的键对应关系，接入普通 BCL Dictionary 的冻结、增量保存、历史读取、显式升级与领域恢复，是否能避免 List 的序列匹配复杂性？
 > 最小成功见证：同一个共享 `Dictionary<string, Point>` 连续增删改并 Commit；冷重开保留键引用、值状态和 comparer 语义；Point 升版后只归一化一次、强制 Base，随后恢复 Delta/NoChange。
 > 用户采纳先用白名单建设主体，并明确 BCL Dictionary 适配仍为实验性；复合值 Key 是后续重点。
-> 本轮维护设计，不开始产品施工；下述具体 API/码位仍须在施工 G0 固定，不是实现事实或长期容器承诺。
+> 2026-09-10 用户已授权完整实施本分片；完成与验证以 §10 施工账本为准，不把后续复合 Key 纳入本片。
 
 ## 1. 结论与现有依据
 
@@ -32,7 +32,7 @@ Microsoft 的 [Dictionary 合同](https://learn.microsoft.com/en-us/dotnet/api/s
 TValue 使用完整现有槽闭包：13 种标量、显式 enum、Nullable、递归 inline/generic struct、string、durable class、数组、List，
 再加 Dictionary 引用；支持容器、泛型、数组的递归组合。共享和循环沿统一 ObjectId 路径处理。
 
-TKey 的**可表示性**和**可恢复的键比较能力**分别判定。推荐首片支持：
+TKey 的**可表示性**和**可恢复的键比较能力**分别判定。首片支持：
 
 | TKey | 可接受的实例 comparer | 说明 |
 |---|---|---|
@@ -104,7 +104,7 @@ ValueTuple 同样逐分量使用默认比较器，不能仅凭外壳名称放行
 
 ## 3. 类型、状态与 comparer 位置
 
-拟议形状（名字可在实施时就近调整）：
+实施形状：
 
 ```text
 TypeExpr.Dictionary(keyNominal, valueNominal)
@@ -121,8 +121,8 @@ Entries 在语义上无序，只读访问不等于承诺内部 buffer 排列。C
 comparer 是**对象内容元数据**，不进入 nominal 类型或 DictionaryLayout。
 同一个 `Dictionary<string, Node>` CLR 类型可以同时存在 Ordinal、OrdinalIgnoreCase、ReferenceIdentity 实例；
 现有按 CLR Type 缓存的 current binding 因而仍可唯一，Allocate 从当前 frozen state 选择 comparer。
-拟设四种封闭策略：ScalarDefault、StringOrdinal、StringOrdinalIgnoreCase、ReferenceIdentity。
-具体码位在 G0 固定。historical ScalarDefault 接受 builtin scalar，或符合 enum 表示规范的 exact InlineValue：
+四种封闭策略为 ScalarDefault=0、StringOrdinal=1、StringOrdinalIgnoreCase=2、ReferenceIdentity=3。
+historical ScalarDefault 接受 builtin scalar，或符合 enum 表示规范的 exact InlineValue：
 非泛型、无 base、唯一 FieldId=1、八种整数底层槽之一；按该整数槽操作，不需要旧领域 enum CLR。
 reader 验证的是持久布局，不能证明历史 CLR 声明是 enum：DB-053 没有持久 enum 标记，等价单整数 struct 的表示同样可读。
 这不授予当前 struct 的默认 key 能力；current binding/Capture 仍要求矩阵中的真实 CLR 类型。
@@ -136,7 +136,8 @@ SchemaCatalog 增加 Dictionary 行，两个 exact 槽及 codec 版本共用既�
 Base v4 仍只写 RepresentationId，Delta 仍继承终止 Base 的 exact 表示，Storage 不理解 Dictionary。
 引用 Dictionary 的 owner 只锁定双实参 nominal 约束；Dictionary 自己锁定 key/value 的 exact inline 布局，引用目标版本独立。
 SG、Shared history、Build、nominal wire codec 与目录格式须一起接入双实参构造，不能只让 Runtime 识别 CLR 类型。
-G0 盘点现有码位后固定必要的新语法/版本：新 history 保留原已接受文件及 hash；不为未投入使用的存储格式增加兼容 reader。
+新增 nominal 构造码 10、目录 row kind 5；新写 history/manifest v7，保留已接受旧版本文件及 hash。
+SCB1 v2 与 Base v4 不变，没有增加旧存储格式兼容 reader。
 
 ## 4. 两种键相等性与最小 Delta
 
@@ -149,7 +150,7 @@ G0 盘点现有码位后固定必要的新语法/版本：新 history 保留原�
 同理 `+0/-0` 或不同 NaN bits 在默认查找语义下可能等价，持久表示不同仍按删除新增处理。
 这可能少复用一次 value Delta，是正确的局部效率取舍。
 
-推荐实现每次准备临时生成 key body 并建立哈希索引；hash 只加速，碰撞必须比较完整 bytes，不能作持久身份。
+实现每次准备临时生成 key body 并建立哈希索引；hash 只加速，碰撞必须比较完整 bytes，不能作持久身份。
 不新增 SG StateHash，不在整个库引入 comparer 插件。该索引及 key bytes 是可释放的操作内存，不能引用可变领域 key。
 无需全量排序；匹配平均成本为所有 key 的编码与哈希扫描，加实际变化 value 的融合编码。
 哈希碰撞下仍须正确，不声称无条件线性最坏时间。大 key 的临时 bytes 和重复传输是首片接受的代价。
@@ -225,7 +226,7 @@ ReferenceIdentity 不读取目标对象字段，因此即使目标尚未 Hydrate
 
 ## 6. 历史 Upgrade
 
-复用容器 owner 的显式工具模式，拟增加彼此独立的 `UseDictionaryKeyUpgrades` / `UseDictionaryValueUpgrades`。
+复用容器 owner 的显式工具模式，使用彼此独立的 `UseDictionaryKeyUpgrades` / `UseDictionaryValueUpgrades`。
 同一 nominal Dictionary 的 source→current 两个完整槽分别绑定；未变槽直接保留，变化槽必须显式选择规则集。
 key 的首片升级见证为 enum；value 覆盖 inline/generic struct、Nullable/enum 等完整既有值能力。
 保留历史 DTO/body，不需要旧 enum/struct 领域 CLR；不自动寻找邻接升级路径或 latest 填缺。
@@ -273,7 +274,7 @@ subagents 可在 G0 合同固定后分别承担 Runtime body、SG/history、图/
 - 计数型 IStateOps 见证每个匹配 key 恰调用一次 value PrepareDelta、零 StateEquals；新增/删除 key 不调用 value Delta；
 - 与 List 一样复用 PreparedBase/PreparedDelta 实际 bytes、原 Base/Delta 策略与发布故障合同，不新增 Storage 语义。
 
-代码实施后根 solution build、相关与全量 tests、真实包及独立审查；这轮只有文档变更，不宣称上述验收已通过。
+验收包括根 solution build、相关与全量 tests、真实包及独立审查；实际结果见 §10。
 性能只需见证改一项的 Delta 不随未变化项数线性膨胀、无 List 搜索预算；不预设吞吐门槛。
 后续实测若大 key 编码成为热点，再考虑缓冲复用/StateHash 或字节索引缓存；不以此为首片前置。
 
@@ -285,3 +286,55 @@ subagents 可在 G0 合同固定后分别承担 Runtime body、SG/history、图/
 初稿提交 `336d97b` 修改五份 Markdown，403 个本地链接和 36 个锚点检查通过；未运行产品 build/tests。
 后续用户讨论采纳白名单试验路线，明确复合 Key 的优先级与 BCL 容器外观可替换性；本次据此补充 §2.1–2.2，
 没有将 record struct/ValueTuple 或自定义容器描述为现有能力。
+
+## 10. 实施合同与验收账本
+
+基线 `430f9ed` 工作区干净；根 build 零警告/错误，全量 1828 tests 通过（Runtime 1039、StateStore 531、Serialization 103、Storage 155）。
+日志位于测试项目 ignored obj 下 `db054-baseline.log`。
+
+G0 固定最小接缝：TypeExpr/共享模式构造码 10，双操作数 `Dictionary(key,value)` / `d(key,value)`；
+新写 history/manifest v7，旧 accepted 1–6 按各版语法保留原文件/hash。
+SCB1 保持 v2，Dictionary row kind=5、codec=1，两个槽隐含 FieldId 1/2；不修改 Base v4 或 Storage wire。
+comparer 为 body byte，ScalarDefault=0、StringOrdinal=1、StringOrdinalIgnoreCase=2、ReferenceIdentity=3。
+FrozenDictionaryState<K,V> 拥有 entry 数组与 comparer，内部排列不构成映射语义；现有 IStateOps 保持不变。
+Dictionary reader/current binding 分别提供内部 ValidateLookupKeys(row, resolver)，调用方在完整目标表可用时验证；
+不往通用基类增加容器 hook，不在 DTO 保存执行能力或领域引用。
+
+| 要求 | 实施落点 | 验收证据 |
+|---|---|---|
+| 双实参/Schema 引用/common Runtime | TypeExpr/ObjectLayout/ObjectStateRecord/引用与模板替换 | [生成图测试](../../tests/DurableGraph.Tests/DictionaryGeneratedGraphTests.cs)：13 标量与八整数 enum 键、复合 value、泛型/容器及不调用领域相等 |
+| SG 与历史 v7 | Generator/Shared/Build | [生成测试](../../tests/DurableGraph.Tests/DictionaryGeneratorTests.cs)、[history 测试](../../tests/DurableGraph.Tests/DictionaryHistoryTests.cs)：旧格式/文件保留、嵌套语法、诊断 |
+| 双槽持久目录 | SchemaStore/catalog/nominal wire | [目录测试](../../tests/DurableGraph.StateStore.Tests/DictionaryCatalogTests.cs)：独立 golden、双端依赖、冲突原子性/冷重开 |
+| frozen/body/key policy | Dictionary 新 Runtime 文件 | [body 测试](../../tests/DurableGraph.Tests/DictionaryBodyTests.cs)、[policy 测试](../../tests/DurableGraph.Tests/DictionaryKeyPolicyTests.cs)：融合计数、排列、截断、浮点/Empty/策略拒绝 |
+| current/exact 图接入 | snapshot/registry/Seal/decoded/normalized | [绑定测试](../../tests/DurableGraph.StateStore.Tests/DictionaryBindingCatalogTests.cs)、[Repository 测试](../../tests/DurableGraph.StateStore.Tests/DictionaryRepositoryTests.cs)：全部 source/current 校验、连续保存、晚期依赖冲突 |
+| 显式 key/value Upgrade | DictionaryUpgrade/UpgradeContext | [升级测试](../../tests/DurableGraph.Tests/DictionaryUpgradeTests.cs)：独立规则、空/absent、late conflict、碰撞、Context 与失败隔离 |
+| 真实包两代 | DictionaryConsumer/runner | [包见证](../../experiments/PackageConsumerProbe/DictionaryConsumer/README.md)：旧 enum/struct 删除、96 callbacks、两字典 Base 后 Delta |
+| 旧包回归与独立审查 | 主线程串行验证，独立 reviewer 两轮审查 | 下述九条包 lane 全部通过；无未解决阻塞，无跳过/削弱旧断言 |
+
+最终根 build 零警告/错误；全量 **2029 tests 通过**（Runtime 1190、StateStore 581、Serialization 103、Storage 155），
+比基线新增 201 个用例。最终日志为 `tests/DurableGraph.Tests/obj/db054-build.log` 与 `db054-full-final.log`。
+初次集成发现的是测试夹具的 internal 可见性、params 类型推导/Nullable 警告及异常继承假设，均已修正；
+未通过扩大产品访问权限、兼容旧存储格式或放宽任意异常来绕过测试。
+metadata Validate 保持不编码，key 查重/lookup 验证位于各自内容阶段；新增计数回归验证该屏障。
+
+包均由主线程串行实际执行；前八条共用八依赖包 feed，版本 `0.0.0-dictionary-e2e.20260909162417.14064`，
+位于 Dictionary artifact 的 `feed`。基础 Run-Probe 无复用 feed 参数，按原入口独立 pack/run。
+artifact 相对 `experiments/PackageConsumerProbe/obj/`：
+
+| lane | artifact 目录 |
+|---|---|
+| Dictionary | `dictionary-20260909162416-14064-08f1929b` |
+| Generic | `generic-20260909162605-21652-ec2d3a04` |
+| Nullable | `nullable-20260909162628-21652-8b16f275` |
+| Enum | `enum-20260909162646-21652-7bec2bbb` |
+| List | `list-20260909162703-21652-11dc7e07` |
+| Array | `array-20260909162721-21652-cc43e9f8` |
+| InlineStruct | `inline-struct-20260909162739-21652-425a11b1` |
+| ValueUpgrade | `value-upgrade-20260909162801-21652-094a7b0f` |
+| 基础 PackageConsumer | `run-20260909162850-4200` |
+
+新写 v7 与保留旧 accepted hash 的合同分别由 tests/实际包验证。存储仍是 SCB1 v2、Base v4、Storage wire v3。
+正文的实验性定位和后继 TODO 已进入 DictionaryObjectBinding；没有一般 comparer 插件或容器框架。
+文档收尾检查覆盖 11 份 Markdown、500 个本地链接及 49 个锚点，全部通过；staged diff 空白检查通过。
+
+后续复合值 Key、record struct/ValueTuple、任意 comparer、替换容器外观均不进入本轮实施。

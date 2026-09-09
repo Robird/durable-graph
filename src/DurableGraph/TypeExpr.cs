@@ -55,6 +55,14 @@ public sealed class TypeExpr : IEquatable<TypeExpr>, IComparable<TypeExpr> {
 
     public bool IsNullable => Kind == TypeExprKind.Nullable;
 
+    public bool IsDictionary => Kind == TypeExprKind.Dictionary;
+
+    /// <summary>The key operand of a built-in Dictionary expression.</summary>
+    public TypeExpr? KeyType => IsDictionary ? Arguments[0] : null;
+
+    /// <summary>The value operand of a built-in Dictionary expression.</summary>
+    public TypeExpr? ValueType => IsDictionary ? Arguments[1] : null;
+
     /// <summary>Gets the array rank, or zero for a non-array expression.</summary>
     public int ArrayRank => IsArray ? (int)Kind - (int)TypeExprKind.VectorArray + 1 : 0;
 
@@ -64,7 +72,7 @@ public sealed class TypeExpr : IEquatable<TypeExpr>, IComparable<TypeExpr> {
     /// <summary>Constructs a nullable value expression; named and parameter children are checked when bound.</summary>
     public static TypeExpr Nullable(TypeExpr element) {
         ArgumentNullException.ThrowIfNull(element);
-        if (element.IsNullable || element.IsArray || element.IsList ||
+        if (element.IsNullable || element.IsArray || element.IsList || element.IsDictionary ||
             element.Kind == TypeExprKind.Builtin && element.BuiltinTag == TypeTag.String) {
             throw new ArgumentException("A nullable child must be a non-nullable supported value type.", nameof(element));
         }
@@ -75,6 +83,13 @@ public sealed class TypeExpr : IEquatable<TypeExpr>, IComparable<TypeExpr> {
     public static TypeExpr List(TypeExpr element) {
         ArgumentNullException.ThrowIfNull(element);
         return new(TypeExprKind.List, TypeTag.Invalid, null, [element], -1);
+    }
+
+    /// <summary>Constructs the experimental built-in BCL Dictionary type.</summary>
+    public static TypeExpr Dictionary(TypeExpr key, TypeExpr value) {
+        ArgumentNullException.ThrowIfNull(key);
+        ArgumentNullException.ThrowIfNull(value);
+        return new(TypeExprKind.Dictionary, TypeTag.Invalid, null, [key, value], -1);
     }
 
     public static TypeExpr Builtin(TypeTag tag) {
@@ -146,6 +161,7 @@ public sealed class TypeExpr : IEquatable<TypeExpr>, IComparable<TypeExpr> {
         TypeExprKind.Rank4Array => $"{ElementType}[,,,]",
         TypeExprKind.List => $"List<{ElementType}>",
         TypeExprKind.Nullable => $"Nullable<{ElementType}>",
+        TypeExprKind.Dictionary => $"Dictionary<{KeyType},{ValueType}>",
         _ => throw new InvalidOperationException("Unknown type expression constructor."),
     };
 
@@ -163,4 +179,5 @@ public enum TypeExprKind : byte {
     Rank4Array = 7,
     List = 8,
     Nullable = 9,
+    Dictionary = 10,
 }

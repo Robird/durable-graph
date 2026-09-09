@@ -48,11 +48,19 @@ internal sealed class NormalizedRevision {
         }
         // The complete old chains were decoded first. Validate current references only after
         // every single-object Upgrade completed; source rows remain live even after an edge is cut.
-        StateReferenceValidator validator = new(normalized.ToDictionary(static pair => pair.Key, static pair => pair.Value.Current));
+        Dictionary<ObjectId, ObjectStateRecord> directory = normalized.ToDictionary(static pair => pair.Key, static pair => pair.Value.Current);
+        StateReferenceValidator validator = new(directory);
         foreach (NormalizedObject row in normalized.Values) {
             row.Model?.VisitReferences(row.Current, validator);
         }
-        return new(source.RevisionAddress, normalized, source.Strings);
+        // Validate all source members even if an Upgrade removed their last incoming edge.
+        foreach (NormalizedObject row in normalized.Values) {
+            if (row.Model is DictionaryObjectBinding dictionary) {
+                dictionary.ValidateLookupKeys(row.Current, id => directory.TryGetValue(id, out ObjectStateRecord? target)
+                    ? target : throw new InvalidDataException($"Dictionary key object {id.Value} is not live."));
+            }
+        }
+        return new(source.RevisionAddress, normalized, source.Strings, directory);
     }
 
     private static ObjectBinding ResolveModel(StateModelSnapshot models, ObjectLayout layout) =>

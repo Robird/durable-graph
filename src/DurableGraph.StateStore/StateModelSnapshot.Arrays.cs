@@ -6,6 +6,7 @@ internal sealed partial class StateModelSnapshot {
 
     public override bool TryGetCurrentObjectBinding(Type domainType, out ObjectBinding? binding) {
         RequireClosed(domainType);
+        if (IsDictionaryType(domainType)) { return TryGetCurrentDictionaryBinding(domainType, out binding); }
         if (IsListType(domainType)) { return TryGetCurrentListBinding(domainType, out binding); }
         if (!domainType.IsArray) { return base.TryGetCurrentObjectBinding(domainType, out binding); }
         if (_currentArrays.TryGetValue(domainType, out ArrayObjectBinding? prior)) {
@@ -35,6 +36,7 @@ internal sealed partial class StateModelSnapshot {
 
     public override ObjectReaderBinding ResolveObjectReader(ObjectLayout layout) {
         ArgumentNullException.ThrowIfNull(layout);
+        if (layout.Kind == ObjectStateKind.Dictionary) { return ResolveDictionaryReader(layout); }
         if (layout.Kind == ObjectStateKind.List) { return ResolveListReader(layout); }
         if (layout.Kind != ObjectStateKind.Array) { return base.ResolveObjectReader(layout); }
         ArrayLayout array = layout.Array!;
@@ -82,6 +84,12 @@ internal sealed partial class StateModelSnapshot {
             if (requiredKind == SchemaKind.ReferenceObject) { throw new InvalidDataException("Nullable cannot be a reference target."); }
             TypeExpr child = type.ElementType!;
             CheckContainerNominalType(child, child.Kind == TypeExprKind.Named ? SchemaKind.InlineValue : null);
+            return;
+        }
+        if (type.IsDictionary) {
+            if (requiredKind == SchemaKind.InlineValue) { throw new InvalidDataException("A Dictionary cannot be an inline value."); }
+            CheckContainerNominalType(type.KeyType!);
+            CheckContainerNominalType(type.ValueType!);
             return;
         }
         if (type.IsArray || type.IsList) {

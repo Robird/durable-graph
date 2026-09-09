@@ -63,6 +63,7 @@ public sealed class StateReferenceValidator : IStateReferenceVisitor {
             ObjectStateKind.Durable => declaredType.Kind == TypeExprKind.Named && Accepts(layout.Schema!, declaredType),
             ObjectStateKind.Array => declaredType.IsArray && layout.Array!.Type == declaredType,
             ObjectStateKind.List => declaredType.IsList && layout.List!.Type == declaredType,
+            ObjectStateKind.Dictionary => declaredType.IsDictionary && layout.Dictionary!.Type == declaredType,
             _ => false,
         };
     }
@@ -89,9 +90,9 @@ public sealed class StateReferenceValidator : IStateReferenceVisitor {
 
     internal static void RequireReferenceType(TypeExpr declaredType) {
         ArgumentNullException.ThrowIfNull(declaredType);
-        if (!declaredType.IsClosed || !(declaredType.Kind == TypeExprKind.Named || declaredType.IsArray || declaredType.IsList ||
+        if (!declaredType.IsClosed || !(declaredType.Kind == TypeExprKind.Named || declaredType.IsArray || declaredType.IsList || declaredType.IsDictionary ||
             declaredType == TypeExpr.Builtin(TypeTag.String))) {
-            throw new ArgumentException("A reference requires a closed named, array, List, or string type.", nameof(declaredType));
+            throw new ArgumentException("A reference requires a closed named, array, List, Dictionary, or string type.", nameof(declaredType));
         }
     }
 }

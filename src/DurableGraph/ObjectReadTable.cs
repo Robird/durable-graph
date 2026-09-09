@@ -35,7 +35,8 @@ public sealed class ObjectReadTable {
             return null;
         }
         return _objects.TryGetValue(id, out object? instance) && instance is T typed &&
-            (!(typeof(T).IsArray || (typeof(T).IsGenericType && typeof(T).GetGenericTypeDefinition() == typeof(List<>))) ||
+            (!(typeof(T).IsArray || (typeof(T).IsGenericType &&
+                (typeof(T).GetGenericTypeDefinition() == typeof(List<>) || typeof(T).GetGenericTypeDefinition() == typeof(Dictionary<,>)))) ||
                 instance.GetType() == typeof(T))
             ? typed
             : throw new InvalidDataException($"Object ID {id} is not an allocated {typeof(T)} in this loading view.");

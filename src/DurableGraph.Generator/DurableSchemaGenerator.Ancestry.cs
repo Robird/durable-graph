@@ -129,7 +129,7 @@ public sealed partial class DurableSchemaGenerator {
         AttributeData attribute = GetAttribute(type.BaseType!.GetAttributes(), DurableTypeAttributeMetadataName)!;
         return new SchemaReference(
             (string)attribute.ConstructorArguments[0].Value!,
-            (int)attribute.ConstructorArguments[1].Value!, GetNamedTypePattern(type.BaseType!, model.ListType));
+            (int)attribute.ConstructorArguments[1].Value!, GetNamedTypePattern(type.BaseType!, model.ListType, model.DictionaryType));
     }
 
     private static bool SameReference(SchemaReference? left, SchemaReference? right) {
