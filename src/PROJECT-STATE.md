@@ -18,12 +18,15 @@
 
 ## 当前焦点
 
+[DB-051](../docs/design-branches/0051-bounded-list-delta-competition.md) 已形成经子代理审阅的施工计划，**下一轮实施，当前尚未改代码**：
+完整 Local Delta 作基准，停滞时尝试独立有界 Myers，并在竞争编码达到基准长度时停止；计划新增默认 Adaptive，保留三种显式旧算法。
+先流式输出 patch 去掉整段临时缓冲，再实现严格长度竞争；主要保证为候选 body 不大于原 Local，细分关卡/所有权/验证见该计划。
+
 [DB-049](../docs/design-branches/0049-list-range-delta-and-matcher-trial-slice.md) 已实现静态 StateEquals、统一 List codec 2，
 Position/LocalResync/BoundedMyers 共用 decoder，配置随模型 snapshot 冻结；根构建/tests、相关真实包和独立审查通过。
-[ListDeltaReplayProbe](../experiments/ListDeltaReplayProbe/README.md) 已完成独立库同领域历史 smoke 与正式重复矩阵；[结果](../experiments/ListDeltaReplayProbe/RESULTS.md)显示写入改善与算法间的时间/分配取舍。
-[白盒对照](../experiments/ListDeltaReplayProbe/WHITEBOX.md)另验证了 Local 窗口外位移与 Myers 编辑深度越界；失配后的位置回退会放大 Delta 准备分配，后选 Base 只兜底实际写入。
-[回退研究](../experiments/ListDeltaReplayProbe/FALLBACK.md)已验证共享预算的双向救援；Local-first 为优先实验候选，但成功匹配可能使 inline 小 patch 变为较大的完整值，采用前仍待字节代价验收。产品公开算法/默认不变。
-默认 LocalResync；保存成本与实际字节为主要评价，冷读优化最低优先级。证据集中在 DB-049，后继问题在[路线图](../docs/DurableGraph-research-roadmap.md#32-list-差分算法选型与设计)。
+[ListDeltaReplayProbe](../experiments/ListDeltaReplayProbe/README.md) 的普通落盘、[白盒](../experiments/ListDeltaReplayProbe/WHITEBOX.md)及
+[DB-050 回退研究](../experiments/ListDeltaReplayProbe/FALLBACK.md)保留证据：算法互补但搜索成功不保证 bytes 更小。
+**当前产品默认仍为 LocalResync**；保存成本与实际字节为主要评价，冷读优化最低优先级。后续项在[路线图](../docs/DurableGraph-research-roadmap.md#32-list-差分算法选型与设计)。
 [DB-047](../docs/design-branches/0047-list-content-object-slice.md) 的完整元素闭包、冻结/恢复、List owner Upgrade 与 history v5 继续沿用。
 
 [DB-046 统一闭合目录](../docs/design-branches/0046-unified-schema-catalog-slice.md) 的单批次登记、exact 整数依赖，

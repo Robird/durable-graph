@@ -3,10 +3,10 @@
 Purpose: replay the same ordinary domain edits into independent DurableGraph repositories and
 compare codec-2 List writers under the same policy, with correctness ahead of performance ranking.
 
-Current focus: complementary fallback research has passed correctness and two-seed measurements.
-Local-first single rescue fixes both known failures and preserves ordinary-trace bytes, but
-successful rescue can replace tiny inline patches with wide literals. It is the preferred research
-candidate, not a new public/default writer. Next is byte-cost acceptance of alternative pairings.
+Current focus: [DB-051](../../docs/design-branches/0051-bounded-list-delta-competition.md) is the reviewed
+next-turn construction plan, not implemented: full Local incumbent plus byte-limited Myers competition,
+with independent search budgets, then Adaptive as product default. The existing fallback candidates
+remain research evidence and must not be promoted unchanged. Current product default remains LocalResync.
 Evidence, limits and reproducible commands live in [FALLBACK.md](FALLBACK.md); prior causal examples
 and real repository replay remain in [WHITEBOX.md](WHITEBOX.md) and [RESULTS.md](RESULTS.md).
 Commands, measurement boundaries and workload inventory live in [README.md](README.md).
@@ -23,9 +23,7 @@ Output is ignored per-run JSON/CSV/Markdown plus independent repositories. Root 
 Fallback mode instead uses captured pairs and raw body validation, with no publication or cumulative
 policy simulation. It shares kernels/body with the product, and the experimental candidates remain here.
 
-Next: compare candidate pairings by byte cost as well as matching success; retain counterexamples,
-both white-box families and ordinary traces when evaluating fallback behavior;
-use representative application traces before changing defaults or tuning budgets; compare
-whole Commit and isolated Diff rather than assigning all overhead to flush. Larger traces,
-allocation profiling and segment-level code competition
-remain optional follow-ups triggered by representative results, not prerequisites.
+Next: implement DB-051 with product writer vs standalone matcher enumeration kept distinct, add
+Adaptive body/persistence measurements and retain the historical three/five-strategy evidence.
+Its limited encoder must preserve incumbent bytes and discard incomplete alternatives. Pooling,
+element-level interruption and region-byte reuse remain later profile-driven work.

@@ -87,16 +87,17 @@ DB-009/010 的旧 no-reuse 前提不能沿用；借用 Base 共享 prior 等结�
 ### 3.2 List 差分算法选型与设计
 
 [DB-049](design-branches/0049-list-range-delta-and-matcher-trial-slice.md) 已完成静态比较、统一 codec 与三种 writer，
-独立 Repository 的同领域历史重放也已完成；[实验结果](../experiments/ListDeltaReplayProbe/RESULTS.md)支持继续保留 LocalResync 默认和 Myers 选择。
-这项功能不再是待施工前置，当前接口与能力从 PROJECT-STATE 进入。
+独立 Repository 的同领域历史重放及 [DB-050 回退研究](../experiments/ListDeltaReplayProbe/FALLBACK.md)也已完成。
+**已选下一片为 [DB-051](design-branches/0051-bounded-list-delta-competition.md)，尚未实施**：完整 Local 基准、独立有界 Myers、
+严格限长竞争，并在验收后切换默认 Adaptive。用户接受触发路径的额外时间与短期分配，不再要求共享一份比较预算或只编码一次。
+当前实际默认仍为 LocalResync，从 PROJECT-STATE 查现有能力。
 
-剩余性能工作以真实业务轨迹触发，不自动延长当前分片：
+DB-051 之外的性能工作以实际轨迹或测量问题触发，不自动扩大该施工片：
 
 - 实际列表尺寸、编辑分布或保存频率明显不同于合成样本时，用现有 Probe 调整规模/种子/预算，
   分别比较完整 Commit、隔离 Diff、分配和策略后的实际写入，不能拿 candidate body 当实际文件节省。
-- [白盒对照](../experiments/ListDeltaReplayProbe/WHITEBOX.md)已定位窗口外位移、全局深度越界后的整段位置回退问题，
-  以及失败匹配引起的元素 Delta 准备分配。[回退研究](../experiments/ListDeltaReplayProbe/FALLBACK.md)已验证 Local-first 单次救援可修复两例，
-  但成功搜索可能扩大 inline payload。下步先研究候选配对的字节代价验收，连同其开销一起测量；保留 Marker 反例、重复值、边界控制和普通轨迹，不能只提高预算或按单例更换默认。
+- 候选配对的字节代价验收已经选定完整基准与限长竞争，转入 DB-051；后续若仍有开销问题，再研究
+  元素级编码复用、池化、更细的子 codec 中断及已编码区间复用。保留 Marker 反例、重复值、边界控制和普通轨迹，不能只提高预算或按单例判优。
 - 大块搬移、全部元素微改同时插入等场景出现实际写入问题后，再比较哈希匹配、偏移配对或局部 New/Patch 竞价；
   新匹配策略只要输出同 grammar，就不增加格式版本。暂不引入 key/comparer、tracking 容器或全局最优脚本。
 - 用户已明确冷读优化最低优先，完整恢复仍为硬条件；链变长只作观察，不为这轮匹配能力增加链长新策略、cache 或 accumulator。

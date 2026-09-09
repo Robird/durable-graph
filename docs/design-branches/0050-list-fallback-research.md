@@ -2,6 +2,9 @@
 
 状态：**Research / 实验已验证，尚未采纳新产品策略**。2026-09-09。
 
+后继施工计划为 [DB-051](0051-bounded-list-delta-competition.md)：采用完整基准与限长竞争，
+放松本实验的共享/半预算与单次编码约束。本文及数据保留原研究条件，不直接提升实验协调器为默认。
+
 问题：在 [DB-049](0049-list-range-delta-and-matcher-trial-slice.md) 的共同区间 codec 上，
 能否廉价识别 matcher 停滞、借另一种算法救援，并在 payload 准备前避免大量无益编码？
 [此前白盒](../../experiments/ListDeltaReplayProbe/WHITEBOX.md)给出了 Local 窗口外位移与 Myers 深度越界两种原因。

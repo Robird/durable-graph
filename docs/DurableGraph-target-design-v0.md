@@ -117,6 +117,9 @@ Source Generator 负责可在编译期确定的类型知识与机械代码，框
   按输出顺序组合新值与稀疏元素 patch；不修改 prior，也不依赖 target-copy 或业务编辑日志。
   匹配算法只决定复用哪些区间，不进入持久格式、ListLayout、Schema 或 RepresentationId；不同 writer 共用 reader。
   算法选择随操作快照冻结，重新配置不改变已有会话。搜索预算耗尽可退回位置匹配，不能牺牲精确恢复或 NoChange。
+  已选的默认策略方向是保留完整 Local Delta 基准，停滞时用独立有界 Myers 竞争，仅采用严格更短的完整 body；
+  竞争者可在实际已写长度达到基准时停止。接受额外编码及短期分配，最终选择后复用 bytes。
+  这是 [DB-051](design-branches/0051-bounded-list-delta-competition.md) 的待实施约束，不是当前默认能力声明。
   选择时优先保存耗时、分配与实际写入尺寸，冷读性能优化优先级最低；不为匹配实验扩张读链或缓存设计。
   语法与算法分工见 [DB-049](design-branches/0049-list-range-delta-and-matcher-trial-slice.md)，选型证据与后继条件见
   [路线图](DurableGraph-research-roadmap.md#32-list-差分算法选型与设计)。
