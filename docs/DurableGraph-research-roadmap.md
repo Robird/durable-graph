@@ -88,19 +88,20 @@ DB-009/010 的旧 no-reuse 前提不能沿用；借用 Base 共享 prior 等结�
 
 2026-09-09 用户选择两步推进：DB-047 先完成 BCL List 功能，以正确的位置差分占位；
 该片现已通过；[DB-048](design-branches/0048-list-delta-algorithm-research.md) 已完成文献、源码与候选交叉审查，
-尚未进行候选性能实验或选择最终算法/格式。此项是明确的后继研究，不延至泛指的 MVP 后优化。
+后续用户反馈已具体化为 [DB-049 施工方案](design-branches/0049-list-range-delta-and-matcher-trial-slice.md)，尚未实施或取得候选性能排名。
+此项是明确的后继工作，不延至泛指的 MVP 后优化。
 
 后续以两份冻结 List 状态为输入，研究如何兼顾 Diff/Patch 生成速度与 Object Delta 存储效率，重点改善
-头插、中插、删除引起的整体错位。变化发现与 patch 表达分别比较：不预定 Myers/LCS、splice 或区间复制，
+头插、中插、删除引起的整体错位。变化发现与 patch 表达分别评估，
 也不把改用自建 tracking 容器作为必需前置。可以复用前人成果，但必须保留精确元素语义和完整恢复能力。
 
-初步推荐验证“旧区间复用及稀疏子 Patch＋新元素区间”；局部重同步与有界 Myers 为首轮候选，
-哈希区间匹配保留为挑战者。原语、比较能力、工作预算和算法分别裁决，详细依据与实验矩阵集中在 DB-048。
-新增两个必须测量的成本面：IStateOps 尚无廉价 exact equality/hash；紧凑 Delta 可能延长策略允许的链，
-而当前每条 Apply 仍物化完整 List。故同时测匹配预处理和实际 X/Y 形成的冷读链，不仅比较 raw Delta 字节。
+DB-049 推荐直接补静态 StateEquals，引用槽按 ObjectId、浮点按位、inline 逐持久字段比较，避免匹配时准备弃用 payload。
+Position/局部重同步/有界 Myers 三个 writer 共用一套区间 codec，算法选择不进入持久格式或类型身份。
+通过独立 Repository 重放相同领域编辑历史，主要比较保存耗时/分配与实际字节；暂缓哈希匹配和局部最优选码。
 
-下一步按 DB-048 的局部实验顺序取得实测证据，再形成实施合同；保持 bit-exact/ObjectId/嵌套槽语义、正确回退及
-准确 NoChange，不追求全局最短脚本。改变 grammar 须明确 codec 版本，不自动引入兼容、tracking 容器或新策略。
+用户已明确冷读优化为最低优先级，完整恢复仍是硬条件；更小 Delta 可能延长链的现象只作观察，
+不增加冷读优化门槛、链长新策略或 accumulator。施工合同、配置冻结、预算和验证分工集中在 DB-049；
+改变 grammar 须明确 codec 版本，不自动引入兼容或 tracking 容器。
 
 ## 4. 明确延后及重访条件
 
