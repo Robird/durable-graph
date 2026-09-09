@@ -191,6 +191,7 @@ public sealed class ArrayBodyTests {
     }
 
     private readonly struct CountingOps : IStateOps<int> {
+        public static bool StateEquals(in int left, in int right, DurableFieldInfo slot) => left == right;
         public static int Preparations;
         public static void WriteBase(ref BinaryPayloadWriter writer, in int state, DurableFieldInfo slot) => Int32StateOps.WriteBase(ref writer, in state, slot);
         public static int ReadBase(ref BinaryPayloadReader reader, DurableFieldInfo slot) => Int32StateOps.ReadBase(ref reader, slot);
@@ -204,6 +205,7 @@ public sealed class ArrayBodyTests {
 
     private readonly struct Empty { }
     private readonly struct EmptyOps : IStateOps<Empty> {
+        public static bool StateEquals(in Empty left, in Empty right, DurableFieldInfo slot) => true;
         public static void WriteBase(ref BinaryPayloadWriter writer, in Empty state, DurableFieldInfo slot) { }
         public static Empty ReadBase(ref BinaryPayloadReader reader, DurableFieldInfo slot) => default;
         public static PreparedDeltaBody PrepareDelta(in Empty prior, in Empty current, DurableFieldInfo slot) => new(false, []);

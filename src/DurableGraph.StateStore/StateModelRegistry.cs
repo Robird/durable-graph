@@ -10,6 +10,14 @@ public sealed class StateModelRegistry : IStateModelRegistration {
     private readonly Dictionary<Type, StateValueUpgradeRuleSet> _valueUpgradeRules = [];
     private Type? _arrayElementUpgradeRuleSet;
     private Type? _listElementUpgradeRuleSet;
+    private ListDeltaAlgorithm _listDeltaAlgorithm = ListDeltaAlgorithm.LocalResync;
+
+    /// <summary>Selects how future operation snapshots prepare List Delta bodies.</summary>
+    /// <remarks>Existing sessions keep their writer selection. Algorithms share one persisted format and reader.</remarks>
+    public void UseListDeltaAlgorithm(ListDeltaAlgorithm algorithm) {
+        if (!Enum.IsDefined(algorithm)) { throw new ArgumentOutOfRangeException(nameof(algorithm)); }
+        _listDeltaAlgorithm = algorithm;
+    }
 
     /// <summary>Selects explicit value rules owned by Lists whose element layout changes.</summary>
     /// <remarks>This choice is independent of array element rules and is frozen per operation.</remarks>
@@ -92,5 +100,6 @@ public sealed class StateModelRegistry : IStateModelRegistration {
         new Dictionary<Type, StateModelBinding>(_types),
         new Dictionary<SchemaKey, StateReaderBinding>(_readers),
         new Dictionary<string, StateDefinitionBinding>(_definitions, StringComparer.Ordinal), schemas,
-        new Dictionary<Type, StateValueUpgradeRuleSet>(_valueUpgradeRules), _arrayElementUpgradeRuleSet, _listElementUpgradeRuleSet);
+        new Dictionary<Type, StateValueUpgradeRuleSet>(_valueUpgradeRules), _arrayElementUpgradeRuleSet, _listElementUpgradeRuleSet,
+        _listDeltaAlgorithm);
 }

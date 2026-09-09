@@ -71,6 +71,10 @@ Source Generator 负责可在编译期确定的类型知识与机械代码，框
   再生成，不要求永久保留所有旧领域 CLR 类，也不另存一套 DTO 源码历史。
 - 同版 DTO 的 Delta 准备融合变化判断与编码，结果持有变化判定和可复用 bytes，Delta body 大小从实际长度取得；
   选择 Delta 后复用该结果，避免再次比较和编码。临时缓冲所有权独立于可变领域对象。
+  List 匹配需要反复试探元素相等性，另用同 exact 槽下无分配的静态 StateEquals；逐持久字段比较，
+  不比较 struct padding、不调用领域 Equals，也不为试探生成临时 payload。匹配确定后，
+  仅对实际需要 patch 的元素对调用融合 PrepareDelta，并复用其 bytes；两者必须具有相同的持久状态相等语义。
+  这不要求普通对象在 PrepareDelta 前额外扫描一遍完整状态。具体分工见 [DB-049](design-branches/0049-list-range-delta-and-matcher-trial-slice.md)。
 - MVP 同样提前 PrepareBase：复用强类型 Write 生成独立拥有的 Base body，以实际 body 长度计量，
   决策后直接复用选定 bytes。先接受全部 live Base 准备的 CPU/内存成本，优化留待 MVP 后测量；
   Frame 大小上限不代表候选集合的内存上限。Storage envelope 开销另按其格式计入。
@@ -109,8 +113,13 @@ Source Generator 负责可在编译期确定的类型知识与机械代码，框
 - BCL 容器按内容保存和重建，不以其 bucket、capacity 等内部实现代替持久内容合同。
   List 只保存 Count、有序逻辑元素；Capture 递归投影为 owned 状态 buffer，后续领域修改不能污染候选。
   同一列表 resize 保持 ObjectId，只改 Capacity 无状态变化；同内容的新列表仍具有新的引用身份。
-  List 的差异算法不要求用户维护 change-tracking 容器。首版位置差分保证恢复正确性，
-  高效插入类 Diff/Patch 的选型另见[路线图](DurableGraph-research-roadmap.md#32-list-差分算法选型与设计)。
+  List 的差异算法不要求用户维护 change-tracking 容器。Delta 从 immutable prior 的 source 区间复制内容，
+  按输出顺序组合新值与稀疏元素 patch；不修改 prior，也不依赖 target-copy 或业务编辑日志。
+  匹配算法只决定复用哪些区间，不进入持久格式、ListLayout、Schema 或 RepresentationId；不同 writer 共用 reader。
+  算法选择随操作快照冻结，重新配置不改变已有会话。搜索预算耗尽可退回位置匹配，不能牺牲精确恢复或 NoChange。
+  选择时优先保存耗时、分配与实际写入尺寸，冷读性能优化优先级最低；不为匹配实验扩张读链或缓存设计。
+  语法与算法分工见 [DB-049](design-branches/0049-list-range-delta-and-matcher-trial-slice.md)，选型证据与后继条件见
+  [路线图](DurableGraph-research-roadmap.md#32-list-差分算法选型与设计)。
 
 设计来源：[DB-018](design-branches/0018-generated-graph-codec-shape.md)、
 [DB-024](design-branches/0024-reference-capture-and-reusable-object-ids.md)、

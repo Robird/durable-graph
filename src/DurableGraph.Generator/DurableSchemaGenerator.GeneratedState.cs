@@ -174,6 +174,7 @@ public sealed partial class DurableSchemaGenerator {
             AppendBinaryPrepareBase(source, version, bodyIndent);
             AppendBinaryDtoRead(source, version, bodyIndent);
             AppendBinaryPrepareDelta(source, version, bodyIndent);
+            AppendBinaryStateEquality(source, version, bodyIndent);
             AppendBinaryApplyDelta(source, version, bodyIndent);
             AppendBinaryStringReferenceValidation(source, version, bodyIndent);
             AppendBinaryReferenceTraversal(source, version, bodyIndent);
@@ -525,6 +526,23 @@ public sealed partial class DurableSchemaGenerator {
         }
 
         source.AppendLine(");");
+        source.Append(indent).AppendLine("}");
+    }
+
+    private static void AppendBinaryStateEquality(StringBuilder source, BinaryVersionModel version, string indent) {
+        source.Append(indent).Append("internal static bool StateEquals(in ").Append(version.Name).Append(" left, in ")
+            .Append(version.Name).AppendLine(" right) {");
+        foreach (BinaryFieldModel field in version.Fields) {
+            source.Append(indent).Append("    if (!(");
+            if (field.InlineSchema.HasValue) {
+                source.Append(InlineHelperName(field.InlineSchema.Value)).Append(".StateEquals(in left.").Append(field.Name)
+                    .Append(", in right.").Append(field.Name).Append(')');
+            } else {
+                AppendBinarySlotEquality(source, field, "left." + field.Name, "right." + field.Name);
+            }
+            source.AppendLine(")) return false;");
+        }
+        source.Append(indent).AppendLine("    return true;");
         source.Append(indent).AppendLine("}");
     }
 

@@ -298,4 +298,5 @@ history. Explicit list-owned value Upgrade runs once for the shared list, forces
 resumes ordinary Delta. Representation IDs remain persistent, with a new ID only for the upgraded
 list layout. The runner requires stage markers, immutable history hashes and new history v5;
 it accepts `-PackageSource <feed> -Version <version>` to reuse the existing eight-package feed.
-The first positional Delta is a correctness baseline; compact insertion algorithms are a later slice.
+The consumer now uses DB-049's List range codec 2 and default LocalResync writer. Algorithm comparisons
+and same-history measurements live in [ListDeltaReplayProbe](../ListDeltaReplayProbe/README.md); this lane verifies package delivery.

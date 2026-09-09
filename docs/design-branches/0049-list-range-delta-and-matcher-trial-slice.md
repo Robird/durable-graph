@@ -1,6 +1,6 @@
 # DB-049：List 区间 Delta 与匹配算法对照施工方案
 
-> 状态：**Proposed / 施工方案已具体化，尚未实施**，2026-09-09。
+> 状态：**Implemented / G0–G4 已通过验收**，2026-09-09。实现与验证证据见 §8。
 > 前置：[DB-048 调研](0048-list-delta-algorithm-research.md)；实现基线为 `fac4981` 的 List codec 1。
 > 用户本轮明确：优先保存开销与 Delta 尺寸；冷读性能是最低优先级；允许并存少量算法，重放相同领域编辑历史到独立 Repository 比较。
 
@@ -215,3 +215,37 @@ source/target 范围和预算回退，不以 benchmark 输出成功代替正确�
 
 完成时记录实际环境、验证与跑分证据；维护 PROJECT-STATE/roadmap/设计索引。根据结果选择临时默认，
 若两算法各有优势可继续保留两者和简单配置，不强行宣布唯一赢家。
+
+## 8. 施工验收记录
+
+基线 `55045b4` 工作区干净，根构建通过（0 warnings/errors）。本片保持 §1 非目标；
+主线程负责区间 codec、交叉接口、综合审查和串行构建/测试/跑分，子任务按文件独占写入。
+
+| 要求 | 实施责任 | 状态 / 证据 |
+|---|---|---|
+| G0 静态比较、SG/history | [IStateOps](../../src/DurableGraph/StateValueBinding.cs)、SG 两条 body 路径 | [静态比较](../../tests/DurableGraph.Tests/StateEqualityTests.cs)、[历史/泛型/padding](../../tests/DurableGraph.Tests/GeneratedStateEqualityTests.cs) 通过 |
+| G1 区间 codec / ListLayout | [reader/body](../../src/DurableGraph/ListStateReader.cs)、[ListLayout](../../src/DurableGraph/ListLayout.cs) | [golden/坏输入](../../tests/DurableGraph.Tests/ListBodyTests.cs)、[区间与源独立](../../tests/DurableGraph.Tests/ListRangeDeltaTests.cs) 通过 |
+| G2 Position/Local/Myers | [matcher](../../src/DurableGraph/ListDeltaMatcher.cs) | [独立 DP/随机/预算](../../tests/DurableGraph.Tests/ListDeltaMatcherTests.cs) 通过 |
+| G3 snapshot 配置、目录与集成 | [Registry](../../src/DurableGraph.StateStore/StateModelRegistry.cs)、List binding | [配置冻结/跨算法续链](../../tests/DurableGraph.StateStore.Tests/ListRepositoryTests.cs)、目录 tests 通过 |
+| G4 同历史重放与报告 | [ReplayProbe](../../experiments/ListDeltaReplayProbe/README.md) | Release smoke 及三规模三次重复矩阵通过，[结果](../../experiments/ListDeltaReplayProbe/RESULTS.md) |
+| 独立审查、完整构建/tests/真实包、文档 | 主线程与独立 reviewer | 核心及 replay 审查无剩余阻断；根 tests 1,529、五组相关真实包通过 |
+
+根构建 0 warnings/errors；Runtime 772、StateStore 499、Serialization 103、Storage 155，均 0 failures/skips。
+日志 `experiments/PackageConsumerProbe/obj/db049-tests.log`。首轮编译发现新增测试误用跨程序集 internal helper，
+已改用 snapshot 的既有绑定入口，没有扩大测试程序集权限。
+smoke 产物 `experiments/ListDeltaReplayProbe/obj/run-20260909082004-42552-0fccb2f7`：15 个独立测量库、225 个历史 Revision 全验证。
+probe 审查另指出无内容变化仍可被策略选 Base，已修正检查以允许并正常计量；正式矩阵使用修正后的代码。
+
+真实包均使用本片生产代码，五组为 List、Generic、InlineStruct、Array、ValueUpgrade；
+包含旧领域 CLR 删除后的历史 DTO、静态泛型操作、Upgrade、同引用身份、区间 Delta 及冷重开。
+八包共享 feed 为 `experiments/PackageConsumerProbe/obj/list-20260909082333-372-d4a22df9/feed`，
+版本 `0.0.0-list-e2e.20260909082333.372`。对应日志为该 Probe 的 `obj/db049-package-{list,Generic,InlineStruct,Array,ValueUpgrade}.log`。
+
+正式重放 `experiments/ListDeltaReplayProbe/obj/run-20260909082715-47256-4f0b463a`：
+126 个独立测量库、1,890 个历史 Revision、另 60 次 warmup；Count 32/512/4096（wide 最大512），
+每组合重复3次，每 pair 的隔离 Diff 重复5次，seed49001、X8/Y5。所有历史图和候选 roundtrip 通过。
+完整重现参数、指标边界和样本表集中在 ReplayProbe 的 RESULTS，不在多个工作集重复堆积数字。
+
+保留默认 LocalResync 与显式 Myers：14 个 workload/规模组合中11组实际对象写入相同，
+Myers 在另3组分别少12/13/31字节；LocalResync 的隔离 Diff 总分配在14组均更低，Myers 在部分大列表更快。
+独立结果复核支持“保留选择”而非宣布普适赢家；本轮不继续调参、加哈希或区间 New/Patch 竞价。

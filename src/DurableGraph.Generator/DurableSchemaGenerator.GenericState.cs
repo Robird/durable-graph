@@ -179,6 +179,7 @@ public sealed partial class DurableSchemaGenerator {
         output.AppendLine("            Write(ref writer, in value, schema);");
         output.Append("            return new ").Append(PayloadNamespace).AppendLine("PreparedBaseBody(buffer.WrittenSpan);");
         output.AppendLine("        }");
+        AppendGenericStateEquality(output, layout);
         AppendGenericDelta(output, layout);
         AppendGenericApply(output, layout);
         output.Append("        public static void Visit(in ").Append(dto).Append(" state, ").Append(RuntimeName).Append("IStateReferenceVisitor visitor, ")
@@ -192,6 +193,8 @@ public sealed partial class DurableSchemaGenerator {
         }
         output.AppendLine("        }");
         if (layout.Shape.Kind == 2) {
+            output.Append("        public static bool StateEquals(in ").Append(dto).Append(" left, in ").Append(dto)
+                .Append(" right, ").Append(RuntimeName).AppendLine("DurableFieldInfo slot) => StateEquals(in left, in right, slot.InlineSchema!);");
             output.Append("        public static void WriteBase(ref ").Append(PayloadNamespace).Append("BinaryPayloadWriter writer, in ").Append(dto)
                 .Append(" value, ").Append(RuntimeName).AppendLine("DurableFieldInfo slot) => Write(ref writer, in value, slot.InlineSchema!);");
             output.Append("        public static ").Append(dto).Append(" ReadBase(ref ").Append(PayloadNamespace).Append("BinaryPayloadReader reader, ")
@@ -204,6 +207,20 @@ public sealed partial class DurableSchemaGenerator {
                 .Append(RuntimeName).AppendLine("DurableFieldInfo slot) => Visit(in state, visitor, slot.InlineSchema!);");
         }
         output.AppendLine("    }");
+    }
+
+    private static void AppendGenericStateEquality(StringBuilder output, GenericLayout layout) {
+        output.Append("        public static bool StateEquals(in ").Append(layout.Dto).Append(" left, in ")
+            .Append(layout.Dto).Append(" right, ").Append(RuntimeName).AppendLine("DurableSchema schema) {");
+        foreach (GenericField field in layout.Fields) {
+            output.Append("            if (!(");
+            if (UsesGenericOps(field)) output.Append(GenericFieldOps(field)).Append(".StateEquals(in left.").Append(field.Name)
+                .Append(", in right.").Append(field.Name).Append(", ").Append(field.Slot()).Append(')');
+            else output.Append(GenericFieldEquality(field, "left." + field.Name, "right." + field.Name));
+            output.AppendLine(")) return false;");
+        }
+        output.AppendLine("            return true;");
+        output.AppendLine("        }");
     }
 
     private static void AppendGenericDelta(StringBuilder output, GenericLayout layout) {

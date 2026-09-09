@@ -1,6 +1,6 @@
 # DurableGraph 产品开发工作集
 
-> 校准：2026-09-09，[DB-047](../docs/design-branches/0047-list-content-object-slice.md) 已完成整体验收。本文只维护当前能力、边界与续工入口。
+> 校准：2026-09-09，[DB-049](../docs/design-branches/0049-list-range-delta-and-matcher-trial-slice.md) 已完成 G0–G4 验收。本文只维护当前能力、边界与续工入口。
 > 文档不是实现授权；事实以当前源码、测试和工具输出为准。
 
 ## 从这里继续
@@ -18,13 +18,11 @@
 
 ## 当前焦点
 
-[DB-047 List<T> 内容对象](../docs/design-branches/0047-list-content-object-slice.md) 已完成根构建、各测试项目、七组真实包和独立审查。
-完整受支持元素闭包、同实例长度变化、冻结/恢复及列表 owner Upgrade 均已接入统一对象路径与目录；history 新写 v5。
-位置差分是正确可用的效率基线；[DB-048 调研](../docs/design-branches/0048-list-delta-algorithm-research.md)及用户反馈已形成
-[DB-049 施工方案](../docs/design-branches/0049-list-range-delta-and-matcher-trial-slice.md)：无分配静态 StateEquals、统一 List 区间 codec，
-Position/局部重同步/有界 Myers 共用 decoder，配置随模型 snapshot 冻结；独立库重放相同领域编辑历史比较保存成本与实际字节。
-方案尚未实施、无性能排名；冷读优化按用户裁决为最低优先级，见[路线图](../docs/DurableGraph-research-roadmap.md#32-list-差分算法选型与设计)。
-施工证据集中维护在 DB-047。
+[DB-049](../docs/design-branches/0049-list-range-delta-and-matcher-trial-slice.md) 已实现静态 StateEquals、统一 List codec 2，
+Position/LocalResync/BoundedMyers 共用 decoder，配置随模型 snapshot 冻结；根构建/tests、相关真实包和独立审查通过。
+[ListDeltaReplayProbe](../experiments/ListDeltaReplayProbe/README.md) 已完成独立库同领域历史 smoke 与正式重复矩阵；[结果](../experiments/ListDeltaReplayProbe/RESULTS.md)显示写入改善与算法间的时间/分配取舍。
+默认 LocalResync；保存成本与实际字节为主要评价，冷读优化最低优先级。证据集中在 DB-049，后继问题在[路线图](../docs/DurableGraph-research-roadmap.md#32-list-差分算法选型与设计)。
+[DB-047](../docs/design-branches/0047-list-content-object-slice.md) 的完整元素闭包、冻结/恢复、List owner Upgrade 与 history v5 继续沿用。
 
 [DB-046 统一闭合目录](../docs/design-branches/0046-unified-schema-catalog-slice.md) 的单批次登记、exact 整数依赖，
 以及 [DB-045](../docs/design-branches/0045-persisted-representation-id-slice.md) 的 Base v4 单 ID 边界继续沿用。
@@ -40,7 +38,7 @@ Position/局部重同步/有界 Myers 共用 decoder，配置随模型 snapshot 
 
 | 层 | 已验证能力 | 尚未闭合的边界 |
 |---|---|---|
-| [DurableGraph](DurableGraph/DurableGraph.csproj) | immutable Schema/exact DAG；统一 ObjectBinding、ObjectLayout、Capture/refs/恢复目录；SZ/rank 2–4 数组与 List owned 状态、静态元素操作/位置 Delta；独立 historical reader | 高效 List Diff/Patch、其他 BCL、数组协变；持久发布由 StateStore 拥有 |
+| [DurableGraph](DurableGraph/DurableGraph.csproj) | immutable Schema/exact DAG；统一 ObjectBinding、ObjectLayout、Capture/refs/恢复目录；SZ/rank 2–4 数组与 List owned 状态；静态 StateEquals、数组稀疏/列表区间 Delta、三种 List writer；独立 historical reader | 其他 BCL、数组协变；持久发布由 StateStore 拥有 |
 | [Generator](DurableGraph.Generator/DurableGraph.Generator.csproj) / [Build](DurableGraph.Build/DurableGraph.Build.csproj) | class/struct 开放模板、readonly DTO/静态 body、Capture/Hydrate、泛型继承与递归数组/List 组合；history v5；三参 Upgrade/旧二参适配、值规则/局部依赖 adapter | 其他 BCL；跨程序集生成规则 |
 | [StateStore](DurableGraph.StateStore/DurableGraph.StateStore.csproj) | 统一闭合 Schema/数组/List 目录与整数依赖、单批次登记、Base v4 ID 头；完整 stored/current 引用验证、可达图两阶段恢复；公开 PrepareNew/fixed-Parent Prepare；GraphRepository 单 head/持久 WorldId 与 GraphSession 同实例 Commit；升级 Base/Remove | 无 branch/Reset/根替换或联合 Store 视图 |
 | [Storage](DurableGraph.StateStore.Storage/DurableGraph.StateStore.Storage.csproj) | AppendDurably 原 lease 屏障；local Base/Delta records、wire v3、exact Revision live map、Parent/prior 校验、object-first 原始重建链及实际 payload H；Base 精确/Delta 上界计量；真实 Segment/RBF 冷重开 | 不解码 typed body；不拥有持久 roots、类型目录或发布 head；重复读取暂未缓存 |
@@ -127,6 +125,7 @@ Position/局部重同步/有界 Myers 共用 decoder，配置随模型 snapshot 
   恢复的可达 durable 实例身份导入同一捕获会话；child-only 修改不改变 owner ID 槽，
   断开最后根路径后整个循环岛由完整 source − candidate 得到 Remove，旧 Revision 不受影响。
 - PrepareDeltaBody 每槽比较一次形成位图，再静态写变化值；结果含 HasChanges 和可复用 raw body，裸 Delta body 大小可直接取长度。
+  List 匹配另用静态 StateEquals 试探，仅实际变化的配对调用子 PrepareDelta；浮点按位、ObjectId 按值、inline 逐持久字段比较，忽略 padding。
   策略 D 还须计入对象 envelope，不能直接以裸 body 大小代替。
   PrepareBaseBody 对每版 DTO 复用 WriteBaseBody；全部 live Base 提前准备，决策后复用 bytes，性能优化留待 MVP 后。
   B 为完整 Base payload 精确值，D 仅对未定文件距离按 5 字节上界计量（超额 0..4）；H 仍是原记录实编码。
@@ -172,8 +171,10 @@ Position/局部重同步/有界 Myers 共用 decoder，配置随模型 snapshot 
   已知成员的 SG body 静态绑定字节原语；PrimitiveSlotCodecs 只在测试工具中。
 - exact BCL List<T> 复用完整槽闭包，可与数组、泛型 class/struct 递归组合；接口字段、List 子类及其他 BCL 容器仍拒绝。
   ListLayout 只含 exact 元素槽和 codec 版本，Count 属于 owned FrozenListState；Capacity 不持久化。
-  同实例 resize 保持 ObjectId/表示 ID；Base=count+元素，Delta=newCount+共同位置稀疏变化+新增尾部 Base。
-  Prepare/Apply 保持 prior/candidate 内容独立，插入类编辑可放大后缀写入；效率 TODO 指向路线图 §3.2。
+  同实例 resize 保持 ObjectId/表示 ID；Base=count+元素，codec 2 Delta=newCount+Copy/New/CopyAndPatch 区间，旧 codec 1 拒绝。
+  Prepare/Apply 保持 prior/candidate 独立；source 可重复/倒序，只读 prior，区间内使用严格局部稀疏子 patch。
+  UseListDeltaAlgorithm 选择 Position/LocalResync/BoundedMyers，默认 LocalResync；配置冻结到会话模型 snapshot，不进入布局/格式/表示 ID。
+  matcher 不编码，搜索有界、回退按位置配对；整个 NoChange 判定独立于搜索预算。性能选择与保留边界见路线图 §3.2。
   UseListElementUpgrades 独立于数组规则选择，空 List 同样预绑定；每个共享 List 归一化一次，保留 ID/count 并强制 Base。
   UpgradeContext.ListCount 随子工具继承，不复用 ArrayShape；历史 reader 不依赖旧领域 struct CLR 类型。
 - Generator 中未注册的 graph operations probe 和 tests 中 logical graph R1–R3b 是机制见证，不能算产品通用图能力。
@@ -185,7 +186,8 @@ DurableGraph runtime 也引用 Serialization，单一 runtime PackageReference �
 
 | 准备修改 | 先查源码/测试，再按需读合同 |
 |---|---|
-| List 内容、位置 Delta、历史元素 Upgrade | [DB-047](../docs/design-branches/0047-list-content-object-slice.md)、[当前投影](DurableGraph/ListObjectBinding.cs)、[历史 reader/body](DurableGraph/ListStateReader.cs)、[List 升级](DurableGraph/StateBindingContext.ListUpgrade.cs)、[真实包](../experiments/PackageConsumerProbe/ListConsumer/README.md) |
+| List 区间 Delta、匹配与配置 | [DB-049](../docs/design-branches/0049-list-range-delta-and-matcher-trial-slice.md)、[matcher](DurableGraph/ListDeltaMatcher.cs)、[reader/body](DurableGraph/ListStateReader.cs)、[重放实验](../experiments/ListDeltaReplayProbe/README.md) |
+| List 内容、冻结与历史元素 Upgrade | [DB-047](../docs/design-branches/0047-list-content-object-slice.md)、[当前投影](DurableGraph/ListObjectBinding.cs)、[List 升级](DurableGraph/StateBindingContext.ListUpgrade.cs)、[真实包](../experiments/PackageConsumerProbe/ListConsumer/README.md) |
 | 统一闭合目录、持久表示 ID 与 Base 头 | [DB-046](../docs/design-branches/0046-unified-schema-catalog-slice.md)、[目录 codec](DurableGraph.StateStore/SchemaCatalogWireCodec.cs)、[SchemaStore](DurableGraph.StateStore/SchemaStore.cs)、[目录重放测试](../tests/DurableGraph.StateStore.Tests/SchemaCatalogReplayTests.cs)、[表示集成测试](../tests/DurableGraph.StateStore.Tests/RepresentationIntegrationTests.cs) |
 | 数组对象、共同引用入口与元素 Upgrade | [DB-043](../docs/design-branches/0043-vector-array-object-slice.md)、[对象布局](DurableGraph/ObjectLayout.cs)、[数组绑定](DurableGraph/ArrayObjectBinding.cs)、[历史 reader](DurableGraph/ArrayStateReader.cs)、[数组 owner Upgrade](DurableGraph/StateBindingContext.ArrayUpgrade.cs) |
 | 引用槽与对象身份包装 | [DB-041](../docs/design-branches/0041-object-id-state-representation.md)、[ObjectId](DurableGraph/ObjectId.cs)、[静态引用操作](DurableGraph/BuiltinStateValues.cs) |

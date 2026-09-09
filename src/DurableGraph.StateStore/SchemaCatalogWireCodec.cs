@@ -104,7 +104,7 @@ internal static class SchemaCatalogWireCodec {
                 }
                 else if (kind == 4) {
                     uint codecVersion = reader.ReadUInt32();
-                    if (codecVersion != 1) { throw new InvalidDataException("Unsupported List codec version."); }
+                    if (codecVersion != 2) { throw new InvalidDataException("Unsupported List codec version."); }
                     entry = SchemaCatalogEntry.ForList(id, new(ReadSlot(ref reader, 1, state), codecVersion));
                 }
                 else { throw new InvalidDataException($"Unknown Schema catalog node kind {kind}."); }

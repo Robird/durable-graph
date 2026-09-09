@@ -48,7 +48,9 @@ public sealed class ListTypeExprTests {
         Assert.False(ObjectLayout.ForList(first).Equals(ObjectLayout.ForList(next)));
         Assert.True(StateReferenceValidator.Accepts(ObjectLayout.ForList(next), first.Type));
         Assert.False(StateReferenceValidator.Accepts(ObjectLayout.ForList(first), TypeExpr.VectorArray(v1.Type)));
-        Assert.Throws<ArgumentOutOfRangeException>(() => new ListLayout(first.ElementSlot, 2));
+        Assert.Equal(2U, first.CodecVersion);
+        Assert.Throws<ArgumentOutOfRangeException>(() => new ListLayout(first.ElementSlot, 1));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new ListLayout(first.ElementSlot, 3));
         Assert.Throws<ArgumentException>(() => new ListLayout(default));
     }
 

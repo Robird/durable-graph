@@ -22,8 +22,8 @@ public sealed class ListBodyTests {
         ListLayout layout = new(new(1, TypeTag.Int32));
         FrozenListState<int> prior = new(before), current = new(after);
         CountingOps.Preparations = 0;
-        PreparedDeltaBody delta = ListStateBody<int, CountingOps>.PrepareDelta(prior, current, layout);
-        Assert.Equal(Math.Min(before.Length, after.Length), CountingOps.Preparations);
+        PreparedDeltaBody delta = ListStateBody<int, CountingOps>.PrepareDelta(prior, current, layout, ListDeltaAlgorithm.Position);
+        Assert.Equal(before.Zip(after).Count(pair => pair.First != pair.Second), CountingOps.Preparations);
         Assert.Equal(!before.SequenceEqual(after), delta.HasChanges);
         BinaryPayloadReader reader = new(delta.Body);
         FrozenListState<int> applied = ListStateBody<int, CountingOps>.ApplyDelta(ref reader, prior, layout);
@@ -34,13 +34,13 @@ public sealed class ListBodyTests {
     }
 
     [Fact]
-    public void GoldenBodyDistinguishesPrefixDeltaAndBaseTail() {
+    public void GoldenBodyDistinguishesSparseSourcePatchesAndNewRange() {
         ListLayout layout = new(new(1, TypeTag.Int32));
         PreparedBaseBody body = ListStateBody<int, Int32StateOps>.PrepareBase(new(new[] { 1, 2, 3 }), layout);
         Assert.Equal(new byte[] { 3, 2, 4, 6 }, body.Body.ToArray());
-        PreparedDeltaBody delta = ListStateBody<int, Int32StateOps>.PrepareDelta(new(new[] { 1, 2, 3 }), new(new[] { 9, 2, 3, 0 }), layout);
-        Assert.Equal(new byte[] { 4, 1, 18, 0, 0 }, delta.Body.ToArray());
-        Assert.Equal(new byte[] { 0, 0 }, ListStateBody<int, Int32StateOps>.PrepareDelta(new(new[] { 1 }), new([]), layout).Body.ToArray());
+        PreparedDeltaBody delta = ListStateBody<int, Int32StateOps>.PrepareDelta(new(new[] { 1, 2, 3 }), new(new[] { 9, 2, 3, 0 }), layout, ListDeltaAlgorithm.Position);
+        Assert.Equal(new byte[] { 4, 3, 0, 3, 1, 18, 0, 2, 1, 0 }, delta.Body.ToArray());
+        Assert.Equal(new byte[] { 0 }, ListStateBody<int, Int32StateOps>.PrepareDelta(new(new[] { 1 }), new([]), layout).Body.ToArray());
     }
 
     [Theory]
@@ -67,16 +67,25 @@ public sealed class ListBodyTests {
     }
 
     [Theory]
-    [InlineData(typeof(InvalidDataException), new byte[] { 3, 1, 18, 1, 16, 0 })]
-    [InlineData(typeof(InvalidDataException), new byte[] { 3, 2, 18, 1, 16, 0 })]
-    [InlineData(typeof(InvalidDataException), new byte[] { 4, 4, 18, 0, 0 })] // Tail is not part of delta prefix.
-    [InlineData(typeof(InvalidDataException), new byte[] { 1, 2, 18, 0 })] // Removed index.
-    [InlineData(typeof(InvalidDataException), new byte[] { 3, 1, 2, 0 })] // Unchanged entry.
-    [InlineData(typeof(EndOfStreamException), new byte[] { 3, 1, 18 })]
+    [InlineData(typeof(InvalidDataException), new byte[] { 3, 3, 0, 3, 1, 18, 1, 16, 0 })] // Duplicate patch.
+    [InlineData(typeof(InvalidDataException), new byte[] { 3, 3, 0, 3, 2, 18, 1, 16, 0 })] // Descending patch.
+    [InlineData(typeof(InvalidDataException), new byte[] { 3, 3, 0, 3, 4, 18, 0 })] // Patch outside the selected range.
+    [InlineData(typeof(InvalidDataException), new byte[] { 2, 1, 2, 2 })] // Source end outside prior.
+    [InlineData(typeof(InvalidDataException), new byte[] { 1, 1, 4, 1 })] // Source start outside prior.
+    [InlineData(typeof(InvalidDataException), new byte[] { 3, 3, 0, 3, 1, 2, 0 })] // Unchanged child.
+    [InlineData(typeof(InvalidDataException), new byte[] { 3, 3, 0, 3, 0 })] // Empty CopyAndPatch.
+    [InlineData(typeof(InvalidDataException), new byte[] { 3, 1, 0, 0 })] // Zero source count.
+    [InlineData(typeof(InvalidDataException), new byte[] { 1, 2, 0 })] // Zero literal count.
+    [InlineData(typeof(InvalidDataException), new byte[] { 1, 1, 0, 2 })] // Output overrun.
+    [InlineData(typeof(EndOfStreamException), new byte[] { 3, 3, 0, 3, 1 })]
+    [InlineData(typeof(EndOfStreamException), new byte[] { 3, 3, 0, 3, 1, 18 })] // Last Patch still needs its terminator.
     [InlineData(typeof(EndOfStreamException), new byte[] { 3, 1 })]
-    [InlineData(typeof(InvalidDataException), new byte[] { 3, 0, 0 })]
+    [InlineData(typeof(EndOfStreamException), new byte[] { 3, 1, 0, 1 })] // Output underfill.
+    [InlineData(typeof(InvalidDataException), new byte[] { 3, 0 })] // No outer zero opcode.
+    [InlineData(typeof(InvalidDataException), new byte[] { 3, 4 })]
+    [InlineData(typeof(InvalidDataException), new byte[] { 3, 1, 0, 3, 0 })] // Trailing data.
     [InlineData(typeof(InvalidDataException), new byte[] { 128, 0 })]
-    [InlineData(typeof(InvalidDataException), new byte[] { 4, 0 })] // Missing Base tail.
+    [InlineData(typeof(InvalidDataException), new byte[] { 1, 2, 1 })] // Missing literal value.
     [InlineData(typeof(InvalidDataException), new byte[] { 255, 255, 255, 255, 15 })]
     public void MalformedDeltaRejectsWithoutChangingPrior(Type exception, byte[] bytes) {
         ListLayout layout = new(new(1, TypeTag.Int32));
@@ -107,7 +116,7 @@ public sealed class ListBodyTests {
         ListLayout emptyLayout = new(new(1, TypeTag.InlineValue, inlineSchema: empty));
         PreparedDeltaBody delta = ListStateBody<Empty, EmptyOps>.PrepareDelta(new(new Empty[1]), new(new Empty[4]), emptyLayout);
         Assert.True(delta.HasChanges);
-        Assert.Equal(new byte[] { 4, 0 }, delta.Body.ToArray());
+        Assert.Equal(new byte[] { 4, 1, 0, 1, 2, 3 }, delta.Body.ToArray());
         BinaryPayloadReader input = new(delta.Body);
         Assert.Equal(4, ListStateBody<Empty, EmptyOps>.ApplyDelta(ref input, new(new Empty[1]), emptyLayout).Count);
         input.EnsureFullyConsumed();
@@ -143,6 +152,7 @@ public sealed class ListBodyTests {
     }
     private readonly struct CountingOps : IStateOps<int> {
         public static int Preparations;
+        public static bool StateEquals(in int left, in int right, DurableFieldInfo slot) => left == right;
         public static void WriteBase(ref BinaryPayloadWriter writer, in int state, DurableFieldInfo slot) => Int32StateOps.WriteBase(ref writer, in state, slot);
         public static int ReadBase(ref BinaryPayloadReader reader, DurableFieldInfo slot) => Int32StateOps.ReadBase(ref reader, slot);
         public static PreparedDeltaBody PrepareDelta(in int prior, in int current, DurableFieldInfo slot) {
@@ -154,6 +164,7 @@ public sealed class ListBodyTests {
     }
     private readonly struct Empty { }
     private readonly struct EmptyOps : IStateOps<Empty> {
+        public static bool StateEquals(in Empty left, in Empty right, DurableFieldInfo slot) => true;
         public static void WriteBase(ref BinaryPayloadWriter writer, in Empty state, DurableFieldInfo slot) { }
         public static Empty ReadBase(ref BinaryPayloadReader reader, DurableFieldInfo slot) => default;
         public static PreparedDeltaBody PrepareDelta(in Empty prior, in Empty current, DurableFieldInfo slot) => new(false, []);

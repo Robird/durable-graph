@@ -3,6 +3,36 @@ using Atelia.Rbf;
 namespace Atelia.DurableGraph.StateStore.Tests;
 
 public sealed class ListBindingCatalogTests {
+    [Fact]
+    public void AlgorithmSelectionIsFrozenBeforeLazyBindingAndDoesNotAffectLayoutOrReader() {
+        StateModelRegistry registry = new();
+        StateModelSnapshot initial = registry.Snapshot();
+        registry.UseListDeltaAlgorithm(ListDeltaAlgorithm.Position);
+        StateModelSnapshot position = registry.Snapshot();
+        registry.UseListDeltaAlgorithm(ListDeltaAlgorithm.BoundedMyers);
+        StateModelSnapshot myers = registry.Snapshot();
+        Assert.Throws<ArgumentOutOfRangeException>(() => registry.UseListDeltaAlgorithm((ListDeltaAlgorithm)(-1)));
+        Assert.Throws<ArgumentOutOfRangeException>(() => registry.UseListDeltaAlgorithm((ListDeltaAlgorithm)999));
+
+        ListObjectBinding Bind(StateModelSnapshot snapshot) {
+            Assert.True(snapshot.TryGetCurrentObjectBinding(typeof(List<int>), out ObjectBinding? binding));
+            return Assert.IsAssignableFrom<ListObjectBinding>(binding);
+        }
+        ListObjectBinding a = Bind(initial), b = Bind(position), c = Bind(myers);
+        Assert.Equal(ListDeltaAlgorithm.LocalResync, a.DeltaAlgorithm);
+        Assert.Equal(ListDeltaAlgorithm.Position, b.DeltaAlgorithm);
+        Assert.Equal(ListDeltaAlgorithm.BoundedMyers, c.DeltaAlgorithm);
+        Assert.Same(a, Bind(initial));
+        Assert.Equal(a.CurrentLayout, b.CurrentLayout);
+        Assert.Equal(a.CurrentLayout, c.CurrentLayout);
+        Assert.Equal(a.CurrentLayout, myers.ResolveObjectReader(a.CurrentLayout).Layout);
+
+        StateValueBinding element = initial.ResolveCurrentValue(typeof(int));
+        Assert.Throws<ArgumentOutOfRangeException>(() => ListObjectBinding.Create(typeof(List<int>),
+            new(element.Slot), element, algorithm: (ListDeltaAlgorithm)999));
+        Assert.Equal(ListDeltaAlgorithm.LocalResync, ListObjectBinding.Create(typeof(List<int>), new(element.Slot), element).DeltaAlgorithm);
+    }
+
     [Theory]
     [InlineData(typeof(List<int>))]
     [InlineData(typeof(List<string>))]

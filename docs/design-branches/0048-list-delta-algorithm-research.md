@@ -2,7 +2,7 @@
 
 > 状态：**Research / Proposed**，2026-09-09。完成前人工作、当前源码及候选交叉审查；尚未进行候选性能实验，未选择最终算法或持久编码。
 > 基线：[DB-047](0047-list-content-object-slice.md)，产品提交 `fac4981`。本轮仅研究和记录，不实施产品变更。
-> 后续用户反馈已收敛为 [DB-049 施工方案](0049-list-range-delta-and-matcher-trial-slice.md)：静态 StateEquals、统一区间 codec、三种可配置 writer 与领域编辑历史重放；冷读优化降为最低优先级。具体施工以该方案为准，尚未实施。
+> 后续用户反馈已收敛并实施为 [DB-049](0049-list-range-delta-and-matcher-trial-slice.md)：静态 StateEquals、统一区间 codec、三种可配置 writer 与领域编辑历史重放；冷读优化降为最低优先级。本文保留调研依据，当前实现与结果从 DB-049 进入。
 
 ## 1. 问题与初步结论
 

@@ -250,6 +250,7 @@ public sealed class ArrayUpgradeTests {
         public static void Hydrate(ref T target, in T state, ObjectReadTable objects, DurableFieldInfo slot) => target = state;
     }
     private sealed class NoOps<T> : IStateOps<T> where T : unmanaged {
+        public static bool StateEquals(in T left, in T right, DurableFieldInfo slot) => throw new NotSupportedException();
         public static void WriteBase(ref BinaryPayloadWriter writer, in T state, DurableFieldInfo slot) => throw new NotSupportedException();
         public static T ReadBase(ref BinaryPayloadReader reader, DurableFieldInfo slot) => throw new NotSupportedException();
         public static PreparedDeltaBody PrepareDelta(in T prior, in T current, DurableFieldInfo slot) => throw new NotSupportedException();

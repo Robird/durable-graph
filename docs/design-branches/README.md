@@ -19,11 +19,11 @@
 ## 当前规划
 
 DB-034–039 已实现；DB-041 已实现非泛型 ObjectId，DB-042 已收敛 Upgrade Schema 复核，DB-040 的泛型目标品牌暂缓。
-DB-045 持久表示 ID、DB-046 统一闭合目录与 DB-047 List 基础能力均已完成；DB-048 调研与后续反馈已形成 DB-049 施工方案：
+DB-045 持久表示 ID、DB-046 统一闭合目录、DB-047 List 基础能力和 DB-049 区间差分均已完成；DB-048 保留调研依据：
 
 | 文档 | 状态 | 实施范围 |
 |---|---|---|
-| [DB-049 List 区间 Delta 与匹配算法对照](0049-list-range-delta-and-matcher-trial-slice.md) | Proposed / 未实施 | 静态 StateEquals、统一 codec、三种 writer 及快照配置；相同领域历史写独立库跑分，冷读优化最低优先 |
+| [DB-049 List 区间 Delta 与匹配算法对照](0049-list-range-delta-and-matcher-trial-slice.md) | Implemented / G0–G4 已验收 | 静态 StateEquals、统一 codec 2、三种 writer 及快照配置；根 tests/五组相关真实包/独立审查和同领域历史正式重放通过，保留 LocalResync 默认与 Myers 选择 |
 | [DB-048 List 差分算法与编辑原语调研](0048-list-delta-algorithm-research.md) | Research / 后继 DB-049 | 文献与源码证据、区间复用及稀疏 Patch 候选；用户后续选择静态比较并降低冷读优先级，具体施工转入 DB-049 |
 | [DB-047 List<T> 内容对象](0047-list-content-object-slice.md) | Implemented / G0–G3 已验收 | 完整槽组合、简单位置 Delta、List owner Upgrade、统一目录和 history v5；各测试项目与七组真实包通过；高效插入 Diff/Patch 后继选型 |
 | [DB-046 统一闭合 Schema 目录](0046-unified-schema-catalog-slice.md) | Implemented / G0–G3 已通过验收 | 合并 Schema/表示记录及单批次登记；exact base/inline 依赖按 ID 寻址；保留当前闭合与版本规则；完整 tests 与四组真实包通过 |

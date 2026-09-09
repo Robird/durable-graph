@@ -100,6 +100,7 @@ public sealed partial class DurableSchemaGenerator {
             AppendBinaryPrepareBase(source, version, "        ");
             AppendBinaryDtoRead(source, version, "        ");
             AppendBinaryPrepareDelta(source, version, "        ");
+            AppendBinaryStateEquality(source, version, "        ");
             AppendBinaryApplyDelta(source, version, "        ", inlineHelper: true);
             AppendBinaryStringReferenceValidation(source, version, "        ");
             AppendBinaryReferenceTraversal(source, version, "        ");

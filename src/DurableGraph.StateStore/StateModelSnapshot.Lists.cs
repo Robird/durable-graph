@@ -3,6 +3,7 @@ namespace Atelia.DurableGraph.StateStore;
 internal sealed partial class StateModelSnapshot {
     private readonly Dictionary<Type, ListObjectBinding> _currentLists = [];
     private readonly Dictionary<ListLayout, ObjectReaderBinding> _listReaders = [];
+    private readonly ListDeltaAlgorithm _listDeltaAlgorithm;
 
     private bool TryGetCurrentListBinding(Type domainType, out ObjectBinding? binding) {
         if (_currentLists.TryGetValue(domainType, out ListObjectBinding? prior)) {
@@ -18,7 +19,7 @@ internal sealed partial class StateModelSnapshot {
             StateValueBinding element = ResolveCurrentValue(domainType.GetGenericArguments()[0]);
             ListLayout layout = new(element.Slot);
             ListObjectBinding result = ListObjectBinding.Create(domainType, layout, element,
-                (target, source) => NormalizeList(source, target));
+                (target, source) => NormalizeList(source, target), _listDeltaAlgorithm);
             if (result.DomainType != domainType || !result.ListLayout.Equals(layout)) {
                 throw new InvalidDataException("A List factory returned another current type or exact layout.");
             }

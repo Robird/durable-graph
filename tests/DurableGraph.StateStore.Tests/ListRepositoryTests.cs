@@ -17,14 +17,89 @@ public sealed class ListRepositoryTests : IDisposable {
         DurableFieldInfo.Reference(3, LinksType), new DurableFieldInfo(4, TypeTag.Byte));
 
     [Fact]
-    public void SharedListCyclesResizeAndChildOnlyChangesKeepIdentityAcrossColdReopen() {
+    public void SessionFreezesWriterAndReopenSwitchesAlgorithmWithoutNewRepresentationOrForcedBase() {
+        StateModelRegistry models = Models(ListDeltaAlgorithm.LocalResync);
+        List<int> values = Enumerable.Range(10000, 1000).ToList();
+        World world = new() { Values = values, Alias = values };
+        FrameAddress seed, local, myers, position;
+        ObjectId listId;
+        byte[] registered;
+        using (GraphRepository repository = CreateRepository()) {
+            using GraphSession<World> session = repository.Create(world, models);
+            // List binding is still lazy here. The session must have copied the choice,
+            // rather than consulting the mutable registry when it first closes a List.
+            models.UseListDeltaAlgorithm(ListDeltaAlgorithm.Position);
+            seed = session.Commit(NoRebase);
+            values.Insert(0, 7);
+            local = session.Commit(NoRebase);
+            Assert.Same(values, session.World.Values);
+        }
+        registered = File.ReadAllBytes(Path.Combine(_root, "schemas.rbf"));
+        using (SegmentStore segments = OpenState()) {
+            StateRevisionStore store = new(segments);
+            ObjectVersionRecord delta = Assert.Single(store.Read(local).LocalObjects);
+            listId = new(delta.ObjectId);
+            // A head insertion into 1000 unchanged elements has a tiny range Delta.
+            // This is a payload-size witness for the frozen LocalResync selection;
+            // Position would rewrite the suffix, so this check is not just a setting getter.
+            Assert.Equal(ObjectVersionKind.Delta, delta.Kind);
+            Assert.True(delta.Body.Length < 40);
+        }
+
+        models.UseListDeltaAlgorithm(ListDeltaAlgorithm.BoundedMyers);
+        using (GraphRepository reopened = GraphRepository.OpenExisting(_root)) {
+            using GraphSession<World> session = reopened.Load<World>(models);
+            Assert.Equal(7, session.World.Values![0]);
+            session.World.Values.Insert(500, 8);
+            myers = session.Commit(NoRebase);
+        }
+        Assert.Equal(registered, File.ReadAllBytes(Path.Combine(_root, "schemas.rbf")));
+
+        models.UseListDeltaAlgorithm(ListDeltaAlgorithm.Position);
+        using (GraphRepository reopened = GraphRepository.OpenExisting(_root)) {
+            using GraphSession<World> session = reopened.Load<World>(models);
+            session.World.Values![1] = 42; // A sparse replacement is cheap for Position too.
+            position = session.Commit(NoRebase);
+            Assert.Same(session.World.Values, session.World.Alias);
+        }
+        Assert.Equal(registered, File.ReadAllBytes(Path.Combine(_root, "schemas.rbf")));
+        using (SegmentStore segments = OpenState()) {
+            StateRevisionStore store = new(segments);
+            Assert.Equal(seed, store.Read(local).ParentRevisionAddress);
+            Assert.Equal(local, store.Read(myers).ParentRevisionAddress);
+            Assert.Equal(myers, store.Read(position).ParentRevisionAddress);
+            foreach (FrameAddress revision in new[] { myers, position }) {
+                ObjectVersionRecord change = Assert.Single(store.Read(revision).LocalObjects);
+                Assert.Equal(listId.Value, change.ObjectId);
+                Assert.Equal(ObjectVersionKind.Delta, change.Kind);
+            }
+            using IRbfFile file = RbfFile.OpenExisting(Path.Combine(_root, "schemas.rbf"));
+            SchemaStore schemas = new(file, readOnly: true);
+            // Decode historical versions with an unrelated writer choice. All deltas
+            // share one reader and inherit the same Base representation.
+            StateModelSnapshot readers = Models().Snapshot(schemas);
+            Assert.Equal(1000, RevisionDecoder.ReadSnapshot(store, schemas, seed, readers).GetRequired(listId).GetListState<int>().Count);
+            Assert.Equal(1001, RevisionDecoder.ReadSnapshot(store, schemas, local, readers).GetRequired(listId).GetListState<int>().Count);
+            FrozenListState<int> final = RevisionDecoder.ReadSnapshot(store, schemas, position, readers).GetRequired(listId).GetListState<int>();
+            Assert.Equal(1002, final.Count);
+            Assert.Equal(7, final[0]);
+            Assert.Equal(42, final[1]);
+            Assert.Equal(8, final[500]);
+        }
+    }
+
+    [Theory]
+    [InlineData(ListDeltaAlgorithm.Position)]
+    [InlineData(ListDeltaAlgorithm.LocalResync)]
+    [InlineData(ListDeltaAlgorithm.BoundedMyers)]
+    public void SharedListCyclesResizeAndChildOnlyChangesKeepIdentityAcrossColdReopen(ListDeltaAlgorithm algorithm) {
         World world = new() { Values = Enumerable.Range(10000, 100).ToList() };
         World child = new() { Value = 3, Values = world.Values };
         world.Alias = world.Values;
         world.Links = child.Links = [world, child];
         FrameAddress seed, resize, childOnly, unchanged;
         using (GraphRepository repository = CreateRepository()) {
-            using GraphSession<World> session = repository.Create(world, Models());
+            using GraphSession<World> session = repository.Create(world, Models(algorithm));
             seed = session.Commit(NoRebase);
             world.Values.Add(777);
             world.Values[1] = 42;
@@ -173,7 +248,7 @@ public sealed class ListRepositoryTests : IDisposable {
         public byte Value;
     }
     private readonly record struct State(ObjectId Values, ObjectId Alias, ObjectId Links, byte Value);
-    private static StateModelRegistry Models() {
+    private static StateModelRegistry Models(ListDeltaAlgorithm algorithm = ListDeltaAlgorithm.LocalResync) {
         CapturedStatePreparation<State> prepare = new(Schema, Base, Delta);
         StateReaderBinding<State> reader = new(Schema, Read, Apply, Visit);
         StateModelBinding<World, State> model = new(prepare, [reader], row => row.GetState<State>(), static () => new(),
@@ -186,6 +261,7 @@ public sealed class ListRepositoryTests : IDisposable {
                 context.CaptureObject(world.Alias, NumbersType), context.CaptureObject(world.Links, LinksType), world.Value), Visit);
         StateModelRegistry registry = new();
         registry.Register(model);
+        registry.UseListDeltaAlgorithm(algorithm);
         return registry;
     }
     private static void Visit(in State state, IStateReferenceVisitor visitor) {

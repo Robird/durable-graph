@@ -32,4 +32,5 @@ Each marker is followed by `True`. The runner publishes and verifies canonical h
 counts `4 -> 5`, and preserves all accepted file names and hashes. Feed/cache/history/databases
 remain in a unique ignored `obj` run directory. The lane verifies package delivery and cross-process
 history continuity; malformed bodies, empty-list Upgrade preflight and failure injection belong to
-product tests. It makes no compact-insertion or performance claim for the initial positional Delta.
+product tests. The current consumer uses DB-049's List range codec 2; writer comparisons and performance
+evidence live in [ListDeltaReplayProbe](../../ListDeltaReplayProbe/README.md), not in these package markers.

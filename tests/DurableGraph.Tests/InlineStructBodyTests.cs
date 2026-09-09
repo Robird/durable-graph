@@ -31,7 +31,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         string generated = GeneratedSource(run, "DurableStates.g.cs");
         AssertGeneratedBodiesRemainStaticallyBound(generated);
         Assert.DoesNotContain("ValueSlotCodec", generated);
-        Assert.DoesNotContain("StateEquals(", generated);
+        AssertPrepareDeltaDoesNotPrecompare(generated);
         Assert.DoesNotContain("typeof(", generated.Split("namespace Atelia.DurableGraph.Generated {")[1]);
         Assert.Contains(".PrepareDeltaBody(in prior.Segment0Field1", generated);
         Assert.Contains("writer.WriteSpan(delta0.Body)", generated);

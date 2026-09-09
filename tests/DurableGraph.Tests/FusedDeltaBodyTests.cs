@@ -61,7 +61,8 @@ public sealed partial class DurableSchemaGeneratorTests {
 
         string generated = GeneratedSource(run, "DurableStates.g.cs");
         AssertGeneratedBodiesRemainStaticallyBound(generated);
-        foreach (string forbidden in new[] { "StateEquals(", "WriteDelta(", "EstimateDelta(", "ValueSlotCodec", "PrimitiveSlotCodecs", "System.Reflection" }) {
+        AssertPrepareDeltaDoesNotPrecompare(generated);
+        foreach (string forbidden in new[] { "WriteDelta(", "EstimateDelta(", "ValueSlotCodec", "PrimitiveSlotCodecs", "System.Reflection" }) {
             Assert.DoesNotContain(forbidden, generated);
         }
     }

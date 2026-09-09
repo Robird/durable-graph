@@ -58,11 +58,13 @@ public sealed class GenericValueOperationTests {
         DurableFieldInfo slot = new(1, tag);
         PreparedDeltaBody delta = TOps.PrepareDelta(in prior, in current, slot);
         Assert.True(delta.HasChanges);
+        Assert.False(TOps.StateEquals(in prior, in current, slot));
         BinaryPayloadReader reader = new(delta.Body);
         T restored = TOps.ApplyDelta(ref reader, in prior, slot);
         reader.EnsureFullyConsumed();
         Assert.Equal(Encode<T, TOps>(in current, slot), Encode<T, TOps>(in restored, slot));
         Assert.False(TOps.PrepareDelta(in restored, in current, slot).HasChanges);
+        Assert.True(TOps.StateEquals(in restored, in current, slot));
         byte[] same = Encode<T, TOps>(in prior, slot);
         Assert.Throws<InvalidDataException>(() => {
             BinaryPayloadReader redundant = new(same);

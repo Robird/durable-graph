@@ -26,7 +26,8 @@ internal sealed partial class StateModelSnapshot : StateBindingContext {
         Dictionary<Type, StateModelBinding> types, Dictionary<SchemaKey, StateReaderBinding> readers,
         Dictionary<string, StateDefinitionBinding>? definitions = null, SchemaStore? schemas = null,
         Dictionary<Type, StateValueUpgradeRuleSet>? valueUpgradeRules = null,
-        Type? arrayElementUpgradeRuleSet = null, Type? listElementUpgradeRuleSet = null) {
+        Type? arrayElementUpgradeRuleSet = null, Type? listElementUpgradeRuleSet = null,
+        ListDeltaAlgorithm listDeltaAlgorithm = ListDeltaAlgorithm.LocalResync) {
         _models = models;
         _types = types;
         _readers = readers;
@@ -34,6 +35,8 @@ internal sealed partial class StateModelSnapshot : StateBindingContext {
         _valueUpgradeRules = valueUpgradeRules ?? [];
         ArrayElementUpgradeRuleSet = arrayElementUpgradeRuleSet;
         ListElementUpgradeRuleSet = listElementUpgradeRuleSet;
+        if (!Enum.IsDefined(listDeltaAlgorithm)) { throw new ArgumentOutOfRangeException(nameof(listDeltaAlgorithm)); }
+        _listDeltaAlgorithm = listDeltaAlgorithm;
         _schemas = schemas;
         foreach (StateDefinitionBinding definition in _definitions.Values) {
             if (definition.DomainTypeDefinition is { } domain && !_domainDefinitions.TryAdd(domain, definition)) {

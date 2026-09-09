@@ -86,22 +86,19 @@ DB-009/010 的旧 no-reuse 前提不能沿用；借用 Base 共享 prior 等结�
 
 ### 3.2 List 差分算法选型与设计
 
-2026-09-09 用户选择两步推进：DB-047 先完成 BCL List 功能，以正确的位置差分占位；
-该片现已通过；[DB-048](design-branches/0048-list-delta-algorithm-research.md) 已完成文献、源码与候选交叉审查，
-后续用户反馈已具体化为 [DB-049 施工方案](design-branches/0049-list-range-delta-and-matcher-trial-slice.md)，尚未实施或取得候选性能排名。
-此项是明确的后继工作，不延至泛指的 MVP 后优化。
+[DB-049](design-branches/0049-list-range-delta-and-matcher-trial-slice.md) 已完成静态比较、统一 codec 与三种 writer，
+独立 Repository 的同领域历史重放也已完成；[实验结果](../experiments/ListDeltaReplayProbe/RESULTS.md)支持继续保留 LocalResync 默认和 Myers 选择。
+这项功能不再是待施工前置，当前接口与能力从 PROJECT-STATE 进入。
 
-后续以两份冻结 List 状态为输入，研究如何兼顾 Diff/Patch 生成速度与 Object Delta 存储效率，重点改善
-头插、中插、删除引起的整体错位。变化发现与 patch 表达分别评估，
-也不把改用自建 tracking 容器作为必需前置。可以复用前人成果，但必须保留精确元素语义和完整恢复能力。
+剩余性能工作以真实业务轨迹触发，不自动延长当前分片：
 
-DB-049 推荐直接补静态 StateEquals，引用槽按 ObjectId、浮点按位、inline 逐持久字段比较，避免匹配时准备弃用 payload。
-Position/局部重同步/有界 Myers 三个 writer 共用一套区间 codec，算法选择不进入持久格式或类型身份。
-通过独立 Repository 重放相同领域编辑历史，主要比较保存耗时/分配与实际字节；暂缓哈希匹配和局部最优选码。
+- 实际列表尺寸、编辑分布或保存频率明显不同于合成样本时，用现有 Probe 调整规模/种子/预算，
+  分别比较完整 Commit、隔离 Diff、分配和策略后的实际写入，不能拿 candidate body 当实际文件节省。
+- 大块搬移、全部元素微改同时插入等场景出现实际写入问题后，再比较哈希匹配、偏移配对或局部 New/Patch 竞价；
+  新匹配策略只要输出同 grammar，就不增加格式版本。暂不引入 key/comparer、tracking 容器或全局最优脚本。
+- 用户已明确冷读优化最低优先，完整恢复仍为硬条件；链变长只作观察，不为这轮匹配能力增加链长新策略、cache 或 accumulator。
 
-用户已明确冷读优化为最低优先级，完整恢复仍是硬条件；更小 Delta 可能延长链的现象只作观察，
-不增加冷读优化门槛、链长新策略或 accumulator。施工合同、配置冻结、预算和验证分工集中在 DB-049；
-改变 grammar 须明确 codec 版本，不自动引入兼容或 tracking 容器。
+改变 grammar 才需要新的 codec 解释；保持精确状态语义、准确 NoChange 与有界搜索回退。
 
 ## 4. 明确延后及重访条件
 

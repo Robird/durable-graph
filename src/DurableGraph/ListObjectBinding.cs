@@ -5,22 +5,27 @@ namespace Atelia.DurableGraph;
 /// <summary>Current BCL List projection assembled once from closed element capabilities.</summary>
 public abstract class ListObjectBinding : ObjectBinding {
     private protected ListObjectBinding(Type domainType, ListLayout layout, StateValueBinding element,
-        Func<ListObjectBinding, ObjectStateRecord, ObjectStateRecord>? normalize)
+        Func<ListObjectBinding, ObjectStateRecord, ObjectStateRecord>? normalize, ListDeltaAlgorithm algorithm)
         : base(domainType, ObjectLayout.ForList(layout)) {
         ListLayout = layout;
         ElementBinding = element;
         NormalizeState = normalize;
+        DeltaAlgorithm = algorithm;
     }
 
     public ListLayout ListLayout { get; }
     public StateValueBinding ElementBinding { get; }
+    /// <summary>The immutable writer choice; it does not affect the persisted layout or reader.</summary>
+    public ListDeltaAlgorithm DeltaAlgorithm { get; }
     private protected Func<ListObjectBinding, ObjectStateRecord, ObjectStateRecord>? NormalizeState { get; }
 
     public static ListObjectBinding Create(Type domainListType, ListLayout layout, StateValueBinding element,
-        Func<ListObjectBinding, ObjectStateRecord, ObjectStateRecord>? normalize = null) {
+        Func<ListObjectBinding, ObjectStateRecord, ObjectStateRecord>? normalize = null,
+        ListDeltaAlgorithm algorithm = ListDeltaAlgorithm.LocalResync) {
         ArgumentNullException.ThrowIfNull(domainListType);
         ArgumentNullException.ThrowIfNull(layout);
         ArgumentNullException.ThrowIfNull(element);
+        if (!Enum.IsDefined(algorithm)) { throw new ArgumentOutOfRangeException(nameof(algorithm)); }
         if (!domainListType.IsGenericType || domainListType.GetGenericTypeDefinition() != typeof(List<>) ||
             domainListType.ContainsGenericParameters || domainListType.GetGenericArguments()[0] != element.DomainType ||
             element.ProjectionType is null || layout.ElementSlot != StateBindingContext.WithFieldId(element.Slot, 1)) {
@@ -28,7 +33,7 @@ public abstract class ListObjectBinding : ObjectBinding {
         }
         return (ListObjectBinding)Activator.CreateInstance(
             typeof(ListObjectBinding<,,,>).MakeGenericType(element.DomainType!, element.StateType,
-                element.ProjectionType, element.StateOpsType), domainListType, layout, element, normalize)!;
+                element.ProjectionType, element.StateOpsType), domainListType, layout, element, normalize, algorithm)!;
     }
 
     internal abstract ObjectStateRecord CreateStateRecord(ObjectId id, object frozen);
@@ -37,8 +42,8 @@ public abstract class ListObjectBinding : ObjectBinding {
 internal sealed class ListObjectBinding<TDomain, TState, TProjection, TOps> : ListObjectBinding, ICapturedStatePreparation
     where TState : unmanaged where TProjection : IValueProjection<TDomain, TState> where TOps : IStateOps<TState> {
     public ListObjectBinding(Type domainType, ListLayout layout, StateValueBinding element,
-        Func<ListObjectBinding, ObjectStateRecord, ObjectStateRecord>? normalize)
-        : base(domainType, layout, element, normalize) { }
+        Func<ListObjectBinding, ObjectStateRecord, ObjectStateRecord>? normalize, ListDeltaAlgorithm algorithm)
+        : base(domainType, layout, element, normalize, algorithm) { }
 
     internal override ObjectStateRecord Capture(ObjectId id, object domain, CaptureContext context) {
         List<TDomain> list = RequireDomain(domain);
@@ -109,7 +114,7 @@ internal sealed class ListObjectBinding<TDomain, TState, TProjection, TOps> : Li
     PreparedDeltaBody ICapturedStatePreparation.PrepareDelta(ObjectStateRecord previous, ObjectStateRecord current) {
         ((ICapturedStatePreparation)this).Validate(previous);
         ((ICapturedStatePreparation)this).Validate(current);
-        return ListStateBody<TState, TOps>.PrepareDelta(previous.GetListState<TState>(), current.GetListState<TState>(), ListLayout);
+        return ListStateBody<TState, TOps>.PrepareDelta(previous.GetListState<TState>(), current.GetListState<TState>(), ListLayout, DeltaAlgorithm);
     }
 
     private List<TDomain> RequireDomain(object domain) {
