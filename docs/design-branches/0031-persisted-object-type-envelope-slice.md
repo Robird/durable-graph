@@ -22,9 +22,9 @@ Delta 不重复声明类型：整个 Base→Delta 内容链只能使用 Base 所
 
 ## 2. 已有事实与可复用机制
 
-- [InMemorySchemaStore](../../src/DurableGraph/InMemorySchemaStore.cs) 已具备 exact key、完整
+- 当时的 `InMemorySchemaStore`（已退役）已具备 exact key、完整
   Schema 相等、祖先闭包预检、等价注册幂等和冲突拒绝。缺的是持久记录、恢复与确认边界。
-- [InMemoryStateStore](../../src/DurableGraph/InMemoryStateStore.cs) 已表达“先注册 Schema，
+- 当时的 `InMemoryStateStore`（已退役）已表达“先注册 Schema，
   状态保存其 key，读取解析 exact Schema”的职责关系；其 string slot 和 boxed 字段字典属于旧实验，
   不适合作为新对象图产品 API 的骨架。
 - [StoredGraphNormalizationProbe](../../tests/DurableGraph.Tests/StoredGraphNormalizationProbe.cs)
@@ -284,9 +284,9 @@ SchemaStore 自托管、Dictionary/内建复合类型以及 ID/物理回收只�
 实际入口：
 
 - [SchemaStore](../../src/DurableGraph.StateStore/SchemaStore.cs)、[SchemaKey](../../src/DurableGraph.StateStore/SchemaKey.cs)、
-  [SchemaBatchWireCodec](../../src/DurableGraph.StateStore/SchemaBatchWireCodec.cs) 实现借用文件、批次预检/规范编码、
+  [SchemaBatchWireCodec（其后由 DB-046 替换）](0046-unified-schema-catalog-slice.md) 实现借用文件、批次预检/规范编码、
   严格恢复、可写重开确认及 faulted 状态；tail 检查拒绝过期 facade 或回调期间的外部追加。
-- [BaseObjectPayloadCodec](../../src/DurableGraph.StateStore/BaseObjectPayloadCodec.cs) 与
+- `BaseObjectPayloadCodec`（后继为 [BaseObjectBodyCodec](../../src/DurableGraph.StateStore/BaseObjectBodyCodec.cs)）与
   [TypedObjectVersionReader](../../src/DurableGraph.StateStore/TypedObjectVersionReader.cs) 实现 Base-only 类型头、
   owned raw body、callback 前完整 Schema 匹配，以及每段 body 全消费；string 无 Schema 查询且拒绝 Delta。
 - [CapturedRevisionPlanner](../../src/DurableGraph.StateStore/CapturedRevisionPlanner.cs) 统一完成保存适配，

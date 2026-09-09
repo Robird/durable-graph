@@ -60,23 +60,26 @@ public sealed class RepresentationHeaderTests : IDisposable {
         using (IRbfFile file = RbfFile.CreateNew(path)) {
             SchemaStore schemas = new(file);
             RepresentationId[] ids = schemas.RegisterRepresentations([classLayout, arrayLayout]);
-            Assert.Equal(new[] { new RepresentationId(2), new RepresentationId(3) }, ids);
+            // Point's inline Schema occupies node 3 before its array owner receives node 4.
+            Assert.Equal(new[] { new RepresentationId(2), new RepresentationId(4) }, ids);
             Assert.Equal(Convert.FromHexString("0402AB"), BaseObjectBodyCodec.Encode(ids[0], new([0xAB])).Body.ToArray());
-            Assert.Equal(Convert.FromHexString("0403AB"), BaseObjectBodyCodec.Encode(ids[1], new([0xAB])).Body.ToArray());
+            Assert.Equal(Convert.FromHexString("0404AB"), BaseObjectBodyCodec.Encode(ids[1], new([0xAB])).Body.ToArray());
         }
         using IRbfFile reopened = RbfFile.OpenReadOnlyExisting(path);
         SchemaStore restored = new(reopened, readOnly: true);
         long tail = reopened.TailOffset;
         var durable = BaseObjectBodyCodec.Decode(Convert.FromHexString("0402AB"), restored);
-        var array = BaseObjectBodyCodec.Decode(Convert.FromHexString("0403AB"), restored);
+        var array = BaseObjectBodyCodec.Decode(Convert.FromHexString("0404AB"), restored);
         Assert.Equal(classLayout, durable.Layout);
         Assert.Equal(arrayLayout, array.Layout);
         Assert.Equal(new RepresentationId(2), durable.RepresentationId);
-        Assert.Equal(new RepresentationId(3), array.RepresentationId);
+        Assert.Equal(new RepresentationId(4), array.RepresentationId);
+        Assert.Throws<InvalidDataException>(() => restored.GetRepresentation(new(3)));
+        Assert.Throws<InvalidDataException>(() => BaseObjectBodyCodec.Decode(Convert.FromHexString("0403AB"), restored));
         Assert.Same(restored.GetRequired("Point", 2), array.Layout.Array!.ElementSlot.InlineSchema);
         Assert.Equal(tail, reopened.TailOffset);
         Assert.Throws<InvalidDataException>(() => BaseObjectBodyCodec.Decode(Convert.FromHexString("0402AB")));
-        Assert.Throws<InvalidDataException>(() => BaseObjectBodyCodec.Decode(Convert.FromHexString("0403AB")));
+        Assert.Throws<InvalidDataException>(() => BaseObjectBodyCodec.Decode(Convert.FromHexString("0404AB")));
     }
 
     [Fact]

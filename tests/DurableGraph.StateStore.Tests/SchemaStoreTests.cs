@@ -21,6 +21,9 @@ public sealed class SchemaStoreTests : IDisposable {
             DurableSchema equal = new("Leaf", 4, [new(2, TypeTag.String)], new("Base", 2, new DurableFieldInfo(1, TypeTag.Int64)));
             Assert.Same(leaf, store.Register(equal));
             store.RegisterBatch([]);
+            RepresentationId[] ids = store.RegisterRepresentations([ObjectLayout.ForDurable(leaf), ObjectLayout.ForDurable(ancestor)]);
+            Assert.Equal(new RepresentationId[] { new(3), new(2) }, ids);
+            Assert.Equal(ObjectLayout.ForDurable(leaf), store.GetRepresentation(ids[0]));
             Assert.Equal(tail, file.TailOffset);
             Assert.Equal(1, recording.Appends);
             Assert.Equal(1, recording.Flushes);
@@ -75,7 +78,7 @@ public sealed class SchemaStoreTests : IDisposable {
         long tail = file.TailOffset;
         Assert.Throws<IOException>(() => store.RegisterBatch(FailingEnumeration()));
         Assert.Throws<ArgumentNullException>(() => store.RegisterBatch([new("A", 1), null!]));
-        Assert.Throws<ArgumentException>(() => store.Register(SchemaBatchWireCodecTests.Chain(257)[^1]));
+        Assert.Throws<ArgumentException>(() => store.Register(SchemaCatalogWireCodecTests.Chain(257)[^1]));
         Assert.Equal(tail, file.TailOffset);
         Assert.Equal(0, store.Count);
         Assert.False(store.IsFaulted);
@@ -213,10 +216,10 @@ public sealed class SchemaStoreTests : IDisposable {
             new SchemaStore(file).Register(new("A", 1));
             byte[] payload = kind switch {
                 "payload" => [99],
-                "conflict" => SchemaBatchWireCodec.Write([new DurableSchema("A", 1, new DurableFieldInfo(1, TypeTag.String))]),
-                _ => SchemaBatchWireCodec.Write([new DurableSchema("B", 1)]),
+                "conflict" => CatalogTestData.Encode(CatalogTestData.Schemas([new DurableSchema("A", 1, new DurableFieldInfo(1, TypeTag.String))], 3)),
+                _ => CatalogTestData.Encode(CatalogTestData.Schemas([new DurableSchema("B", 1)], 3)),
             };
-            file.Append(kind == "tag" ? 999U : SchemaBatchWireCodec.RbfTag, payload,
+            file.Append(kind == "tag" ? 999U : SchemaCatalogWireCodec.RbfTag, payload,
                 kind == "meta" ? new byte[] { 1 } : []).Unwrap();
             file.DurableFlush();
         }
@@ -257,13 +260,13 @@ public sealed class SchemaStoreTests : IDisposable {
     }
 
     [Fact]
-    public void EquivalentPhysicalDuplicatesRecoverIdempotently() {
+    public void EquivalentPhysicalDuplicatesAreRejectedAsReusedCatalogIds() {
         using IRbfFile file = RbfFile.CreateNew(NewPath());
-        byte[] payload = SchemaBatchWireCodec.Write([new DurableSchema("A", 1)]);
-        file.Append(SchemaBatchWireCodec.RbfTag, payload).Unwrap();
-        file.Append(SchemaBatchWireCodec.RbfTag, payload).Unwrap();
+        byte[] payload = CatalogTestData.Encode(CatalogTestData.Schemas([new DurableSchema("A", 1)]));
+        file.Append(SchemaCatalogWireCodec.RbfTag, payload).Unwrap();
+        file.Append(SchemaCatalogWireCodec.RbfTag, payload).Unwrap();
         file.DurableFlush();
-        Assert.Equal(1, new SchemaStore(file).Count);
+        Assert.Throws<InvalidDataException>(() => new SchemaStore(file));
     }
 
     [Fact]
@@ -289,7 +292,7 @@ public sealed class SchemaStoreTests : IDisposable {
         Assert.Throws<SchemaNotFoundException>(() => reopened.GetRequired("Requested", 1));
 
         IEnumerable<DurableSchema> ExternalWrite() {
-            file.Append(SchemaBatchWireCodec.RbfTag, SchemaBatchWireCodec.Write([new DurableSchema("External", 1)])).Unwrap();
+            file.Append(SchemaCatalogWireCodec.RbfTag, CatalogTestData.Encode(CatalogTestData.Schemas([new DurableSchema("External", 1)]))).Unwrap();
             yield return new("Requested", 1);
         }
     }

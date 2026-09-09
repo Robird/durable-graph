@@ -9,61 +9,48 @@ namespace Atelia.DurableGraph.StateStore.Tests;
 public sealed class InlineSchemaStoreTests : IDisposable {
     private readonly string _root = Path.Combine(Path.GetTempPath(), $"durable-inline-schema-{Guid.NewGuid():N}");
     private int _sequence;
-    private static readonly Dictionary<SchemaKey, DurableSchema> Empty = new();
+    private static readonly IReadOnlyDictionary<RepresentationId, SchemaCatalogEntry> Empty = CatalogTestData.Empty;
 
     public InlineSchemaStoreTests() => Directory.CreateDirectory(_root);
 
     [Fact]
-    public void V4IndependentGoldenBindsExactForwardInlineSchemaAndV2RemainsReadable() {
+    public void IndependentGoldenBindsExactPrecedingInlineSchemaByIntegerId() {
         DurableSchema value = new("Z", 2, SchemaKind.InlineValue, new DurableFieldInfo(1, TypeTag.Int32));
         DurableSchema owner = new("A", 1, new DurableFieldInfo(1, TypeTag.InlineValue, inlineSchema: value));
-        byte[] golden = Convert.FromHexString("04020203410001010001011002035A000202035A00020200010102");
-        Assert.Equal(golden, SchemaBatchWireCodec.Write([value, owner]));
-        var read = SchemaBatchWireCodec.Read(golden, Empty);
-        Assert.Equal(owner, read[new("A", 1)]);
-        Assert.Equal(SchemaKind.ReferenceObject, read[new("A", 1)].Kind);
-        Assert.Equal(SchemaKind.InlineValue, read[new("Z", 2)].Kind);
-        Assert.Same(read[new("Z", 2)], read[new("A", 1)].Fields[0].InlineSchema);
-        byte[] legacy = Convert.FromHexString("02020341010100010110035A02035A020200010102");
-        Assert.Equal(owner, SchemaBatchWireCodec.Read(legacy, Empty)[new("A", 1)]);
+        byte[] golden = Convert.FromHexString("0102020202035A000200010102030102034100010001011002");
+        Assert.Equal(golden, SchemaCatalogWireCodec.Write(CatalogTestData.Schemas([value, owner]), Empty));
+        var read = SchemaCatalogWireCodec.Read(golden, Empty);
+        Assert.Equal(owner, read[1].Schema);
+        Assert.Equal(SchemaKind.ReferenceObject, read[1].Schema!.Kind);
+        Assert.Equal(SchemaKind.InlineValue, read[0].Schema!.Kind);
+        Assert.Null(read[0].Layout);
+        Assert.Same(read[0].Schema, read[1].Schema!.Fields[0].InlineSchema);
         for (int length = 0; length < golden.Length; length++) {
             byte[] prefix = golden[..length];
-            Assert.ThrowsAny<Exception>(() => SchemaBatchWireCodec.Read(prefix, Empty));
+            Exception? error = Record.Exception(() => SchemaCatalogWireCodec.Read(prefix, Empty));
+            Assert.True(error is InvalidDataException or EndOfStreamException, $"Cut {length}: {error}");
         }
     }
 
-    [Fact]
-    public void V1RemainsReadableAndV4AppendsWithoutRewritingOldBytes() {
+    [Theory]
+    [InlineData(0x31424753U, "010203410101035A020201010809035A0200010304")]
+    [InlineData(0x31424753U, "02020341010100010110035A02035A020200010102")]
+    [InlineData(0x31424753U, "04020203410001010001011002035A000202035A00020200010102")]
+    [InlineData(0x31425052U, "01010203010402")]
+    public void RetiredSchemaAndRepresentationLogsAreRejectedWithoutRewriting(uint tag, string hex) {
         string path = NextPath();
-        byte[] legacy = Convert.FromHexString("010203410101035A020201010809035A0200010304");
-        byte[] original;
+        byte[] legacy = Convert.FromHexString(hex);
         using (IRbfFile file = RbfFile.CreateNew(path)) {
-            file.Append(SchemaBatchWireCodec.RbfTag, legacy).Unwrap();
+            file.Append(tag, legacy).Unwrap();
             file.DurableFlush();
         }
-        original = File.ReadAllBytes(path);
-        DurableSchema value = new("Value", 1, SchemaKind.InlineValue, new DurableFieldInfo(1, TypeTag.Byte));
-        DurableSchema owner = new("Owner", 1, new DurableFieldInfo(1, TypeTag.InlineValue, inlineSchema: value));
+        byte[] original = File.ReadAllBytes(path);
         using (IRbfFile file = RbfFile.OpenExisting(path)) {
-            SchemaStore store = new(file);
-            Assert.Equal(2, store.Count);
-            Assert.Equal(SchemaKind.ReferenceObject, store.GetRequired("Z", 2).Kind);
-            Assert.Same(store.GetRequired("Z", 2), store.GetRequired("A", 1).BaseSchema);
-            store.Register(owner);
-            Assert.Equal(4, store.Count);
-            var scan = file.ScanForward().GetEnumerator();
-            Assert.True(scan.MoveNext());
-            using RbfPooledFrame first = file.ReadPooledFrame(scan.Current.Ticket).Unwrap();
-            Assert.Equal(legacy, first.PayloadAndMeta.ToArray());
-            Assert.True(scan.MoveNext());
-            using RbfPooledFrame second = file.ReadPooledFrame(scan.Current.Ticket).Unwrap();
-            Assert.Equal(4, second.PayloadAndMeta[0]);
+            Assert.Throws<InvalidDataException>(() => new SchemaStore(file));
         }
-        Assert.Equal(original, File.ReadAllBytes(path)[..original.Length]);
+        Assert.Equal(original, File.ReadAllBytes(path));
         using IRbfFile reopened = RbfFile.OpenReadOnlyExisting(path);
-        SchemaStore restored = new(reopened, readOnly: true);
-        Assert.Equal(owner, restored.GetRequired("Owner", 1));
-        Assert.Equal(4, restored.Count);
+        Assert.Throws<InvalidDataException>(() => new SchemaStore(reopened, readOnly: true));
     }
 
     [Fact]
@@ -130,25 +117,24 @@ public sealed class InlineSchemaStoreTests : IDisposable {
         Assert.Equal(tail, file.TailOffset);
         Assert.Equal(sameBatch ? 0 : 1, store.Count);
         Assert.False(store.IsFaulted);
-        var registered = sameBatch ? Empty : new Dictionary<SchemaKey, DurableSchema> { [new("A", 1)] = reference };
-        byte[] batch = SchemaBatchWireCodec.Write(sameBatch ? [reference, inline] : [inline]);
-        Assert.Throws<InvalidDataException>(() => SchemaBatchWireCodec.Read(batch, registered));
+        var registered = sameBatch ? Empty : CatalogTestData.Index(CatalogTestData.Schemas([reference]));
+        byte[] batch = CatalogTestData.Encode(CatalogTestData.Schemas(sameBatch ? [reference, inline] : [inline], sameBatch ? 2U : 3U));
+        Assert.Throws<InvalidDataException>(() => SchemaCatalogWireCodec.Read(batch, registered));
         Assert.Equal(sameBatch ? 0 : 1, registered.Count);
     }
 
     [Theory]
-    [InlineData("0201034101000000")] // Kind zero.
-    [InlineData("0201034101030000")] // Unknown kind.
-    [InlineData("0201034101020103410100")] // Inline Schema has a base.
-    [InlineData("0202034101010103420100034201020000")] // Reference base names inline kind.
-    [InlineData("02020341010100010110034201034201010000")] // Inline slot names reference kind.
-    [InlineData("02010341010100010110034201")] // Missing exact inline dependency.
-    [InlineData("02010341010200010110034101")] // Inline self cycle.
-    [InlineData("020203410102000101100342010342010200010110034101")] // Two-node inline cycle.
-    [InlineData("010103410100010110034201")] // v1 cannot silently accept inline extension.
+    [InlineData("01010300000000")] // Kind zero.
+    [InlineData("01010304000000")] // Unknown kind.
+    [InlineData("0101030202034100010200")] // Inline Schema has a base.
+    [InlineData("0102030202034100010000040102034200010300")] // Reference base names inline kind.
+    [InlineData("0101030102034100010001011002")] // Inline slot names registered reference kind.
+    [InlineData("0101030102034100010001011063")] // Missing exact inline dependency.
+    [InlineData("0101030202034100010001011003")] // Inline self cycle.
+    [InlineData("0102030202034100010001011004040202034200010001011003")] // Forward edge in two-node cycle.
     public void MalformedInlineLayoutsFailBeforeMerging(string hex) {
-        var registered = new Dictionary<SchemaKey, DurableSchema> { [new("Existing", 1)] = new("Existing", 1) };
-        Assert.Throws<InvalidDataException>(() => SchemaBatchWireCodec.Read(Convert.FromHexString(hex), registered));
+        var registered = CatalogTestData.Index(CatalogTestData.Schemas([new("Existing", 1)]));
+        Assert.Throws<InvalidDataException>(() => SchemaCatalogWireCodec.Read(Convert.FromHexString(hex), registered));
         Assert.Single(registered);
     }
 
@@ -156,10 +142,12 @@ public sealed class InlineSchemaStoreTests : IDisposable {
     public void InlineDepthLimitIncludesCachedAndPreviouslyRegisteredDependencies() {
         DurableSchema[] chain = InlineChain(257);
         var atLimit = chain[..256];
-        var registered = SchemaBatchWireCodec.Read(SchemaBatchWireCodec.Write(atLimit), Empty);
+        var registered = CatalogTestData.Index(SchemaCatalogWireCodec.Read(
+            SchemaCatalogWireCodec.Write(CatalogTestData.Schemas(atLimit), Empty), Empty));
         Assert.Equal(256, registered.Count);
-        Assert.Throws<InvalidDataException>(() => SchemaBatchWireCodec.Read(SchemaBatchWireCodec.Write(chain), Empty));
-        Assert.Throws<InvalidDataException>(() => SchemaBatchWireCodec.Read(SchemaBatchWireCodec.Write([chain[^1]]), registered));
+        Assert.Throws<InvalidDataException>(() => SchemaCatalogWireCodec.Read(CatalogTestData.Encode(CatalogTestData.Schemas(chain)), Empty));
+        Assert.Throws<InvalidDataException>(() => SchemaCatalogWireCodec.Read(
+            CatalogTestData.Encode(CatalogTestData.Schemas([chain[^1]], 258), registered), registered));
         using IRbfFile file = RbfFile.CreateNew(NextPath());
         SchemaStore store = new(file);
         store.Register(chain[255]);
@@ -177,6 +165,9 @@ public sealed class InlineSchemaStoreTests : IDisposable {
         using IRbfFile file = RbfFile.CreateNew(NextPath());
         SchemaStore schemas = new(file);
         schemas.Register(inline);
+        Assert.Throws<InvalidDataException>(() => schemas.GetRepresentation(new(2)));
+        Assert.Throws<InvalidDataException>(() => schemas.ResolveReader(new(2), new StateReaderRegistry().Snapshot(schemas)));
+        Assert.Throws<InvalidDataException>(() => BaseObjectBodyCodec.Decode([4, 2], schemas));
         Assert.Throws<InvalidDataException>(() => TypedObjectVersionReader.MatchSchema(schemas.GetRequired("A", 1), inline));
         Assert.Throws<InvalidDataException>(() => TypedObjectVersionReader.MatchSchema(schemas.GetRequired("A", 1), new("A", 1)));
     }
@@ -212,9 +203,9 @@ public sealed class InlineSchemaStoreTests : IDisposable {
         FrameAddress address;
         using (SegmentStore segments = SegmentStore.OpenExisting(Path.Combine(repositoryPath, "state"))) {
             StateRevisionStore states = new(segments);
-            // Valid object envelope syntax, but its exact key identifies an inline value.
+            // Valid current Base envelope syntax, but its catalog ID identifies an inline value.
             address = states.AppendDurably(StateRevision.CreateObjectHeadMapBase(null,
-                [ObjectVersionRecord.CreateBase(1, Convert.FromHexString("0102034101"))], []));
+                [ObjectVersionRecord.CreateBase(1, new byte[] { 4, 2 })], []));
         }
         using (IRbfFile publication = RbfFile.OpenExisting(Path.Combine(repositoryPath, "publication.rbf"))) {
             PublicationLog log = new(publication, static (_, _) => { });

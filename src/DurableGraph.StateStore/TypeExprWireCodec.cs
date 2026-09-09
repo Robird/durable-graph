@@ -2,7 +2,7 @@ using Atelia.DurableGraph.StateStore.Serialization;
 
 namespace Atelia.DurableGraph.StateStore;
 
-/// <summary>Canonical closed type expressions. Legacy callers explicitly disable array constructors.</summary>
+/// <summary>Canonical closed nominal type expressions, without exact Schema versions.</summary>
 internal static class TypeExprWireCodec {
     internal static void Write(ref BinaryPayloadWriter writer, TypeExpr type) {
         ArgumentNullException.ThrowIfNull(type);
@@ -25,12 +25,12 @@ internal static class TypeExprWireCodec {
         foreach (TypeExpr argument in type.Arguments) { WriteNode(ref writer, argument); }
     }
 
-    internal static TypeExpr Read(ref BinaryPayloadReader reader, bool allowArrays = true) {
+    internal static TypeExpr Read(ref BinaryPayloadReader reader) {
         int remainingNodes = TypeExpr.MaximumNodeCount;
-        return ReadNode(ref reader, 1, ref remainingNodes, allowArrays);
+        return ReadNode(ref reader, 1, ref remainingNodes);
     }
 
-    private static TypeExpr ReadNode(ref BinaryPayloadReader reader, int depth, ref int remainingNodes, bool allowArrays) {
+    private static TypeExpr ReadNode(ref BinaryPayloadReader reader, int depth, ref int remainingNodes) {
         if (depth > TypeExpr.MaximumDepth || --remainingNodes < 0) {
             throw new InvalidDataException("The type expression exceeds its depth or node limit.");
         }
@@ -40,8 +40,8 @@ internal static class TypeExprWireCodec {
             if (builtin is < 1 or > 14) { throw new InvalidDataException("Unknown built-in type expression."); }
             return TypeExpr.Builtin((TypeTag)builtin);
         }
-        if (allowArrays && tag is >= 4 and <= 7) {
-            TypeExpr element = ReadNode(ref reader, depth + 1, ref remainingNodes, allowArrays);
+        if (tag is >= 4 and <= 7) {
+            TypeExpr element = ReadNode(ref reader, depth + 1, ref remainingNodes);
             return tag == 4 ? TypeExpr.VectorArray(element) : TypeExpr.MultiDimArray(element, tag - 3);
         }
         if (tag != 2) {
@@ -55,7 +55,7 @@ internal static class TypeExprWireCodec {
         }
         var arguments = new TypeExpr[(int)arity];
         for (int index = 0; index < arguments.Length; index++) {
-            arguments[index] = ReadNode(ref reader, depth + 1, ref remainingNodes, allowArrays);
+            arguments[index] = ReadNode(ref reader, depth + 1, ref remainingNodes);
         }
         return TypeExpr.Named(definitionId, arguments);
     }

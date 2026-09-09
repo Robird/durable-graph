@@ -89,9 +89,11 @@ public sealed class RepresentationIntegrationTests : IDisposable {
     }
 
     [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
-    public void StrictRepositoryReopenRejectsUnknownRepresentationInsideOtherwiseValidFrames(bool unknownWorld) {
+    [InlineData(true, false)]
+    [InlineData(false, false)]
+    [InlineData(true, true)]
+    [InlineData(false, true)]
+    public void StrictRepositoryReopenRejectsInvalidObjectRepresentationInsideOtherwiseValidFrames(bool unknownWorld, bool inlineNode) {
         CreateEmptyRepository();
         FrameAddress published;
         using (IRbfFile schemaFile = OpenSchemas())
@@ -99,10 +101,11 @@ public sealed class RepresentationIntegrationTests : IDisposable {
             SchemaStore schemas = new(schemaFile);
             RepresentationId valid = Assert.Single(schemas.RegisterRepresentations([ObjectLayout.ForDurable(WorldSchema)]));
             Assert.Equal(new RepresentationId(2), valid);
+            if (inlineNode) { schemas.Register(new DurableSchema("Value", 1, SchemaKind.InlineValue)); }
             var good = BaseObjectBodyCodec.Encode(valid, new PreparedBaseBody([0, 1]));
             // Version and canonical UInt32 ID are valid. Only the repository directory cannot
-            // resolve this ID; the RBF CRC, State frame and publication relationship are all valid.
-            byte[] unknown = [4, 127, 0, 1];
+            // resolve it as an object (unknown, or an inline Schema node); framing remains valid.
+            byte[] unknown = [4, inlineNode ? (byte)3 : (byte)127, 0, 1];
             ObjectVersionRecord[] objects = unknownWorld
                 ? [ObjectVersionRecord.CreateBase(1, unknown)]
                 : [ObjectVersionRecord.CreateBase(1, good.Body), ObjectVersionRecord.CreateBase(2, unknown)];

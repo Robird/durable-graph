@@ -102,6 +102,23 @@ public sealed class TypedObjectVersionReaderTests : IDisposable {
         Assert.Equal(0, calls);
     }
 
+    [Fact]
+    public void InlineSchemaNodeCannotBeUsedAsAnObjectBaseBeforeCallbacks() {
+        using IRbfFile file = RbfFile.CreateNew(NextPath());
+        SchemaStore schemas = new(file);
+        schemas.Register(new DurableSchema("Point", 1, SchemaKind.InlineValue,
+            new DurableFieldInfo(1, TypeTag.Int32)));
+        ObjectVersionChain chain = Chain(new(Convert.FromHexString("040200")));
+        int calls = 0;
+        int Read(ref BinaryPayloadReader reader) { calls++; return 0; }
+        int Apply(ref BinaryPayloadReader reader, in int prior) { calls++; return prior; }
+        Assert.Throws<InvalidDataException>(() => schemas.GetRepresentation(new(2)));
+        Assert.Throws<InvalidDataException>(() => TypedObjectVersionReader.ReadDurable<int>(
+            chain, schemas, new("World", 1), Read, Apply));
+        Assert.Equal(0, calls);
+        Assert.Equal(1, schemas.Count);
+    }
+
     [Theory]
     [InlineData("010203410121")]
     [InlineData("0202020341000121")]

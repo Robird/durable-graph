@@ -6,22 +6,17 @@ namespace Atelia.DurableGraph.StateStore.Tests;
 
 public sealed class GenericSchemaPersistenceTests {
     [Fact]
-    public void GenericKeyAndEnvelopeHaveIndependentGoldenBytes() {
+    public void GenericCatalogNodeAndEnvelopeHaveIndependentGoldenBytes() {
         TypeExpr type = TypeExpr.Named("B", TypeExpr.Builtin(TypeTag.Int32), TypeExpr.Named("P"));
-        SchemaKey key = new(type, 128);
-        var buffer = new ArrayBufferWriter<byte>();
-        var writer = new BinaryPayloadWriter(buffer);
-        SchemaKeyWireCodec.Write(ref writer, key);
-        // Named B, arity 2; builtin Int32; Named P, arity 0; version 128.
-        Assert.Equal(Convert.FromHexString("020342020102020350008001"), buffer.WrittenSpan.ToArray());
-        var reader = new BinaryPayloadReader(buffer.WrittenSpan);
-        Assert.Equal(key, SchemaKeyWireCodec.Read(ref reader));
-        reader.EnsureFullyConsumed();
+        DurableSchema schema = new(type, 128);
+        // ID 2 reference Schema; Named B with Int32/P arguments; version 128; no base/fields.
+        byte[] golden = Convert.FromHexString("010102010203420201020203500080010000");
+        Assert.Equal(golden, SchemaCatalogTestData.Write([schema]));
+        Assert.Equal(schema, SchemaCatalogTestData.Read(golden)[new(type, 128)]);
         string path = Path.Combine(Path.GetTempPath(), $"generic-envelope-{Guid.NewGuid():N}.rbf");
         try {
             using IRbfFile file = RbfFile.CreateNew(path);
             SchemaStore schemas = new(file);
-            DurableSchema schema = new(type, 128);
             RepresentationId id = schemas.RegisterRepresentations([ObjectLayout.ForDurable(schema)])[0];
             var encoded = BaseObjectBodyCodec.Encode(id, new([0xAB]));
             Assert.Equal(Convert.FromHexString("0402AB"), encoded.Body.ToArray());
@@ -36,14 +31,14 @@ public sealed class GenericSchemaPersistenceTests {
     }
 
     [Fact]
-    public void BatchV4GoldenSeparatesClosuresAndKeepsNominalReferenceArguments() {
+    public void CatalogGoldenSeparatesClosuresAndKeepsNominalReferenceArguments() {
         TypeExpr intType = TypeExpr.Named("B", TypeExpr.Builtin(TypeTag.Int32));
         TypeExpr stringType = TypeExpr.Named("B", TypeExpr.Builtin(TypeTag.String));
         DurableSchema intBox = new(intType, 1, DurableFieldInfo.Reference(1, stringType));
         DurableSchema stringBox = new(stringType, 1);
-        byte[] golden = Convert.FromHexString("040202034201010201010001010F02034201010402034201010401010000");
-        Assert.Equal(golden, SchemaBatchWireCodec.Write([stringBox, intBox]));
-        var decoded = SchemaBatchWireCodec.Read(golden, new Dictionary<SchemaKey, DurableSchema>());
+        byte[] golden = Convert.FromHexString("01020201020342010102010001010F0203420101040301020342010104010000");
+        Assert.Equal(golden, SchemaCatalogTestData.Write([intBox, stringBox]));
+        var decoded = SchemaCatalogTestData.Read(golden);
         Assert.Equal(intBox, decoded[new(intType, 1)]);
         Assert.Equal(stringBox, decoded[new(stringType, 1)]);
         Assert.Equal(stringType, decoded[new(intType, 1)].Fields[0].TargetType);
@@ -53,10 +48,8 @@ public sealed class GenericSchemaPersistenceTests {
     [InlineData("010103410100010102")]
     [InlineData("02010341010100010102")]
     [InlineData("030102034100010100010102")]
-    public void OldBatchVersionsRemainExactZeroArgumentDefinitions(string hex) {
-        var schema = SchemaBatchWireCodec.Read(Convert.FromHexString(hex), new Dictionary<SchemaKey, DurableSchema>())[new("A", 1)];
-        Assert.Equal(TypeExpr.Named("A"), schema.Type);
-        Assert.Equal(new DurableSchema("A", 1, new DurableFieldInfo(1, TypeTag.Int32)), schema);
+    public void OldSchemaBatchPayloadsCannotMasqueradeAsCatalogBatches(string hex) {
+        Assert.Throws<InvalidDataException>(() => SchemaCatalogWireCodec.Read(Convert.FromHexString(hex), SchemaCatalogTestData.Empty));
     }
 
     [Fact]
@@ -136,9 +129,15 @@ public sealed class GenericSchemaPersistenceTests {
                 Assert.Equal(tail, file.TailOffset);
                 Assert.Equal(1, store.Count);
             }
-            var registered = new Dictionary<SchemaKey, DurableSchema> { [new(first.Type, 1)] = first };
-            Assert.Throws<InvalidDataException>(() => SchemaBatchWireCodec.Read(SchemaBatchWireCodec.Write([second]), registered));
-            Assert.Throws<InvalidDataException>(() => SchemaBatchWireCodec.Read(SchemaBatchWireCodec.Write([owner, point]), new Dictionary<SchemaKey, DurableSchema>()));
+            var registered = SchemaCatalogTestData.Registered(first);
+            // Build each row independently, then patch its ID to the next persisted ID.
+            byte[] secondRow = SchemaCatalogTestData.Write([second]);
+            secondRow[2] = 3;
+            Assert.Throws<InvalidDataException>(() => SchemaCatalogWireCodec.Read(secondRow, registered));
+            byte[] ownerRow = SchemaCatalogTestData.Write([owner])[2..];
+            byte[] pointRow = SchemaCatalogTestData.Write([point])[2..];
+            pointRow[0] = 3;
+            Assert.Throws<InvalidDataException>(() => SchemaCatalogWireCodec.Read([1, 2, .. ownerRow, .. pointRow], SchemaCatalogTestData.Empty));
         }
         finally { File.Delete(path); }
     }
@@ -148,7 +147,7 @@ public sealed class GenericSchemaPersistenceTests {
         DurableSchema point = new("Point", 1, SchemaKind.InlineValue);
         DurableSchema owner = new("Owner", 1, DurableFieldInfo.Reference(1,
             TypeExpr.Named("Box", TypeExpr.Named("Point"), TypeExpr.Builtin(TypeTag.Int32))));
-        var decoded = SchemaBatchWireCodec.Read(SchemaBatchWireCodec.Write([owner, point]), new Dictionary<SchemaKey, DurableSchema>());
+        var decoded = SchemaCatalogTestData.Read(SchemaCatalogTestData.Write([owner, point]));
         Assert.Equal(2, decoded.Count);
         Assert.Equal(owner, decoded[new("Owner", 1)]);
         Assert.Equal(point, decoded[new("Point", 1)]);

@@ -44,29 +44,34 @@ public sealed class RepresentationStoreTests : IDisposable {
             [new(1, TypeTag.Int32), new(2, TypeTag.InlineValue, inlineSchema: point)], ancestor);
         ObjectLayout durable = ObjectLayout.ForDurable(owner);
         ObjectLayout array = InlineArray(point);
+        RepresentationId durableId;
+        RepresentationId arrayId;
         using (IRbfFile file = RbfFile.CreateNew(path)) {
             var recording = new RecordingFile(file);
             var store = new SchemaStore(recording);
-            Assert.Equal(new RepresentationId[] { new(2), RepresentationId.String, new(3), new(2) },
-                store.RegisterRepresentations([durable, ObjectLayout.String, array, durable]));
-            Assert.Equal(new[] { "append-schema", "flush", "append-representation", "flush" }, recording.Events);
+            RepresentationId[] ids = store.RegisterRepresentations([durable, ObjectLayout.String, array, durable]);
+            (durableId, arrayId) = (ids[0], ids[2]);
+            Assert.Equal(new RepresentationId[] { durableId, RepresentationId.String, arrayId, durableId }, ids);
+            Assert.Equal(4U, durableId.Value); // Ancestor and inline Point precede the owner.
+            Assert.Equal(5U, arrayId.Value);
+            Assert.Equal(new[] { "append-catalog", "flush" }, recording.Events);
             Assert.Equal(3, store.Count);
             long tail = file.TailOffset;
             ObjectLayout equivalent = ObjectLayout.ForDurable(new(owner.Type, 1,
                 [new(1, TypeTag.Int32), new(2, TypeTag.InlineValue, inlineSchema: Point(1, TypeTag.Int32))],
                 new("Ancestor", 2, new DurableFieldInfo(1, TypeTag.Int64))));
-            Assert.Equal(new RepresentationId[] { new(3), new(2) }, store.RegisterRepresentations([array, equivalent]));
+            Assert.Equal(new RepresentationId[] { arrayId, durableId }, store.RegisterRepresentations([array, equivalent]));
             Assert.Equal(tail, file.TailOffset);
         }
         using (IRbfFile file = RbfFile.OpenExisting(path)) {
             var recording = new RecordingFile(file);
             var store = new SchemaStore(recording);
             Assert.Equal(new[] { "flush" }, recording.Events);
-            Assert.Equal(durable, store.GetRepresentation(new(2)));
-            Assert.Equal(array, store.GetRepresentation(new(3)));
-            Assert.Same(store.GetRequired("Point", 1), store.GetRepresentation(new(3)).Array!.ElementSlot.InlineSchema);
-            Assert.Equal(new RepresentationId[] { new(3), new(2) }, store.RegisterRepresentations([array, durable]));
-            Assert.Equal(new RepresentationId(4), store.RegisterRepresentations([PrimitiveArray(TypeTag.Int32)])[0]);
+            Assert.Equal(durable, store.GetRepresentation(durableId));
+            Assert.Equal(array, store.GetRepresentation(arrayId));
+            Assert.Same(store.GetRequired("Point", 1), store.GetRepresentation(arrayId).Array!.ElementSlot.InlineSchema);
+            Assert.Equal(new RepresentationId[] { arrayId, durableId }, store.RegisterRepresentations([array, durable]));
+            Assert.Equal(new RepresentationId(6), store.RegisterRepresentations([PrimitiveArray(TypeTag.Int32)])[0]);
         }
     }
 
@@ -117,8 +122,8 @@ public sealed class RepresentationStoreTests : IDisposable {
             ObjectLayout.ForDurable(new("Owner", 1))]));
         Assert.Equal(tail, file.TailOffset);
         Assert.False(store.IsFaulted);
-        Assert.Throws<InvalidDataException>(() => store.GetRepresentation(new(4)));
-        Assert.Equal(new RepresentationId(4), store.RegisterRepresentations([PrimitiveArray(TypeTag.Byte)])[0]);
+        Assert.Throws<InvalidDataException>(() => store.GetRepresentation(new(5)));
+        Assert.Equal(new RepresentationId(5), store.RegisterRepresentations([PrimitiveArray(TypeTag.Byte)])[0]);
     }
 
     [Theory]
@@ -179,29 +184,25 @@ public sealed class RepresentationStoreTests : IDisposable {
         var recording = new RecordingFile(file);
         var store = new SchemaStore(recording);
         Assert.Throws<InvalidOperationException>(() => store.RegisterRepresentations(new CallbackList(1, _ => {
-            file.Append(SchemaBatchWireCodec.RbfTag, SchemaBatchWireCodec.Write([new DurableSchema("External", 1)])).Unwrap();
+            file.Append(SchemaCatalogWireCodec.RbfTag, CatalogTestData.Encode(CatalogTestData.Schemas([new DurableSchema("External", 1)]))).Unwrap();
             return PrimitiveArray(TypeTag.Int32);
         })));
         Assert.True(store.IsFaulted);
         Assert.Empty(recording.Events);
         var reopened = new SchemaStore(file);
-        Assert.Equal(new RepresentationId(2), reopened.RegisterRepresentations([PrimitiveArray(TypeTag.Int32)])[0]);
+        Assert.Equal(new RepresentationId(3), reopened.RegisterRepresentations([PrimitiveArray(TypeTag.Int32)])[0]);
     }
 
     [Theory]
-    [InlineData(1, FailurePoint.BeforeAppend, false, false)]
-    [InlineData(1, FailurePoint.AfterAppend, true, false)]
-    [InlineData(1, FailurePoint.BeforeFlush, true, false)]
-    [InlineData(1, FailurePoint.AfterFlush, true, false)]
-    [InlineData(2, FailurePoint.BeforeAppend, true, false)]
-    [InlineData(2, FailurePoint.AfterAppend, true, true)]
-    [InlineData(2, FailurePoint.BeforeFlush, true, true)]
-    [InlineData(2, FailurePoint.AfterFlush, true, true)]
-    public void UncertainSchemaOrRepresentationWriteFaultsUntilColdOpen(int frame, FailurePoint point, bool schemaExists, bool representationExists) {
+    [InlineData(FailurePoint.BeforeAppend, false)]
+    [InlineData(FailurePoint.AfterAppend, true)]
+    [InlineData(FailurePoint.BeforeFlush, true)]
+    [InlineData(FailurePoint.AfterFlush, true)]
+    public void UncertainUnifiedCatalogWriteFaultsUntilColdOpen(FailurePoint point, bool batchExists) {
         string path = NewPath();
         ObjectLayout layout = ObjectLayout.ForDurable(new("A", 1));
         using (IRbfFile file = RbfFile.CreateNew(path)) {
-            var recording = new RecordingFile(file) { Failure = point, FailureAppendNumber = frame };
+            var recording = new RecordingFile(file) { Failure = point };
             var store = new SchemaStore(recording);
             Assert.Throws<IOException>(() => store.RegisterRepresentations([layout]));
             Assert.True(store.IsFaulted);
@@ -212,8 +213,8 @@ public sealed class RepresentationStoreTests : IDisposable {
         // This observes complete bytes after a process-local reopen; it is not a power-loss simulation.
         using (IRbfFile file = RbfFile.OpenExisting(path)) {
             var store = new SchemaStore(file);
-            Assert.Equal(schemaExists ? 1 : 0, store.Count);
-            if (representationExists) { Assert.Equal(layout, store.GetRepresentation(new(2))); }
+            Assert.Equal(batchExists ? 1 : 0, store.Count);
+            if (batchExists) { Assert.Equal(layout, store.GetRepresentation(new(2))); }
             else { Assert.Throws<InvalidDataException>(() => store.GetRepresentation(new(2))); }
             Assert.Equal(new RepresentationId(2), store.RegisterRepresentations([layout])[0]);
         }
@@ -227,7 +228,7 @@ public sealed class RepresentationStoreTests : IDisposable {
             var recording = new RecordingFile(file) { Failure = FailurePoint.AfterAppend };
             var store = new SchemaStore(recording);
             Assert.Throws<IOException>(() => store.RegisterRepresentations([layout]));
-            Assert.Equal(new[] { "append-representation" }, recording.Events);
+            Assert.Equal(new[] { "append-catalog" }, recording.Events);
         }
         using (IRbfFile file = RbfFile.OpenReadOnlyExisting(path)) {
             var recording = new RecordingFile(file);
@@ -279,7 +280,7 @@ public sealed class RepresentationStoreTests : IDisposable {
                 historicalValueFactory: static (exact, _) => new(
                     new(1, TypeTag.InlineValue, inlineSchema: exact), typeof(int), typeof(Int32StateOps))));
             StateModelSnapshot snapshot = second.Snapshot(store);
-            Assert.Equal(InlineArray(Point(1, TypeTag.Int32)), store.ResolveReader(new(3), snapshot).Layout);
+            Assert.Equal(InlineArray(Point(1, TypeTag.Int32)), store.ResolveReader(new(4), snapshot).Layout);
             Assert.Throws<InvalidDataException>(() => snapshot.GetDomainType(TypeExpr.Named("Point")));
         }
     }
@@ -289,21 +290,26 @@ public sealed class RepresentationStoreTests : IDisposable {
         using IRbfFile file = RbfFile.CreateNew(NewPath());
         var store = new SchemaStore(file);
         RepresentationId old = store.RegisterRepresentations([PrimitiveArray(TypeTag.Int32)])[0];
+        DurableSchema existing = new("Existing", 1);
+        store.Register(existing);
+        RepresentationId existingId = store.RegisterRepresentations([ObjectLayout.ForDurable(existing)])[0];
         // Exhaustion cannot be reached economically in a test. Change only the allocator
         // boundary; assertions concern the public all-or-nothing registration contract.
         typeof(SchemaStore).GetField("_nextRepresentationId", BindingFlags.NonPublic | BindingFlags.Instance)!
-            .SetValue(store, (ulong)uint.MaxValue);
+            .SetValue(store, (ulong)uint.MaxValue + 1);
         long tail = file.TailOffset;
         Assert.Throws<InvalidOperationException>(() => store.RegisterRepresentations([
             ObjectLayout.ForDurable(new("A", 1)), PrimitiveArray(TypeTag.Byte)]));
         Assert.Equal(tail, file.TailOffset);
-        Assert.Equal(0, store.Count);
+        Assert.Equal(1, store.Count);
         Assert.False(store.IsFaulted);
-        RepresentationId last = store.RegisterRepresentations([PrimitiveArray(TypeTag.Byte)])[0];
-        Assert.Equal(uint.MaxValue, last.Value);
-        Assert.Equal(new[] { last, old }, store.RegisterRepresentations([PrimitiveArray(TypeTag.Byte), PrimitiveArray(TypeTag.Int32)]));
+        Assert.Same(existing, store.Register(existing));
+        Assert.Equal(new[] { existingId, old }, store.RegisterRepresentations([ObjectLayout.ForDurable(existing), PrimitiveArray(TypeTag.Int32)]));
+        Assert.Throws<InvalidOperationException>(() => store.Register(new("New", 1)));
         Assert.Throws<InvalidOperationException>(() => store.RegisterRepresentations([PrimitiveArray(TypeTag.Int64)]));
-        Assert.Equal(PrimitiveArray(TypeTag.Byte), store.GetRepresentation(last));
+        Assert.Equal(PrimitiveArray(TypeTag.Int32), store.GetRepresentation(old));
+        Assert.Equal(tail, file.TailOffset);
+        Assert.False(store.IsFaulted);
     }
 
     private static DurableSchema Point(int version, TypeTag tag) => new("Point", version, SchemaKind.InlineValue, new DurableFieldInfo(1, tag));
@@ -336,7 +342,8 @@ public sealed class RepresentationStoreTests : IDisposable {
         }
         public AteliaResult<SizedPtr> Append(uint tag, ReadOnlySpan<byte> payload, ReadOnlySpan<byte> tailMeta = default) {
             _appends++;
-            Events.Add(tag == SchemaBatchWireCodec.RbfTag ? "append-schema" : "append-representation");
+            Assert.Equal(SchemaCatalogWireCodec.RbfTag, tag);
+            Events.Add("append-catalog");
             Fail(FailurePoint.BeforeAppend);
             var result = inner.Append(tag, payload, tailMeta);
             Fail(FailurePoint.AfterAppend);

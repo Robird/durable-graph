@@ -5,6 +5,7 @@
 前序比较：[DB-044](0044-type-header-blind-review/README.md)；当前实现：[PROJECT-STATE](../../src/PROJECT-STATE.md)。
 
 后续修订：初次验收时保留的 Base v1–v3 兼容已决定移除，当前合同见 [§7](#7-后续清理移除旧-base-读取兼容)；下文初次施工与验收记录保留历史含义。
+目录内部的双批次和 SchemaKey 转接其后由 [DB-046](0046-unified-schema-catalog-slice.md) 替换；下面相关链接转向后继记录，初次格式与故障窗口仍是历史证据。
 
 ## 1. 本片只回答什么
 
@@ -86,9 +87,8 @@ descriptor 复用今天的 class SchemaKey / 数组 codec、构造码和元素�
 可写非空重开仍需确认持久屏障，不能只以用户 Schema 数量判断非空：纯基元数组也会产生表示登记帧。
 非法 ID、跳号、重复/重绑定 ID、同表示重复绑定不同 ID、缺依赖、未知格式、坏尾和溢长均拒绝；不按字典枚举顺序恢复编号。
 定义 kind/arity 的声明一致性覆盖 Schema 和数组表示登记，恢复时亦统一检查。
-参考 [SchemaStore](../../src/DurableGraph.StateStore/SchemaStore.cs)、[SchemaBatchWireCodec](../../src/DurableGraph.StateStore/SchemaBatchWireCodec.cs)、
-[RepresentationBatchWireCodec](../../src/DurableGraph.StateStore/RepresentationBatchWireCodec.cs)、
-[RepresentationDescriptorCodec](../../src/DurableGraph.StateStore/RepresentationDescriptorCodec.cs)。
+参考 [SchemaStore](../../src/DurableGraph.StateStore/SchemaStore.cs)；原 SchemaBatchWireCodec、RepresentationBatchWireCodec、
+RepresentationDescriptorCodec 的后继为 [DB-046 统一目录](0046-unified-schema-catalog-slice.md)。
 
 ## 5. Base 与读写贯通
 
@@ -136,7 +136,7 @@ G0–G1 需要测试以下容易被 DTO 类型相等掩盖的案例：不同 nom
 
 | 闸门 | 代码与回归入口 | 状态 |
 |---|---|---|
-| G0 表示目录 | [SchemaStore](../../src/DurableGraph.StateStore/SchemaStore.cs)、[目录测试](../../tests/DurableGraph.StateStore.Tests/RepresentationStoreTests.cs)、[批次格式测试](../../tests/DurableGraph.StateStore.Tests/RepresentationBatchWireCodecTests.cs) | 通过 |
+| G0 表示目录 | [SchemaStore](../../src/DurableGraph.StateStore/SchemaStore.cs)、[目录测试](../../tests/DurableGraph.StateStore.Tests/RepresentationStoreTests.cs)、[批次格式测试（DB-046 后继）](../../tests/DurableGraph.StateStore.Tests/SchemaCatalogReplayTests.cs) | 通过 |
 | G1 Base 格式 | [BaseObjectBodyCodec](../../src/DurableGraph.StateStore/BaseObjectBodyCodec.cs)、[DecodedBaseObjectBody](../../src/DurableGraph.StateStore/DecodedBaseObjectBody.cs)、[表示头测试](../../tests/DurableGraph.StateStore.Tests/RepresentationHeaderTests.cs)、[旧头兼容测试](../../tests/DurableGraph.StateStore.Tests/BaseObjectBodyCodecTests.cs) | 通过 |
 | G2 保存与读取 | [CapturedRevisionPlanner](../../src/DurableGraph.StateStore/CapturedRevisionPlanner.cs)、[LoadedRevisionPlanner](../../src/DurableGraph.StateStore/LoadedRevisionPlanner.cs)、[RevisionDecoder](../../src/DurableGraph.StateStore/RevisionDecoder.cs)、[TypedObjectVersionReader](../../src/DurableGraph.StateStore/TypedObjectVersionReader.cs)、[GraphRepository](../../src/DurableGraph.StateStore/GraphRepository.cs)、[集成测试](../../tests/DurableGraph.StateStore.Tests/RepresentationIntegrationTests.cs) | 通过 |
 | G3 实际包与历史 | [ArrayConsumer](../../experiments/PackageConsumerProbe/ArrayConsumer/README.md)、[GenericConsumer](../../experiments/PackageConsumerProbe/GenericConsumer/README.md)、[ValueUpgradeConsumer](../../experiments/PackageConsumerProbe/ValueUpgradeConsumer/README.md) | 通过 |

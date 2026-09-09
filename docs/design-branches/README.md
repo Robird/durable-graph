@@ -19,10 +19,11 @@
 ## 当前规划
 
 DB-034–039 已实现；DB-041 已实现非泛型 ObjectId，DB-042 已收敛 Upgrade Schema 复核，DB-040 的泛型目标品牌暂缓。
-DB-045 持久表示 ID 已完成；下一片尚未排期，后继内部描述与其他扩展从活跃路线图选片：
+DB-045 持久表示 ID 与 DB-046 统一闭合目录均已完成；后继从活跃路线图选择：
 
 | 文档 | 状态 | 实施范围 |
 |---|---|---|
+| [DB-046 统一闭合 Schema 目录](0046-unified-schema-catalog-slice.md) | Implemented / G0–G3 已通过验收 | 合并 Schema/表示记录及单批次登记；exact base/inline 依赖按 ID 寻址；保留当前闭合与版本规则；完整 tests 与四组真实包通过 |
 | [DB-045 持久表示 ID](0045-persisted-representation-id-slice.md) | Implemented / G0–G3 已通过验收 | 复用 ObjectLayout，SchemaStore 同日志持久整数登记、Base v4 ID 头与历史 reader 解析；后续清理移除旧 Base 头读取，不改模板/版本模型；初次完整测试及 Array/Generic/ValueUpgrade 真实包证据保留 |
 | [DB-044 类型头与 Schema 寻址盲评](0044-type-header-blind-review/README.md) | Research / 未裁决 | 隔离上下文、相反阅读顺序与交叉质询；比较版本化开放模板 token、闭合登记别名及表示版本政策；未修改产品格式 |
 | [DB-043 可组合数组与统一引用对象路径](0043-vector-array-object-slice.md) | Implemented / 已通过整体验收 | 统一 object 分派 string/class/array；SZ/rank 2–4、开放泛型/jagged/inline 元素、融合 Delta、数组 owner Upgrade；history/schema v4、Base envelope v3；完整测试和真实包证据见分片 |

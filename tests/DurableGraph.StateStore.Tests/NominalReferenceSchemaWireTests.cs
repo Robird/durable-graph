@@ -6,33 +6,37 @@ public sealed class NominalReferenceSchemaWireTests {
     [Fact]
     public void ReferenceOperandHasIndependentGoldenAndDoesNotRequireTargetRegistration() {
         DurableSchema owner = new("A", 1, new DurableFieldInfo(1, TypeTag.ObjectReference, "B"));
-        byte[] golden = Convert.FromHexString("04010203410001010001010F02034200");
-        Assert.Equal(golden, SchemaBatchWireCodec.Write([owner]));
-        Assert.Equal(owner, SchemaBatchWireCodec.Read(golden, new Dictionary<SchemaKey, DurableSchema>())[new("A", 1)]);
+        byte[] golden = Convert.FromHexString("0101020102034100010001010F02034200");
+        Assert.Equal(golden, SchemaCatalogTestData.Write([owner]));
+        Assert.Equal(owner, SchemaCatalogTestData.Read(golden)[new("A", 1)]);
         for (int length = 0; length < golden.Length; length++) {
             byte[] truncated = golden[..length];
-            Assert.ThrowsAny<Exception>(() => SchemaBatchWireCodec.Read(truncated, new Dictionary<SchemaKey, DurableSchema>()));
+            Exception? error = Record.Exception(() => SchemaCatalogWireCodec.Read(truncated, SchemaCatalogTestData.Empty));
+            Assert.True(error is InvalidDataException or EndOfStreamException, $"Prefix {length}: {error}");
         }
     }
 
     [Theory]
-    [InlineData("01010341010001010F")] // Missing operand.
-    [InlineData("01010341010001010F00")] // Null/empty string representation.
-    [InlineData("01010341010001010F0320")] // Blank nominal identity.
-    [InlineData("01010341010001010F034200")] // Extra operand/trailing byte.
-    [InlineData("010103410100010110")] // Inline tag 16 is illegal in v1.
+    [InlineData("0101020102034100010001010F")] // Missing operand.
+    [InlineData("0101020102034100010001010F00")] // Unknown expression.
+    [InlineData("0101020102034100010001010F02032000")] // Blank nominal identity.
+    [InlineData("0101020102034100010001010F0203420000")] // Extra operand/trailing byte.
+    [InlineData("0101020102034100010001010F0102")] // A numeric primitive cannot be a reference constraint.
+    [InlineData("0101020102034100010001010F0104")] // String has its own canonical slot tag.
     public void MalformedNominalOperandsFailClosed(string hex) {
-        Assert.ThrowsAny<Exception>(() => SchemaBatchWireCodec.Read(Convert.FromHexString(hex), new Dictionary<SchemaKey, DurableSchema>()));
+        Exception? error = Record.Exception(() => SchemaCatalogWireCodec.Read(Convert.FromHexString(hex), SchemaCatalogTestData.Empty));
+        Assert.True(error is InvalidDataException or EndOfStreamException, error?.ToString());
     }
 
     [Fact]
     public void ChangingOnlyNominalFamilyConflictsWithPersistedDefinition() {
         DurableSchema first = new("A", 1, new DurableFieldInfo(1, TypeTag.ObjectReference, "B"));
         DurableSchema changed = new("A", 1, new DurableFieldInfo(1, TypeTag.ObjectReference, "C"));
-        var registered = new Dictionary<SchemaKey, DurableSchema> { [new("A", 1)] = first };
+        var registered = SchemaCatalogTestData.Registered(first);
         Assert.NotEqual(first, changed);
-        Assert.Throws<InvalidDataException>(() => SchemaBatchWireCodec.Read(SchemaBatchWireCodec.Write([changed]), registered));
-        Assert.Same(first, Assert.Single(registered).Value);
+        byte[] changedRow = Convert.FromHexString("0101030102034100010001010F02034300");
+        Assert.Throws<InvalidDataException>(() => SchemaCatalogWireCodec.Read(changedRow, registered));
+        Assert.Same(first, Assert.Single(registered).Value.Schema);
     }
 
     [Fact]
@@ -42,7 +46,7 @@ public sealed class NominalReferenceSchemaWireTests {
         Assert.ThrowsAny<ArgumentException>(() => new DurableFieldInfo(1, TypeTag.UInt32, "A"));
         DurableSchema self = new("A", 1, new DurableFieldInfo(1, TypeTag.ObjectReference, "A"));
         Assert.Null(self.BaseSchema);
-        Assert.Equal(self, SchemaBatchWireCodec.Read(SchemaBatchWireCodec.Write([self]), new Dictionary<SchemaKey, DurableSchema>())[new("A", 1)]);
+        Assert.Equal(self, SchemaCatalogTestData.Read(SchemaCatalogTestData.Write([self]))[new("A", 1)]);
     }
 
     [Fact]

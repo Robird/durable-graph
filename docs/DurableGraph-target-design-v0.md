@@ -35,7 +35,7 @@ Source Generator 负责可在编译期确定的类型知识与机械代码，框
   多维数组 rank 上界为 4；超过上界明确拒绝。受支持槽可递归作为数组元素，包括泛型/inline struct 与数组引用；
   数组引用要求 exact nominal 类型，协变的历史 ancestry witness 独立后继，不以当前 CLR 祖先替代。
   VectorArray、Rank-2、Rank-3、Rank-4 使用独立构造码，元素类型及每维长度仍须表达；
-  当前局部格式见 [DB-043](design-branches/0043-vector-array-object-slice.md)，完整表示整数 ID 的待实施规划见 [DB-045](design-branches/0045-persisted-representation-id-slice.md)。
+  数组局部合同见 [DB-043](design-branches/0043-vector-array-object-slice.md)，完整表示整数寻址见 [DB-045](design-branches/0045-persisted-representation-id-slice.md)。
   可静态识别的不支持类型由 SG 拒绝，其余在 Capture/读取边界校验，不静默降级。
 - Upgrade 仅转换单个对象的字段，从旧 DTO 产生下一版 DTO；不读取其他对象，不拆分/合并对象，
   不创建带持久身份的新对象。创建下一版 DTO 值本身不属于这一禁令。已有引用槽可以保留、调整或
@@ -197,7 +197,16 @@ Source Generator 负责可在编译期确定的类型知识与机械代码，框
 取得领域身份与 exact 持久表示布局，Delta 沿用 Base。SchemaStore 封装描述及其解析；当前程序用保留的
 历史代码绑定 DTO/reader，CLR Type/委托本身不落盘。同 ID 不重绑定，引用目标版本仍由目标自己的 Base 决定。
 ID 由所属目录统一分配，等价完整表示复用；登记先于使用该 ID 的 State 发布，放弃一次 State 不撤销已登记表示。
-最小实现合同见 [DB-045](design-branches/0045-persisted-representation-id-slice.md)；内部模板/组合表示的重整另行研究。
+对象寻址合同见 [DB-045](design-branches/0045-persisted-representation-id-slice.md)。目录内部采用
+[DB-046](design-branches/0046-unified-schema-catalog-slice.md) 选择的统一闭合记录：用户 class 的 Schema 记录
+就是其对象表示记录；inline Schema 与数组进入同一编号空间，base/inline exact 依赖按目录 ID 引用。
+inline 记录只描述嵌套值，不能被 Base 当作独立对象表示；普通引用槽只约束无版本 nominal 类型，
+目标版本不成为引用方的 exact 依赖。`SchemaKey` 是由完整名义类型与定义版本派生的查询、冲突索引，
+同 key 异形仍须拒绝，不能靠新编号绕过。一次登记的完整缺失闭包经一个批次持久化后才交付 ID。
+
+领域 CLR 类型与版本化 DTO/reader 都是结合目录描述和保留代码得到的绑定结果，不持久化第二套 DTO 类型名称。
+不同领域名义身份即使共享同一个 DTO CLR 类型也不能合并。是否持久化开放模板与必要 exact 实参，
+应以能否简化模板展开和反向绑定为依据另行研究，不由整数寻址自动改变现有版本传播政策。
 
 未知版本、相同身份/版本却不一致的 Schema、缺失升级器、损坏引用或来源不匹配时，
 应明确拒绝，不猜测并不回退到 latest。升级由显式类型知识和函数承担，不自动推断业务迁移。
