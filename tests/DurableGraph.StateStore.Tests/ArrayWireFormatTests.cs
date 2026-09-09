@@ -31,7 +31,7 @@ public sealed class ArrayWireFormatTests {
         tooDeep[^1] = 2;
         Assert.Throws<InvalidDataException>(() => ReadType(tooDeep));
         Assert.Throws<InvalidDataException>(() => ReadType([4, 3, 0]));
-        Assert.Throws<InvalidDataException>(() => ReadType([9, 1, 2]));
+        Assert.Throws<InvalidDataException>(() => ReadType([10, 1, 2]));
         Assert.Throws<ArgumentException>(() => WriteType(TypeExpr.VectorArray(TypeExpr.Parameter(0))));
     }
 
@@ -39,7 +39,7 @@ public sealed class ArrayWireFormatTests {
     public void CatalogPersistsArrayReferencesAndNestedGenericArguments() {
         TypeExpr slot = TypeExpr.VectorArray(TypeExpr.MultiDimArray(TypeExpr.Builtin(TypeTag.Int32), 2));
         DurableSchema schema = new("A", 1, DurableFieldInfo.Reference(1, slot));
-        byte[] golden = Convert.FromHexString("0101020102034100010001010F04050102");
+        byte[] golden = Convert.FromHexString("0201020102034100010001010F04050102");
         Assert.Equal(golden, SchemaCatalogTestData.Write([schema]));
         Assert.Equal(schema, SchemaCatalogTestData.Read(golden)[new("A", 1)]);
         byte[] old = (byte[])golden.Clone();
@@ -68,10 +68,10 @@ public sealed class ArrayWireFormatTests {
     }
 
     [Theory]
-    [InlineData(TypeExprKind.VectorArray, "01010203010402")]
-    [InlineData(TypeExprKind.Rank2Array, "01010203010502")]
-    [InlineData(TypeExprKind.Rank3Array, "01010203010602")]
-    [InlineData(TypeExprKind.Rank4Array, "01010203010702")]
+    [InlineData(TypeExprKind.VectorArray, "02010203010402")]
+    [InlineData(TypeExprKind.Rank2Array, "02010203010502")]
+    [InlineData(TypeExprKind.Rank3Array, "02010203010602")]
+    [InlineData(TypeExprKind.Rank4Array, "02010203010702")]
     public void CatalogNodePreservesExactShapeConstructor(TypeExprKind constructor, string hex) {
         ArrayLayout layout = new(constructor, new DurableFieldInfo(1, TypeTag.Int32));
         byte[] golden = Convert.FromHexString(hex);
@@ -83,13 +83,13 @@ public sealed class ArrayWireFormatTests {
     public void ReferenceElementNodeSupportsJaggedGenericComposition() {
         ArrayLayout layout = new(TypeExprKind.VectorArray, DurableFieldInfo.Reference(1,
             TypeExpr.VectorArray(TypeExpr.Named("B", TypeExpr.MultiDimArray(TypeExpr.Builtin(TypeTag.String), 4)))));
-        byte[] golden = Convert.FromHexString("0101020301040F0402034201070104");
+        byte[] golden = Convert.FromHexString("0201020301040F0402034201070104");
         Assert.Equal(golden, WriteArray(layout));
         Assert.Equal(layout, ReadArray(golden));
         ArrayLayout strings = new(TypeExprKind.VectorArray, new DurableFieldInfo(1, TypeTag.String));
-        Assert.Equal(Convert.FromHexString("01010203010404"), WriteArray(strings));
+        Assert.Equal(Convert.FromHexString("02010203010404"), WriteArray(strings));
         // A second representation of the same string slot is deliberately noncanonical.
-        Assert.Throws<InvalidDataException>(() => ReadArray(Convert.FromHexString("0101020301040F0104")));
+        Assert.Throws<InvalidDataException>(() => ReadArray(Convert.FromHexString("0201020301040F0104")));
     }
 
     [Fact]
@@ -100,7 +100,7 @@ public sealed class ArrayWireFormatTests {
             DurableSchema point2 = new("P", 2, SchemaKind.InlineValue, new DurableFieldInfo(1, TypeTag.Int64));
             ArrayLayout layout = new(TypeExprKind.VectorArray, new DurableFieldInfo(1, TypeTag.InlineValue, inlineSchema: point1));
             var registered = SchemaCatalogTestData.Registered(point1);
-            byte[] golden = Convert.FromHexString("0101030301041002");
+            byte[] golden = Convert.FromHexString("0201030301041002");
             Assert.Equal(golden, WriteArray(layout, registered));
             Assert.Same(point1, ReadArray(golden, registered).ElementSlot.InlineSchema);
             // Even a known ID cannot point at a class where an inline element is required.
@@ -124,18 +124,18 @@ public sealed class ArrayWireFormatTests {
     }
 
     [Theory]
-    [InlineData("01010203000402")] // Unknown codec zero.
-    [InlineData("01010203020402")] // Future codec.
-    [InlineData("0101020381000402")] // Noncanonical codec.
-    [InlineData("01010203010302")] // Open type is not an array constructor.
-    [InlineData("01010203010802")] // Unknown rank.
-    [InlineData("01010203010400")] // Invalid element slot.
-    [InlineData("01010203010411")] // Template parameter is not a closed element slot.
-    [InlineData("0101020301040F040300")] // Open reference element operand.
-    [InlineData("0101020301041000")] // Zero cannot identify an inline Schema.
-    [InlineData("0101020301041001")] // String cannot identify an inline Schema.
-    [InlineData("0101020301041002")] // Self dependency.
-    [InlineData("0101020301041003")] // Future dependency.
+    [InlineData("02010203000402")] // Unknown codec zero.
+    [InlineData("02010203020402")] // Future codec.
+    [InlineData("0201020381000402")] // Noncanonical codec.
+    [InlineData("02010203010302")] // Open type is not an array constructor.
+    [InlineData("02010203010802")] // Unknown rank.
+    [InlineData("02010203010400")] // Invalid element slot.
+    [InlineData("02010203010411")] // Template parameter is not a closed element slot.
+    [InlineData("0201020301040F040300")] // Open reference element operand.
+    [InlineData("0201020301041000")] // Zero cannot identify an inline Schema.
+    [InlineData("0201020301041001")] // String cannot identify an inline Schema.
+    [InlineData("0201020301041002")] // Self dependency.
+    [InlineData("0201020301041003")] // Future dependency.
     public void MalformedArrayNodesFailClosed(string hex) {
         Assert.Throws<InvalidDataException>(() => ReadArray(Convert.FromHexString(hex)));
     }
@@ -152,7 +152,7 @@ public sealed class ArrayWireFormatTests {
             .ToDictionary(entry => entry.Id);
         ArrayLayout layout = new(TypeExprKind.VectorArray, new(1, TypeTag.InlineValue, inlineSchema: chain[^1]));
         // ID 258 array references inline ID 257, whose Schema DAG has exactly 256 levels.
-        byte[] golden = Convert.FromHexString("01018202030104108102");
+        byte[] golden = Convert.FromHexString("02018202030104108102");
         Assert.Equal(golden, WriteArray(layout, registered));
         ArrayLayout decoded = ReadArray(golden, registered);
         Assert.Equal(layout, decoded);
@@ -161,7 +161,7 @@ public sealed class ArrayWireFormatTests {
 
     [Fact]
     public void EveryTruncatedReferenceArrayNodeFails() {
-        byte[] golden = Convert.FromHexString("0101020301040F0402034201070104");
+        byte[] golden = Convert.FromHexString("0201020301040F0402034201070104");
         for (int length = 0; length < golden.Length; length++) {
             byte[] prefix = golden[..length];
             Exception? error = Record.Exception(() => ReadArray(prefix));

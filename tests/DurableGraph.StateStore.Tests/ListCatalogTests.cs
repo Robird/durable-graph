@@ -11,7 +11,7 @@ public sealed class ListCatalogTests {
         Assert.Equal(TypeExpr.List(TypeExpr.Builtin(TypeTag.Int32)), ReadType(Convert.FromHexString("080102")));
         for (byte tag = 1; tag <= 14; tag++) {
             SchemaCatalogEntry row = SchemaCatalogEntry.ForList(new(2), new(new(1, (TypeTag)tag)));
-            byte[] golden = [1, 1, 2, 4, 2, tag];
+            byte[] golden = [2, 1, 2, 4, 2, tag];
             Assert.Equal(golden, SchemaCatalogWireCodec.Write([row], CatalogTestData.Empty));
             Assert.Equal(row.Layout, Assert.Single(SchemaCatalogWireCodec.Read(golden, CatalogTestData.Empty)).Layout);
         }
@@ -24,13 +24,13 @@ public sealed class ListCatalogTests {
         Assert.Equal(typeGolden, WriteType(nested));
         Assert.Equal(nested, ReadType(typeGolden));
         SchemaCatalogEntry row = SchemaCatalogEntry.ForList(new(2), new(DurableFieldInfo.Reference(1, nested)));
-        byte[] golden = Convert.FromHexString("01010204020F0804080102");
+        byte[] golden = Convert.FromHexString("02010204020F0804080102");
         Assert.Equal(golden, SchemaCatalogWireCodec.Write([row], CatalogTestData.Empty));
         Assert.Equal(row.Layout, Assert.Single(SchemaCatalogWireCodec.Read(golden, CatalogTestData.Empty)).Layout);
         DurableSchema point = new("P", 1, SchemaKind.InlineValue, new DurableFieldInfo(1, TypeTag.Int32));
         SchemaCatalogEntry[] entries = [SchemaCatalogEntry.ForSchema(new(2), point),
             SchemaCatalogEntry.ForList(new(3), new(new(1, TypeTag.InlineValue, inlineSchema: point)))];
-        byte[] inlineGolden = Convert.FromHexString("010202020203500001000101020304021002");
+        byte[] inlineGolden = Convert.FromHexString("020202020203500001000101020304021002");
         Assert.Equal(inlineGolden, SchemaCatalogWireCodec.Write(entries, CatalogTestData.Empty));
         SchemaCatalogEntry[] read = SchemaCatalogWireCodec.Read(inlineGolden, CatalogTestData.Empty);
         Assert.Same(read[0].Schema, read[1].List!.ElementSlot.InlineSchema);
@@ -42,20 +42,20 @@ public sealed class ListCatalogTests {
     }
 
     [Theory]
-    [InlineData("010102040002")] // Codec zero.
-    [InlineData("010102040102")] // Retired codec.
-    [InlineData("010102040302")] // Future codec.
-    [InlineData("01010204820002")] // Noncanonical codec.
-    [InlineData("010102040200")] // Unknown slot.
-    [InlineData("010102040211")] // Open slot.
-    [InlineData("01010204020F0104")] // String has a canonical dedicated slot.
-    [InlineData("01010204021000")] // Null dependency.
-    [InlineData("01010204021001")] // Builtin string dependency.
-    [InlineData("01010204021002")] // Self dependency.
-    [InlineData("01010204021003")] // Forward dependency.
-    [InlineData("01010204020200")] // Extra byte.
-    [InlineData("01020204020203040202")] // Duplicate layout at another ID.
-    [InlineData("010102050102")] // Unknown catalog node.
+    [InlineData("020102040002")] // Codec zero.
+    [InlineData("020102040102")] // Retired codec.
+    [InlineData("020102040302")] // Future codec.
+    [InlineData("02010204820002")] // Noncanonical codec.
+    [InlineData("020102040200")] // Unknown slot.
+    [InlineData("020102040211")] // Open slot.
+    [InlineData("02010204020F0104")] // String has a canonical dedicated slot.
+    [InlineData("02010204021000")] // Null dependency.
+    [InlineData("02010204021001")] // Builtin string dependency.
+    [InlineData("02010204021002")] // Self dependency.
+    [InlineData("02010204021003")] // Forward dependency.
+    [InlineData("02010204020200")] // Extra byte.
+    [InlineData("02020204020203040202")] // Duplicate layout at another ID.
+    [InlineData("020102050102")] // Unknown catalog node.
     public void InvalidListRowsFailClosed(string hex) {
         Assert.Throws<InvalidDataException>(() => SchemaCatalogWireCodec.Read(Convert.FromHexString(hex), CatalogTestData.Empty));
     }
@@ -68,7 +68,7 @@ public sealed class ListCatalogTests {
         byte[] tooDeep = [.. Enumerable.Repeat((byte)8, TypeExpr.MaximumDepth), 1, 2];
         Assert.Throws<InvalidDataException>(() => ReadType(tooDeep));
         Assert.Throws<InvalidDataException>(() => ReadType([8, 3, 0]));
-        Assert.Throws<InvalidDataException>(() => ReadType([9, 1, 2]));
+        Assert.Throws<InvalidDataException>(() => ReadType([10, 1, 2]));
         Assert.Throws<ArgumentException>(() => WriteType(TypeExpr.List(TypeExpr.Parameter(0))));
     }
 
@@ -129,7 +129,7 @@ public sealed class ListCatalogTests {
 
     [Fact]
     public void InlineDependencyRejectsClassAndContainerNodesAndKeepsSchemaDepthLimit() {
-        byte[] dependency = Convert.FromHexString("01010304021002");
+        byte[] dependency = Convert.FromHexString("02010304021002");
         var classIndex = CatalogTestData.Index([SchemaCatalogEntry.ForSchema(new(2), new("C", 1))]);
         var listIndex = CatalogTestData.Index([SchemaCatalogEntry.ForList(new(2), new(new(1, TypeTag.Int32)))]);
         Assert.Throws<InvalidDataException>(() => SchemaCatalogWireCodec.Read(dependency, classIndex));
@@ -142,7 +142,7 @@ public sealed class ListCatalogTests {
         }
         var registered = CatalogTestData.Index(SchemaCatalogWireCodec.Read(SchemaCatalogTestData.Write(chain), CatalogTestData.Empty));
         SchemaCatalogEntry list = SchemaCatalogEntry.ForList(new(258), new(new(1, TypeTag.InlineValue, inlineSchema: chain[^1])));
-        byte[] golden = Convert.FromHexString("010182020402108102");
+        byte[] golden = Convert.FromHexString("020182020402108102");
         Assert.Equal(golden, SchemaCatalogWireCodec.Write([list], registered));
         Assert.Same(registered[new(257)].Schema,
             Assert.Single(SchemaCatalogWireCodec.Read(golden, registered)).List!.ElementSlot.InlineSchema);

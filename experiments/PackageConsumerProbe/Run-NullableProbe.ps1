@@ -12,8 +12,8 @@ function Invoke-DotNet {
 }
 
 $repositoryRoot = (Resolve-Path (Join-Path $PSScriptRoot "../..")).Path
-$consumerProject = Join-Path $PSScriptRoot "ListConsumer/ListConsumer.csproj"
-$runId = "list-$([DateTime]::UtcNow.ToString('yyyyMMddHHmmss'))-$PID-$([Guid]::NewGuid().ToString('N').Substring(0, 8))"
+$consumerProject = Join-Path $PSScriptRoot "NullableConsumer/NullableConsumer.csproj"
+$runId = "nullable-$([DateTime]::UtcNow.ToString('yyyyMMddHHmmss'))-$PID-$([Guid]::NewGuid().ToString('N').Substring(0, 8))"
 $workRoot = Join-Path $PSScriptRoot "obj/$runId"
 $packageCache = Join-Path $workRoot "packages"
 $history = Join-Path $workRoot "history"
@@ -30,7 +30,7 @@ try {
     if ([string]::IsNullOrWhiteSpace($PackageSource)) {
         $PackageSource = Join-Path $workRoot "feed"
         New-Item -ItemType Directory -Path $PackageSource | Out-Null
-        $Version = "0.0.0-list-e2e.$([DateTime]::UtcNow.ToString('yyyyMMddHHmmss')).$PID"
+        $Version = "0.0.0-nullable-e2e.$([DateTime]::UtcNow.ToString('yyyyMMddHHmmss')).$PID"
         foreach ($project in @(
             "../atelia/src/Data/Data.csproj",
             "../atelia/src/Primitives/Primitives.csproj",
@@ -52,11 +52,11 @@ try {
         "-p:BaseOutputPath=$output"
     )
     Invoke-DotNet (@("restore", $consumerProject, "--source", $PackageSource, "--packages", $packageCache) + $properties)
-    $assembly = Join-Path $output "Debug/net10.0/Atelia.ListConsumer.dll"
+    $assembly = Join-Path $output "Debug/net10.0/Atelia.NullableConsumer.dll"
     $hashes = @{}
     foreach ($stage in @(
-        @{ Number = 1; Count = 4; Expected = "ListSeed:True:CompositionsAndCycles:True:ResizeAndCapacity:True:FrozenDelta:True:RepresentationIds:True:ReorderedRegistration:True" },
-        @{ Number = 2; Count = 5; Expected = "ListUpgrade:True:SharedOwnerOnce:True:ForcedBaseThenDelta:True:HistoricalExact:True:DeletedDomainStruct:True:ColdReopen:True:IndependentRepresentationUpgrade:True:DeltaInheritsRepresentation:True" }
+        @{ Number = 1; Count = 3; Expected = "NullableSeed:True:SharedCycles:True:VectorAndRank4:True:FrozenPreparation:True:HistoricalDelta:True" },
+        @{ Number = 2; Count = 5; Expected = "NullableUpgrade:True:LiftedOwnerAndElements:True:ForcedBaseThenDelta:True:HistoricalExact:True:DeletedDomainStruct:True:ColdReopen:True:ClearRemovesIsland:True" }
     )) {
         $stageProperties = $properties + "-p:HistoryVersion=$($stage.Number)"
         Invoke-DotNet (@("clean", $consumerProject) + $stageProperties)
@@ -76,9 +76,9 @@ try {
             $hashes[$file.Name] = $hash
         }
         $actual = (& dotnet $assembly $database | Out-String).Trim()
-        if ($LASTEXITCODE -ne 0 -or $actual -ne $stage.Expected) { throw "List stage $($stage.Number) failed; output was '$actual'." }
+        if ($LASTEXITCODE -ne 0 -or $actual -ne $stage.Expected) { throw "Nullable stage $($stage.Number) failed; output was '$actual'." }
         Write-Host $actual
     }
-    Write-Host "List package consumer probe passed. Artifacts: $workRoot"
+    Write-Host "Nullable package consumer probe passed. Artifacts: $workRoot"
 }
 finally { Pop-Location }

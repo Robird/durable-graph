@@ -22,7 +22,7 @@ internal static class CatalogTestData {
         }
         ArrayBufferWriter<byte> buffer = new();
         BinaryPayloadWriter writer = new(buffer);
-        writer.WriteByte(1);
+        writer.WriteByte(2);
         writer.WriteUInt32((uint)entries.Count);
         foreach (SchemaCatalogEntry entry in entries) {
             writer.WriteUInt32(entry.Id.Value);
@@ -54,7 +54,8 @@ internal static class CatalogTestData {
 
     private static void WriteSlot(ref BinaryPayloadWriter writer, DurableFieldInfo slot, Dictionary<SchemaKey, RepresentationId> ids) {
         writer.WriteByte((byte)slot.TypeTag);
-        if (slot.TypeTag == TypeTag.ObjectReference) { TypeExprWireCodec.Write(ref writer, slot.TargetType!); }
+        if (slot.TypeTag == TypeTag.Nullable) { WriteSlot(ref writer, slot.NullableLayout!.ElementSlot, ids); }
+        else if (slot.TypeTag == TypeTag.ObjectReference) { TypeExprWireCodec.Write(ref writer, slot.TargetType!); }
         else if (slot.TypeTag == TypeTag.InlineValue) {
             writer.WriteUInt32(ids[new(slot.InlineSchema!.Type, slot.InlineSchema.Version)].Value);
         }

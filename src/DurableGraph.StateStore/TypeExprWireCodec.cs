@@ -16,7 +16,7 @@ internal static class TypeExprWireCodec {
             writer.WriteByte((byte)type.BuiltinTag);
             return;
         }
-        if (type.IsArray || type.IsList) {
+        if (type.IsArray || type.IsList || type.IsNullable) {
             WriteNode(ref writer, type.ElementType!);
             return;
         }
@@ -45,6 +45,11 @@ internal static class TypeExprWireCodec {
             return tag == 4 ? TypeExpr.VectorArray(element) : TypeExpr.MultiDimArray(element, tag - 3);
         }
         if (tag == 8) { return TypeExpr.List(ReadNode(ref reader, depth + 1, ref remainingNodes)); }
+        if (tag == 9) {
+            TypeExpr child = ReadNode(ref reader, depth + 1, ref remainingNodes);
+            try { return TypeExpr.Nullable(child); }
+            catch (ArgumentException error) { throw new InvalidDataException("Invalid Nullable type operand.", error); }
+        }
         if (tag != 2) {
             throw new InvalidDataException("Unknown or open type expression in a closed persisted type.");
         }

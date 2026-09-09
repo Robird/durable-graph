@@ -156,11 +156,11 @@ public sealed class SchemaStore {
         foreach (ObjectLayout layout in layouts) {
             if (layout.Schema is { } schema) { AddClosure(schema, 1); }
             else if (layout.Array is { } array) {
-                if (array.ElementSlot.InlineSchema is { } inline) { AddClosure(inline, 1); }
+                if (array.ElementSlot.ValueSchema is { } inline) { AddClosure(inline, 1); }
                 if (!ids.ContainsKey(layout)) { Add(SchemaCatalogEntry.ForArray(Allocate(), array)); }
             }
             else if (layout.List is { } list) {
-                if (list.ElementSlot.InlineSchema is { } inline) { AddClosure(inline, 1); }
+                if (list.ElementSlot.ValueSchema is { } inline) { AddClosure(inline, 1); }
                 if (!ids.ContainsKey(layout)) { Add(SchemaCatalogEntry.ForList(Allocate(), list)); }
             }
         }
@@ -192,7 +192,7 @@ public sealed class SchemaStore {
             int height = 1;
             if (schema.BaseSchema is { } ancestor) { height = Math.Max(height, 1 + AddClosure(ancestor, depth + 1)); }
             foreach (DurableFieldInfo field in schema.Fields) {
-                if (field.InlineSchema is { } inline) { height = Math.Max(height, 1 + AddClosure(inline, depth + 1)); }
+                if (field.ValueSchema is { } inline) { height = Math.Max(height, 1 + AddClosure(inline, depth + 1)); }
             }
             SchemaKey key = SchemaCatalogWireCodec.Key(schema);
             if (schemas.TryGetValue(key, out DurableSchema? old)) {

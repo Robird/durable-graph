@@ -10,7 +10,7 @@ public sealed class GenericSchemaPersistenceTests {
         TypeExpr type = TypeExpr.Named("B", TypeExpr.Builtin(TypeTag.Int32), TypeExpr.Named("P"));
         DurableSchema schema = new(type, 128);
         // ID 2 reference Schema; Named B with Int32/P arguments; version 128; no base/fields.
-        byte[] golden = Convert.FromHexString("010102010203420201020203500080010000");
+        byte[] golden = Convert.FromHexString("020102010203420201020203500080010000");
         Assert.Equal(golden, SchemaCatalogTestData.Write([schema]));
         Assert.Equal(schema, SchemaCatalogTestData.Read(golden)[new(type, 128)]);
         string path = Path.Combine(Path.GetTempPath(), $"generic-envelope-{Guid.NewGuid():N}.rbf");
@@ -36,7 +36,7 @@ public sealed class GenericSchemaPersistenceTests {
         TypeExpr stringType = TypeExpr.Named("B", TypeExpr.Builtin(TypeTag.String));
         DurableSchema intBox = new(intType, 1, DurableFieldInfo.Reference(1, stringType));
         DurableSchema stringBox = new(stringType, 1);
-        byte[] golden = Convert.FromHexString("01020201020342010102010001010F0203420101040301020342010104010000");
+        byte[] golden = Convert.FromHexString("02020201020342010102010001010F0203420101040301020342010104010000");
         Assert.Equal(golden, SchemaCatalogTestData.Write([intBox, stringBox]));
         var decoded = SchemaCatalogTestData.Read(golden);
         Assert.Equal(intBox, decoded[new(intType, 1)]);
@@ -137,7 +137,7 @@ public sealed class GenericSchemaPersistenceTests {
             byte[] ownerRow = SchemaCatalogTestData.Write([owner])[2..];
             byte[] pointRow = SchemaCatalogTestData.Write([point])[2..];
             pointRow[0] = 3;
-            Assert.Throws<InvalidDataException>(() => SchemaCatalogWireCodec.Read([1, 2, .. ownerRow, .. pointRow], SchemaCatalogTestData.Empty));
+            Assert.Throws<InvalidDataException>(() => SchemaCatalogWireCodec.Read([2, 2, .. ownerRow, .. pointRow], SchemaCatalogTestData.Empty));
         }
         finally { File.Delete(path); }
     }

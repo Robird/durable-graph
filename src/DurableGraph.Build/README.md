@@ -13,23 +13,36 @@ DurableGraph.Build verify  --manifest <generated.g.cs> --schema-history <directo
 The manifest format is strict:
 
 ```csharp
-// durable-graph-schema-history-manifest:1
+// durable-graph-schema-history-manifest:6
 // schema-begin
 // schema-id-base64:cHJvYmUuY2hhcmFjdGVy
 // version:1
+// kind:1
+// arity:0
 // field:1|4
+// field:2|18|q(b2)
 // schema-end
 ```
 
 It may contain zero or more schema-history record blocks. Field IDs must be positive,
 unique, and sorted. Type tags `1` through `14` retain their existing meanings
-and two-column field records. Tag `15` is a durable reference and requires a
-third column containing its nominal target SchemaId in canonical UTF-8 Base64:
-`// field:2|15|cHJvYmUuaXRlbQ==`. It binds a family, without a target version
-or an exact target Schema dependency. Other tags prohibit a third column.
-These field records retain their established meanings under the current
-Schema-history header. Legacy `.dgsnapshot` headers and record markers are rejected;
-because the canonical text changed, current content hashes differ from the legacy format.
+and two-column field records. Current format v6 uses canonical type patterns:
+
+- Tag `15`: a third column with the nominal named/array/List reference pattern; no target version.
+- Tag `16`: an inline named pattern followed by its fixed historical version.
+- Tag `17`: a declaration-scoped type parameter, such as `p0`.
+- Tag `18`: a Nullable pattern `q(child)`. A named child requires its fixed inline version
+  as the fourth column; scalar and parameter children have no version column.
+
+For example, `// field:2|18|q(b2)` is `int?`; `// field:3|18|q(nUG9pbnQ=())|1`
+retains the exact Point V1 dependency. Nullable does not have its own definition version.
+Arrays use `a1(...)` through `a4(...)`, Lists use `l(...)`, and named definitions use
+`n<canonical UTF-8 Base64 ID>(arguments)`. These constructors compose recursively within
+the supported CLR shape constraints. Nullable cannot directly wrap references or another Nullable.
+
+Accepted formats v1–v5 remain readable with their original grammar and immutable filenames/hashes.
+Nullable patterns are valid only in v6, including when nested inside generic or collection arguments.
+Legacy `.dgsnapshot` headers and record markers are rejected.
 
 The Source Generator validates the Schema shapes needed to compile generated code. The Build tool is
 the canonical file authority: after `CoreCompile` it additionally rejects duplicate keys,
@@ -37,7 +50,7 @@ noncanonical filenames, BOM/CRLF bytes, and other representations that cannot be
 history. A project build succeeds only when both layers accept the inputs.
 
 Each checked-in `*.dgschema` uses the same single block with the header
-`// durable-graph-schema-history:1`. History is canonical UTF-8 without a byte-order
+`// durable-graph-schema-history:6` for newly published records. History is canonical UTF-8 without a byte-order
 mark, uses LF line endings, and ends in one LF. Its filename contains full
 SHA-256 hashes of the decoded SchemaId and canonical history content, plus the
 version; a SchemaId never becomes a path component.

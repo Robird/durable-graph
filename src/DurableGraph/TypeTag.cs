@@ -21,4 +21,6 @@ public enum TypeTag {
     Double = 14,
     ObjectReference = 15,
     InlineValue = 16,
+    // 17 is reserved for declaration parameters in retained build history.
+    Nullable = 18,
 }

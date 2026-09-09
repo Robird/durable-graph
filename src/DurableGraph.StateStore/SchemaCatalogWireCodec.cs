@@ -7,7 +7,7 @@ namespace Atelia.DurableGraph.StateStore;
 /// <summary>The sole persistent grammar for closed Schemas and object representations.</summary>
 internal static class SchemaCatalogWireCodec {
     internal const uint RbfTag = 0x31424353; // SCB1 in little-endian byte order.
-    internal const byte Version = 1;
+    internal const byte Version = 2;
     internal const int MaximumDepth = 256;
 
     internal static byte[] Write(IReadOnlyList<SchemaCatalogEntry> entries,
@@ -121,14 +121,19 @@ internal static class SchemaCatalogWireCodec {
 
     private static void WriteSlot(ref BinaryPayloadWriter writer, DurableFieldInfo field, ValidationState state) {
         writer.WriteByte((byte)field.TypeTag);
-        if (field.TypeTag == TypeTag.ObjectReference) { TypeExprWireCodec.Write(ref writer, field.TargetType!); }
+        if (field.TypeTag == TypeTag.Nullable) { WriteSlot(ref writer, field.NullableLayout!.ElementSlot, state); }
+        else if (field.TypeTag == TypeTag.ObjectReference) { TypeExprWireCodec.Write(ref writer, field.TargetType!); }
         else if (field.TypeTag == TypeTag.InlineValue) {
             writer.WriteUInt32(state.RequireSchema(field.InlineSchema!, SchemaKind.InlineValue).Value);
         }
     }
 
-    private static DurableFieldInfo ReadSlot(ref BinaryPayloadReader reader, int fieldId, ValidationState state) {
+    private static DurableFieldInfo ReadSlot(ref BinaryPayloadReader reader, int fieldId, ValidationState state, bool nullableChild = false) {
         byte tag = reader.ReadByte();
+        if (tag == 18) {
+            if (nullableChild) { throw new InvalidDataException("A Nullable child cannot itself be Nullable."); }
+            return DurableFieldInfo.Nullable(fieldId, ReadSlot(ref reader, 1, state, nullableChild: true));
+        }
         if (tag is >= 1 and <= 14) { return new(fieldId, (TypeTag)tag); }
         if (tag == 15) { return DurableFieldInfo.Reference(fieldId, TypeExprWireCodec.Read(ref reader)); }
         if (tag == 16) {
@@ -184,7 +189,7 @@ internal static class SchemaCatalogWireCodec {
             else {
                 DurableFieldInfo element = entry.Array?.ElementSlot ?? entry.List!.ElementSlot;
                 if (element.TargetType is { } target) { ValidateDeclaration(target, SchemaKind.ReferenceObject); }
-                if (element.InlineSchema is { } inline) { RequireSchema(inline, SchemaKind.InlineValue); }
+                if (element.ValueSchema is { } inline) { RequireSchema(inline, SchemaKind.InlineValue); }
                 if (!_containers.Add(entry.Layout!)) { throw new InvalidDataException("A container representation cannot have more than one ID."); }
             }
             _nodes.Add(entry.Id, entry);
@@ -199,7 +204,7 @@ internal static class SchemaCatalogWireCodec {
 
             void ValidateSlot(DurableFieldInfo field) {
                 if (field.TargetType is { } target) { ValidateDeclaration(target, SchemaKind.ReferenceObject); }
-                if (field.InlineSchema is { } inline) { AddDependency(inline, SchemaKind.InlineValue); }
+                if (field.ValueSchema is { } inline) { AddDependency(inline, SchemaKind.InlineValue); }
             }
         }
 
@@ -217,6 +222,12 @@ internal static class SchemaCatalogWireCodec {
         }
 
         private void ValidateArities(TypeExpr type) {
+            if (type.IsNullable) {
+                TypeExpr child = type.ElementType!;
+                if (child.Kind == TypeExprKind.Named) { ValidateDeclaration(child, SchemaKind.InlineValue); }
+                else { ValidateArities(child); }
+                return;
+            }
             if (type.IsArray || type.IsList) { ValidateArities(type.ElementType!); return; }
             if (type.Kind != TypeExprKind.Named) { return; }
             string id = type.DefinitionId!;

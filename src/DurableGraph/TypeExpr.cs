@@ -53,11 +53,23 @@ public sealed class TypeExpr : IEquatable<TypeExpr>, IComparable<TypeExpr> {
 
     public bool IsList => Kind == TypeExprKind.List;
 
+    public bool IsNullable => Kind == TypeExprKind.Nullable;
+
     /// <summary>Gets the array rank, or zero for a non-array expression.</summary>
     public int ArrayRank => IsArray ? (int)Kind - (int)TypeExprKind.VectorArray + 1 : 0;
 
-    /// <summary>Gets the array or List element expression, or null for another expression.</summary>
-    public TypeExpr? ElementType => IsArray || IsList ? Arguments[0] : null;
+    /// <summary>Gets the array, List or nullable element expression, or null for another expression.</summary>
+    public TypeExpr? ElementType => IsArray || IsList || IsNullable ? Arguments[0] : null;
+
+    /// <summary>Constructs a nullable value expression; named and parameter children are checked when bound.</summary>
+    public static TypeExpr Nullable(TypeExpr element) {
+        ArgumentNullException.ThrowIfNull(element);
+        if (element.IsNullable || element.IsArray || element.IsList ||
+            element.Kind == TypeExprKind.Builtin && element.BuiltinTag == TypeTag.String) {
+            throw new ArgumentException("A nullable child must be a non-nullable supported value type.", nameof(element));
+        }
+        return new(TypeExprKind.Nullable, TypeTag.Invalid, null, [element], -1);
+    }
 
     /// <summary>Constructs the built-in BCL List type.</summary>
     public static TypeExpr List(TypeExpr element) {
@@ -133,6 +145,7 @@ public sealed class TypeExpr : IEquatable<TypeExpr>, IComparable<TypeExpr> {
         TypeExprKind.Rank3Array => $"{ElementType}[,,]",
         TypeExprKind.Rank4Array => $"{ElementType}[,,,]",
         TypeExprKind.List => $"List<{ElementType}>",
+        TypeExprKind.Nullable => $"Nullable<{ElementType}>",
         _ => throw new InvalidOperationException("Unknown type expression constructor."),
     };
 
@@ -149,4 +162,5 @@ public enum TypeExprKind : byte {
     Rank3Array = 6,
     Rank4Array = 7,
     List = 8,
+    Nullable = 9,
 }

@@ -31,11 +31,11 @@ public abstract partial class StateBindingContext {
 
     private ListUpgradePlan PrepareListUpgrade(ListLayout source, ListLayout target) {
         ExactSchemaRequirementSet.Builder requirements = new();
-        if (source.ElementSlot.InlineSchema is { } priorSchema) {
+        if (source.ElementSlot.ValueSchema is { } priorSchema) {
             BindSchema(priorSchema);
             requirements.Add(priorSchema, "list upgrade.source.element");
         }
-        if (target.ElementSlot.InlineSchema is { } nextSchema) {
+        if (target.ElementSlot.ValueSchema is { } nextSchema) {
             BindSchema(nextSchema);
             requirements.Add(nextSchema, "list upgrade.target.element");
         }

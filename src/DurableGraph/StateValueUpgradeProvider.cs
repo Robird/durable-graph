@@ -7,6 +7,8 @@ namespace Atelia.DurableGraph;
 [AttributeUsage(AttributeTargets.Class, AllowMultiple = false)]
 public sealed class ValueUpgradeRuleSetAttribute : Attribute {
     public bool AllowKeepExact { get; set; }
+    /// <summary>Allows this rule set's child conversion to preserve Nullable presence around that conversion.</summary>
+    public bool AllowNullableLifting { get; set; }
 }
 
 /// <summary>Registers one inline family conversion without requiring its old domain CLR type.</summary>
@@ -108,8 +110,10 @@ public sealed class StateValueUpgradeProvider {
     }
 
     public TypeExpr SourceType { get; }
+    /// <summary>The direct inline version, or the direct inline child's version for Nullable endpoints.</summary>
     public int? SourceInlineVersion { get; }
     public TypeExpr TargetType { get; }
+    /// <summary>The direct inline version, or the direct inline child's version for Nullable endpoints.</summary>
     public int? TargetInlineVersion { get; }
     public MethodInfo Method { get; }
     public ImmutableArray<StateUpgradeDependency> Dependencies { get; }
@@ -126,16 +130,16 @@ public sealed class StateValueUpgradeProvider {
 
     private static void ValidateEndpoint(TypeExpr type, int? version) {
         ArgumentNullException.ThrowIfNull(type);
-        if ((type.Kind is not (TypeExprKind.Builtin or TypeExprKind.Named) && !type.IsArray && !type.IsList) ||
-            version is <= 0 || (version.HasValue && type.Kind != TypeExprKind.Named)) {
-            throw new ArgumentException("A value rule requires a builtin, named, array or List pattern and only inline endpoints have versions.");
+        if ((type.Kind is not (TypeExprKind.Builtin or TypeExprKind.Named) && !type.IsArray && !type.IsList && !type.IsNullable) ||
+            version is <= 0 || (version.HasValue && type.Kind != TypeExprKind.Named && !(type.IsNullable && type.ElementType!.Kind == TypeExprKind.Named))) {
+            throw new ArgumentException("A value rule requires a builtin, named, array, List or Nullable pattern and only inline endpoints have versions.");
         }
     }
 }
 
 /// <summary>An immutable application-local rule collection frozen into the operation's code catalog.</summary>
 public sealed class StateValueUpgradeRuleSet {
-    public StateValueUpgradeRuleSet(Type ruleSet, IEnumerable<StateValueUpgradeProvider> providers, bool allowKeepExact = false) {
+    public StateValueUpgradeRuleSet(Type ruleSet, IEnumerable<StateValueUpgradeProvider> providers, bool allowKeepExact = false, bool allowNullableLifting = false) {
         ArgumentNullException.ThrowIfNull(ruleSet);
         ArgumentNullException.ThrowIfNull(providers);
         if (ruleSet.ContainsGenericParameters) { throw new ArgumentException("A rule-set identity must be a closed CLR type.", nameof(ruleSet)); }
@@ -147,9 +151,12 @@ public sealed class StateValueUpgradeRuleSet {
         }
         Providers = distinct.ToImmutableArray();
         AllowKeepExact = allowKeepExact;
+        AllowNullableLifting = allowNullableLifting;
     }
 
     public Type RuleSet { get; }
     public ImmutableArray<StateValueUpgradeProvider> Providers { get; }
     public bool AllowKeepExact { get; }
+    /// <summary>Allows presence-preserving lifting after explicit providers and complete KeepExact selection.</summary>
+    public bool AllowNullableLifting { get; }
 }

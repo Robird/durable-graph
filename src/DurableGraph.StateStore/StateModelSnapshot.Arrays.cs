@@ -64,6 +64,10 @@ internal sealed partial class StateModelSnapshot {
     }
 
     private void CheckContainerElement(DurableFieldInfo element) {
+        if (element.TypeTag == TypeTag.Nullable) {
+            CheckContainerElement(element.NullableLayout!.ElementSlot);
+            return;
+        }
         CheckContainerNominalType(NominalType(element), element.TypeTag switch {
             TypeTag.ObjectReference => SchemaKind.ReferenceObject,
             TypeTag.InlineValue => SchemaKind.InlineValue,
@@ -74,6 +78,12 @@ internal sealed partial class StateModelSnapshot {
 
     private void CheckContainerNominalType(TypeExpr type, SchemaKind? requiredKind = null) {
         if (!type.IsClosed) { throw new InvalidDataException("A container element requires a closed nominal type."); }
+        if (type.IsNullable) {
+            if (requiredKind == SchemaKind.ReferenceObject) { throw new InvalidDataException("Nullable cannot be a reference target."); }
+            TypeExpr child = type.ElementType!;
+            CheckContainerNominalType(child, child.Kind == TypeExprKind.Named ? SchemaKind.InlineValue : null);
+            return;
+        }
         if (type.IsArray || type.IsList) {
             if (requiredKind == SchemaKind.InlineValue) { throw new InvalidDataException("A container cannot be an inline value."); }
             // The referenced container carries its own exact element slot in its Base. Its
@@ -117,7 +127,7 @@ internal sealed partial class StateModelSnapshot {
             }
             if (schema.BaseSchema is { } ancestor) { pending.Push(ancestor); }
             foreach (DurableFieldInfo field in schema.Fields) {
-                if (field.InlineSchema is { } inline) { pending.Push(inline); }
+                if (field.ValueSchema is { } inline) { pending.Push(inline); }
             }
         }
         return found ?? throw new InvalidDataException($"No retained declaration metadata is registered for container element {definitionId}.");

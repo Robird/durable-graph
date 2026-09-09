@@ -8,7 +8,8 @@ public readonly record struct DurableFieldInfo {
         : this(fieldId, typeTag, targetSchemaId is null ? null : TypeExpr.Named(targetSchemaId), inlineSchema) {
     }
 
-    private DurableFieldInfo(int fieldId, TypeTag typeTag, TypeExpr? targetType, DurableSchema? inlineSchema) {
+    private DurableFieldInfo(int fieldId, TypeTag typeTag, TypeExpr? targetType, DurableSchema? inlineSchema,
+        NullableValueLayout? nullableLayout = null) {
         if (fieldId <= 0) {
             throw new ArgumentOutOfRangeException(
                 nameof(fieldId),
@@ -43,10 +44,17 @@ public readonly record struct DurableFieldInfo {
             throw new ArgumentException("Only inline values have an exact inline Schema.", nameof(inlineSchema));
         }
 
+        if (typeTag == TypeTag.Nullable) {
+            ArgumentNullException.ThrowIfNull(nullableLayout);
+        } else if (nullableLayout is not null) {
+            throw new ArgumentException("Only nullable values have an exact nullable layout.", nameof(nullableLayout));
+        }
+
         FieldId = fieldId;
         TypeTag = typeTag;
         TargetType = targetType;
         InlineSchema = inlineSchema;
+        NullableLayout = nullableLayout;
     }
 
     public int FieldId { get; }
@@ -64,4 +72,13 @@ public readonly record struct DurableFieldInfo {
 
     /// <summary>Gets the immutable exact layout of an inline value, including its value dependencies.</summary>
     public DurableSchema? InlineSchema { get; }
+
+    /// <summary>Gets the exact child layout of a nullable value.</summary>
+    public NullableValueLayout? NullableLayout { get; }
+
+    /// <summary>Gets the exact inline dependency, including one inside a nullable wrapper.</summary>
+    public DurableSchema? ValueSchema => InlineSchema ?? NullableLayout?.ElementSlot.InlineSchema;
+
+    public static DurableFieldInfo Nullable(int fieldId, DurableFieldInfo element) =>
+        new(fieldId, TypeTag.Nullable, null, null, new NullableValueLayout(element));
 }

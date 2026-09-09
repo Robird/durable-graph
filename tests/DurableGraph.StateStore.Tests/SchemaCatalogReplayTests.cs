@@ -10,14 +10,14 @@ public sealed class SchemaCatalogReplayTests : IDisposable {
     [Fact]
     public void IndependentGoldenIncludesSchemaAndArrayRowsWithIntegerInlineDependency() {
         Assert.Equal(0x31424353U, SchemaCatalogWireCodec.RbfTag);
-        byte[] golden = Convert.FromHexString("01020201020341000100000303010402");
+        byte[] golden = Convert.FromHexString("02020201020341000100000303010402");
         SchemaCatalogEntry[] rows = [SchemaCatalogEntry.ForSchema(new(2), A), Array(3, TypeTag.Int32)];
         Assert.Equal(golden, SchemaCatalogWireCodec.Write(rows, CatalogTestData.Empty));
         SchemaCatalogEntry[] read = SchemaCatalogWireCodec.Read(golden, CatalogTestData.Empty);
         Assert.Equal(rows.Select(static row => row.Id), read.Select(static row => row.Id));
         Assert.Equal(rows.Select(static row => row.Layout), read.Select(static row => row.Layout));
 
-        byte[] inlineGolden = Convert.FromHexString("01020202020350000200010102030301041002");
+        byte[] inlineGolden = Convert.FromHexString("02020202020350000200010102030301041002");
         SchemaCatalogEntry[] inlineRows = [SchemaCatalogEntry.ForSchema(new(2), Point),
             SchemaCatalogEntry.ForArray(new(3), new(TypeExprKind.VectorArray, new(1, TypeTag.InlineValue, inlineSchema: Point)))];
         Assert.Equal(inlineGolden, SchemaCatalogWireCodec.Write(inlineRows, CatalogTestData.Empty));
@@ -32,48 +32,48 @@ public sealed class SchemaCatalogReplayTests : IDisposable {
         for (byte constructor = 4; constructor <= 7; constructor++) {
             for (byte tag = 1; tag <= 14; tag++) {
                 SchemaCatalogEntry row = SchemaCatalogEntry.ForArray(new(2), new((TypeExprKind)constructor, new(1, (TypeTag)tag)));
-                byte[] golden = [1, 1, 2, 3, 1, constructor, tag];
+                byte[] golden = [2, 1, 2, 3, 1, constructor, tag];
                 Assert.Equal(golden, SchemaCatalogWireCodec.Write([row], CatalogTestData.Empty));
                 Assert.Equal(row.Layout, SchemaCatalogWireCodec.Read(golden, CatalogTestData.Empty)[0].Layout);
             }
         }
         SchemaCatalogEntry composed = SchemaCatalogEntry.ForArray(new(2), new(TypeExprKind.VectorArray, DurableFieldInfo.Reference(1,
             TypeExpr.VectorArray(TypeExpr.Named("B", TypeExpr.MultiDimArray(TypeExpr.Builtin(TypeTag.String), 4))))));
-        byte[] composedGolden = Convert.FromHexString("0101020301040F0402034201070104");
+        byte[] composedGolden = Convert.FromHexString("0201020301040F0402034201070104");
         Assert.Equal(composedGolden, SchemaCatalogWireCodec.Write([composed], CatalogTestData.Empty));
         Assert.Equal(composed.Layout, SchemaCatalogWireCodec.Read(composedGolden, CatalogTestData.Empty)[0].Layout);
     }
 
     [Theory]
-    [InlineData("02010203010402")] // Unknown batch version.
-    [InlineData("0100")] // Empty physical batch.
-    [InlineData("01FFFFFFFF0F")] // Count would exceed remaining bytes.
-    [InlineData("01010003010402")] // ID zero.
-    [InlineData("01010103010402")] // Reserved string ID.
-    [InlineData("0101820003010402")] // Overlong ID.
-    [InlineData("0101FFFFFFFF1003010402")] // ID overflow.
-    [InlineData("01010200000000")] // Unknown node kind.
-    [InlineData("01010203000402")] // Unknown array codec.
-    [InlineData("01010203020402")] // Future array codec.
-    [InlineData("0101020381000402")] // Noncanonical codec.
-    [InlineData("01010203010302")] // Open constructor.
-    [InlineData("01010203010802")] // Unsupported rank.
-    [InlineData("01010203010400")] // Unsupported element.
-    [InlineData("01010203010411")] // Open element.
-    [InlineData("0101020301040F0104")] // String has its own canonical slot tag.
-    [InlineData("0101020301040F040300")] // Open nested reference.
-    [InlineData("0101020301041001")] // Builtin string is not an inline Schema.
-    [InlineData("0101020301040200")] // Trailing byte.
-    [InlineData("010202030104020203010405")] // Repeated ID.
-    [InlineData("010203030104020203010405")] // Descending ID / initial gap.
-    [InlineData("010202030104020303010402")] // Same layout under two IDs.
+    [InlineData("03010203010402")] // Unknown batch version.
+    [InlineData("0200")] // Empty physical batch.
+    [InlineData("02FFFFFFFF0F")] // Count would exceed remaining bytes.
+    [InlineData("02010003010402")] // ID zero.
+    [InlineData("02010103010402")] // Reserved string ID.
+    [InlineData("0201820003010402")] // Overlong ID.
+    [InlineData("0201FFFFFFFF1003010402")] // ID overflow.
+    [InlineData("02010200000000")] // Unknown node kind.
+    [InlineData("02010203000402")] // Unknown array codec.
+    [InlineData("02010203020402")] // Future array codec.
+    [InlineData("0201020381000402")] // Noncanonical codec.
+    [InlineData("02010203010302")] // Open constructor.
+    [InlineData("02010203010802")] // Unsupported rank.
+    [InlineData("02010203010400")] // Unsupported element.
+    [InlineData("02010203010411")] // Open element.
+    [InlineData("0201020301040F0104")] // String has its own canonical slot tag.
+    [InlineData("0201020301040F040300")] // Open nested reference.
+    [InlineData("0201020301041001")] // Builtin string is not an inline Schema.
+    [InlineData("0201020301040200")] // Trailing byte.
+    [InlineData("020202030104020203010405")] // Repeated ID.
+    [InlineData("020203030104020203010405")] // Descending ID / initial gap.
+    [InlineData("020202030104020303010402")] // Same layout under two IDs.
     public void MalformedBatchesFailClosed(string hex) {
         Assert.Throws<InvalidDataException>(() => SchemaCatalogWireCodec.Read(Convert.FromHexString(hex), CatalogTestData.Empty));
     }
 
     [Fact]
     public void EveryTruncatedPrefixFailsWithoutInstallingRows() {
-        byte[] golden = Convert.FromHexString("01020202020350000200010102030301041002");
+        byte[] golden = Convert.FromHexString("02020202020350000200010102030301041002");
         Assert.Equal(2, SchemaCatalogWireCodec.Read(golden, CatalogTestData.Empty).Length);
         for (int length = 0; length < golden.Length; length++) {
             byte[] prefix = golden[..length];

@@ -101,6 +101,13 @@ public abstract partial class StateBindingContext : IStateModelResolver {
             if (slot.FieldId != pattern.FieldId || NominalType(slot) != nominal) {
                 throw new InvalidDataException("A stored field does not match its retained type pattern.");
             }
+            TypeExpr declaredValue = pattern.ValueType.IsNullable ? pattern.ValueType.ElementType! : pattern.ValueType;
+            MatchValue(slot, expression, pattern.InlineVersion, declaredValue.Kind != TypeExprKind.Parameter);
+            flattened?.Add(slot);
+        }
+
+        void MatchValue(DurableFieldInfo slot, TypeExpr expression, int? inlineVersion, bool requiresFixedVersion) {
+            TypeExpr nominal = Substitute(expression, rootArguments);
             if (nominal.Kind == TypeExprKind.Named) {
                 StateDefinitionBinding valueDefinition = GetDefinition(nominal.DefinitionId!);
                 if (valueDefinition.Arity != nominal.Arguments.Length ||
@@ -108,23 +115,25 @@ public abstract partial class StateBindingContext : IStateModelResolver {
                     throw new InvalidDataException("A parameter or named field has the wrong declaration kind or generic arity.");
                 }
             }
-            if (pattern.InlineVersion is { } exactVersion) {
-                if (slot.InlineSchema is not { } inline || inline.Version != exactVersion) {
+            if (inlineVersion is { } exactVersion) {
+                if (slot.ValueSchema is not { } inline || inline.Version != exactVersion) {
                     throw new InvalidDataException("A stored inline dependency has the wrong exact version.");
                 }
-            } else if (pattern.ValueType.Kind != TypeExprKind.Parameter && slot.TypeTag == TypeTag.InlineValue) {
+            } else if (requiresFixedVersion && slot.TypeTag == TypeTag.InlineValue) {
                 throw new InvalidDataException("A named inline field requires a fixed historical version.");
             }
             // A parameter means the entire exact slot. Named dependent values also propagate
             // their inner variables through the callee's declaration scope.
-            int? bindingVersion = expression.Kind == TypeExprKind.Parameter ? null : pattern.InlineVersion;
+            int? bindingVersion = expression.Kind == TypeExprKind.Parameter ? null : inlineVersion;
             var valueKey = (expression, bindingVersion);
             DurableFieldInfo canonical = WithFieldId(slot, 1);
             if (values.TryGetValue(valueKey, out DurableFieldInfo seen) && seen != canonical) {
                 throw new InvalidDataException("Repeated use of one value expression has inconsistent exact slot semantics.");
             }
             values[valueKey] = canonical;
-            if (slot.InlineSchema is { } nested) {
+            if (expression.IsNullable) {
+                MatchValue(slot.NullableLayout!.ElementSlot, expression.ElementType!, inlineVersion, requiresFixedVersion);
+            } else if (slot.ValueSchema is { } nested) {
                 if (expression.Kind == TypeExprKind.Named) {
                     Match(nested, expression.Arguments, rootArguments, values, null, matched, depth + 1);
                 } else {
@@ -133,7 +142,6 @@ public abstract partial class StateBindingContext : IStateModelResolver {
                     BindSchema(nested);
                 }
             }
-            flattened?.Add(slot);
         }
     }
 
@@ -202,7 +210,7 @@ public abstract partial class StateBindingContext : IStateModelResolver {
                     height = Math.Max(height, Visit(ancestor, $"{path}.base", depth + 1) + 1);
                 }
                 foreach (DurableFieldInfo field in schema.Fields) {
-                    if (field.InlineSchema is not { } inline) { continue; }
+                    if (field.ValueSchema is not { } inline) { continue; }
                     height = Math.Max(height,
                         Visit(inline, $"{path}.field[{field.FieldId}].inline", depth + 1) + 1);
                 }
@@ -229,6 +237,7 @@ public abstract partial class StateBindingContext : IStateModelResolver {
         }
         if (expression.Kind == TypeExprKind.Builtin || expression.Arguments.IsEmpty) { return expression; }
         if (expression.IsList) { return TypeExpr.List(Substitute(expression.ElementType!, arguments)); }
+        if (expression.IsNullable) { return TypeExpr.Nullable(Substitute(expression.ElementType!, arguments)); }
         if (expression.IsArray) {
             TypeExpr element = Substitute(expression.ElementType!, arguments);
             return expression.ArrayRank == 1 ? TypeExpr.VectorArray(element) : TypeExpr.MultiDimArray(element, expression.ArrayRank);
@@ -239,12 +248,14 @@ public abstract partial class StateBindingContext : IStateModelResolver {
     public static DurableFieldInfo WithFieldId(DurableFieldInfo slot, int fieldId) => slot.TypeTag switch {
         TypeTag.ObjectReference => DurableFieldInfo.Reference(fieldId, slot.TargetType!),
         TypeTag.InlineValue => new(fieldId, TypeTag.InlineValue, inlineSchema: slot.InlineSchema),
+        TypeTag.Nullable => DurableFieldInfo.Nullable(fieldId, slot.NullableLayout!.ElementSlot),
         _ => new(fieldId, slot.TypeTag),
     };
 
     public static TypeExpr NominalType(DurableFieldInfo slot) => slot.TypeTag switch {
         TypeTag.ObjectReference => slot.TargetType!,
         TypeTag.InlineValue => slot.InlineSchema!.Type,
+        TypeTag.Nullable => TypeExpr.Nullable(NominalType(slot.NullableLayout!.ElementSlot)),
         _ => TypeExpr.Builtin(slot.TypeTag),
     };
 }

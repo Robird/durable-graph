@@ -40,6 +40,10 @@ Source Generator 负责可在编译期确定的类型知识与机械代码，框
 - 首个 BCL 内容对象选择 exact `System.Collections.Generic.List<T>`，元素复用全部受支持槽，
   并允许 List、数组及用户泛型递归组合。List 子类、接口集合字段、任意 object 槽和其他 BCL 容器不随之开放。
   List 的泛型实参不协变；`List<Base>` 内的已登记 Derived 实例继续遵循已有 class 多态约束。
+- 支持 CLR `Nullable<T>`，T 为受支持标量或 Durable inline struct，包括泛型 struct；可作为字段、
+  泛型实参和数组/List 元素。DTO 使用 unmanaged `NullableState<TState>`，absent 不访问内部状态或产生引用边。
+  Nullable 无独立对象身份或业务版本，内部 exact 布局变化沿原 inline 规则传播到 owner；
+  不随之开放 enum、其他 CLR 值类型或 boxed value。具体合同见 [DB-052](design-branches/0052-nullable-value-slot-slice.md)。
 - Upgrade 仅转换单个对象的字段，从旧 DTO 产生下一版 DTO；不读取其他对象，不拆分/合并对象，
   不创建带持久身份的新对象。创建下一版 DTO 值本身不属于这一禁令。已有引用槽可以保留、调整或
   清空，但必须满足输出类型与引用合法性；不提供遍历其他对象内容或分配新 ObjectId 的升级上下文。
@@ -154,6 +158,9 @@ Source Generator 负责可在编译期确定的类型知识与机械代码，框
 - 值工具按 provider 局部 key、显式规则集和两端声明段/FieldId 绑定；完整槽语义包括引用类别与 nominal 约束，
   不仅是 DTO CLR 类型。显式候选的布局、签名或子依赖失败必须拒绝，不能回退为透传；
   KeepExact 仅在作者明确启用、没有显式候选且完整槽等价时成立。
+- Nullable 值工具可在显式规则集中开启 `AllowNullableLifting`，保持有值/无值状态，仅对 present 执行已绑定的 child 转换。
+  显式 wrapper provider 优先，错误不可回退；空值及空集合仍须在业务 callback 前验证 child 能力和 exact 依赖。
+  wrapper 的 inline 版本适用性取自 child；Nullable 不因此成为新的独立 Upgrade owner。
   整条对象升级链及其声明依赖在首个业务调用前绑定。snapshot 缓存不含调用状态，
   子工具保持自己的依赖表并继承当前 owner 的 ID/exact 对象布局端点；class owner 采用相邻版本，
   array owner 另带不可变 shape，List owner 使用独立的 ListCount，不以 ArrayShape 冒充长度。

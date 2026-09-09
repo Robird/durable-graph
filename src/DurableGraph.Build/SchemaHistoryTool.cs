@@ -166,6 +166,14 @@ internal sealed class SchemaHistoryTool {
         void RequirePattern(TypePattern pattern, int rootKind) {
             if (rootKind != 0 && pattern.Kind == PatternKind.Named) RequireKind(pattern.DefinitionId!, rootKind);
             foreach (TypePattern named in pattern.NamedNodes()) RequireArity(named.DefinitionId!, named.Arguments.Count);
+            RequireNullableKinds(pattern);
+        }
+
+        void RequireNullableKinds(TypePattern pattern) {
+            if (pattern.IsNullable && pattern.ElementType!.Kind == PatternKind.Named) {
+                RequireKind(pattern.ElementType.DefinitionId!, 2);
+            }
+            foreach (TypePattern argument in pattern.Arguments) { RequireNullableKinds(argument); }
         }
 
         Dictionary<string, int> kinds = new(StringComparer.Ordinal);
@@ -248,7 +256,8 @@ internal sealed class SchemaHistoryTool {
             }
             foreach (SchemaHistoryField field in record.Fields) {
                 if (field.InlineSchema is SchemaHistoryKey inlineKey) {
-                    height = Math.Max(height, 1 + Visit(Resolve(record, inlineKey, "inline", 2, field.ValuePattern), depth + 1));
+                    TypePattern inlinePattern = field.ValuePattern.IsNullable ? field.ValuePattern.ElementType! : field.ValuePattern;
+                    height = Math.Max(height, 1 + Visit(Resolve(record, inlineKey, "inline", 2, inlinePattern), depth + 1));
                 }
             }
             visiting.Remove(record.Key);
@@ -355,7 +364,7 @@ internal static class SchemaHistoryDocument {
         return record;
     }
 
-    public static string RenderHistory(SchemaHistoryRecord record, int formatVersion = 5) {
+    public static string RenderHistory(SchemaHistoryRecord record, int formatVersion = 6) {
         StringBuilder builder = new();
         builder.Append(HistoryHeader).AppendLine(formatVersion.ToString(CultureInfo.InvariantCulture));
         AppendSchemaRecord(builder, record, formatVersion);
@@ -382,8 +391,9 @@ internal static class SchemaHistoryDocument {
              !StringComparer.Ordinal.Equals(lines[0], expectedHeader + "2") &&
              !StringComparer.Ordinal.Equals(lines[0], expectedHeader + "3") &&
              !StringComparer.Ordinal.Equals(lines[0], expectedHeader + "4") &&
-             !StringComparer.Ordinal.Equals(lines[0], expectedHeader + "5"))) {
-            throw Invalid(path, $"expected header '{expectedHeader}1', '{expectedHeader}2', '{expectedHeader}3', '{expectedHeader}4', or '{expectedHeader}5'");
+             !StringComparer.Ordinal.Equals(lines[0], expectedHeader + "5") &&
+             !StringComparer.Ordinal.Equals(lines[0], expectedHeader + "6"))) {
+            throw Invalid(path, $"expected header '{expectedHeader}1', '{expectedHeader}2', '{expectedHeader}3', '{expectedHeader}4', '{expectedHeader}5', or '{expectedHeader}6'");
         }
         int formatVersion = lines[0][lines[0].Length - 1] - '0';
 
@@ -460,20 +470,28 @@ internal static class SchemaHistoryDocument {
                         $"field IDs must be unique and sorted; line {index + 1} has {fieldId} after {previousFieldId}");
                 }
 
-                if (typeTag < 1 || typeTag > (formatVersion == 1 ? 15 : formatVersion == 2 ? 16 : 17)) {
+                if (typeTag < 1 || typeTag > (formatVersion == 1 ? 15 : formatVersion == 2 ? 16 : formatVersion < 6 ? 17 : 18)) {
                     throw Invalid(path, $"line {index + 1} has unsupported TypeTag {typeTag}");
                 }
 
-                if (parts.Length != (typeTag == 16 ? 4 : typeTag is 15 or 17 ? 3 : 2)) {
+                if (typeTag == 18 ? parts.Length is < 3 or > 4 : parts.Length != (typeTag == 16 ? 4 : typeTag is 15 or 17 ? 3 : 2)) {
                     throw Invalid(path, $"line {index + 1} has an invalid field operand");
                 }
                 TypePattern pattern = typeTag <= 14 ? TypePattern.Builtin(typeTag) :
-                    formatVersion >= 3 ? ParsePattern(path, parts[2], arity, typeTag == 17 ? PatternKind.Parameter : PatternKind.Named, formatVersion, typeTag == 15) :
+                    formatVersion >= 3 ? ParsePattern(path, parts[2], arity, typeTag == 18 ? PatternKind.Nullable : typeTag == 17 ? PatternKind.Parameter : PatternKind.Named, formatVersion, typeTag == 15) :
                     TypePattern.Named(DecodeSchemaId(path, parts[2]));
                 string? targetSchemaId = typeTag == 15 ? pattern.DefinitionId : null;
                 SchemaHistoryKey? inlineSchema = typeTag == 16 ? new SchemaHistoryKey(
                     pattern.DefinitionId!,
                     ParsePositiveCanonicalInt(path, parts[3], "inline version")) : null;
+                if (typeTag == 18) {
+                    TypePattern child = pattern.ElementType!;
+                    bool hasInline = child.Kind == PatternKind.Named;
+                    if (parts.Length != (hasInline ? 4 : 3)) { throw Invalid(path, "a nullable named child requires exactly one inline version; other nullable children have none"); }
+                    if (hasInline) {
+                        inlineSchema = new SchemaHistoryKey(child.DefinitionId!, ParsePositiveCanonicalInt(path, parts[3], "nullable child inline version"));
+                    }
+                }
                 fields.Add(new SchemaHistoryField(fieldId, typeTag, targetSchemaId, inlineSchema, pattern));
                 previousFieldId = fieldId;
                 index++;
@@ -646,10 +664,16 @@ internal static class SchemaHistoryDocument {
                 .Append(field.FieldId.ToString(CultureInfo.InvariantCulture))
                 .Append('|')
                 .Append(field.TypeTag.ToString(CultureInfo.InvariantCulture));
-            if (field.TypeTag is 15 or 17) {
+            if (field.TypeTag == 18) {
+                if (formatVersion < 6) { throw new SchemaHistoryException("Nullable requires history format v6."); }
+                builder.Append('|').Append(field.ValuePattern.ToString());
+                if (field.InlineSchema is SchemaHistoryKey childSchema) {
+                    builder.Append('|').Append(childSchema.Version.ToString(CultureInfo.InvariantCulture));
+                }
+            } else if (field.TypeTag is 15 or 17) {
                 builder.Append('|').Append(formatVersion >= 3 ? field.ValuePattern.ToString() : Convert.ToBase64String(Utf8NoBom.GetBytes(field.TargetSchemaId!)));
             }
-            if (field.InlineSchema is SchemaHistoryKey inlineSchema) {
+            if (field.TypeTag != 18 && field.InlineSchema is SchemaHistoryKey inlineSchema) {
                 builder.Append('|').Append(formatVersion >= 3 ? field.ValuePattern.ToString() : Convert.ToBase64String(Utf8NoBom.GetBytes(inlineSchema.SchemaId)))
                     .Append('|').Append(inlineSchema.Version.ToString(CultureInfo.InvariantCulture));
             }
@@ -670,7 +694,7 @@ internal static class SchemaHistoryDocument {
     }
 
     private static TypePattern ParsePattern(string path, string text, int arity, PatternKind expectedKind, int formatVersion, bool arrayReference = false) {
-        if (!TypePattern.TryParse(text, arity, out TypePattern? pattern, formatVersion >= 4, formatVersion >= 5) ||
+        if (!TypePattern.TryParse(text, arity, out TypePattern? pattern, formatVersion >= 4, formatVersion >= 5, formatVersion >= 6) ||
             (pattern!.Kind != expectedKind && !(arrayReference && (pattern.IsArray || pattern.IsList)))) {
             throw Invalid(path, "invalid or unbound canonical type pattern");
         }
@@ -717,7 +741,7 @@ internal sealed class SchemaHistoryRecord {
     public int Arity { get; }
     public TypePattern? BaseType { get; }
 
-    internal int SourceFormatVersion { get; init; } = 5;
+    internal int SourceFormatVersion { get; init; } = 6;
 
     public SchemaHistoryKey Key => new(SchemaId, Version);
 

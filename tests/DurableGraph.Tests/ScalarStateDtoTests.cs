@@ -139,7 +139,6 @@ public sealed partial class DurableSchemaGeneratorTests {
 
     [Theory]
     [InlineData("Choice")]
-    [InlineData("int?")]
     [InlineData("nint")]
     [InlineData("nuint")]
     [InlineData("decimal")]

@@ -131,7 +131,7 @@ public abstract partial class StateBindingContext {
             StateParameterTemplate parameter = template.StateParameters[index];
             TypeExpr nominal = Substitute(parameter.Expression, owner.Arguments);
             DurableFieldInfo slot = InferSlotFromState(nominal, arguments[index], depth + 1);
-            if (parameter.InlineVersion is { } inlineVersion && slot.InlineSchema?.Version != inlineVersion) {
+            if (parameter.InlineVersion is { } inlineVersion && slot.ValueSchema?.Version != inlineVersion) {
                 throw new InvalidDataException("An explicit value DTO disagrees with its fixed historical inline version.");
             }
             AddSelection(selections, (parameter.Expression, parameter.InlineVersion), slot);
@@ -145,6 +145,13 @@ public abstract partial class StateBindingContext {
     }
 
     private DurableFieldInfo InferSlotFromState(TypeExpr nominal, Type stateType, int depth) {
+        if (depth > 256) { throw new InvalidDataException("Exact DTO inference exceeded its layout depth bound."); }
+        if (nominal.IsNullable) {
+            if (!stateType.IsGenericType || stateType.GetGenericTypeDefinition() != typeof(NullableState<>)) {
+                throw new InvalidDataException("A Nullable DTO operand must retain its NullableState wrapper.");
+            }
+            return DurableFieldInfo.Nullable(1, InferSlotFromState(nominal.ElementType!, stateType.GetGenericArguments()[0], depth + 1));
+        }
         if (nominal.Kind == TypeExprKind.Builtin) {
             DurableFieldInfo slot = new(1, nominal.BuiltinTag);
             if (ResolveStoredValue(slot).StateType != stateType) { throw new InvalidDataException("A DTO value does not match its nominal built-in semantics."); }
@@ -192,8 +199,15 @@ public abstract partial class StateBindingContext {
 
     private DurableFieldInfo BuildSlot(TypeExpr expression, int? version, IReadOnlyList<TypeExpr> ownerArguments,
         Dictionary<(TypeExpr Expression, int? Version), DurableFieldInfo> selections, int depth) {
+        if (depth > 256) { throw new InvalidDataException("Exact Schema inference exceeded its layout depth bound."); }
         if (selections.TryGetValue((expression, version), out DurableFieldInfo selected)) { return selected; }
         TypeExpr nominal = Substitute(expression, ownerArguments);
+        if (nominal.IsNullable) {
+            // An explicit Nullable(T) preserves T's source expression. A parameter
+            // closed to Nullable instead carries that entire slot as its operand.
+            TypeExpr child = expression.IsNullable ? expression.ElementType! : nominal.ElementType!;
+            return DurableFieldInfo.Nullable(1, BuildSlot(child, version, ownerArguments, selections, depth + 1));
+        }
         if (nominal.Kind == TypeExprKind.Builtin) { return new(1, nominal.BuiltinTag); }
         if (nominal.IsArray || nominal.IsList) { return DurableFieldInfo.Reference(1, nominal); }
         StateDefinitionBinding definition = GetDefinition(nominal.DefinitionId!);
@@ -228,6 +242,9 @@ public abstract partial class StateBindingContext {
             throw new InvalidDataException("The explicit DTO binds one value expression to conflicting exact layouts.");
         }
         selections[key] = canonical;
+        if (key.Expression.IsNullable && canonical.NullableLayout is { } nullable) {
+            AddSelection(selections, (key.Expression.ElementType!, key.Version), nullable.ElementSlot);
+        }
     }
 
     private static void UnifyStateType(Type pattern, Type actual, Dictionary<Type, Type> variables) {

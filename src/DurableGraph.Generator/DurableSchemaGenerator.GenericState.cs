@@ -81,7 +81,7 @@ public sealed partial class DurableSchemaGenerator {
         GenericLayout layout = new(shape, FlattenGenericFields(shape, available));
         Dictionary<string, int> slots = new(StringComparer.Ordinal);
         foreach (GenericField field in layout.Fields) {
-            bool dynamic = field.Pattern.Kind == PatternKind.Parameter ||
+            bool dynamic = field.Pattern.Kind == PatternKind.Parameter || field.Pattern.IsNullable ||
                 (field.Field.TypeTagValue == 17 && field.Pattern.Kind != PatternKind.Builtin) ||
                 (field.Field.InlineSchema is SchemaReference inline &&
                  (field.Pattern.Arguments.Count > 0 || HasDynamicInlineLayout(inline, available, new HashSet<string>(StringComparer.Ordinal))));
@@ -103,7 +103,7 @@ public sealed partial class DurableSchemaGenerator {
         SchemaHistoryModel shape = FindHistory(available, reference.SchemaId, reference.Version)[0];
         if (shape.Arity > 0) return true;
         foreach (SchemaHistoryFieldModel field in shape.Fields) {
-            if (field.ValuePattern.ContainsParameter || (field.InlineSchema is SchemaReference child &&
+            if (field.ValuePattern.ContainsParameter || field.ValuePattern.IsNullable || (field.InlineSchema is SchemaReference child &&
                 (child.Type.Arguments.Count > 0 || HasDynamicInlineLayout(child, available, visited)))) return true;
         }
         return false;

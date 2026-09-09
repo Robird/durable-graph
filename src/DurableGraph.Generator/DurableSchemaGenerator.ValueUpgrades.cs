@@ -142,6 +142,7 @@ public sealed partial class DurableSchemaGenerator {
         foreach (INamedTypeSymbol rules in GetValueRuleSets(compilation)) {
             AttributeData attribute = GetAttribute(rules.GetAttributes(), ValueRuleSetAttributeName)!;
             bool keepExact = attribute.NamedArguments.Any(argument => argument.Key == "AllowKeepExact" && argument.Value.Value is true);
+            bool nullableLifting = attribute.NamedArguments.Any(argument => argument.Key == "AllowNullableLifting" && argument.Value.Value is true);
             output.Append("public static class ").Append(ValueRuleSetClassName(rules)).AppendLine(" {");
             output.Append("    public static readonly ").Append(RuntimeName).Append("StateValueUpgradeRuleSet Rules = new(typeof(")
                 .Append(rules.ToDisplayString(GenericQualifiedNameFormat)).Append("), new ").Append(RuntimeName).AppendLine("StateValueUpgradeProvider[] {");
@@ -160,7 +161,8 @@ public sealed partial class DurableSchemaGenerator {
                 AppendUpgradeDependencies(output, method);
                 output.AppendLine("),");
             }
-            output.Append("    }, allowKeepExact: ").Append(keepExact ? "true" : "false").AppendLine(");");
+            output.Append("    }, allowKeepExact: ").Append(keepExact ? "true" : "false")
+                .Append(", allowNullableLifting: ").Append(nullableLifting ? "true" : "false").AppendLine(");");
             output.AppendLine("}");
         }
         foreach (INamedTypeSymbol host in EnumerateSourceTypes(compilation.Assembly.GlobalNamespace)) {

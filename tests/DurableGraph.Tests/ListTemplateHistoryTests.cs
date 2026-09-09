@@ -10,7 +10,7 @@ public sealed class ListTemplateHistoryTests {
         string text = History("// field:1|15|l(p0)\n// field:2|15|a2(l(a1(b2)))\n" +
             "// field:3|16|nUGFpcg==(l(p0))|1\n// field:4|15|l(l(b4))\n// field:5|2\n");
         SchemaHistoryRecord record = fixture.Parse(text);
-        Assert.Equal(text, SchemaHistoryDocument.RenderHistory(record));
+        Assert.Equal(text, SchemaHistoryDocument.RenderHistory(record, 5));
         Assert.Equal("l(b2)", record.Fields[0].ValuePattern.Substitute([record.Fields[4].ValuePattern]).ToString());
         Assert.Equal("nUGFpcg==(l(b2))", record.Fields[2].ValuePattern.Substitute([record.Fields[4].ValuePattern]).ToString());
         Assert.Equal("a2(l(a1(b2)))", record.Fields[1].ValuePattern.ToString());
@@ -50,7 +50,7 @@ public sealed class ListTemplateHistoryTests {
     }
 
     [Fact]
-    public void PublishingVersionFivePreservesEarlierFilesAndTheirHashes() {
+    public void PublishingVersionSixPreservesEarlierFilesAndTheirHashes() {
         using Fixture fixture = new();
         string[] old = [
             "// durable-graph-schema-history:1\n// schema-begin\n// schema-id-base64:T25l\n// version:1\n// field:1|2\n// schema-end\n",

@@ -17,7 +17,7 @@ public sealed class InlineSchemaStoreTests : IDisposable {
     public void IndependentGoldenBindsExactPrecedingInlineSchemaByIntegerId() {
         DurableSchema value = new("Z", 2, SchemaKind.InlineValue, new DurableFieldInfo(1, TypeTag.Int32));
         DurableSchema owner = new("A", 1, new DurableFieldInfo(1, TypeTag.InlineValue, inlineSchema: value));
-        byte[] golden = Convert.FromHexString("0102020202035A000200010102030102034100010001011002");
+        byte[] golden = Convert.FromHexString("0202020202035A000200010102030102034100010001011002");
         Assert.Equal(golden, SchemaCatalogWireCodec.Write(CatalogTestData.Schemas([value, owner]), Empty));
         var read = SchemaCatalogWireCodec.Read(golden, Empty);
         Assert.Equal(owner, read[1].Schema);
@@ -124,14 +124,14 @@ public sealed class InlineSchemaStoreTests : IDisposable {
     }
 
     [Theory]
-    [InlineData("01010300000000")] // Kind zero.
-    [InlineData("01010305000000")] // Unknown kind.
-    [InlineData("0101030202034100010200")] // Inline Schema has a base.
-    [InlineData("0102030202034100010000040102034200010300")] // Reference base names inline kind.
-    [InlineData("0101030102034100010001011002")] // Inline slot names registered reference kind.
-    [InlineData("0101030102034100010001011063")] // Missing exact inline dependency.
-    [InlineData("0101030202034100010001011003")] // Inline self cycle.
-    [InlineData("0102030202034100010001011004040202034200010001011003")] // Forward edge in two-node cycle.
+    [InlineData("02010300000000")] // Kind zero.
+    [InlineData("02010305000000")] // Unknown kind.
+    [InlineData("0201030202034100010200")] // Inline Schema has a base.
+    [InlineData("0202030202034100010000040102034200010300")] // Reference base names inline kind.
+    [InlineData("0201030102034100010001011002")] // Inline slot names registered reference kind.
+    [InlineData("0201030102034100010001011063")] // Missing exact inline dependency.
+    [InlineData("0201030202034100010001011003")] // Inline self cycle.
+    [InlineData("0202030202034100010001011004040202034200010001011003")] // Forward edge in two-node cycle.
     public void MalformedInlineLayoutsFailBeforeMerging(string hex) {
         var registered = CatalogTestData.Index(CatalogTestData.Schemas([new("Existing", 1)]));
         Assert.Throws<InvalidDataException>(() => SchemaCatalogWireCodec.Read(Convert.FromHexString(hex), registered));

@@ -15,7 +15,7 @@ public interface IStateDefinitionRegistration {
 /// <summary>One fixed-version exact dependency in a declaration template.</summary>
 public sealed record StateSchemaReference(TypeExpr Type, int Version);
 
-/// <summary>One declared field type pattern; only a named inline value has a fixed inline version.</summary>
+/// <summary>One declared field type pattern; a named inline value or nullable named child has a fixed inline version.</summary>
 public sealed record StateFieldTemplate(int FieldId, TypeExpr ValueType, int? InlineVersion = null);
 
 /// <summary>One generated DTO type parameter and its declaration-scoped value expression.</summary>
@@ -42,7 +42,8 @@ public sealed class StateSchemaTemplate {
         }
         foreach (StateFieldTemplate field in Fields) {
             ValidatePattern(field.ValueType, arity);
-            if (field.InlineVersion is <= 0 || (field.InlineVersion.HasValue && field.ValueType.Kind != TypeExprKind.Named)) {
+            TypeExpr versionedType = field.ValueType.IsNullable ? field.ValueType.ElementType! : field.ValueType;
+            if (field.InlineVersion is <= 0 || (field.InlineVersion.HasValue && versionedType.Kind != TypeExprKind.Named)) {
                 throw new ArgumentException("A fixed inline dependency requires a named type and positive version.", nameof(fields));
             }
         }

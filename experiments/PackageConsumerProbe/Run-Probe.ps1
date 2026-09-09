@@ -244,7 +244,7 @@ try {
         Where-Object Name -eq "DurableGraphSchemaHistoryCandidates.g.cs")
 
     if ($emptyManifests.Count -ne 1 -or
-        (Get-Content -LiteralPath $emptyManifests[0].FullName -Raw) -ne "// durable-graph-schema-history-manifest:5`n") {
+        (Get-Content -LiteralPath $emptyManifests[0].FullName -Raw) -ne "// durable-graph-schema-history-manifest:6`n") {
         throw "Removing all durable types without cleaning did not replace the old candidate with an empty manifest."
     }
 

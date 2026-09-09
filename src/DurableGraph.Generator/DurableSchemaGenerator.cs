@@ -23,7 +23,7 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
     private const string DurableBaseMetadataName =
         "Atelia.DurableGraph.DurableBase";
     private const string SchemaHistoryManifestHeader =
-        "// durable-graph-schema-history-manifest:5";
+        "// durable-graph-schema-history-manifest:6";
     private const string SchemaHistoryHeader =
         "// durable-graph-schema-history:1";
     private static readonly UTF8Encoding StrictUtf8 = new(
@@ -392,7 +392,7 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
         }
 
         string[] lines = normalized.Split('\n');
-        if (lines.Length > 0 && (lines[0] == "// durable-graph-schema-history:3" || lines[0] == "// durable-graph-schema-history:4" || lines[0] == "// durable-graph-schema-history:5")) {
+        if (lines.Length > 0 && (lines[0] == "// durable-graph-schema-history:3" || lines[0] == "// durable-graph-schema-history:4" || lines[0] == "// durable-graph-schema-history:5" || lines[0] == "// durable-graph-schema-history:6")) {
             return TryParseTemplateHistory(file.Path, lines, out model, out error);
         }
         if (lines.Length < 5 ||
@@ -740,7 +740,9 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
                     out typeTag, out typeTagValue, out fieldTypeName, out inlineSchema) &&
                 !TryGetParameterField(field.Type, out typeTag, out typeTagValue, out fieldTypeName) &&
                 !TryGetArrayField(field.Type, out typeTag, out typeTagValue, out fieldTypeName) &&
-                !TryGetListField(field.Type, listType, out typeTag, out typeTagValue, out fieldTypeName)) {
+                !TryGetListField(field.Type, listType, out typeTag, out typeTagValue, out fieldTypeName) &&
+                !TryGetNullableField(field.Type, type, halfType, listType, context.CancellationToken,
+                    out typeTag, out typeTagValue, out fieldTypeName, out inlineSchema)) {
                 context.ReportDiagnostic(Diagnostic.Create(
                     UnsupportedFieldType,
                     GetSourceLocation(field),
@@ -755,7 +757,7 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
                 hasErrors = true;
                 continue;
             }
-            if (inlineSchema.HasValue) inlineSchema = new SchemaReference(inlineSchema.Value.SchemaId, inlineSchema.Value.Version, valuePattern);
+            if (inlineSchema.HasValue) inlineSchema = new SchemaReference(inlineSchema.Value.SchemaId, inlineSchema.Value.Version, valuePattern!.IsNullable ? valuePattern.ElementType : valuePattern);
 
             durableFields.Add(new DurableFieldModel(
                 field,
@@ -974,7 +976,7 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
                     .Append(field.FieldId.ToString(CultureInfo.InvariantCulture))
                     .Append('|')
                     .Append(field.TypeTagValue.ToString(CultureInfo.InvariantCulture));
-                if (field.TypeTagValue == 15 || field.TypeTagValue == 17) {
+                if (field.TypeTagValue == 15 || field.TypeTagValue == 17 || (field.TypeTagValue == 18 && !field.InlineSchema.HasValue)) {
                     source.Append('|').Append(field.ValuePattern.ToString());
                 }
                 if (field.InlineSchema.HasValue) {

@@ -17,6 +17,7 @@ internal sealed partial class StateModelSnapshot : StateBindingContext {
     private readonly Dictionary<Type, StateDefinitionBinding> _domainDefinitions = [];
     private readonly Dictionary<Type, StateValueBinding> _currentValues = [];
     private readonly Dictionary<SchemaKey, StateValueBinding> _storedValues = [];
+    private readonly Dictionary<DurableFieldInfo, StateValueBinding> _storedNullableValues = [];
     private readonly HashSet<(string Kind, object Key)> _closing = [];
     private readonly HashSet<Type> _validatedDomainTypes = [];
     private readonly Dictionary<Type, bool> _managedValueTypes = [];
@@ -153,12 +154,21 @@ internal sealed partial class StateModelSnapshot : StateBindingContext {
     public override StateValueBinding ResolveCurrentValue(Type domainType) {
         RequireClosed(domainType);
         if (_currentValues.TryGetValue(domainType, out StateValueBinding? prior)) {
-            if (prior.Slot.InlineSchema is { } inline) { CheckRegistered(inline); }
+            if (prior.Slot.ValueSchema is { } inline) { CheckRegistered(inline); }
             return prior;
         }
         if (BuiltinStateValues.TryBindCurrent(domainType, out StateValueBinding builtin)) {
             _currentValues.Add(domainType, builtin);
             return builtin;
+        }
+        if (Nullable.GetUnderlyingType(domainType) is { } underlying) {
+            StateValueBinding child = ResolveCurrentValue(underlying);
+            StateValueBinding result = new(DurableFieldInfo.Nullable(1, child.Slot),
+                typeof(NullableState<>).MakeGenericType(child.StateType),
+                typeof(NullableStateOps<,>).MakeGenericType(child.StateType, child.StateOpsType),
+                domainType, typeof(NullableValueProjection<,,>).MakeGenericType(underlying, child.StateType, child.ProjectionType!));
+            _currentValues.Add(domainType, result);
+            return result;
         }
         TypeExpr nominal = GetTypeExpr(domainType);
         // Reference metadata must not recursively close the referenced object's body.
@@ -186,6 +196,16 @@ internal sealed partial class StateModelSnapshot : StateBindingContext {
 
     public override StateValueBinding ResolveStoredValue(DurableFieldInfo slot) {
         if (BuiltinStateValues.TryBindStored(slot, out StateValueBinding builtin)) { return builtin; }
+        if (slot.TypeTag == TypeTag.Nullable) {
+            DurableFieldInfo nullableKey = WithFieldId(slot, 1);
+            if (slot.ValueSchema is { } dependency) { CheckRegistered(dependency); }
+            if (_storedNullableValues.TryGetValue(nullableKey, out StateValueBinding? cached)) { return cached.WithFieldId(slot.FieldId); }
+            StateValueBinding child = ResolveStoredValue(slot.NullableLayout!.ElementSlot);
+            StateValueBinding result = new(nullableKey, typeof(NullableState<>).MakeGenericType(child.StateType),
+                typeof(NullableStateOps<,>).MakeGenericType(child.StateType, child.StateOpsType));
+            _storedNullableValues.Add(nullableKey, result);
+            return result.WithFieldId(slot.FieldId);
+        }
         DurableSchema schema = slot.InlineSchema ?? throw new InvalidDataException("Unsupported stored value slot.");
         SchemaKey key = new(schema.Type, schema.Version);
         if (_storedValues.TryGetValue(key, out StateValueBinding? prior)) {
@@ -209,6 +229,7 @@ internal sealed partial class StateModelSnapshot : StateBindingContext {
     public override TypeExpr GetTypeExpr(Type domainType) {
         RequireClosed(domainType);
         if (BuiltinStateValues.TryBindCurrent(domainType, out StateValueBinding builtin)) { return NominalType(builtin.Slot); }
+        if (Nullable.GetUnderlyingType(domainType) is { } underlying) { return TypeExpr.Nullable(GetTypeExpr(underlying)); }
         if (domainType.IsArray) {
             TypeExpr element = GetTypeExpr(domainType.GetElementType()!);
             return domainType.IsSZArray ? TypeExpr.VectorArray(element) : TypeExpr.MultiDimArray(element, domainType.GetArrayRank());
@@ -225,6 +246,15 @@ internal sealed partial class StateModelSnapshot : StateBindingContext {
     public override Type GetDomainType(TypeExpr type) {
         ArgumentNullException.ThrowIfNull(type);
         if (!type.IsClosed) { throw new InvalidDataException("A current domain lookup requires a closed nominal type."); }
+        if (type.IsNullable) {
+            Type child = GetDomainType(type.ElementType!);
+            if (!child.IsValueType || Nullable.GetUnderlyingType(child) is not null) {
+                throw new InvalidDataException("A Nullable operand must be a supported non-nullable value type.");
+            }
+            Type nullable = typeof(Nullable<>).MakeGenericType(child);
+            RequireClosed(nullable);
+            return nullable;
+        }
         if (type.IsList) {
             Type list = typeof(List<>).MakeGenericType(GetDomainType(type.ElementType!));
             RequireClosed(list);

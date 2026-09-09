@@ -144,7 +144,12 @@ public sealed class DurableSchema : IEquatable<DurableSchema> {
             if (left.BaseSchema is not null) { pending.Push((left.BaseSchema, right.BaseSchema!)); }
             for (int index = 0; index < left.Fields.Length; index++) {
                 DurableFieldInfo a = left.Fields[index], b = right.Fields[index];
-                if (a.FieldId != b.FieldId || a.TypeTag != b.TypeTag ||
+                if (a.FieldId != b.FieldId || a.TypeTag != b.TypeTag) { return false; }
+                if (a.TypeTag == TypeTag.Nullable) {
+                    a = a.NullableLayout!.ElementSlot;
+                    b = b.NullableLayout!.ElementSlot;
+                }
+                if (a.TypeTag != b.TypeTag ||
                     a.TargetType != b.TargetType ||
                     (a.InlineSchema is null) != (b.InlineSchema is null)) { return false; }
                 if (a.InlineSchema is not null) { pending.Push((a.InlineSchema, b.InlineSchema!)); }

@@ -54,16 +54,20 @@ public abstract partial class StateBindingContext {
             if (candidates.Length > 1) { throw new InvalidDataException("Multiple explicit value upgrade providers match these nominal endpoints."); }
             // Selectors supply complete endpoints. Validate those layouts directly;
             // value tools never infer a missing Schema or rebuild a shared layout DAG.
-            if (source.InlineSchema is { } priorSchema) { BindSchema(priorSchema); }
-            if (target.InlineSchema is { } nextSchema) { BindSchema(nextSchema); }
+            if (source.ValueSchema is { } priorSchema) { BindSchema(priorSchema); }
+            if (target.ValueSchema is { } nextSchema) { BindSchema(nextSchema); }
             Type priorType = ResolveStoredValue(source).StateType;
             Type nextType = ResolveStoredValue(target).StateType;
             ValueUpgradePlan plan;
             if (candidates.Length == 0) {
-                if (!rules.AllowKeepExact || source != target || priorType != nextType) {
-                    throw new InvalidDataException("No explicit value upgrade provider matches, and KeepExact is not available for these complete slots.");
+                if (rules.AllowKeepExact && source == target && priorType == nextType) {
+                    plan = CreateKeepExactPlan(priorType);
+                } else if (rules.AllowNullableLifting && source.NullableLayout is { } priorNullable && target.NullableLayout is { } nextNullable) {
+                    ValueUpgradePlan child = PrepareValueUpgrade(ruleSet, priorNullable.ElementSlot, nextNullable.ElementSlot, depth + 1);
+                    plan = CreateNullableUpgradePlan(priorType, nextType, child);
+                } else {
+                    throw new InvalidDataException("No explicit value upgrade provider matches, and neither KeepExact nor Nullable lifting is available for these complete slots.");
                 }
-                plan = CreateKeepExactPlan(priorType);
             } else {
                 StateValueUpgradeProvider provider = candidates[0];
                 if ((provider.ExpectedSource is { } expectedSource && expectedSource != source) ||
@@ -74,7 +78,7 @@ public abstract partial class StateBindingContext {
                 UnifyStateType(provider.PriorType, priorType, variables);
                 UnifyStateType(provider.NextType, nextType, variables);
                 MethodInfo method = CloseUpgradeMethod(provider.Method, variables);
-                UpgradeDependencies dependencies = PrepareDependencies(provider.Dependencies, source.InlineSchema, target.InlineSchema, depth + 1);
+                UpgradeDependencies dependencies = PrepareDependencies(provider.Dependencies, source.ValueSchema, target.ValueSchema, depth + 1);
                 plan = CreateValueUpgradePlan(priorType, nextType, method, dependencies);
             }
             plan.Source = source;
@@ -88,8 +92,8 @@ public abstract partial class StateBindingContext {
         // Only declared nominal applicability chooses candidates. Signature constraints,
         // expected layouts and dependencies must not hide a broken candidate from KeepExact.
         Dictionary<int, TypeExpr> variables = [];
-        return provider.SourceInlineVersion == source.InlineSchema?.Version &&
-            provider.TargetInlineVersion == target.InlineSchema?.Version &&
+        return provider.SourceInlineVersion == source.ValueSchema?.Version &&
+            provider.TargetInlineVersion == target.ValueSchema?.Version &&
             MatchValuePattern(provider.SourceType, NominalType(source), variables) &&
             MatchValuePattern(provider.TargetType, NominalType(target), variables);
     }
@@ -129,6 +133,24 @@ public abstract partial class StateBindingContext {
     private static ValueUpgradePlan CreateKeepExactPlanTyped<T>() where T : unmanaged =>
         new TypedValueUpgradePlan<T, T>(
             static (in T prior, out T next, UpgradeContext _) => next = prior, new([]));
+
+    private static ValueUpgradePlan CreateNullableUpgradePlan(Type priorType, Type nextType, ValueUpgradePlan child) {
+        if (!priorType.IsGenericType || priorType.GetGenericTypeDefinition() != typeof(NullableState<>) ||
+            !nextType.IsGenericType || nextType.GetGenericTypeDefinition() != typeof(NullableState<>)) {
+            throw new InvalidDataException("Nullable slots must bind to NullableState representations.");
+        }
+        MethodInfo factory = typeof(StateBindingContext).GetMethod(nameof(CreateNullableUpgradePlanTyped), BindingFlags.NonPublic | BindingFlags.Static)!
+            .MakeGenericMethod(priorType.GetGenericArguments()[0], nextType.GetGenericArguments()[0]);
+        return factory.CreateDelegate<Func<ValueUpgradePlan, ValueUpgradePlan>>()(child);
+    }
+
+    private static ValueUpgradePlan CreateNullableUpgradePlanTyped<TPrior, TNext>(ValueUpgradePlan child)
+        where TPrior : unmanaged where TNext : unmanaged =>
+        new TypedValueUpgradePlan<NullableState<TPrior>, NullableState<TNext>>(
+            static (in NullableState<TPrior> prior, out NullableState<TNext> next, UpgradeContext context) => {
+                // Binding has already checked the child even when this value is absent.
+                next = prior.HasValue ? new(context.GetValueUpgrade<TPrior, TNext>("nullable.value")(prior.Value)) : default;
+            }, new([new("nullable.value", child)]));
 
     private readonly record struct ValuePlanKey(Type RuleSet, DurableFieldInfo Source, DurableFieldInfo Target);
 
@@ -173,8 +195,8 @@ public abstract partial class StateBindingContext {
         internal void CollectRequirements(ExactSchemaRequirementSet.Builder requirements, string path,
             HashSet<ValueUpgradePlan> visited) {
             if (!visited.Add(this)) { return; }
-            if (Source.InlineSchema is { } source) { requirements.Add(source, $"{path}.source"); }
-            if (Target.InlineSchema is { } target) { requirements.Add(target, $"{path}.target"); }
+            if (Source.ValueSchema is { } source) { requirements.Add(source, $"{path}.source"); }
+            if (Target.ValueSchema is { } target) { requirements.Add(target, $"{path}.target"); }
             Dependencies.CollectRequirements(requirements, path, visited);
         }
     }
