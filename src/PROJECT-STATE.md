@@ -24,9 +24,10 @@ SchemaStore 只维护一种闭合记录和登记批次；class Schema 即其对�
 前序 [DB-045](../docs/design-branches/0045-persisted-representation-id-slice.md) 的 Base v4 单 ID 边界继续沿用，旧 Base 格式拒绝。
 施工证据集中维护在 DB-046。
 
-下一片推荐 [DB-047 List<T> 内容对象](../docs/design-branches/0047-list-content-object-slice.md)，状态 Proposed，待用户采纳后实施。
-以完整已有元素闭包接入有序可变长度内容、融合 Delta 和列表 owner Upgrade；复用统一对象路径与目录。
-本轮只完成规划，尚无 List 产品代码。开放模板持久化暂不作为前置：剩余 Match 仍承担持久布局与代码历史的一致性核验，
+下一片 [DB-047 List<T> 内容对象](../docs/design-branches/0047-list-content-object-slice.md) 已按两步安排收敛，状态 Chosen，尚未实施。
+先以完整已有元素闭包接入有序可变长度内容、简单位置 Delta 和列表 owner Upgrade，复用统一对象路径与目录；
+高效插入类 Diff/Patch 在本片完成后单独[选型与设计](../docs/DurableGraph-research-roadmap.md#32-list-差分算法选型与设计)。
+位置差分是正确可用的效率占位，不是未实现 API；尚无 List 产品代码。开放模板持久化暂不作为前置：剩余 Match 仍承担持久布局与代码历史的一致性核验，
 继续按[路线图](../docs/DurableGraph-research-roadmap.md#31-版本化表示类型头的统一寻址)的净简化条件重访。
 
 [DB-043](../docs/design-branches/0043-vector-array-object-slice.md) 已完成统一引用对象路径、可组合数组与数组元素 Upgrade；

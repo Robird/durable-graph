@@ -1,6 +1,6 @@
 # DB-047：List<T> 内容对象
 
-> 状态：**Proposed / 待采纳，尚未实施**，2026-09-09。
+> 状态：**Chosen / 按两步安排收敛，尚未实施**，2026-09-09。
 > 问题：在既有统一对象路径上，能否完整保存、恢复和升级一个可变长度的 BCL 内容对象，而不依赖其内部字段布局？
 > 最小成功见证：同一 `List<Point>` 实例连续增删改并 Commit，冷重开保留内容和共享身份；Point 升版后列表只升级一次、强制 Base，随后恢复普通 Delta。
 > 前置事实：[DB-043](0043-vector-array-object-slice.md) 的可组合数组和 [DB-046](0046-unified-schema-catalog-slice.md) 的统一闭合目录已实现。
@@ -20,6 +20,11 @@ List 则带来直接的产品能力：不改变引用身份、发布或 Schema �
 数组已有的静态元素操作、owned 状态、历史 reader、元素 Upgrade 均有可复用机制。
 两路独立源码评估均推荐 List；分歧集中于 resize Delta，见 §4 的取舍。
 
+2026-09-09 后续讨论将施工拆为两步：本片先搭起 BCL List 的完整产品能力，使用简单、正确的
+位置差分作为可替换基线；高效识别插入类编辑、兼顾生成速度与 Delta 尺寸的算法选型在本片完成后单独进行。
+后一步的目标和素材统一维护在[路线图 §3.2](../DurableGraph-research-roadmap.md#32-list-差分算法选型与设计)。
+这里的“占位”指效率方案尚待替换；保存/读取/相等性仍须完整可用，不能留下抛异常的 Delta 空壳或把变化报告为 NoChange。
+
 ## 2. 支持范围与不变量
 
 - 支持 exact `System.Collections.Generic.List<T>`；List 子类、`IList<T>`/`IEnumerable<T>` 等接口字段及任意 object 槽不在本片范围。
@@ -34,6 +39,7 @@ List 则带来直接的产品能力：不改变引用身份、发布或 Schema �
 - Capture 期间领域图静止，沿用宿主同步合同。冻结结果拥有独立 `TState[]`；引用元素为 ID、值元素递归捕获，
   不持有可变领域元素。后续 List 或 inline 值变化不能改变候选内容。
 - 本片不做 Dictionary/Set、comparer、通用集合插件、跨程序集模型发现、并发 Capture 或性能池化。
+  不实现自建 change-tracking 容器；高效插入差分的比较实验与选型也不作为本片验收前置。
 
 ## 3. 类型、布局与目录
 
@@ -66,6 +72,7 @@ List 则带来直接的产品能力：不改变引用身份、发布或 Schema �
 
 ## 4. Base / Delta body
 
+本节选定的是首版可替换的位置差分基线，不是最终高效 List Diff/Patch 算法。
 复用 `IStateOps<TState>`；没有独立 StateEquals 或尺寸估算器。
 所有整数使用现有 canonical UInt32，Base/Delta 准备结果拥有 bytes，后续使用原策略及真实 payload 计量。
 
@@ -91,8 +98,15 @@ Delta（有 prior，同一 ListLayout）:
    变化索引上界是 common，不能接受指向新增尾部或已删除部分的索引。
 
 比较过“等长稀疏 Delta，resize 使用完整替换模式”：它需要额外 mode 和两套内容路径，且丢失共有前缀的差异复用。
-上述单语法只在数组差分循环上增加 newCount、common 和尾部三处逻辑，故推荐采用。
-暂不做 LCS、区间搬移、字典化、容量策略或小 Delta 特殊编码；是否最终写 Base 仍由既有策略决定。
+上述单语法只在数组差分循环上增加 newCount、common 和尾部三处逻辑，故用作本片基线。
+头部/中间插入可能使整个后缀按位置产生变化，Delta 尺寸可随后缀长度增长；本片接受这个效率限制。
+暂不做前后缀对齐、splice、LCS、区间搬移或算法竞争；是否最终写 Base 仍由既有策略决定，
+不能用“插入时一律 Base”替代可验证的 Delta 准备与应用闭环。
+
+实现时在 List 的 PrepareDelta/ApplyDelta 附近留一条 TODO，链接路线图 §3.2，说明当前位置差分的插入写放大。
+算法实现保持在 List body 内，不提前引入算法插件接口、通用编辑操作框架或多个持久编码后端。
+后续只改差异搜索而不改字节含义时可复用 codec；若引入新的 patch 语法，必须明确调整格式解释版本，
+不能在同一 codec 版本下重解释已写 bytes，也不因此预先承诺原型格式的永久兼容。
 
 读取要求 count 可表示且满足 CLR buffer 上限、checked 算术、适用时的 payload 最小长度预检；
 索引重复/逆序/越界、缺尾值、截断、非 canonical 数值及尾随数据均拒绝。
@@ -127,7 +141,7 @@ List 自己是内容 Upgrade 的 owner，不由入边字段各自转换：
 
 | 阶段 | 工作包与依赖 | 最小出口 |
 |---|---|---|
-| G0 | 主线程冻结 List nominal/layout、body、history 语法及失败规则；保持 Proposed 直到用户采纳 | 上述合同无影响业务语义的未决分支，列出黄金编码 |
+| G0 | 按两步安排核对 List nominal/layout、首版位置差分、history 语法及失败规则 | 上述合同无影响业务语义的未决分支，列出黄金编码；不等待高效算法选型 |
 | G1 | Runtime 类型/内容 body 与 tests；SG/Shared/Build 的模式/history支持可由另一 agent 在接口约定后并行 | 递归类型与 Base/Delta/owned buffer 成立，SG 生成可编译 |
 | G2 | Runtime List owner Upgrade；StateStore 快照闭合、引用验证、目录记录及 tests | 历史精确读取、空 List 升级预检、共享与长度变化保存闭环 |
 | G3 | 主线程整合真实包跨版本场景；独立 agent 复核类型版本/候选所有权/差分边界 | 完整产品验收、文档收口及连贯提交 |
@@ -147,7 +161,7 @@ List 自己是内容 Upgrade 的 owner，不由入边字段各自转换：
 
 | 机制 | 必须可观察的结果 |
 |---|---|
-| 内容 Delta | append/truncate/clear/中间插删/交换/等长变化/default 尾值/零字节 struct；Apply(Prepare(a,b),a)=b，prior 不变；浮点按位、引用按 ID |
+| 内容 Delta | append/truncate/clear/中间插删/交换/等长变化/default 尾值/零字节 struct；Apply(Prepare(a,b),a)=b，prior 不变；浮点按位、引用按 ID；本片验证正确性，不要求插删产生紧凑 patch |
 | 冻结 | Prepare 后修改领域 List、Capacity 或含引用的 inline struct；已准备 bytes/引用列表保持候选时状态 |
 | 图身份 | 共享 List、Node↔List 循环、同实例 resize、同内容替换、child-only 修改、断开后 Remove；成功再次 Commit 无伪变化 |
 | 组合类型 | List 的 List、数组与 List 双向嵌套、泛型 class/struct 参数、struct 含 List<自身>；不发生无限闭合；用户自定义同名 List<T> 不误识别为 BCL |
@@ -160,3 +174,4 @@ List 自己是内容 Upgrade 的 owner，不由入边字段各自转换：
 扩展 [PackageConsumerProbe](../../experiments/PackageConsumerProbe/README.md) 的 List 正常和跨版本包场景，
 并验证既有 Array/Generic/ValueUpgrade/StateStore 包路径未退化。
 只有 G3 的证据完成后才更新实现状态；本次规划没有运行或声称通过这些新增测试。
+届时把上述真实冻结状态与正确性场景作为后续算法选型素材；本片不以性能排名或紧凑插入编码作为完成条件。

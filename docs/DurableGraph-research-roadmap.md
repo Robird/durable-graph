@@ -10,8 +10,9 @@
 当前能力与已完成分片的验收从 PROJECT-STATE/其账本进入；这里仅保留后续增量。
 
 [DB-046 统一闭合 Schema 目录](design-branches/0046-unified-schema-catalog-slice.md) 已合并持久记录、批次和 exact 依赖引用。
-下一片推荐 [DB-047 List<T> 内容对象](design-branches/0047-list-content-object-slice.md)，Proposed，待采纳后实施。
-目标是支持完整已有元素闭包、同实例长度变化的融合 Delta、历史内容 Upgrade 与真实包冷重开；
+下一片 [DB-047 List<T> 内容对象](design-branches/0047-list-content-object-slice.md) 已按两步安排收敛，Chosen，尚未实施。
+先支持完整已有元素闭包、同实例长度变化的简单位置 Delta、历史内容 Upgrade 与真实包冷重开；
+完成后再进行 §3.2 的高效 Diff/Patch 选型与设计，不以该研究阻塞 List 基础能力。
 不预先引入通用容器平台。开放模板方案的评估结论与重访条件见 §3.1。
 DB-036 单 World/单 head 工作会话已实现；branch/Reset、联合 Store 视图及更强恢复保证仍独立排期。
 MVP 库内加载顺序为 exact 重建 → 单对象 Upgrade → 分配实例 → 填充/连接引用 → 完整交付 World；
@@ -34,7 +35,8 @@ B/D/H 分别指本轮精确 Base payload、Delta payload 上界、已有对象�
 
 | 工作项 | 最小应回答的问题 | 设计或证据入口 |
 |---|---|---|
-| BCL 内容适配与恢复 | 首片推荐 List<T>：ordered 内容、可变 Count、完整槽组合、单列表 owner Upgrade；Dictionary/Set 的 comparer、key/index 后继裁决；不保存 CLR 内部字段布局 | [DB-047（Proposed）](design-branches/0047-list-content-object-slice.md)、[目标引用对象模型](DurableGraph-target-design-v0.md) |
+| BCL 内容适配与恢复 | 首片 List<T>：有序内容、可变 Count、完整槽组合、单列表 owner Upgrade；以简单位置差分闭合功能；Dictionary/Set 的 comparer、key/index 后继裁决 | [DB-047（Chosen）](design-branches/0047-list-content-object-slice.md)、[目标引用对象模型](DurableGraph-target-design-v0.md) |
+| List 高效 Diff/Patch | DB-047 完成后选型，兼顾生成速度、分配与 Delta 存储效率，重点处理插入类编辑 | [§3.2](#32-list-差分算法选型与设计) |
 
 ## 3. 尚待裁决的机制
 
@@ -83,12 +85,34 @@ DB-009/010 的旧 no-reuse 前提不能沿用；借用 Base 共享 prior 等结�
 数组协变仍需独立验证空数组元素 ancestry。
 所有组合只锁定本对象需要的 exact 解释，不锁定引用目标版本；元数据与可执行历史能力继续分别保留，不以 latest 补缺。
 
+### 3.2 List 差分算法选型与设计
+
+2026-09-09 用户选择两步推进：DB-047 先完成 BCL List 功能，以正确的位置差分占位；
+该片通过后再安排独立算法选型与设计，尚未选择高效算法。此项是明确的后继研究，不延至泛指的 MVP 后优化。
+
+后续以两份冻结 List 状态为输入，研究如何兼顾 Diff/Patch 生成速度与 Object Delta 存储效率，重点改善
+头插、中插、删除引起的整体错位。变化发现与 patch 表达分别比较：不预定 Myers/LCS、splice 或区间复制，
+也不把改用自建 tracking 容器作为必需前置。可以复用前人成果，但必须保留精确元素语义和完整恢复能力。
+
+选型时至少区分以下素材与指标：
+
+- 场景：尾部追加/截短、头部和中间插删、稀疏替换、组合编辑、重排/排序、重复元素及改后撤销；
+  覆盖 ObjectId 元素与不同大小的 inline/generic DTO，不能只用文本或整数得出通用结论。
+- 成本：分别测量差异生成、Patch 应用、分配量和实际 Delta payload；与 DB-047 位置基线、完整 Base 比较。
+  Capture 和全量 PrepareBase 的既有成本单独列出，不把局部算法加速宣称为整个 Commit 的同等加速。
+- 正确性：Apply(Diff(old,new),old)=new，prior/candidate 不受修改；浮点按位、引用按 ObjectId、值按 exact 槽，
+  不能使用领域 Equals 或仅靠未验证 hash 代替持久语义；对重复内容和退化输入必须有确定行为与可控成本。
+- 结构：允许比较非最优但有界的补丁与回退策略，不以最短编辑脚本作为前置要求。
+  如改变持久 patch 语法，明确 codec 版本与 Base/Delta 链解释；不为尚未选定的算法提前建设兼容/插件平台。
+
+研究阶段交付候选比较、实测证据与下一实施方案，再落地所选算法；这不改变 DB-047 的当前功能验收范围。
+
 ## 4. 明确延后及重访条件
 
 | 延后项 | 何时重访 / 届时要回答的问题 |
 |---|---|
 | ObjectId 数字回收 | 单调分配配合其他机制开发后，再定义候选隔离、retire/reuse 时机与恢复；可评估 StateJournal SlabBitmap/SlotPool，不能复用旧对象 Delta 链 |
-| 后续 BCL 集合 | List 已进入 DB-047 提案；Dictionary/Set 等在该内容闭环后逐类型定义 comparer、共享、内容 Upgrade 和 key/index 建立时机，不随 List 自动加入范围 |
+| 后续 BCL 集合 | List 已进入 DB-047 功能分片；Dictionary/Set 等在该内容闭环后逐类型定义 comparer、共享、内容 Upgrade 和 key/index 建立时机，不随 List 自动加入范围 |
 | SchemaStore 后续能力 | MVP 单调注册已实现；联合 Commit/Ref 及复用 StateStore 的演进候选见下节，Dictionary 与内建类型 codec 完整后重访。多 writer、压缩/GC 另待真实需求 |
 | Schema/表示日志自动修复与分段 | 遇到真实坏尾恢复或容量需求时；无额外确认水位不能自动区分未完成尾部和已确认末帧损坏，当前严格拒绝。重访时先冻结故障模型，不绕过完整注册一致性 |
 | 发布恢复保证扩展 | DB-036 已闭合同实例 Commit、expected Parent、数据/发布屏障及严格重开；遇到真实可用性要求时再设计坏尾自动修复、OS crash/power loss 与目录持久性，不能默默回退旧 head |
