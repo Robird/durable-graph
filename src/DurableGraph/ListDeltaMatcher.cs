@@ -1,3 +1,5 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace Atelia.DurableGraph;
 
 /// <summary>A consecutive target range paired with prior contents, or new contents when OldStart is -1.</summary>
@@ -15,14 +17,74 @@ internal static class ListDeltaMatcher<TState, TOps> where TState : unmanaged wh
     internal static List<ListDeltaRange> Plan(ReadOnlySpan<TState> prior, ReadOnlySpan<TState> current,
         DurableFieldInfo slot, ListDeltaAlgorithm algorithm) =>
         PlanWithBudget(prior, current, slot, algorithm,
-            (int)Math.Min(1_000_000L, 4096L + 8L * (prior.Length + (long)current.Length)),
+            GetComparisonBudget(prior.Length, current.Length),
             MaximumMyersDepth, MaximumTraceBytes);
+
+    internal static int GetComparisonBudget(int priorCount, int currentCount) =>
+        (int)Math.Min(1_000_000L, 4096L + 8L * (priorCount + (long)currentCount));
+
+    // Complete the original Local search while observing stalls, without adding or reordering comparisons.
+    internal static List<ListDeltaRange> PlanLocal(ReadOnlySpan<TState> prior, ReadOnlySpan<TState> current,
+        DurableFieldInfo slot, out bool stalled) =>
+        PlanLocalWithBudget(prior, current, slot, GetComparisonBudget(prior.Length, current.Length), out stalled);
+
+    internal static List<ListDeltaRange> PlanLocalWithBudget(ReadOnlySpan<TState> prior, ReadOnlySpan<TState> current,
+        DurableFieldInfo slot, int comparisonBudget, out bool stalled) {
+        ArgumentOutOfRangeException.ThrowIfNegative(comparisonBudget);
+        List<ListDeltaRange> result = [];
+        TrimCommonEnds(prior, current, slot, result, out int prefix, out int oldEnd, out int newEnd, out int suffix);
+        int oldIndex = prefix, newIndex = prefix;
+        stalled = false;
+        while (true) {
+            ListDeltaLocalStatus status = TryLocal(prior, current, slot, ref oldIndex, oldEnd,
+                ref newIndex, newEnd, ref comparisonBudget, result, stopAtWindowMiss: true);
+            if (status == ListDeltaLocalStatus.Complete) { break; }
+            if (status == ListDeltaLocalStatus.BudgetExhausted) {
+                // TryLocal reports exhaustion only while both middle spans still contain elements.
+                stalled = true;
+                AddGap(result, oldIndex, oldEnd, newIndex, newEnd);
+                break;
+            }
+            stalled |= oldEnd - oldIndex > LocalLookahead + 1 || newEnd - newIndex > LocalLookahead + 1;
+            // This pair and its entire window were already compared. Keep Local's original fallback pair.
+            // Even a proven short-tail miss continues normally to preserve Local's exact comparison work.
+            Add(result, oldIndex++, newIndex++, 1);
+        }
+        Add(result, oldEnd, newEnd, suffix);
+        return result;
+    }
+
+    // Unlike explicit BoundedMyers, competition must distinguish completion from positional fallback.
+    internal static bool TryPlanMyers(ReadOnlySpan<TState> prior, ReadOnlySpan<TState> current,
+        DurableFieldInfo slot, [NotNullWhen(true)] out List<ListDeltaRange>? plan) =>
+        TryPlanMyersWithBudget(prior, current, slot, GetComparisonBudget(prior.Length, current.Length), out plan);
+
+    internal static bool TryPlanMyersWithBudget(ReadOnlySpan<TState> prior, ReadOnlySpan<TState> current,
+        DurableFieldInfo slot, int comparisonBudget, [NotNullWhen(true)] out List<ListDeltaRange>? plan,
+        int maximumEditDepth = MaximumMyersDepth, int maximumTraceBytes = MaximumTraceBytes) {
+        ArgumentOutOfRangeException.ThrowIfNegative(comparisonBudget);
+        ArgumentOutOfRangeException.ThrowIfNegative(maximumEditDepth);
+        ArgumentOutOfRangeException.ThrowIfNegative(maximumTraceBytes);
+        List<ListDeltaRange> result = [];
+        TrimCommonEnds(prior, current, slot, result, out int prefix, out int oldEnd, out int newEnd, out int suffix);
+        if (!Myers(prior[prefix..oldEnd], current[prefix..newEnd], slot, prefix, prefix,
+                ref comparisonBudget, maximumEditDepth, maximumTraceBytes, result)) {
+            plan = null;
+            return false;
+        }
+        Add(result, oldEnd, newEnd, suffix);
+        plan = result;
+        return true;
+    }
 
     // Internal overrides make deterministic budget boundaries observable without a public tuning surface.
     internal static List<ListDeltaRange> PlanWithBudget(ReadOnlySpan<TState> prior, ReadOnlySpan<TState> current,
         DurableFieldInfo slot, ListDeltaAlgorithm algorithm, int comparisonBudget,
         int maximumEditDepth = MaximumMyersDepth, int maximumTraceBytes = MaximumTraceBytes) {
-        if (!Enum.IsDefined(algorithm)) { throw new ArgumentOutOfRangeException(nameof(algorithm)); }
+        // Adaptive chooses by encoded bytes and therefore cannot be dispatched as a pure matcher.
+        if (algorithm is not (ListDeltaAlgorithm.Position or ListDeltaAlgorithm.LocalResync or ListDeltaAlgorithm.BoundedMyers)) {
+            throw new ArgumentOutOfRangeException(nameof(algorithm));
+        }
         ArgumentOutOfRangeException.ThrowIfNegative(comparisonBudget);
         ArgumentOutOfRangeException.ThrowIfNegative(maximumEditDepth);
         ArgumentOutOfRangeException.ThrowIfNegative(maximumTraceBytes);
@@ -32,17 +94,7 @@ internal static class ListDeltaMatcher<TState, TOps> where TState : unmanaged wh
             return result;
         }
 
-        int prefix = 0;
-        int common = Math.Min(prior.Length, current.Length);
-        while (prefix < common && TOps.StateEquals(in prior[prefix], in current[prefix], slot)) { prefix++; }
-        Add(result, 0, 0, prefix);
-        int suffix = 0;
-        while (suffix < common - prefix &&
-            TOps.StateEquals(in prior[prior.Length - suffix - 1], in current[current.Length - suffix - 1], slot)) {
-            suffix++;
-        }
-        int oldEnd = prior.Length - suffix;
-        int newEnd = current.Length - suffix;
+        TrimCommonEnds(prior, current, slot, result, out int prefix, out int oldEnd, out int newEnd, out int suffix);
         if (algorithm == ListDeltaAlgorithm.LocalResync) {
             int oldIndex = prefix, newIndex = prefix;
             if (TryLocal(prior, current, slot, ref oldIndex, oldEnd, ref newIndex, newEnd,
@@ -55,6 +107,21 @@ internal static class ListDeltaMatcher<TState, TOps> where TState : unmanaged wh
         }
         Add(result, oldEnd, newEnd, suffix);
         return result;
+    }
+
+    private static void TrimCommonEnds(ReadOnlySpan<TState> prior, ReadOnlySpan<TState> current, DurableFieldInfo slot,
+        List<ListDeltaRange> result, out int prefix, out int oldEnd, out int newEnd, out int suffix) {
+        prefix = 0;
+        int common = Math.Min(prior.Length, current.Length);
+        while (prefix < common && TOps.StateEquals(in prior[prefix], in current[prefix], slot)) { prefix++; }
+        Add(result, 0, 0, prefix);
+        suffix = 0;
+        while (suffix < common - prefix &&
+            TOps.StateEquals(in prior[prior.Length - suffix - 1], in current[current.Length - suffix - 1], slot)) {
+            suffix++;
+        }
+        oldEnd = prior.Length - suffix;
+        newEnd = current.Length - suffix;
     }
 
     // Internal kernels allow bounded matcher experiments to share the production comparison and tie rules.

@@ -69,14 +69,18 @@ internal static class ListStateBody<TState, TOps> where TState : unmanaged where
     }
 
     internal static PreparedDeltaBody PrepareDelta(FrozenListState<TState> prior, FrozenListState<TState> current,
-        ListLayout layout, ListDeltaAlgorithm algorithm = ListDeltaAlgorithm.LocalResync,
+        ListLayout layout, ListDeltaAlgorithm algorithm = ListDeltaAlgorithm.Adaptive,
+        ListDeltaPlanFactory<TState>? planFactory = null) =>
+        PrepareDeltaObserved(prior, current, layout, out _, algorithm, planFactory);
+
+    internal static PreparedDeltaBody PrepareDeltaObserved(FrozenListState<TState> prior, FrozenListState<TState> current,
+        ListLayout layout, out ListDeltaCompetitionObservation observation,
+        ListDeltaAlgorithm algorithm = ListDeltaAlgorithm.Adaptive,
         ListDeltaPlanFactory<TState>? planFactory = null) {
-        if (algorithm is not (ListDeltaAlgorithm.Position or ListDeltaAlgorithm.LocalResync or ListDeltaAlgorithm.BoundedMyers)) {
+        if (algorithm is not (ListDeltaAlgorithm.Position or ListDeltaAlgorithm.LocalResync or
+                ListDeltaAlgorithm.BoundedMyers or ListDeltaAlgorithm.Adaptive)) {
             throw new ArgumentOutOfRangeException(nameof(algorithm));
         }
-        ArrayBufferWriter<byte> buffer = new();
-        BinaryPayloadWriter writer = new(buffer);
-        writer.WriteUInt32((uint)current.Count);
         bool changed = prior.Count != current.Count;
         if (!changed) {
             for (int index = 0; index < current.Count; index++) {
@@ -88,44 +92,86 @@ internal static class ListStateBody<TState, TOps> where TState : unmanaged where
         }
         // NoChange is a property of the two sequences, not of the matcher or its search budget.
         if (!changed) {
+            ArrayBufferWriter<byte> buffer = new();
+            BinaryPayloadWriter writer = new(buffer);
+            writer.WriteUInt32((uint)current.Count);
             if (current.Count > 0) { WriteSourceRange(ref writer, Copy, 0, current.Count); }
+            observation = new(ListDeltaCompetitionOutcome.NoChange, buffer.WrittenCount, 0, 0);
             return new(false, buffer.WrittenSpan);
         }
 
+        // An explicit research plan overrides writer selection and is encoded exactly once.
+        if (planFactory is null && algorithm == ListDeltaAlgorithm.Adaptive) {
+            return ListDeltaCompetition<TState, TOps>.PrepareChanged(prior, current, layout, out observation);
+        }
         List<ListDeltaRange> ranges = planFactory is null
             ? ListDeltaMatcher<TState, TOps>.Plan(prior.Elements, current.Elements, layout.ElementSlot, algorithm)
             : planFactory(prior.Elements, current.Elements, layout.ElementSlot);
+        TryEncodePlan(prior, current, layout, ranges, null, out PreparedDeltaBody? result);
+        observation = new(ListDeltaCompetitionOutcome.ExplicitPlan, result!.Body.Length, 0, 0);
+        return result!;
+    }
+
+    // Encodes a changed pair. A finite limit accepts only a strictly shorter complete body;
+    // it bounds actual output at element-call boundaries, not child allocations or GetSpan hints.
+    internal static bool TryEncodePlan(FrozenListState<TState> prior, FrozenListState<TState> current,
+        ListLayout layout, IReadOnlyList<ListDeltaRange> ranges, int? exclusiveByteLimit, out PreparedDeltaBody? result) =>
+        TryEncodePlan(prior, current, layout, ranges, exclusiveByteLimit, out result, out _);
+
+    internal static bool TryEncodePlan(FrozenListState<TState> prior, FrozenListState<TState> current,
+        ListLayout layout, IReadOnlyList<ListDeltaRange> ranges, int? exclusiveByteLimit,
+        out PreparedDeltaBody? result, out int writtenBytes) {
+        if (exclusiveByteLimit.HasValue) { ArgumentOutOfRangeException.ThrowIfNegative(exclusiveByteLimit.Value); }
+        result = null;
+        ArrayBufferWriter<byte> buffer = new();
+        BinaryPayloadWriter writer = new(buffer);
+        writer.WriteUInt32((uint)current.Count);
+        if (LimitReached(buffer, exclusiveByteLimit, out writtenBytes)) { return false; }
         foreach (ListDeltaRange range in ranges) {
             if (range.OldStart < 0) {
                 writer.WriteByte(New);
                 writer.WriteUInt32((uint)range.Count);
+                if (LimitReached(buffer, exclusiveByteLimit, out writtenBytes)) { return false; }
                 for (int index = 0; index < range.Count; index++) {
                     TOps.WriteBase(ref writer, in current.OwnedElements[range.NewStart + index], layout.ElementSlot);
+                    if (LimitReached(buffer, exclusiveByteLimit, out writtenBytes)) { return false; }
                 }
                 continue;
             }
-            ArrayBufferWriter<byte>? patches = null;
+            bool rangeStarted = false;
             for (int index = 0; index < range.Count; index++) {
                 ref readonly TState oldValue = ref prior.OwnedElements[range.OldStart + index];
                 ref readonly TState newValue = ref current.OwnedElements[range.NewStart + index];
                 if (TOps.StateEquals(in oldValue, in newValue, layout.ElementSlot)) { continue; }
+                if (!rangeStarted) {
+                    WriteSourceRange(ref writer, CopyAndPatch, range.OldStart, range.Count);
+                    if (LimitReached(buffer, exclusiveByteLimit, out writtenBytes)) { return false; }
+                    rangeStarted = true;
+                }
+                writer.WriteUInt32((uint)index + 1);
+                if (LimitReached(buffer, exclusiveByteLimit, out writtenBytes)) { return false; }
                 PreparedDeltaBody delta = TOps.PrepareDelta(in oldValue, in newValue, layout.ElementSlot);
                 if (!delta.HasChanges) {
                     throw new InvalidOperationException("List element StateEquals and PrepareDelta disagree about a changed value.");
                 }
-                patches ??= new();
-                BinaryPayloadWriter patchWriter = new(patches);
-                patchWriter.WriteUInt32((uint)index + 1);
-                patchWriter.WriteSpan(delta.Body);
+                writer.WriteSpan(delta.Body);
+                if (LimitReached(buffer, exclusiveByteLimit, out writtenBytes)) { return false; }
             }
-            WriteSourceRange(ref writer, patches is null ? Copy : CopyAndPatch, range.OldStart, range.Count);
-            if (patches is not null) {
-                writer.WriteSpan(patches.WrittenSpan);
+            if (rangeStarted) {
                 writer.WriteUInt32(0);
+            } else {
+                WriteSourceRange(ref writer, Copy, range.OldStart, range.Count);
             }
+            if (LimitReached(buffer, exclusiveByteLimit, out writtenBytes)) { return false; }
         }
-        // TODO: Consider local New-versus-Patch costs only if replay evidence justifies extra encoding.
-        return new(true, buffer.WrittenSpan);
+        if (LimitReached(buffer, exclusiveByteLimit, out writtenBytes)) { return false; }
+        result = new(true, buffer.WrittenSpan);
+        return true;
+    }
+
+    private static bool LimitReached(ArrayBufferWriter<byte> buffer, int? exclusiveByteLimit, out int writtenBytes) {
+        writtenBytes = buffer.WrittenCount;
+        return exclusiveByteLimit.HasValue && writtenBytes >= exclusiveByteLimit.Value;
     }
 
     internal static FrozenListState<TState> ApplyDelta(ref BinaryPayloadReader reader, FrozenListState<TState> prior, ListLayout layout) {

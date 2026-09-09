@@ -82,11 +82,16 @@ internal static class Whitebox {
                         RunResult run = Replay.Run(workload, count, repeat, algorithm, path, script, settings,
                             applyEdit: (world, _) => scenario.Apply(world.Items));
                         runs.Add(run);
-                        MatcherObservation observation = Observe(scenario, prior, current, repeat, algorithm, settings.DiffRepeats);
-                        observations.Add(observation);
                         StepResult edit = run.Steps[1];
-                        Console.WriteLine($"{scenario.Name} n={count} r={repeat} {algorithm}: matches={observation.EqualPairs}/{observation.KnownLcsLength}, " +
-                            $"comparisons={observation.StateEqualsCalls}, candidate={edit.Diff!.DeltaBodyBytes}, actual={edit.ListWriteKind}:{edit.ListPayloadBytes}");
+                        if (algorithm is ListDeltaAlgorithm.Position or ListDeltaAlgorithm.LocalResync or ListDeltaAlgorithm.BoundedMyers) {
+                            MatcherObservation observation = Observe(scenario, prior, current, repeat, algorithm, settings.DiffRepeats);
+                            observations.Add(observation);
+                            Console.WriteLine($"{scenario.Name} n={count} r={repeat} {algorithm}: matches={observation.EqualPairs}/{observation.KnownLcsLength}, " +
+                                $"comparisons={observation.StateEqualsCalls}, candidate={edit.Diff!.DeltaBodyBytes}, actual={edit.ListWriteKind}:{edit.ListPayloadBytes}");
+                        } else {
+                            Console.WriteLine($"{scenario.Name} n={count} r={repeat} {algorithm}: {edit.Diff!.Diagnostics.Outcome}, " +
+                                $"candidate={edit.Diff.DeltaBodyBytes}, actual={edit.ListWriteKind}:{edit.ListPayloadBytes}");
+                        }
                     }
                 }
                 ordinal++;
@@ -95,9 +100,13 @@ internal static class Whitebox {
         Report.Write(settings, Cases.Select(c => new Edit(0, c.Name, 0, 0)).ToArray(), runs, warmups);
         File.WriteAllText(Path.Combine(settings.Output, "whitebox.json"), JsonSerializer.Serialize(new {
             Cases, Observations = observations,
+            Writers = runs.Select(run => new { Case = run.Workload, run.Count, run.Repeat, run.Algorithm,
+                run.Steps[1].Diff, run.Steps[1].ListWriteKind, run.Steps[1].ListPayloadBytes }).ToArray(),
             Measurement = "StateEquals counts use an untimed instrumented ops wrapper; matcher time/allocation use real Int32StateOps. " +
                 "32 matcher warmups per case/algorithm precede samples. Counts include prefix/suffix, exclude body emission. " +
                 "Relaxed-bound probes are diagnostic only; all saved payloads use unchanged product defaults. " +
+                "Standalone matcher observations cover only Position/LocalResync/BoundedMyers. Adaptive is measured through the product writer, " +
+                "with untimed whole-writer equality/child-call counts and actual competition outcome/cutoff bytes; no Plan(Adaptive) is called. " +
                 "See report.json for environment, binary fingerprints, settings, real Commit and isolated full Delta measurements."
         }, new JsonSerializerOptions { WriteIndented = true }));
         StringBuilder text = new("# White-box matcher observations\n\nTwo adverse families plus boundary controls; no absolute worst-case or occurrence-rate claim.\n\n");
@@ -109,6 +118,17 @@ internal static class Whitebox {
             double[] times = group.Select(o => o.MillisecondsMedian).Order().ToArray();
             text.AppendLine($"| {first.Case} | {first.Count} | {first.Algorithm} | {first.EqualPairs} / {first.KnownLcsLength} | " +
                 $"{first.StateEqualsCalls} | {Statistics.Median(times):F4} | {first.AllocatedBytesMedian} | {edit.Diff!.DeltaBodyBytes} | {edit.ListWriteKind} {edit.ListPayloadBytes} |");
+        }
+        text.AppendLine().AppendLine("## Complete product writers").AppendLine()
+            .AppendLine("Adaptive has no standalone matcher metric. Counts below include the whole writer; timing excludes instrumentation.").AppendLine()
+            .AppendLine("| Case | N | Writer | Raw Delta B | Diff ms | Allocation B | Outcome | Challenger written B | Actual List write |")
+            .AppendLine("|---|---:|---|---:|---:|---:|---|---:|---|");
+        foreach (var group in runs.GroupBy(run => (run.Workload, run.Count, run.Algorithm))) {
+            StepResult edit = group.First().Steps[1];
+            DiffResult diff = edit.Diff!;
+            text.AppendLine($"| {group.Key.Workload} | {group.Key.Count} | {group.Key.Algorithm} | {diff.DeltaBodyBytes} | " +
+                $"{Statistics.Median(group.Select(run => run.Steps[1].Diff!.MillisecondsMedian).Order().ToArray()):F4} | {diff.AllocatedBytesMedian} | " +
+                $"{diff.Diagnostics.Outcome} | {diff.Diagnostics.ChallengerWrittenBytes} | {edit.ListWriteKind} {edit.ListPayloadBytes} |");
         }
         File.WriteAllText(Path.Combine(settings.Output, "whitebox.md"), text.ToString());
         Console.WriteLine($"Whitebox passed: {runs.Count} measured repositories; {runs.Sum(r => r.Steps.Length)} validated revisions. Reports: {settings.Output}");

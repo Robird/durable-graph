@@ -21,7 +21,7 @@ public abstract class ListObjectBinding : ObjectBinding {
 
     public static ListObjectBinding Create(Type domainListType, ListLayout layout, StateValueBinding element,
         Func<ListObjectBinding, ObjectStateRecord, ObjectStateRecord>? normalize = null,
-        ListDeltaAlgorithm algorithm = ListDeltaAlgorithm.LocalResync) {
+        ListDeltaAlgorithm algorithm = ListDeltaAlgorithm.Adaptive) {
         ArgumentNullException.ThrowIfNull(domainListType);
         ArgumentNullException.ThrowIfNull(layout);
         ArgumentNullException.ThrowIfNull(element);

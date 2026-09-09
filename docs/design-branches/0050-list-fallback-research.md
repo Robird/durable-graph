@@ -2,7 +2,7 @@
 
 状态：**Research / 实验已验证，尚未采纳新产品策略**。2026-09-09。
 
-后继施工计划为 [DB-051](0051-bounded-list-delta-competition.md)：采用完整基准与限长竞争，
+已实施的后继为 [DB-051](0051-bounded-list-delta-competition.md)：采用完整基准与限长竞争，
 放松本实验的共享/半预算与单次编码约束。本文及数据保留原研究条件，不直接提升实验协调器为默认。
 
 问题：在 [DB-049](0049-list-range-delta-and-matcher-trial-slice.md) 的共同区间 codec 上，

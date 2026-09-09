@@ -10,10 +10,10 @@ public sealed class StateModelRegistry : IStateModelRegistration {
     private readonly Dictionary<Type, StateValueUpgradeRuleSet> _valueUpgradeRules = [];
     private Type? _arrayElementUpgradeRuleSet;
     private Type? _listElementUpgradeRuleSet;
-    private ListDeltaAlgorithm _listDeltaAlgorithm = ListDeltaAlgorithm.LocalResync;
+    private ListDeltaAlgorithm _listDeltaAlgorithm = ListDeltaAlgorithm.Adaptive;
 
     /// <summary>Selects how future operation snapshots prepare List Delta bodies.</summary>
-    /// <remarks>Existing sessions keep their writer selection. Algorithms share one persisted format and reader.</remarks>
+    /// <remarks>Adaptive is the default. Existing sessions keep their writer selection. Algorithms share one persisted format and reader.</remarks>
     public void UseListDeltaAlgorithm(ListDeltaAlgorithm algorithm) {
         if (!Enum.IsDefined(algorithm)) { throw new ArgumentOutOfRangeException(nameof(algorithm)); }
         _listDeltaAlgorithm = algorithm;

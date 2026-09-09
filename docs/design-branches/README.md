@@ -23,9 +23,9 @@ DB-045 持久表示 ID、DB-046 统一闭合目录、DB-047 List 基础能力和
 
 | 文档 | 状态 | 实施范围 |
 |---|---|---|
-| [DB-051 完整基准与限长竞争的默认 List Delta](0051-bounded-list-delta-competition.md) | Chosen / 施工计划，未实施 | 流式 patch、完整 Local 基准、独立有界 Myers 与严格长度竞争；计划新增默认 Adaptive，G0–G5 及验证合同已审阅 |
+| [DB-051 完整基准与限长竞争的默认 List Delta](0051-bounded-list-delta-competition.md) | Implemented / G0–G5 已验收 | 流式 patch、完整 Local 基准、独立有界 Myers 与严格长度竞争；默认 Adaptive、根 tests/真实包/白盒落盘/双 seed 矩阵及独立审查通过 |
 | [DB-050 List 匹配回退研究](0050-list-fallback-research.md) | Research / 实验已验证，后继 DB-051 | 共享有界 kernel、双向单次救援及反证；保留原共享/半预算实验条件，字节代价验收转入完整基准与限长竞争计划，未增加公开策略或改变默认 |
-| [DB-049 List 区间 Delta 与匹配算法对照](0049-list-range-delta-and-matcher-trial-slice.md) | Implemented / G0–G4 已验收 | 静态 StateEquals、统一 codec 2、三种 writer 及快照配置；根 tests/五组相关真实包/独立审查和同领域历史正式重放通过，保留 LocalResync 默认与 Myers 选择 |
+| [DB-049 List 区间 Delta 与匹配算法对照](0049-list-range-delta-and-matcher-trial-slice.md) | Implemented / G0–G4 已验收，默认后继 DB-051 | 静态 StateEquals、统一 codec 2、三种 writer 及快照配置；根 tests/五组相关真实包/独立审查和同领域历史正式重放通过；原 LocalResync 默认的选择证据保留，当前默认见 DB-051 |
 | [DB-048 List 差分算法与编辑原语调研](0048-list-delta-algorithm-research.md) | Research / 后继 DB-049 | 文献与源码证据、区间复用及稀疏 Patch 候选；用户后续选择静态比较并降低冷读优先级，具体施工转入 DB-049 |
 | [DB-047 List<T> 内容对象](0047-list-content-object-slice.md) | Implemented / G0–G3 已验收 | 完整槽组合、简单位置 Delta、List owner Upgrade、统一目录和 history v5；各测试项目与七组真实包通过；高效插入 Diff/Patch 后继选型 |
 | [DB-046 统一闭合 Schema 目录](0046-unified-schema-catalog-slice.md) | Implemented / G0–G3 已通过验收 | 合并 Schema/表示记录及单批次登记；exact base/inline 依赖按 ID 寻址；保留当前闭合与版本规则；完整 tests 与四组真实包通过 |

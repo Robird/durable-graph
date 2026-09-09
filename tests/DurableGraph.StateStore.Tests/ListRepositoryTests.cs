@@ -18,10 +18,10 @@ public sealed class ListRepositoryTests : IDisposable {
 
     [Fact]
     public void SessionFreezesWriterAndReopenSwitchesAlgorithmWithoutNewRepresentationOrForcedBase() {
-        StateModelRegistry models = Models(ListDeltaAlgorithm.LocalResync);
+        StateModelRegistry models = Models();
         List<int> values = Enumerable.Range(10000, 1000).ToList();
         World world = new() { Values = values, Alias = values };
-        FrameAddress seed, local, myers, position;
+        FrameAddress seed, adaptive, myers, local, position;
         ObjectId listId;
         byte[] registered;
         using (GraphRepository repository = CreateRepository()) {
@@ -30,20 +30,21 @@ public sealed class ListRepositoryTests : IDisposable {
             // rather than consulting the mutable registry when it first closes a List.
             models.UseListDeltaAlgorithm(ListDeltaAlgorithm.Position);
             seed = session.Commit(NoRebase);
-            values.Insert(0, 7);
-            local = session.Commit(NoRebase);
+            values.InsertRange(0, Enumerable.Range(7, 33));
+            values[^1] = 3;
+            adaptive = session.Commit(NoRebase);
             Assert.Same(values, session.World.Values);
         }
         registered = File.ReadAllBytes(Path.Combine(_root, "schemas.rbf"));
         using (SegmentStore segments = OpenState()) {
             StateRevisionStore store = new(segments);
-            ObjectVersionRecord delta = Assert.Single(store.Read(local).LocalObjects);
+            ObjectVersionRecord delta = Assert.Single(store.Read(adaptive).LocalObjects);
             listId = new(delta.ObjectId);
-            // A head insertion into 1000 unchanged elements has a tiny range Delta.
-            // This is a payload-size witness for the frozen LocalResync selection;
-            // Position would rewrite the suffix, so this check is not just a setting getter.
+            // Inserting 33 items exceeds Local's lookahead, and changing the tail
+            // prevents its suffix shortcut. The tiny Delta witnesses the frozen
+            // Adaptive choice completing Myers rescue, not merely a setting getter.
             Assert.Equal(ObjectVersionKind.Delta, delta.Kind);
-            Assert.True(delta.Body.Length < 40);
+            Assert.True(delta.Body.Length < 100);
         }
 
         models.UseListDeltaAlgorithm(ListDeltaAlgorithm.BoundedMyers);
@@ -52,6 +53,14 @@ public sealed class ListRepositoryTests : IDisposable {
             Assert.Equal(7, session.World.Values![0]);
             session.World.Values.Insert(500, 8);
             myers = session.Commit(NoRebase);
+        }
+        Assert.Equal(registered, File.ReadAllBytes(Path.Combine(_root, "schemas.rbf")));
+
+        models.UseListDeltaAlgorithm(ListDeltaAlgorithm.LocalResync);
+        using (GraphRepository reopened = GraphRepository.OpenExisting(_root)) {
+            using GraphSession<World> session = reopened.Load<World>(models);
+            session.World.Values!.Insert(750, 9);
+            local = session.Commit(NoRebase);
         }
         Assert.Equal(registered, File.ReadAllBytes(Path.Combine(_root, "schemas.rbf")));
 
@@ -65,10 +74,11 @@ public sealed class ListRepositoryTests : IDisposable {
         Assert.Equal(registered, File.ReadAllBytes(Path.Combine(_root, "schemas.rbf")));
         using (SegmentStore segments = OpenState()) {
             StateRevisionStore store = new(segments);
-            Assert.Equal(seed, store.Read(local).ParentRevisionAddress);
-            Assert.Equal(local, store.Read(myers).ParentRevisionAddress);
-            Assert.Equal(myers, store.Read(position).ParentRevisionAddress);
-            foreach (FrameAddress revision in new[] { myers, position }) {
+            Assert.Equal(seed, store.Read(adaptive).ParentRevisionAddress);
+            Assert.Equal(adaptive, store.Read(myers).ParentRevisionAddress);
+            Assert.Equal(myers, store.Read(local).ParentRevisionAddress);
+            Assert.Equal(local, store.Read(position).ParentRevisionAddress);
+            foreach (FrameAddress revision in new[] { myers, local, position }) {
                 ObjectVersionRecord change = Assert.Single(store.Read(revision).LocalObjects);
                 Assert.Equal(listId.Value, change.ObjectId);
                 Assert.Equal(ObjectVersionKind.Delta, change.Kind);
@@ -78,13 +88,19 @@ public sealed class ListRepositoryTests : IDisposable {
             // Decode historical versions with an unrelated writer choice. All deltas
             // share one reader and inherit the same Base representation.
             StateModelSnapshot readers = Models().Snapshot(schemas);
+            RepresentationId representation = TypedObjectVersionReader.DecodeBase(store.ReadObjectVersionChain(seed, listId.Value), schemas).RepresentationId;
+            foreach (FrameAddress revision in new[] { adaptive, myers, local, position }) {
+                Assert.Equal(representation, TypedObjectVersionReader.DecodeBase(store.ReadObjectVersionChain(revision, listId.Value), schemas).RepresentationId);
+            }
             Assert.Equal(1000, RevisionDecoder.ReadSnapshot(store, schemas, seed, readers).GetRequired(listId).GetListState<int>().Count);
-            Assert.Equal(1001, RevisionDecoder.ReadSnapshot(store, schemas, local, readers).GetRequired(listId).GetListState<int>().Count);
+            Assert.Equal(1033, RevisionDecoder.ReadSnapshot(store, schemas, adaptive, readers).GetRequired(listId).GetListState<int>().Count);
             FrozenListState<int> final = RevisionDecoder.ReadSnapshot(store, schemas, position, readers).GetRequired(listId).GetListState<int>();
-            Assert.Equal(1002, final.Count);
+            Assert.Equal(1035, final.Count);
             Assert.Equal(7, final[0]);
             Assert.Equal(42, final[1]);
             Assert.Equal(8, final[500]);
+            Assert.Equal(9, final[750]);
+            Assert.Equal(3, final[^1]);
         }
     }
 
@@ -92,6 +108,7 @@ public sealed class ListRepositoryTests : IDisposable {
     [InlineData(ListDeltaAlgorithm.Position)]
     [InlineData(ListDeltaAlgorithm.LocalResync)]
     [InlineData(ListDeltaAlgorithm.BoundedMyers)]
+    [InlineData(ListDeltaAlgorithm.Adaptive)]
     public void SharedListCyclesResizeAndChildOnlyChangesKeepIdentityAcrossColdReopen(ListDeltaAlgorithm algorithm) {
         World world = new() { Values = Enumerable.Range(10000, 100).ToList() };
         World child = new() { Value = 3, Values = world.Values };
@@ -248,7 +265,7 @@ public sealed class ListRepositoryTests : IDisposable {
         public byte Value;
     }
     private readonly record struct State(ObjectId Values, ObjectId Alias, ObjectId Links, byte Value);
-    private static StateModelRegistry Models(ListDeltaAlgorithm algorithm = ListDeltaAlgorithm.LocalResync) {
+    private static StateModelRegistry Models(ListDeltaAlgorithm? algorithm = null) {
         CapturedStatePreparation<State> prepare = new(Schema, Base, Delta);
         StateReaderBinding<State> reader = new(Schema, Read, Apply, Visit);
         StateModelBinding<World, State> model = new(prepare, [reader], row => row.GetState<State>(), static () => new(),
@@ -261,7 +278,7 @@ public sealed class ListRepositoryTests : IDisposable {
                 context.CaptureObject(world.Alias, NumbersType), context.CaptureObject(world.Links, LinksType), world.Value), Visit);
         StateModelRegistry registry = new();
         registry.Register(model);
-        registry.UseListDeltaAlgorithm(algorithm);
+        if (algorithm is { } selected) { registry.UseListDeltaAlgorithm(selected); }
         return registry;
     }
     private static void Visit(in State state, IStateReferenceVisitor visitor) {

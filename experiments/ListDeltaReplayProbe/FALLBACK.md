@@ -2,8 +2,8 @@
 
 设计选择与实验边界见 [DB-050](../../docs/design-branches/0050-list-fallback-research.md)；本文件保留复现与证据。
 
-后继为已选、尚未实施的 [DB-051](../../docs/design-branches/0051-bounded-list-delta-competition.md)：完整 Local 基准与限长竞争，
-使用独立搜索预算。下面的共享/半预算实验结果不代表新默认的实测性能。
+后继 [DB-051](../../docs/design-branches/0051-bounded-list-delta-competition.md) 已实施完整 Local 基准与限长竞争，
+使用独立搜索预算，新默认实测见 [ADAPTIVE.md](ADAPTIVE.md)。下面的共享/半预算实验结果保留原历史条件。
 
 本轮比较 Myers-first 失败后转 Local，以及 Local-first 窗口停滞时单次 Myers 救援，
 共用原有总比较额度，并与三种原算法对照。协调器留在 Probe，产品公开选择和 codec 不变。

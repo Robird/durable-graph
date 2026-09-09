@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [ValidateSet('ordinary', 'whitebox', 'fallback')]
+    [ValidateSet('ordinary', 'whitebox', 'fallback', 'adaptive')]
     [string] $Suite = 'ordinary',
     [string] $Counts = '32',
     [int] $Repeats = 1,

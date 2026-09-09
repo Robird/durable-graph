@@ -7,6 +7,8 @@ public sealed class ListBindingCatalogTests {
     public void AlgorithmSelectionIsFrozenBeforeLazyBindingAndDoesNotAffectLayoutOrReader() {
         StateModelRegistry registry = new();
         StateModelSnapshot initial = registry.Snapshot();
+        registry.UseListDeltaAlgorithm(ListDeltaAlgorithm.LocalResync);
+        StateModelSnapshot local = registry.Snapshot();
         registry.UseListDeltaAlgorithm(ListDeltaAlgorithm.Position);
         StateModelSnapshot position = registry.Snapshot();
         registry.UseListDeltaAlgorithm(ListDeltaAlgorithm.BoundedMyers);
@@ -18,19 +20,33 @@ public sealed class ListBindingCatalogTests {
             Assert.True(snapshot.TryGetCurrentObjectBinding(typeof(List<int>), out ObjectBinding? binding));
             return Assert.IsAssignableFrom<ListObjectBinding>(binding);
         }
-        ListObjectBinding a = Bind(initial), b = Bind(position), c = Bind(myers);
-        Assert.Equal(ListDeltaAlgorithm.LocalResync, a.DeltaAlgorithm);
+        ListObjectBinding a = Bind(initial), b = Bind(position), c = Bind(myers), d = Bind(local);
+        Assert.Equal(ListDeltaAlgorithm.Adaptive, a.DeltaAlgorithm);
         Assert.Equal(ListDeltaAlgorithm.Position, b.DeltaAlgorithm);
         Assert.Equal(ListDeltaAlgorithm.BoundedMyers, c.DeltaAlgorithm);
+        Assert.Equal(ListDeltaAlgorithm.LocalResync, d.DeltaAlgorithm);
         Assert.Same(a, Bind(initial));
         Assert.Equal(a.CurrentLayout, b.CurrentLayout);
         Assert.Equal(a.CurrentLayout, c.CurrentLayout);
+        Assert.Equal(a.CurrentLayout, d.CurrentLayout);
         Assert.Equal(a.CurrentLayout, myers.ResolveObjectReader(a.CurrentLayout).Layout);
+
+        // Cover the constructor's independent default as well as the registry field:
+        // neither entry point may silently retain the previous Local default.
+        Assert.Equal(ListDeltaAlgorithm.Adaptive, Bind(new StateModelSnapshot([], [], [])).DeltaAlgorithm);
+        registry.UseListDeltaAlgorithm(ListDeltaAlgorithm.Adaptive);
+        Assert.Equal(ListDeltaAlgorithm.Adaptive, Bind(registry.Snapshot()).DeltaAlgorithm);
+        Assert.Equal(ListDeltaAlgorithm.Position, Bind(position).DeltaAlgorithm);
 
         StateValueBinding element = initial.ResolveCurrentValue(typeof(int));
         Assert.Throws<ArgumentOutOfRangeException>(() => ListObjectBinding.Create(typeof(List<int>),
             new(element.Slot), element, algorithm: (ListDeltaAlgorithm)999));
-        Assert.Equal(ListDeltaAlgorithm.LocalResync, ListObjectBinding.Create(typeof(List<int>), new(element.Slot), element).DeltaAlgorithm);
+        Assert.Equal(ListDeltaAlgorithm.Adaptive, ListObjectBinding.Create(typeof(List<int>), new(element.Slot), element).DeltaAlgorithm);
+        foreach (ListDeltaAlgorithm algorithm in Enum.GetValues<ListDeltaAlgorithm>()) {
+            ListObjectBinding binding = ListObjectBinding.Create(typeof(List<int>), new(element.Slot), element, algorithm: algorithm);
+            Assert.Equal(algorithm, binding.DeltaAlgorithm);
+            Assert.Equal(a.CurrentLayout, binding.CurrentLayout);
+        }
     }
 
     [Theory]

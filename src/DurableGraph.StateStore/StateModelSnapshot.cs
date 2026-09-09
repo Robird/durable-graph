@@ -27,7 +27,7 @@ internal sealed partial class StateModelSnapshot : StateBindingContext {
         Dictionary<string, StateDefinitionBinding>? definitions = null, SchemaStore? schemas = null,
         Dictionary<Type, StateValueUpgradeRuleSet>? valueUpgradeRules = null,
         Type? arrayElementUpgradeRuleSet = null, Type? listElementUpgradeRuleSet = null,
-        ListDeltaAlgorithm listDeltaAlgorithm = ListDeltaAlgorithm.LocalResync) {
+        ListDeltaAlgorithm listDeltaAlgorithm = ListDeltaAlgorithm.Adaptive) {
         _models = models;
         _types = types;
         _readers = readers;

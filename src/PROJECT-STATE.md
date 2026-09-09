@@ -1,6 +1,6 @@
 # DurableGraph 产品开发工作集
 
-> 校准：2026-09-09，[DB-049](../docs/design-branches/0049-list-range-delta-and-matcher-trial-slice.md) 已完成 G0–G4 验收。本文只维护当前能力、边界与续工入口。
+> 校准：2026-09-09，[DB-051](../docs/design-branches/0051-bounded-list-delta-competition.md) 已完成 G0–G5 验收。本文只维护当前能力、边界与续工入口。
 > 文档不是实现授权；事实以当前源码、测试和工具输出为准。
 
 ## 从这里继续
@@ -18,15 +18,17 @@
 
 ## 当前焦点
 
-[DB-051](../docs/design-branches/0051-bounded-list-delta-competition.md) 已形成经子代理审阅的施工计划，**下一轮实施，当前尚未改代码**：
-完整 Local Delta 作基准，停滞时尝试独立有界 Myers，并在竞争编码达到基准长度时停止；计划新增默认 Adaptive，保留三种显式旧算法。
-先流式输出 patch 去掉整段临时缓冲，再实现严格长度竞争；主要保证为候选 body 不大于原 Local，细分关卡/所有权/验证见该计划。
+[DB-051](../docs/design-branches/0051-bounded-list-delta-competition.md) 已完成默认 Adaptive：
+完整 Local Delta 作基准，停滞时尝试独立有界 Myers；只有严格更短的完整 body 胜出，达到基准长度即停止竞争编码。
+流式 patch 删除整段临时缓冲，三个显式旧 writer 保留；主要保证为候选 body 不大于原 Local。
+根构建/全量测试、真实包、白盒落盘、双 seed 矩阵及独立审查通过；成本与边界见[实测记录](../experiments/ListDeltaReplayProbe/ADAPTIVE.md)。
+当前施工已收口；下一个功能分片尚未选定，按路线图中的实际需求继续，不自动扩展匹配优化。
 
 [DB-049](../docs/design-branches/0049-list-range-delta-and-matcher-trial-slice.md) 已实现静态 StateEquals、统一 List codec 2，
 Position/LocalResync/BoundedMyers 共用 decoder，配置随模型 snapshot 冻结；根构建/tests、相关真实包和独立审查通过。
 [ListDeltaReplayProbe](../experiments/ListDeltaReplayProbe/README.md) 的普通落盘、[白盒](../experiments/ListDeltaReplayProbe/WHITEBOX.md)及
 [DB-050 回退研究](../experiments/ListDeltaReplayProbe/FALLBACK.md)保留证据：算法互补但搜索成功不保证 bytes 更小。
-**当前产品默认仍为 LocalResync**；保存成本与实际字节为主要评价，冷读优化最低优先级。后续项在[路线图](../docs/DurableGraph-research-roadmap.md#32-list-差分算法选型与设计)。
+当前默认 Adaptive，格式仍为 codec 2；保存成本与实际字节为主要评价，冷读优化最低优先级。后续优化仅按实测触发，见[路线图](../docs/DurableGraph-research-roadmap.md#32-list-差分算法选型与设计)。
 [DB-047](../docs/design-branches/0047-list-content-object-slice.md) 的完整元素闭包、冻结/恢复、List owner Upgrade 与 history v5 继续沿用。
 
 [DB-046 统一闭合目录](../docs/design-branches/0046-unified-schema-catalog-slice.md) 的单批次登记、exact 整数依赖，
@@ -43,7 +45,7 @@ Position/LocalResync/BoundedMyers 共用 decoder，配置随模型 snapshot 冻�
 
 | 层 | 已验证能力 | 尚未闭合的边界 |
 |---|---|---|
-| [DurableGraph](DurableGraph/DurableGraph.csproj) | immutable Schema/exact DAG；统一 ObjectBinding、ObjectLayout、Capture/refs/恢复目录；SZ/rank 2–4 数组与 List owned 状态；静态 StateEquals、数组稀疏/列表区间 Delta、三种 List writer；独立 historical reader | 其他 BCL、数组协变；持久发布由 StateStore 拥有 |
+| [DurableGraph](DurableGraph/DurableGraph.csproj) | immutable Schema/exact DAG；统一 ObjectBinding、ObjectLayout、Capture/refs/恢复目录；SZ/rank 2–4 数组与 List owned 状态；静态 StateEquals、数组稀疏/列表区间 Delta、默认 Adaptive 与三种显式 List writer；独立 historical reader | 其他 BCL、数组协变；持久发布由 StateStore 拥有 |
 | [Generator](DurableGraph.Generator/DurableGraph.Generator.csproj) / [Build](DurableGraph.Build/DurableGraph.Build.csproj) | class/struct 开放模板、readonly DTO/静态 body、Capture/Hydrate、泛型继承与递归数组/List 组合；history v5；三参 Upgrade/旧二参适配、值规则/局部依赖 adapter | 其他 BCL；跨程序集生成规则 |
 | [StateStore](DurableGraph.StateStore/DurableGraph.StateStore.csproj) | 统一闭合 Schema/数组/List 目录与整数依赖、单批次登记、Base v4 ID 头；完整 stored/current 引用验证、可达图两阶段恢复；公开 PrepareNew/fixed-Parent Prepare；GraphRepository 单 head/持久 WorldId 与 GraphSession 同实例 Commit；升级 Base/Remove | 无 branch/Reset/根替换或联合 Store 视图 |
 | [Storage](DurableGraph.StateStore.Storage/DurableGraph.StateStore.Storage.csproj) | AppendDurably 原 lease 屏障；local Base/Delta records、wire v3、exact Revision live map、Parent/prior 校验、object-first 原始重建链及实际 payload H；Base 精确/Delta 上界计量；真实 Segment/RBF 冷重开 | 不解码 typed body；不拥有持久 roots、类型目录或发布 head；重复读取暂未缓存 |
@@ -178,8 +180,9 @@ Position/LocalResync/BoundedMyers 共用 decoder，配置随模型 snapshot 冻�
   ListLayout 只含 exact 元素槽和 codec 版本，Count 属于 owned FrozenListState；Capacity 不持久化。
   同实例 resize 保持 ObjectId/表示 ID；Base=count+元素，codec 2 Delta=newCount+Copy/New/CopyAndPatch 区间，旧 codec 1 拒绝。
   Prepare/Apply 保持 prior/candidate 独立；source 可重复/倒序，只读 prior，区间内使用严格局部稀疏子 patch。
-  UseListDeltaAlgorithm 选择 Position/LocalResync/BoundedMyers，默认 LocalResync；配置冻结到会话模型 snapshot，不进入布局/格式/表示 ID。
-  matcher 不编码，搜索有界、回退按位置配对；整个 NoChange 判定独立于搜索预算。性能选择与保留边界见路线图 §3.2。
+  UseListDeltaAlgorithm 选择 Position/LocalResync/BoundedMyers/Adaptive，默认 Adaptive；配置冻结到会话模型 snapshot，不进入布局/格式/表示 ID。
+  三种纯 matcher 不编码且拒绝 Adaptive；Adaptive 在 writer 层保留完整 Local，并按停滞信号竞争独立有界 Myers，只接受严格更短 body。
+  限长按实际输出在元素调用边界检查，不能视作峰值内存上限；整个 NoChange 判定独立于搜索预算。性能选择与保留边界见路线图 §3.2。
   UseListElementUpgrades 独立于数组规则选择，空 List 同样预绑定；每个共享 List 归一化一次，保留 ID/count 并强制 Base。
   UpgradeContext.ListCount 随子工具继承，不复用 ArrayShape；历史 reader 不依赖旧领域 struct CLR 类型。
 - Generator 中未注册的 graph operations probe 和 tests 中 logical graph R1–R3b 是机制见证，不能算产品通用图能力。

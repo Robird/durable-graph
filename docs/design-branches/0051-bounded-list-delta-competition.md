@@ -1,9 +1,12 @@
 # DB-051：完整基准与限长竞争的默认 List Delta
 
-状态：**Chosen / 施工计划；尚未实施**。2026-09-09。
+状态：**Implemented / G0–G5 已验收**。2026-09-09。
 
 用户已选定主干：保留一个完整候选，第二候选边编码边检查长度，只采用严格更短者；
-下一轮实施并成为默认行为。本轮只形成计划及审阅，不修改产品代码。
+本轮按该合同实现默认 Adaptive；验收记录在文末，后续优化不随本片展开。
+
+实测摘要：两 seed 各 220 frozen pairs 均为 4 更短、216 等长、0 更大；完整结果、成本和制品见
+[ADAPTIVE.md](../../experiments/ListDeltaReplayProbe/ADAPTIVE.md)。下文保留本片合同，§10 记录对应实现与验收。
 
 ## 1. 要解决的问题与验收保证
 
@@ -24,16 +27,16 @@ Apply(Adaptive.Body, prior) == current
 不承诺全局最优配对、每个输入都尝试 Myers、整个 Revision/Repository 写入量或时间/峰值内存不增。
 后续 Base/Delta 策略继续按原 envelope/B/D/H 规则决策。
 
-## 2. 从当前代码出发
+## 2. 施工起点
 
 - [ListDeltaMatcher](../../src/DurableGraph/ListDeltaMatcher.cs)已有可暂停 Local、明确 WindowMiss/BudgetExhausted、
   失败不改结果的 Myers kernel，以及独立 old/new offset。
 - [ListStateBody](../../src/DurableGraph/ListStateReader.cs)负责 NoChange、按计划写 codec 2；
-  目前 CopyAndPatch 先写整段临时 buffer，末尾才复制到外层。
+  施工前 CopyAndPatch 先写整段临时 buffer，末尾才复制到外层。
 - [PreparedDeltaBody](../../src/DurableGraph.StateStore.Serialization/Serialization/PreparedDeltaBody.cs)
   复制传入 bytes，拥有私有数组。原图冻结和候选生命周期无需改变。
 - DB-050 的两个组合策略在 Probe，采用一份共享预算和半预算救援；**本片不直接提升这些实验协调器**。
-- 当前默认仍是 LocalResync；下面的 Adaptive、限长编码和默认切换均为下一轮工作。
+- 施工前默认是 LocalResync；下面保留本片的 Adaptive、限长编码和默认切换合同。
 
 ## 3. 默认协调流程
 
@@ -227,7 +230,7 @@ dotnet test DurableGraph.slnx --no-build
 只在出现新缺陷或测量疑点时扩展测试，不机械重跑全部无关 package lanes。
 
 完工后更新 src/PROJECT-STATE、目标设计、路线图、术语表中受影响的默认/算法说明及 Probe 当前状态；
-保留历史证据与后继链接。可以按关卡自主提交，不推送。当前文档不授权在本轮提前执行这些代码任务。
+保留历史证据与后继链接。提交按用户本轮授权进行，不推送。
 
 ## 9. 审阅记录
 
@@ -235,3 +238,23 @@ dotnet test DurableGraph.slnx --no-build
 审阅纳入：流式 patch 删除 pending buffer；实际 WrittenCount 与 GetSpan 区别；Try 失败及异常界限；
 独立搜索预算与完整基准；Adaptive/pure matcher/实验覆盖的分派区别；默认入口和枚举全覆盖；
 触发边界及短尾预算误报；固定重构前预期防止测试自证。后续代码仍必须通过 §7–8 的验收。
+
+## 10. 实施与验收记录
+
+| 关卡 | 实现与证据 |
+|---|---|
+| G0 / G2 | ListStateBody 的共享 TryEncodePlan 流式输出，按实际 WrittenCount 进行严格上限判断；[encoder tests](../../tests/DurableGraph.Tests/ListBoundedEncoderTests.cs)覆盖独立 golden、全部截止点、相等/超额、异常、反序/重复源、varint 与空 struct |
+| G1 | PlanLocal 暂停/消费已检查 pair/恢复，TryPlanMyers 区分完成与位置回退；[observation tests](../../tests/DurableGraph.Tests/ListDeltaObservationTests.cs)固定旧坐标、比较顺序/次数和 33/34、预算边界，并比较随机路径 |
+| G3 | [ListDeltaCompetition](../../src/DurableGraph/ListDeltaCompetition.cs)提供完整基准、独立预算及真实长度竞争；[协调 tests](../../tests/DurableGraph.Tests/ListAdaptiveDeltaTests.cs)覆盖 NoChange、override、失败、同计划、严格更短、不同计划等长及随机/ID/浮点；[真实 SG Marker](../../tests/DurableGraph.Tests/ListAdaptiveGeneratedTests.cs)覆盖嵌套 struct 反例 |
+| G4 | 四处默认均为 Adaptive，枚举旧值保留；[binding tests](../../tests/DurableGraph.StateStore.Tests/ListBindingCatalogTests.cs)与[Repository tests](../../tests/DurableGraph.StateStore.Tests/ListRepositoryTests.cs)验证冻结、真实救援、切换旧 writer、相同表示、循环及冷重开；Probe 区分四种 writer 与三种纯 matcher |
+| G5 | 根 build 零警告/错误；全量 **1612 tests**（Runtime 854、StateStore 500、Serialization 103、Storage 155）通过；独立核心/集成审查无未决问题 |
+
+- 基线为 1545 tests；新增和扩展测试已通过。实施中发现新生成测试夹具错误调用 internal Snapshot，已把
+  snapshot/Capture 操作移回测试宿主，没有放宽产品 API 或编译校验。
+- 真实 `Run-ListProbe.ps1` 通过，包括 history、共享 owner Upgrade、强制 Base 后 Delta、删除历史领域 struct 和冷重开；
+  制品为 `experiments/PackageConsumerProbe/obj/list-20260909110514-47428-28cec0ba`。
+- 普通落盘 20 个实测仓库 / 300 Revision；白盒 120 个实测仓库 / 240 Revision；两个 seed 各 220 pairs / 2640 observations；
+  原 DB-050 planFactory smoke 84 pairs / 420 observations 均通过。具体 warmup、计量边界、SHA-256 与路径见 ADAPTIVE。
+- 独立审阅补入不同计划恰好 1161 B 的平局回归；Marker 34 保留 207 B，竞争者在 220 B 截止，没有交付 1455 B 候选。
+- 未修改 Schema/history、表示 ID、List codec 2、reader 或外层保存/发布协议；没有池化、逐字段抢占或区域编码复用。
+  完整基准的准备成本仍存在；普通轨迹测得隔离 Diff 约增加 11–14%、累计分配约增加 3.6%，不作时间/内存不退化承诺。

@@ -28,7 +28,7 @@ internal sealed record Settings(int[] Counts, int Repeats, int Rounds, int DiffR
         int y = int.Parse(Get("--y", "5"));
         string output = Path.GetFullPath(Get("--output", Path.Combine("experiments", "ListDeltaReplayProbe", "obj", "run-" + DateTime.UtcNow.ToString("yyyyMMddHHmmss") + "-" + Guid.NewGuid().ToString("N")[..8])));
         string baseline = Get("--baseline", "not-supplied");
-        if (values.Count != 0 || suite is not ("ordinary" or "whitebox" or "fallback") ||
+        if (values.Count != 0 || suite is not ("ordinary" or "whitebox" or "fallback" or "adaptive") ||
             (suite == "whitebox" && (counts.Any(count => count < 512) || rounds != 1)) ||
             counts.Length == 0 || counts.Any(count => count is < 8 or > 50_000) ||
             repeats is < 1 or > 20 || rounds is < 1 or > 20 || diffRepeats is < 1 or > 100 || x < 1 || y is < 1 or > 100) {
@@ -49,6 +49,7 @@ internal static class Program {
         Directory.CreateDirectory(settings.Output);
         if (settings.Suite == "whitebox") { Whitebox.Run(settings); return; }
         if (settings.Suite == "fallback") { FallbackTrial.Run(settings); return; }
+        if (settings.Suite == "adaptive") { AdaptiveTrial.Run(settings); return; }
         Edit[] script = Scripts.Create(settings.Seed, settings.Rounds);
         List<RunResult> runs = [];
         List<object> warmups = [];
@@ -144,7 +145,7 @@ internal static class Report {
                 Allocation = "GC.GetAllocatedBytesForCurrentThread, excludes other-thread allocations and unmanaged memory",
                 ObjectBytes = "actual decoded ObjectVersion payload, excluding ObjectId/membership/shared frames; physical file sizes separate",
                 Cold = "fresh file handles and bindings, not a flushed OS page cache; writable Repository reopen includes integrity validation and flush",
-                IsolatedDiff = "same frozen states read from each actual repository; direct product matcher, one untimed warmup per pair; all candidates Apply-verified including Base-selected cases" },
+                IsolatedDiff = "same frozen states read from each actual repository; direct product writer, one untimed warmup per pair; all candidates Apply-verified including Base-selected cases. Untimed diagnostics count complete writer equality/element calls; Adaptive must not exceed explicit Local body bytes." },
             Script = script, Warmups = warmups, Summary = summaries, Runs = runs,
         };
         File.WriteAllText(Path.Combine(settings.Output, "report.json"), JsonSerializer.Serialize(report, JsonOptions));

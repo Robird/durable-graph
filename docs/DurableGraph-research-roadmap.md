@@ -88,15 +88,16 @@ DB-009/010 的旧 no-reuse 前提不能沿用；借用 Base 共享 prior 等结�
 
 [DB-049](design-branches/0049-list-range-delta-and-matcher-trial-slice.md) 已完成静态比较、统一 codec 与三种 writer，
 独立 Repository 的同领域历史重放及 [DB-050 回退研究](../experiments/ListDeltaReplayProbe/FALLBACK.md)也已完成。
-**已选下一片为 [DB-051](design-branches/0051-bounded-list-delta-competition.md)，尚未实施**：完整 Local 基准、独立有界 Myers、
-严格限长竞争，并在验收后切换默认 Adaptive。用户接受触发路径的额外时间与短期分配，不再要求共享一份比较预算或只编码一次。
-当前实际默认仍为 LocalResync，从 PROJECT-STATE 查现有能力。
+[DB-051](design-branches/0051-bounded-list-delta-competition.md) 已验收默认 Adaptive：完整 Local 基准、独立有界 Myers、
+严格限长竞争。用户接受触发路径的额外时间与短期分配，不要求共享一份比较预算或只编码一次。
+当前能力与验收入口从 PROJECT-STATE 查阅；该片不保证每次触发都有收益，也不消除无停滞的重复值坏匹配。
+[实测](../experiments/ListDeltaReplayProbe/ADAPTIVE.md)保留完整基准的准备成本；若这成为真实消费者瓶颈，再按下面触发条件展开。
 
 DB-051 之外的性能工作以实际轨迹或测量问题触发，不自动扩大该施工片：
 
 - 实际列表尺寸、编辑分布或保存频率明显不同于合成样本时，用现有 Probe 调整规模/种子/预算，
   分别比较完整 Commit、隔离 Diff、分配和策略后的实际写入，不能拿 candidate body 当实际文件节省。
-- 候选配对的字节代价验收已经选定完整基准与限长竞争，转入 DB-051；后续若仍有开销问题，再研究
+- 候选配对的字节代价验收由 DB-051 的完整基准与限长竞争承担；后续若仍有开销问题，再研究
   元素级编码复用、池化、更细的子 codec 中断及已编码区间复用。保留 Marker 反例、重复值、边界控制和普通轨迹，不能只提高预算或按单例判优。
 - 大块搬移、全部元素微改同时插入等场景出现实际写入问题后，再比较哈希匹配、偏移配对或局部 New/Patch 竞价；
   新匹配策略只要输出同 grammar，就不增加格式版本。暂不引入 key/comparer、tracking 容器或全局最优脚本。

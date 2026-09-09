@@ -14,7 +14,8 @@ internal sealed record StepResult(string Workload, int Count, int Repeat, string
     double CommitMs, long CommitAllocatedBytes, int BaseWrites, int DeltaWrites, long BasePayloadBytes, long DeltaPayloadBytes,
     string ListWriteKind, int ListPayloadBytes, DiffResult? Diff, string StateFingerprint);
 internal sealed record DiffResult(int BaseBodyBytes, int DeltaBodyBytes, bool HasChanges,
-    double MillisecondsMedian, double MillisecondsMin, double MillisecondsMax, long AllocatedBytesMedian);
+    double MillisecondsMedian, double MillisecondsMin, double MillisecondsMax, long AllocatedBytesMedian,
+    ProductDiffDiagnostics Diagnostics);
 internal sealed record RunResult(string Workload, int Count, int Repeat, string Algorithm, string Directory,
     double SetupMs, long SetupAllocatedBytes, double ReopenAndLoadMs, long ReopenAndLoadAllocatedBytes,
     long StateFileBytes, long SchemaFileBytes, long PublicationFileBytes, StepResult[] Steps);
@@ -138,6 +139,7 @@ internal static class Replay {
             times[index] = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
             allocations[index] = GC.GetAllocatedBytesForCurrentThread() - allocated;
         }
+        ProductDiffDiagnostics diagnostics = ProductDiagnostics.Observe<TState, TOps>(prior, current, layout, algorithm, delta!);
         BinaryPayloadReader reader = new(delta!.Body);
         FrozenListState<TState> applied = ListStateBody<TState, TOps>.ApplyDelta(ref reader, prior, layout);
         reader.EnsureFullyConsumed();
@@ -154,7 +156,7 @@ internal static class Replay {
         }
         Array.Sort(times); Array.Sort(allocations);
         return new(currentBefore.Length, delta.Body.Length, delta.HasChanges,
-            Statistics.Median(times), times[0], times[^1], allocations[allocations.Length / 2]);
+            Statistics.Median(times), times[0], times[^1], allocations[allocations.Length / 2], diagnostics);
     }
 
     private static StateModelRegistry Models(ListDeltaAlgorithm? algorithm = null) {

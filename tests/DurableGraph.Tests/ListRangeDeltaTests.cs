@@ -53,6 +53,7 @@ public sealed class ListRangeDeltaTests {
     [InlineData(ListDeltaAlgorithm.Position)]
     [InlineData(ListDeltaAlgorithm.LocalResync)]
     [InlineData(ListDeltaAlgorithm.BoundedMyers)]
+    [InlineData(ListDeltaAlgorithm.Adaptive)]
     public void RandomSequencesRoundtripWithOneReaderAndIndependentInputs(ListDeltaAlgorithm algorithm) {
         Random random = new(49621);
         for (int trial = 0; trial < 350; trial++) {

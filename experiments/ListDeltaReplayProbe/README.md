@@ -1,8 +1,12 @@
 # List Delta domain-history replay
 
-DB-049's current-product experiment compares Position, LocalResync and BoundedMyers under one
-List codec. It references product projects and the real source generator, and copies no matcher.
-The first completed matrix and current default decision are recorded in [RESULTS.md](RESULTS.md).
+The product experiment compares Position, LocalResync, BoundedMyers and the default Adaptive writer
+under one List codec. Adaptive preserves a complete Local incumbent and permits only a strictly
+smaller, complete Myers challenger. It references product projects and the real source generator,
+and copies no matcher or codec. The construction contract is
+[DB-051](../../docs/design-branches/0051-bounded-list-delta-competition.md).
+Acceptance and measured costs are recorded in [ADAPTIVE.md](ADAPTIVE.md).
+The first three-writer matrix and its historical default decision are recorded in [RESULTS.md](RESULTS.md).
 Two white-box adverse families and boundary controls are described in [WHITEBOX.md](WHITEBOX.md).
 Research-only complementary fallback coordinators and byte-cost counterexamples are in [FALLBACK.md](FALLBACK.md).
 The executable uses Runtime/StateStore test friendship only for obtaining closed element operations
@@ -25,24 +29,31 @@ Run from the repository root, with no competing builds or benchmark processes:
 
 # Research on identical captured frozen pairs; raw payloads, no repository publication.
 ./experiments/ListDeltaReplayProbe/Run-Probe.ps1 -Suite fallback -Counts '32,512,4096' -Repeats 3 -DiffRepeats 9
+
+# DB-051: four product writers on those same fixture families, including Marker and duplicates.
+# Set DOTNET_TieredCompilation=0 for a representative measurement and record it in the output.
+./experiments/ListDeltaReplayProbe/Run-Probe.ps1 -Suite adaptive -Counts '32,512,4096' -Repeats 3 -DiffRepeats 9 -Seed 49001
+./experiments/ListDeltaReplayProbe/Run-Probe.ps1 -Suite adaptive -Counts '32,512,4096' -Repeats 3 -DiffRepeats 9 -Seed 49002 -NoBuild
 ```
 
 The runner builds Release unless `-NoBuild` is supplied. `-Output` must name a new directory;
 existing repositories are never adopted, deleted or reused. Defaults retain artifacts below ignored
-`obj/`. The representative run executes 1,890 measured Commit calls and 60 warmup Commit calls;
+`obj/`. The representative ordinary run executes 2,520 measured Commit calls and 80 warmup Commit calls;
 budget several minutes depending on flush latency and historical-chain verification. The smoke
-executes 225 measured plus 60 warmup Commit calls. No timeout changes the algorithms or pass criteria.
+executes 300 measured plus 80 warmup Commit calls. No timeout changes the algorithms or pass criteria.
 Count accepts 8–50,000, Repeats 1–20, Rounds 1–20, DiffRepeats 1–100. `-Seed`,
 `-ReadAmplification` (X, default 8) and `-BaseBudgetPercent` (Y, default 5) are recorded unchanged
 for every algorithm. The widest inline workload caps count at 512 and deduplicates capped sizes.
 
 `-Suite ordinary` is the default. `-Suite whitebox` defaults to Count 4096, requires Count >= 512
 and Rounds = 1, and uses deterministic single-edit histories without Seed. It runs five cases
-(two adverse cases and three controls), each in its own repository, plus 15 warmup repositories.
+(two adverse cases and three controls), each in its own repository, plus 20 warmup repositories.
 It reuses the same Commit, historical Load, candidate Apply and frozen-input checks. In addition,
 `whitebox.json` records instrumented comparison counts, known optimal unchanged-pair counts,
-independent relaxed-bound diagnostics and isolated matcher time/allocation; `whitebox.md` summarizes
-them. Counters are excluded from timing. Saved data always uses the unmodified product budgets.
+independent relaxed-bound diagnostics and isolated matcher time/allocation for the three standalone
+matchers. Adaptive is measured as a complete writer, including body/persistence bytes and competition
+diagnostics; it is never passed to `ListDeltaMatcher.Plan`. `whitebox.md` summarizes both views.
+Counters are excluded from timing. Saved data always uses the unmodified product budgets.
 See WHITEBOX for the run with tiered compilation disabled to reduce JIT phase interference.
 
 `-Suite fallback` retains three baseline writers and compares two experiment-only coordinators.
@@ -53,6 +64,21 @@ must still be fresh. Existing Counts/Repeats/Rounds/DiffRepeats limits apply; in
 use at least 512 elements and wide-value cases at most 512, while the fixed Marker cases have 34/48/65
 elements. This suite does not add public algorithms or change the default. See FALLBACK for
 acceptance, exact measurement boundaries, formal runs and the remaining byte-cost decision.
+
+`-Suite adaptive` reuses exactly those generated captured pairs and adds the product Adaptive writer
+alongside the three explicit product writers. It calls the actual product entry without a plan factory
+or the research coordinators; no standalone matcher metric is invented for Adaptive. `adaptive.json`
+and `adaptive.md` report complete Diff time/allocation, raw body size, complete incumbent size,
+competition outcome, actual challenger bytes at completion/cutoff, and independent search budget B
+per matcher. Untimed wrappers count whole-writer StateEquals calls and direct element WriteBase /
+PrepareDelta calls; they do not count recursively expanded generated struct fields. Eight warmups
+precede each timing series. Every candidate Apply-validates and leaves both input encodings unchanged;
+every Adaptive body must be no longer than explicit Local, with identical HasChanges. Same fixture,
+repeat and algorithm order rules apply. No time/allocation nonregression requirement is imposed.
+This mode produces no repositories and does not model outer Base/Delta policy choices. An atomic
+child call can pass the byte ceiling before the next checkpoint; reported cutoff bytes are actual
+written bytes, not an estimated upper bound or a peak-memory guarantee. Historical DB-050 results
+remain frozen and describe its original shared-budget research coordinators.
 
 Workloads and script:
 
@@ -86,7 +112,9 @@ Reflection closes the generic test entry outside timing; one untimed call preced
 Every candidate is Apply-checked even when the storage policy selected Base, and both inputs are
 checked against their original Base encodings. StateEquals, HasChanges and reconstructed bytes must
 agree. This local measurement excludes Capture/Base preparation by design and supplements rather
-than replaces the whole-Commit measurements.
+than replaces the whole-Commit measurements. A separate untimed instrumented call verifies identical
+bytes and records the same competition/element-call diagnostics used by the adaptive suite; Adaptive
+is also checked against explicit Local on every consecutive state pair.
 
 Reports:
 
@@ -94,7 +122,8 @@ Reports:
   generated script, warmup/setup/initial publication, individual observations and median/min/max
   across fresh runs. Allocation is current-thread managed allocation, not peak memory or all-thread
   allocation. Matcher limits are read from product constants; the current comparison-budget formula
-  is documented alongside the binary fingerprints.
+  is documented alongside the binary fingerprints. Per-step Diff diagnostics include whole-writer
+  equality/child-call counts and the Adaptive competition outcome and cutoff bytes.
 - `steps.csv`: per-step Commit and isolated Diff samples, candidate sizes, actual Base/Delta counts
   and actual decoded ObjectVersion payload bytes, plus List-specific write kind/bytes.
 - `summary.md`: concise comparison. Correctness is the only automatic gate; no performance winner
@@ -109,4 +138,5 @@ Flush variability and full-graph work can obscure matcher differences; preserve 
 This is a bounded synthetic study, not a universal workload ranking or a peak-memory profiler.
 
 Current research context lives in [PROJECT-STATE.md](PROJECT-STATE.md); product authority and acceptance
-remain in [DB-049](../../docs/design-branches/0049-list-range-delta-and-matcher-trial-slice.md).
+remain in [DB-049](../../docs/design-branches/0049-list-range-delta-and-matcher-trial-slice.md) and
+[DB-051](../../docs/design-branches/0051-bounded-list-delta-competition.md).
