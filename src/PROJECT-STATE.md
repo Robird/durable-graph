@@ -22,7 +22,12 @@
 SchemaStore 只维护一种闭合记录和登记批次；class Schema 即其对象表示，exact base/inline 依赖使用节点 ID。
 一次追加/flush 后安装完整目录，旧双批次及转接 codec 已删除；领域身份、版本传播和 Upgrade 不变。
 前序 [DB-045](../docs/design-branches/0045-persisted-representation-id-slice.md) 的 Base v4 单 ID 边界继续沿用，旧 Base 格式拒绝。
-施工证据集中维护在 DB-046。后继模板与绑定简化按[路线图](../docs/DurableGraph-research-roadmap.md#31-版本化表示类型头的统一寻址)评估，尚未选择下一片。
+施工证据集中维护在 DB-046。
+
+下一片推荐 [DB-047 List<T> 内容对象](../docs/design-branches/0047-list-content-object-slice.md)，状态 Proposed，待用户采纳后实施。
+以完整已有元素闭包接入有序可变长度内容、融合 Delta 和列表 owner Upgrade；复用统一对象路径与目录。
+本轮只完成规划，尚无 List 产品代码。开放模板持久化暂不作为前置：剩余 Match 仍承担持久布局与代码历史的一致性核验，
+继续按[路线图](../docs/DurableGraph-research-roadmap.md#31-版本化表示类型头的统一寻址)的净简化条件重访。
 
 [DB-043](../docs/design-branches/0043-vector-array-object-slice.md) 已完成统一引用对象路径、可组合数组与数组元素 Upgrade；
 [DB-042](../docs/design-branches/0042-upgrade-schema-requirement-set.md) 已完成 plan 级 exact Schema 依赖证书；

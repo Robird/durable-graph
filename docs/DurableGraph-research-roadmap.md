@@ -10,8 +10,9 @@
 当前能力与已完成分片的验收从 PROJECT-STATE/其账本进入；这里仅保留后续增量。
 
 [DB-046 统一闭合 Schema 目录](design-branches/0046-unified-schema-catalog-slice.md) 已合并持久记录、批次和 exact 依赖引用。
-下一片尚未选择；可按 §3.1 评估开放模板是否能实质减少绑定复杂性，或为具体 BCL 消费者增加内容恢复，
-不预先引入通用容器平台。
+下一片推荐 [DB-047 List<T> 内容对象](design-branches/0047-list-content-object-slice.md)，Proposed，待采纳后实施。
+目标是支持完整已有元素闭包、同实例长度变化的融合 Delta、历史内容 Upgrade 与真实包冷重开；
+不预先引入通用容器平台。开放模板方案的评估结论与重访条件见 §3.1。
 DB-036 单 World/单 head 工作会话已实现；branch/Reset、联合 Store 视图及更强恢复保证仍独立排期。
 MVP 库内加载顺序为 exact 重建 → 单对象 Upgrade → 分配实例 → 填充/连接引用 → 完整交付 World；
 Transient 由用户在交付后处理，约束维护在[目标设计](DurableGraph-target-design-v0.md#恢复transient-与宿主边界)。
@@ -33,7 +34,7 @@ B/D/H 分别指本轮精确 Base payload、Delta payload 上界、已有对象�
 
 | 工作项 | 最小应回答的问题 | 设计或证据入口 |
 |---|---|---|
-| BCL 内容适配与恢复 | 复用统一 ObjectBinding 生命周期和静态值槽能力，逐类型明确内容、comparer、key/index 建立时机及内容 Upgrade；不保存 CLR 内部字段布局 | [DB-043](design-branches/0043-vector-array-object-slice.md)、[目标引用对象模型](DurableGraph-target-design-v0.md) |
+| BCL 内容适配与恢复 | 首片推荐 List<T>：ordered 内容、可变 Count、完整槽组合、单列表 owner Upgrade；Dictionary/Set 的 comparer、key/index 后继裁决；不保存 CLR 内部字段布局 | [DB-047（Proposed）](design-branches/0047-list-content-object-slice.md)、[目标引用对象模型](DurableGraph-target-design-v0.md) |
 
 ## 3. 尚待裁决的机制
 
@@ -67,6 +68,11 @@ DB-009/010 的旧 no-reuse 前提不能沿用；借用 Base 共享 prior 等结�
 会增加维护面；应先明确能删除哪些机制，并保留手工 Schema/reader 的自然入口。
 闭合 Schema 不能反推出字段原来声明为 `T` 还是固定 `int`，需要 SG/history 提供模板材料。
 
+2026-09-09 的[下一片评估](design-branches/0047-list-content-object-slice.md#1-为什么选择这一片)确认：
+当前目录冷读直接恢复闭合 Schema，Match 负责对 retained code history 的验证及 DTO 操作数推导；
+构造后匹配的往返主要在 current binding 与 Upgrade 端点推导。未找到能整体删除一条机制且不增加等价验证路径的小切片，
+故暂不推进模板持久化，推荐先做 List。重访应明确净删除/替换的路径，不能仅以新编码更紧密作为绑定重构理由。
+
 名义参数与 exact 值参数不能一律合并：`ArrayHolder<T>` 在数组引用边截断 exact 依赖，
 `Phantom<int>` 与 `Phantom<string>` 即使 DTO 相同也保持不同身份；纯 nominal 参数不得被强制要求拥有 exact Schema/provider。
 `Box<Point>` 若允许同模板版本绑定不同 Point exact 版本，会改变现有同 key 唯一布局政策及 Upgrade 路由，
@@ -82,7 +88,7 @@ DB-009/010 的旧 no-reuse 前提不能沿用；借用 Base 共享 prior 等结�
 | 延后项 | 何时重访 / 届时要回答的问题 |
 |---|---|
 | ObjectId 数字回收 | 单调分配配合其他机制开发后，再定义候选隔离、retire/reuse 时机与恢复；可评估 StateJournal SlabBitmap/SlotPool，不能复用旧对象 Delta 链 |
-| BCL 集合 | 基础引用/值和对象恢复形成消费者后；逐类型定义内容、顺序、comparer、共享和 key/index 建立时机 |
+| 后续 BCL 集合 | List 已进入 DB-047 提案；Dictionary/Set 等在该内容闭环后逐类型定义 comparer、共享、内容 Upgrade 和 key/index 建立时机，不随 List 自动加入范围 |
 | SchemaStore 后续能力 | MVP 单调注册已实现；联合 Commit/Ref 及复用 StateStore 的演进候选见下节，Dictionary 与内建类型 codec 完整后重访。多 writer、压缩/GC 另待真实需求 |
 | Schema/表示日志自动修复与分段 | 遇到真实坏尾恢复或容量需求时；无额外确认水位不能自动区分未完成尾部和已确认末帧损坏，当前严格拒绝。重访时先冻结故障模型，不绕过完整注册一致性 |
 | 发布恢复保证扩展 | DB-036 已闭合同实例 Commit、expected Parent、数据/发布屏障及严格重开；遇到真实可用性要求时再设计坏尾自动修复、OS crash/power loss 与目录持久性，不能默默回退旧 head |
