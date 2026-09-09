@@ -126,9 +126,9 @@ public sealed class StateValueUpgradeProvider {
 
     private static void ValidateEndpoint(TypeExpr type, int? version) {
         ArgumentNullException.ThrowIfNull(type);
-        if ((type.Kind is not (TypeExprKind.Builtin or TypeExprKind.Named) && !type.IsArray) ||
+        if ((type.Kind is not (TypeExprKind.Builtin or TypeExprKind.Named) && !type.IsArray && !type.IsList) ||
             version is <= 0 || (version.HasValue && type.Kind != TypeExprKind.Named)) {
-            throw new ArgumentException("A value rule requires a builtin, named or array pattern and only inline endpoints have versions.");
+            throw new ArgumentException("A value rule requires a builtin, named, array or List pattern and only inline endpoints have versions.");
         }
     }
 }

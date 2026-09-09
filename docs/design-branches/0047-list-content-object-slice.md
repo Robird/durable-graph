@@ -1,6 +1,6 @@
 # DB-047：List<T> 内容对象
 
-> 状态：**Chosen / 按两步安排收敛，尚未实施**，2026-09-09。
+> 状态：**Implemented / G0–G3 已通过验收**，2026-09-09。
 > 问题：在既有统一对象路径上，能否完整保存、恢复和升级一个可变长度的 BCL 内容对象，而不依赖其内部字段布局？
 > 最小成功见证：同一 `List<Point>` 实例连续增删改并 Commit，冷重开保留内容和共享身份；Point 升版后列表只升级一次、强制 Base，随后恢复普通 Delta。
 > 前置事实：[DB-043](0043-vector-array-object-slice.md) 的可组合数组和 [DB-046](0046-unified-schema-catalog-slice.md) 的统一闭合目录已实现。
@@ -173,5 +173,53 @@ List 自己是内容 Upgrade 的 owner，不由入边字段各自转换：
 代码完成后根 `dotnet build DurableGraph.slnx`、相关 focused tests、完整 solution tests；
 扩展 [PackageConsumerProbe](../../experiments/PackageConsumerProbe/README.md) 的 List 正常和跨版本包场景，
 并验证既有 Array/Generic/ValueUpgrade/StateStore 包路径未退化。
-只有 G3 的证据完成后才更新实现状态；本次规划没有运行或声称通过这些新增测试。
-届时把上述真实冻结状态与正确性场景作为后续算法选型素材；本片不以性能排名或紧凑插入编码作为完成条件。
+G3 证据记录于下节。真实冻结状态与正确性场景供后续算法选型复用；本片不以性能排名或紧凑插入编码作为完成条件。
+
+## 8. 实施与验收账本
+
+2026-09-09 用户授权实施本片。开工工作区干净，根 solution baseline build 为 0 警告、0 错误。
+G0 采用上文 TypeExpr=8、目录 kind=4、history/manifest v5 及位置 Delta 语法；不改变既有 Base v4/发布协议。
+
+| 合同 | 实施责任与入口 | 验证状态 |
+|---|---|---|
+| List nominal/layout、owned 内容、位置 Delta、图投影 | [ListObjectBinding](../../src/DurableGraph/ListObjectBinding.cs)、[ListStateReader/body](../../src/DurableGraph/ListStateReader.cs)、[ListBodyTests](../../tests/DurableGraph.Tests/ListBodyTests.cs)、[ListGraphTests](../../tests/DurableGraph.Tests/ListGraphTests.cs) | 已验证 |
+| 递归类型生成、历史 v5 与旧 history 保留 | [ListTemplateHistoryTests](../../tests/DurableGraph.Tests/ListTemplateHistoryTests.cs)、[ListGeneratedStateTests](../../tests/DurableGraph.Tests/ListGeneratedStateTests.cs) | 已验证 |
+| List owner Upgrade、空内容预绑定、Context/完整依赖复核 | [ListUpgrade](../../src/DurableGraph/StateBindingContext.ListUpgrade.cs)、[ListUpgradeTests](../../tests/DurableGraph.Tests/ListUpgradeTests.cs) | 已验证 |
+| 当前/历史绑定、统一目录、注册与 Repository 接入 | [ListBindingCatalogTests](../../tests/DurableGraph.StateStore.Tests/ListBindingCatalogTests.cs)、[ListCatalogTests](../../tests/DurableGraph.StateStore.Tests/ListCatalogTests.cs)、[ListRepositoryTests](../../tests/DurableGraph.StateStore.Tests/ListRepositoryTests.cs) | 已验证 |
+| 真包跨版本、组合图、共享升级与持久续写 | [ListConsumer](../../experiments/PackageConsumerProbe/ListConsumer/README.md)、[Run-ListProbe](../../experiments/PackageConsumerProbe/Run-ListProbe.ps1) | 两代通过 |
+| 跨模块集成、独立审查、最终构建/各测试项目与文档 | 主线程与独立只读 reviewer | 已验收 |
+
+共同接口按 §3–5；UpgradeContext 使用独立 nullable ListCount，不复用 ArrayShape。
+各包独占文件；所有 dotnet 构建、测试和 package 脚本由主线程串行运行，避免 Windows 文件锁干扰。
+
+### 8.1 验收证据
+
+- 根 `dotnet build DurableGraph.slnx --no-restore -v quiet`：0 警告、0 错误。
+- 各测试项目全部通过，共 **1,483** 项：Runtime 731、StateStore 494、Serialization 103、Storage 155，0 跳过。
+  完整 solution test 初次运行仅一个新 Store 测试错误假定小 World 必须 Delta；改为按新 ObjectId 识别替换 List，
+  并增加 exact decode 验证后，重新构建并完整复验 StateStore 494 项。未修改产品策略。
+- 独立源码审查及上述测试修正补审通过；共同容器校验的函数/诊断名称已从 array 改为 container。
+- 七组真实包通过，List/Array/Generic/ValueUpgrade/InlineStruct 共用新 feed，StateStore 与基础消费各自 pack；
+  新 history v5 的 Publish/Verify 及旧 history hash 保留均由测试/真实包验证。没有新格式兼容后端。
+- 11 份变更 Markdown 的 412 条本地链接、46 个锚点检查通过；集成 diff 无空白错误。
+
+日志均位于 `experiments/PackageConsumerProbe/obj/`，本次包产物可据以下目录复核：
+
+| 场景 | 产物目录 | 核心证据 |
+|---|---|---|
+| List | `list-20260909064504-26248-89e2f239` | 组合/循环、变长和 Capacity、冻结、删除旧 CLR、共享一次 Upgrade、强制 Base 后 Delta、表示 ID |
+| Array | `array-20260909064650-15004-59100b8d` | 既有四 rank、泛型/交错、元素升级与独立表示继承 |
+| Generic | `generic-20260909064711-15004-d75a7768` | 四阶段历史/闭合业务规则、删除旧 inline CLR 与稳定续存 |
+| ValueUpgrade | `value-upgrade-20260909064733-15004-6452fa08` | 开放 owner/Pair、组合工具、保留历史规则、相邻 Context |
+| InlineStruct | `inline-struct-20260909065352-14188-a083d63d` | 嵌套 owner Delta、名义 child 独立升版、删除 struct CLR 的历史链 |
+| StateStore | `state-store-run-20260909065053-26052-714d5cd0` | 工作会话、持久发布、升级续写、共享循环和删除 |
+| 基础包 | `run-20260909065140-26052` | 自动生成/构建接线、Publish/Verify、空 manifest 与原有 primitive/body 合同 |
+
+主日志：`db047-build.log`、`db047-full-tests.log`、`db047-statestore-tests.log`，
+以及 `db047-{list,array,generic,valueupgrade,inline,statestore,basic}-package.log`。
+
+额外复验发现旧 InlineStruct 包 fixture 依赖较大的旧类型头：原 Base payload B=12，嵌套 Delta 上界 D≥12，
+现有策略正确选择 Base。只将已有稳定 score 数值加宽至五字节（B=16），保留 Schema、Upgrade、Delta 强断言与全部阶段；
+重跑通过。此为验收素材尺寸前提修正，不改变 List、预算策略或持久对象规则。
+
+首版仍完整 Capture/PrepareBase，并使用简单位置差分；高效插入 Diff/Patch 仅留 TODO 与路线图，未在本片宣称完成。

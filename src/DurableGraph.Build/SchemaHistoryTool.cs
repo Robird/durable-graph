@@ -355,7 +355,7 @@ internal static class SchemaHistoryDocument {
         return record;
     }
 
-    public static string RenderHistory(SchemaHistoryRecord record, int formatVersion = 4) {
+    public static string RenderHistory(SchemaHistoryRecord record, int formatVersion = 5) {
         StringBuilder builder = new();
         builder.Append(HistoryHeader).AppendLine(formatVersion.ToString(CultureInfo.InvariantCulture));
         AppendSchemaRecord(builder, record, formatVersion);
@@ -381,8 +381,9 @@ internal static class SchemaHistoryDocument {
             (!StringComparer.Ordinal.Equals(lines[0], expectedHeader + "1") &&
              !StringComparer.Ordinal.Equals(lines[0], expectedHeader + "2") &&
              !StringComparer.Ordinal.Equals(lines[0], expectedHeader + "3") &&
-             !StringComparer.Ordinal.Equals(lines[0], expectedHeader + "4"))) {
-            throw Invalid(path, $"expected header '{expectedHeader}1', '{expectedHeader}2', '{expectedHeader}3', or '{expectedHeader}4'");
+             !StringComparer.Ordinal.Equals(lines[0], expectedHeader + "4") &&
+             !StringComparer.Ordinal.Equals(lines[0], expectedHeader + "5"))) {
+            throw Invalid(path, $"expected header '{expectedHeader}1', '{expectedHeader}2', '{expectedHeader}3', '{expectedHeader}4', or '{expectedHeader}5'");
         }
         int formatVersion = lines[0][lines[0].Length - 1] - '0';
 
@@ -669,8 +670,8 @@ internal static class SchemaHistoryDocument {
     }
 
     private static TypePattern ParsePattern(string path, string text, int arity, PatternKind expectedKind, int formatVersion, bool arrayReference = false) {
-        if (!TypePattern.TryParse(text, arity, out TypePattern? pattern, formatVersion >= 4) ||
-            (pattern!.Kind != expectedKind && !(arrayReference && pattern.IsArray))) {
+        if (!TypePattern.TryParse(text, arity, out TypePattern? pattern, formatVersion >= 4, formatVersion >= 5) ||
+            (pattern!.Kind != expectedKind && !(arrayReference && (pattern.IsArray || pattern.IsList)))) {
             throw Invalid(path, "invalid or unbound canonical type pattern");
         }
         return pattern;
@@ -716,7 +717,7 @@ internal sealed class SchemaHistoryRecord {
     public int Arity { get; }
     public TypePattern? BaseType { get; }
 
-    internal int SourceFormatVersion { get; init; } = 4;
+    internal int SourceFormatVersion { get; init; } = 5;
 
     public SchemaHistoryKey Key => new(SchemaId, Version);
 

@@ -163,7 +163,7 @@ public sealed partial class DurableSchemaGenerator {
 
         string indent = hasNamespace ? "    " : string.Empty;
         string member = indent + "    ";
-        bool hasDomainBase = GetCurrentBaseReference(type.Symbol).HasValue;
+        bool hasDomainBase = GetCurrentBaseReference(type).HasValue;
         source.Append(indent).Append("partial class ").Append(EscapeIdentifier(type.Symbol.Name)).AppendLine(" {");
         source.Append(member).Append("internal ").Append(hasDomainBase ? "new " : string.Empty)
             .Append("static class ").Append(GeneratedStateTypeName).AppendLine(" {");

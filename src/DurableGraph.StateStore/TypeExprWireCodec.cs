@@ -16,7 +16,7 @@ internal static class TypeExprWireCodec {
             writer.WriteByte((byte)type.BuiltinTag);
             return;
         }
-        if (type.IsArray) {
+        if (type.IsArray || type.IsList) {
             WriteNode(ref writer, type.ElementType!);
             return;
         }
@@ -44,6 +44,7 @@ internal static class TypeExprWireCodec {
             TypeExpr element = ReadNode(ref reader, depth + 1, ref remainingNodes);
             return tag == 4 ? TypeExpr.VectorArray(element) : TypeExpr.MultiDimArray(element, tag - 3);
         }
+        if (tag == 8) { return TypeExpr.List(ReadNode(ref reader, depth + 1, ref remainingNodes)); }
         if (tag != 2) {
             throw new InvalidDataException("Unknown or open type expression in a closed persisted type.");
         }

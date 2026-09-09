@@ -23,7 +23,7 @@ Point 转换被 `Box<Point>` 与 `Box<Pair<Point>>` 复用；Pair 的同一开�
 Box 和 Pair 故意同时采用局部 key `value`，其完整槽语义由各自的声明段与 FieldId 决定。
 V3 删除的只有 inline 领域声明；独立 `Box<Point>` 行仍保留其 current CLR 闭合所需的 Point 类型。
 
-runner 检查新增 history 格式 v4，数量依次为 5、10、10、12，并核对先前 `.dgschema` 的存在性与 SHA256。
+runner 检查新增 history 格式 v5，数量依次为 5、10、10、12，并核对先前 `.dgschema` 的存在性与 SHA256。
 三个版本通过磁盘 repository 交接，每次运行都是独立进程。
 Box 还保存稳定的创建时间 ticks，各版本 owner Upgrade 透传它，历史与当前读取均检查其值。
 这让单字段编辑的 Delta 相对于真实完整状态节省字节，而不依赖旧类型名称头的额外尺寸；

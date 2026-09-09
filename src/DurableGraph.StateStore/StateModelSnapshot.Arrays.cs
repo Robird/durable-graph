@@ -6,6 +6,7 @@ internal sealed partial class StateModelSnapshot {
 
     public override bool TryGetCurrentObjectBinding(Type domainType, out ObjectBinding? binding) {
         RequireClosed(domainType);
+        if (IsListType(domainType)) { return TryGetCurrentListBinding(domainType, out binding); }
         if (!domainType.IsArray) { return base.TryGetCurrentObjectBinding(domainType, out binding); }
         if (_currentArrays.TryGetValue(domainType, out ArrayObjectBinding? prior)) {
             CheckArrayLayout(prior.ArrayLayout);
@@ -34,6 +35,7 @@ internal sealed partial class StateModelSnapshot {
 
     public override ObjectReaderBinding ResolveObjectReader(ObjectLayout layout) {
         ArgumentNullException.ThrowIfNull(layout);
+        if (layout.Kind == ObjectStateKind.List) { return ResolveListReader(layout); }
         if (layout.Kind != ObjectStateKind.Array) { return base.ResolveObjectReader(layout); }
         ArrayLayout array = layout.Array!;
         if (_arrayReaders.TryGetValue(array, out ObjectReaderBinding? prior)) {
@@ -58,38 +60,41 @@ internal sealed partial class StateModelSnapshot {
     }
 
     private void CheckArrayLayout(ArrayLayout layout) {
-        DurableFieldInfo element = layout.ElementSlot;
-        CheckArrayNominalType(NominalType(element), element.TypeTag switch {
+        CheckContainerElement(layout.ElementSlot);
+    }
+
+    private void CheckContainerElement(DurableFieldInfo element) {
+        CheckContainerNominalType(NominalType(element), element.TypeTag switch {
             TypeTag.ObjectReference => SchemaKind.ReferenceObject,
             TypeTag.InlineValue => SchemaKind.InlineValue,
             _ => null,
         });
-        if (layout.ElementSlot.InlineSchema is { } inline) { CheckRegistered(inline); }
+        if (element.InlineSchema is { } inline) { CheckRegistered(inline); }
     }
 
-    private void CheckArrayNominalType(TypeExpr type, SchemaKind? requiredKind = null) {
-        if (!type.IsClosed) { throw new InvalidDataException("An array element requires a closed nominal type."); }
-        if (type.IsArray) {
-            if (requiredKind == SchemaKind.InlineValue) { throw new InvalidDataException("An array cannot be an inline value."); }
-            // The referenced array carries its own exact element slot in its Base. Its
+    private void CheckContainerNominalType(TypeExpr type, SchemaKind? requiredKind = null) {
+        if (!type.IsClosed) { throw new InvalidDataException("A container element requires a closed nominal type."); }
+        if (type.IsArray || type.IsList) {
+            if (requiredKind == SchemaKind.InlineValue) { throw new InvalidDataException("A container cannot be an inline value."); }
+            // The referenced container carries its own exact element slot in its Base. Its
             // nominal element can be either a reference family or an inline family.
-            CheckArrayNominalType(type.ElementType!);
+            CheckContainerNominalType(type.ElementType!);
             return;
         }
         if (type.Kind == TypeExprKind.Builtin) {
             if (requiredKind.HasValue) { throw new InvalidDataException("A builtin cannot use a named object or inline slot."); }
             return;
         }
-        if (type.Kind != TypeExprKind.Named) { throw new InvalidDataException("Unsupported array element type constructor."); }
+        if (type.Kind != TypeExprKind.Named) { throw new InvalidDataException("Unsupported container element type constructor."); }
 
-        (SchemaKind kind, int arity) = GetArrayNominalDefinition(type.DefinitionId!);
+        (SchemaKind kind, int arity) = GetContainerNominalDefinition(type.DefinitionId!);
         if (arity != type.Arguments.Length || (requiredKind.HasValue && requiredKind.Value != kind)) {
-            throw new InvalidDataException($"Array element type {type} has the wrong declaration kind or generic arity.");
+            throw new InvalidDataException($"Container element type {type} has the wrong declaration kind or generic arity.");
         }
-        foreach (TypeExpr argument in type.Arguments) { CheckArrayNominalType(argument); }
+        foreach (TypeExpr argument in type.Arguments) { CheckContainerNominalType(argument); }
     }
 
-    private (SchemaKind Kind, int Arity) GetArrayNominalDefinition(string definitionId) {
+    private (SchemaKind Kind, int Arity) GetContainerNominalDefinition(string definitionId) {
         if (_definitions.TryGetValue(definitionId, out StateDefinitionBinding? definition)) {
             return (definition.Kind, definition.Arity);
         }
@@ -115,6 +120,6 @@ internal sealed partial class StateModelSnapshot {
                 if (field.InlineSchema is { } inline) { pending.Push(inline); }
             }
         }
-        return found ?? throw new InvalidDataException($"No retained declaration metadata is registered for array element {definitionId}.");
+        return found ?? throw new InvalidDataException($"No retained declaration metadata is registered for container element {definitionId}.");
     }
 }

@@ -66,7 +66,7 @@ public sealed class GraphRepository : IDisposable {
             string schemaPath = Path.Combine(root, "schemas.rbf");
             schemas = create ? RbfFile.CreateNew(schemaPath) : RbfFile.OpenExisting(schemaPath);
             SchemaStore schemaStore = new(schemas);
-            // Confirm a possibly empty header too. With only built-in array registrations,
+            // Confirm a possibly empty header too. With only built-in container registrations,
             // this can repeat SchemaStore's recovery flush because Count counts user Schemas.
             if (schemaStore.Count == 0) { schemas.DurableFlush(); }
             string statePath = Path.Combine(root, "state");

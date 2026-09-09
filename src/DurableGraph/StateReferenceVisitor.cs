@@ -10,7 +10,7 @@ public interface IStateReferenceVisitor {
         StateReferenceValidator.RequireReferenceType(declaredType);
         if (declaredType.Kind == TypeExprKind.Builtin) { VisitString(id); }
         else if (declaredType.Kind == TypeExprKind.Named) { VisitDurable(id, declaredType); }
-        else { throw new NotSupportedException("This visitor does not support array reference types."); }
+        else { throw new NotSupportedException("This visitor does not support built-in container reference types."); }
     }
 
     /// <summary>Visits a reference constrained by a complete constructed nominal identity.</summary>
@@ -62,6 +62,7 @@ public sealed class StateReferenceValidator : IStateReferenceVisitor {
             ObjectStateKind.String => declaredType == TypeExpr.Builtin(TypeTag.String),
             ObjectStateKind.Durable => declaredType.Kind == TypeExprKind.Named && Accepts(layout.Schema!, declaredType),
             ObjectStateKind.Array => declaredType.IsArray && layout.Array!.Type == declaredType,
+            ObjectStateKind.List => declaredType.IsList && layout.List!.Type == declaredType,
             _ => false,
         };
     }
@@ -88,9 +89,9 @@ public sealed class StateReferenceValidator : IStateReferenceVisitor {
 
     internal static void RequireReferenceType(TypeExpr declaredType) {
         ArgumentNullException.ThrowIfNull(declaredType);
-        if (!declaredType.IsClosed || !(declaredType.Kind == TypeExprKind.Named || declaredType.IsArray ||
+        if (!declaredType.IsClosed || !(declaredType.Kind == TypeExprKind.Named || declaredType.IsArray || declaredType.IsList ||
             declaredType == TypeExpr.Builtin(TypeTag.String))) {
-            throw new ArgumentException("A reference requires a closed named, array, or string type.", nameof(declaredType));
+            throw new ArgumentException("A reference requires a closed named, array, List, or string type.", nameof(declaredType));
         }
     }
 }

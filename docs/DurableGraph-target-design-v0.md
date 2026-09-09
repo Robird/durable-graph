@@ -28,7 +28,7 @@ Source Generator 负责可在编译期确定的类型知识与机械代码，框
 
 ### MVP 功能边界
 
-2026-09-07 用户明确以下支持与裁剪范围；这是支持合同，不表示相关 codec 或加载流程已经实现：
+以下为用户已选定的支持与裁剪范围；这是支持合同，不表示相关 codec 或加载流程已经实现：
 
 - 数组仅支持零下界的 SZ VectorArray `T[]` 和有限 rank 的多维数组。任何维度非零下界，
   以及非 SZ 的 rank-1 数组 `T[*]`（即使下界为零），均明确拒绝，不转换成其他形状。
@@ -37,6 +37,9 @@ Source Generator 负责可在编译期确定的类型知识与机械代码，框
   VectorArray、Rank-2、Rank-3、Rank-4 使用独立构造码，元素类型及每维长度仍须表达；
   数组局部合同见 [DB-043](design-branches/0043-vector-array-object-slice.md)，完整表示整数寻址见 [DB-045](design-branches/0045-persisted-representation-id-slice.md)。
   可静态识别的不支持类型由 SG 拒绝，其余在 Capture/读取边界校验，不静默降级。
+- 首个 BCL 内容对象选择 exact `System.Collections.Generic.List<T>`，元素复用全部受支持槽，
+  并允许 List、数组及用户泛型递归组合。List 子类、接口集合字段、任意 object 槽和其他 BCL 容器不随之开放。
+  List 的泛型实参不协变；`List<Base>` 内的已登记 Derived 实例继续遵循已有 class 多态约束。
 - Upgrade 仅转换单个对象的字段，从旧 DTO 产生下一版 DTO；不读取其他对象，不拆分/合并对象，
   不创建带持久身份的新对象。创建下一版 DTO 值本身不属于这一禁令。已有引用槽可以保留、调整或
   清空，但必须满足输出类型与引用合法性；不提供遍历其他对象内容或分配新 ObjectId 的升级上下文。
@@ -104,6 +107,10 @@ Source Generator 负责可在编译期确定的类型知识与机械代码，框
 - struct 等复合值没有独立身份，采用嵌套布局。ref accessor 的作用是让值 codec 共用字段、
   数组元素等真实槽位，配合 Writer/Reader 读写；不要求统一读写模式的 visitor。
 - BCL 容器按内容保存和重建，不以其 bucket、capacity 等内部实现代替持久内容合同。
+  List 只保存 Count、有序逻辑元素；Capture 递归投影为 owned 状态 buffer，后续领域修改不能污染候选。
+  同一列表 resize 保持 ObjectId，只改 Capacity 无状态变化；同内容的新列表仍具有新的引用身份。
+  List 的差异算法不要求用户维护 change-tracking 容器。首版位置差分保证恢复正确性，
+  高效插入类 Diff/Patch 的选型另见[路线图](DurableGraph-research-roadmap.md#32-list-差分算法选型与设计)。
 
 设计来源：[DB-018](design-branches/0018-generated-graph-codec-shape.md)、
 [DB-024](design-branches/0024-reference-capture-and-reusable-object-ids.md)、
@@ -123,9 +130,10 @@ Source Generator 负责可在编译期确定的类型知识与机械代码，框
 - owner 的单对象 Upgrade 显式转换嵌套 DTO；框架不另行先升级 struct。历史 inline DTO/body
   从保留的 exact history 生成，不依赖当前领域 struct 声明存在，也不要求值迁移壳。
   领域/DTO 表示保持分离，不能为泛型复用而把可变领域引用保留在 DTO 中。
-  数组是独立的内建 owner：显式选定元素转换规则后，由框架逐元素执行；不能由引用它的不同对象
-  分别决定同一共享数组的转换。元素升级保持数组身份与 shape，仍 live 的升级数组下次保存强制 Base。
-  数组元素直接绑定 source→current 的显式值规则，不自动串接相邻规则搜索路径；空数组也须验证转换能力。
+  数组与 List 是各自独立的内建 owner：分别显式选定元素转换规则后，由框架逐元素执行；不能由不同入边
+  分别决定同一共享内容对象的转换。元素升级保持 ObjectId 与位置，数组保持 shape，List 保持 Count；
+  仍 live 的升级对象下次保存强制 Base。两者直接绑定 source→current 的显式值规则，
+  不自动串接相邻规则搜索路径；空数组、空 List 也须验证转换能力。
 - Upgrade 用户入口统一接收非泛型 UpgradeContext，优先考虑工具扩展的灵活性；Context 提供本次转换的只读信息，
   值转换能力由 owner 显式取得并调用，不逐个追加到历史方法的参数列表。
   当前采用预声明/预绑定能力，只在执行时查询已选工具；不由 Context 动态选择业务规则，也不扩张单对象操作边界。
@@ -136,7 +144,8 @@ Source Generator 负责可在编译期确定的类型知识与机械代码，框
   KeepExact 仅在作者明确启用、没有显式候选且完整槽等价时成立。
   整条对象升级链及其声明依赖在首个业务调用前绑定。snapshot 缓存不含调用状态，
   子工具保持自己的依赖表并继承当前 owner 的 ID/exact 对象布局端点；class owner 采用相邻版本，
-  array owner 另带不可变 shape。Context 与工具不跨同步调用保留。
+  array owner 另带不可变 shape，List owner 使用独立的 ListCount，不以 ArrayShape 冒充长度。
+  Context 与工具不跨同步调用保留。
 - 自定义泛型的持久身份是定义 ID、有序 nominal 实参与定义版本；领域参数、冻结状态表示和静态操作参数分开。
   历史 DTO/body 位于纯状态宿主，按 stored 完整布局闭合，不要求旧领域值 CLR 类型继续存在。
   单对象整条相邻 Upgrade 链先绑定再执行；中间 exact 布局不足以唯一确定时明确拒绝，不能用 current/latest 补齐。
@@ -147,7 +156,7 @@ Source Generator 负责可在编译期确定的类型知识与机械代码，框
   [DB-038 §3.3](design-branches/0038-generic-schema-state-and-binding-design.md#33-必须明确的保证作用域两个空仓库)。
 - 引用对象的 Base 头表达实际 exact 类型/Schema，后续 Delta 沿同一 Schema 解释；版本变化从新 Base 开始。
   读取先在 stored Schema 下完整重建，再升级；仍存活的升级对象下次显式保存必须 Base，即使业务值未变。
-  TypeCodec 表达受支持类型经数组或泛型构造的组合；
+  TypeCodec 表达受支持类型经数组、内建 List 或用户泛型构造的组合；
   类型表达能力与是否存在相应 codec 是两个条件，可表达不等于可读写任意 CLR 类型。
 - SG 已知字段/元素类型时直接绑定字节原语或静态值 body，不为每个已知槽位增加 Type 查表、
   委托或虚调用。运行时开放组合的绑定接缝不能反过来支配静态成员的生成形状。
@@ -203,6 +212,10 @@ ID 由所属目录统一分配，等价完整表示复用；登记先于使用�
 inline 记录只描述嵌套值，不能被 Base 当作独立对象表示；普通引用槽只约束无版本 nominal 类型，
 目标版本不成为引用方的 exact 依赖。`SchemaKey` 是由完整名义类型与定义版本派生的查询、冲突索引，
 同 key 异形仍须拒绝，不能靠新编号绕过。一次登记的完整缺失闭包经一个批次持久化后才交付 ID。
+[DB-047](design-branches/0047-list-content-object-slice.md) 的 List 扩展复用同一编号空间，
+以明确内建构造和内容 codec 解释，无需用户 Schema；其元素若为用户 inline 值，仍须登记完整 exact 依赖。
+Count 与 Capacity 均不属于 ListLayout；前者属于对象内容，后者不持久化。引用 List 的 owner 只约束 nominal 类型，
+不锁定该列表的历史元素布局。内建资格由框架显式定义，不能用同名用户类或程序集归属冒充。
 
 领域 CLR 类型与版本化 DTO/reader 都是结合目录描述和保留代码得到的绑定结果，不持久化第二套 DTO 类型名称。
 不同领域名义身份即使共享同一个 DTO CLR 类型也不能合并。是否持久化开放模板与必要 exact 实参，
@@ -289,7 +302,7 @@ MVP 库内加载采用以下阶段顺序；这是目标流程，不表示各阶�
 2. 对需要升级的对象执行单对象字段转换的显式合法路径，形成当前版本 DTO 全目录；缺失路径或升级失败则停止加载，
    不悄悄交付旧版。记录升级对象下一次保存必须 Base 的义务，读取本身不回写。
 3. 对受支持的自定义领域类用 `RuntimeHelpers.GetUninitializedObject` 分配全部实例，
-   建立 ObjectId 到实例的映射；string/数组等内建类型使用各自适配器。
+   建立 ObjectId 到实例的映射；string、数组、List 等内建类型使用各自适配器。
 4. SG 生成 Hydrate，填充持久字段并连接对象引用，利用先分配的完整映射保留共享和循环。
 5. 完成框架的持久数据/引用校验后交付 World，不能暴露解码、升级或引用连接的半成品。
 
@@ -306,6 +319,8 @@ Empty 多 ID 的反向绑定确定选择最小 source ID，但基线引用槽保
 实际引用差异。新加载会话从完整 source live max+1 开始分配，只承诺会话内单调；uint 耗尽仅阻止
 新增 ID，不阻止加载或已有对象保存。固定 Parent 的低层 Prepare 不就地接受新地址，需 Append 后重新 Load；
 普通连续保存使用受控 GraphSession.Commit，发布成功后直接安装原候选并保留领域实例。
+List 适配器先分配空列表，待全部实例登记后逐元素 Hydrate 并按序 Add，保留共享和循环；
+这类内建构造不改变用户领域类不执行构造器的恢复合同。
 
 Hydrate 普通字段由 SG 直接赋值；readonly 实例字段优先由 SG 生成返回字段可写 ref 的
 `UnsafeAccessor`，再进行强类型赋值。访问器按字段的声明类型绑定，基类 private 字段不通过

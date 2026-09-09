@@ -26,13 +26,14 @@ internal sealed partial class StateModelSnapshot : StateBindingContext {
         Dictionary<Type, StateModelBinding> types, Dictionary<SchemaKey, StateReaderBinding> readers,
         Dictionary<string, StateDefinitionBinding>? definitions = null, SchemaStore? schemas = null,
         Dictionary<Type, StateValueUpgradeRuleSet>? valueUpgradeRules = null,
-        Type? arrayElementUpgradeRuleSet = null) {
+        Type? arrayElementUpgradeRuleSet = null, Type? listElementUpgradeRuleSet = null) {
         _models = models;
         _types = types;
         _readers = readers;
         _definitions = definitions ?? new(StringComparer.Ordinal);
         _valueUpgradeRules = valueUpgradeRules ?? [];
         ArrayElementUpgradeRuleSet = arrayElementUpgradeRuleSet;
+        ListElementUpgradeRuleSet = listElementUpgradeRuleSet;
         _schemas = schemas;
         foreach (StateDefinitionBinding definition in _definitions.Values) {
             if (definition.DomainTypeDefinition is { } domain && !_domainDefinitions.TryAdd(domain, definition)) {
@@ -45,6 +46,7 @@ internal sealed partial class StateModelSnapshot : StateBindingContext {
     internal IReadOnlyDictionary<Type, StateModelBinding> Types => _types;
     internal IReadOnlyDictionary<SchemaKey, StateReaderBinding> Readers => _readers;
     public override Type? ArrayElementUpgradeRuleSet { get; }
+    public override Type? ListElementUpgradeRuleSet { get; }
 
     internal static void RegisterValueUpgradeRuleSet(Dictionary<Type, StateValueUpgradeRuleSet> rules,
         StateValueUpgradeRuleSet ruleSet) {
@@ -157,7 +159,7 @@ internal sealed partial class StateModelSnapshot : StateBindingContext {
         }
         TypeExpr nominal = GetTypeExpr(domainType);
         // Reference metadata must not recursively close the referenced object's body.
-        if (domainType.IsArray || typeof(DurableBase).IsAssignableFrom(domainType)) {
+        if (domainType.IsArray || IsListType(domainType) || typeof(DurableBase).IsAssignableFrom(domainType)) {
             StateValueBinding reference = new(DurableFieldInfo.Reference(1, nominal), typeof(ObjectId), typeof(ObjectIdStateOps),
                 domainType, typeof(ObjectValueProjection<>).MakeGenericType(domainType));
             _currentValues.Add(domainType, reference);
@@ -208,6 +210,7 @@ internal sealed partial class StateModelSnapshot : StateBindingContext {
             TypeExpr element = GetTypeExpr(domainType.GetElementType()!);
             return domainType.IsSZArray ? TypeExpr.VectorArray(element) : TypeExpr.MultiDimArray(element, domainType.GetArrayRank());
         }
+        if (IsListType(domainType)) { return TypeExpr.List(GetTypeExpr(domainType.GetGenericArguments()[0])); }
         if (_types.TryGetValue(domainType, out StateModelBinding? model)) { return model.CurrentSchema.Type; }
         if (!TryDefinition(domainType, out StateDefinitionBinding? definition)) {
             throw new InvalidDataException($"No supported declaration is registered for {domainType}.");
@@ -219,6 +222,11 @@ internal sealed partial class StateModelSnapshot : StateBindingContext {
     public override Type GetDomainType(TypeExpr type) {
         ArgumentNullException.ThrowIfNull(type);
         if (!type.IsClosed) { throw new InvalidDataException("A current domain lookup requires a closed nominal type."); }
+        if (type.IsList) {
+            Type list = typeof(List<>).MakeGenericType(GetDomainType(type.ElementType!));
+            RequireClosed(list);
+            return list;
+        }
         if (type.IsArray) {
             Type element = GetDomainType(type.ElementType!);
             Type array = type.Kind == TypeExprKind.VectorArray ? element.MakeArrayType() : element.MakeArrayType(type.ArrayRank);
@@ -254,6 +262,8 @@ internal sealed partial class StateModelSnapshot : StateBindingContext {
 
     private bool TryDefinition(Type type, out StateDefinitionBinding? definition) =>
         _domainDefinitions.TryGetValue(type.IsGenericType ? type.GetGenericTypeDefinition() : type, out definition);
+
+    private static bool IsListType(Type type) => type.IsGenericType && type.GetGenericTypeDefinition() == typeof(List<>);
 
     private void Begin((string Kind, object Key) active) {
         if (!_closing.Add(active)) { throw new InvalidDataException($"Recursive exact {active.Kind} binding is unsupported."); }

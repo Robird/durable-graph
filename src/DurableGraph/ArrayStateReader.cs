@@ -61,7 +61,7 @@ internal static class ArrayStateBody<TState, TOps> where TState : unmanaged wher
             lengths[dimension] = (int)length;
         }
         ArrayShape shape = new(lengths);
-        int minimum = MinimumBaseBytes(layout.ElementSlot, new Dictionary<DurableSchema, int>(ReferenceEqualityComparer.Instance));
+        int minimum = StateBodySize.MinimumBaseBytes(layout.ElementSlot);
         if (minimum > 0 && shape.Count > reader.RemainingCount / minimum) {
             throw new InvalidDataException("Array length cannot fit in the remaining Base payload.");
         }
@@ -114,17 +114,4 @@ internal static class ArrayStateBody<TState, TOps> where TState : unmanaged wher
         if (shape.Rank != layout.Rank) { throw new InvalidDataException("Array shape rank does not match its exact layout."); }
     }
 
-    private static int MinimumBaseBytes(DurableFieldInfo slot, Dictionary<DurableSchema, int> memo) {
-        if (slot.TypeTag != TypeTag.InlineValue) {
-            return slot.TypeTag switch { TypeTag.Half => 2, TypeTag.Single => 4, TypeTag.Double => 8, _ => 1 };
-        }
-        DurableSchema schema = slot.InlineSchema!;
-        if (memo.TryGetValue(schema, out int known)) { return known; }
-        long count = 0;
-        foreach (DurableFieldInfo field in schema.Fields) {
-            count += MinimumBaseBytes(field, memo);
-            if (count >= int.MaxValue) { count = int.MaxValue; break; }
-        }
-        return memo[schema] = (int)count;
-    }
 }

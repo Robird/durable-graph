@@ -7,7 +7,7 @@ namespace Atelia.DurableGraph.SchemaHistory;
 
 // Shared source between the compiler and history publisher. This is an open definition
 // pattern, not a Runtime TypeExpr or a second persistent closed-schema identity.
-internal enum PatternKind { Builtin = 1, Named = 2, Parameter = 3, VectorArray = 4, Rank2Array = 5, Rank3Array = 6, Rank4Array = 7 }
+internal enum PatternKind { Builtin = 1, Named = 2, Parameter = 3, VectorArray = 4, Rank2Array = 5, Rank3Array = 6, Rank4Array = 7, List = 8 }
 
 internal sealed class TypePattern : IEquatable<TypePattern> {
     private static readonly UTF8Encoding Utf8 = new(false, true);
@@ -28,6 +28,7 @@ internal sealed class TypePattern : IEquatable<TypePattern> {
         if (kind == PatternKind.Builtin) text.Append('b').Append(number.ToString(CultureInfo.InvariantCulture));
         else if (kind == PatternKind.Parameter) text.Append('p').Append(number.ToString(CultureInfo.InvariantCulture));
         else if (IsArray) text.Append('a').Append(ArrayRank.ToString(CultureInfo.InvariantCulture)).Append('(').Append(arguments[0]._canonical).Append(')');
+        else if (IsList) text.Append("l(").Append(arguments[0]._canonical).Append(')');
         else {
             text.Append('n').Append(Convert.ToBase64String(Utf8.GetBytes(definitionId!))).Append('(');
             for (int index = 0; index < arguments.Length; index++) {
@@ -46,8 +47,16 @@ internal sealed class TypePattern : IEquatable<TypePattern> {
     public int ParameterOrdinal { get; }
     public bool ContainsParameter { get; }
     public bool IsArray => (int)Kind >= 4 && (int)Kind <= 7;
+    public bool IsList => Kind == PatternKind.List;
     public int ArrayRank => IsArray ? (int)Kind - 3 : 0;
-    public TypePattern? ElementType => IsArray ? _arguments[0] : null;
+    public TypePattern? ElementType => IsArray || IsList ? _arguments[0] : null;
+    public bool ContainsList {
+        get {
+            if (IsList) return true;
+            foreach (TypePattern argument in _arguments) if (argument.ContainsList) return true;
+            return false;
+        }
+    }
     public bool ContainsArray {
         get {
             if (IsArray) return true;
@@ -60,6 +69,14 @@ internal sealed class TypePattern : IEquatable<TypePattern> {
         if (element is null) throw new ArgumentNullException(nameof(element));
         if (rank < 1 || rank > 4) throw new ArgumentOutOfRangeException(nameof(rank));
         TypePattern result = new((PatternKind)(rank + 3), 0, null, new[] { element });
+        int nodes = 0;
+        result.ValidateBounds(1, ref nodes);
+        return result;
+    }
+
+    public static TypePattern ListOf(TypePattern element) {
+        if (element is null) throw new ArgumentNullException(nameof(element));
+        TypePattern result = new(PatternKind.List, 0, null, new[] { element });
         int nodes = 0;
         result.ValidateBounds(1, ref nodes);
         return result;
@@ -93,7 +110,7 @@ internal sealed class TypePattern : IEquatable<TypePattern> {
         if (!ContainsParameter) return this;
         TypePattern[] substituted = new TypePattern[_arguments.Length];
         for (int index = 0; index < substituted.Length; index++) substituted[index] = _arguments[index].Substitute(arguments);
-        return IsArray ? ArrayOf(substituted[0], ArrayRank) : Named(DefinitionId!, substituted);
+        return IsArray ? ArrayOf(substituted[0], ArrayRank) : IsList ? ListOf(substituted[0]) : Named(DefinitionId!, substituted);
     }
 
     public bool ParametersFit(int arity) {
@@ -115,13 +132,13 @@ internal sealed class TypePattern : IEquatable<TypePattern> {
         }
     }
 
-    public static bool TryParse(string text, int arity, out TypePattern? result, bool allowArrays = true) {
+    public static bool TryParse(string text, int arity, out TypePattern? result, bool allowArrays = true, bool allowLists = true) {
         result = null;
         if (arity < 0 || arity > 32) return false;
         try {
             int cursor = 0, nodes = 0;
             TypePattern parsed = Parse(text, ref cursor, 1, ref nodes);
-            if (cursor != text.Length || !parsed.ParametersFit(arity) || parsed.ToString() != text || (!allowArrays && parsed.ContainsArray)) return false;
+            if (cursor != text.Length || !parsed.ParametersFit(arity) || parsed.ToString() != text || (!allowArrays && parsed.ContainsArray) || (!allowLists && parsed.ContainsList)) return false;
             result = parsed;
             return true;
         } catch (ArgumentException) { return false; }
@@ -132,6 +149,12 @@ internal sealed class TypePattern : IEquatable<TypePattern> {
     private static TypePattern Parse(string text, ref int cursor, int depth, ref int nodes) {
         if (cursor >= text.Length || depth > 64 || ++nodes > 4096) throw new FormatException();
         char kind = text[cursor++];
+        if (kind == 'l') {
+            if (cursor >= text.Length || text[cursor++] != '(') throw new FormatException();
+            TypePattern element = Parse(text, ref cursor, depth + 1, ref nodes);
+            if (cursor >= text.Length || text[cursor++] != ')') throw new FormatException();
+            return ListOf(element);
+        }
         if (kind == 'a') {
             if (cursor + 1 >= text.Length || text[cursor] < '1' || text[cursor] > '4') throw new FormatException();
             int rank = text[cursor++] - '0';

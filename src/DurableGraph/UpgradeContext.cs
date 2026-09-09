@@ -45,7 +45,23 @@ public sealed class UpgradeContext {
         SourceObjectLayout = owner.SourceObjectLayout;
         TargetObjectLayout = owner.TargetObjectLayout;
         ArrayShape = owner.ArrayShape;
+        ListCount = owner.ListCount;
         _tools = tools;
+    }
+
+    internal UpgradeContext(ObjectId objectId, ObjectLayout source, ObjectLayout target, int listCount) {
+        ArgumentOutOfRangeException.ThrowIfZero(objectId.Value, nameof(objectId));
+        ArgumentOutOfRangeException.ThrowIfNegative(listCount);
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(target);
+        if (source.Kind != ObjectStateKind.List || target.Kind != ObjectStateKind.List || source.Type != target.Type) {
+            throw new ArgumentException("List upgrade endpoints must have the same nominal list type.");
+        }
+        ObjectId = objectId;
+        SourceObjectLayout = source;
+        TargetObjectLayout = target;
+        ListCount = listCount;
+        _tools = new Dictionary<string, Delegate>(StringComparer.Ordinal);
     }
 
     internal UpgradeContext WithTools(IReadOnlyDictionary<string, Delegate> tools) => new(this, tools);
@@ -56,8 +72,10 @@ public sealed class UpgradeContext {
     public ObjectId ObjectId { get; }
     public ObjectLayout SourceObjectLayout { get; }
     public ObjectLayout TargetObjectLayout { get; }
-    /// <summary>The preserved source dimensions for an array owner; null for a durable class owner.</summary>
+    /// <summary>The preserved source dimensions for an array owner; null for other owner kinds.</summary>
     public ArrayShape? ArrayShape { get; }
+    /// <summary>The preserved source element count for a list owner; null for other owner kinds.</summary>
+    public int? ListCount { get; }
     public DurableSchema SourceObjectSchema => SourceObjectLayout.Schema ??
         throw new InvalidOperationException("This upgrade owner has no user DurableSchema; inspect SourceObjectLayout instead.");
     public DurableSchema TargetObjectSchema => TargetObjectLayout.Schema ??

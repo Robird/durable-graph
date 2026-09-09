@@ -1,6 +1,6 @@
 # DurableGraph 产品开发工作集
 
-> 校准：2026-09-09，[DB-046](../docs/design-branches/0046-unified-schema-catalog-slice.md) 已完成整体验收。本文只维护当前能力、边界与续工入口。
+> 校准：2026-09-09，[DB-047](../docs/design-branches/0047-list-content-object-slice.md) 已完成整体验收。本文只维护当前能力、边界与续工入口。
 > 文档不是实现授权；事实以当前源码、测试和工具输出为准。
 
 ## 从这里继续
@@ -18,17 +18,14 @@
 
 ## 当前焦点
 
-[DB-046 统一闭合 Schema 目录](../docs/design-branches/0046-unified-schema-catalog-slice.md) 已完成，根构建、完整测试、四组真实包和独立审查通过。
-SchemaStore 只维护一种闭合记录和登记批次；class Schema 即其对象表示，exact base/inline 依赖使用节点 ID。
-一次追加/flush 后安装完整目录，旧双批次及转接 codec 已删除；领域身份、版本传播和 Upgrade 不变。
-前序 [DB-045](../docs/design-branches/0045-persisted-representation-id-slice.md) 的 Base v4 单 ID 边界继续沿用，旧 Base 格式拒绝。
-施工证据集中维护在 DB-046。
+[DB-047 List<T> 内容对象](../docs/design-branches/0047-list-content-object-slice.md) 已完成根构建、各测试项目、七组真实包和独立审查。
+完整受支持元素闭包、同实例长度变化、冻结/恢复及列表 owner Upgrade 均已接入统一对象路径与目录；history 新写 v5。
+位置差分是正确可用的效率基线；下一步按已选安排进行[高效 List Diff/Patch 选型与设计](../docs/DurableGraph-research-roadmap.md#32-list-差分算法选型与设计)，尚未选择算法。
+施工证据集中维护在 DB-047。
 
-下一片 [DB-047 List<T> 内容对象](../docs/design-branches/0047-list-content-object-slice.md) 已按两步安排收敛，状态 Chosen，尚未实施。
-先以完整已有元素闭包接入有序可变长度内容、简单位置 Delta 和列表 owner Upgrade，复用统一对象路径与目录；
-高效插入类 Diff/Patch 在本片完成后单独[选型与设计](../docs/DurableGraph-research-roadmap.md#32-list-差分算法选型与设计)。
-位置差分是正确可用的效率占位，不是未实现 API；尚无 List 产品代码。开放模板持久化暂不作为前置：剩余 Match 仍承担持久布局与代码历史的一致性核验，
-继续按[路线图](../docs/DurableGraph-research-roadmap.md#31-版本化表示类型头的统一寻址)的净简化条件重访。
+[DB-046 统一闭合目录](../docs/design-branches/0046-unified-schema-catalog-slice.md) 的单批次登记、exact 整数依赖，
+以及 [DB-045](../docs/design-branches/0045-persisted-representation-id-slice.md) 的 Base v4 单 ID 边界继续沿用。
+开放模板持久化仍按[路线图](../docs/DurableGraph-research-roadmap.md#31-版本化表示类型头的统一寻址)的净简化条件重访。
 
 [DB-043](../docs/design-branches/0043-vector-array-object-slice.md) 已完成统一引用对象路径、可组合数组与数组元素 Upgrade；
 [DB-042](../docs/design-branches/0042-upgrade-schema-requirement-set.md) 已完成 plan 级 exact Schema 依赖证书；
@@ -40,15 +37,15 @@ SchemaStore 只维护一种闭合记录和登记批次；class Schema 即其对�
 
 | 层 | 已验证能力 | 尚未闭合的边界 |
 |---|---|---|
-| [DurableGraph](DurableGraph/DurableGraph.csproj) | immutable Schema/exact DAG；统一 ObjectBinding、ObjectLayout、Capture/refs/恢复目录；SZ/rank 2–4 数组 owned 状态、静态元素操作与融合 Delta；独立 historical reader | BCL 内容适配、数组协变；持久发布由 StateStore 拥有 |
-| [Generator](DurableGraph.Generator/DurableGraph.Generator.csproj) / [Build](DurableGraph.Build/DurableGraph.Build.csproj) | class/struct 开放模板、readonly DTO/静态 body、Capture/Hydrate、泛型继承与递归数组组合；history v4；三参 Upgrade/旧二参适配、值规则/局部依赖 adapter | BCL；跨程序集生成规则 |
-| [StateStore](DurableGraph.StateStore/DurableGraph.StateStore.csproj) | 统一闭合 Schema/数组目录与整数依赖、单批次登记、Base v4 ID 头；完整 stored/current 引用验证、可达图两阶段恢复；公开 PrepareNew/fixed-Parent Prepare；GraphRepository 单 head/持久 WorldId 与 GraphSession 同实例 Commit；升级 Base/Remove | 无 branch/Reset/根替换或联合 Store 视图 |
+| [DurableGraph](DurableGraph/DurableGraph.csproj) | immutable Schema/exact DAG；统一 ObjectBinding、ObjectLayout、Capture/refs/恢复目录；SZ/rank 2–4 数组与 List owned 状态、静态元素操作/位置 Delta；独立 historical reader | 高效 List Diff/Patch、其他 BCL、数组协变；持久发布由 StateStore 拥有 |
+| [Generator](DurableGraph.Generator/DurableGraph.Generator.csproj) / [Build](DurableGraph.Build/DurableGraph.Build.csproj) | class/struct 开放模板、readonly DTO/静态 body、Capture/Hydrate、泛型继承与递归数组/List 组合；history v5；三参 Upgrade/旧二参适配、值规则/局部依赖 adapter | 其他 BCL；跨程序集生成规则 |
+| [StateStore](DurableGraph.StateStore/DurableGraph.StateStore.csproj) | 统一闭合 Schema/数组/List 目录与整数依赖、单批次登记、Base v4 ID 头；完整 stored/current 引用验证、可达图两阶段恢复；公开 PrepareNew/fixed-Parent Prepare；GraphRepository 单 head/持久 WorldId 与 GraphSession 同实例 Commit；升级 Base/Remove | 无 branch/Reset/根替换或联合 Store 视图 |
 | [Storage](DurableGraph.StateStore.Storage/DurableGraph.StateStore.Storage.csproj) | AppendDurably 原 lease 屏障；local Base/Delta records、wire v3、exact Revision live map、Parent/prior 校验、object-first 原始重建链及实际 payload H；Base 精确/Delta 上界计量；真实 Segment/RBF 冷重开 | 不解码 typed body；不拥有持久 roots、类型目录或发布 head；重复读取暂未缓存 |
-| [Serialization](DurableGraph.StateStore.Serialization/DurableGraph.StateStore.Serialization.csproj) | 字节原语、string 内容 codec、拥有 raw bytes 的 PreparedBaseBody/PreparedDeltaBody、显式 body 的 typed slot、早期元素 ref 循环 | 完整数组对象操作位于 Runtime；BCL 内容 codec 尚无 |
+| [Serialization](DurableGraph.StateStore.Serialization/DurableGraph.StateStore.Serialization.csproj) | 字节原语、string 内容 codec、拥有 raw bytes 的 PreparedBaseBody/PreparedDeltaBody、显式 body 的 typed slot、早期元素 ref 循环 | 完整数组/List 对象操作位于 Runtime；其他 BCL 内容 codec 尚无 |
 
 容易混淆的限制：
 
-- SG DTO/body 支持递归 inline struct 与 13 种标量：bool、byte/sbyte、short/ushort、int/uint、long/ulong、char、Half、float、double；string、受支持 durable class 和数组引用槽保存非泛型 ObjectId；字节层仍编码 UInt32。
+- SG DTO/body 支持递归 inline struct 与 13 种标量：bool、byte/sbyte、short/ushort、int/uint、long/ulong、char、Half、float、double；string、受支持 durable class、数组和 List 引用槽保存非泛型 ObjectId；字节层仍编码 UInt32。
   裸 `[DurableType]` 限同编译、顶层、非 record 的 partial class 链或显式 partial struct（包括 readonly），支持泛型；
   支持 readonly 持久字段和没有无参构造器的领域类。RuntimeHelpers 分配、SG Hydrate/声明层 UnsafeAccessor
   不执行实例构造器或字段初始化表达式；Transient 由用户交付后重建。
@@ -58,7 +55,7 @@ SchemaStore 只维护一种闭合记录和登记批次；class Schema 即其对�
   共享值 DTO/body 按 exact key 生成，不依赖当前领域 struct CLR 宿主；owner Upgrade 通过强类型构造器显式转换，
   删除 struct 后仍可保留完整 owner 升级链。struct Hydrate 从 default 临时值经 ref accessor 填充，
   完成后赋回字段/元素槽，不运行构造器或初始化器，Transient 默认。仍无 record/ref struct/CLR nested type 支持。
-- `TypeExpr` 区分 builtin、named 定义及有序实参、声明内 parameter、SZ/rank 2–4 数组构造；持久 key 为闭合 TypeExpr + 定义版本。
+- `TypeExpr` 区分 builtin、named 定义及有序实参、声明内 parameter、SZ/rank 2–4 数组和内建 List 构造；持久 key 为闭合 TypeExpr + 定义版本。
   SchemaId 只表示定义 ID，不能用来区分闭合族。base/inline 显式升版仍沿定义传播；Box<int> 也随 Box 定义升版。
   目标仓库内同 key 完整布局严格一致；两个独立空库仍可能首次登记同 key 异形，不提供闭合历史账本或跨库 key 互换保证。
   TypeExpr depth≤64、展开 nodes≤4096、arity≤32，exact 布局 DAG depth≤256。
@@ -88,14 +85,14 @@ SchemaStore 只维护一种闭合记录和登记批次；class Schema 即其对�
   空串 Capture/读取两端统一 Empty，非空 string 保留引用身份。
   现有多根 Capture 是内部能力/机制见证；LoadedWorld 外层入口限定一个固定 World。
 - CaptureSession.Prepare 自动使用 Current，完整预检 exact Schema/DTO/稳定 binding 后编码；全部 live Base 提前生成，
-  existing class/array 调用融合 Delta、existing string 为 unchanged。结果只标识内存 Previous/Candidate，不带磁盘地址。
+  existing class/array/List 调用融合 Delta、existing string 为 unchanged。结果只标识内存 Previous/Candidate，不带磁盘地址。
   重复准备与失败不安装或放弃候选、不烧号；临时 guard 拒绝会话重入。capture-only 登记仍有效，缺 binding 仅 Prepare 拒绝。
   跨 exact layout/DTO/binding 或数组 shape 不匹配拒绝，不自动降级 BaseOnly；StateStore 的 CapturedRevisionPlanner 统一映射结果，调用方仍负责 exact Parent 对应。
 - SG RegisterReaders 显式登记一个模型族的全部可用 Vn；StateReaderRegistry 同 binding 实例幂等，
   同 key 另一实例拒绝，读取开始复制固定索引。Schema 日志不包含可执行 reader，完全移除的模型族仍拒绝。
   Runtime typed 循环完成整链后才装箱，字段 body 保持静态绑定；无程序集扫描或一般 TypeCodec。
 - RevisionDecoder.Read 读取指定 Revision 全部 live 行，逐对象匹配完整 ObjectLayout 后解码，由 exact reader
-  VisitReferences 验证 string/class/array 引用；class nominal 约束按 stored Schema 祖先判断，数组要求 exact nominal 类型。
+  VisitReferences 验证 string/class/array/List 引用；class nominal 约束按 stored Schema 祖先判断，数组与 List 要求 exact nominal 类型。
   晚期失败不返回部分结果，不要求全批 body 零调用。
   DecodedRevision 保留 stored-exact DTO、查询地址及每 ID 唯一 string 实例，关闭 Store 后仍可使用；
   无 roots/领域实例/Upgrade，不是 CaptureSession.Current，不能直接作为已加载的可编辑基线。
@@ -103,7 +100,7 @@ SchemaStore 只维护一种闭合记录和登记批次；class Schema 即其对�
   同 exact CLR Type 的其他模型原子拒绝。传统非泛型入口的可选普通静态 UpgradeStateVnToVnPlus1
   按相邻版本转换完整 leaf DTO，不重复升级祖先。已声明边逐一强类型检查；缺边仅阻止需要该边的 current Load。
   LoadedWorld.Load 先完整 exact 解码、再升级全部 source 行，按 current Schema 重新校验全部引用；
-  从所选 exact World 迭代求可达闭包，全部可达 class/array 实例分配并登记 string 后才 Hydrate。分配必须 exact、非空、彼此不同，Empty 例外。
+  从所选 exact World 迭代求可达闭包，全部可达 class/array/List 实例分配并登记 string 后才 Hydrate。分配必须 exact、非空、彼此不同，Empty 例外。
   内部仅保留 current 冻结状态比较基线及 source ObjectLayout/完整 membership，升级仍 live 必须 Base。
   不可达 source 仍须解码/归一化/验证，但不要求其 current 类型可以 Allocate；历史 ancestry 不能用 current CLR 反推。
 - GraphRepository 独占 publication.rbf、schemas.rbf 和 state/，单 head、单活动 GraphSession；Create 只允许无已发布 head。
@@ -132,13 +129,14 @@ SchemaStore 只维护一种闭合记录和登记批次；class Schema 即其对�
   B 为完整 Base payload 精确值，D 仅对未定文件距离按 5 字节上界计量（超额 0..4）；H 仍是原记录实编码。
   ApplyDeltaBodyVn 只处理同 Vn；不证明 prior 身份，之后仍须对完整 DTO 验证引用。
 - SchemaStore 借用独占的专用 IRbfFile，`schemas.rbf` 只接受 SCB1 v1 的统一闭合目录批次，拒绝旧 SGB1/RPB1。
-  class Schema 记录本身就是对象表示；inline Schema 与数组共用从 2 起连续单调的 UInt32 编号，0 无效、1 固定 string。
+  class Schema 记录本身就是对象表示；inline Schema、数组与 List 共用从 2 起连续单调的 UInt32 编号，0 无效、1 固定 string。
   inline 编号只作为元数据依赖，不能用于对象 Base。编号不回收、不跨仓库解释；shape/对象实例不属于表示身份。
   SchemaKey 为派生查询/冲突索引，不单独编码；Count 只统计用户 Schema，含 inline。完整闭包检查不能因已有 ID 而跳过。
   全部输入、完整 base/inline 闭包、名义 kind/arity、ID/单帧容量预检后，一次追加/flush，最后安装全部索引并交付 ID；幂等登记不追加。
-  exact base/inline 使用先前节点 ID，按依赖顺序恢复；字段 tag15 引用仍携带 closed Named/Array TargetType，
+  exact base/inline 使用先前节点 ID，按依赖顺序恢复；字段 tag15 引用仍携带 closed Named/Array/List TargetType，
   不绑定目标版本或形成 exact 注册依赖，nominal 自环/互环允许。Schema DAG depth≤256，数组外壳不额外占深度。
-  `.dgschema` history 继续新写 v4、严格读旧 v1–v3，其历史格式行为不受目录重构影响。
+  List 使用目录 kind=4、nominal 构造码=8；数组/List 的 exact inline 元素外壳不增加 Schema DAG 深度。
+  `.dgschema` 与 manifest 新写 v5，严格读取原 v1–v4 语法并保留已接受 history 的文件与 hash；旧版本拒绝 List 模式。
   字段 tag 1–16 不变，history-only 参数 tag=17；
   nominal 约束改变属于 owner Schema 改变，目标自身升版则不传播 owner 版本。
   严格重放全部帧/CRC；坏尾、tombstone、未知格式拒绝且不自动截断。写入不确定后 faulted，须重开；
@@ -169,6 +167,12 @@ SchemaStore 只维护一种闭合记录和登记批次；class Schema 即其对�
   空数组也验证升级能力，共享数组只归一化一次，保持 ID/shape 并强制 Base。详细合同与证据见 DB-043。
   非零下界、非 SZ rank-1、rank > 4、数组协变与 unsupported 元素拒绝；object 内部入口不授予 object/interface 通配槽。
   已知成员的 SG body 静态绑定字节原语；PrimitiveSlotCodecs 只在测试工具中。
+- exact BCL List<T> 复用完整槽闭包，可与数组、泛型 class/struct 递归组合；接口字段、List 子类及其他 BCL 容器仍拒绝。
+  ListLayout 只含 exact 元素槽和 codec 版本，Count 属于 owned FrozenListState；Capacity 不持久化。
+  同实例 resize 保持 ObjectId/表示 ID；Base=count+元素，Delta=newCount+共同位置稀疏变化+新增尾部 Base。
+  Prepare/Apply 保持 prior/candidate 内容独立，插入类编辑可放大后缀写入；效率 TODO 指向路线图 §3.2。
+  UseListElementUpgrades 独立于数组规则选择，空 List 同样预绑定；每个共享 List 归一化一次，保留 ID/count 并强制 Base。
+  UpgradeContext.ListCount 随子工具继承，不复用 ArrayShape；历史 reader 不依赖旧领域 struct CLR 类型。
 - Generator 中未注册的 graph operations probe 和 tests 中 logical graph R1–R3b 是机制见证，不能算产品通用图能力。
 
 产品依赖为 StateStore → Runtime + Storage，二者分别复用 Serialization；Storage 另用 RBF substrate。
@@ -178,6 +182,7 @@ DurableGraph runtime 也引用 Serialization，单一 runtime PackageReference �
 
 | 准备修改 | 先查源码/测试，再按需读合同 |
 |---|---|
+| List 内容、位置 Delta、历史元素 Upgrade | [DB-047](../docs/design-branches/0047-list-content-object-slice.md)、[当前投影](DurableGraph/ListObjectBinding.cs)、[历史 reader/body](DurableGraph/ListStateReader.cs)、[List 升级](DurableGraph/StateBindingContext.ListUpgrade.cs)、[真实包](../experiments/PackageConsumerProbe/ListConsumer/README.md) |
 | 统一闭合目录、持久表示 ID 与 Base 头 | [DB-046](../docs/design-branches/0046-unified-schema-catalog-slice.md)、[目录 codec](DurableGraph.StateStore/SchemaCatalogWireCodec.cs)、[SchemaStore](DurableGraph.StateStore/SchemaStore.cs)、[目录重放测试](../tests/DurableGraph.StateStore.Tests/SchemaCatalogReplayTests.cs)、[表示集成测试](../tests/DurableGraph.StateStore.Tests/RepresentationIntegrationTests.cs) |
 | 数组对象、共同引用入口与元素 Upgrade | [DB-043](../docs/design-branches/0043-vector-array-object-slice.md)、[对象布局](DurableGraph/ObjectLayout.cs)、[数组绑定](DurableGraph/ArrayObjectBinding.cs)、[历史 reader](DurableGraph/ArrayStateReader.cs)、[数组 owner Upgrade](DurableGraph/StateBindingContext.ArrayUpgrade.cs) |
 | 引用槽与对象身份包装 | [DB-041](../docs/design-branches/0041-object-id-state-representation.md)、[ObjectId](DurableGraph/ObjectId.cs)、[静态引用操作](DurableGraph/BuiltinStateValues.cs) |

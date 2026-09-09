@@ -29,7 +29,7 @@ objects' IDs remain unchanged. Subsequent array Delta chains inherit that new Ba
 reads still resolve the old one. Required markers include `RepresentationIds`, `ReorderedRegistration`,
 `IndependentRepresentationUpgrade`, and `DeltaInheritsRepresentation`, each followed by `True`.
 
-The runner publishes and verifies canonical history v4, checks counts `4 -> 5`, and preserves all
+The runner publishes and verifies canonical history v5, checks counts `4 -> 5`, and preserves all
 previous file names and hashes. It retains feed/cache/history/database artifacts in its unique
 ignored `obj` directory. Broader malformed-input, unsupported-shape and upgrade-failure coverage
 belongs to the product tests; this lane proves package delivery and two-process history continuity.

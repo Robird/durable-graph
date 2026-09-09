@@ -36,12 +36,16 @@ internal static class SchemaCatalogWireCodec {
                         WriteSlot(ref writer, field, state);
                     }
                 }
-                else {
+                else if (entry.Array is { } array) {
                     writer.WriteByte(3);
-                    ArrayLayout array = entry.Array!;
                     writer.WriteUInt32(array.CodecVersion);
                     writer.WriteByte((byte)array.Constructor);
                     WriteSlot(ref writer, array.ElementSlot, state);
+                }
+                else {
+                    writer.WriteByte(4);
+                    writer.WriteUInt32(entry.List!.CodecVersion);
+                    WriteSlot(ref writer, entry.List.ElementSlot, state);
                 }
                 state.Add(entry);
             }
@@ -56,8 +60,8 @@ internal static class SchemaCatalogWireCodec {
         var reader = new BinaryPayloadReader(payload);
         if (reader.ReadByte() != Version) { throw new InvalidDataException("Unknown Schema catalog version."); }
         uint count = reader.ReadUInt32();
-        // The shortest row is an array: ID, kind, codec version, constructor, slot.
-        if (count == 0 || count > (uint)reader.RemainingCount / 5) {
+        // The shortest row is a List: ID, kind, codec version, slot.
+        if (count == 0 || count > (uint)reader.RemainingCount / 4) {
             throw new InvalidDataException("Invalid Schema catalog row count.");
         }
         var state = new ValidationState(registered);
@@ -98,6 +102,11 @@ internal static class SchemaCatalogWireCodec {
                     }
                     entry = SchemaCatalogEntry.ForArray(id, new((TypeExprKind)constructor, ReadSlot(ref reader, 1, state), codecVersion));
                 }
+                else if (kind == 4) {
+                    uint codecVersion = reader.ReadUInt32();
+                    if (codecVersion != 1) { throw new InvalidDataException("Unsupported List codec version."); }
+                    entry = SchemaCatalogEntry.ForList(id, new(ReadSlot(ref reader, 1, state), codecVersion));
+                }
                 else { throw new InvalidDataException($"Unknown Schema catalog node kind {kind}."); }
             }
             catch (ArgumentException error) { throw new InvalidDataException("Invalid persisted catalog layout.", error); }
@@ -134,7 +143,7 @@ internal static class SchemaCatalogWireCodec {
     private sealed class ValidationState {
         private readonly Dictionary<RepresentationId, SchemaCatalogEntry> _nodes = new();
         private readonly Dictionary<SchemaKey, RepresentationId> _schemaIds = new();
-        private readonly HashSet<ArrayLayout> _arrays = new();
+        private readonly HashSet<ObjectLayout> _containers = new();
         private readonly Dictionary<RepresentationId, int> _heights = new();
         private readonly Dictionary<string, SchemaKind> _kinds = new(StringComparer.Ordinal);
         private readonly Dictionary<string, int> _arities = new(StringComparer.Ordinal);
@@ -173,10 +182,10 @@ internal static class SchemaCatalogWireCodec {
                 }
             }
             else {
-                DurableFieldInfo element = entry.Array!.ElementSlot;
+                DurableFieldInfo element = entry.Array?.ElementSlot ?? entry.List!.ElementSlot;
                 if (element.TargetType is { } target) { ValidateDeclaration(target, SchemaKind.ReferenceObject); }
                 if (element.InlineSchema is { } inline) { RequireSchema(inline, SchemaKind.InlineValue); }
-                if (!_arrays.Add(entry.Array)) { throw new InvalidDataException("An array representation cannot have more than one ID."); }
+                if (!_containers.Add(entry.Layout!)) { throw new InvalidDataException("A container representation cannot have more than one ID."); }
             }
             _nodes.Add(entry.Id, entry);
             _heights.Add(entry.Id, height);
@@ -195,9 +204,9 @@ internal static class SchemaCatalogWireCodec {
         }
 
         private void ValidateDeclaration(TypeExpr type, SchemaKind kind) {
-            // Array elements and generic arguments carry nominal identities only;
+            // Container elements and generic arguments carry nominal identities only;
             // a named argument can represent either a class or an inline value.
-            if (!type.IsArray) {
+            if (!type.IsArray && !type.IsList) {
                 string id = type.DefinitionId!;
                 if (_kinds.TryGetValue(id, out SchemaKind previous) && previous != kind) {
                     throw new InvalidDataException($"Schema family '{id}' cannot change kind across versions.");
@@ -208,7 +217,7 @@ internal static class SchemaCatalogWireCodec {
         }
 
         private void ValidateArities(TypeExpr type) {
-            if (type.IsArray) { ValidateArities(type.ElementType!); return; }
+            if (type.IsArray || type.IsList) { ValidateArities(type.ElementType!); return; }
             if (type.Kind != TypeExprKind.Named) { return; }
             string id = type.DefinitionId!;
             if (_arities.TryGetValue(id, out int arity) && arity != type.Arguments.Length) {

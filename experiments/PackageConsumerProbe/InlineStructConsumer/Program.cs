@@ -91,7 +91,7 @@ internal static class Program {
             Node node = world.Links.Left.Node;
             Require(World.UpgradeCalls == 1 && Node.UpgradeCalls == 1, "Each stored object must be upgraded exactly once.");
             CheckLinks(world, 1012, 131);
-            Require(world.Score == 105 && world.Links.Right.Value == 1021, "Owner upgrade did not rebuild nested V2 DTOs.");
+            Require(world.Score == World.InitialScore + 100 && world.Links.Right.Value == 1021, "Owner upgrade did not rebuild nested V2 DTOs.");
             upgraded = session.Commit(Policy);
             unchanged = session.Commit(Policy);
             Require(ReferenceEquals(world, session.World) && ReferenceEquals(node, session.World.Links.Left.Node) &&
@@ -142,7 +142,7 @@ internal static class Program {
             CheckHistoricalDto(store, schemas, historical, worldId);
             Require(World.UpgradeCalls == 0, "Stored-exact reading must not call Upgrade.");
             LoadedWorld<World> old = LoadedWorld.Load<World>(store, schemas, historical, worldId, Models());
-            Require(old.World.Summary == 2033L && old.World.Score == 1105 && World.UpgradeCalls == 2 && Node.UpgradeCalls == 2,
+            Require(old.World.Summary == 2033L && old.World.Score == World.InitialScore + 1100 && World.UpgradeCalls == 2 && Node.UpgradeCalls == 2,
                 "Old owner must traverse V1 -> V2 -> V3 using retained historical nested DTO constructors.");
         });
         World.UpgradeCalls = Node.UpgradeCalls = 0;
@@ -150,7 +150,7 @@ internal static class Program {
         using (GraphRepository repository = GraphRepository.OpenExisting(directory, Options)) {
             using GraphSession<World> session = repository.Load<World>(Models());
             World world = session.World;
-            Require(world.Summary == 2033L && world.Score == 1105 && World.UpgradeCalls == 1 && Node.UpgradeCalls == 0,
+            Require(world.Summary == 2033L && world.Score == World.InitialScore + 1100 && World.UpgradeCalls == 1 && Node.UpgradeCalls == 0,
                 "The current V2 head must use just the remaining V2 -> V3 owner upgrade.");
             removed = session.Commit(Policy);
             Require(ReferenceEquals(world, session.World), "Removing inline state replaced the domain World.");
@@ -165,7 +165,7 @@ internal static class Program {
         });
         using GraphRepository reopened = GraphRepository.OpenExisting(directory, Options);
         using GraphSession<World> current = reopened.Load<World>(Models());
-        Require(current.World.Summary == 2033L && current.World.Score == 1105 &&
+        Require(current.World.Summary == 2033L && current.World.Score == World.InitialScore + 1100 &&
             reopened.HeadRevisionAddress == removed, "Published V3 head cannot be reopened after deleting inline CLR declarations.");
     }
 #endif
@@ -189,7 +189,7 @@ internal static class Program {
         var state = decoded.GetRequired(worldId).GetState<World.__DurableState.V1>();
         Require(decoded.Objects.Count == 4 && decoded.GetRequired(worldId).Schema!.Version == 1 &&
             state.Segment0Field1.Segment0Field1.Segment0Field1 == 12 &&
-            state.Segment0Field1.Segment0Field2.Segment0Field1 == 21 && state.Segment1Field1 == 5,
+            state.Segment0Field1.Segment0Field2.Segment0Field1 == 21 && state.Segment1Field1 == World.InitialScore,
             "Historical exact nested DTO/Base+Delta reconstruction changed across consumer builds.");
     }
 

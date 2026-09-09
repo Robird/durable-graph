@@ -228,6 +228,7 @@ public abstract partial class StateBindingContext : IStateModelResolver {
             return arguments[expression.ParameterOrdinal];
         }
         if (expression.Kind == TypeExprKind.Builtin || expression.Arguments.IsEmpty) { return expression; }
+        if (expression.IsList) { return TypeExpr.List(Substitute(expression.ElementType!, arguments)); }
         if (expression.IsArray) {
             TypeExpr element = Substitute(expression.ElementType!, arguments);
             return expression.ArrayRank == 1 ? TypeExpr.VectorArray(element) : TypeExpr.MultiDimArray(element, expression.ArrayRank);

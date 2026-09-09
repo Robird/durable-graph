@@ -28,7 +28,7 @@ public static class RevisionDecoder {
         IReadOnlyDictionary<SchemaKey, StateReaderBinding> bindings) => ReadCore(store, schemas, revisionAddress, body => {
             ObjectLayout layout = body.Layout;
             if (layout.Kind == ObjectStateKind.String) { return StringObjectReader.Instance; }
-            DurableSchema schema = layout.Schema ?? throw new InvalidDataException("Array readers require a model catalog.");
+            DurableSchema schema = layout.Schema ?? throw new InvalidDataException("Container readers require a model catalog.");
             SchemaKey key = new(schema.Type, schema.Version);
             if (!bindings.TryGetValue(key, out StateReaderBinding? binding)) {
                 throw new InvalidDataException($"No reader is registered for {key.Type} v{key.Version}.");

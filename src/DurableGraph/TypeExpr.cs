@@ -51,11 +51,19 @@ public sealed class TypeExpr : IEquatable<TypeExpr>, IComparable<TypeExpr> {
     /// <summary>Gets whether this expression is a supported array constructor.</summary>
     public bool IsArray => Kind is >= TypeExprKind.VectorArray and <= TypeExprKind.Rank4Array;
 
+    public bool IsList => Kind == TypeExprKind.List;
+
     /// <summary>Gets the array rank, or zero for a non-array expression.</summary>
     public int ArrayRank => IsArray ? (int)Kind - (int)TypeExprKind.VectorArray + 1 : 0;
 
-    /// <summary>Gets the element expression, or null for a non-array expression.</summary>
-    public TypeExpr? ElementType => IsArray ? Arguments[0] : null;
+    /// <summary>Gets the array or List element expression, or null for another expression.</summary>
+    public TypeExpr? ElementType => IsArray || IsList ? Arguments[0] : null;
+
+    /// <summary>Constructs the built-in BCL List type.</summary>
+    public static TypeExpr List(TypeExpr element) {
+        ArgumentNullException.ThrowIfNull(element);
+        return new(TypeExprKind.List, TypeTag.Invalid, null, [element], -1);
+    }
 
     public static TypeExpr Builtin(TypeTag tag) {
         if (tag is < TypeTag.Boolean or > TypeTag.Double) {
@@ -124,6 +132,7 @@ public sealed class TypeExpr : IEquatable<TypeExpr>, IComparable<TypeExpr> {
         TypeExprKind.Rank2Array => $"{ElementType}[,]",
         TypeExprKind.Rank3Array => $"{ElementType}[,,]",
         TypeExprKind.Rank4Array => $"{ElementType}[,,,]",
+        TypeExprKind.List => $"List<{ElementType}>",
         _ => throw new InvalidOperationException("Unknown type expression constructor."),
     };
 
@@ -139,4 +148,5 @@ public enum TypeExprKind : byte {
     Rank2Array = 5,
     Rank3Array = 6,
     Rank4Array = 7,
+    List = 8,
 }

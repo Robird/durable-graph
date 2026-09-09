@@ -5,6 +5,7 @@ public enum ObjectStateKind {
     Durable,
     String,
     Array,
+    List,
 }
 
 /// <summary>
@@ -39,6 +40,14 @@ public sealed class ObjectStateRecord {
     }
 
     public ObjectId Id { get; }
+    internal ObjectStateRecord(ObjectId id, ListLayout layout, object state, ICapturedStatePreparation? preparation = null) {
+        ArgumentNullException.ThrowIfNull(state);
+        Id = id;
+        Layout = ObjectLayout.ForList(layout);
+        _content = state;
+        Preparation = preparation;
+    }
+
     public ObjectLayout Layout { get; }
     public ObjectStateKind Kind => Layout.Kind;
     public DurableSchema? Schema => Layout.Schema;
@@ -61,4 +70,9 @@ public sealed class ObjectStateRecord {
     public FrozenArrayState<TState> GetArrayState<TState>() where TState : unmanaged =>
         Kind == ObjectStateKind.Array && _content is FrozenArrayState<TState> state
             ? state : throw new InvalidOperationException("The record does not contain the requested exact array state type.");
+
+    /// <summary>Returns immutable exact List content, without exposing a writable buffer.</summary>
+    public FrozenListState<TState> GetListState<TState>() where TState : unmanaged =>
+        Kind == ObjectStateKind.List && _content is FrozenListState<TState> state
+            ? state : throw new InvalidOperationException("The record does not contain the requested exact List state type.");
 }

@@ -171,7 +171,7 @@ public sealed partial class DurableSchemaGenerator {
             source.Append("state.").Append(current.Fields[inheritedCount + index].Name).AppendLine(");");
         }
         if (hasDomainBase) {
-            SchemaReference reference = GetCurrentBaseReference(type.Symbol)!.Value;
+            SchemaReference reference = GetCurrentBaseReference(type)!.Value;
             string baseState = type.Symbol.BaseType!.ToDisplayString(FullyQualifiedNameFormat) + "." + GeneratedStateTypeName;
             source.Append(indent).Append("    var baseState = new ").Append(baseState).Append(".V")
                 .Append(reference.Version.ToString(CultureInfo.InvariantCulture)).Append('(');

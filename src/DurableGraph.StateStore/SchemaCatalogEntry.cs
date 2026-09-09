@@ -2,11 +2,13 @@ namespace Atelia.DurableGraph.StateStore;
 
 /// <summary>One closed metadata node. Inline nodes are dependencies, never object representations.</summary>
 internal sealed class SchemaCatalogEntry {
-    private SchemaCatalogEntry(RepresentationId id, DurableSchema? schema, ArrayLayout? array) {
+    private SchemaCatalogEntry(RepresentationId id, DurableSchema? schema, ArrayLayout? array, ListLayout? list = null) {
         Id = id;
         Schema = schema;
         Array = array;
-        Layout = array is not null ? ObjectLayout.ForArray(array)
+        List = list;
+        Layout = list is not null ? ObjectLayout.ForList(list)
+            : array is not null ? ObjectLayout.ForArray(array)
             : schema!.Kind == SchemaKind.ReferenceObject ? ObjectLayout.ForDurable(schema) : null;
     }
 
@@ -20,8 +22,14 @@ internal sealed class SchemaCatalogEntry {
         return new(id, null, array);
     }
 
+    internal static SchemaCatalogEntry ForList(RepresentationId id, ListLayout list) {
+        ArgumentNullException.ThrowIfNull(list);
+        return new(id, null, null, list);
+    }
+
     internal RepresentationId Id { get; }
     internal DurableSchema? Schema { get; }
     internal ArrayLayout? Array { get; }
+    internal ListLayout? List { get; }
     internal ObjectLayout? Layout { get; }
 }

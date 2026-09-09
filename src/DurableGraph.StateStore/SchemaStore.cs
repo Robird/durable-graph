@@ -2,7 +2,7 @@ using Atelia.Rbf;
 
 namespace Atelia.DurableGraph.StateStore;
 
-/// <summary>Persists closed Schema and array nodes in one append-only representation catalog.</summary>
+/// <summary>Persists closed Schema and container nodes in one append-only representation catalog.</summary>
 /// <remarks>
 /// The caller owns the file and its exclusive writer lifetime. Do not append to or
 /// truncate it outside this store, or share it with another live SchemaStore.
@@ -47,12 +47,12 @@ public sealed class SchemaStore {
             throw new InvalidDataException($"SchemaStore framing is invalid; no automatic tail recovery is performed. {error.Message}");
         }
         // Merely reading bytes left in the OS cache after an uncertain outcome
-        // is not a new durable barrier, including catalogs containing only arrays.
+        // is not a new durable barrier, including catalogs containing only containers.
         if (!readOnly && hadFrames) { file.DurableFlush(); }
         _acceptedTail = file.TailOffset;
     }
 
-    /// <summary>The number of user Schemas (class and inline), excluding arrays and built-ins.</summary>
+    /// <summary>The number of user Schemas (class and inline), excluding containers and built-ins.</summary>
     public int Count {
         get {
             RequireAvailable();
@@ -158,6 +158,10 @@ public sealed class SchemaStore {
             else if (layout.Array is { } array) {
                 if (array.ElementSlot.InlineSchema is { } inline) { AddClosure(inline, 1); }
                 if (!ids.ContainsKey(layout)) { Add(SchemaCatalogEntry.ForArray(Allocate(), array)); }
+            }
+            else if (layout.List is { } list) {
+                if (list.ElementSlot.InlineSchema is { } inline) { AddClosure(inline, 1); }
+                if (!ids.ContainsKey(layout)) { Add(SchemaCatalogEntry.ForList(Allocate(), list)); }
             }
         }
         // The shared codec validates nominal kind/arity and all integer dependencies

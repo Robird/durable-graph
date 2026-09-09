@@ -45,12 +45,15 @@ public abstract partial class Owner : DurableBase {
 [DurableType("package.inline-world", 3)]
 #endif
 public sealed partial class World : Owner {
+    // A real unchanged scalar keeps this nested-Delta witness useful after the Base
+    // header became a compact representation ID: old score=5 gave B=12 <= D.
+    internal const int InitialScore = 1_000_000_000;
     [DurableField(1)] private readonly int _score;
     internal int Score => _score;
     internal static int UpgradeCalls = 0;
 #if HISTORY_V1
     internal World(Node node, string rightLabel) {
-        _score = 5;
+        _score = InitialScore;
         SetLinks(new(new(11, node.Label, node), new(21, rightLabel, node), this));
     }
     internal void ChangeLeft(int value) => SetLinks(new(new(value, Links.Left.Label, Links.Left.Node), Links.Right, this));

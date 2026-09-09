@@ -37,11 +37,16 @@ internal static class CatalogTestData {
                     WriteSlot(ref writer, field, ids);
                 }
             }
-            else {
+            else if (entry.Array is { } array) {
                 writer.WriteByte(3);
-                writer.WriteUInt32(entry.Array!.CodecVersion);
-                writer.WriteByte((byte)entry.Array.Constructor);
-                WriteSlot(ref writer, entry.Array.ElementSlot, ids);
+                writer.WriteUInt32(array.CodecVersion);
+                writer.WriteByte((byte)array.Constructor);
+                WriteSlot(ref writer, array.ElementSlot, ids);
+            }
+            else {
+                writer.WriteByte(4);
+                writer.WriteUInt32(entry.List!.CodecVersion);
+                WriteSlot(ref writer, entry.List.ElementSlot, ids);
             }
         }
         return buffer.WrittenSpan.ToArray();

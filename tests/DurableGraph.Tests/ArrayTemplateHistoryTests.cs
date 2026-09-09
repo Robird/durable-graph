@@ -10,7 +10,7 @@ public sealed class ArrayTemplateHistoryTests {
         string text = History("// field:1|15|a1(p0)\n// field:2|15|a2(a3(a4(b2)))\n" +
             "// field:3|15|nQm94(a1(b4))\n// field:4|16|nUGFpcg==(a1(p0))|1\n// field:5|2\n");
         SchemaHistoryRecord record = fixture.Parse(text);
-        Assert.Equal(text, SchemaHistoryDocument.RenderHistory(record));
+        Assert.Equal(text, SchemaHistoryDocument.RenderHistory(record, 4));
         Assert.Equal("a1(p0)", record.Fields[0].ValuePattern.ToString());
         Assert.Equal("a1(b2)", record.Fields[0].ValuePattern.Substitute([record.Fields[4].ValuePattern]).ToString());
         Assert.Equal("a2(a3(a4(b2)))", record.Fields[1].ValuePattern.ToString());
@@ -120,7 +120,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         Assert.Contains("TypeExpr.VectorArray(", generated);
         Assert.DoesNotContain("Array.GetValue(", generated);
         string history = GeneratedSource(run, "DurableGraphSchemaHistoryCandidates.g.cs");
-        Assert.Contains("manifest:4", history);
+        Assert.Contains("manifest:5", history);
         Assert.Contains("// field:2|15|a1(p0)", history);
         Assert.Contains("// field:2|15|a1(a1(b2))", history);
         Assert.Contains("// field:4|15|nQm94(a1(b2))", history);
@@ -131,7 +131,7 @@ public sealed partial class DurableSchemaGeneratorTests {
     [InlineData("int[,,,,]")]
     [InlineData("object[]")]
     [InlineData("decimal[]")]
-    [InlineData("System.Collections.Generic.List<int>[]")]
+    [InlineData("System.Collections.Generic.List<decimal>[]")]
     public void UnsupportedArrayElementsAndRanksRemainPreciseGeneratorErrors(string type) {
         GeneratorTestRun run = RunGenerator("using Atelia.DurableGraph; [DurableType(\"Bad\",1)] public partial class Bad:DurableBase { [DurableField(1)] public " + type + " Value; }");
         Assert.Contains(run.GeneratorDiagnostics, diagnostic => diagnostic.Id == "DG0007");

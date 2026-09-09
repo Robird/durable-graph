@@ -116,7 +116,8 @@ public sealed partial class DurableSchemaGenerator {
         return true;
     }
 
-    private static SchemaReference? GetCurrentBaseReference(INamedTypeSymbol type) {
+    private static SchemaReference? GetCurrentBaseReference(DurableTypeModel model) {
+        INamedTypeSymbol type = model.Symbol;
         if (type.TypeKind == TypeKind.Struct || HasMetadataName(type.BaseType, DurableBaseMetadataName)) {
             return null;
         }
@@ -124,7 +125,7 @@ public sealed partial class DurableSchemaGenerator {
         AttributeData attribute = GetAttribute(type.BaseType!.GetAttributes(), DurableTypeAttributeMetadataName)!;
         return new SchemaReference(
             (string)attribute.ConstructorArguments[0].Value!,
-            (int)attribute.ConstructorArguments[1].Value!, GetNamedTypePattern(type.BaseType!));
+            (int)attribute.ConstructorArguments[1].Value!, GetNamedTypePattern(type.BaseType!, model.ListType));
     }
 
     private static bool SameReference(SchemaReference? left, SchemaReference? right) {
@@ -302,7 +303,7 @@ public sealed partial class DurableSchemaGenerator {
     private static SchemaHistoryModel CurrentShape(DurableTypeModel current) {
         return new SchemaHistoryModel(
             string.Empty, current.SchemaId, current.Version,
-            ToSchemaHistoryFields(current.Fields), GetCurrentBaseReference(current.Symbol), current.IsInline ? 2 : 1, current.Arity);
+            ToSchemaHistoryFields(current.Fields), GetCurrentBaseReference(current), current.IsInline ? 2 : 1, current.Arity);
     }
 
     private static void AppendSchemaType(
@@ -318,7 +319,7 @@ public sealed partial class DurableSchemaGenerator {
 
         string indent = hasNamespace ? "    " : string.Empty;
         string member = indent + "    ";
-        string hiding = GetCurrentBaseReference(current.Symbol).HasValue ? "new " : string.Empty;
+        string hiding = GetCurrentBaseReference(current).HasValue ? "new " : string.Empty;
         source.Append(indent).Append(current.IsInline ? "partial struct " : "partial class ").Append(EscapeIdentifier(current.Symbol.Name)).AppendLine(" {");
         source.Append(member).Append("public ").Append(hiding)
             .Append("static global::Atelia.DurableGraph.DurableSchema Schema => GetSchema(")

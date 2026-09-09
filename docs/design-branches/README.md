@@ -19,11 +19,11 @@
 ## 当前规划
 
 DB-034–039 已实现；DB-041 已实现非泛型 ObjectId，DB-042 已收敛 Upgrade Schema 复核，DB-040 的泛型目标品牌暂缓。
-DB-045 持久表示 ID 与 DB-046 统一闭合目录均已完成；DB-047 按两步安排收敛为基础功能分片，尚未实施：
+DB-045 持久表示 ID、DB-046 统一闭合目录与 DB-047 List 基础能力均已完成；后继 List 高效差分研究从活跃路线图进入：
 
 | 文档 | 状态 | 实施范围 |
 |---|---|---|
-| [DB-047 List<T> 内容对象](0047-list-content-object-slice.md) | Chosen / 尚未实施 | 先完整支持 BCL List、简单位置 Delta、owner Upgrade 与真实包；高效插入 Diff/Patch 后继选型，本片不做效率竞争 |
+| [DB-047 List<T> 内容对象](0047-list-content-object-slice.md) | Implemented / G0–G3 已验收 | 完整槽组合、简单位置 Delta、List owner Upgrade、统一目录和 history v5；各测试项目与七组真实包通过；高效插入 Diff/Patch 后继选型 |
 | [DB-046 统一闭合 Schema 目录](0046-unified-schema-catalog-slice.md) | Implemented / G0–G3 已通过验收 | 合并 Schema/表示记录及单批次登记；exact base/inline 依赖按 ID 寻址；保留当前闭合与版本规则；完整 tests 与四组真实包通过 |
 | [DB-045 持久表示 ID](0045-persisted-representation-id-slice.md) | Implemented / G0–G3 已通过验收 | 复用 ObjectLayout，SchemaStore 同日志持久整数登记、Base v4 ID 头与历史 reader 解析；后续清理移除旧 Base 头读取，不改模板/版本模型；初次完整测试及 Array/Generic/ValueUpgrade 真实包证据保留 |
 | [DB-044 类型头与 Schema 寻址盲评](0044-type-header-blind-review/README.md) | Research / 未裁决 | 隔离上下文、相反阅读顺序与交叉质询；比较版本化开放模板 token、闭合登记别名及表示版本政策；未修改产品格式 |
