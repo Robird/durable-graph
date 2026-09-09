@@ -67,6 +67,8 @@ null key 一律拒绝，nullable reference 注解不授予 null key 支持。
 
 ### 2.1 复合值 Key 是明确后续能力
 
+后继功能边界与推荐结构已形成 [DB-055](0055-composite-dictionary-key-design.md)（Proposed，未实施）；下文保留本片完成时的需求与备选依据。
+
 用户确认组合多个字段构成键是典型领域需求，不能把它留在“有消费者才考虑”的末端。
 本片主体完成后，优先设计至少一条方便、可恢复的复合值 Key 路径；允许有限支持，
 不要求第一次就接受任意用户比较逻辑。候选包括已有 Durable struct 的受控结构比较、有限 record struct，

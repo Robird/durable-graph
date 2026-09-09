@@ -21,8 +21,10 @@
 [DB-054 Dictionary 内容对象](../docs/design-branches/0054-dictionary-content-object-slice.md) 已接入双槽冻结、无序映射、
 canonical key body 寻址 Remove/Add/PatchValue、实例 comparer 与显式双槽 Upgrade，根 tests/真实包整体验收通过。
 新写 history v7；SCB1 v2、Base v4 与 Storage wire 不变。完整验收与接缝以该分片 §10 为准。
-主体后优先设计有限复合值 Key，具体工作见[路线图](../docs/DurableGraph-research-roadmap.md#2-已采纳方向中的未完成能力)；
-BCL Dictionary 外观保持实验性，不自动扩展 record struct、ValueTuple 或自定义容器。
+下一片设计见 [DB-055 有限复合 Key](../docs/design-branches/0055-composite-dictionary-key-design.md)（Proposed，尚未实施）：
+推荐 BCL Dictionary 显式选择框架持久字段 comparer，覆盖普通/generic struct、Nullable/string/identity 引用组件；
+冷热查找规则一致，仍保留 key-body Delta。字段集合与构造入口待用户采纳；record struct、ValueTuple、自建容器另列后继。
+未完成工作由[路线图](../docs/DurableGraph-research-roadmap.md#2-已采纳方向中的未完成能力)维护，不把该提议当当前能力。
 
 [DB-053](../docs/design-branches/0053-enum-inline-state-slice.md) 的单整数 InlineValue、Family DTO/body、
 外置 enum 投影及删除旧 CLR 后的显式升级继续沿用；常量表不入 Schema。

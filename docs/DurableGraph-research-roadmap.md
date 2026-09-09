@@ -16,8 +16,9 @@
 [DB-053 显式 enum 内联状态](design-branches/0053-enum-inline-state-slice.md) 已贯通单整数布局、组合与历史显式升级；
 常量表不入 Schema 的已选合同维护在目标设计，验收以该分片为入口。
 [DB-054 Dictionary 内容对象](design-branches/0054-dictionary-content-object-slice.md) 已完成白名单范围的保存、键寻址 Delta 与历史双槽升级。
-接下来优先设计有限复合值 Key，比较器与具体容器方案见该文档 §2；BCL Dictionary 外观仍可后继替换，
-不预先引入通用容器平台。
+有限复合值 Key 已形成 [DB-055 提议](design-branches/0055-composite-dictionary-key-design.md)：
+推荐显式框架持久字段 comparer + BCL Dictionary，覆盖普通/generic struct 与递归安全组件；待采纳后实施。
+严格 Default 子集和固定语义容器作为备选，record/ValueTuple 外观另排；不预先引入通用容器平台。
 开放模板方案的评估结论与重访条件见 §3.1。
 DB-036 单 World/单 head 工作会话已实现；branch/Reset、联合 Store 视图及更强恢复保证仍独立排期。
 MVP 库内加载顺序为 exact 重建 → 单对象 Upgrade → 分配实例 → 填充/连接引用 → 完整交付 World；
@@ -40,7 +41,7 @@ B/D/H 分别指本轮精确 Base payload、Delta payload 上界、已有对象�
 
 | 工作项 | 最小应回答的问题 | 设计或证据入口 |
 |---|---|---|
-| 复合值 Key | 优先设计至少一条易用的有限支持路径；比较已有 struct、record struct 与框架 comparer，ValueTuple 为后续候选；复核是否保留 BCL 外观或采用近似 IDictionary 实现 | [DB-054 §2.1–2.2](design-branches/0054-dictionary-content-object-slice.md#21-复合值-key-是明确后续能力) |
+| 复合值 Key | DB-055 已形成推荐：显式 comparer 按全部持久字段递归，current SG 比较与 historical exact 查重；待采纳比较语义/构造入口并完成 G0–G3。ValueTuple/record 外观、逐字段策略和自建容器另列边界 | [DB-055](design-branches/0055-composite-dictionary-key-design.md)、需求来源 [DB-054 §2.1–2.2](design-branches/0054-dictionary-content-object-slice.md#21-复合值-key-是明确后续能力) |
 
 List 高效 Diff/Patch 已完成；额外性能工作按 [§3.2](#32-list-差分算法选型与设计)的实测条件重访。
 

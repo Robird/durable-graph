@@ -23,6 +23,7 @@ DB-045 持久表示 ID、DB-046 统一闭合目录、DB-047 List 基础能力和
 
 | 文档 | 状态 | 实施范围 |
 |---|---|---|
+| [DB-055 有限复合 Dictionary Key](0055-composite-dictionary-key-design.md) | Proposed / 研究与交叉审阅，未实施 | 推荐显式框架持久字段 comparer、BCL 外观、普通/generic struct 与递归组件；热侧 SG/冷侧 exact 查重、备选与功能取舍、G0–G3 验收建议 |
 | [DB-054 Dictionary 内容对象](0054-dictionary-content-object-slice.md) | Implemented / G0–G4 | 白名单双槽冻结、键寻址 Delta、完整 source/current 校验与历史升级；BCL 外观保持实验性，复合值 Key 为明确后继；全量及九条真实包验收 |
 | [DB-053 显式 enum 内联状态](0053-enum-inline-state-slice.md) | Implemented / G0–G3 | 有 nominal 身份的单整数 InlineValue、外置静态投影与完整组合/历史升级；常量表不入 Schema、无新增格式，八整数和跨版本真实包验证 |
 | [DB-052 可组合 Nullable 值槽](0052-nullable-value-slot-slice.md) | Implemented / G0–G4 已验收 | exact child、unmanaged 状态包装、字段/泛型/数组/List 与显式升级提升；history v6、SCB1 v2、完整tests/真实包/独立审查通过；不含 enum 或 Dictionary |
