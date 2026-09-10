@@ -32,7 +32,7 @@ save unchanged and resume ordinary List Delta. A cold reopen preserves the resul
 repeating business callbacks. The earlier revision remains independently readable.
 
 The runner requires immutable history hashes and exact counts **4 -> 8**, with canonical text
-format v7 throughout. This slice reuses the existing catalog and body formats. Stage markers are
+format v8 for newly published files. This slice reuses the existing catalog and body formats. Stage markers are
 printed only after all executable assertions pass:
 
 ```text

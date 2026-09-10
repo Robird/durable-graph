@@ -58,6 +58,18 @@ internal static class BuiltinStateValues {
             binding = new(new(1, TypeTag.Double), typeof(double), typeof(DoubleStateOps), domainType, typeof(IdentityValueProjection<double>));
             return true;
         }
+        if (domainType == typeof(Guid)) {
+            binding = new(new(1, TypeTag.Guid), typeof(Guid), typeof(GuidStateOps), domainType, typeof(IdentityValueProjection<Guid>));
+            return true;
+        }
+        if (domainType == typeof(decimal)) {
+            binding = new(new(1, TypeTag.Decimal), typeof(decimal), typeof(DecimalStateOps), domainType, typeof(IdentityValueProjection<decimal>));
+            return true;
+        }
+        if (domainType == typeof(TimeSpan)) {
+            binding = new(new(1, TypeTag.TimeSpan), typeof(TimeSpan), typeof(TimeSpanStateOps), domainType, typeof(IdentityValueProjection<TimeSpan>));
+            return true;
+        }
         if (domainType == typeof(string)) {
             binding = new(new(1, TypeTag.String), typeof(ObjectId), typeof(StringIdStateOps), domainType, typeof(StringValueProjection));
             return true;
@@ -81,6 +93,9 @@ internal static class BuiltinStateValues {
             TypeTag.Half => new(slot, typeof(Half), typeof(HalfStateOps)),
             TypeTag.Single => new(slot, typeof(float), typeof(SingleStateOps)),
             TypeTag.Double => new(slot, typeof(double), typeof(DoubleStateOps)),
+            TypeTag.Guid => new(slot, typeof(Guid), typeof(GuidStateOps)),
+            TypeTag.Decimal => new(slot, typeof(decimal), typeof(DecimalStateOps)),
+            TypeTag.TimeSpan => new(slot, typeof(TimeSpan), typeof(TimeSpanStateOps)),
             TypeTag.String => new(slot, typeof(ObjectId), typeof(StringIdStateOps)),
             TypeTag.ObjectReference => new(slot, typeof(ObjectId), typeof(ObjectIdStateOps)),
             _ => null!,

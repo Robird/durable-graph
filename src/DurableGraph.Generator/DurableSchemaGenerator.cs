@@ -23,7 +23,7 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
     private const string DurableBaseMetadataName =
         "Atelia.DurableGraph.DurableBase";
     private const string SchemaHistoryManifestHeader =
-        "// durable-graph-schema-history-manifest:7";
+        "// durable-graph-schema-history-manifest:8";
     private const string SchemaHistoryHeader =
         "// durable-graph-schema-history:1";
     private static readonly UTF8Encoding StrictUtf8 = new(
@@ -393,7 +393,7 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
         }
 
         string[] lines = normalized.Split('\n');
-        if (lines.Length > 0 && (lines[0] == "// durable-graph-schema-history:3" || lines[0] == "// durable-graph-schema-history:4" || lines[0] == "// durable-graph-schema-history:5" || lines[0] == "// durable-graph-schema-history:6" || lines[0] == "// durable-graph-schema-history:7")) {
+        if (lines.Length > 0 && (lines[0] == "// durable-graph-schema-history:3" || lines[0] == "// durable-graph-schema-history:4" || lines[0] == "// durable-graph-schema-history:5" || lines[0] == "// durable-graph-schema-history:6" || lines[0] == "// durable-graph-schema-history:7" || lines[0] == "// durable-graph-schema-history:8")) {
             return TryParseTemplateHistory(file.Path, lines, out model, out error);
         }
         if (lines.Length < 5 ||
@@ -474,7 +474,7 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
                     ? !format2 || parts.Length != 4 || !TryDecodeSchemaId(parts[2], out targetSchemaId) || !TryParsePositiveCanonicalInt(parts[3], out inlineVersion)
                     : typeTagValue == 15
                         ? parts.Length != 3 || !TryDecodeSchemaId(parts[2], out targetSchemaId)
-                        : parts.Length != 2 || !TryGetFieldTypeName(typeTagValue, out _))) {
+                        : parts.Length != 2 || typeTagValue > 14 || !TryGetFieldTypeName(typeTagValue, out _))) {
                 error = "fields must have increasing positive IDs and supported numeric type tags";
                 return false;
             }
@@ -873,7 +873,8 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
             SpecialType.System_Char => 11,
             SpecialType.System_Single => 13,
             SpecialType.System_Double => 14,
-            _ => halfType is not null && SymbolEqualityComparer.Default.Equals(type, halfType) ? 12 : 0,
+            SpecialType.System_Decimal => 20,
+            _ => GetCoreLibraryScalarTag(type, halfType),
         };
         if (TryGetFieldTypeName(typeTagValue, out fieldTypeName)) {
             typeTag = GetTypeTagName(typeTagValue);
@@ -882,6 +883,16 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
 
         typeTag = null;
         return false;
+    }
+
+    private static int GetCoreLibraryScalarTag(ITypeSymbol type, INamedTypeSymbol? halfType) {
+        // The Half symbol comes from this compilation's actual System.Object core library.
+        // Resolve these two metadata symbols there too; source-defined System names are not builtins.
+        if (halfType is null) return 0;
+        if (SymbolEqualityComparer.Default.Equals(type, halfType)) return 12;
+        int tag = type.Name == "Guid" ? 19 : type.Name == "TimeSpan" ? 21 : 0;
+        return tag != 0 && SymbolEqualityComparer.Default.Equals(type,
+            halfType.ContainingAssembly.GetTypeByMetadataName("System." + type.Name)) ? tag : 0;
     }
 
     private static bool TryGetNominalReference(
@@ -932,7 +943,7 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
     private static bool TryGetFieldTypeName(
         int typeTagValue,
         out string? fieldTypeName) {
-        if (typeTagValue >= 1 && typeTagValue <= 14) {
+        if (TypePattern.IsBuiltinTag(typeTagValue)) {
             fieldTypeName = "global::System." + GetTypeTagName(typeTagValue);
             return true;
         }
@@ -1030,6 +1041,12 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
                 return "Single";
             case 14:
                 return "Double";
+            case 19:
+                return "Guid";
+            case 20:
+                return "Decimal";
+            case 21:
+                return "TimeSpan";
             case 15:
                 return "ObjectReference";
             case 16:

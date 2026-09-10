@@ -284,11 +284,12 @@ public sealed partial class DurableSchemaGenerator {
 
     private static bool TryParseTemplateHistory(string path, string[] lines, out SchemaHistoryModel model, out string? error) {
         model = default;
-        bool allowDictionaries = lines[0] == "// durable-graph-schema-history:7";
+        bool allowBclScalars = lines[0] == "// durable-graph-schema-history:8";
+        bool allowDictionaries = allowBclScalars || lines[0] == "// durable-graph-schema-history:7";
         bool allowNullable = allowDictionaries || lines[0] == "// durable-graph-schema-history:6";
         bool allowLists = allowNullable || lines[0] == "// durable-graph-schema-history:5";
         bool allowArrays = allowLists || lines[0] == "// durable-graph-schema-history:4";
-        error = "format 3/4/5/6/7 requires canonical kind, arity, and type-pattern records";
+        error = "format 3/4/5/6/7/8 requires canonical kind, arity, and type-pattern records";
         if (lines.Length < 7 || lines[1] != "// schema-begin" || lines[lines.Length - 1] != "// schema-end" ||
             !lines[2].StartsWith("// schema-id-base64:", StringComparison.Ordinal) ||
             !TryDecodeSchemaId(lines[2].Substring(20), out string? id) ||
@@ -300,7 +301,7 @@ public sealed partial class DurableSchemaGenerator {
         SchemaReference? baseSchema = null;
         if (lines[cursor].StartsWith("// base:", StringComparison.Ordinal)) {
             string[] parts = lines[cursor++].Substring(8).Split('|');
-            if (parts.Length != 2 || !TypePattern.TryParse(parts[0], arity, out TypePattern? pattern, allowArrays, allowLists, allowNullable, allowDictionaries) || pattern!.Kind != PatternKind.Named ||
+            if (parts.Length != 2 || !TypePattern.TryParse(parts[0], arity, out TypePattern? pattern, allowArrays, allowLists, allowNullable, allowDictionaries, allowBclScalars) || pattern!.Kind != PatternKind.Named ||
                 !TryParsePositiveCanonicalInt(parts[1], out int baseVersion)) return false;
             baseSchema = new SchemaReference(pattern.DefinitionId!, baseVersion, pattern);
         }
@@ -312,15 +313,15 @@ public sealed partial class DurableSchemaGenerator {
             if (!line.StartsWith("// field:", StringComparison.Ordinal)) return false;
             string[] parts = line.Substring(9).Split('|');
             if (parts.Length < 2 || !TryParsePositiveCanonicalInt(parts[0], out int fieldId) || fieldId <= previous ||
-                !TryParsePositiveCanonicalInt(parts[1], out int tag) || tag > (allowNullable ? 18 : 17)) return false;
+                !TryParsePositiveCanonicalInt(parts[1], out int tag) || tag > (allowBclScalars ? 21 : allowNullable ? 18 : 17)) return false;
             previous = fieldId;
             TypePattern? pattern;
             SchemaReference? inline = null;
-            if (tag <= 14) {
+            if (TypePattern.IsBuiltinTag(tag)) {
                 if (parts.Length != 2) return false;
                 pattern = TypePattern.Builtin(tag);
             } else {
-                if (parts.Length < 3 || !TypePattern.TryParse(parts[2], arity, out pattern, allowArrays, allowLists, allowNullable, allowDictionaries)) return false;
+                if (parts.Length < 3 || !TypePattern.TryParse(parts[2], arity, out pattern, allowArrays, allowLists, allowNullable, allowDictionaries, allowBclScalars)) return false;
                 bool expectedKind = tag == 18 ? pattern!.IsNullable : tag == 17 ? pattern!.Kind == PatternKind.Parameter :
                     pattern!.Kind == PatternKind.Named || (tag == 15 && (pattern.IsArray || pattern.IsList || pattern.IsDictionary));
                 if (!expectedKind) return false;

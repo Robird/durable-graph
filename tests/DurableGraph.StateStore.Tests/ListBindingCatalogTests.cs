@@ -87,7 +87,7 @@ public sealed class ListBindingCatalogTests {
     [Fact]
     public void UnsupportedElementsOpenTypesInterfacesAndSubclassesFailClosed() {
         StateModelSnapshot snapshot = new StateModelRegistry().Snapshot();
-        Type[] unsupported = [typeof(List<>), typeof(List<object>), typeof(List<decimal>),
+        Type[] unsupported = [typeof(List<>), typeof(List<object>), typeof(List<DateTime>),
             typeof(List<DayOfWeek>), typeof(IList<int>), typeof(DerivedList), typeof(List<DerivedList>)];
         foreach (Type type in unsupported) {
             Assert.Throws<InvalidDataException>(() => snapshot.GetTypeExpr(type));

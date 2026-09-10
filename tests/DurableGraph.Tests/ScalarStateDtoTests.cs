@@ -141,7 +141,6 @@ public sealed partial class DurableSchemaGeneratorTests {
     [InlineData("Choice")]
     [InlineData("nint")]
     [InlineData("nuint")]
-    [InlineData("decimal")]
     [InlineData("System.Int128")]
     [InlineData("Composite")]
     public void ScalarTypeRecognitionKeepsUnsupportedValueKindsOutsideTheSlice(string fieldType) {

@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Globalization;
 using System.Text;
+using Atelia.DurableGraph.SchemaHistory;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.Text;
@@ -133,7 +134,7 @@ public sealed partial class DurableSchemaGenerator {
     }
 
     private static bool IsBinaryField(int typeTagValue) =>
-        typeTagValue >= 1 && typeTagValue <= 16;
+        TypePattern.IsBuiltinTag(typeTagValue) || typeTagValue == 15 || typeTagValue == 16;
 
     // Schema tags describe domain fields. Reference DTO slots use ObjectId, whose wire value is UInt32.
     private static int GetBinarySlotTypeTag(int typeTagValue) => IsBinaryReference(typeTagValue) ? 9 : typeTagValue;
@@ -553,6 +554,11 @@ public sealed partial class DurableSchemaGenerator {
 
     private static void AppendBinarySlotEquality(
         StringBuilder source, BinaryFieldModel field, string left, string right) {
+        if (field.TypeTagValue == 20) {
+            source.Append("global::Atelia.DurableGraph.StateStore.Serialization.ScalarStateEquality.DecimalEquals(in ")
+                .Append(left).Append(", in ").Append(right).Append(')');
+            return;
+        }
         // Match Base encoding's preserved bits, including signed zero and NaN payloads.
         string? bitConversion = field.TypeTagValue switch {
             12 => "HalfToUInt16Bits",

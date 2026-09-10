@@ -120,7 +120,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         Assert.Contains("TypeExpr.VectorArray(", generated);
         Assert.DoesNotContain("Array.GetValue(", generated);
         string history = GeneratedSource(run, "DurableGraphSchemaHistoryCandidates.g.cs");
-        Assert.Contains("manifest:7", history);
+        Assert.Contains("manifest:8", history);
         Assert.Contains("// field:2|15|a1(p0)", history);
         Assert.Contains("// field:2|15|a1(a1(b2))", history);
         Assert.Contains("// field:4|15|nQm94(a1(b2))", history);
@@ -130,8 +130,6 @@ public sealed partial class DurableSchemaGeneratorTests {
     [Theory]
     [InlineData("int[,,,,]")]
     [InlineData("object[]")]
-    [InlineData("decimal[]")]
-    [InlineData("System.Collections.Generic.List<decimal>[]")]
     public void UnsupportedArrayElementsAndRanksRemainPreciseGeneratorErrors(string type) {
         GeneratorTestRun run = RunGenerator("using Atelia.DurableGraph; [DurableType(\"Bad\",1)] public partial class Bad:DurableBase { [DurableField(1)] public " + type + " Value; }");
         Assert.Contains(run.GeneratorDiagnostics, diagnostic => diagnostic.Id == "DG0007");

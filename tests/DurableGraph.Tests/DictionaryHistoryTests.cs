@@ -11,7 +11,7 @@ public sealed class DictionaryHistoryTests {
             "// field:2|15|a2(d(b4,d(b2,nUG9pbnQ=())))\n" +
             "// field:3|16|nUGFpcg==(d(p1,p0))|1\n// field:4|2\n// field:5|4\n", arity: 2);
         SchemaHistoryRecord record = fixture.Parse(text);
-        Assert.Equal(text, SchemaHistoryDocument.RenderHistory(record));
+        Assert.Equal(text, SchemaHistoryDocument.RenderHistory(record, 7));
         Assert.Equal("d(b4,l(q(b2)))", record.Fields[0].ValuePattern.Substitute(
             [record.Fields[4].ValuePattern, record.Fields[3].ValuePattern]).ToString());
         Assert.Equal("nUGFpcg==(d(b2,b4))", record.Fields[2].ValuePattern.Substitute(

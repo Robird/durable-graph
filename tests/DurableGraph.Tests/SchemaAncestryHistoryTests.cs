@@ -20,9 +20,9 @@ public sealed class SchemaAncestryHistoryTests {
     }
 
     [Fact]
-    public void NewClassOnlyRecordUsesVersionSevenWithArityZero() {
+    public void NewClassOnlyRecordUsesVersionEightWithArityZero() {
         Assert.Equal(
-            "// durable-graph-schema-history:7\n// schema-begin\n// schema-id-base64:QmFzZQ==\n" +
+            "// durable-graph-schema-history:8\n// schema-begin\n// schema-id-base64:QmFzZQ==\n" +
             "// version:1\n// kind:1\n// arity:0\n// field:1|2\n// schema-end\n",
             SchemaHistoryDocument.RenderHistory(Record("Base", 1)));
     }
@@ -181,8 +181,8 @@ public sealed class SchemaAncestryHistoryTests {
     }
 
     private static string Manifest(params SchemaHistoryRecord[] records) {
-        return "// durable-graph-schema-history-manifest:7\n" + string.Concat(records.Select(record =>
-            SchemaHistoryDocument.RenderHistory(record).Replace("// durable-graph-schema-history:7\n", "", StringComparison.Ordinal)));
+        return "// durable-graph-schema-history-manifest:8\n" + string.Concat(records.Select(record =>
+            SchemaHistoryDocument.RenderHistory(record).Replace("// durable-graph-schema-history:8\n", "", StringComparison.Ordinal)));
     }
 
     private sealed class Fixture : IDisposable {

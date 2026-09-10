@@ -46,7 +46,7 @@ public sealed class ArrayBindingCatalogTests {
     public void UnsupportedArrayKindsAndElementsFailAtBinding() {
         StateModelSnapshot snapshot = new StateModelRegistry().Snapshot();
         Type[] unsupported = [typeof(int).MakeArrayType(1), typeof(int).MakeArrayType(5),
-            typeof(object[]), typeof(decimal[]), typeof(Box<>).MakeArrayType()];
+            typeof(object[]), typeof(DateTime[]), typeof(Box<>).MakeArrayType()];
         foreach (Type type in unsupported) {
             Assert.Throws<InvalidDataException>(() => snapshot.GetTypeExpr(type));
             Assert.Throws<InvalidDataException>(() => snapshot.TryGetCurrentObjectBinding(type, out _));

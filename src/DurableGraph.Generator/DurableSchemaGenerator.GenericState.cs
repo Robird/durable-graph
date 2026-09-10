@@ -125,6 +125,8 @@ public sealed partial class DurableSchemaGenerator {
     private static int GenericFieldTag(GenericField field) => field.Pattern.Kind == PatternKind.Builtin ? field.Pattern.BuiltinTag : field.Field.TypeTagValue;
     private static string GenericFieldRead(GenericField field) => BinarySlotRead(GenericFieldTag(field));
     private static string GenericFieldEquality(GenericField field, string left, string right) {
+        if (GenericFieldTag(field) == 20) return
+            "global::Atelia.DurableGraph.StateStore.Serialization.ScalarStateEquality.DecimalEquals(in " + left + ", in " + right + ")";
         string? bits = GenericFieldTag(field) switch { 12 => "HalfToUInt16Bits", 13 => "SingleToUInt32Bits", 14 => "DoubleToUInt64Bits", _ => null };
         return bits is null ? left + " == " + right : "global::System.BitConverter." + bits + "(" + left + ") == global::System.BitConverter." + bits + "(" + right + ")";
     }

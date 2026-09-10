@@ -37,7 +37,7 @@ uses Family aliases in both generations; it does not depend on the older `__Dura
 Persistence describes FieldId and slot layout, not the record keyword, property name or synthesized
 methods. No record-specific persistent format is added.
 
-The runner requires history v7 and counts **4 -> 7**, and verifies that previously accepted filenames
+The runner requires history v8 and counts **4 -> 7**, and verifies that previously accepted filenames
 and SHA256 hashes are unchanged. It prints these markers only after executable assertions pass:
 
 ```text

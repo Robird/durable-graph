@@ -364,7 +364,7 @@ internal static class SchemaHistoryDocument {
         return record;
     }
 
-    public static string RenderHistory(SchemaHistoryRecord record, int formatVersion = 7) {
+    public static string RenderHistory(SchemaHistoryRecord record, int formatVersion = 8) {
         StringBuilder builder = new();
         builder.Append(HistoryHeader).AppendLine(formatVersion.ToString(CultureInfo.InvariantCulture));
         AppendSchemaRecord(builder, record, formatVersion);
@@ -393,8 +393,9 @@ internal static class SchemaHistoryDocument {
              !StringComparer.Ordinal.Equals(lines[0], expectedHeader + "4") &&
              !StringComparer.Ordinal.Equals(lines[0], expectedHeader + "5") &&
              !StringComparer.Ordinal.Equals(lines[0], expectedHeader + "6") &&
-             !StringComparer.Ordinal.Equals(lines[0], expectedHeader + "7"))) {
-            throw Invalid(path, $"expected header '{expectedHeader}1', '{expectedHeader}2', '{expectedHeader}3', '{expectedHeader}4', '{expectedHeader}5', '{expectedHeader}6', or '{expectedHeader}7'");
+             !StringComparer.Ordinal.Equals(lines[0], expectedHeader + "7") &&
+             !StringComparer.Ordinal.Equals(lines[0], expectedHeader + "8"))) {
+            throw Invalid(path, $"expected header '{expectedHeader}1', '{expectedHeader}2', '{expectedHeader}3', '{expectedHeader}4', '{expectedHeader}5', '{expectedHeader}6', '{expectedHeader}7', or '{expectedHeader}8'");
         }
         int formatVersion = lines[0][lines[0].Length - 1] - '0';
 
@@ -471,14 +472,14 @@ internal static class SchemaHistoryDocument {
                         $"field IDs must be unique and sorted; line {index + 1} has {fieldId} after {previousFieldId}");
                 }
 
-                if (typeTag < 1 || typeTag > (formatVersion == 1 ? 15 : formatVersion == 2 ? 16 : formatVersion < 6 ? 17 : 18)) {
+                if (typeTag < 1 || typeTag > (formatVersion == 1 ? 15 : formatVersion == 2 ? 16 : formatVersion < 6 ? 17 : formatVersion < 8 ? 18 : 21)) {
                     throw Invalid(path, $"line {index + 1} has unsupported TypeTag {typeTag}");
                 }
 
                 if (typeTag == 18 ? parts.Length is < 3 or > 4 : parts.Length != (typeTag == 16 ? 4 : typeTag is 15 or 17 ? 3 : 2)) {
                     throw Invalid(path, $"line {index + 1} has an invalid field operand");
                 }
-                TypePattern pattern = typeTag <= 14 ? TypePattern.Builtin(typeTag) :
+                TypePattern pattern = TypePattern.IsBuiltinTag(typeTag) ? TypePattern.Builtin(typeTag) :
                     formatVersion >= 3 ? ParsePattern(path, parts[2], arity, typeTag == 18 ? PatternKind.Nullable : typeTag == 17 ? PatternKind.Parameter : PatternKind.Named, formatVersion, typeTag == 15) :
                     TypePattern.Named(DecodeSchemaId(path, parts[2]));
                 string? targetSchemaId = typeTag == 15 ? pattern.DefinitionId : null;
@@ -642,6 +643,9 @@ internal static class SchemaHistoryDocument {
         StringBuilder builder,
         SchemaHistoryRecord record,
         int formatVersion) {
+        if (formatVersion < 8 && (record.BaseType?.ContainsBclScalars == true || record.Fields.Any(field => field.ValuePattern.ContainsBclScalars))) {
+            throw new SchemaHistoryException("Guid, decimal and TimeSpan require history format v8.");
+        }
         if (formatVersion < 7 && (record.BaseType?.ContainsDictionary == true || record.Fields.Any(field => field.ValuePattern.ContainsDictionary))) {
             throw new SchemaHistoryException("Dictionary requires history format v7.");
         }
@@ -698,7 +702,7 @@ internal static class SchemaHistoryDocument {
     }
 
     private static TypePattern ParsePattern(string path, string text, int arity, PatternKind expectedKind, int formatVersion, bool arrayReference = false) {
-        if (!TypePattern.TryParse(text, arity, out TypePattern? pattern, formatVersion >= 4, formatVersion >= 5, formatVersion >= 6, formatVersion >= 7) ||
+        if (!TypePattern.TryParse(text, arity, out TypePattern? pattern, formatVersion >= 4, formatVersion >= 5, formatVersion >= 6, formatVersion >= 7, formatVersion >= 8) ||
             (pattern!.Kind != expectedKind && !(arrayReference && (pattern.IsArray || pattern.IsList || pattern.IsDictionary)))) {
             throw Invalid(path, "invalid or unbound canonical type pattern");
         }
@@ -745,7 +749,7 @@ internal sealed class SchemaHistoryRecord {
     public int Arity { get; }
     public TypePattern? BaseType { get; }
 
-    internal int SourceFormatVersion { get; init; } = 7;
+    internal int SourceFormatVersion { get; init; } = 8;
 
     public SchemaHistoryKey Key => new(SchemaId, Version);
 

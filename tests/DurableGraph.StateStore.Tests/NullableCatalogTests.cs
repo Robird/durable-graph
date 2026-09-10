@@ -33,10 +33,10 @@ public sealed class NullableCatalogTests {
     }
 
     [Theory]
-    [InlineData(typeof(decimal?))]
+    [InlineData(typeof(DateTimeOffset?))]
     [InlineData(typeof(DayOfWeek?))]
     [InlineData(typeof(DateTime?))]
-    [InlineData(typeof(List<decimal?>))]
+    [InlineData(typeof(List<DateTime?>))]
     public void UnsupportedNullableChildrenFailClosed(Type domain) {
         StateModelSnapshot snapshot = new StateModelRegistry().Snapshot();
         Assert.Throws<InvalidDataException>(() => snapshot.GetTypeExpr(domain));

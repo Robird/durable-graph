@@ -60,6 +60,26 @@ public ref struct BinaryPayloadWriter {
         _downstream.Advance(sizeof(double));
     }
 
+    /// <summary>Writes all 128 Guid bits in big-endian order, without a length prefix.</summary>
+    public void WriteGuid(Guid value) {
+        value.TryWriteBytes(_downstream.GetSpan(16), bigEndian: true, out _);
+        _downstream.Advance(16);
+    }
+
+    /// <summary>Writes decimal's lo, mid, hi and flags words as four little-endian Int32 values.</summary>
+    public void WriteDecimal(decimal value) {
+        Span<int> bits = stackalloc int[4];
+        decimal.GetBits(value, bits);
+        Span<byte> destination = _downstream.GetSpan(16);
+        for (int index = 0; index < bits.Length; index++) {
+            BinaryPrimitives.WriteInt32LittleEndian(destination[(index * sizeof(int))..], bits[index]);
+        }
+        _downstream.Advance(16);
+    }
+
+    /// <summary>Writes signed ticks using canonical Int64 ZigZag encoding.</summary>
+    public void WriteTimeSpan(TimeSpan value) => WriteInt64(value.Ticks);
+
     /// <summary>Writes already encoded body bytes verbatim, without a length prefix.</summary>
     public void WriteSpan(ReadOnlySpan<byte> value) {
         if (value.IsEmpty) {

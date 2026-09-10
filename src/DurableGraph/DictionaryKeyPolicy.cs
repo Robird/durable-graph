@@ -91,9 +91,7 @@ internal static class DictionaryKeyPolicy {
 
     internal static bool TryScalarTag(DurableFieldInfo slot, out TypeTag tag) {
         tag = slot.TypeTag;
-        if (tag is TypeTag.Boolean or TypeTag.Byte or TypeTag.SByte or TypeTag.Int16 or TypeTag.UInt16 or
-            TypeTag.Int32 or TypeTag.UInt32 or TypeTag.Int64 or TypeTag.UInt64 or TypeTag.Char or
-            TypeTag.Half or TypeTag.Single or TypeTag.Double) { return true; }
+        if (TypeTagFacts.IsBuiltin(tag) && tag != TypeTag.String) { return true; }
         if (tag != TypeTag.InlineValue) { return false; }
         DurableSchema schema = slot.InlineSchema!;
         // This validates a representation, not historical CLR enum provenance. An
@@ -113,7 +111,9 @@ internal static class DictionaryKeyPolicy {
             TypeTag.Int16 => reader.ReadInt16(), TypeTag.UInt16 => reader.ReadUInt16(), TypeTag.Int32 => reader.ReadInt32(),
             TypeTag.UInt32 => reader.ReadUInt32(), TypeTag.Int64 => reader.ReadInt64(), TypeTag.UInt64 => reader.ReadUInt64(),
             TypeTag.Char => reader.ReadChar(), TypeTag.Half => reader.ReadHalf(), TypeTag.Single => reader.ReadSingle(),
-            TypeTag.Double => reader.ReadDouble(), _ => throw new InvalidDataException("Unsupported scalar key."),
+            TypeTag.Double => reader.ReadDouble(), TypeTag.Guid => reader.ReadGuid(),
+            TypeTag.Decimal => reader.ReadDecimal(), TypeTag.TimeSpan => reader.ReadTimeSpan(),
+            _ => throw new InvalidDataException("Unsupported scalar key."),
         };
         reader.EnsureFullyConsumed();
         return result;

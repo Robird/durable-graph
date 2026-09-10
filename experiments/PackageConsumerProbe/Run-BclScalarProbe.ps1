@@ -12,8 +12,8 @@ function Invoke-DotNet {
 }
 
 $repositoryRoot = (Resolve-Path (Join-Path $PSScriptRoot "../..")).Path
-$consumerProject = Join-Path $PSScriptRoot "ArrayConsumer/ArrayConsumer.csproj"
-$runId = "array-$([DateTime]::UtcNow.ToString('yyyyMMddHHmmss'))-$PID-$([Guid]::NewGuid().ToString('N').Substring(0, 8))"
+$consumerProject = Join-Path $PSScriptRoot "BclScalarConsumer/BclScalarConsumer.csproj"
+$runId = "bcl-scalar-$([DateTime]::UtcNow.ToString('yyyyMMddHHmmss'))-$PID-$([Guid]::NewGuid().ToString('N').Substring(0, 8))"
 $workRoot = Join-Path $PSScriptRoot "obj/$runId"
 $packageCache = Join-Path $workRoot "packages"
 $history = Join-Path $workRoot "history"
@@ -30,7 +30,7 @@ try {
     if ([string]::IsNullOrWhiteSpace($PackageSource)) {
         $PackageSource = Join-Path $workRoot "feed"
         New-Item -ItemType Directory -Path $PackageSource | Out-Null
-        $Version = "0.0.0-array-e2e.$([DateTime]::UtcNow.ToString('yyyyMMddHHmmss')).$PID"
+        $Version = "0.0.0-bcl-scalar-e2e.$([DateTime]::UtcNow.ToString('yyyyMMddHHmmss')).$PID"
         foreach ($project in @(
             "../atelia/src/Data/Data.csproj",
             "../atelia/src/Primitives/Primitives.csproj",
@@ -52,13 +52,23 @@ try {
         "-p:BaseOutputPath=$output"
     )
     Invoke-DotNet (@("restore", $consumerProject, "--source", $PackageSource, "--packages", $packageCache) + $properties)
-    $assembly = Join-Path $output "Debug/net10.0/Atelia.ArrayConsumer.dll"
+    $assembly = Join-Path $output "Debug/net10.0/Atelia.BclScalarConsumer.dll"
     $hashes = @{}
+    $contents = @{}
     foreach ($stage in @(
-        @{ Number = 1; Count = 4; Expected = "ArraySeed:True:FourRanks:True:GenericJaggedCycles:True:FrozenDelta:True:RepresentationIds:True:ReorderedRegistration:True" },
-        @{ Number = 2; Count = 5; Expected = "ArrayUpgrade:True:SharedOwnerOnce:True:ForcedBaseThenDelta:True:HistoricalExact:True:ColdReopen:True:IndependentRepresentationUpgrade:True:DeltaInheritsRepresentation:True" }
+        @{ Number = 1; Count = 3; Expected = "BclScalarSeed:True:ThreeScalarCompositions:True:ExactDecimalScale:True:DecimalKeyRemoveAdd:True:ColdReopen:True" },
+        @{ Number = 2; Count = 5; Expected = "BclScalarUpgrade:True:DeletedInlineClr:True:ExplicitOwnerAndValueUpgrade:True:HistoricalExact:True:ForcedBaseThenDelta:True:ColdReopen:True" }
     )) {
         $stageProperties = $properties + "-p:HistoryVersion=$($stage.Number)"
+        # Assert every accepted file before the next Publish, then again after Publish/Verify.
+        foreach ($name in $hashes.Keys) {
+            $path = Join-Path $history $name
+            if (-not (Test-Path -LiteralPath $path -PathType Leaf) -or
+                (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash -ne $hashes[$name] -or
+                [Convert]::ToBase64String([IO.File]::ReadAllBytes($path)) -ne $contents[$name]) {
+                throw "Accepted history '$name' changed before stage $($stage.Number)."
+            }
+        }
         Invoke-DotNet (@("clean", $consumerProject) + $stageProperties)
         Invoke-DotNet (@("build", $consumerProject, "--no-restore") + $stageProperties)
         # A second build verifies the accepted immutable history through packaged CI mode.
@@ -72,13 +82,15 @@ try {
             $text = Get-Content -LiteralPath $file.FullName -Raw
             if (-not $hashes.ContainsKey($file.Name) -and -not $text.StartsWith("// durable-graph-schema-history:8`n", [StringComparison]::Ordinal)) { throw "Expected canonical v8 history." }
             $hash = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash
-            if ($hashes.ContainsKey($file.Name) -and $hashes[$file.Name] -ne $hash) { throw "A later build rewrote immutable history '$($file.Name)'." }
+            $bytes = [Convert]::ToBase64String([IO.File]::ReadAllBytes($file.FullName))
+            if ($hashes.ContainsKey($file.Name) -and ($hashes[$file.Name] -ne $hash -or $contents[$file.Name] -ne $bytes)) { throw "A later build rewrote immutable history '$($file.Name)'." }
             $hashes[$file.Name] = $hash
+            $contents[$file.Name] = $bytes
         }
         $actual = (& dotnet $assembly $database | Out-String).Trim()
-        if ($LASTEXITCODE -ne 0 -or $actual -ne $stage.Expected) { throw "Array stage $($stage.Number) failed; output was '$actual'." }
+        if ($LASTEXITCODE -ne 0 -or $actual -ne $stage.Expected) { throw "BclScalar stage $($stage.Number) failed; output was '$actual'." }
         Write-Host $actual
     }
-    Write-Host "Array package consumer probe passed. Artifacts: $workRoot"
+    Write-Host "BclScalar package consumer probe passed. Artifacts: $workRoot"
 }
 finally { Pop-Location }

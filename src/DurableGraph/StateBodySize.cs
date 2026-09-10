@@ -7,7 +7,10 @@ internal static class StateBodySize {
 
     private static int MinimumBaseBytes(DurableFieldInfo slot, Dictionary<DurableSchema, int> memo) {
         if (slot.TypeTag != TypeTag.InlineValue) {
-            return slot.TypeTag switch { TypeTag.Half => 2, TypeTag.Single => 4, TypeTag.Double => 8, _ => 1 };
+            return slot.TypeTag switch {
+                TypeTag.Half => 2, TypeTag.Single => 4, TypeTag.Double => 8,
+                TypeTag.Guid or TypeTag.Decimal => 16, _ => 1,
+            };
         }
         DurableSchema schema = slot.InlineSchema!;
         if (memo.TryGetValue(schema, out int known)) { return known; }

@@ -103,6 +103,30 @@ public ref struct BinaryPayloadReader {
     public double ReadDouble() =>
         BinaryPrimitives.ReadDoubleLittleEndian(ReadSpan(sizeof(double)));
 
+    /// <summary>Reads all 128 Guid bits in big-endian order.</summary>
+    public Guid ReadGuid() => new(ReadSpan(16), bigEndian: true);
+
+    /// <summary>Reads the complete decimal representation, preserving scale and the sign of zero.</summary>
+    public decimal ReadDecimal() {
+        BinaryPayloadReader candidate = this;
+        ReadOnlySpan<byte> source = candidate.ReadSpan(16);
+        int lo = BinaryPrimitives.ReadInt32LittleEndian(source);
+        int mid = BinaryPrimitives.ReadInt32LittleEndian(source[4..]);
+        int hi = BinaryPrimitives.ReadInt32LittleEndian(source[8..]);
+        uint flags = BinaryPrimitives.ReadUInt32LittleEndian(source[12..]);
+        uint scale = (flags >> 16) & 0xff;
+        if ((flags & 0x7f00ffffu) != 0 || scale > 28) {
+            throw new InvalidDataException("Invalid decimal flags: reserved bits must be zero and scale must be 0 through 28.");
+        }
+
+        decimal value = new(lo, mid, hi, isNegative: (flags & 0x80000000u) != 0, scale: (byte)scale);
+        this = candidate;
+        return value;
+    }
+
+    /// <summary>Reads signed ticks using canonical Int64 ZigZag encoding.</summary>
+    public TimeSpan ReadTimeSpan() => new(ReadInt64());
+
     internal ReadOnlySpan<byte> ReadSpan(int length) {
         if (length < 0) {
             throw new ArgumentOutOfRangeException(nameof(length));

@@ -190,7 +190,7 @@ public sealed partial class DurableSchemaGeneratorTests {
     }
 
     [Theory]
-    [InlineData("[DurableField(1)] private decimal _unsupported;", "", "DG0007")]
+    [InlineData("[DurableField(1)] private System.DateTime _unsupported;", "", "DG0007")]
     [InlineData("", "[DurableType(\"base\", 1)] public partial class Other : DurableBase { }", "DG0017")]
     public void SchemaOnlyRejectsDescendantsOfFilteredAncestorsWithoutGeneratorFailure(
         string baseFields, string otherDeclaration, string ancestorDiagnostic) {

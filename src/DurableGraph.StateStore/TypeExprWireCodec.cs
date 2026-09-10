@@ -42,7 +42,7 @@ internal static class TypeExprWireCodec {
         byte tag = reader.ReadByte();
         if (tag == 1) {
             byte builtin = reader.ReadByte();
-            if (builtin is < 1 or > 14) { throw new InvalidDataException("Unknown built-in type expression."); }
+            if (!TypeTagFacts.IsBuiltin((TypeTag)builtin)) { throw new InvalidDataException("Unknown built-in type expression."); }
             return TypeExpr.Builtin((TypeTag)builtin);
         }
         if (tag is >= 4 and <= 7) {

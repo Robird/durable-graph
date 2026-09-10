@@ -93,7 +93,7 @@ public sealed class TypeExpr : IEquatable<TypeExpr>, IComparable<TypeExpr> {
     }
 
     public static TypeExpr Builtin(TypeTag tag) {
-        if (tag is < TypeTag.Boolean or > TypeTag.Double) {
+        if (!TypeTagFacts.IsBuiltin(tag)) {
             throw new ArgumentOutOfRangeException(nameof(tag), "Only the supported scalar and string tags are built-in types.");
         }
         return new(TypeExprKind.Builtin, tag, null, ImmutableArray<TypeExpr>.Empty, -1);

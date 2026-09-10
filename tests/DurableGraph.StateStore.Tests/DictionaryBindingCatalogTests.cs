@@ -67,7 +67,7 @@ public sealed class DictionaryBindingCatalogTests {
     public void UnsupportedClosuresInterfacesAndSubclassesFailClosed() {
         StateModelSnapshot snapshot = new StateModelRegistry().Snapshot();
         Type[] unsupported = [typeof(Dictionary<,>), typeof(Dictionary<int, object>),
-            typeof(Dictionary<decimal, int>), typeof(Dictionary<int, DayOfWeek>),
+            typeof(Dictionary<DateTime, int>), typeof(Dictionary<int, DayOfWeek>),
             typeof(IDictionary<int, int>), typeof(DerivedDictionary), typeof(List<DerivedDictionary>)];
         foreach (Type domain in unsupported) {
             Assert.Throws<InvalidDataException>(() => snapshot.GetTypeExpr(domain));

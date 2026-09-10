@@ -48,6 +48,13 @@ internal sealed class TypePattern : IEquatable<TypePattern> {
     public IReadOnlyList<TypePattern> Arguments { get; }
     public int ParameterOrdinal { get; }
     public bool ContainsParameter { get; }
+    public bool ContainsBclScalars {
+        get {
+            if (Kind == PatternKind.Builtin && BuiltinTag >= 19 && BuiltinTag <= 21) return true;
+            foreach (TypePattern argument in _arguments) if (argument.ContainsBclScalars) return true;
+            return false;
+        }
+    }
     public bool IsArray => (int)Kind >= 4 && (int)Kind <= 7;
     public bool IsList => Kind == PatternKind.List;
     public bool IsDictionary => Kind == PatternKind.Dictionary;
@@ -122,8 +129,10 @@ internal sealed class TypePattern : IEquatable<TypePattern> {
         return result;
     }
 
+    public static bool IsBuiltinTag(int tag) => (tag >= 1 && tag <= 14) || (tag >= 19 && tag <= 21);
+
     public static TypePattern Builtin(int tag) {
-        if (tag < 1 || tag > 14) throw new ArgumentOutOfRangeException(nameof(tag));
+        if (!IsBuiltinTag(tag)) throw new ArgumentOutOfRangeException(nameof(tag));
         return new TypePattern(PatternKind.Builtin, tag, null, Array.Empty<TypePattern>());
     }
 
@@ -173,13 +182,13 @@ internal sealed class TypePattern : IEquatable<TypePattern> {
         }
     }
 
-    public static bool TryParse(string text, int arity, out TypePattern? result, bool allowArrays = true, bool allowLists = true, bool allowNullable = true, bool allowDictionaries = true) {
+    public static bool TryParse(string text, int arity, out TypePattern? result, bool allowArrays = true, bool allowLists = true, bool allowNullable = true, bool allowDictionaries = true, bool allowBclScalars = true) {
         result = null;
         if (arity < 0 || arity > 32) return false;
         try {
             int cursor = 0, nodes = 0;
             TypePattern parsed = Parse(text, ref cursor, 1, ref nodes);
-            if (cursor != text.Length || !parsed.ParametersFit(arity) || parsed.ToString() != text || (!allowArrays && parsed.ContainsArray) || (!allowLists && parsed.ContainsList) || (!allowNullable && parsed.ContainsNullable) || (!allowDictionaries && parsed.ContainsDictionary)) return false;
+            if (cursor != text.Length || !parsed.ParametersFit(arity) || parsed.ToString() != text || (!allowArrays && parsed.ContainsArray) || (!allowLists && parsed.ContainsList) || (!allowNullable && parsed.ContainsNullable) || (!allowDictionaries && parsed.ContainsDictionary) || (!allowBclScalars && parsed.ContainsBclScalars)) return false;
             result = parsed;
             return true;
         } catch (ArgumentException) { return false; }

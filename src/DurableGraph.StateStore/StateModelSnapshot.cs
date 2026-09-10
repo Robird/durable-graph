@@ -290,6 +290,7 @@ internal sealed partial class StateModelSnapshot : StateBindingContext {
                 TypeTag.UInt32 => typeof(uint), TypeTag.Int64 => typeof(long), TypeTag.UInt64 => typeof(ulong),
                 TypeTag.Char => typeof(char), TypeTag.Half => typeof(Half), TypeTag.Single => typeof(float),
                 TypeTag.Double => typeof(double), TypeTag.String => typeof(string),
+                TypeTag.Guid => typeof(Guid), TypeTag.Decimal => typeof(decimal), TypeTag.TimeSpan => typeof(TimeSpan),
                 _ => throw new InvalidDataException("Unsupported builtin domain type."),
             };
         }

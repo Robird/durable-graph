@@ -57,7 +57,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             string file = Path.Combine(directory, "a.dgschema");
             File.WriteAllText(file, NominalHistory, new UTF8Encoding(false));
             SchemaHistoryRecord record = SchemaHistoryDocument.ParseHistory(file);
-            Assert.Equal(NominalHistory.Replace("history:1", "history:7").Replace("// version:1\n", "// version:1\n// kind:1\n// arity:0\n")
+            Assert.Equal(NominalHistory.Replace("history:1", "history:8").Replace("// version:1\n", "// version:1\n// kind:1\n// arity:0\n")
                     .Replace("|15|Qg==", "|15|nQg==()"),
                 SchemaHistoryDocument.RenderHistory(record));
             Assert.Equal("B", Assert.Single(record.Fields).TargetSchemaId);

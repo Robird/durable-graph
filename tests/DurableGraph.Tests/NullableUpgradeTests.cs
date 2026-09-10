@@ -10,6 +10,41 @@ public sealed class NullableUpgradeTests {
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
+    public void BclScalarExplicitTickConversionComposesWithNullableLifting(bool present) {
+        Calls.Clear();
+        DurableFieldInfo before = DurableFieldInfo.Nullable(1, new(1, TypeTag.Int64));
+        DurableFieldInfo after = DurableFieldInfo.Nullable(1, new(1, TypeTag.TimeSpan));
+        DurableSchema sourceSchema = new("BclOwner", 1, before), targetSchema = new("BclOwner", 2, after);
+        StateDefinitionBinding owner = new("BclOwner", SchemaKind.ReferenceObject, 0, null, [
+            new("BclOwner", 1, SchemaKind.ReferenceObject, 0, [new(1, StateBindingContext.NominalType(before))],
+                stateTypeDefinition: typeof(Owner1<NullableState<long>>)),
+            new("BclOwner", 2, SchemaKind.ReferenceObject, 0, [new(1, StateBindingContext.NominalType(after))],
+                stateTypeDefinition: typeof(Owner2<NullableState<TimeSpan>>)),
+        ], upgrades: [new("BclOwner", 1, Method(nameof(UpgradeOwner)), dependencies: [
+            new("value", typeof(Rules), new("BclOwner", 1), new("BclOwner", 1)),
+        ])]);
+        ObjectStateRecord source = new(new(1), sourceSchema,
+            new Owner1<NullableState<long>>(present ? new(long.MinValue) : default));
+        TestContext missing = new([], lift: true) { Extra = owner };
+        Assert.Throws<InvalidDataException>(() => missing.Normalize<Owner2<NullableState<TimeSpan>>>(source, targetSchema));
+        Assert.Empty(Calls);
+        StateValueUpgradeProvider rule = new(TypeExpr.Builtin(TypeTag.Int64), null,
+            TypeExpr.Builtin(TypeTag.TimeSpan), null, Method(nameof(ToDuration)));
+        TestContext context = new([rule], lift: true) { Extra = owner };
+        var result = context.Normalize<Owner2<NullableState<TimeSpan>>>(source, targetSchema);
+        Assert.Equal(present, result.Value.HasValue);
+        if (present) { Assert.Equal(TimeSpan.MinValue, result.Value.Value); }
+        Assert.Equal(present ? new[] { "owner", "ticks" } : new[] { "owner" }, Calls);
+    }
+
+    private static void ToDuration(in long ticks, out TimeSpan duration, UpgradeContext context) {
+        Calls.Add("ticks");
+        duration = TimeSpan.FromTicks(ticks);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
     public void LiftingPreservesPresenceAndOnlyPresentInvokesChild(bool present) {
         Calls.Clear();
         TestContext context = new([ChildRule()], lift: true);

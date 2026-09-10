@@ -1,7 +1,7 @@
 # DB-057：Guid、decimal 与 TimeSpan 内建标量值槽
 
-> 状态：Proposed，2026-09-10。推荐的下一施工分片；尚未实施。
-> 源码调查基线：`1c38768`（DB-056）。本文的编码、接口和验收均为建议合同，不能当作当前能力。
+> 状态：已实施 / G0–G3，2026-09-10。完成证据与实际边界见 §9。
+> 设计调查基线：`1c38768`（DB-056）；施工基线：`67f7209`。§1–§8 保留选片依据与采纳合同，§9 记录实际实现。
 > 当前能力：[PROJECT-STATE](../../src/PROJECT-STATE.md)；后继选择：[路线图](../DurableGraph-research-roadmap.md)。
 
 ## 1. 本片回答什么问题
@@ -28,9 +28,9 @@
 另一路 Tuple 设计审视确认多 child 是真实结构变化，同意本轮先做叶子值。
 这不是否决 Tuple，也不是以实现容易取代用户价值。
 
-## 2. 当前事实与需要贯通的接缝
+## 2. 实施前事实与需要贯通的接缝
 
-当前产品支持 13 种标量，string 是独立引用对象。下面均为本轮查读的源码事实，未运行新功能见证：
+调查基线只支持 13 种标量，string 是独立引用对象。下面是实施前的接缝盘点；新能力与执行见证见 §9：
 
 - [TypeTag](../../src/DurableGraph/TypeTag.cs) 的 1–14 包含已有标量/string；15、16、18 分别为引用、inline、Nullable，17 留给 history 参数。
   [TypeExpr.Builtin](../../src/DurableGraph/TypeExpr.cs) 与 [共享 TypePattern](../../src/Shared/SchemaHistoryTypePattern.cs) 把 builtin 限于 1–14。
@@ -79,7 +79,7 @@ DateTime 的时间/隐藏状态合同另选；DateOnly/TimeOnly 并非已知技�
 
 ## 4. 精确状态与 Base / Delta 编码
 
-下面是待采纳的编码合同；不依赖私有 CLR 字段顺序、native memory dump、当前文化或文本解析。
+实现采用下面的编码合同；不依赖私有 CLR 字段顺序、native memory dump、当前文化或文本解析。
 
 | 类型 | 持久状态相等性 | Base 建议 | 读取校验 |
 |---|---|---|---|
@@ -110,7 +110,7 @@ Apply 必须拒绝宣称变化却与 prior 持久相等的 payload；嵌套 read
 
 ### 5.1 tag 与格式边界
 
-建议新增 `TypeTag.Guid=19`、`Decimal=20`、`TimeSpan=21`；沿用 `TypeExprKind.Builtin`，无新增 TypeExpr 构造。
+新增 `TypeTag.Guid=19`、`Decimal=20`、`TimeSpan=21`；沿用 `TypeExprKind.Builtin`，无新增 TypeExpr 构造。
 共享 history 的 nominal 叶子使用 `b19`、`b20`、`b21`，FieldTag 与实际 builtin kind 匹配。
 参数 tag 17、Nullable 18 与新叶子必须明确区分；未知 tag、错误 tag/operand 组合继续拒绝。
 
@@ -219,3 +219,38 @@ Guid 的端序、decimal 固定 16 byte、TimeSpan varint 是简单明确的初�
   不用伪用户 DefinitionId 或仅保存当前值、把历史读取留 TODO 的捷径。
 
 record 已提供有名复合值；未来有 tuple 建模需求时，本节是技术调查入口，不能从已支持 record 推导 tuple 已支持。
+
+## 9. 实施合同与验收账本
+
+施工基线 `67f7209`，工作区干净；本轮只实施 §3–§7，§8 的 Tuple 后继不进入代码。
+冻结 tag 19/20/21、Guid big-endian、decimal 四字 little-endian、TimeSpan canonical Int64；history 新写 v8，其他格式沿 §5.1。
+Serialization 提供三种 Read/Write 及唯一 `ScalarStateEquality.DecimalEquals(in decimal, in decimal)`；
+Runtime/SG 使用该比较，未知泛型槽仍走静态操作。不改变会话、发布、容器 nominal 升级或业务转换权限。
+
+| 要求 | 实现落点 | 验收证据 |
+|---|---|---|
+| G0 / G1 字节与完整表示比较 | Serialization Reader/Writer、唯一 ScalarStateEquality | [BclScalarPayloadTests](../../tests/DurableGraph.StateStore.Serialization.Tests/Serialization/BclScalarPayloadTests.cs)：独立 golden、全部 scale/符号、非法 flags、极值/截断、unmanaged |
+| G1 Runtime/current/stored/目录/字典 | TypeTagFacts、BclScalarStateValues、StateModelSnapshot、目录与 DictionaryKeyPolicy | [静态操作/最低尺寸](../../tests/DurableGraph.Tests/BclScalarStateTests.cs)、[独立目录 bytes](../../tests/DurableGraph.StateStore.Tests/BclScalarCatalogTests.cs)；新叶子不创建 Schema 行，旧 tag bytes 不变 |
+| G2 SG 普通/Family/组合 | 真正 corelib 符号识别、普通 body 资格、唯一 decimal 比较与静态读写 | [BclScalarGeneratorTests](../../tests/DurableGraph.Tests/BclScalarGeneratorTests.cs)：分离 compilation、实际执行 golden、nominal/base/phantom/容器、伪类型拒绝 |
+| G2 history v8 / 旧文件 | Shared TypePattern、Build、SG history reader | [BclScalarHistoryTests](../../tests/DurableGraph.Tests/BclScalarHistoryTests.cs)：固定 v7 filename/hash/bytes 保留，v1–7 直接/递归拒绝，旧 CLR 删除后的 exact reader |
+| G3 差分与连续图 | 既有 GraphSession、容器和规则，不新增对象机制 | [14 次 Commit 图](../../tests/DurableGraph.Tests/BclScalarGraphTests.cs)：decimal scale 分形状修改，键 Remove+Add / value Patch；[显式值工具](../../tests/DurableGraph.Tests/NullableUpgradeTests.cs)：long→TimeSpan 与 Nullable lifting，缺规则零 callback |
+| G3 真实包历史 | [BclScalarConsumer](../../experiments/PackageConsumerProbe/BclScalarConsumer/README.md) | 两代全部 marker 通过；history 3→5，删除 LegacyPoint、显式 owner/共享 List 升级、仅两对象强制 Base、NoChange→Delta、冷重开不重复升级 |
+| 完整集成 | 主线程串行验证、独立只读审查 | 根 build 0 warnings/errors；2204 tests 全通过（Runtime/SG 1313、StateStore 610、Serialization 126、Storage 155），无 skip；最终审查无阻断 |
+
+基线根 build 0 warnings/errors，原 2146 tests 全通过。最终根测试包括新增的 64 个展开用例；
+六条已失效的 decimal 拒绝数据移出，另一些诊断/容器拒绝测试改用 DateTime/DateTimeOffset 保留原目的，未批量删除负例。
+
+实际接口与格式沿 §3–§5：三种 CLR 值直接作 DTO，普通和 Family 均静态调用；
+TypeTag 19/20/21、history v8、SCB1 v2、Base v4、Storage v3、List 2、Dictionary 1。
+明确分开保留构建 history 与兼容旧 State wire；没有重新添加旧 State/Schema wire 只读分支。
+
+施工校准：普通生成路径的 body 资格原有独立 `<=16` 上界，现与显式叶子分类同步；
+固定 inline 字段生成的 World.V1/V2 是非泛型 DTO，真实包按实际形状引用，不能仅凭包含 inline 值就假设 DTO 有类型参数。
+这些修正不改变既有版本传播或容器 nominal 升级边界。
+
+执行日志保存在忽略的 `obj/db057-*`；可重跑命令为 §6 与新消费者 README。
+BCL 新 lane 使用版本 `0.0.0-bcl-scalar-e2e.20260910062306.13584` 的隔离八包 feed；
+成功产物位于 `experiments/PackageConsumerProbe/obj/bcl-scalar-20260910062842-27696-b1642476`。
+同 feed 的 Generic（四阶段）、Nullable、CompositeDictionary、Record（各两代）全部 marker 通过。
+既有活跃 runner 的新写 history 断言同步 v8，固定旧 fixture 保持原版本；没有以批量升级旧文件让测试通过。
+提交前检查 13 份修改 Markdown 的 494 个本地链接与 45 个锚点，零错误；`git diff --cached --check` 通过。

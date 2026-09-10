@@ -147,7 +147,7 @@ internal static class SchemaCatalogWireCodec {
             if (nullableChild) { throw new InvalidDataException("A Nullable child cannot itself be Nullable."); }
             return DurableFieldInfo.Nullable(fieldId, ReadSlot(ref reader, 1, state, nullableChild: true));
         }
-        if (tag is >= 1 and <= 14) { return new(fieldId, (TypeTag)tag); }
+        if (TypeTagFacts.IsBuiltin((TypeTag)tag)) { return new(fieldId, (TypeTag)tag); }
         if (tag == 15) { return DurableFieldInfo.Reference(fieldId, TypeExprWireCodec.Read(ref reader)); }
         if (tag == 16) {
             return new(fieldId, TypeTag.InlineValue,

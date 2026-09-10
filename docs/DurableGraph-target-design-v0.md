@@ -61,6 +61,11 @@ Source Generator 负责可在编译期确定的类型知识与机械代码，框
   泛型实参和数组/List 元素。DTO 使用 unmanaged `NullableState<TState>`，absent 不访问内部状态或产生引用边。
   Nullable 无独立对象身份或业务版本，内部 exact 布局变化沿原 inline 规则传播到 owner；
   不随之开放其他 CLR 值类型或 boxed value。包装合同见 [DB-052](design-branches/0052-nullable-value-slot-slice.md)。
+- Guid、decimal、TimeSpan 作为内建标量值组合到既有字段、泛型、Nullable 和容器，不要求用户 Schema 或独立对象身份。
+  Guid 保存全部 128 bit；decimal 保存公开的系数、scale 与符号，包括正负零；TimeSpan 保存完整有符号 Ticks。
+  decimal 数值相等不意味着持久状态相等，scale-only 修改也保存；领域 Dictionary 比较仍按其原规则，持久键按完整表示配对。
+  采用公开稳定 API，不转文本、不依赖 CLR 私有内存布局，不自动把 long/TimeSpan 或 double/decimal 相互转换。
+  编码与验收见 [DB-057](design-branches/0057-bcl-scalar-value-slice.md)；日期时间及其他 BCL 值另行选择。
 - 用户 enum 显式标记 DurableType；支持同编译、顶层 public/internal 声明及八种 C# 整数底层类型，
   无需 partial。Schema 复用 InlineValue：独立 nominal 身份/版本，单一 FieldId=1 的底层整数槽；
   生成版本化 DTO 与外置静态投影，不把 enum 擦成普通整数身份，不新增持久格式或对象行。
