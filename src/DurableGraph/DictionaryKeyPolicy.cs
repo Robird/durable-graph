@@ -2,10 +2,13 @@ using Atelia.DurableGraph.StateStore.Serialization;
 
 namespace Atelia.DurableGraph;
 
-// DB-054 deliberately supports a closed set of recoverable comparisons, independently
-// of the broader set of representable value slots. No domain equality runs on old DTOs.
+// Persistent key identity uses complete state bytes. Standard modes have framework
+// lookup semantics; DB-055 modes use current domain behavior only when restoring a map.
 internal static class DictionaryKeyPolicy {
     internal static void RequireCurrentKey(Type domainType, DurableFieldInfo slot) {
+        if (slot.TypeTag == TypeTag.Nullable || Nullable.GetUnderlyingType(domainType) is not null) {
+            throw new ArgumentException("Root Nullable Dictionary keys are not supported.");
+        }
         if (domainType.IsEnum) {
             if (slot.TypeTag != TypeTag.InlineValue || !TryScalarTag(slot, out TypeTag tag) ||
                 tag != EnumUnderlyingTag(domainType)) {
@@ -16,11 +19,16 @@ internal static class DictionaryKeyPolicy {
         if (!domainType.IsValueType && slot.TypeTag is TypeTag.String or TypeTag.ObjectReference) { return; }
         if (BuiltinStateValues.TryBindCurrent(domainType, out StateValueBinding builtin) &&
             builtin.Slot.TypeTag != TypeTag.String && slot == StateBindingContext.WithFieldId(builtin.Slot, slot.FieldId)) { return; }
-        throw new ArgumentException("Dictionary keys require a supported scalar, durable enum, or supported reference type; struct and Nullable keys are not supported.");
+        if (domainType.IsValueType && slot.TypeTag == TypeTag.InlineValue && !BuiltinStateValues.TryBindCurrent(domainType, out _)) { return; }
+        throw new ArgumentException("Dictionary keys require a supported scalar, inline value, or reference representation.");
     }
 
     internal static DictionaryComparerKind Identify<TKey>(IEqualityComparer<TKey> comparer, DurableFieldInfo slot) where TKey : notnull {
         RequireCurrentKey(typeof(TKey), slot);
+        if (comparer is DictionaryRestoreComparer<TKey> restored) {
+            RequireStoredPolicy(restored.Kind, slot);
+            return restored.Kind;
+        }
         if (!typeof(TKey).IsValueType && ReferenceEquals(comparer, ReferenceEqualityComparer.Instance)) {
             return DictionaryComparerKind.ReferenceIdentity;
         }
@@ -29,20 +37,30 @@ internal static class DictionaryKeyPolicy {
                 return DictionaryComparerKind.StringOrdinal;
             }
             if (ReferenceEquals(comparer, StringComparer.OrdinalIgnoreCase)) { return DictionaryComparerKind.StringOrdinalIgnoreCase; }
-        } else if (typeof(TKey).IsValueType && ReferenceEquals(comparer, EqualityComparer<TKey>.Default)) {
-            return DictionaryComparerKind.ScalarDefault;
         }
-        throw new InvalidDataException("The Dictionary comparer is not a supported persistent comparison policy.");
+        if (ReferenceEquals(comparer, EqualityComparer<TKey>.Default)) {
+            return IsCurrentStandardScalar(typeof(TKey), slot) ? DictionaryComparerKind.ScalarDefault : DictionaryComparerKind.CurrentDefault;
+        }
+        return DictionaryComparerKind.Application;
     }
 
-    internal static IEqualityComparer<TKey> CreateComparer<TKey>(DictionaryComparerKind kind, DurableFieldInfo slot) where TKey : notnull {
+    internal static IEqualityComparer<TKey> CreateComparer<TKey>(DictionaryComparerKind kind, DurableFieldInfo slot,
+        IEqualityComparer<TKey>? applicationComparer = null) where TKey : notnull {
         RequireCurrentKey(typeof(TKey), slot);
         RequireStoredPolicy(kind, slot);
+        if ((kind == DictionaryComparerKind.ScalarDefault && !IsCurrentStandardScalar(typeof(TKey), slot)) ||
+            (kind is DictionaryComparerKind.StringOrdinal or DictionaryComparerKind.StringOrdinalIgnoreCase && typeof(TKey) != typeof(string)) ||
+            (kind == DictionaryComparerKind.ReferenceIdentity && typeof(TKey).IsValueType)) {
+            throw new InvalidDataException("The current domain key cannot restore the recorded standard Dictionary comparison policy.");
+        }
         return kind switch {
             DictionaryComparerKind.ScalarDefault => EqualityComparer<TKey>.Default,
             DictionaryComparerKind.StringOrdinal => (IEqualityComparer<TKey>)(object)StringComparer.Ordinal,
             DictionaryComparerKind.StringOrdinalIgnoreCase => (IEqualityComparer<TKey>)(object)StringComparer.OrdinalIgnoreCase,
             DictionaryComparerKind.ReferenceIdentity => (IEqualityComparer<TKey>)(object)ReferenceEqualityComparer.Instance,
+            DictionaryComparerKind.CurrentDefault => new DictionaryRestoreComparer<TKey>(kind, EqualityComparer<TKey>.Default),
+            DictionaryComparerKind.Application => new DictionaryRestoreComparer<TKey>(kind, applicationComparer ??
+                throw new InvalidDataException("Application Dictionary comparison requires a current registered comparer.")),
             _ => throw new InvalidDataException("Unknown Dictionary comparison policy."),
         };
     }
@@ -52,10 +70,24 @@ internal static class DictionaryKeyPolicy {
             DictionaryComparerKind.ScalarDefault => TryScalarTag(slot, out _),
             DictionaryComparerKind.StringOrdinal or DictionaryComparerKind.StringOrdinalIgnoreCase => slot.TypeTag == TypeTag.String,
             DictionaryComparerKind.ReferenceIdentity => slot.TypeTag is TypeTag.String or TypeTag.ObjectReference,
+            DictionaryComparerKind.CurrentDefault or DictionaryComparerKind.Application =>
+                slot.TypeTag is TypeTag.InlineValue or TypeTag.String or TypeTag.ObjectReference || TryScalarTag(slot, out _),
             _ => false,
         };
         if (!valid) { throw new InvalidDataException("Dictionary comparison policy is incompatible with its exact key slot."); }
     }
+
+    internal static void RequireKeyCount(int count, DurableFieldInfo slot) {
+        // Minimum zero is possible only for recursively empty inline layouts: there
+        // is exactly one persistent key. Reject before allocating count-sized buffers.
+        if (count > 1 && StateBodySize.MinimumBaseBytes(slot) == 0) {
+            throw new InvalidDataException("A Dictionary with a zero-width key representation can contain at most one entry.");
+        }
+    }
+
+    private static bool IsCurrentStandardScalar(Type domainType, DurableFieldInfo slot) =>
+        domainType.IsEnum || (BuiltinStateValues.TryBindCurrent(domainType, out StateValueBinding builtin) &&
+            builtin.Slot.TypeTag != TypeTag.String && slot == StateBindingContext.WithFieldId(builtin.Slot, slot.FieldId));
 
     internal static bool TryScalarTag(DurableFieldInfo slot, out TypeTag tag) {
         tag = slot.TypeTag;

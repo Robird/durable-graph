@@ -46,10 +46,10 @@ public sealed partial class DurableSchemaGeneratorTests {
     }
 
     [Theory]
-    [InlineData("Dictionary<Point,int>")]
+    [InlineData("Dictionary<UnregisteredKey,int>")]
     [InlineData("Dictionary<int?,int>")]
-    [InlineData("List<Dictionary<Point,int>>")]
-    [InlineData("Dictionary<int,Dictionary<Point,int>>")]
+    [InlineData("List<Dictionary<UnregisteredKey,int>>")]
+    [InlineData("Dictionary<int,Dictionary<UnregisteredKey,int>>")]
     [InlineData("Dictionary<Unmarked,int>")]
     [InlineData("Dictionary<object,int>")]
     [InlineData("Dictionary<int,object>")]
@@ -60,7 +60,7 @@ public sealed partial class DurableSchemaGeneratorTests {
     public void UnsupportedDictionaryKeysValuesAndContainerShapesAreRejected(string fieldType) {
         GeneratorTestRun run = RunGenerator("using System.Collections.Generic; using Atelia.DurableGraph; " +
             "[DurableType(\"Point\",1)] public partial struct Point { [DurableField(1)] public int X; } " +
-            "public enum Unmarked {A} public class ChildDictionary:Dictionary<int,int> {} " +
+            "public enum Unmarked {A} public struct UnregisteredKey {public int X;} public class ChildDictionary:Dictionary<int,int> {} " +
             "[DurableType(\"Bad\",1)] public partial class Bad:DurableBase { " +
             "[DurableField(1)] public " + fieldType + " Value; }");
         Assert.Contains(run.GeneratorDiagnostics, diagnostic => diagnostic.Id == "DG0007");

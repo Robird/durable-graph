@@ -99,10 +99,9 @@ public sealed partial class DurableSchemaGenerator {
         if (IsBclDictionary(type, dictionaryType)) {
             INamedTypeSymbol dictionary = (INamedTypeSymbol)type;
             ITypeSymbol keyType = dictionary.TypeArguments[0];
-            // Open keys are checked after Runtime closure. The first current-key matrix accepts
-            // scalar/enum values and supported reference shapes, but not arbitrary struct equality.
-            if (keyType is not ITypeParameterSymbol && !keyType.IsReferenceType && keyType.TypeKind != TypeKind.Enum &&
-                !TryGetTypeTag(keyType, halfType, out _, out _, out _)) return false;
+            // Key representation uses the ordinary supported slot closure. Domain equality is
+            // selected independently at Runtime; only a root Nullable key remains excluded.
+            if (IsNullableValue(keyType)) return false;
             if (!TryGetTypePattern(keyType, owner, halfType, listType, dictionaryType, out TypePattern? key) ||
                 !TryGetTypePattern(dictionary.TypeArguments[1], owner, halfType, listType, dictionaryType, out TypePattern? value)) return false;
             try { pattern = TypePattern.DictionaryOf(key!, value!); return true; }

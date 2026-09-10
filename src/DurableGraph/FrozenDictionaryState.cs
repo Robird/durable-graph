@@ -4,7 +4,7 @@ namespace Atelia.DurableGraph;
 public readonly record struct DictionaryEntryState<TKeyState, TValueState>(TKeyState Key, TValueState Value)
     where TKeyState : unmanaged where TValueState : unmanaged;
 
-/// <summary>Owned immutable mapping content; entry order is not persistent state.</summary>
+/// <summary>Owned immutable mapping content and restore choice; entry order and current comparer code are not persistent state.</summary>
 public sealed class FrozenDictionaryState<TKeyState, TValueState> : IFrozenDictionaryState
     where TKeyState : unmanaged where TValueState : unmanaged {
     private readonly DictionaryEntryState<TKeyState, TValueState>[] _entries;

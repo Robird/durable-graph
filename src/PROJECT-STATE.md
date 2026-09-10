@@ -1,6 +1,6 @@
 # DurableGraph 产品开发工作集
 
-> 校准：2026-09-10，[DB-054](../docs/design-branches/0054-dictionary-content-object-slice.md) 实验性 Dictionary 已完成保存、历史升级与跨版本真实包验收。本文只维护当前能力、边界与续工入口。
+> 校准：2026-09-10，实验性 Dictionary 已加入 [DB-055](../docs/design-branches/0055-composite-dictionary-key-design.md) 复合 Key 与当前 comparer；验收结果集中在分片记录。本文只维护当前能力、边界与续工入口。
 > 文档不是实现授权；事实以当前源码、测试和工具输出为准。
 
 ## 从这里继续
@@ -18,14 +18,13 @@
 
 ## 当前焦点
 
-[DB-054 Dictionary 内容对象](../docs/design-branches/0054-dictionary-content-object-slice.md) 已接入双槽冻结、无序映射、
-canonical key body 寻址 Remove/Add/PatchValue、实例 comparer 与显式双槽 Upgrade，根 tests/真实包整体验收通过。
-新写 history v7；SCB1 v2、Base v4 与 Storage wire 不变。完整验收与接缝以该分片 §10 为准。
-下一片设计见[修订后的 DB-055](../docs/design-branches/0055-composite-dictionary-key-design.md)（分层方向已采纳，具体方案尚未实施）：
-领域 Key 可用当前 Default/IEquatable 或应用 comparer，DTO 继续按全部持久字段配对；不再生成框架规定的领域比较规则。
-推荐保留标准模式，新增 CurrentDefault/Application、typed 登记与泛型 resolver；补齐恢复模式的回捕、分阶段验证和 G0–G3 见证。
-同型多 Application 角色、引用内容比较的恢复顺序、record/ValueTuple 另列边界；未完成事项由[路线图](../docs/DurableGraph-research-roadmap.md#2-已采纳方向中的未完成能力)维护。
-下文仍描述 DB-054 的实际白名单与验证，不把新设计当当前能力。
+[DB-055 复合 Dictionary Key](../docs/design-branches/0055-composite-dictionary-key-design.md) 已接入普通/generic struct、
+当前 Default/IEquatable 与 Application comparer。DTO 继续完整捕获 Key，以原 canonical key body 配对 Delta；
+模式 4/5 恢复后回捕保留，typed 登记和泛型 resolver 随 snapshot 冻结并惰性缓存。
+历史 exact/Normalize 不执行当前业务比较；当前碰撞在实际 TryAdd 拒绝。
+根构建、全量测试和真实包已验证删除旧泛型 Key CLR、双槽升级与续写，以及同 Schema 仅比较逻辑改变的失败边界。
+沿用 [DB-054](../docs/design-branches/0054-dictionary-content-object-slice.md) codec 1、history v7、SCB1 v2、Base v4 与 Storage wire v3。
+同型多 Application 角色、引用内容比较的恢复顺序、record/ValueTuple 外观分别由[路线图](../docs/DurableGraph-research-roadmap.md)维护。
 
 [DB-053](../docs/design-branches/0053-enum-inline-state-slice.md) 的单整数 InlineValue、Family DTO/body、
 外置 enum 投影及删除旧 CLR 后的显式升级继续沿用；常量表不入 Schema。
@@ -213,15 +212,21 @@ Position/LocalResync/BoundedMyers 共用 decoder，配置随模型 snapshot 冻�
   UseListElementUpgrades 独立于数组规则选择，空 List 同样预绑定；每个共享 List 归一化一次，保留 ID/count 并强制 Base。
   UpgradeContext.ListCount 随子工具继承，不复用 ArrayShape；历史 reader 不依赖旧领域 struct CLR 类型。
 - 实验性 exact BCL Dictionary<TKey,TValue> 采用两个完整槽，codec 1；TypeExpr/共享模式构造码 10，history `d(key,value)`，目录 kind=5。
-  TValue 复用完整现有槽闭包；key 支持标量/enum Default、string Default/Ordinal/OrdinalIgnoreCase，受支持引用类型显式 ReferenceIdentity。
-  struct/Nullable key、任意 custom/culture comparer、子类/接口字段拒绝；复合 Key 是明确后继，不是永久排除。
-  comparer 是 frozen/Base body 的对象级标签（0/1/2/3），不进入 Layout/RepresentationId；同 CLR 多策略可共存。
+  TValue 复用完整现有槽闭包；key 支持已有标量/enum、普通/generic Durable struct 和受支持引用类型。
+  根 Nullable、未支持类型、子类/接口字段仍拒绝；复合 Key 的 Nullable/string/引用成分复用已有槽投影。
+  comparer 是 frozen/Base body 的对象级标签 0–5，不进入 Layout/RepresentationId；0–3 标准选择保持，
+  4 CurrentDefault 使用当前 CLR Default/IEquatable，5 Application 使用闭合 Dictionary 的当前应用选择。
+  UseDictionaryComparer<K,V> 优先于唯一 UseDictionaryComparerResolver；只实际 Application Capture/Allocate 才解析，空实例亦然，
+  缺失/错类型/异常不得回退。snapshot 复制配置、按闭合类型缓存并共享成功 comparer，不能冻结用户捕获的外部状态。
+  4/5 用透明转发包装保留 Load→Capture→Commit 的模式；不保证 Comparer 实例身份，同型 Application 只恢复一种当前规则。
   owned 双槽条目语义无序；容量/枚举重排无伪变化，hash/bucket 不持久化。key 和 value 引用均参与共享、循环及可达性。
   Delta 以 canonical key Base bytes 寻址 Remove/PatchValue/Add；键表示不变时每 value 只调用一次融合 PrepareDelta。
   不用领域 comparer 配对、不依赖 entry ordinal；相同查找键但不同持久 ID/bits 使用 Remove+Add，prior 不被修改。
   metadata Validate 不编码 key；临时 key bytes/hash索引只在操作内使用，完整 bytes 决定相等，性能复用留待实测。
-  局部 reader 查语法、null/持久重复和标量等价冲突；Seal、完整 exact/current 目录分别校验 lookup 唯一性，包含不可达 source 行。
-  string 内容冲突和多个 Empty ID 的身份碰撞明确拒绝，非空同内容不同实例可在 ReferenceIdentity 策略下保留。
+  所有模式查语法、根 null、canonical 重复和完整引用，包括不可达行；零宽完整 key 的多条计数在分配前拒绝。
+  0–3 保留框架标准 lookup 校验，包括 string 内容与 Empty 身份冲突；4/5 的 exact/Normalize 不执行当前业务比较，
+  只在可达图的 TryAdd 拒绝当前碰撞。历史可读不等于当前规则可接纳，失败不交付部分 World。
+  key inline/string 和引用身份在填充时可用，引用目标内容可能未就绪；比较不可依赖其内容或未恢复的 Transient。
   UseDictionaryKeyUpgrades/UseDictionaryValueUpgrades 分别选择显式规则；完整双端依赖和全部工具在首次 callback 前预检，空容器亦如此。
   每个共享字典仅 Normalize 一次，保持 ID/count/comparer；升级碰撞拒绝，仍 live 的布局升级强制 Base。
   UpgradeContext.DictionaryCount 只用于 Dictionary owner，子工具继承；历史 enum/struct key/value DTO 不依赖旧领域 CLR。
@@ -234,7 +239,7 @@ DurableGraph runtime 也引用 Serialization，单一 runtime PackageReference �
 
 | 准备修改 | 先查源码/测试，再按需读合同 |
 |---|---|
-| Dictionary 内容、键寻址 Delta、comparer 与历史双槽升级 | [DB-054](../docs/design-branches/0054-dictionary-content-object-slice.md)、[body](DurableGraph/DictionaryStateReader.cs)、[current binding](DurableGraph/DictionaryObjectBinding.cs)、[升级](DurableGraph/StateBindingContext.DictionaryUpgrade.cs)、[真实包](../experiments/PackageConsumerProbe/DictionaryConsumer/README.md) |
+| Dictionary 内容、复合 Key、当前 comparer 与历史双槽升级 | [DB-055](../docs/design-branches/0055-composite-dictionary-key-design.md)、[body](DurableGraph/DictionaryStateReader.cs)、[current binding](DurableGraph/DictionaryObjectBinding.cs)、[升级](DurableGraph/StateBindingContext.DictionaryUpgrade.cs)、[真实包](../experiments/PackageConsumerProbe/CompositeDictionaryConsumer/README.md) |
 | enum 表示、外置投影与历史升级 | [DB-053](../docs/design-branches/0053-enum-inline-state-slice.md)、[生成接缝](DurableGraph.Generator/DurableSchemaGenerator.Enums.cs)、[当前模板校验](DurableGraph/StateDefinitionBinding.cs)、[真实包](../experiments/PackageConsumerProbe/EnumConsumer/README.md) |
 | Nullable 值槽、history 与显式升级提升 | [DB-052](../docs/design-branches/0052-nullable-value-slot-slice.md)、[静态值操作](DurableGraph/NullableStateValues.cs)、[完整 child 布局](DurableGraph/NullableValueLayout.cs)、[真实包](../experiments/PackageConsumerProbe/NullableConsumer/README.md) |
 | List 区间 Delta、匹配与配置 | [DB-049](../docs/design-branches/0049-list-range-delta-and-matcher-trial-slice.md)、[matcher](DurableGraph/ListDeltaMatcher.cs)、[reader/body](DurableGraph/ListStateReader.cs)、[重放实验](../experiments/ListDeltaReplayProbe/README.md) |

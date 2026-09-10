@@ -77,6 +77,7 @@ internal static class DictionaryStateBody<K, V, KOps, VOps>
         DictionaryComparerKind kind = (DictionaryComparerKind)reader.ReadByte();
         DictionaryKeyPolicy.RequireStoredPolicy(kind, layout.KeySlot);
         int count = ReadCount(ref reader);
+        DictionaryKeyPolicy.RequireKeyCount(count, layout.KeySlot);
         RequireTailFits(count, ref reader, layout, values: true);
         DictionaryEntryState<K, V>[] entries = new DictionaryEntryState<K, V>[count];
         for (int index = 0; index < count; index++) {
@@ -164,6 +165,7 @@ internal static class DictionaryStateBody<K, V, KOps, VOps>
         int addCount = ReadCount(ref reader);
         long resultCount = (long)prior.Count - removeCount + addCount;
         if (resultCount > Array.MaxLength) { throw new InvalidDataException("Dictionary result count exceeds supported buffer length."); }
+        DictionaryKeyPolicy.RequireKeyCount((int)resultCount, layout.KeySlot);
         RequireTailFits(addCount, ref reader, layout, values: true);
         DictionaryEntryState<K, V>[] entries = new DictionaryEntryState<K, V>[(int)resultCount];
         int output = 0;
@@ -200,7 +202,7 @@ internal static class DictionaryStateBody<K, V, KOps, VOps>
         ArgumentNullException.ThrowIfNull(resolve);
         KeyIndex keys = Index(state, layout);
         ValidateLocalKeys(state, layout, keys);
-        if (state.ComparerKind == DictionaryComparerKind.ScalarDefault) { return; }
+        if (state.ComparerKind is DictionaryComparerKind.ScalarDefault or DictionaryComparerKind.CurrentDefault or DictionaryComparerKind.Application) { return; }
         HashSet<string>? strings = state.ComparerKind switch {
             DictionaryComparerKind.StringOrdinal => new(StringComparer.Ordinal),
             DictionaryComparerKind.StringOrdinalIgnoreCase => new(StringComparer.OrdinalIgnoreCase),
@@ -234,13 +236,14 @@ internal static class DictionaryStateBody<K, V, KOps, VOps>
                     throw new InvalidDataException("Dictionary contains duplicate scalar lookup keys.");
                 }
             }
-        } else {
+        } else if (layout.KeySlot.TypeTag is TypeTag.String or TypeTag.ObjectReference) {
             foreach (byte[] encoded in keys.Bytes) { DictionaryKeyPolicy.ReadReference(encoded); }
         }
     }
 
     private static KeyIndex Index(FrozenDictionaryState<K, V> state, DictionaryLayout layout) {
         DictionaryKeyPolicy.RequireStoredPolicy(state.ComparerKind, layout.KeySlot);
+        DictionaryKeyPolicy.RequireKeyCount(state.Count, layout.KeySlot);
         byte[][] bytes = new byte[state.Count][];
         Dictionary<byte[], int> offsets = new(DictionaryKeyBytesComparer.Instance);
         for (int index = 0; index < state.Count; index++) {

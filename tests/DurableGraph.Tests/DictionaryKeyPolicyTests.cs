@@ -9,24 +9,27 @@ public sealed class DictionaryKeyPolicyTests {
         Assert.Equal(DictionaryComparerKind.StringOrdinal, DictionaryKeyPolicy.Identify<string>(StringComparer.Ordinal, Strings.KeySlot));
         Assert.Equal(DictionaryComparerKind.StringOrdinalIgnoreCase, DictionaryKeyPolicy.Identify<string>(StringComparer.OrdinalIgnoreCase, Strings.KeySlot));
         Assert.Equal(DictionaryComparerKind.ReferenceIdentity, DictionaryKeyPolicy.Identify<string>(ReferenceEqualityComparer.Instance, Strings.KeySlot));
-        Assert.Throws<InvalidDataException>(() => DictionaryKeyPolicy.Identify(new HostileComparer(), Strings.KeySlot));
-        Assert.Throws<InvalidDataException>(() => DictionaryKeyPolicy.Identify<string>(StringComparer.InvariantCulture, Strings.KeySlot));
+        Assert.Equal(DictionaryComparerKind.Application, DictionaryKeyPolicy.Identify(new HostileComparer(), Strings.KeySlot));
+        Assert.Equal(DictionaryComparerKind.Application, DictionaryKeyPolicy.Identify<string>(StringComparer.InvariantCulture, Strings.KeySlot));
+        Assert.Throws<InvalidDataException>(() => DictionaryKeyPolicy.CreateComparer<string>(DictionaryComparerKind.Application, Strings.KeySlot));
         Assert.Same(StringComparer.Ordinal, DictionaryKeyPolicy.CreateComparer<string>(DictionaryComparerKind.StringOrdinal, Strings.KeySlot));
     }
 
     [Fact]
-    public void DomainReferenceDefaultIsRejectedButExplicitIdentityIsAccepted() {
+    public void DomainReferenceDefaultUsesCurrentBehaviorAndExplicitIdentityRetainsStandardMode() {
         DurableFieldInfo slot = DurableFieldInfo.Reference(1, TypeExpr.Named("Node"));
-        Assert.Throws<InvalidDataException>(() => DictionaryKeyPolicy.Identify(EqualityComparer<KeyNode>.Default, slot));
+        Assert.Equal(DictionaryComparerKind.CurrentDefault, DictionaryKeyPolicy.Identify(EqualityComparer<KeyNode>.Default, slot));
         Assert.Equal(DictionaryComparerKind.ReferenceIdentity, DictionaryKeyPolicy.Identify<KeyNode>(ReferenceEqualityComparer.Instance, slot));
         Assert.Same(ReferenceEqualityComparer.Instance, DictionaryKeyPolicy.CreateComparer<KeyNode>(DictionaryComparerKind.ReferenceIdentity, slot));
     }
 
     [Fact]
-    public void StructAndNullableCurrentKeysRequireFutureComparisonContract() {
+    public void StructUsesCurrentDefaultWhileRootNullableStillRejects() {
         DurableSchema inline = new("Point", 1, SchemaKind.InlineValue, new DurableFieldInfo(1, TypeTag.Int32));
         DurableFieldInfo inlineSlot = new(1, TypeTag.InlineValue, inlineSchema: inline);
-        Assert.Throws<ArgumentException>(() => DictionaryKeyPolicy.RequireCurrentKey(typeof(OrdinaryStruct), inlineSlot));
+        DictionaryKeyPolicy.RequireCurrentKey(typeof(OrdinaryStruct), inlineSlot);
+        Assert.Equal(DictionaryComparerKind.CurrentDefault, DictionaryKeyPolicy.Identify(EqualityComparer<OrdinaryStruct>.Default, inlineSlot));
+        Assert.Throws<InvalidDataException>(() => DictionaryKeyPolicy.CreateComparer<OrdinaryStruct>(DictionaryComparerKind.ScalarDefault, inlineSlot));
         Assert.Throws<ArgumentException>(() => DictionaryKeyPolicy.RequireCurrentKey(typeof(int?), DurableFieldInfo.Nullable(1, new(1, TypeTag.Int32))));
         Assert.Throws<InvalidDataException>(() => DictionaryKeyPolicy.RequireStoredPolicy(DictionaryComparerKind.ScalarDefault,
             DurableFieldInfo.Nullable(1, new(1, TypeTag.Int32))));

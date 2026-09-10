@@ -1,8 +1,8 @@
 # DB-055：复合 Dictionary Key 的持久状态与当前比较行为
 
-> 状态：**方向已采纳 / 修订方案待实施与代码见证**，2026-09-10。
-> 本轮授权是完善设计文档、组织审阅；不启动产品实现。新增 API、模式及包装均为拟议形状。
-> 代码基线：`821e602`，当前产品仍是 DB-054 白名单。旧推荐来自 `77e4341`，已[冻结归档](../archive/2026-09-10/0055-composite-dictionary-key-design-v1.md)。
+> 状态：**已实施 / G0–G3 验收完成**，2026-09-10。
+> 用户已授权实施本文；模式、API 与包装按下述合同落地，完成情况以 §11 的实现验收记录为准。
+> 实施前代码基线：`821e602`（DB-054 白名单）。旧推荐来自 `77e4341`，已[冻结归档](../archive/2026-09-10/0055-composite-dictionary-key-design-v1.md)。
 > 问题：允许普通/generic struct 的领域相等性忽略部分持久字段，同时完整保存 Key，能否复用既有 Delta 并保持普通 Dictionary 的易用性？
 > 最小见证：Key 的三个字段均持久，Equals 忽略 Timestamp；普通 new()、同值查询、连续 Commit、冷重开均工作；旧 Key CLR 删除后仍能读历史 DTO，当前规则冲突则明确拒绝交付 World。
 
@@ -22,7 +22,7 @@
 | 有限边界 | 一个闭合 Dictionary 类型的 Application 实例共享一份当前恢复规则；引用内容比较的额外恢复阶段、命名策略、record/tuple 外观另排 |
 
 这里没有已发布数据兼容负担。保留标准模式是保留当前功能，不是建设旧格式兼容层。
-上述模式编码与 API 接线是本轮审阅后的推荐；实现仍须经过 §9 的见证，不能把文档状态当成代码能力。
+上述模式编码与 API 接线经设计审阅选择，实施对应 §9 的见证；实际验证结果集中在 §11。
 
 ## 2. 三种职责及正确性条件
 
@@ -93,8 +93,8 @@ record struct、ValueTuple、其他 CLR/BCL 类型的序列化能力仍未实现
 
 ### 4.1 推荐保留对象级恢复模式
 
-建议继续使用对象 body 中的 `DictionaryComparerKind`，增加两值；它不进入 DictionaryLayout/RepresentationId。
-表中名字和码值为施工推荐；0–3 不改变既有含义，4/5 尚无产品数据。
+继续使用对象 body 中的 `DictionaryComparerKind`，增加两值；它不进入 DictionaryLayout/RepresentationId。
+表中名字和码值已落实；0–3 不改变既有含义。
 
 | 模式 | 捕获来源 | 恢复时的含义 | 历史 lookup 校验 |
 |---|---|---|---|
@@ -130,7 +130,7 @@ TryAdd 无法检测这种配置丢失。保留模式只选择当前内建规则�
 ### 5.1 最小公开入口
 
 ```csharp
-// 拟议 API。配置只服务 Application；不更改现有领域字典的 Comparer。
+// 配置只服务 Application；不更改现有领域字典的 Comparer。
 models.UseDictionaryComparer<OrderKey, Order>(OrderKeyComparer.Instance);
 
 // 领域对象仍按普通 BCL 方式创建，可以复用上面的同一实例。
@@ -151,7 +151,7 @@ Default 的 `Key<T> : IEquatable<Key<T>>` 由 CLR 随实际 T 自动工作，不
 只有外置 comparer 需要一个当前闭合入口：
 
 ```csharp
-// 拟议 API：输入总是受支持的闭合 Dictionary<K,V> CLR Type。
+// 输入总是受支持的闭合 Dictionary<K,V> CLR Type。
 models.UseDictionaryComparerResolver(static dictionaryType => {
     Type keyType = dictionaryType.GetGenericArguments()[0];
     if (keyType.IsGenericType && keyType.GetGenericTypeDefinition() == typeof(TenantKey<>)) {
@@ -162,7 +162,7 @@ models.UseDictionaryComparerResolver(static dictionaryType => {
 });
 ```
 
-建议签名为 `Func<Type, object?>`。框架在已闭合的 Dictionary<K,V> helper 中检查结果可赋值给 `IEqualityComparer<K>`。
+签名为 `Func<Type, object?>`。框架在已闭合的 Dictionary<K,V> helper 中检查结果可赋值给 `IEqualityComparer<K>`。
 这里用的是当前领域 K，既不是 DTO 类型，也不是待编码的 TypeExpr。
 `List<Dictionary<TenantKey<int>, Item[]>[]>` 与直接字段共用同一字典绑定，不枚举外层组合。
 应用可在 resolver 中组合预制的泛型 comparer；框架不另建 pattern 匹配、泛型参数映射或程序集扫描平台。
@@ -190,7 +190,7 @@ Runtime binding 只接收 comparer 取得能力，Registry/Snapshot 的选择仍
 
 ### 6.1 body 和槽能力
 
-Dictionary codec 1 grammar、catalog kind 5、SCB1 v2、Base v4、Storage wire v3、history v7 预计均不变；
+Dictionary codec 1 grammar、catalog kind 5、SCB1 v2、Base v4、Storage wire v3、history v7 均不变；
 只扩展 comparerKind 取值，旧程序读新模式明确拒绝，不建设兼容写法。
 现有 Remove / PatchValue / Add 分组和完整 key Base body 寻址不变。
 匹配条目只对 value 调用一次融合 PrepareDelta；枚举重排和 Capacity 改变仍为 NoChange。
@@ -210,7 +210,7 @@ Delta 也先检结果 count。这与业务 comparer 无关，防止零字节 key
 下一次 Capture 识别为 StringOrdinal，prior 仍为 Application，现有 PrepareDelta 会拒绝模式变化。
 CurrentDefault 也可能遇到同类问题：历史 struct 的同 nominal inline 后来成为 enum，当前 Default 会被识别为 ScalarDefault。
 
-建议恢复 4/5 时使用一个内部封闭的 `DictionaryRestoreComparer<TKey>`，保存模式并转发 inner 的 Equals/Hash：
+恢复 4/5 时使用一个内部封闭的 `DictionaryRestoreComparer<TKey>`，保存模式并转发 inner 的 Equals/Hash：
 
 ```text
 Allocate(CurrentDefault) -> wrapper(4, EqualityComparer<K>.Default)
@@ -282,7 +282,7 @@ Key/Value 的 exact 布局变化继续分别选显式 Upgrade 工具，空容器
 
 ## 9. 建议施工顺序与最小验收
 
-下表是下一次实施授权后的任务，不是本轮已完成的测试。
+下表为实施与验收的阶段划分；完成结果和测试位置见 §11。
 
 | 阶段 | 最小可观察结果 |
 |---|---|
@@ -307,19 +307,19 @@ Key/Value 的 exact 布局变化继续分别选显式 Upgrade 工具，空容器
 12. 真正 PackageReference 两代 Key：旧 CLR 删除、既有 accepted history 文件/hash 保留、完整 key/value Upgrade 与所有相关生成路径。
 13. 不改 Schema、不触发 Upgrade，只在两代程序中改变当前 Equals/comparer：旧 exact DTO 仍可读，Normalize 不调用 comparer，原本不同的键在当前 TryAdd 碰撞而使 Load 失败。
 
-实现时运行根 solution build、相关/完整 tests 及真实包回归。正文只记录设计和源码依据，不将上述见证宣称为已通过。
+验收运行根 solution build、相关/完整 tests 及真实包回归；§11 保存结果，避免在每条设计合同后重复测试日志。
 
 ## 10. 审阅结论与后续裁决
 
-本轮先由需求/易用性、最小架构、恢复语义三路独立分析，再交叉检查标准策略丢失、Application 回捕漂移和不可达恢复边界。
+实施前先由需求/易用性、最小架构、恢复语义三路独立分析，再交叉检查标准策略丢失、Application 回捕漂移和不可达恢复边界。
 同 CLR 多标准策略有现成回归；因此保留选择标签比无条件删除更符合当前功能。
 新增模式包装只为解决恢复模式在下一次 Capture 改变的具体反例，不恢复旧稿的 comparer 语义证明体系。
 三路完整主稿复审完成；定稿补清 inner 的用户捕获边界、格式/领域失败阶段、共享 comparer 实例及不改 Schema 的行为变更见证。
-未发现需要新增恢复阶段或 comparer 平台的设计阻塞；未执行产品实验，不声称性能数据。
-本轮仅修改 8 份 Markdown；集成差异已审阅，510 个本地链接、46 个锚点及 git diff --check 通过。
-归档与 `77e4341` 原稿核对一致，仅增加归档说明和调整相对链接；未运行 dotnet 构建或产品测试。
+设计阶段未发现需要新增恢复阶段或 comparer 平台的阻塞，未进行性能测量。
+设计阶段修改 8 份 Markdown；510 个本地链接、46 个锚点及 git diff --check 通过。
+归档与 `77e4341` 原稿核对一致，仅增加归档说明和调整相对链接。后续产品施工证据独立记录于 §11。
 
-推荐以本文作为下一片施工基础。只有以下需求变化才应重新选择结构：
+只有以下需求变化才应重新选择结构：
 
 - **同闭合类型的多种 Application 配置必须分别恢复**：需要持久角色标记或显式外部身份规则，不能在当前单策略合同下假装支持。
 - **comparer 必须读取引用目标内容**：需要确定恢复阶段及允许依赖，可能先做固定字典后填充；不能仅靠“不读 Transient”推导安全。
@@ -328,3 +328,33 @@ Key/Value 的 exact 布局变化继续分别选显式 Upgrade 工具，空容器
 ValueTuple/record struct 先完成其值布局、成员标注和历史能力，再自然使用当前 Default/自定义比较。
 Tuple 的元素名称不应成为键身份；record 的合成比较可能包含未持久字段，应用仍须遵守本片状态/行为合同。
 SortedDictionary 的排序与 OrderedDictionary 的顺序状态独立设计，不因共享 key/value DTO 就自动获得支持。
+
+## 11. 实施与验收记录
+
+本片限定为 §3–7 的合同，不扩充 tuple/record、同型多 Application 角色、引用内容比较恢复阶段或 comparer 历史代码。
+依赖仍是 StateStore → Runtime；配置由 Registry/Snapshot 拥有，Runtime 仅取得惰性 comparer 能力。
+
+| 要求 | 实现归属 | 验收入口 | 状态 |
+|---|---|---|---|
+| G0：普通/generic struct key 与完整 DTO 差分 | Generator 资格、Runtime key policy | [真实 SG 纵向 tests](../../tests/DurableGraph.Tests/CompositeDictionaryGeneratorTests.cs) | 已验证 |
+| G1：模式 4/5、当前配置、回捕稳定 | Runtime binding/wrapper；StateStore Registry/Snapshot | [body tests](../../tests/DurableGraph.Tests/CompositeDictionaryBodyTests.cs)、[Repository tests](../../tests/DurableGraph.StateStore.Tests/CompositeDictionaryRepositoryTests.cs) | 已验证 |
+| G2：历史数据/业务验证分层、Upgrade、零宽/根 null | Runtime reader/Upgrade、既有图验证 | [Upgrade tests](../../tests/DurableGraph.Tests/CompositeDictionaryUpgradeTests.cs)、上述 body/Repository tests | 已验证 |
+| G3：删除旧 CLR、两代历史与同 Schema 行为变化 | PackageConsumerProbe | [真实包见证](../../experiments/PackageConsumerProbe/CompositeDictionaryConsumer/README.md) | 已验证 |
+
+实现保持局部：SG 仅放开受支持 inline key 的资格；没有生成领域 comparer，没修改历史模板/Schema 目录格式，
+也没有给 Upgrade 或图恢复增加阶段。Registry 提供 typed 入口和单 resolver，Runtime 的可选惰性能力保持依赖方向。
+0–3 仍守原有框架 lookup 合同；0 历史单整数布局不能借同形普通 struct 的 Default 偷换标准行为。
+
+验证记录（2026-09-10）：
+
+- 实施前根 build 为 0 warnings / 0 errors，基线 **2029** 项测试通过。
+- 最终 `dotnet build DurableGraph.slnx --no-restore`：**0 warnings / 0 errors**。
+- 最终 `dotnet test DurableGraph.slnx --no-restore`：**2091 passed，0 failed，0 skipped**，其中 Runtime/SG 1235、StateStore 598、Serialization 103、Storage 155；新增 62 项。
+- `Run-CompositeDictionaryProbe.ps1` 通过两代真实 PackageReference 的 Publish/Verify。history **6 → 9**，原 filename/hash 不变；192 次显式 key/part/value 回调，两个升级字典 Base 后恢复 Delta。另一个 Schema V1 完全不变的仓库，只改 Equals 即在 TryAdd 失败，而失败前后 exact DTO 均可读取且不执行比较。
+- 新模式的空配置、成功缓存、标准策略隔离、不可达行完整引用、Transient/Empty 规范化重复、零宽分配前限制、模式 4/5 回捕及两类升级碰撞均有通过的回归。
+- 独立审阅核对产品 diff、生成器、四组新测试与包见证，未留下阻塞发现。首轮仅修复新增测试绕过 Capture 阶段的用法及一处测试分析器警告；未放松产品阶段约束。
+- 复用同一份包 feed 的 `Run-DictionaryProbe.ps1` 与 `Run-GenericProbe.ps1` 均通过，保留既有标准 comparer、历史键值升级、开放泛型与删除旧 inline CLR 的交付能力。
+- 集成文档与差异核对完成；8 份 Markdown 的 481 个本地链接、45 个锚点以及 `git diff --check` 通过。
+
+本次真实包产物位于忽略目录 `experiments/PackageConsumerProbe/obj/composite-dictionary-20260910041040-18892-8573e918`，
+运行入口与断言维护在消费者 README。不把运行日志或生成文件纳入源代码。

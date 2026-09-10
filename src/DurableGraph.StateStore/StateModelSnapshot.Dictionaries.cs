@@ -3,6 +3,21 @@ namespace Atelia.DurableGraph.StateStore;
 internal sealed partial class StateModelSnapshot {
     private readonly Dictionary<Type, DictionaryObjectBinding> _currentDictionaries = [];
     private readonly Dictionary<DictionaryLayout, ObjectReaderBinding> _dictionaryReaders = [];
+    private readonly Dictionary<Type, object> _dictionaryComparers;
+    private readonly Func<Type, object?>? _dictionaryComparerResolver;
+    private readonly Dictionary<Type, object> _resolvedDictionaryComparers = [];
+
+    private object ResolveDictionaryComparer(Type dictionaryType) {
+        if (_resolvedDictionaryComparers.TryGetValue(dictionaryType, out object? cached)) { return cached; }
+        object? result = _dictionaryComparers.TryGetValue(dictionaryType, out object? registered)
+            ? registered : _dictionaryComparerResolver?.Invoke(dictionaryType);
+        Type required = typeof(IEqualityComparer<>).MakeGenericType(dictionaryType.GetGenericArguments()[0]);
+        if (result is null || !required.IsInstanceOfType(result)) {
+            throw new InvalidDataException($"Application Dictionary comparer for {dictionaryType} is missing or does not implement {required}.");
+        }
+        _resolvedDictionaryComparers.Add(dictionaryType, result);
+        return result;
+    }
 
     private bool TryGetCurrentDictionaryBinding(Type domainType, out ObjectBinding? binding) {
         if (_currentDictionaries.TryGetValue(domainType, out DictionaryObjectBinding? prior)) {
@@ -19,7 +34,8 @@ internal sealed partial class StateModelSnapshot {
             StateValueBinding value = ResolveCurrentValue(arguments[1]);
             DictionaryLayout layout = new(key.Slot, value.Slot);
             DictionaryObjectBinding result = DictionaryObjectBinding.Create(domainType, layout, key, value,
-                (target, source) => NormalizeDictionary(source, target));
+                (target, source) => NormalizeDictionary(source, target),
+                () => ResolveDictionaryComparer(domainType));
             if (result.DomainType != domainType || !result.DictionaryLayout.Equals(layout)) {
                 throw new InvalidDataException("A Dictionary factory returned another current type or exact layout.");
             }

@@ -17,6 +17,11 @@ The [Dictionary consumer](DictionaryConsumer/README.md) exercises experimental B
 `Run-DictionaryProbe.ps1`: supported comparer policies, shared key/value references, unordered key-addressed Delta,
 and independent historical enum-key/struct-value upgrades after deleting their old CLR declarations.
 
+The [composite Dictionary consumer](CompositeDictionaryConsumer/README.md) runs through
+`Run-CompositeDictionaryProbe.ps1`: generic struct keys whose IEquatable ignores a persistent Timestamp,
+typed/resolver Application configuration, preserved restoration modes, and retained nested key/value history.
+A separate same-Schema comparison change leaves exact DTO reading available while current TryAdd rejects a collision.
+
 The [Enum consumer](EnumConsumer/README.md) adds explicit durable enum coverage through
 `Run-EnumProbe.ps1`: unknown integer values, generic/Nullable/array/List composition,
 retained history after deleting the old CLR enum, and explicit upgrades followed by Base/Delta resaves.

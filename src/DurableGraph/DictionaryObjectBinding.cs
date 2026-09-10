@@ -2,27 +2,29 @@ using Atelia.DurableGraph.StateStore.Serialization;
 
 namespace Atelia.DurableGraph;
 
-/// <summary>Experimental DB-054 projection of exact BCL Dictionary contents and supported comparer semantics.</summary>
-/// <remarks>Comparison policy is per instance. Arbitrary comparers and struct keys require a future explicit recovery contract.</remarks>
-// TODO(DB-054): revisit composite keys and whether the BCL facade remains suitable;
-// see docs/design-branches/0054-dictionary-content-object-slice.md sections 2.1 and 2.2.
+/// <summary>Experimental projection of exact BCL Dictionary contents and current comparison choices.</summary>
+/// <remarks>Default and application comparison behavior belongs to the current program; historical DTOs retain full key state.</remarks>
+// TODO: revisit named application roles or reference-content comparison only when required;
+// see docs/design-branches/0055-composite-dictionary-key-design.md section 10.
 public abstract class DictionaryObjectBinding : ObjectBinding {
     private protected DictionaryObjectBinding(Type domainType, DictionaryLayout layout, StateValueBinding key, StateValueBinding value,
-        Func<DictionaryObjectBinding, ObjectStateRecord, ObjectStateRecord>? normalize)
+        Func<DictionaryObjectBinding, ObjectStateRecord, ObjectStateRecord>? normalize, Func<object?>? getApplicationComparer)
         : base(domainType, ObjectLayout.ForDictionary(layout)) {
         DictionaryLayout = layout;
         KeyBinding = key;
         ValueBinding = value;
         NormalizeState = normalize;
+        GetApplicationComparer = getApplicationComparer;
     }
 
     public DictionaryLayout DictionaryLayout { get; }
     public StateValueBinding KeyBinding { get; }
     public StateValueBinding ValueBinding { get; }
     private protected Func<DictionaryObjectBinding, ObjectStateRecord, ObjectStateRecord>? NormalizeState { get; }
+    private protected Func<object?>? GetApplicationComparer { get; }
 
     public static DictionaryObjectBinding Create(Type domainType, DictionaryLayout layout, StateValueBinding key, StateValueBinding value,
-        Func<DictionaryObjectBinding, ObjectStateRecord, ObjectStateRecord>? normalize = null) {
+        Func<DictionaryObjectBinding, ObjectStateRecord, ObjectStateRecord>? normalize = null, Func<object?>? getApplicationComparer = null) {
         ArgumentNullException.ThrowIfNull(domainType);
         ArgumentNullException.ThrowIfNull(layout);
         ArgumentNullException.ThrowIfNull(key);
@@ -36,7 +38,7 @@ public abstract class DictionaryObjectBinding : ObjectBinding {
         DictionaryKeyPolicy.RequireCurrentKey(key.DomainType!, layout.KeySlot);
         return (DictionaryObjectBinding)Activator.CreateInstance(typeof(DictionaryObjectBinding<,,,,,,,>).MakeGenericType(
             key.DomainType!, key.StateType, key.ProjectionType, key.StateOpsType,
-            value.DomainType!, value.StateType, value.ProjectionType, value.StateOpsType), domainType, layout, key, value, normalize)!;
+            value.DomainType!, value.StateType, value.ProjectionType, value.StateOpsType), domainType, layout, key, value, normalize, getApplicationComparer)!;
     }
 
     internal abstract ObjectStateRecord CreateStateRecord(ObjectId id, object frozen);
@@ -49,11 +51,14 @@ internal sealed class DictionaryObjectBinding<KDomain, K, KProjection, KOps, VDo
     where KProjection : IValueProjection<KDomain, K> where KOps : IStateOps<K>
     where VProjection : IValueProjection<VDomain, V> where VOps : IStateOps<V> {
     public DictionaryObjectBinding(Type domainType, DictionaryLayout layout, StateValueBinding key, StateValueBinding value,
-        Func<DictionaryObjectBinding, ObjectStateRecord, ObjectStateRecord>? normalize) : base(domainType, layout, key, value, normalize) { }
+        Func<DictionaryObjectBinding, ObjectStateRecord, ObjectStateRecord>? normalize, Func<object?>? getApplicationComparer)
+        : base(domainType, layout, key, value, normalize, getApplicationComparer) { }
 
     internal override ObjectStateRecord Capture(ObjectId id, object domain, CaptureContext context) {
         Dictionary<KDomain, VDomain> dictionary = RequireDomain(domain);
         DictionaryComparerKind kind = DictionaryKeyPolicy.Identify(dictionary.Comparer, DictionaryLayout.KeySlot);
+        if (kind == DictionaryComparerKind.Application) { ResolveApplicationComparer(id); }
+        DictionaryKeyPolicy.RequireKeyCount(dictionary.Count, DictionaryLayout.KeySlot);
         DictionaryEntryState<K, V>[] entries = new DictionaryEntryState<K, V>[dictionary.Count];
         int index = 0;
         foreach (KeyValuePair<KDomain, VDomain> entry in dictionary) {
@@ -106,7 +111,8 @@ internal sealed class DictionaryObjectBinding<KDomain, K, KProjection, KOps, VDo
     internal override object Allocate(ObjectStateRecord current) {
         ((ICapturedStatePreparation)this).Validate(current);
         FrozenDictionaryState<K, V> state = current.GetDictionaryState<K, V>();
-        return new Dictionary<KDomain, VDomain>(state.Count, DictionaryKeyPolicy.CreateComparer<KDomain>(state.ComparerKind, DictionaryLayout.KeySlot));
+        IEqualityComparer<KDomain>? application = state.ComparerKind == DictionaryComparerKind.Application ? ResolveApplicationComparer(current.Id) : null;
+        return new Dictionary<KDomain, VDomain>(state.Count, DictionaryKeyPolicy.CreateComparer(state.ComparerKind, DictionaryLayout.KeySlot, application));
     }
 
     internal override void Hydrate(object domain, ObjectStateRecord current, ObjectReadTable objects) {
@@ -150,5 +156,15 @@ internal sealed class DictionaryObjectBinding<KDomain, K, KProjection, KOps, VDo
     private Dictionary<KDomain, VDomain> RequireDomain(object domain) {
         if (domain is null || domain.GetType() != DomainType) { throw new InvalidDataException("Dictionary projection requires the exact registered BCL type."); }
         return (Dictionary<KDomain, VDomain>)domain;
+    }
+
+    private IEqualityComparer<KDomain> ResolveApplicationComparer(ObjectId id) {
+        object? selected;
+        try { selected = GetApplicationComparer?.Invoke(); }
+        catch (Exception error) {
+            throw new InvalidDataException($"Application comparer resolution failed for Dictionary object {id} of type {DomainType}.", error);
+        }
+        return selected is IEqualityComparer<KDomain> comparer ? comparer : throw new InvalidDataException(
+            $"Application comparer is missing or has the wrong IEqualityComparer<{typeof(KDomain)}> type for Dictionary object {id} of type {DomainType}.");
     }
 }

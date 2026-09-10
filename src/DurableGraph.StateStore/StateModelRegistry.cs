@@ -13,6 +13,42 @@ public sealed class StateModelRegistry : IStateModelRegistration {
     private Type? _dictionaryKeyUpgradeRuleSet;
     private Type? _dictionaryValueUpgradeRuleSet;
     private ListDeltaAlgorithm _listDeltaAlgorithm = ListDeltaAlgorithm.Adaptive;
+    private readonly Dictionary<Type, object> _dictionaryComparers = [];
+    private Func<Type, object?>? _dictionaryComparerResolver;
+
+    /// <summary>Selects the current comparer for Application-mode instances of one closed Dictionary type.</summary>
+    /// <remarks>
+    /// Standard modes and CurrentDefault ignore this selection. Configuration is copied into future snapshots;
+    /// existing sessions keep their selection. All Application instances of this type share the comparer.
+    /// The comparer must be stable and use only restored inline values, strings or reference identities,
+    /// not the contents of referenced objects that may still await hydration.
+    /// </remarks>
+    public void UseDictionaryComparer<TKey, TValue>(IEqualityComparer<TKey> comparer) where TKey : notnull {
+        ArgumentNullException.ThrowIfNull(comparer);
+        Type dictionaryType = typeof(Dictionary<TKey, TValue>);
+        if (_dictionaryComparers.TryGetValue(dictionaryType, out object? existing)) {
+            if (!ReferenceEquals(existing, comparer)) {
+                throw new InvalidOperationException($"A different Application comparer is already selected for {dictionaryType}.");
+            }
+            return;
+        }
+        _dictionaryComparers.Add(dictionaryType, comparer);
+    }
+
+    /// <summary>Selects one lazy fallback for Application-mode Dictionary types without an exact registration.</summary>
+    /// <remarks>
+    /// The argument is the closed domain Dictionary&lt;TKey,TValue&gt; type. Return an IEqualityComparer&lt;TKey&gt;.
+    /// Missing, null or invalid results fail; they never fall back to Default. Successful results are shared
+    /// and cached per snapshot and closed type. Exact DTO reading and normalization do not invoke this callback.
+    /// Snapshot freezing retains delegate/comparer references, not copies of their mutable external state.
+    /// </remarks>
+    public void UseDictionaryComparerResolver(Func<Type, object?> resolver) {
+        ArgumentNullException.ThrowIfNull(resolver);
+        if (_dictionaryComparerResolver is not null && !ReferenceEquals(_dictionaryComparerResolver, resolver)) {
+            throw new InvalidOperationException("A different Dictionary comparer resolver is already selected.");
+        }
+        _dictionaryComparerResolver = resolver;
+    }
 
     /// <summary>Selects how future operation snapshots prepare List Delta bodies.</summary>
     /// <remarks>Adaptive is the default. Existing sessions keep their writer selection. Algorithms share one persisted format and reader.</remarks>
@@ -123,5 +159,6 @@ public sealed class StateModelRegistry : IStateModelRegistration {
         new Dictionary<SchemaKey, StateReaderBinding>(_readers),
         new Dictionary<string, StateDefinitionBinding>(_definitions, StringComparer.Ordinal), schemas,
         new Dictionary<Type, StateValueUpgradeRuleSet>(_valueUpgradeRules), _arrayElementUpgradeRuleSet, _listElementUpgradeRuleSet,
-        _listDeltaAlgorithm, _dictionaryKeyUpgradeRuleSet, _dictionaryValueUpgradeRuleSet);
+        _listDeltaAlgorithm, _dictionaryKeyUpgradeRuleSet, _dictionaryValueUpgradeRuleSet,
+        new Dictionary<Type, object>(_dictionaryComparers), _dictionaryComparerResolver);
 }

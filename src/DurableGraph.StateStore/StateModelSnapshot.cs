@@ -29,7 +29,8 @@ internal sealed partial class StateModelSnapshot : StateBindingContext {
         Dictionary<Type, StateValueUpgradeRuleSet>? valueUpgradeRules = null,
         Type? arrayElementUpgradeRuleSet = null, Type? listElementUpgradeRuleSet = null,
         ListDeltaAlgorithm listDeltaAlgorithm = ListDeltaAlgorithm.Adaptive,
-        Type? dictionaryKeyUpgradeRuleSet = null, Type? dictionaryValueUpgradeRuleSet = null) {
+        Type? dictionaryKeyUpgradeRuleSet = null, Type? dictionaryValueUpgradeRuleSet = null,
+        Dictionary<Type, object>? dictionaryComparers = null, Func<Type, object?>? dictionaryComparerResolver = null) {
         _models = models;
         _types = types;
         _readers = readers;
@@ -39,6 +40,8 @@ internal sealed partial class StateModelSnapshot : StateBindingContext {
         ListElementUpgradeRuleSet = listElementUpgradeRuleSet;
         DictionaryKeyUpgradeRuleSet = dictionaryKeyUpgradeRuleSet;
         DictionaryValueUpgradeRuleSet = dictionaryValueUpgradeRuleSet;
+        _dictionaryComparers = dictionaryComparers ?? [];
+        _dictionaryComparerResolver = dictionaryComparerResolver;
         if (!Enum.IsDefined(listDeltaAlgorithm)) { throw new ArgumentOutOfRangeException(nameof(listDeltaAlgorithm)); }
         _listDeltaAlgorithm = listDeltaAlgorithm;
         _schemas = schemas;
