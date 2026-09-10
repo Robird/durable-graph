@@ -23,6 +23,7 @@ DB-045 持久表示 ID、DB-046 统一闭合目录、DB-047 List 基础能力和
 
 | 文档 | 状态 | 实施范围 |
 |---|---|---|
+| [DB-059 跨程序集模型目录与类型组合](0059-cross-assembly-model-composition-slice.md) | Proposed / 待采纳 | 外部 nominal 与动态表示参数、显式 Family 导出及普通 Model/Definition nominal 桥接；独立模型包与两代历史验收规划；固定外部 inline/base 模板导入另排，未修改产品 |
 | [DB-058 DateOnly / TimeOnly / DateTimeOffset 内建值槽](0058-temporal-scalar-value-slice.md) | 已实施 / G0–G3 | 三值完整公开表示、offset 持久相等性、静态 body/组合/history v9、字典双比较与显式升级；两代真实包保留旧 inline 历史并升级续写；DateTime Local/DST 独立后继 |
 | [DB-057 Guid / decimal / TimeSpan 内建值槽](0057-bcl-scalar-value-slice.md) | 已实施 / G0–G3 | 三种完整表示、静态 body、组合/history v8、字典双语义及显式升级；真实包保留旧 inline 历史并升级续写，Tuple 多 child 后继保留于 §8 |
 | [DB-056 record struct 持久值](0056-record-struct-state-slice.md) | 已实施 / G0–G3 验收通过 | positional/readonly/generic、显式 backing storage 分类与强类型字段投影；复用 Family/InlineValue/DB-055，完整图/历史/两代删除旧 CLR 的真实包验证；无新增持久格式 |

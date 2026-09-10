@@ -21,9 +21,11 @@
 [DB-058 DateOnly / TimeOnly / DateTimeOffset](../docs/design-branches/0058-temporal-scalar-value-slice.md) 已贯通静态 body、
 Nullable/泛型/容器、history 与显式升级。DateTimeOffset 保留 clock ticks 与 offset，同瞬间改 offset 也保存；
 新写 history v9，旧 history 原样保留；对象/目录/容器格式版本不变。两代真实包验证旧 inline CLR 删除与升级续写。
-当前没有另一份已采纳而待实施的工作单；后续从[路线图](../docs/DurableGraph-research-roadmap.md)的具体模型/工作流选择。
+下一片推荐 [DB-059 跨程序集模型目录与类型组合](../docs/design-branches/0059-cross-assembly-model-composition-slice.md)（Proposed，待采纳）：
+外部 nominal 与动态表示参数、显式 Family 导出、普通 Model/Definition 登记桥接，以及独立模型包的历史升级见证。
+本轮仅规划，跨程序集产品支持尚未开放；固定外部 inline/base 模板导入不在该提案内。
 DateTime 的 Local/DST 保存合同单独待定；ValueTuple 的多 child exact 布局与参数来源问题保留在 DB-057 §8。
-跨程序集和 SchemaStore 自举仍按具体需求重访；不自动按 BCL 类型清单继续排期。
+SchemaStore 自举仍待元数据引导与联合视图的具体裁决；不自动按 BCL 类型清单继续排期。
 
 ## 当前能力与实际边界
 
