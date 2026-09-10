@@ -62,17 +62,21 @@ to a temporary file in the history directory and moved into place without
 overwrite. The prototype assumes one writer; publishing several files is not a
 transaction.
 
-For fixed inline fields supplied by another assembly, package targets pass the separate
+For fixed inline fields or exact base schemas supplied by another assembly, package targets pass the separate
 `DurableGraphSchemaHistoryReferences.g.cs` file emitted by the same generation. It contains
-only selected external inline records and their declaring assembly identities. The owned
+only selected external records and their declaring assembly identities. The owned
 candidate manifest ends with `// references-sha256:<lowercase SHA256>` when these records are
 nonempty. The digest covers the complete canonical reference text; missing, stale, malformed,
 duplicate or differently owned inputs are rejected, even when there are zero owned candidates.
-The protocol is version 1 and each embedded record is a canonical v9 inline manifest paired
-with execution contract 1. This is build input, not State wire or a second history store.
+The reference container remains version 1. Each embedded record is a canonical v9 manifest:
+execution contract 1 requires InlineValue, while contract 2 requires ReferenceObject. Unknown
+contracts and mismatched schema kinds are rejected. This is build input, not State wire or a second history store.
 
 Validation proceeds in two stages: imported records must close using imports alone; owned
 accepted history plus those imports must then close before any current candidate is added.
+Both stages follow exact base and fixed inline edges, including retained history with no current
+owned candidates. Base edges require ReferenceObject; inline edges require InlineValue. Nominal
+reference fields do not require the referenced object's exact version.
 An imported definition ID cannot overlap any owned accepted or current definition, even at
 another version. Consequently a current candidate cannot repair missing accepted history,
 and a library cannot borrow a consumer definition to fill a missing dependency export.

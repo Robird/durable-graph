@@ -107,7 +107,7 @@ public sealed class CrossAssemblyInlineBuildTests {
             "truncated" => References(entry)[..^1],
             "crlf" => References(entry).Replace("\n", "\r\n", StringComparison.Ordinal),
             "unknown-protocol" => References(entry).Replace("references:1", "references:2", StringComparison.Ordinal),
-            "unknown-contract" => ReferenceHeader + entry.Replace("|1|1|", "|1|2|", StringComparison.Ordinal),
+            "unknown-contract" => ReferenceHeader + entry.Replace("|1|1|", "|1|3|", StringComparison.Ordinal),
             "leading-zero" => ReferenceHeader + entry.Replace("|1|1|", "|01|1|", StringComparison.Ordinal),
             "invalid-utf8" => ReferenceHeader + entry.Replace("|QQ==|", "|/w==|", StringComparison.Ordinal),
             "noncanonical-base64" => ReferenceHeader + entry.Replace("|QQ==|", "|QR==|", StringComparison.Ordinal),

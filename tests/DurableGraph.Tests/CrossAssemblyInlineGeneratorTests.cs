@@ -48,7 +48,9 @@ public sealed partial class DurableSchemaGeneratorTests {
         Assert.DoesNotContain("Remote.Hidden",body);
         Assert.Contains("// references-sha256:",GeneratedSource(app,"DurableGraphSchemaHistoryCandidates.g.cs"));
         Assert.Contains("// reference|",GeneratedSource(app,"DurableGraphSchemaHistoryReferences.g.cs"));
-        Assert.DoesNotContain(app.GeneratedSources, source=>source.HintName=="DurableGraphSchemaExports.g.cs");
+        string exports = GeneratedSource(app,"DurableGraphSchemaExports.g.cs");
+        Assert.Contains("(2, \"World\"", exports);
+        Assert.DoesNotContain("(1, \"Point\"", exports);
     }
 
     [Theory]
@@ -86,7 +88,8 @@ public sealed partial class DurableSchemaGeneratorTests {
     }
 
     [Theory]
-    [InlineData(2,false)]
+    [InlineData(3,false)]
+    [InlineData(2,false)] // A supported class contract is invalid for an inline import.
     [InlineData(1,true)]
     public void CrossAssemblyInlineRejectsUnknownContractOrMissingHelpers(int contract,bool missingHelpers) {
         string manifest=InlinePointManifest;

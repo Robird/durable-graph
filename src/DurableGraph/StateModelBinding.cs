@@ -75,6 +75,7 @@ public sealed class StateModelBinding<TDomain, TState> : StateModelBinding
     private readonly StateHydrator<TDomain, TState> _hydrate;
     private readonly Func<TDomain, CaptureContext, TState> _capture;
     private readonly StateReferenceVisitor<TState> _visitReferences;
+    private readonly bool _supportsBaseProjection;
 
     public StateModelBinding(
         CapturedStatePreparation<TState> preparation,
@@ -84,7 +85,8 @@ public sealed class StateModelBinding<TDomain, TState> : StateModelBinding
         StateHydrator<TDomain, TState> hydrate,
         Func<TDomain, CaptureContext, TState> capture,
         StateReferenceVisitor<TState> visitReferences,
-        Func<DurableSchema, StateReaderBinding>? sourceReaderResolver = null)
+        Func<DurableSchema, StateReaderBinding>? sourceReaderResolver = null,
+        bool supportsBaseProjection = false)
         : base((preparation ?? throw new ArgumentNullException(nameof(preparation))).Schema, typeof(TDomain), readers, sourceReaderResolver) {
         ArgumentNullException.ThrowIfNull(normalize);
         ArgumentNullException.ThrowIfNull(allocate);
@@ -97,6 +99,14 @@ public sealed class StateModelBinding<TDomain, TState> : StateModelBinding
         _hydrate = hydrate;
         _capture = capture;
         _visitReferences = visitReferences;
+        _supportsBaseProjection = supportsBaseProjection;
+    }
+
+    internal StateBaseProjection<TDomain, TState> CreateBaseProjection() {
+        if (!_supportsBaseProjection) {
+            throw new InvalidDataException("This model does not explicitly support projection onto derived instances.");
+        }
+        return new(_capture, _hydrate);
     }
 
     internal override ObjectStateRecord Normalize(ObjectStateRecord source) {

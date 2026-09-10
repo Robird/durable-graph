@@ -36,7 +36,7 @@ namespace Atelia.DurableGraph.SchemaHistory {
             var output = new StringBuilder(Header);
             foreach (var entry in ordered) {
                 if (string.IsNullOrWhiteSpace(entry.Owner) || string.IsNullOrWhiteSpace(entry.SchemaId) || string.IsNullOrEmpty(entry.Manifest) ||
-                    entry.SchemaVersion <= 0 || entry.ContractVersion != 1) {
+                    entry.SchemaVersion <= 0 || (entry.ContractVersion != 1 && entry.ContractVersion != 2)) {
                     throw new FormatException("Schema reference has an invalid owner, ID, version, manifest or execution contract.");
                 }
                 if (owners.TryGetValue(entry.SchemaId, out var owner) && owner != entry.Owner) {
@@ -47,7 +47,8 @@ namespace Atelia.DurableGraph.SchemaHistory {
                     throw new FormatException("Schema reference repeats an exact definition/version.");
                 }
                 output.Append(Prefix).Append(Encode(entry.Owner)).Append('|').Append(Encode(entry.SchemaId)).Append('|')
-                    .Append(entry.SchemaVersion.ToString(CultureInfo.InvariantCulture)).Append("|1|").Append(Encode(entry.Manifest)).Append('\n');
+                    .Append(entry.SchemaVersion.ToString(CultureInfo.InvariantCulture)).Append('|')
+                    .Append(entry.ContractVersion.ToString(CultureInfo.InvariantCulture)).Append('|').Append(Encode(entry.Manifest)).Append('\n');
             }
             return output.ToString();
         }

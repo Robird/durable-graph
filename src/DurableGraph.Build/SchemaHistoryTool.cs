@@ -365,9 +365,10 @@ internal static class SchemaHistoryDocument {
         IReadOnlyList<SchemaHistoryRecord> records = Parse(path, entry.Manifest, ManifestHeader, requireExactlyOneRecord: true);
         SchemaHistoryRecord record = records[0];
         string canonical = RenderHistory(record).Replace(HistoryHeader, ManifestHeader, StringComparison.Ordinal);
-        if (record.SourceFormatVersion != 9 || record.Kind != 2 || record.SchemaId != entry.SchemaId || record.Version != entry.SchemaVersion ||
+        int expectedKind = entry.ContractVersion switch { 1 => 2, 2 => 1, _ => 0 };
+        if (record.SourceFormatVersion != 9 || record.Kind != expectedKind || record.SchemaId != entry.SchemaId || record.Version != entry.SchemaVersion ||
             !StringComparer.Ordinal.Equals(canonical, entry.Manifest)) {
-            throw Invalid(path, "reference must be a canonical v9 inline manifest matching its exported ID/version");
+            throw Invalid(path, "reference must be a canonical v9 manifest matching its exported ID/version and execution contract (1: inline, 2: class)");
         }
         return record;
     }

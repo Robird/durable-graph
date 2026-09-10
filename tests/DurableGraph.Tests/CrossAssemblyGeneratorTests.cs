@@ -135,15 +135,15 @@ public sealed partial class DurableSchemaGeneratorTests {
     }
 
     [Theory]
-    [InlineData("int", "Remote.Node", "DG0019")]
-    [InlineData("int", "Remote.Box<int>", "DG0019")]
-    public void CrossAssemblyMetadataRejectsExternalBase(string field, string parent, string diagnostic) {
+    [InlineData("int", "Remote.Node")]
+    [InlineData("int", "Remote.Box<int>")]
+    public void CrossAssemblyMetadataSupportsExternalBase(string field, string parent) {
         var library = EmitCrossAssemblyReference(RunCrossAssemblyGenerator(CrossAssemblyRemoteSource, forceDefinitions: "true"));
         GeneratorTestRun run = RunCrossAssemblyGenerator($$"""
             using Atelia.DurableGraph;
-            [DurableType("World",1)] public partial class World:{{parent}} { [DurableField(1)] public {{field}} Value; }
+            [DurableType("World",1)] public partial class World:{{parent}} { [DurableField(1)] public {{field}} OwnValue; }
             """, [library.Reference]);
-        Assert.Contains(run.GeneratorDiagnostics, error => error.Id == diagnostic);
+        AssertSchemaOnlyCompiles(run);
         Assert.DoesNotContain(run.GeneratorDiagnostics, error => error.Id == "CS8785");
     }
 

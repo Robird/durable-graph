@@ -1,10 +1,11 @@
 namespace Atelia.DurableGraph;
 
-/// <summary>Supplies generated inline history to a referencing model compilation.</summary>
+/// <summary>Supplies generated exact declaration history to a referencing model compilation.</summary>
 /// <remarks>
 /// Generated build metadata only. A referencing generator reads this attribute without
 /// executing the assembly. It does not register runtime definitions or historical readers.
 /// The execution contract version is independent of the history document's format version.
+/// Contract 1 describes inline value helpers; contract 2 describes reference-object helpers for base composition.
 /// </remarks>
 [AttributeUsage(AttributeTargets.Assembly, AllowMultiple = true)]
 public sealed class DurableSchemaExportAttribute : Attribute {

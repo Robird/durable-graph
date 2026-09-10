@@ -108,21 +108,35 @@ without importing the dependency's generated DTO names. A plain struct library c
 
 Direct fixed external values such as `RemotePoint`, `RemotePoint?`, and `RemotePair<LocalPoint>`
 use the providing library's generated inline-history exports. A library using the Family surface
-exports its own retained inline templates automatically; a plain struct library enables
+exports its own retained declaration templates automatically; a plain struct library enables
 `DurableGraphGenerateDefinitions` as shown above. The consumer selects the Family surface when it
 needs these fixed dependencies, including dependencies retained only in old history.
 Public values may encapsulate private fields of internal durable value types: the library's
 projection handles those fields, while its public state helpers provide the historical layout.
 
-The generator reads the required exports through compiler metadata, including transitive inline
+The generator reads the required exports through compiler metadata, including transitive base/inline
 dependencies. Each library continues to own and publish only its own `.dgschema` files. Do not copy
 dependency history into the consumer's directory. The build targets pass a generated read-only
 reference manifest to Publish/Verify; it is temporary build input, not another history directory.
 Missing exports, required old versions or conflicting definition ownership fail explicitly.
 Exports describe build capabilities; the host still registers each library through its facade.
 
-Local classes derived from an external durable base remain unsupported. Existing CLR shapes,
-generic constraints, reference and comparer restrictions still apply. Model identity is the durable
+Local durable classes may derive from an external public top-level durable base, including abstract
+and generic bases. The providing library uses the Family surface; fixed external base dependencies
+automatically select that surface in the consumer. Each class projects its own fields and delegates
+its complete base state to a bound `StateBaseProjection<TBase,TState>`. Private/readonly fields and
+internal value implementations remain inside the defining library; consumers only combine public DTOs.
+The complete leaf DTO and Base/Delta body keep their existing flattened declaration segments.
+
+Base projection does not allocate or register another object and does not run a base Upgrade.
+The actual object's leaf owner still converts the complete historical DTO; base layout changes require
+affected derived versions and explicit upgrades, even when their own fields did not change.
+Handwritten model bindings must opt in with `supportsBaseProjection: true` only when their Capture/Hydrate
+callbacks support compatible derived instances. Whole-object entry points still require exact CLR types.
+Generated inline exports use execution contract 1; reference-object exports use contract 2, independently
+of the canonical v9 template format. No dependency history is copied into the consumer.
+
+Existing CLR shapes, generic constraints, reference and comparer restrictions still apply. Model identity is the durable
 definition ID, not an assembly name; two libraries cannot independently claim the same identity.
 
 Each referenced object retains its own Schema version. Updating its library does not change a
@@ -143,6 +157,8 @@ See the [cross-assembly consumer](../../experiments/PackageConsumerProbe/CrossAs
 for independent model packages, public facades, two-generation history and an unchanged consumer DLL.
 The [inline library consumer](../../experiments/PackageConsumerProbe/InlineLibraryConsumer/README.md)
 demonstrates direct values across three model libraries, independent history and explicit upgrades.
+The [inheritance library consumer](../../experiments/PackageConsumerProbe/InheritanceLibraryConsumer/README.md)
+demonstrates two external base edges, hidden field implementations, deleted historical CLR names and leaf-only upgrades.
 
 Use a normal C# alias for readable historical types. For a declaration with ID `Box`, whose V2 adds
 an integer field after the retained value, a generic adjacent conversion is:

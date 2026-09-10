@@ -1,6 +1,6 @@
 # DB-061：跨程序集继承与基类状态投影
 
-> 状态：Proposed；本轮完成源码调查与设计，尚未实施，不构成实施授权。
+> 状态：已实施，G0–G3 验收通过；用户于 2026-09-10 授权完整实施，施工账本见 §10。
 > 日期：2026-09-10；调查基线：`6123faa`（DB-060 已完成）。
 > 续工入口：[PROJECT-STATE](../../src/PROJECT-STATE.md)；总体目标：[目标设计](../DurableGraph-target-design-v0.md)。
 
@@ -241,14 +241,61 @@ G0 可以先接通最小 class export/import 原型来取得真实编译材料�
 
 若发现必须暴露基类 hidden CLR、按每字段反射/装箱、改变 leaf DTO/State wire、放宽同 key 一致性，
 或执行额外基类 Upgrade 才能恢复，则停在具体反例处重新裁决；不要临时另建第二套执行后端。
-本轮没有运行新功能的 build/test；上述 G0–G3 都是后续验收要求。
+规划轮没有运行新功能的 build/test；G0–G3 的实施结果见 §10。
 
 ## 9. 规划审阅记录
 
 基于 `6123faa`，分别进行候选方向评估、受限接缝事实调查和独立投影方案审阅，再交叉检查泛型映射。
 结论收敛到显式 typed base projection、统一 Family 当前投影、保留完整 leaf DTO/body。
 最后审阅补齐 projection 内部构造权限、DTO 公开构造器、class body 真实签名和 G0 最小导入前置。
-这些结论来自源码与设计检查，G0 的编译执行结果仍须在实施中取得。
+这些结论来自规划时的源码与设计检查，后续编译执行验证单独记入 §10。
 
-本轮只修改本分片、PROJECT-STATE、路线图与设计索引；本地链接/锚点与集成 diff 已检查。
-实施后将实际 build/test/包验证与偏差写入本节，不复制到其他活跃文档。
+规划轮只修改本分片、PROJECT-STATE、路线图与设计索引，并检查本地链接/锚点与集成 diff。
+实际 build/test/包验证与偏差集中在 §10，不复制到其他活跃文档。
+
+## 10. 实施合同与验收账本
+
+施工基线 `5308fbc`，工作区干净。用户授权 §3–§8 的完整分片；不展开其他候选或后续性能工作。
+冻结 `StateBaseProjection<TBase,TState>`、`StateBindingContext.BindBaseProjection`，
+model 构造器末尾 `supportsBaseProjection=false`、Family 显式启用；整对象 exact 检查不变。
+导出合同 InlineValue=1 / ReferenceObject=2，reference 容器 v1 / history v9 与 State wire 保持。
+主线程负责所有 Windows dotnet build/test/pack 串行验证，子任务只在各自文件所有权内编辑。
+
+| 要求 | 实施所有者/位置 | 验收 | 状态 |
+|---|---|---|---|
+| typed projection 与显式能力 | [StateBaseProjection](../../src/DurableGraph/StateBaseProjection.cs)、StateModelBinding | [8 项 Runtime 测试](../../tests/DurableGraph.Tests/StateBaseProjectionTests.cs)：未授予、错类型/Schema、null、晚登记冲突、整对象 exact | 已验证 |
+| Family own + immediate base、泛型映射 | [GenericProjection](../../src/DurableGraph.Generator/DurableSchemaGenerator.GenericProjection.cs) | [Generator 专项](../../tests/DurableGraph.Tests/CrossAssemblyInheritanceGeneratorTests.cs)：metadata/ref hidden inline/Nullable、参数合流/重排/具体化/双 ObjectId；local/split golden | 已验证 |
+| class 导出与 base 只读依赖 | [SchemaExports](../../src/DurableGraph.Generator/DurableSchemaGenerator.SchemaExports.cs)、[helper 核验](../../src/DurableGraph.Generator/DurableSchemaGenerator.SchemaExportHelpers.cs) | 同上专项：真实类型/构造器/ref 签名、额外约束、ref-like 拒绝、historical-only | 已验证 |
+| reference 合同与自有 history 发布 | Shared protocol、SchemaHistoryTool | [31 项 Build 测试](../../tests/DurableGraph.Tests/CrossAssemblyInheritanceBuildTests.cs)：contract2、accepted 先验闭包、零候选、归属/版本/kind/arity/深度拒绝 | 已验证 |
+| 图/历史升级 | [图测试](../../tests/DurableGraph.Tests/CrossAssemblyInheritanceGraphTests.cs)、[历史测试](../../tests/DurableGraph.Tests/CrossAssemblyInheritanceHistoryTests.cs) | 4 项：引用循环、readonly、跨字节 Delta、旧 CLR 删除、leaf-only Upgrade、Base/NoChange/Delta、缺能力不发布 | 已验证 |
+| 真实多库包与回归 | [InheritanceLibraryConsumer](../../experiments/PackageConsumerProbe/InheritanceLibraryConsumer/README.md) | 两代独立 history、ref/lib；既有 CrossAssembly/InlineLibrary/Generic/ValueUpgrade | 已验证 |
+| 独立审查与最终交付 | 主线程 / reviewer | 根 build/test、包线、diff/链接、文档 | 已验证 |
+
+实施补充：
+
+- 私有字段实现留在定义库，实际投影直接复用已有委托；没有新增反射逐字段访问或 DTO 装箱路径。
+- 独立审查补齐零字段 base DTO 使用 default、helper 额外约束/ref-like 拒绝。
+  struct/unmanaged 自带的无参构造能力不视为额外约束，避免误拒 metadata 符号。
+- 两处测试集成问题已修正：PreparedDeltaBody 是引用类型，不能取 Nullable.Value；旧外部 base 负例改正例后，
+  字段更名 OwnValue 避免 C# 遮蔽 warning，保留 FieldId/声明段，未抑制 warning 或放宽断言。
+- 完全没有当前 Durable 声明或局部值规则的空库，不因剩余 history 自动生成全部恢复能力；
+  本片历史-only 依赖沿原 Family 入口触发，不扩大 DB-060 的空库能力边界。
+
+验证记录：
+
+- 基线：根 build 零警告/错误，既有 CrossAssembly 116 项通过；全量旧基线 2406 项来自 DB-060 记录。
+- 最终根 `dotnet build DurableGraph.slnx --no-restore` 零警告/错误；
+  `dotnet test DurableGraph.slnx --no-build --no-restore` **2467 项通过、零失败/跳过**，新增 61 项。
+  分布为 Runtime/SG 1519、StateStore 630、Serialization 163、Storage 155。
+- 新继承真实包首轮及审查修补后的最终轮都通过，无 fixture 绕行；最终自包含产物为
+  `experiments/PackageConsumerProbe/obj/inheritance-library-20260910125007-39028-1d6b0378`，
+  Runtime 包版本 `0.0.0-inheritance-library-e2e.20260910125007-39028-1d6b0378`。
+  BaseLibrary / MiddleLibrary / AppModel 的 history 为 3→6 / 1→2 / 1→2，旧文件名/hash/bytes 保持。
+  两代删除旧基类与 hidden inline CLR、两个 leaf 各升级一次、base/middle 零次、两 Base → NoChange → Delta → 冷重开。
+  主线程另核对最终 10 份 history bytes/hash 和 6 处消费者代际 ref/lib 选择。
+- 新包保留 SDK Pack 的已知 NU5131 提示，未抑制；本片验证 PackageReference，不增加 packages.config 合同，说明在包 README。
+- 复用最终 Runtime feed 顺序执行四条旧包线，全部通过：CrossAssembly（App/Host DLL 不变）、
+  InlineLibrary（三库固定值历史）、Generic（三代泛型）、ValueUpgrade（保留值规则/旧 CLR 删除）。
+  原型的普通生成路径、动态组合和已有 inline 合同均保留。
+- 独立 Runtime 与 SG/Build 审查已关闭，无未解决阻塞；最终代码未改 State wire、history 格式或既有展开 DTO arity。
+- 文档检查：10 份变更 Markdown、527 个本地链接、50 个锚点均通过；集成 diff 已检查。

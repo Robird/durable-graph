@@ -23,7 +23,7 @@ DB-045 持久表示 ID、DB-046 统一闭合目录、DB-047 List 基础能力和
 
 | 文档 | 状态 | 实施范围 |
 |---|---|---|
-| [DB-061 跨程序集继承与基类状态投影](0061-cross-assembly-inheritance-slice.md) | Proposed / 未实施 | 推荐复用 typed Capture/Hydrate，Family class 统一 own + immediate base；导入 ReferenceObject 历史，保留展开 leaf DTO/body 和显式 Upgrade；G0 先验证隐藏泛型/Nullable 字段 |
+| [DB-061 跨程序集继承与基类状态投影](0061-cross-assembly-inheritance-slice.md) | 已实施 / G0–G3 | typed base projection、Family own + immediate base、class 只读历史与严格 helper 合同；隐藏泛型/Nullable、参数合流/重排、旧 CLR 删除及 leaf-only Upgrade 经测试和两代真实包验证；展开 DTO/body 与 State 格式不变 |
 | [DB-060 跨程序集固定 inline 值与只读历史依赖](0060-cross-assembly-inline-history-slice.md) | 已实施 / G0–G3 | 直接外部值字段、按需只读模板导出、独立 history/生成归属；真实 ref/lib 三库两代包验证旧 CLR 删除、显式 Upgrade 与增量续写；history/State 格式不变，外部 base 另片 |
 | [DB-059 跨程序集模型目录与类型组合](0059-cross-assembly-model-composition-slice.md) | 已实施 / G0–G3 | 外部 nominal/动态参数、显式 Family、普通 Model/reader 名义证据；独立模型包升级时 App/Host DLL 和 World history 不变，旧 inline CLR 删除后仍可恢复续写；固定外部 inline/base 模板另排 |
 | [DB-058 DateOnly / TimeOnly / DateTimeOffset 内建值槽](0058-temporal-scalar-value-slice.md) | 已实施 / G0–G3 | 三值完整公开表示、offset 持久相等性、静态 body/组合/history v9、字典双比较与显式升级；两代真实包保留旧 inline 历史并升级续写；DateTime Local/DST 独立后继 |

@@ -1,6 +1,6 @@
 # DurableGraph 产品开发工作集
 
-> 校准：2026-09-10，[DB-060 跨程序集固定 inline](../docs/design-branches/0060-cross-assembly-inline-history-slice.md) 的能力与验收集中在分片记录。本文只维护当前能力、边界与续工入口。
+> 校准：2026-09-10，[DB-061 跨程序集继承](../docs/design-branches/0061-cross-assembly-inheritance-slice.md) 的能力与验收集中在分片记录。本文只维护当前能力、边界与续工入口。
 > 文档不是实现授权；事实以当前源码、测试和工具输出为准。
 
 ## 从这里继续
@@ -18,20 +18,18 @@
 
 ## 当前焦点
 
-[DB-060 跨程序集固定 inline 值与只读历史依赖](../docs/design-branches/0060-cross-assembly-inline-history-slice.md)
-已完成；实现验收集中在该文档 §9。
-下一片推荐 [DB-061 跨程序集继承与基类状态投影](../docs/design-branches/0061-cross-assembly-inheritance-slice.md)，
-状态为 Proposed，尚未实施。计划复用已绑定的 typed Capture/Hydrate、导入 exact base 历史，
-让 Family class 统一按本声明字段与 immediate base 组合，保留 leaf DTO/body 与升级语义。
-首个验收须覆盖基类 private 字段使用 internal 泛型值及其 Nullable 包装，不能只以 public 标量基类证明可行。
-自动跨库业务规则发现、ValueTuple、DateTime 和 SchemaStore 自举仍按路线图分别选择。
+[DB-061 跨程序集继承与基类状态投影](../docs/design-branches/0061-cross-assembly-inheritance-slice.md)
+已完成 G0–G3，验收集中在该文档 §10。Family class 统一按本声明字段与 immediate base 组合，
+支持隐藏泛型/Nullable 实现及独立 base history，保留完整 leaf DTO/body 与显式升级语义。
+真实两代多库包已验证旧 CLR 删除、leaf-only Upgrade 和增量续写。
+当前没有其他已采纳待实施的工作单；自动跨库业务规则发现、ValueTuple、DateTime 和 SchemaStore 自举按路线图分别选择。
 
 ## 当前能力与实际边界
 
 | 层 | 已验证能力 | 尚未闭合的边界 |
 |---|---|---|
 | [DurableGraph](DurableGraph/DurableGraph.csproj) | immutable Schema/exact DAG；统一 ObjectBinding、ObjectLayout、Capture/refs/恢复目录；SZ/rank 2–4 数组、List 与 Dictionary owned 状态；静态 StateEquals、数组稀疏/列表区间/字典键寻址 Delta、默认 Adaptive 与三种显式 List writer；独立 historical reader | 其他 BCL、数组协变；持久发布由 StateStore 拥有 |
-| [Generator](DurableGraph.Generator/DurableGraph.Generator.csproj) / [Build](DurableGraph.Build/DurableGraph.Build.csproj) | class/struct（含 record struct）开放模板、显式 enum、readonly DTO/静态 body、Capture/Hydrate、泛型继承与递归 Nullable/数组/List/Dictionary 组合；跨程序集 nominal/动态参数、固定 inline 及只读模板导出；history v9；三参 Upgrade/旧二参适配、值规则/局部依赖 adapter | 其他 CLR 值类型、其他 BCL；外部 base 声明层访问与跨程序集规则发现 |
+| [Generator](DurableGraph.Generator/DurableGraph.Generator.csproj) / [Build](DurableGraph.Build/DurableGraph.Build.csproj) | class/struct（含 record struct）开放模板、显式 enum、readonly DTO/静态 body、Capture/Hydrate、泛型继承与递归 Nullable/数组/List/Dictionary 组合；跨程序集 nominal/动态参数、固定 base/inline 与只读模板导出；history v9；三参 Upgrade/旧二参适配、值规则/局部依赖 adapter | 其他 CLR 值类型、其他 BCL；跨程序集业务规则发现 |
 | [StateStore](DurableGraph.StateStore/DurableGraph.StateStore.csproj) | 统一闭合 Schema/数组/List/Dictionary 目录与整数依赖、单批次登记、Base v4 ID 头；完整 stored/current 引用验证、可达图两阶段恢复；公开 PrepareNew/fixed-Parent Prepare；GraphRepository 单 head/持久 WorldId 与 GraphSession 同实例 Commit；升级 Base/Remove | 无 branch/Reset/根替换或联合 Store 视图 |
 | [Storage](DurableGraph.StateStore.Storage/DurableGraph.StateStore.Storage.csproj) | AppendDurably 原 lease 屏障；local Base/Delta records、wire v3、exact Revision live map、Parent/prior 校验、object-first 原始重建链及实际 payload H；Base 精确/Delta 上界计量；真实 Segment/RBF 冷重开 | 不解码 typed body；不拥有持久 roots、类型目录或发布 head；重复读取暂未缓存 |
 | [Serialization](DurableGraph.StateStore.Serialization/DurableGraph.StateStore.Serialization.csproj) | 字节原语、string 内容 codec、拥有 raw bytes 的 PreparedBaseBody/PreparedDeltaBody、显式 body 的 typed slot、早期元素 ref 循环 | 完整数组/List 对象操作位于 Runtime；其他 BCL 内容 codec 尚无 |
@@ -92,12 +90,18 @@
   nominal 查询优先 Definition，缺失时允许精确相同 nominal 的已登记普通 Model/reader，仅证明 ReferenceObject，
   不调用目标工厂或补历史模板；普通匹配与 Upgrade 反推共用，实际 exact reader 仍须存在。
   目标单独升版不改变 nominal-only owner；动态 inline 仍要求 owner 升版。程序集拆包不增加 CLR 二进制兼容保证。
-- Family 编译以 DurableSchemaExportAttribute 导出自有 inline 当前/保留模板（执行合同 1、模板 v9），SG 按需读取编译引用元数据，
-  包括传递 internal 实现依赖、仅历史和仅本地规则端点；固定外部依赖自动选 Family，复用已有公开 DTO/body/projection。
+- Family 编译以 DurableSchemaExportAttribute 导出自有当前/保留模板（inline 执行合同 1、class 合同 2，模板 v9），SG 按需读取编译引用元数据，
+  包括传递 base/inline、internal 实现依赖、仅历史和仅本地值规则端点；固定外部依赖自动选 Family，复用公开状态能力。
   不重生成/重导出外部 Family；Build 通过带候选摘要关联的 canonical reference manifest 校验，只 Publish owned candidate。
   referenced 自闭包、accepted+referenced、最后 current 的顺序保留历史完整性；外部依赖不能借 owned 同 ID 补缺。
   独立库同 ID 即使模板相同也拒绝；导出材料不授予 Runtime factory/reader/Upgrade。固定外部值改变仍要求 owner 升版。
-  普通无引用 candidate 与既有 Family DTO arity/Schema/body 保持；外部 base 和自动跨库业务规则发现仍未开放。见 DB-060。
+  普通无引用 candidate 与既有 Family DTO arity/Schema/body 保持；自动跨库业务规则发现仍未开放。见 DB-060/061。
+- Family class 当前投影统一处理本声明字段，并经 StateBaseProjection 调用 immediate base 的已绑定 Capture/Hydrate，
+  同库/跨库共享路径；支持 public 顶层 abstract/generic 外部基类，hidden internal 泛型/Nullable 字段留在定义库处理。
+  base DTO 参数按原始参数代表字段映射到 leaf 前缀，state/ops 从 exact 槽取得，本地 projection 参数单独选择；
+  完整 leaf DTO/body 仍展开，不分配基类对象、不增加 ID、不自动执行基类 Upgrade。
+  该能力由 generated model 显式开启，手工 binding 默认关闭；冷绑定核对完整 Schema/DTO，整对象 exact CLR 检查保留。
+  每层委托/DTO 复制的深链成本留待实测，不另建优化后端。历史变化仍要求受影响 leaf 显式升版和 Upgrade。
 - 新 `DurableUpgrade` 方法使用非泛型 static host 中可访问的三参方法；运行时优先闭合 owner 特例，否则选择通用边。
   整条相邻链在该对象首次业务调用前绑定；中间 exact 布局来自显式 DTO 表示、已注册 Schema 或唯一历史推导，缺失则拒绝。
   不使用 latest 补缺，不自动升级 struct，失败不尝试另一业务规则。每对象/相邻边独立 UpgradeContext 含 ObjectId 及完整 Source/TargetObjectLayout；Schema 访问器仅适用于 durable owner。
@@ -236,6 +240,7 @@ DurableGraph runtime 也引用 Serialization，单一 runtime PackageReference �
 
 | 准备修改 | 先查源码/测试，再按需读合同 |
 |---|---|
+| 跨程序集继承、hidden 字段与基类状态投影 | [DB-061](../docs/design-branches/0061-cross-assembly-inheritance-slice.md)、[Runtime 投影](DurableGraph/StateBaseProjection.cs)、[SG 当前投影](DurableGraph.Generator/DurableSchemaGenerator.GenericProjection.cs)、[真实包](../experiments/PackageConsumerProbe/InheritanceLibraryConsumer/README.md) |
 | 固定外部 inline、只读模板归属与构建闭包 | [DB-060](../docs/design-branches/0060-cross-assembly-inline-history-slice.md)、[SG 导入导出](DurableGraph.Generator/DurableSchemaGenerator.SchemaExports.cs)、[Build 依赖](DurableGraph.Build/SchemaHistoryTool.References.cs)、[真实包](../experiments/PackageConsumerProbe/InlineLibraryConsumer/README.md) |
 | 跨程序集 nominal/动态参数、显式 Family 与稳定消费者 DLL | [DB-059](../docs/design-branches/0059-cross-assembly-model-composition-slice.md)、[metadata 分类](DurableGraph.Generator/DurableSchemaGenerator.CrossAssembly.cs)、[真实包](../experiments/PackageConsumerProbe/CrossAssemblyConsumer/README.md) |
 | DateOnly/TimeOnly/DateTimeOffset、完整 offset 与 history v9 | [DB-058](../docs/design-branches/0058-temporal-scalar-value-slice.md)、[静态值操作](DurableGraph/TemporalScalarStateValues.cs)、[真实包](../experiments/PackageConsumerProbe/TemporalScalarConsumer/README.md) |

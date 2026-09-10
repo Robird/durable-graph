@@ -235,7 +235,7 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
         }
 
         validTypes = RemoveDuplicateSchemaIds(context, validTypes);
-        validTypes = ValidateSchemaChains(context, validTypes);
+        validTypes = ValidateSchemaChains(context, validTypes, compilation);
         if (!TryImportSchemaReferences(context, compilation, validTypes, history, out List<SchemaHistoryModel> references, out string? referenceManifest)) return;
         List<SchemaHistoryModel> availableHistory = new(history);
         availableHistory.AddRange(references);

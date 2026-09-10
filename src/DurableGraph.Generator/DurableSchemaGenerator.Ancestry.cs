@@ -77,11 +77,11 @@ public sealed partial class DurableSchemaGenerator {
 
     private static List<DurableTypeModel> ValidateSchemaChains(
         SourceProductionContext context,
-        List<DurableTypeModel> types) {
+        List<DurableTypeModel> types, Compilation compilation) {
         List<DurableTypeModel> result = new(types.Count);
         Dictionary<ISymbol, int> heights = new(SymbolEqualityComparer.Default);
         foreach (DurableTypeModel type in types) {
-            bool valid = ValidateCurrentDependency(type, types, new HashSet<ISymbol>(SymbolEqualityComparer.Default), heights, 0, out _);
+            bool valid = ValidateCurrentDependency(type, types, compilation, new HashSet<ISymbol>(SymbolEqualityComparer.Default), heights, 0, out _);
             if (valid) {
                 result.Add(type);
             } else {
@@ -95,7 +95,7 @@ public sealed partial class DurableSchemaGenerator {
         return result;
     }
 
-    private static bool ValidateCurrentDependency(DurableTypeModel type, List<DurableTypeModel> types,
+    private static bool ValidateCurrentDependency(DurableTypeModel type, List<DurableTypeModel> types, Compilation compilation,
         HashSet<ISymbol> path, Dictionary<ISymbol, int> heights, int depth, out int height) {
         height = 1;
         if (depth >= 256 || !path.Add(type.Symbol)) return false;
@@ -106,8 +106,13 @@ public sealed partial class DurableSchemaGenerator {
         height = 1;
         if (!type.IsInline && !HasMetadataName(type.Symbol.BaseType, DurableBaseMetadataName)) {
             int index = types.FindIndex(candidate => SymbolEqualityComparer.Default.Equals(candidate.Symbol, type.Symbol.BaseType!.OriginalDefinition));
-            if (index < 0 || types[index].IsInline || !ValidateCurrentDependency(types[index], types, path, heights, depth + 1, out int childHeight)) return false;
-            height = Math.Max(height, childHeight + 1);
+            if (index < 0) {
+                if (!HasExternalDurableNominalShape(type.Symbol.BaseType!.OriginalDefinition, compilation)) return false;
+                // The imported exact base/inline closure is validated before layout generation.
+            } else {
+                if (types[index].IsInline || !ValidateCurrentDependency(types[index], types, compilation, path, heights, depth + 1, out int childHeight)) return false;
+                height = Math.Max(height, childHeight + 1);
+            }
         }
         foreach (DurableFieldModel field in type.Fields) {
             if (!field.InlineSchema.HasValue) continue;
@@ -115,7 +120,7 @@ public sealed partial class DurableSchemaGenerator {
             int index = types.FindIndex(candidate => SymbolEqualityComparer.Default.Equals(candidate.Symbol, target.OriginalDefinition));
             // Metadata inline templates are validated by the complete imported exact DAG below.
             if (index < 0 && !SymbolEqualityComparer.Default.Equals(target.ContainingAssembly, type.Symbol.ContainingAssembly)) continue;
-            if (index < 0 || !types[index].IsInline || !ValidateCurrentDependency(types[index], types, path, heights, depth + 1, out int childHeight)) return false;
+            if (index < 0 || !types[index].IsInline || !ValidateCurrentDependency(types[index], types, compilation, path, heights, depth + 1, out int childHeight)) return false;
             height = Math.Max(height, childHeight + 1);
         }
         path.Remove(type.Symbol);

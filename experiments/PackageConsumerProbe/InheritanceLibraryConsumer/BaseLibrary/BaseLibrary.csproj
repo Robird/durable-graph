@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>Atelia.InheritanceBaseLibrary</AssemblyName>
+    <PackageId>Atelia.InheritanceBaseLibrary</PackageId>
+    <WarningsAsErrors>$(WarningsAsErrors);CS0433;CS0436</WarningsAsErrors>
+    <HistoryVersion Condition="'$(HistoryVersion)' == ''">1</HistoryVersion>
+    <DefineConstants>$(DefineConstants);HISTORY_V$(HistoryVersion)</DefineConstants>
+    <DurableGraphGenerateDefinitions>true</DurableGraphGenerateDefinitions>
+    <TargetsForTfmSpecificContentInPackage>$(TargetsForTfmSpecificContentInPackage);PackModelReferenceAssembly</TargetsForTfmSpecificContentInPackage>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Atelia.DurableGraph" Version="$(DurableGraphPackageVersion)" />
+  </ItemGroup>
+  <!-- Standard package content: downstream compilation must consume the SDK ref assembly. -->
+  <Target Name="PackModelReferenceAssembly">
+    <ItemGroup>
+      <TfmSpecificPackageFile Include="$(IntermediateOutputPath)ref/$(TargetFileName)" PackagePath="ref/$(TargetFramework)" />
+    </ItemGroup>
+  </Target>
+</Project>

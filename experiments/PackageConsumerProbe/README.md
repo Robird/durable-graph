@@ -18,6 +18,12 @@ Host, AppModel and two value libraries compile from real package reference assem
 three layers of inline history, including private internal implementation values. Two generations retain
 independent library history, explicitly upgrade affected owners and resume Base/NoChange/Delta saves.
 
+The [inheritance library consumer](InheritanceLibraryConsumer/README.md) runs through `Run-InheritanceLibraryProbe.ps1`:
+BaseLibrary, MiddleLibrary and AppModel form two cross-library inheritance edges through real ref/lib packages.
+Private readonly hidden generic/Nullable base state, polymorphic aliases and cycles round-trip without constructors.
+Two generations remove old base/inline CLR names, retain independent history and run only each leaf's explicit Upgrade
+before required Base, NoChange and Delta saves.
+
 Consumers use the runtime's non-generic `ObjectId` for captured/decoded identities, reference DTO
 slots and UpgradeContext tracing. Storage rows and probe-owned address sidecars retain numeric
 `uint` IDs; those boundaries use `.Value` or `new ObjectId(...)` explicitly. Ordinary numeric
