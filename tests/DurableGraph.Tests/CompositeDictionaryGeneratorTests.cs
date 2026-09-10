@@ -24,7 +24,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         Assert.Contains("TypeExpr.Dictionary(", generated);
         Assert.Contains("global::Atelia.DurableGraph.ObjectId", generated);
         Assert.DoesNotContain("__DurableKeyComparer", generated);
-        Assert.Contains("manifest:8", GeneratedSource(run, "DurableGraphSchemaHistoryCandidates.g.cs"));
+        Assert.Contains("manifest:9", GeneratedSource(run, "DurableGraphSchemaHistoryCandidates.g.cs"));
     }
 
     [Theory]

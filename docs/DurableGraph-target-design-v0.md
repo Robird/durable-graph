@@ -65,7 +65,12 @@ Source Generator 负责可在编译期确定的类型知识与机械代码，框
   Guid 保存全部 128 bit；decimal 保存公开的系数、scale 与符号，包括正负零；TimeSpan 保存完整有符号 Ticks。
   decimal 数值相等不意味着持久状态相等，scale-only 修改也保存；领域 Dictionary 比较仍按其原规则，持久键按完整表示配对。
   采用公开稳定 API，不转文本、不依赖 CLR 私有内存布局，不自动把 long/TimeSpan 或 double/decimal 相互转换。
-  编码与验收见 [DB-057](design-branches/0057-bcl-scalar-value-slice.md)；日期时间及其他 BCL 值另行选择。
+  编码与验收见 [DB-057](design-branches/0057-bcl-scalar-value-slice.md)；其他 BCL 值另行选择。
+- DateOnly 保存 DayNumber，TimeOnly 保存日内 Ticks；DateTimeOffset 完整保存 clock Ticks 与整分钟 UTC offset，
+  不保存时区规则，不随本地时区转换，也不统一改为 UTC。三者作为内建标量直接组合到既有值/容器管线。
+  DateTimeOffset 同瞬间不同 offset 是持久变化；领域 Dictionary 默认按同瞬间查找，持久 key 仍按完整 bytes 配对。
+  日期、时刻、ticks 与带偏移时间戳之间的业务转换继续由显式 Upgrade 决定；DateTime 的 Local/DST 合同独立后继。
+  具体编码与验收见 [DB-058](design-branches/0058-temporal-scalar-value-slice.md)。
 - 用户 enum 显式标记 DurableType；支持同编译、顶层 public/internal 声明及八种 C# 整数底层类型，
   无需 partial。Schema 复用 InlineValue：独立 nominal 身份/版本，单一 FieldId=1 的底层整数槽；
   生成版本化 DTO 与外置静态投影，不把 enum 擦成普通整数身份，不新增持久格式或对象行。

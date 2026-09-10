@@ -113,6 +113,8 @@ internal static class DictionaryKeyPolicy {
             TypeTag.Char => reader.ReadChar(), TypeTag.Half => reader.ReadHalf(), TypeTag.Single => reader.ReadSingle(),
             TypeTag.Double => reader.ReadDouble(), TypeTag.Guid => reader.ReadGuid(),
             TypeTag.Decimal => reader.ReadDecimal(), TypeTag.TimeSpan => reader.ReadTimeSpan(),
+            TypeTag.DateOnly => reader.ReadDateOnly(), TypeTag.TimeOnly => reader.ReadTimeOnly(),
+            TypeTag.DateTimeOffset => reader.ReadDateTimeOffset(),
             _ => throw new InvalidDataException("Unsupported scalar key."),
         };
         reader.EnsureFullyConsumed();

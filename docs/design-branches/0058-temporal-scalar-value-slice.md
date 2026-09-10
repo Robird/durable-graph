@@ -1,6 +1,6 @@
 # DB-058：DateOnly / TimeOnly / DateTimeOffset 内建值槽
 
-> 状态：**Proposed**，2026-09-10。下一分片建议，尚未实施；编码与边界等待采纳。
+> 状态：**已实施 / G0–G3 验收通过**，2026-09-10。实施与验收账本见 §9。
 > 调查基线：`0cd838f`（DB-057 已实施）。当前能力见 [PROJECT-STATE](../../src/PROJECT-STATE.md)，
 > 长期约束见[目标设计](../DurableGraph-target-design-v0.md)，其他后继见[路线图](../DurableGraph-research-roadmap.md)。
 
@@ -24,7 +24,7 @@
 这不是继续穷举 CLR 类型的长期排期。三值完成后，按具体领域模型或工作流重新选片，
 不自动接着做 native int、BigInteger、其他集合或通用 codec 注册平台。
 
-## 2. 当前事实与代码接缝
+## 2. 实施前事实与代码接缝
 
 - [TypeTag](../../src/DurableGraph/TypeTag.cs) 的 19/20/21 是 Guid/decimal/TimeSpan，
   `TypeTagFacts.IsBuiltin` 区分叶子与 15/16/17/18 的引用、inline、history parameter、Nullable。
@@ -40,23 +40,23 @@
   目前只提取一个 inline 依赖；[StateFieldTemplate/StateParameterTemplate](../../src/DurableGraph/StateDefinitionBinding.cs)
   只带一个 `InlineVersion`。具体多 child 反例保留在 [DB-057 §8](0057-bcl-scalar-value-slice.md#8-valuetuple-后继保留的问题)。
 
-## 3. 建议支持合同
+## 3. 已采纳支持合同
 
 ### 3.1 范围与表示
 
 仅识别实际 corelib 的三种类型，不凭 `System` 命名空间或简单名字授予内建身份。
-三者直接作为 unmanaged DTO 值，新增 builtin leaf tag 建议为 **22 DateOnly、23 TimeOnly、24 DateTimeOffset**。
+三者直接作为 unmanaged DTO 值，新增 builtin leaf tag 为 **22 DateOnly、23 TimeOnly、24 DateTimeOffset**。
 `TypeExprKind` 不新增构造；不创建用户 Schema、独立 ObjectId 或元数据对象行。
 
 支持直接/readonly 字段、普通与 record inline struct、开放泛型字段/实参、phantom/base 实参、
 Nullable、SZ/rank 2–4 数组、List 及 Dictionary key/value 的现有合法递归组合。
 Dictionary 根 Nullable key、数组协变、boxed value、object/interface 通配字段等原限制保持。
 
-### 3.2 公开状态与 wire 建议
+### 3.2 公开状态与 wire
 
 所有整数沿用现有 canonical varint；不转字符串、不依赖区域设置或主机本地时区，不读 CLR 私有布局。
 
-| 类型 | 持久状态与建议编码 | 解码验证 | 持久相等性 |
+| 类型 | 持久状态与编码 | 解码验证 | 持久相等性 |
 |---|---|---|---|
 | DateOnly | `DayNumber`，UInt32 varint，1–4 bytes | `0..3,652,058`，用 `DateOnly.FromDayNumber` 构造 | DayNumber 相同 |
 | TimeOnly | `Ticks`，UInt64 varint，1–6 bytes | `0 <= ticks < TimeSpan.TicksPerDay`，用 ticks 构造器 | Ticks 相同 |
@@ -88,7 +88,7 @@ ambiguous-DST 状态。因此不能把 `ToBinary` 当成无环境依赖的完整
 DateTime 全类型继续拒绝；也不自动把它转成 DateTimeOffset。
 将来确有 DateTime 模型时再用 DST 重叠/跳跃和跨时区见证裁决，不要求本片启动这一实验。
 
-技术依据（.NET 10 文档及固定 v10.0.0 源码；属于平台事实，以上编码为本项目提案）：
+技术依据（.NET 10 文档及固定 v10.0.0 源码；属于平台事实，以上编码为本项目已采纳合同）：
 
 - [DateOnly.DayNumber](https://learn.microsoft.com/en-us/dotnet/api/system.dateonly.daynumber?view=net-10.0)、
   [DateOnly 源码](https://github.com/dotnet/runtime/blob/v10.0.0/src/libraries/System.Private.CoreLib/src/System/DateOnly.cs)。
@@ -118,7 +118,7 @@ DateTimeOffset 的默认查找只看同一瞬间，不会因为库保存 offset 
 
 ## 5. 格式、history 与生成代码
 
-- 新 manifest/新 `.dgschema` 建议 **v9**；已接受的 v1–v8 文件保留 filename/hash/bytes，不能重写旧文件伪升版。
+- 新 manifest/新 `.dgschema` 使用 **v9**；已接受的 v1–v8 文件保留 filename/hash/bytes，不能重写旧文件伪升版。
   相同声明用新工具 Publish/Verify 不新增无变化 history；固定 v8 与新 v9 的见证不可由两代全 v9 包代替。
 - v1–v8 拒绝新 tag 22–24，包括 nominal-only 的 phantom/base 参数及 List/Dictionary/Nullable 内部位置。
   v9 仍拒绝未知 tag 和错误表达式。19–21 依旧要求至少 v8，不能扩大旧 `ContainsBclScalars` 范围而让 v8 误接纳新类型。
@@ -167,7 +167,7 @@ Shared history 已有多个 `allow*` 参数。实施可在局部净减少重复�
 
 由主线程串行运行根 build、相关 tests、根 tests、新包 lane，再用同 feed 回归 BclScalar、Nullable、
 CompositeDictionary、Generic/Record 中受公共生成或 history 修改影响的 lane；不并行争用 Windows 输出目录。
-产品结果以这些新执行的证据为准，本文件没有宣称它们已经通过。
+实际执行结果集中记录在 §9，不以施工计划代替验收证据。
 
 ## 7. 分工、停止条件与后继
 
@@ -188,5 +188,43 @@ ValueTuple 的多 child exact/参数来源、跨程序集、SchemaStore 自举�
 另一路平台核验区分了 DateTimeOffset 的完整表示与 DateTime Local 的环境依赖。
 多 child 值布局的事实调查用于核对 Tuple 的真实成本，不将“本片不做”表述为技术不可行。
 完整草案经两路独立审阅均无阻断；补入正负 offset 独立 golden、clock 上界与旧 history 接受集合的明确验收。
-本轮仅进行规划和源码/平台资料核验，没有产品代码或测试修改。
+规划阶段仅进行源码/平台资料核验，没有产品代码或测试修改；实施结果见下节。
 规划验收：4 份 Markdown 的 234 个本地链接、14 个锚点检查通过，集成 diff 无空白错误；未运行 build/tests。
+
+## 9. 实施合同与验收账本
+
+施工基线 `c7b58a3`，工作区干净。本轮实施 §3–§6 的三值完整纵向范围；DateTime、Tuple、
+跨程序集、联合 Store 与性能平台不在范围内。固定 tag 22/23/24、DayNumber/日内 Ticks、
+DateTimeOffset clock Ticks + offset 整分钟 Int32 ZigZag；状态比较用 EqualsExact。
+新写 history v9，v1–v8 接受集合及已接受文件原样保留；其他格式版本沿 §5。
+公开字节入口为 Write/ReadDateOnly、Write/ReadTimeOnly、Write/ReadDateTimeOffset；
+字段/元素静态操作和所有权继续复用既有机制，主线程统一集成和串行运行 .NET 验收。
+
+| 要求 | 实现责任 | 验收 | 状态 |
+|---|---|---|---|
+| G0/G1 三值字节、合法范围与 cursor | Serialization Reader/Writer | [TemporalScalarPayloadTests](../../tests/DurableGraph.StateStore.Serialization.Tests/Serialization/TemporalScalarPayloadTests.cs)：37 展开用例；独立 golden、全部 1681 种合法 offset 的边界、非法输入/unmanaged | 已验证 |
+| G1 Runtime/目录/标准字典/最低尺寸 | [TemporalScalarStateValues](../../src/DurableGraph/TemporalScalarStateValues.cs)、BuiltinStateValues、StateModelSnapshot、DictionaryKeyPolicy | [目录/绑定](../../tests/DurableGraph.StateStore.Tests/TemporalScalarCatalogTests.cs) 8 例；[静态状态](../../tests/DurableGraph.Tests/TemporalScalarStateTests.cs) 8 例，包含实际 absent Nullable List 的最低字节预检 | 已验证 |
+| G2 普通/Family SG 及 genuine corelib | SG 两条 body、类型识别与模板 history | [TemporalScalarGeneratorTests](../../tests/DurableGraph.Tests/TemporalScalarGeneratorTests.cs)：16 例，独立编译执行/组合/伪类型/同版变更诊断 | 已验证 |
+| G2 v9/旧 history 完整接受集合 | Shared TypePattern、Build history、SG reader | [TemporalScalarHistoryTests](../../tests/DurableGraph.Tests/TemporalScalarHistoryTests.cs)：14 例；固定 v8、递归门槛、旧接受集合、旧 CLR 删除 | 已验证 |
+| G3 同实例图、字典双比较、显式升级 | 既有会话/容器与值规则 | [图](../../tests/DurableGraph.Tests/TemporalScalarGraphTests.cs)：9 对象冻结隔离、18 次 Commit/原始 Delta/冷重开；[Nullable 升级](../../tests/DurableGraph.Tests/NullableUpgradeTests.cs)：显式 UTC+08 与空/非空预检 2 例 | 已验证 |
+| G3 两代真实包及既有回归 | [TemporalScalarConsumer](../../experiments/PackageConsumerProbe/TemporalScalarConsumer/README.md) | 新 lane 两代全部 marker 通过；同 feed 的 BclScalar、Nullable、CompositeDictionary、Generic、Record 全通过 | 已验证 |
+| 完整集成与文档 | 主线程及独立 reviewer | 根 build 零警告/错误；2290 tests 零失败/跳过；独立审查无阻断，集成 diff/本地链接与锚点通过 | 已验证 |
+
+基线根 build 零警告/错误，原 2204 tests 全通过。新增 86 个展开用例，最终 Runtime/SG 1354、
+StateStore 618、Serialization 163、Storage 155 全通过。旧未知 tag 22 改用 25，
+Nullable DateTimeOffset 拒绝例改用仍不支持的 BigInteger，保留原负例目的而非删掉测试。
+
+编码与范围按 §3，无合同改向。DateTimeOffset 普通/Family/Runtime 直接调用 EqualsExact；
+Shared history 沿用小范围明确能力门槛，独立增加 temporal gate，未展开可选的通用化重构。
+只有 history 新写 edition 改为 v9；既有 catalog/Base/Storage/List/Dictionary 格式版本不变。
+
+新包 lane 以隔离八包版本 `0.0.0-temporal-scalar-e2e.20260910073829.40324` 验证，产物位于
+`experiments/PackageConsumerProbe/obj/temporal-scalar-20260910073829-40324-bd7cdfb2`。
+history 3→5，删除 LegacyPoint 后 retained DTO 可读；owner 与 32 个共享 List 元素显式升级，
+仅两对象强制 Base，随后 NoChange→普通 Delta→冷读不重复升级。命令见 §6 与消费者 README，
+执行日志位于忽略的 `obj/db058-*`。
+
+同 feed 的 BclScalar、Nullable、CompositeDictionary、Generic（四阶段）、Record 全部 marker 通过。
+活动包 runner 的新写 history 断言同步为 v9，已接受 fixture 保留原版本；没有新增旧 State wire 兼容分支。
+本片没有改变原设计合同或遗留未完成实现；DateTime/Tuple/跨程序集等既定后继仍按路线图重访。
+文档验收覆盖 14 份 Markdown 的 501 个本地链接、47 个锚点；暂存 diff 无空白错误。

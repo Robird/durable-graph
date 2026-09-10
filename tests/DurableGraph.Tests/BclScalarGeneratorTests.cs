@@ -55,7 +55,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         GeneratorTestRun run = RunGenerator(BclScalarCompositionSource);
         AssertSchemaOnlyCompiles(run);
         string manifest = GeneratedSource(run, "DurableGraphSchemaHistoryCandidates.g.cs");
-        Assert.Contains("manifest:8", manifest);
+        Assert.Contains("manifest:9", manifest);
         Assert.Contains("// base:nQmFzZQ==(b20)|1", manifest);
         Assert.Contains("q(b20)", manifest);
         Assert.Contains("a4(b19)", manifest);

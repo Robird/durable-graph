@@ -26,10 +26,13 @@ public enum TypeTag {
     Guid = 19,
     Decimal = 20,
     TimeSpan = 21,
+    DateOnly = 22,
+    TimeOnly = 23,
+    DateTimeOffset = 24,
 }
 
 /// <summary>Classifies the fixed built-in leaf tags without including compound or history-only tags.</summary>
 internal static class TypeTagFacts {
     internal static bool IsBuiltin(TypeTag tag) =>
-        tag is >= TypeTag.Boolean and <= TypeTag.Double or TypeTag.Guid or TypeTag.Decimal or TypeTag.TimeSpan;
+        tag is >= TypeTag.Boolean and <= TypeTag.Double or >= TypeTag.Guid and <= TypeTag.DateTimeOffset;
 }

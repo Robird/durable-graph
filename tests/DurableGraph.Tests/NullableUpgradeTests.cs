@@ -10,6 +10,41 @@ public sealed class NullableUpgradeTests {
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
+    public void TemporalScalarExplicitOffsetPolicyComposesWithNullableLifting(bool present) {
+        Calls.Clear();
+        DurableFieldInfo before = DurableFieldInfo.Nullable(1, new(1, TypeTag.Int64));
+        DurableFieldInfo after = DurableFieldInfo.Nullable(1, new(1, TypeTag.DateTimeOffset));
+        DurableSchema sourceSchema = new("TemporalOwner", 1, before), targetSchema = new("TemporalOwner", 2, after);
+        StateDefinitionBinding owner = new("TemporalOwner", SchemaKind.ReferenceObject, 0, null, [
+            new("TemporalOwner", 1, SchemaKind.ReferenceObject, 0, [new(1, StateBindingContext.NominalType(before))],
+                stateTypeDefinition: typeof(Owner1<NullableState<long>>)),
+            new("TemporalOwner", 2, SchemaKind.ReferenceObject, 0, [new(1, StateBindingContext.NominalType(after))],
+                stateTypeDefinition: typeof(Owner2<NullableState<DateTimeOffset>>)),
+        ], upgrades: [new("TemporalOwner", 1, Method(nameof(UpgradeOwner)), dependencies: [
+            new("value", typeof(Rules), new("TemporalOwner", 1), new("TemporalOwner", 1)),
+        ])]);
+        ObjectStateRecord source = new(new(1), sourceSchema,
+            new Owner1<NullableState<long>>(present ? new(TimeSpan.TicksPerDay) : default));
+        TestContext missing = new([], lift: true) { Extra = owner };
+        Assert.Throws<InvalidDataException>(() => missing.Normalize<Owner2<NullableState<DateTimeOffset>>>(source, targetSchema));
+        Assert.Empty(Calls);
+        StateValueUpgradeProvider rule = new(TypeExpr.Builtin(TypeTag.Int64), null,
+            TypeExpr.Builtin(TypeTag.DateTimeOffset), null, Method(nameof(ToTimestamp)));
+        TestContext context = new([rule], lift: true) { Extra = owner };
+        var result = context.Normalize<Owner2<NullableState<DateTimeOffset>>>(source, targetSchema);
+        Assert.Equal(present, result.Value.HasValue);
+        if (present) { Assert.True(new DateTimeOffset(TimeSpan.TicksPerDay, TimeSpan.FromHours(8)).EqualsExact(result.Value.Value)); }
+        Assert.Equal(present ? new[] { "owner", "ticks" } : new[] { "owner" }, Calls);
+    }
+
+    private static void ToTimestamp(in long ticks, out DateTimeOffset timestamp, UpgradeContext context) {
+        Calls.Add("ticks");
+        timestamp = new DateTimeOffset(ticks, TimeSpan.FromHours(8)); // Explicit business choice: ticks are local clock at UTC+08.
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
     public void BclScalarExplicitTickConversionComposesWithNullableLifting(bool present) {
         Calls.Clear();
         DurableFieldInfo before = DurableFieldInfo.Nullable(1, new(1, TypeTag.Int64));

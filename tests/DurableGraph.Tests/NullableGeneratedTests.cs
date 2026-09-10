@@ -61,7 +61,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             """);
         AssertSchemaOnlyCompiles(run);
         string manifest = GeneratedSource(run, "DurableGraphSchemaHistoryCandidates.g.cs");
-        Assert.Contains("manifest:8", manifest);
+        Assert.Contains("manifest:9", manifest);
         Assert.Contains("// field:1|18|q(p0)", manifest);
         Assert.Contains("// field:1|18|q(nUG9pbnQ=())|1", manifest);
         Assert.Contains("// field:2|18|q(nQ2VsbA==(nUG9pbnQ=()))|1", manifest);

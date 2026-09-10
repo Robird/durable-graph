@@ -31,7 +31,7 @@ Clearing every nullable value removes the now-unreachable Node and its string wh
 the World, shared List and arrays; the historical revision remains readable.
 
 The runner checks immutable history hashes, publication followed by packaged Verify mode,
-canonical history v8, and exact file counts **3 -> 5**. Required stage outputs are:
+canonical history v9, and exact file counts **3 -> 5**. Required stage outputs are:
 
 ```text
 NullableSeed:True:SharedCycles:True:VectorAndRank4:True:FrozenPreparation:True:HistoricalDelta:True

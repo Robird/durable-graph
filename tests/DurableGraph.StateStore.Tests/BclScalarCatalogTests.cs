@@ -42,7 +42,7 @@ public sealed class BclScalarCatalogTests {
     [InlineData(16)]
     [InlineData(17)]
     [InlineData(18)]
-    [InlineData(22)]
+    [InlineData(25)]
     [InlineData(255)]
     public void SparseBuiltinCodesDoNotAdmitCompoundOrUnknownTags(byte code) {
         Assert.Throws<ArgumentOutOfRangeException>(() => TypeExpr.Builtin((TypeTag)code));

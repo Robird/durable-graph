@@ -6,7 +6,7 @@ namespace Atelia.DurableGraph.Tests;
 
 public sealed partial class DurableSchemaGeneratorTests {
     [Fact]
-    public void BclScalarVersionEightManifestPreservesFixedVersionSevenFileWithoutSchemaUpgrade() {
+    public void BclScalarCurrentManifestPreservesFixedVersionSevenFileWithoutSchemaUpgrade() {
         const string original = "// durable-graph-schema-history:7\n// schema-begin\n// schema-id-base64:V29ybGQ=\n" +
             "// version:1\n// kind:1\n// arity:0\n// field:1|2\n// schema-end\n";
         const string fileName = "schema.78ae647dc5544d227130a0682a51e30bc7777fbb6d8a8f17007463a3ecd1d524.V1.be236c5b43375082727a61e7e1296ff9ea65cfe5665d2d073de1f21c15d66beb.dgschema";
@@ -20,7 +20,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             [DurableType("World",1)] public partial class World:DurableBase { [DurableField(1)] public int Renamed; }
             """, history.ReadAdditionalTexts());
         AssertSchemaOnlyCompiles(run);
-        Assert.Contains("manifest:8", GeneratedSource(run, "DurableGraphSchemaHistoryCandidates.g.cs"));
+        Assert.Contains("manifest:9", GeneratedSource(run, "DurableGraphSchemaHistoryCandidates.g.cs"));
         SchemaHistoryTool tool = new();
         Assert.Equal("published 0 schema-history record(s); 1 already exact", tool.Publish(history.WriteManifest(run), history.History).Message);
         tool.Verify(history.WriteManifest(run), history.History);
@@ -63,7 +63,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             "// field:4|15|nUGhhbnRvbQ==(b20)\n// field:5|18|q(b21)\n// field:6|15|d(b19,l(q(b20)))\n";
         string text = BclHistory("World", body, 8);
         SchemaHistoryRecord record = fixture.Parse(text);
-        Assert.Equal(text, SchemaHistoryDocument.RenderHistory(record));
+        Assert.Equal(text, SchemaHistoryDocument.RenderHistory(record, 8));
         Assert.Equal("nUGFyZW50(b19)", record.BaseType!.ToString());
         Assert.Equal(new[] { "b19", "b20", "b21", "nUGhhbnRvbQ==(b20)", "q(b21)", "d(b19,l(q(b20)))" },
             record.Fields.Select(field => field.ValuePattern.ToString()));
@@ -91,7 +91,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         AssertSchemaOnlyCompiles(first);
         ObjectStateRecord prior = CaptureRecordHistoryWorld(first);
         new SchemaHistoryTool().Publish(history.WriteManifest(first), history.History);
-        Assert.All(history.ReadContents().Values, text => Assert.StartsWith("// durable-graph-schema-history:8\n", text));
+        Assert.All(history.ReadContents().Values, text => Assert.StartsWith("// durable-graph-schema-history:9\n", text));
         GeneratorTestRun next = RunGenerator("""
             using Atelia.DurableGraph;
             [DurableType("World",2)] public partial class World:DurableBase { [DurableField(1)] public long Value; }

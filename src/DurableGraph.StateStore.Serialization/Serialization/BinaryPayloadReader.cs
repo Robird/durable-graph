@@ -127,6 +127,52 @@ public ref struct BinaryPayloadReader {
     /// <summary>Reads signed ticks using canonical Int64 ZigZag encoding.</summary>
     public TimeSpan ReadTimeSpan() => new(ReadInt64());
 
+    /// <summary>Reads a canonical UInt32 day number in the DateOnly range.</summary>
+    public DateOnly ReadDateOnly() {
+        BinaryPayloadReader candidate = this;
+        uint dayNumber = candidate.ReadUInt32();
+        if (dayNumber > (uint)DateOnly.MaxValue.DayNumber) {
+            throw new InvalidDataException("DateOnly day number exceeds the supported calendar range.");
+        }
+
+        DateOnly value = DateOnly.FromDayNumber((int)dayNumber);
+        this = candidate;
+        return value;
+    }
+
+    /// <summary>Reads canonical UInt64 ticks within a single day.</summary>
+    public TimeOnly ReadTimeOnly() {
+        BinaryPayloadReader candidate = this;
+        ulong ticks = candidate.ReadUInt64();
+        if (ticks >= (ulong)TimeSpan.TicksPerDay) {
+            throw new InvalidDataException("TimeOnly ticks must be within a single day.");
+        }
+
+        TimeOnly value = new((long)ticks);
+        this = candidate;
+        return value;
+    }
+
+    /// <summary>Reads clock ticks and a signed offset in whole minutes, preserving both without local time conversion.</summary>
+    public DateTimeOffset ReadDateTimeOffset() {
+        BinaryPayloadReader candidate = this;
+        ulong clockTicks = candidate.ReadUInt64();
+        int offsetMinutes = candidate.ReadInt32();
+        if (clockTicks > (ulong)DateTime.MaxValue.Ticks || offsetMinutes < -840 || offsetMinutes > 840) {
+            throw new InvalidDataException("DateTimeOffset clock ticks or offset are outside the supported range.");
+        }
+
+        long offsetTicks = offsetMinutes * TimeSpan.TicksPerMinute;
+        long utcTicks = (long)clockTicks - offsetTicks;
+        if (utcTicks < 0 || utcTicks > DateTime.MaxValue.Ticks) {
+            throw new InvalidDataException("DateTimeOffset UTC ticks are outside the supported calendar range.");
+        }
+
+        DateTimeOffset value = new((long)clockTicks, new TimeSpan(offsetTicks));
+        this = candidate;
+        return value;
+    }
+
     internal ReadOnlySpan<byte> ReadSpan(int length) {
         if (length < 0) {
             throw new ArgumentOutOfRangeException(nameof(length));

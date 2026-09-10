@@ -1,6 +1,6 @@
 # DurableGraph 产品开发工作集
 
-> 校准：2026-09-10，[DB-057 三种 BCL 标量](../docs/design-branches/0057-bcl-scalar-value-slice.md) 已贯通现有值/历史管线；验收结果集中在分片记录。本文只维护当前能力、边界与续工入口。
+> 校准：2026-09-10，[DB-058 日期时间标量](../docs/design-branches/0058-temporal-scalar-value-slice.md) 已贯通现有值/历史管线；验收结果集中在分片记录。本文只维护当前能力、边界与续工入口。
 > 文档不是实现授权；事实以当前源码、测试和工具输出为准。
 
 ## 从这里继续
@@ -18,11 +18,10 @@
 
 ## 当前焦点
 
-[DB-057 Guid / decimal / TimeSpan 内建值槽](../docs/design-branches/0057-bcl-scalar-value-slice.md) 已贯通静态 body、
-Nullable/泛型/容器、history 与显式升级。decimal 保留完整公开表示，字典领域比较与持久差分分层；
-新写 history v8，旧 history 原样保留；对象/目录/容器格式版本不变。两代真实包验证旧 inline CLR 删除与升级续写。
-下一片建议为 [DB-058 DateOnly / TimeOnly / DateTimeOffset](../docs/design-branches/0058-temporal-scalar-value-slice.md)，
-状态 Proposed，尚未采纳或实施：复用 builtin 叶子闭合日期、日内时刻与带偏移时间戳，完整保留 offset。
+[DB-058 DateOnly / TimeOnly / DateTimeOffset](../docs/design-branches/0058-temporal-scalar-value-slice.md) 已贯通静态 body、
+Nullable/泛型/容器、history 与显式升级。DateTimeOffset 保留 clock ticks 与 offset，同瞬间改 offset 也保存；
+新写 history v9，旧 history 原样保留；对象/目录/容器格式版本不变。两代真实包验证旧 inline CLR 删除与升级续写。
+当前没有另一份已采纳而待实施的工作单；后续从[路线图](../docs/DurableGraph-research-roadmap.md)的具体模型/工作流选择。
 DateTime 的 Local/DST 保存合同单独待定；ValueTuple 的多 child exact 布局与参数来源问题保留在 DB-057 §8。
 跨程序集和 SchemaStore 自举仍按具体需求重访；不自动按 BCL 类型清单继续排期。
 
@@ -31,14 +30,14 @@ DateTime 的 Local/DST 保存合同单独待定；ValueTuple 的多 child exact 
 | 层 | 已验证能力 | 尚未闭合的边界 |
 |---|---|---|
 | [DurableGraph](DurableGraph/DurableGraph.csproj) | immutable Schema/exact DAG；统一 ObjectBinding、ObjectLayout、Capture/refs/恢复目录；SZ/rank 2–4 数组、List 与 Dictionary owned 状态；静态 StateEquals、数组稀疏/列表区间/字典键寻址 Delta、默认 Adaptive 与三种显式 List writer；独立 historical reader | 其他 BCL、数组协变；持久发布由 StateStore 拥有 |
-| [Generator](DurableGraph.Generator/DurableGraph.Generator.csproj) / [Build](DurableGraph.Build/DurableGraph.Build.csproj) | class/struct（含 record struct）开放模板、显式 enum、readonly DTO/静态 body、Capture/Hydrate、泛型继承与递归 Nullable/数组/List/Dictionary 组合；history v8；三参 Upgrade/旧二参适配、值规则/局部依赖 adapter | 其他 CLR 值类型、其他 BCL；跨程序集生成规则 |
+| [Generator](DurableGraph.Generator/DurableGraph.Generator.csproj) / [Build](DurableGraph.Build/DurableGraph.Build.csproj) | class/struct（含 record struct）开放模板、显式 enum、readonly DTO/静态 body、Capture/Hydrate、泛型继承与递归 Nullable/数组/List/Dictionary 组合；history v9；三参 Upgrade/旧二参适配、值规则/局部依赖 adapter | 其他 CLR 值类型、其他 BCL；跨程序集生成规则 |
 | [StateStore](DurableGraph.StateStore/DurableGraph.StateStore.csproj) | 统一闭合 Schema/数组/List/Dictionary 目录与整数依赖、单批次登记、Base v4 ID 头；完整 stored/current 引用验证、可达图两阶段恢复；公开 PrepareNew/fixed-Parent Prepare；GraphRepository 单 head/持久 WorldId 与 GraphSession 同实例 Commit；升级 Base/Remove | 无 branch/Reset/根替换或联合 Store 视图 |
 | [Storage](DurableGraph.StateStore.Storage/DurableGraph.StateStore.Storage.csproj) | AppendDurably 原 lease 屏障；local Base/Delta records、wire v3、exact Revision live map、Parent/prior 校验、object-first 原始重建链及实际 payload H；Base 精确/Delta 上界计量；真实 Segment/RBF 冷重开 | 不解码 typed body；不拥有持久 roots、类型目录或发布 head；重复读取暂未缓存 |
 | [Serialization](DurableGraph.StateStore.Serialization/DurableGraph.StateStore.Serialization.csproj) | 字节原语、string 内容 codec、拥有 raw bytes 的 PreparedBaseBody/PreparedDeltaBody、显式 body 的 typed slot、早期元素 ref 循环 | 完整数组/List 对象操作位于 Runtime；其他 BCL 内容 codec 尚无 |
 
 容易混淆的限制：
 
-- SG DTO/body 支持递归 inline struct 与 16 种标量：bool、byte/sbyte、short/ushort、int/uint、long/ulong、char、Half、float、double、Guid、decimal、TimeSpan；string、受支持 durable class、数组、List 和 Dictionary 引用槽保存非泛型 ObjectId；字节层仍编码 UInt32。
+- SG DTO/body 支持递归 inline struct 与 19 种标量：bool、byte/sbyte、short/ushort、int/uint、long/ulong、char、Half、float、double、Guid、decimal、TimeSpan、DateOnly、TimeOnly、DateTimeOffset；string、受支持 durable class、数组、List 和 Dictionary 引用槽保存非泛型 ObjectId；字节层仍编码 UInt32。
   `[DurableType]` class/struct 限同编译、顶层、非 record 的 partial class 链或显式 partial struct/record struct（包括 readonly），支持泛型；
   支持 readonly 持久字段和没有无参构造器的领域类。RuntimeHelpers 分配、SG Hydrate/声明层 UnsafeAccessor
   不执行实例构造器或字段初始化表达式；Transient 由用户交付后重建。
@@ -46,6 +45,10 @@ DateTime 的 Local/DST 保存合同单独待定；ValueTuple 的多 child exact 
   Guid 固定 16-byte big-endian，decimal 公开四字固定 16-byte little-endian，TimeSpan 复用有符号 Ticks varint。
   decimal 的 scale/符号零保留；普通/Family/Runtime 共用静态完整表示比较。Dictionary 默认 ScalarDefault，
   数值相等但表示不同的真实 key 替换产生 Remove+Add。既有 SCB1 v2、Base/Storage/容器格式保持。
+- DateOnly/TimeOnly/DateTimeOffset 为内建叶子，tag 22/23/24；公开 DayNumber、日内 Ticks、clock Ticks + 整分钟 offset
+  使用 canonical varint，不读取本地时区或 CLR 私有布局。DateTimeOffset 普通/Family/Runtime 均用 EqualsExact；
+  Dictionary 默认仍按瞬间查找，真实换 offset key 为 Remove+Add，indexer 等价 key 不替换原 key。
+  新 history v9，旧 v1–v8 保留原能力门槛/文件；DateTime 继续拒绝。详见 DB-058。
 - enum 显式标记 DurableType，支持同编译顶层 public/internal 声明及八种整数底层类型，不要求 partial。
   使用有独立 nominal/版本的单整数 InlineValue Schema（合成 FieldId=1），复用 Family DTO/body；外置投影直接 cast。
   不新建 TypeTag、history/catalog 格式或对象行；unknown 数值/Flags bits 原样保留，常量名称、别名、赋值表与 Flags 不参与 history。
@@ -137,7 +140,7 @@ DateTime 的 Local/DST 保存合同单独待定；ValueTuple 的多 child exact 
   恢复的可达 durable 实例身份导入同一捕获会话；child-only 修改不改变 owner ID 槽，
   断开最后根路径后整个循环岛由完整 source − candidate 得到 Remove，旧 Revision 不受影响。
 - PrepareDeltaBody 每槽比较一次形成位图，再静态写变化值；结果含 HasChanges 和可复用 raw body，裸 Delta body 大小可直接取长度。
-  List 匹配另用静态 StateEquals 试探，仅实际变化的配对调用子 PrepareDelta；浮点按位、decimal 按完整 GetBits、ObjectId 按值、inline 逐持久字段比较，忽略 padding。
+  List 匹配另用静态 StateEquals 试探，仅实际变化的配对调用子 PrepareDelta；浮点按位、decimal 按完整 GetBits、DateTimeOffset 按 EqualsExact、ObjectId 按值、inline 逐持久字段比较，忽略 padding。
   策略 D 还须计入对象 envelope，不能直接以裸 body 大小代替。
   PrepareBaseBody 对每版 DTO 复用 WriteBaseBody；全部 live Base 提前准备，决策后复用 bytes，性能优化留待 MVP 后。
   B 为完整 Base payload 精确值，D 仅对未定文件距离按 5 字节上界计量（超额 0..4）；H 仍是原记录实编码。
@@ -150,7 +153,7 @@ DateTime 的 Local/DST 保存合同单独待定；ValueTuple 的多 child exact 
   exact base/inline 使用先前节点 ID，按依赖顺序恢复；字段 tag15 引用仍携带 closed Named/Array/List/Dictionary TargetType，
   不绑定目标版本或形成 exact 注册依赖，nominal 自环/互环允许。Schema DAG depth≤256，数组外壳不额外占深度。
   List 使用目录 kind=4、nominal 构造码=8；数组/List 的 exact inline 元素外壳不增加 Schema DAG 深度。
-  `.dgschema` 与 manifest 新写 v8，严格读取原 v1–v7 语法并保留已接受 history 的文件与 hash；List/Nullable/Dictionary 分别需 v5/v6/v7，Guid/decimal/TimeSpan 叶子需 v8，含 nominal 实参也递归检查。
+  `.dgschema` 与 manifest 新写 v9，严格读取原 v1–v8 语法并保留已接受 history 的文件与 hash；List/Nullable/Dictionary 分别需 v5/v6/v7，Guid/decimal/TimeSpan 叶子需 v8，DateOnly/TimeOnly/DateTimeOffset 需 v9，含 nominal 实参也递归检查。
   字段 tag 1–16 不变，history-only 参数 tag=17，Nullable tag=18/nominal 构造码=9；
   Nullable 内部 inline 依赖仍用先前目录 ID，不新增独立 Nullable 目录行。ValueSchema 统一暴露包装内依赖，exact DAG 深度不多算包装层。
   nominal 约束改变属于 owner Schema 改变，目标自身升版则不传播 owner 版本。
@@ -219,6 +222,7 @@ DurableGraph runtime 也引用 Serialization，单一 runtime PackageReference �
 
 | 准备修改 | 先查源码/测试，再按需读合同 |
 |---|---|
+| DateOnly/TimeOnly/DateTimeOffset、完整 offset 与 history v9 | [DB-058](../docs/design-branches/0058-temporal-scalar-value-slice.md)、[静态值操作](DurableGraph/TemporalScalarStateValues.cs)、[真实包](../experiments/PackageConsumerProbe/TemporalScalarConsumer/README.md) |
 | Guid/decimal/TimeSpan、非连续 builtin tag 与 history v8 | [DB-057](../docs/design-branches/0057-bcl-scalar-value-slice.md)、[静态值操作](DurableGraph/BclScalarStateValues.cs)、[真实包](../experiments/PackageConsumerProbe/BclScalarConsumer/README.md) |
 | record struct、backing storage 分类与字段投影 | [DB-056](../docs/design-branches/0056-record-struct-state-slice.md)、[字段分类](DurableGraph.Generator/DurableSchemaGenerator.Records.cs)、[投影](DurableGraph.Generator/DurableSchemaGenerator.GenericProjection.cs)、[真实包](../experiments/PackageConsumerProbe/RecordConsumer/README.md) |
 | Dictionary 内容、复合 Key、当前 comparer 与历史双槽升级 | [DB-055](../docs/design-branches/0055-composite-dictionary-key-design.md)、[body](DurableGraph/DictionaryStateReader.cs)、[current binding](DurableGraph/DictionaryObjectBinding.cs)、[升级](DurableGraph/StateBindingContext.DictionaryUpgrade.cs)、[真实包](../experiments/PackageConsumerProbe/CompositeDictionaryConsumer/README.md) |

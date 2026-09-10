@@ -559,6 +559,10 @@ public sealed partial class DurableSchemaGenerator {
                 .Append(left).Append(", in ").Append(right).Append(')');
             return;
         }
+        if (field.TypeTagValue == 24) {
+            source.Append(left).Append(".EqualsExact(").Append(right).Append(')');
+            return;
+        }
         // Match Base encoding's preserved bits, including signed zero and NaN payloads.
         string? bitConversion = field.TypeTagValue switch {
             12 => "HalfToUInt16Bits",

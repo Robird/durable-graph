@@ -70,7 +70,7 @@ try {
         }
         foreach ($file in $files) {
             $text = Get-Content -LiteralPath $file.FullName -Raw
-            if (-not $hashes.ContainsKey($file.Name) -and -not $text.StartsWith("// durable-graph-schema-history:8`n", [StringComparison]::Ordinal)) { throw "Expected canonical v8 history." }
+            if (-not $hashes.ContainsKey($file.Name) -and -not $text.StartsWith("// durable-graph-schema-history:9`n", [StringComparison]::Ordinal)) { throw "Expected canonical v9 history." }
             $hash = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash
             if ($hashes.ContainsKey($file.Name) -and $hashes[$file.Name] -ne $hash) { throw "A later build rewrote immutable history '$($file.Name)'." }
             $hashes[$file.Name] = $hash

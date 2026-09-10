@@ -9,7 +9,7 @@ internal static class StateBodySize {
         if (slot.TypeTag != TypeTag.InlineValue) {
             return slot.TypeTag switch {
                 TypeTag.Half => 2, TypeTag.Single => 4, TypeTag.Double => 8,
-                TypeTag.Guid or TypeTag.Decimal => 16, _ => 1,
+                TypeTag.Guid or TypeTag.Decimal => 16, TypeTag.DateTimeOffset => 2, _ => 1,
             };
         }
         DurableSchema schema = slot.InlineSchema!;

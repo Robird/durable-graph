@@ -33,7 +33,7 @@ public sealed class NullableCatalogTests {
     }
 
     [Theory]
-    [InlineData(typeof(DateTimeOffset?))]
+    [InlineData(typeof(System.Numerics.BigInteger?))]
     [InlineData(typeof(DayOfWeek?))]
     [InlineData(typeof(DateTime?))]
     [InlineData(typeof(List<DateTime?>))]

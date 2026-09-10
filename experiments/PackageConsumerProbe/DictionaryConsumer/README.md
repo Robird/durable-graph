@@ -35,7 +35,7 @@ Only these two Dictionaries must rewrite Base. World, Box, array and List retain
 nominal reference layouts. The next commit is unchanged, a value edit resumes ordinary Delta,
 and cold reopening does not run the old conversion again. The original revision stays readable.
 
-The runner checks Publish and Verify builds, new history format v8 and exact file counts
+The runner checks Publish and Verify builds, new history format v9 and exact file counts
 **5 -> 7**. Previously accepted filenames and SHA256 hashes must remain unchanged; retained
 history is never rewritten to a newer format. Required stage outputs follow executable assertions:
 

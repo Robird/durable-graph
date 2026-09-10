@@ -80,6 +80,18 @@ public ref struct BinaryPayloadWriter {
     /// <summary>Writes signed ticks using canonical Int64 ZigZag encoding.</summary>
     public void WriteTimeSpan(TimeSpan value) => WriteInt64(value.Ticks);
 
+    /// <summary>Writes the calendar day number using canonical UInt32 encoding.</summary>
+    public void WriteDateOnly(DateOnly value) => WriteUInt32((uint)value.DayNumber);
+
+    /// <summary>Writes ticks within a single day using canonical UInt64 encoding.</summary>
+    public void WriteTimeOnly(TimeOnly value) => WriteUInt64((ulong)value.Ticks);
+
+    /// <summary>Writes clock ticks followed by the signed offset in whole minutes, without local time conversion.</summary>
+    public void WriteDateTimeOffset(DateTimeOffset value) {
+        WriteUInt64((ulong)value.Ticks);
+        WriteInt32((int)(value.Offset.Ticks / TimeSpan.TicksPerMinute));
+    }
+
     /// <summary>Writes already encoded body bytes verbatim, without a length prefix.</summary>
     public void WriteSpan(ReadOnlySpan<byte> value) {
         if (value.IsEmpty) {

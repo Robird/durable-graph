@@ -23,7 +23,7 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
     private const string DurableBaseMetadataName =
         "Atelia.DurableGraph.DurableBase";
     private const string SchemaHistoryManifestHeader =
-        "// durable-graph-schema-history-manifest:8";
+        "// durable-graph-schema-history-manifest:9";
     private const string SchemaHistoryHeader =
         "// durable-graph-schema-history:1";
     private static readonly UTF8Encoding StrictUtf8 = new(
@@ -393,7 +393,7 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
         }
 
         string[] lines = normalized.Split('\n');
-        if (lines.Length > 0 && (lines[0] == "// durable-graph-schema-history:3" || lines[0] == "// durable-graph-schema-history:4" || lines[0] == "// durable-graph-schema-history:5" || lines[0] == "// durable-graph-schema-history:6" || lines[0] == "// durable-graph-schema-history:7" || lines[0] == "// durable-graph-schema-history:8")) {
+        if (lines.Length > 0 && (lines[0] == "// durable-graph-schema-history:3" || lines[0] == "// durable-graph-schema-history:4" || lines[0] == "// durable-graph-schema-history:5" || lines[0] == "// durable-graph-schema-history:6" || lines[0] == "// durable-graph-schema-history:7" || lines[0] == "// durable-graph-schema-history:8" || lines[0] == "// durable-graph-schema-history:9")) {
             return TryParseTemplateHistory(file.Path, lines, out model, out error);
         }
         if (lines.Length < 5 ||
@@ -887,10 +887,17 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
 
     private static int GetCoreLibraryScalarTag(ITypeSymbol type, INamedTypeSymbol? halfType) {
         // The Half symbol comes from this compilation's actual System.Object core library.
-        // Resolve these two metadata symbols there too; source-defined System names are not builtins.
+        // Resolve the other metadata symbols there too; source-defined System names are not builtins.
         if (halfType is null) return 0;
         if (SymbolEqualityComparer.Default.Equals(type, halfType)) return 12;
-        int tag = type.Name == "Guid" ? 19 : type.Name == "TimeSpan" ? 21 : 0;
+        int tag = type.Name switch {
+            "Guid" => 19,
+            "TimeSpan" => 21,
+            "DateOnly" => 22,
+            "TimeOnly" => 23,
+            "DateTimeOffset" => 24,
+            _ => 0,
+        };
         return tag != 0 && SymbolEqualityComparer.Default.Equals(type,
             halfType.ContainingAssembly.GetTypeByMetadataName("System." + type.Name)) ? tag : 0;
     }
@@ -1047,6 +1054,12 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
                 return "Decimal";
             case 21:
                 return "TimeSpan";
+            case 22:
+                return "DateOnly";
+            case 23:
+                return "TimeOnly";
+            case 24:
+                return "DateTimeOffset";
             case 15:
                 return "ObjectReference";
             case 16:

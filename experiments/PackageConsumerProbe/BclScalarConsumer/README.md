@@ -35,7 +35,7 @@ BclScalarSeed:True:ThreeScalarCompositions:True:ExactDecimalScale:True:DecimalKe
 BclScalarUpgrade:True:DeletedInlineClr:True:ExplicitOwnerAndValueUpgrade:True:HistoricalExact:True:ForcedBaseThenDelta:True:ColdReopen:True
 ```
 
-The runner checks history counts `3 -> 5`, requires v8 for new history, runs packaged Publish and
+The runner checks history counts `3 -> 5`, requires v9 for new history, runs packaged Publish and
 Verify, and checks accepted filenames, SHA256 hashes and bytes before and after each later build.
 This two-generation lane does not replace the separate fixed-v7 fixture required by
 [DB-057](../../../docs/design-branches/0057-bcl-scalar-value-slice.md).

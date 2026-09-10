@@ -42,7 +42,7 @@ needed, and exact reading remains available after the failed Load. This distingu
 data from the ability of current business comparison rules to accept it. The package cannot call
 the internal whole-revision Normalize API directly; focused product tests isolate that phase.
 
-New history uses v8, with exact file counts **6 -> 9**. Previously accepted filenames and
+New history uses v9, with exact file counts **6 -> 9**. Previously accepted filenames and
 SHA256 hashes must remain unchanged. The persistent formats are not version-bumped for this
 fixture. Stage outputs are printed only after their executable assertions pass:
 

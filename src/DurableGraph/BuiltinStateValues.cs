@@ -74,6 +74,18 @@ internal static class BuiltinStateValues {
             binding = new(new(1, TypeTag.String), typeof(ObjectId), typeof(StringIdStateOps), domainType, typeof(StringValueProjection));
             return true;
         }
+        if (domainType == typeof(DateOnly)) {
+            binding = new(new(1, TypeTag.DateOnly), typeof(DateOnly), typeof(DateOnlyStateOps), domainType, typeof(IdentityValueProjection<DateOnly>));
+            return true;
+        }
+        if (domainType == typeof(TimeOnly)) {
+            binding = new(new(1, TypeTag.TimeOnly), typeof(TimeOnly), typeof(TimeOnlyStateOps), domainType, typeof(IdentityValueProjection<TimeOnly>));
+            return true;
+        }
+        if (domainType == typeof(DateTimeOffset)) {
+            binding = new(new(1, TypeTag.DateTimeOffset), typeof(DateTimeOffset), typeof(DateTimeOffsetStateOps), domainType, typeof(IdentityValueProjection<DateTimeOffset>));
+            return true;
+        }
         binding = null!;
         return false;
     }
@@ -96,6 +108,9 @@ internal static class BuiltinStateValues {
             TypeTag.Guid => new(slot, typeof(Guid), typeof(GuidStateOps)),
             TypeTag.Decimal => new(slot, typeof(decimal), typeof(DecimalStateOps)),
             TypeTag.TimeSpan => new(slot, typeof(TimeSpan), typeof(TimeSpanStateOps)),
+            TypeTag.DateOnly => new(slot, typeof(DateOnly), typeof(DateOnlyStateOps)),
+            TypeTag.TimeOnly => new(slot, typeof(TimeOnly), typeof(TimeOnlyStateOps)),
+            TypeTag.DateTimeOffset => new(slot, typeof(DateTimeOffset), typeof(DateTimeOffsetStateOps)),
             TypeTag.String => new(slot, typeof(ObjectId), typeof(StringIdStateOps)),
             TypeTag.ObjectReference => new(slot, typeof(ObjectId), typeof(ObjectIdStateOps)),
             _ => null!,

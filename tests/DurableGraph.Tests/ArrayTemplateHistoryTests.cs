@@ -120,7 +120,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         Assert.Contains("TypeExpr.VectorArray(", generated);
         Assert.DoesNotContain("Array.GetValue(", generated);
         string history = GeneratedSource(run, "DurableGraphSchemaHistoryCandidates.g.cs");
-        Assert.Contains("manifest:8", history);
+        Assert.Contains("manifest:9", history);
         Assert.Contains("// field:2|15|a1(p0)", history);
         Assert.Contains("// field:2|15|a1(a1(b2))", history);
         Assert.Contains("// field:4|15|nQm94(a1(b2))", history);
