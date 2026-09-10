@@ -1,322 +1,330 @@
-# DB-055：有限复合 Dictionary Key 的比较能力与功能边界
+# DB-055：复合 Dictionary Key 的持久状态与当前比较行为
 
-> 状态：**Proposed / 独立分析与交叉审阅后的推荐，尚未实施**，2026-09-10。
-> 本轮授权：研究功能边界并形成设计文档；不据此启动产品实现。
-> 代码依据：`821e602`，DB-054 已完成。本文的新增 API、比较策略和生成代码均为拟议形状。
-> 问题：怎样让自定义 struct / generic struct 成为实用、可恢复的组合键，同时避免承接任意用户比较代码的历史与恢复依赖？
-> 最小成功见证：`Dictionary<Key<string, Mode>, Point>` 用新构造的同值键查询成功；连续保存保留原键中的引用身份；删除旧 Key CLR 后仍能 exact 读取、显式升级；升级碰撞拒绝。
+> 状态：**方向已采纳 / 修订方案待实施与代码见证**，2026-09-10。
+> 本轮授权是完善设计文档、组织审阅；不启动产品实现。新增 API、模式及包装均为拟议形状。
+> 代码基线：`821e602`，当前产品仍是 DB-054 白名单。旧推荐来自 `77e4341`，已[冻结归档](../archive/2026-09-10/0055-composite-dictionary-key-design-v1.md)。
+> 问题：允许普通/generic struct 的领域相等性忽略部分持久字段，同时完整保存 Key，能否复用既有 Delta 并保持普通 Dictionary 的易用性？
+> 最小见证：Key 的三个字段均持久，Equals 忽略 Timestamp；普通 new()、同值查询、连续 Commit、冷重开均工作；旧 Key CLR 删除后仍能读历史 DTO，当前规则冲突则明确拒绝交付 World。
 
-## 1. 推荐结论与需求来源
+## 1. 核心选择与需求来源
 
-**保留普通 BCL Dictionary，增加显式选择的框架 comparer；按 Key 的全部持久字段递归比较。**
-优先支持现有 Durable struct，包括泛型、readonly、私有持久字段、嵌套 struct、Nullable 组件、string 和受支持引用组件。
-不要求用户改写自己的 Equals，也不将 record struct 或 ValueTuple 的序列化支持作为前置。
+**领域 comparer 属于当前程序的行为；DTO 按全部持久信息配对。框架恢复整个对象图，应用只提供需要的当前 comparer。**
+不生成框架规定的领域 Equals/Hash，不要求用户改用固定比较语义的容器，不保存任意比较代码的历史。
+普通 BCL Dictionary 的使用、已有 owned entries、ObjectId、键寻址 Delta 与双槽 Upgrade 保留。
 
-这是扩大有效支持范围的一个固定规则，不是任意 comparer 插件平台。
-现有 key-body 寻址 Delta、owned DTO、完整目录验证和双槽 Upgrade 保留；新增工作的中心是查找相等性。
-
-| 来源 | 要保留的要求 / 尚未选择的事项 |
+| 来源 | 约束或选择 |
 |---|---|
-| 本轮用户请求及 DB-054 前置讨论 | 复合值 Key 是实际领域建模需求；必须认真覆盖普通/generic struct，ValueTuple 是后续候选；允许 BCL 或等效自建容器 |
-| 已实现 DB-054 | 映射无序、键引用身份保留、完整 source/current 校验、升级碰撞失败；BCL 外观实验性 |
-| 当前产品总体约束 | 历史 DTO 不依赖旧领域 CLR；单对象显式 Upgrade；先分配再 Hydrate；无任意对象内容读取与索引依赖调度 |
-| 本文新推荐，待用户采纳 | 显式框架 comparer；全部持久字段参与；string Ordinal、其他引用 identity；框架比较与类型自身 Equals 可以不同 |
-| 暂不承诺 | 任意用户 comparer、任选 KeyField、逐字段比较选项、根 Nullable key、record/tuple 外观及排序容器 |
+| 用户已采纳的新分层 | Timestamp 等字段可以持久而不参与领域查找；普通/generic struct 是主要需求；数据保存不承担任意旧业务代码重现 |
+| 用户已采纳的补充 | 当前恢复用 TryAdd，碰撞失败而不覆盖；框架保留共享、循环与会话身份；不把完整恢复转嫁给宿主 |
+| 当前源码和回归 | DTO 已是 owned 条目数组；Delta 以完整 canonical key body 寻址；标准 comparer 的同 CLR 多实例选择已有消费者 |
+| 延续的产品合同 | exact 历史 DTO 不需要旧领域 Key CLR；单对象显式 Upgrade、完整引用/Schema 校验；恢复不调用领域构造器与 Transient hook |
+| 本文的施工推荐 | 保留标准选择 0–3，增加 CurrentDefault / Application；typed 登记加一个泛型 resolver；新增模式不验证历史业务 lookup |
+| 有限边界 | 一个闭合 Dictionary 类型的 Application 实例共享一份当前恢复规则；引用内容比较的额外恢复阶段、命名策略、record/tuple 外观另排 |
 
-当前没有待兼容的已发布复合 Key 数据；不建设双写或旧格式迁移层。
-这里有实现接缝依据和反例分析，尚无新增能力的可执行验证或性能测量。
+这里没有已发布数据兼容负担。保留标准模式是保留当前功能，不是建设旧格式兼容层。
+上述模式编码与 API 接线是本轮审阅后的推荐；实现仍须经过 §9 的见证，不能把文档状态当成代码能力。
 
-## 2. 将三个问题分开
+## 2. 三种职责及正确性条件
 
-### 2.1 可保存，不等于能安全重建索引
-
-[StateValueBinding](../../src/DurableGraph/StateValueBinding.cs) 和既有 inline DTO 已能冻结复合 Key。
-[DictionaryStateReader](../../src/DurableGraph/DictionaryStateReader.cs) 的 Delta 已以完整 canonical key Base bytes 配对。
-当前拒绝 struct 的位置主要是 [DictionaryKeyPolicy](../../src/DurableGraph/DictionaryKeyPolicy.cs) 和 SG 的已知 key 诊断。
-
-真正欠缺的是一份不依赖已删除 CLR、Transient 或目标对象恢复顺序的查找规则。
-只让 body 接受 struct，随后在 Hydrate 中调用 Default，并不能提供这份规则。
-
-### 2.2 查找相等性与持久键相等性继续分开
-
-| 用途 | 规则 | 例子 |
+| 职责 | 使用的信息 | 不承担的事 |
 |---|---|---|
-| 领域查询、唯一键验证 | 本文固定的递归查找规则 | `Key(new string("a"), 1)` 可查询已有同内容键 |
-| 两次保存之间配对条目 | 同 exact KeySlot 的 canonical key Base bytes | 字符串换成新实例、ID 改变，仍是 Remove(old)+Add(new) |
-| Hash | 各条路径内部的加速手段，不落盘、不作身份 | 热侧 domain hash 与冷侧 lookup hash 无需数值相同 |
+| 领域查询 | 当前 Dictionary 的 Equals/Hash；用户可只比较部分持久字段 | 不要求与 DTO 持久相等相同 |
+| 冻结、配对、Delta | 同 exact KeySlot 的完整 canonical Base bytes；引用为 ObjectId，浮点按位，inline 按持久字段 | 不调用领域 Equals/Hash，不访问引用目标的内容 |
+| 当前领域恢复 | 按对象的恢复模式选择当前 comparer，逐个 TryAdd | 不重现任意旧业务方法；不合并或静默丢弃冲突条目 |
 
-因此不能复用 `IStateOps.StateEquals` 作为查找 Equals：前者的浮点按位、引用按 ObjectId，职责不同。
-也不能把 Delta 配对改成查找相等，否则替换键中的 string 实例时可能丢失真实引用变化。
+现有 [FrozenDictionaryState](../../src/DurableGraph/FrozenDictionaryState.cs) 已持有独立 entries，
+[DictionaryStateReader.Index](../../src/DurableGraph/DictionaryStateReader.cs) 已使用 key bytes 和完整相等检查。
+Hash 仅加速查找；不落盘、不作持久身份。内部数组承载无序映射，不改用有序 List 的算法，也不增加 entry ID。
 
-### 2.3 容器外观不能替代比较规则
-
-无论普通 Dictionary、薄包装还是自建哈希表，都必须回答上述相等性、历史解释和升级碰撞问题。
-包装的额外收益是减少漏传 comparer；它不自动使 `EqualityComparer<TKey>.Default` 受框架控制。
-
-## 3. 支持范围：按成分闭合，避免列举组合
-
-新增策略暂名 **PersistentFieldsV1**。根 Key 是现有支持范围内、显式 `[DurableType]` 的普通 struct；泛型实参按既有 nominal 规则闭合。
-不新增 `[DurableKey]` 资格标记；使用这个 comparer 本身就是选择该语义。
-既有标量/enum/string/直接引用 Key 策略不变。
-
-| Key 内的成分 | 推荐首片规则 | 领域用途与边界 |
-|---|---|---|
-| 13 种已有标量 | 已知类型的默认值相等 | 坐标、序号、数值维度；不调用任意用户方法 |
-| Durable enum | exact 底层整数相等 | 分类/模式/Flags；未知数值保留 |
-| Durable struct / generic struct | 按 FieldId 顺序，递归全部持久字段 | `CellKey`、`Key<TScope,TId>`、嵌套组合 |
-| Nullable 组件 | 先比较 HasValue；present 才递归 | 可选维度；absent 不读取内部值、不遍历其引用 |
-| string 组件 | Ordinal 内容相等，null 与 Empty 不同 | 名称+分类等高价值组合；同内容新实例可查询 |
-| 其他已支持引用组件 | 引用身份相等，null 合法 | scope 对象+序号；停止递归，不读取 class/array/List/Dictionary 的内容 |
-| readonly / 私有持久字段 | 与普通字段相同 | 复用 SG 字段读取与恢复能力，不要求额外可变性 |
-| Transient / 未持久化字段 | 不参与 Equals/Hash | 缓存、调试信息不改变键资格，也不会成为历史依赖 |
-| 自定义 Equals/GetHashCode/IEquatable | 不调用、不要求删除 | 类型在其他业务用途下可以保留自己的相等语义 |
-
-精确定义：
-
-- Half/float/double 用相应默认 Equals 语义：正负零相等，NaN 相等；Hash 必须使用相同等价规则，不能直接 hash 原始位。
-- string 固定 Ordinal，不进行大小写或 Unicode 正规化。null 组件与空字符串分开；不同空串实例按全局 Empty 规则相等。
-- 非 string 引用使用 `ReferenceEquals` / `RuntimeHelpers.GetHashCode` 的身份语义，不调用目标的虚方法。Hash 数值无需跨进程保持。
-- struct 的 Equals/Hash 都忽略相同的非持久字段；不读 getter、不执行构造器、没有原始 CLR 内存或 padding 比较。
-- 空持久 struct 合法，只有一个等价类，故字典至多容纳一个这样的键。不存在状态贡献的 phantom 参数不增加比较能力依赖，但仍受既有 nominal 类型支持边界约束。
-- 不要求 Key 声明为 readonly：BCL 按值存入 struct；上述引用成分的比较也不依赖可变内容。普通局部副本的修改不会修改已经存入的键。
-- 顶层 null key 仍拒绝；允许 struct 内的 null 不等于开放 `Dictionary<Nullable<T>,V>`。
-
-非 string 引用内容比较仍然延后。identity 叶纳入首片是因为已有统一引用路径可直接处理，不增加恢复阶段；
-它还能让 `Key<T>` 闭合引用参数时少一条人为限制。不能由此开放 object/interface 通配槽、数组协变或未知 BCL 类型。
-
-这些组合已经覆盖：二维/三维坐标，租户 ID+资源名，分类+编号，泛型强类型 ID，含可选分量的索引，以及作用域对象+局部编号。
-ValueTuple 的简洁语法有用，但不是完成这些建模能力的唯一途径。
-
-## 4. 创建与普通查询的拟议形状
-
-```csharp
-[DurableType("ItemKey", 1)]
-public partial struct ItemKey<TScope> {
-    [DurableField(1)] public TScope Scope;
-    [DurableField(2)] public string? Name;
-}
-
-// 拟议 API；当前尚不存在。先登记生成能力，再创建普通 BCL 容器。
-var models = new StateModelRegistry();
-Atelia.DurableGraph.Generated.DurableDefinitions.Register(models);
-var keyComparer = models.GetPersistentKeyComparer<ItemKey<int>>();
-var items = new Dictionary<ItemKey<int>, Item>(keyComparer);
-
-items.Add(new() { Scope = 7, Name = new string('a', 1) }, item);
-bool found = items.ContainsKey(new() { Scope = 7, Name = new string('a', 1) }); // true
-```
-
-建议先只提供一个显式取得 comparer 的入口。它通过现有代码登记材料做一次闭合，不需要先打开 Repository、创建 Session 或产生 ObjectId。
-返回普通 `IEqualityComparer<TKey>`，可以缓存并供多个 Dictionary 使用；最终内部对象必须是框架封闭实现。
-日常查询不再访问 registry、SchemaStore、CaptureContext、DTO 或序列化器。
-
-没有 comparer 的 `new Dictionary<ItemKey<int>,V>()` 仍执行 BCL Default；框架不改写它的行为，Capture 明确拒绝不支持的实例 comparer。
-即使 Default 在某个类型上恰好与框架规则一致，本片也不尝试证明或默默接管。
-建议诊断指向上述创建用法，检查空 Dictionary 的 comparer 不能因无条目而省略。
-
-这项选择确有用户成本：一般需要在模型工厂/构造时传入 comparer，原字段初始化器的简单 `new()` 不再足够。
-若实践中重复创建成为负担，可加一行封装的 `CreateDictionary`，不先造第二套注册目录或全局静态 `Serializers<T>`。
-若用户要求“默认构造也绝不可能用错”，固定 comparer 的专用容器才有明确价值，见 §8。
-
-## 5. 最小实现结构
-
-### 5.1 热侧：SG 读取领域字段，泛型子比较器在创建时闭合
-
-[GenericProjection](../../src/DurableGraph.Generator/DurableSchemaGenerator.GenericProjection.cs) 已有按持久字段生成的 ref readonly accessor，
-可供普通/generic struct 的比较代码复用。比较与 Hash 使用同一份字段模型，不让一方自行反射枚举。
-
-生成代码形状如下；名字和接线参数是示意，不要求扩展全部 `IStateOps`：
+设 P(k) 为冻结后的完整 key body。用户比较规则若满足：
 
 ```text
-generated KeyComparer<Key<T>>
-    持有已经闭合的 IEqualityComparer<T>（仅实际持久成分需要）
-    Equals: 逐字段直接读取；已知标量/string/enum 直接调用框架叶操作
-            未知 T / 复合子值调用已注入的子 comparer
-    GetHashCode: 用完全相同字段与叶规则组合 hash
+P(a) = P(b)  ⇒  领域 comparer 认为 a、b 相等
 ```
 
-允许未知子类型有一层 comparer 接口调用；不为消除这层调用强迫改造既有 projection/body 全套泛型参数。
-已知字段保持直接绑定，不在每次查询时按 Type 查表、反射字段、装箱整个 key、编码 bytes 或分配冻结 DTO。
-闭合期的反射/MakeGenericType 与现有 [GenericFactories](../../src/DurableGraph.Generator/DurableSchemaGenerator.GenericFactories.cs) 模式一致。
+则合法领域字典中的不同键不会成为重复持久键。只按部分持久字段比较通常满足该条件；
+它不要求反向成立。比如旧 key `(7, A, 100)` 被实际替换为 `(7, A, 101)`，领域查找相同，DTO 仍 Remove+Add。
+这是完整保存 Timestamp 的正确结果，接受少复用一次 value Delta 的代价。
 
-建议在 [StateDefinitionBinding](../../src/DurableGraph/StateDefinitionBinding.cs) 增加可选的 current key-comparer factory，
-由 [StateBindingContext](../../src/DurableGraph/StateBindingContext.cs) 的专用解析入口按需求调用。
-这样普通 TValue 的 ResolveCurrentValue 不必建立额外键能力，历史 DTO/binding 也不用携带它。
-保持原有显式登记权威；`StateModelRegistry` 的公开入口只是创建一次无 SchemaStore 的快照并解析。
+“不依赖 Transient”不是任意代码的静态证明：例如两种 Empty 实例按 identity 区分，但全局 Capture 会归一它们。
+保留实际 canonical 重复检查并拒绝即可，不建设方法分析器；用户仍须遵守合法等价关系和 Equals⇒同 hash。
+若连完全相同的持久 key 也要作为不同条目保存，就需另一套 multimap/序列合同，本片不接受这种输入。
 
-返回的 comparer 冻结完整 current KeySlot、生成能力来源和子 comparer，不持有可变 registry 或 Repository。
-Capture 识别 framework wrapper 时应验证：策略、精确 TKey、完整 exact KeySlot，以及对应生成能力来源/子能力组成。
-**不能只检查 comparer 实例引用，也不能只检查相同 Schema：布局相同不证明两个工厂读取了相同领域字段。**
-不同快照用同一稳定生成能力创建的 comparer 可以互用；同 CLR/同布局却换了另一个手工工厂时明确拒绝。
-最小来源记录可使用实际参与闭合的 `StateDefinitionBinding` 所拥有的独立身份 token，覆盖所有 inline 子 helper，按定义 ID 去重。
-token 只是内部 object，不回指 Definition；相同 Definition 在快照间提供同一个 token，另一手工 Definition 则不同。
-不用直接持有 Definition 本体，因为它还包含整份历史能力及可能捕获外部对象的委托。
-生成的 inner comparer 只保存子 comparer/不可变叶配置，不能捕获工厂参数 Context。
-Dictionary binding 持有已闭合的期望 comparer 和来源，Capture 只核对，不重复运行 factory；Allocate 直接用此 comparer 创建字典。
-当前 Create/CreateComparer 接口没有 Context，G0 应把这一能力从 snapshot 闭合处传入 binding，而非恢复时另起注册解析或回退 Default。
-此来源校验只在进程内，不增加持久 factory ID，不把 SchemaStore 变成执行代码注册表。
-它不证明任意手写委托的纯度或捕获关系；手工登记能力仍属于既有可信代码边界，不能随外部可变状态改变查找语义。
-闭合非 string 引用叶时只取得 nominal 引用槽并选择 identity，不递归闭合其对象 body，避免 Key→Dictionary 环引入闭合递归。
+## 3. 普通使用方式与支持范围
 
-已核对 [UsesGenericTemplate](../../src/DurableGraph.Generator/DurableSchemaGenerator.TemplateHistory.cs)：
-持久 Dictionary 的双实参模式本来就会触发 Family，普通非泛型 struct Key 因而也可走这个入口，无需增加新属性。
-完全不含 Dictionary/泛型/Nullable 等条件的旧非 Family 编译没有 Definition 注册能力，本片不顺带改造它；
-工厂缺少已登记定义时明确拒绝。跨程序集的生成与登记边界也不借此扩展。
-G0 验证纯非泛型 Dictionary 消费者与开放泛型消费者均能闭合；具体 wrapper/factory 的代码形状以该编译见证收敛。
+以下 Key 可以自然使用默认 Dictionary；Timestamp 不必移到 Value，也不必新增 KeyField 属性：
 
-### 5.2 冷侧：按 exact KeySlot 解释现有 key body
+```csharp
+[DurableType("OrderKey", 1)]
+public partial struct OrderKey : IEquatable<OrderKey> {
+    [DurableField(1)] public int Tenant;
+    [DurableField(2)] public long Number;
+    [DurableField(3)] public long Timestamp;
 
-不恢复旧领域 Key，也不要求历史 DTO 实现新的比较接口。
-复用现有 KOps 生成/读取的 canonical key bytes，由一个局部解释器按 exact Schema 生成临时 lookup key：
+    public bool Equals(OrderKey other) => Tenant == other.Tenant && Number == other.Number;
+    public override bool Equals(object? other) => other is OrderKey key && Equals(key);
+    public override int GetHashCode() => HashCode.Combine(Tenant, Number);
+}
 
-1. 标量读成框架已知值；浮点按查找规则归一；enum 自然是其历史整数字段。
-2. InlineValue 按 exact 字段顺序递归；Nullable 保留 presence，absent 不读取 child。
-3. string 的 ObjectId 从完整 source/current 目录解析为不可变内容；零 ID 表示 null 组件，不能调用当前根 key 禁 null 的 `ReadReference` helper。
-4. 非 string 引用保留 ObjectId，比较其身份；引用类型/存在性仍由统一引用验证负责。
-5. 按当前 exact 槽的结构保留字段与可空边界，Hash 加速后比较完整 lookup 内容。不能靠简单拼接字符串或未经确认的 hash 判断相等。
+var orders = new Dictionary<OrderKey, Order>();
+```
 
-临时表示可先用框架拥有的结构化成分列表；也可用规范 lookup bytes，但 string 必须按完整 UTF-16 内容无损表示，
-含孤立代理项也不得经替换式 UTF-8 编码而错误合并。它不是第二种持久格式，不给它分配 Schema/RepresentationId。
-具体容器不作为产品承诺；首次实现优先简单、完整比较且容易测试的结构化表示。
+这依赖当前 CLR 的 Default / IEquatable 机制，不需要 SG 生成业务比较代码。
+[Microsoft Dictionary 合同](https://learn.microsoft.com/en-us/dotnet/api/system.collections.generic.dictionary-2?view=net-10.0)
+规定默认比较器选择及键相等/hash 稳定性。框架不持久化 hash，也不要求跨进程 hash 数值相同。
 
-解释器使用现有规范 body/字节原语并检查完整消费；复用 schema 深度约束。
-它只服务字典查重，不扩成通用对象反射/序列化平台。新增分支可以沿用现有临时 key bytes，接受这部分分配。
-热侧直接 comparer 与冷侧解释器各自满足 Equals⇒同 hash，二者只须保持等价关系一致。
-
-### 5.3 恢复不增加阶段
-
-key 的值部分经既有投影完整 Hydrate 后再 TryAdd；string 不可变，其他引用只比较身份，故无需等待目标内容 Hydrate。
-保留全 Allocate → Hydrate，包含 Key→Dictionary 自身、Key→World 的引用环。
-不增加 index rebuild hook、任意 comparer 调度或恢复依赖拓扑。
-
-## 6. 持久格式、验证与升级
-
-建议在现有对象内容 comparer 标签中增加 `PersistentFieldsV1 = 4`；0–3 的意义不变。
-该标签固定 §3 的递归查找合同，不保存 comparer CLR 名、hash、字段选择表或任意执行代码。
-完整 exact KeySlot 已提供字段布局、inline 版本与引用声明约束，不新增 Schema 元数据或单独的 key Schema。
-未来若改变比较规则，必须另给明确策略身份/版本，不能原地改变 V1 含义。
-
-预计 Dictionary codec 1 grammar、目录 kind 5、SCB1 v2、Base v4、Storage wire v3 均可保持。
-history 已能表达 struct/generic struct，无需仅为新增 comparer 升级 history v7；能力生成与参数接线仍须真实包验证。
-旧程序遇到新 comparer 标签明确拒绝，本原型不增加向后兼容写法。
-
-验证分层沿用 DB-054，但不能照搬“非 scalar 都是一个非空 ObjectId”的现有分支：
-
-| 阶段 | 新增策略的责任 |
+| 形状 | 本片推荐支持与约束 |
 |---|---|
-| current 闭合 / Capture comparer 检查 | 根及参与字段具备能力；实例策略与生成能力匹配；空字典也检查 |
-| 独立 body / Apply | grammar、完整 canonical key、持久重复、策略与 exact 布局合法；无 string 内容依赖时可完成局部 lookup 查重 |
-| Capture Seal | 所有目标已捕获且引用合法后，用完整 candidate 检查 lookup 唯一性 |
-| exact Revision | 全部 stored 行与引用校验后，对所有字典检查，包括不可达字典；成功后才能返回 DecodedRevision |
-| Normalize 后 | 全部 current 行与引用校验后，检查所有字典的新 lookup 唯一性 |
-| Hydrate | TryAdd 最终拒绝重复；不能用 indexer 覆盖，也不能以这一步替代前述完整验证 |
+| 普通/generic Durable struct | 显式 DurableType；已有持久字段布局、私有/readonly、递归 inline 均沿用；允许用户 Equals/Hash/IEquatable |
+| 已支持的标量/enum | 沿用标准 Default；外置自定义比较可以选择 Application，例如按浮点位模式区分键 |
+| Nullable 成分 | 复用 NullableState；absent 不读取内部字段；根 Nullable key 仍延后 |
+| string 成分 | 保留实际引用与 UTF-16 内容；当前业务可按内容、大小写模式或身份比较；null 成分合法 |
+| 其他已支持引用成分 | 保存 ObjectId；本片恢复保证可用引用身份，不保证引用目标内容已 Hydrate |
+| Transient/未持久状态 | 不进 DTO；用户不得依赖未恢复的状态决定 Equals/Hash；不是通过 SG 检查每个方法证明 |
+| 根 string/引用 key | 非 null，Empty 合法；保留已知标准模式。当前用户代码也受同一恢复时机合同约束，不能凭 Default 自动保证内容比较安全 |
+| Dictionary 的 TValue、数组/List/泛型外层 | 继续使用完整已有槽闭包，字典共享和循环不变 |
 
-string 内容依赖使独立 body reader 仍不承诺单独验证完整查找等价；现有图级 API 保持完整合同。
-空 struct 可能产生零字节 key；当 exact 布局可证明键只有一个等价类时，Base count / Delta 结果 count 大于 1，
-应在 entries 数组分配前拒绝。特别是 TValue 也为零字节时，不能只依靠现有 payload 最小尺寸预检。
-这是一项具体的键唯一性约束，不扩展为全图内存预算；合法的 0/1 条映射继续支持。
-当前实际接缝：[DictionaryStateReader](../../src/DurableGraph/DictionaryStateReader.cs)、
-[CaptureContext](../../src/DurableGraph/CaptureContext.cs)、[RevisionDecoder](../../src/DurableGraph.StateStore/RevisionDecoder.cs)、
-[NormalizedRevision](../../src/DurableGraph.StateStore/NormalizedRevision.cs)。
+普通非 readonly struct 可以作为 Key；框架不增加 readonly 资格要求。可变状态影响 hash 的问题仍由普通 Dictionary 的使用合同约束。
+空持久 struct 只有一种持久 key 表示，最多一条；phantom 类型参数不凭空产生持久字段。
+record struct、ValueTuple、其他 CLR/BCL 类型的序列化能力仍未实现，不能因为现在允许其比较方式就提前放行类型。
+不扩展跨程序集生成、接口/object 通配槽、数组协变或 Dictionary 子类。
 
-Upgrade 保留 [DictionaryUpgrade](../../src/DurableGraph/StateBindingContext.DictionaryUpgrade.cs) 的双槽独立工具和完整预检：
+## 4. 保存选择，不保存任意比较代码
 
-- Key 的 inline 布局变化沿现有 exact Schema 版本规则处理；显式转换全部条目，保留 ObjectId/count/comparer。
-- 不能只查转换后的 canonical bytes；不同 string ID 的同内容键、不同 NaN 位模式等仍可能 lookup 碰撞。
-- 遇到碰撞失败，不合并、丢弃或选择获胜条目；仍 live 的升级字典强制 Base，后续恢复 Delta/NoChange。
-- 字典 owner 的 nominal 引用约束不随键内的 inline 升版而自动升级；所有 exact 依赖检查不能因 comparer/plan 缓存命中省略。
-- 不为 Key Upgrade 开放字符串内容读取、新字符串对象创建或新 ID；若业务转换需要这些能力，仍属于跨对象升级后继。
+### 4.1 推荐保留对象级恢复模式
 
-## 7. 不变式与最小反例
+建议继续使用对象 body 中的 `DictionaryComparerKind`，增加两值；它不进入 DictionaryLayout/RepresentationId。
+表中名字和码值为施工推荐；0–3 不改变既有含义，4/5 尚无产品数据。
 
-| 必须保留的区别 | 删除后的失败见证 |
-|---|---|
-| lookup 相等与持久 bytes 相等 | 同内容的新 string 查询失败，或保存新 key 实例时错误保留旧 ID |
-| 热侧不 Capture | TryGetValue 一个不存在的键会分配对象 ID、要求活动会话 |
-| 全部持久字段与 Transient 分开 | 两键仅凭丢弃的缓存区分，恢复时不可逆地碰撞 |
-| Equals 与 Hash 使用同一叶规则 | Equals 认为 +0/-0 相等但 hash 不同，查询可能漏项 |
-| null 组件与 Empty 分开 | `(null, 1)` 和 `("", 1)` 被误合并；或合法 null 组件被根键检查拒绝 |
-| 引用只按身份，不访问目标内容 | Key 指向尚未 Hydrate 的节点/字典，建立的 hash 随恢复内容变化 |
-| 完整 source/current 检查 | 不可达的坏字典被忽略；升级后两个不同 key body 的 lookup 碰撞漏过 |
-| comparer 来源与 exact 布局分别核对 | 相同 KeySlot 的另一个工厂按不同 CLR 字段比较，却被当作同能力接纳 |
-| 全部参与字段闭合 | 空字典、Nullable absent 掩盖缺失能力，第一次插入或恢复才失败 |
-
-## 8. 候选方案及功能取舍
-
-| 路线 | 可实现性与主要成本 | 使用端代价 | 建议 |
+| 模式 | 捕获来源 | 恢复时的含义 | 历史 lookup 校验 |
 |---|---|---|---|
-| A：严格验证 Default 的安全子集 | 可行；无用户 Equals/GetHashCode/IEquatable、全部实例字段持久、递归限定安全叶；省 SG comparer 热路，但要维护资格检查 | 普通 new() 即可；添加 Transient 或常见 IEquatable 优化会丧失资格，可能迫使另造 Key 类型 | 保留为更窄备选，不与 B 同时建设 |
-| B：框架持久字段 comparer + BCL | 新增当前生成 comparer、一次闭合和历史 lookup 解释；既有 DTO/Delta/Upgrade 可复用 | 创建时显式取一次 comparer；比较语义与领域 Equals 可不同 | **推荐**；支持边界随持久字段演进，更适合泛型组合和已有领域模型 |
-| C：固定语义薄包装/自建等效类型 | 仍需 B 的比较核心；另做 CLR nominal/绑定/创建/接口外观 | 更难漏传 comparer；改字段类型或创建习惯，有 API 适配成本 | 漏传错误成为实测主要问题时重访；暂不重写哈希表 |
-| D：任意用户 comparer 或恢复后调用 Default | 要保留任意执行语义、依赖和历史行为；多一恢复阶段也不能解一般容器依赖环 | 最大表面兼容性，最弱防误用 | 不纳入这次有限支持 |
+| 0 ScalarDefault | 现有标量/enum Default | 既有框架确定的标量规则；不能借此调用任意 struct Default | 保留现有检查 |
+| 1 StringOrdinal | string Default 或 Ordinal | 当前运行库 Ordinal | 保留现有检查 |
+| 2 StringOrdinalIgnoreCase | 已知 OrdinalIgnoreCase | 当前运行库 OrdinalIgnoreCase | 保留现有检查 |
+| 3 ReferenceIdentity | 已知 ReferenceEqualityComparer.Instance | 引用身份 | 保留现有检查与 Empty 规范化处理 |
+| 4 CurrentDefault | 其余受支持 Key 的 Default | 当前 CLR 的 EqualityComparer<TKey>.Default，包括用户代码 | 不解释旧业务规则 |
+| 5 Application | 其他 comparer，或恢复后带此模式的内部包装 | 本次模型 snapshot 为该闭合 Dictionary 登记的当前 comparer | 不解释旧业务规则 |
 
-A 是真实可行方案，不以“无法实现”排除。选择 B 的理由是：
-增加一套固定 comparer 的工作，换取 Transient、用户 Equals 和持久索引行为的独立演进；
-以后增加非持久字段，不会无意破坏原字典的可保存性。这是维护性与领域适用性的取舍。
+0–3 仍只通过明确的已知实例身份识别，不探测或调用任意 comparer.Equals 来判断策略相同。
+标准模式不能被 Application 的配置覆盖；CurrentDefault 也不被外置配置覆盖。
+普通 new() 使用 Default，不要求先创建 Registry。未指定 comparer 的默认使用与 Application 缺配置是两回事。
 
-### 延后但保留路径
+标准模式的保留有现成证据：[同闭合类型的多比较策略回归](../../tests/DurableGraph.StateStore.Tests/DictionaryRepositoryTests.cs)。
+若全部删掉模式，一个只有 `"MiXeD"` 的 IgnoreCase 字典用 Default 恢复时不会碰撞，却已改变查询行为。
+TryAdd 无法检测这种配置丢失。保留模式只选择当前内建规则，并不保证跨运行库的任意历史行为复现。
 
-- **ValueTuple**：未来作为框架内建复合值，按位置递归本文叶规则。需要明确 TypeExpr/历史 exact 描述、ItemN/Rest 布局和支持 arity；
-  泛型/Nullable/引用叶的比较可复用，不直接转发 ValueTuple 默认 Equals。元素名称不应成为键身份；尚未选择具体格式。
-- **record struct**：先解决生成器对位置参数、自动属性/隐式 backing field、FieldId 与 history 的纳入方式。
-  一旦可序列化，比较复用同一持久成员模型；不依赖其合成 Equals，也不因 record 关键字自动放行。
-- **只按部分持久字段、string IgnoreCase、逐字段策略**：确有需求再设计策略身份与演化。
-  目前推荐把索引维度放入专用的小 Key，非键信息放到 Value；不能用第二套字段标记草率掩盖信息丢失/历史变化问题。
-- **SortedDictionary / OrderedDictionary**：分别有排序规则/顺序状态，不能由当前相等 comparer 自动得到兼容承诺。
+### 4.2 Application 的明确有限边界
 
-## 9. 建议施工顺序与验收
+**同一个 snapshot、同一个闭合 Dictionary<TKey,TValue> 的全部 Application 实例，共用一个当前恢复选择。**
+当前源实例可以是用户自行 new(customComparer)；无需来自框架工厂，也不核对其与注册实例 ReferenceEquals。
+登记表示应用接受这个当前恢复选择，不证明它与原 comparer 的所有行为相同。
+只改变比较函数逻辑、而不改变数据布局时，无需为 comparer 保存历史代码或自动升级 Schema。
 
-以下是采纳方案后的施工建议，不是本轮已执行的工作。
+两个同型 Application 实例如果需要恢复成两种不同规则，仅凭 entries、Type 或 ObjectId 无法推导其业务角色。
+字段路径也不可靠：字典可能共享、有多个入边、位于数组或嵌套容器中。
+首片不新增命名 recipe、持久 comparer 对象或角色注册表；需要这种差异时再设计一个小的实例选择标记。
+当前模式能区分标准选择、CurrentDefault 与 Application；不能宣传为任意 custom 实例配置的忠实恢复。
 
-| 阶段 | 可独立观察的结果 |
+## 5. 当前代码登记与泛型组合
+
+### 5.1 最小公开入口
+
+```csharp
+// 拟议 API。配置只服务 Application；不更改现有领域字典的 Comparer。
+models.UseDictionaryComparer<OrderKey, Order>(OrderKeyComparer.Instance);
+
+// 领域对象仍按普通 BCL 方式创建，可以复用上面的同一实例。
+var orders = new Dictionary<OrderKey, Order>(OrderKeyComparer.Instance);
+```
+
+注入 `IEqualityComparer<TKey>` 即可，暂不开放任意 Dictionary factory。
+精确类型、空实例、容量及 ObjectId 分配都由框架控制，不让用户接管两阶段恢复。
+构造器和字段初始化器不会在领域恢复时运行，不能靠 World 字段里的 new(customComparer) 补回选择。
+
+Application 未配置时，实际 Capture 在准备条目之前报错；Load 在实际分配该字典时也报错。
+空的实际字典同样检查。异常包含对象 ID、闭合 Dictionary 类型和缺失配置，不能默换 Default。
+只读历史 DTO 或只 Normalize 不可达字典，不要求这个当前行为配置，见 §7。
+
+### 5.2 一个按需 resolver 覆盖外置泛型 comparer
+
+Default 的 `Key<T> : IEquatable<Key<T>>` 由 CLR 随实际 T 自动工作，不需要任何 resolver。
+只有外置 comparer 需要一个当前闭合入口：
+
+```csharp
+// 拟议 API：输入总是受支持的闭合 Dictionary<K,V> CLR Type。
+models.UseDictionaryComparerResolver(static dictionaryType => {
+    Type keyType = dictionaryType.GetGenericArguments()[0];
+    if (keyType.IsGenericType && keyType.GetGenericTypeDefinition() == typeof(TenantKey<>)) {
+        return Activator.CreateInstance(
+            typeof(TenantKeyComparer<>).MakeGenericType(keyType.GetGenericArguments()));
+    }
+    return null;
+});
+```
+
+建议签名为 `Func<Type, object?>`。框架在已闭合的 Dictionary<K,V> helper 中检查结果可赋值给 `IEqualityComparer<K>`。
+这里用的是当前领域 K，既不是 DTO 类型，也不是待编码的 TypeExpr。
+`List<Dictionary<TenantKey<int>, Item[]>[]>` 与直接字段共用同一字典绑定，不枚举外层组合。
+应用可在 resolver 中组合预制的泛型 comparer；框架不另建 pattern 匹配、泛型参数映射或程序集扫描平台。
+
+选择规则只有两级：精确 typed 登记优先；无精确项才调用唯一的 resolver。
+重复的相同登记可幂等，冲突登记拒绝；另一个 resolver 不静默替换已选 resolver。
+选中 Application 后，缺失、返回 null、类型不匹配、泛型约束失败或用户异常均失败，不能回退 Default 或另一策略。
+resolver 的 Type 反射只在首次需要这种 Application comparer 时发生，正常查找和 DTO 热循环不调用它。
+
+### 5.3 时机、缓存与生存期
+
+配置随现有模型 snapshot 复制；按闭合 Dictionary 类型缓存成功解析的 comparer。
+`StateModelSnapshot` 创建 current binding 时只传入惰性解析入口，不立即调用 resolver。
+实际 Capture 的 Application 预检或 Allocate 才触发解析；已有成功缓存的闭合类型，随后重复 Prepare 不重复运行 resolver。
+标准模式与 CurrentDefault 不触发 Application resolver。
+同型 Application 字典共享成功解析的 inner comparer 实例；不保证每个字典有一份独立 comparer 状态，也不把 resolver 当逐对象 factory。
+解析失败是否缓存留给实现，不承诺失败重试的回调次数。
+
+这冻结的是选择表、委托和 comparer 引用，不冻结它们捕获的任意外部状态。
+应用保证行为在加载、捕获与字典使用期间稳定，且 comparer/resolver 不依赖尚未交付的恢复图、不重入当前操作。
+不做全局静态注册，不缓存带 ObjectId 的业务上下文，不向 SchemaStore 登记可执行 comparer。
+Runtime binding 只接收 comparer 取得能力，Registry/Snapshot 的选择仍归 StateStore，避免反向程序集依赖。
+
+## 6. 数据格式、回捕与增量保存
+
+### 6.1 body 和槽能力
+
+Dictionary codec 1 grammar、catalog kind 5、SCB1 v2、Base v4、Storage wire v3、history v7 预计均不变；
+只扩展 comparerKind 取值，旧程序读新模式明确拒绝，不建设兼容写法。
+现有 Remove / PatchValue / Add 分组和完整 key Base body 寻址不变。
+匹配条目只对 value 调用一次融合 PrepareDelta；枚举重排和 Capacity 改变仍为 NoChange。
+
+新模式的历史资格由 exact KeySlot 的可表示性决定，不反推旧 CLR 是否 enum、是否实现 IEquatable。
+根引用仍禁 null、根 Nullable 仍拒绝；这两项与业务 lookup 查重分开保留。
+不能继续使用当前“非 ScalarDefault 都是单个非零 ObjectId”的分支来读复合 key。
+泛型参数、子 inline/Nullable、引用槽的表示与引用遍历均复用已有能力。
+
+所有模式都保留 canonical key 唯一、操作组合法、完整消费、计数/长度及 exact 引用校验。
+如果 exact key 的完整编码只有一种可能（例如递归空 struct），count>1 在 entries 数组分配前拒绝；
+Delta 也先检结果 count。这与业务 comparer 无关，防止零字节 key/value 绕过最小 payload 长度预检。
+
+### 6.2 恢复模式必须经过下一次 Capture 保持
+
+一个具体反例：Base 是 Application，当前 resolver 返回 StringComparer.Ordinal；直接 new 字典后，
+下一次 Capture 识别为 StringOrdinal，prior 仍为 Application，现有 PrepareDelta 会拒绝模式变化。
+CurrentDefault 也可能遇到同类问题：历史 struct 的同 nominal inline 后来成为 enum，当前 Default 会被识别为 ScalarDefault。
+
+建议恢复 4/5 时使用一个内部封闭的 `DictionaryRestoreComparer<TKey>`，保存模式并转发 inner 的 Equals/Hash：
+
+```text
+Allocate(CurrentDefault) -> wrapper(4, EqualityComparer<K>.Default)
+Allocate(Application)    -> wrapper(5, 当前解析的 IEqualityComparer<K>)
+Capture                 -> 先识别框架 wrapper 并保留 4/5，再识别普通 comparer
+```
+
+它只保存选择，不生成或修改业务相等规则，不验证能力来源；框架包装不额外捕获 Repository、DTO 或 Context，
+inner comparer 的捕获关系由应用负责。
+新增模式的正常领域查询多一次转发，是本片为简化状态所有权接受的成本；不据此宣传零额外调用。
+不承诺 `Dictionary.Comparer` 的 CLR 类型、实例身份或它与 Default 的 ReferenceEquals；承诺所选 inner 的比较行为。
+无需新增会话 object→mode 表，也不让 Capture 借旧 DTO 猜当前选择。
+
+同实例普通 Delta 继续要求模式不变；Upgrade 也保留模式。
+0–3 必须分别检查 stored 槽兼容性和 current 创建能力：历史 ScalarDefault 单整数布局即使与当前普通 struct 相同，
+也不能默换成该 struct 的任意 Default。模式与 stored 槽或 Normalize 输出槽本身不兼容，仍在 body/DTO 阶段拒绝；
+槽合法但当前 CLR 无法按原标准模式创建 comparer，才在实际 Allocate 拒绝。模式迁移另行设计。
+4/5 则按当前规则恢复，可以有业务逻辑变化。只改比较函数而内容未变时，不要求为此制造对象 Delta。
+
+## 7. 验证、Upgrade 与领域交付
+
+| 阶段 | 所有模式 | 新增 4/5 的行为边界 |
+|---|---|---|
+| Capture | 完整冻结 key/value、canonical 唯一、根 null 与引用合法性 | Application 检查当前配置；不重建第二个领域字典验证业务代码 |
+| 独立 body / Apply | grammar、布局/模式合法、持久重复、非法操作、全消费 | 不调用当前 comparer、不构建历史 lookup 解释器 |
+| exact Revision | 所有 stored 行与完整引用都验证，包括不可达行 | 无需旧 Key CLR 或当前 Application 配置 |
+| DTO Normalize | 双槽显式 Upgrade、完整 exact 依赖预检、输出持久重复与完整引用验证 | 不触发 resolver/Equals/Hash，不验证当前业务 lookup；不可达行不要求 comparer |
+| 可达图 Allocate | 每 ID 一个准确、独立的领域实例，先全部分配 | 4 取当前 Default；5 懒解析并包装；空字典亦如此 |
+| Hydrate | 还原每个 key/value 并 TryAdd；成功后才交付完整 World | 当前碰撞或 comparer 异常失败，不覆盖、不返部分 World |
+
+0–3 的已有框架 lookup 检查继续保留；它们不需要执行旧用户代码。
+**不再承诺所有 source/current DTO 都满足任意当前业务 comparer 的唯一性。**
+历史 DTO 能读回、能升级，不代表当前领域 Dictionary 一定能接纳它；这是已采纳的数据/行为边界。
+新规则可使两个不同 canonical key 碰撞，此时可达字典 Load 失败；不可达字典不因当前业务规则而额外失败。
+库不回滚用户 comparer/resolver 的外部副作用，因此这些回调应不发布恢复中对象或修改业务世界。
+
+保留现有全 Allocate → Hydrate，不引入 Transient hook、任意回调调度或依赖拓扑。
+key 的 inline 值已经赋好，string 已完整可用，引用身份已存在；不保证其引用目标的字段/数组/List/Dictionary 内容已填好。
+业务代码只依赖这些在当前阶段就绪的比较依据。比如 GetHashCode 读取 key.Node.Id，即使 Id 持久，也超出本片恢复时机保证。
+若以后确有该需求，先评估固定“非字典先 Hydrate、字典后填充”；它仍不能自动解决字典内容间的比较依赖环。
+
+Key/Value 的 exact 布局变化继续分别选显式 Upgrade 工具，空容器也预检完整闭包，缓存命中仍核对活的 SchemaStore。
+保留 ObjectId/count/模式；仍 live 的布局升级强制 Base，随后 NoChange/Delta；不创建新 ID、不授予跨对象读取。
+升级产生重复 canonical key 在 DTO 阶段失败；仅当前业务 lookup 碰撞在 TryAdd 阶段失败，二者不能混称。
+恢复完成后导入现有 CaptureSession，继续使用同一领域实例及 owned DTO 基线；不能通过事后替换字典实例破坏身份接续。
+
+## 8. 相比旧稿删除什么，以及实现接缝
+
+| 机制 | 结论与理由 |
 |---|---|
-| G0：最小生成/闭合见证 | 普通非泛型 Dictionary 消费者、`Key<T>` 均经已有 Family 登记取得 comparer；查询不依赖 Capture/反射；跨 snapshot 来源校验成立 |
-| G1：当前比较与政策接入 | 字段规则、泛型闭合、Nullable/null、readonly/private、Transient/抛异常 Equals、identity 环、错误 comparer 诊断 |
-| G2：历史查重与字典接线 | 新策略标签、递归 exact 解释、全 source/current lookup 验证；原键寻址 Delta 原语不变 |
-| G3：历史演化与真实包 | 旧 Key CLR 删除、泛型键升级、碰撞拒绝、一次 Normalize、强制 Base→NoChange→Delta、连续提交后冷重开 |
+| SG 生成持久字段领域 comparer、子 comparer 工厂及来源证书 | 删除旧提议；用户负责当前业务相等，不再需要框架证明其与历史规则一致 |
+| 复合历史 lookup token/UTF-16 解释器 | 删除旧提议；新增模式只需要已有 canonical bytes 与实际恢复 TryAdd |
+| 完整 exact/引用验证、owned entries、键寻址 Delta | 保留；数据完整性与业务规则独立，不能随 lookup 检查一起删 |
+| 0–3 标准模式 | 保留；已有同 CLR 多策略消费者，不是旧数据兼容负担 |
+| 4/5 透明模式包装 | 新增局部机制；防止 Load→Capture→Commit 改变模式；不承载相等语义权威 |
+| 任意空 Dictionary factory | 暂不引入；comparer 足够，框架能直接创建正确空实例 |
+| 全部交给上层重建 | 不作普通路径；会让宿主接管共享引用、分配和会话身份；历史 DTO 查询可用于专门救援 |
+| 命名 Application recipe、自建容器、通用 comparer pattern 平台 | 延后；同型多自定义角色或具体 API 痛点出现时重访 |
 
-验收不要只用两个小整数证明整个闭包。至少包含：
+| 代码接缝 | 推荐改动 |
+|---|---|
+| [DictionaryKeyPolicy](../../src/DurableGraph/DictionaryKeyPolicy.cs)、[ComparerKind](../../src/DurableGraph/DictionaryComparerKind.cs) | 分开可表示 key、模式识别、stored 资格与 current comparer 创建；扩展 4/5，标准规则不泛化成任意 Default |
+| [Generator.TemplateHistory](../../src/DurableGraph.Generator/DurableSchemaGenerator.TemplateHistory.cs) | 放开已知 Durable struct key 的局部资格拦截，保留不支持形状诊断；Dictionary 双实参原本已触发 Family |
+| [StateModelRegistry](../../src/DurableGraph.StateStore/StateModelRegistry.cs)、[Dictionary snapshot](../../src/DurableGraph.StateStore/StateModelSnapshot.Dictionaries.cs) | typed 选择、一个 resolver、snapshot 配置与惰性缓存；不扩展历史 reader 工厂 |
+| [DictionaryObjectBinding](../../src/DurableGraph/DictionaryObjectBinding.cs) | Capture 识别/预检，Allocate 注入并包装当前 comparer；Hydrate 保持同实例 TryAdd |
+| [DictionaryStateReader](../../src/DurableGraph/DictionaryStateReader.cs)、[FrozenDictionaryState](../../src/DurableGraph/FrozenDictionaryState.cs) | 新模式资格、根 null/零宽检查；新模式跳过业务 lookup，保留 canonical 索引/所有编码操作 |
+| [DictionaryUpgrade](../../src/DurableGraph/StateBindingContext.DictionaryUpgrade.cs)、[RevisionDecoder](../../src/DurableGraph.StateStore/RevisionDecoder.cs)、[NormalizedRevision](../../src/DurableGraph.StateStore/NormalizedRevision.cs) | exact 与新业务边界分开；不在只读/归一化阶段执行 comparer resolver；策略保留和碰撞诊断准确 |
+| [WorldWorkspace](../../src/DurableGraph.StateStore/WorldWorkspace.cs) | 核对分配/填充及回捕边界，原则上不增加全图阶段或第二份模式状态 |
 
-1. `CellKey(int,int)`、`ItemKey<string,Mode>`、嵌套 struct/Nullable、private readonly；同值新键查找成功。
-2. Key 自定义 Equals/GetHashCode 抛异常，Transient 不同；显式框架 comparer 仍工作，Default/custom 实例 Capture 拒绝。
-3. float/Half/double 的 ±0、多个 NaN 位；null string、Empty、同内容不同实例、孤立 UTF-16 代理项。
-4. 同 string 内容换实例后 Remove+Add，实际 Key 引用保存；同值查询不会分配 ID，也不需要打开 Store。
-5. 非 string 引用叶、Key→World/Dictionary 环；目标内容修改不改变查找结果，目标 child-only Delta 不使字典产生伪变化。
-6. Nullable absent、空字典、空 struct、合法 phantom 参数；缺失/错能力在实际键操作前拒绝；零字节 Key/Value 的 count>1 在 entries 分配前拒绝。
-7. 对同一组已捕获 key，交叉核对领域 comparer 与历史 lookup 的两两等价结果；分别检查两条路径各自的 Equals⇒同 hash，不要求两种 hash 数值相同。
-8. 升级后不同 canonical body 的 lookup 冲突（包括不可达字典），完整失败且不交付 World；原 DTO/已发布基线不污染。
-9. 真实 PackageReference 两代 Key（含泛型与嵌套子版本），旧 CLR 删除后 exact 读取及显式规则工作；旧 accepted history 文件/hash 保留。
+## 9. 建议施工顺序与最小验收
 
-实施时按 repository 指南运行根 build、相关/完整 tests，并用真实包证明生成与历史交付。
-本轮是文档研究，只做源代码对照、独立审阅与文档链接检查，不把上述验收写成已通过。
+下表是下一次实施授权后的任务，不是本轮已完成的测试。
 
-## 10. 审阅结论与仍由用户决定的边界
+| 阶段 | 最小可观察结果 |
+|---|---|
+| G0：默认复合 Key 纵向闭环 | Timestamp 示例以真实 SG 的普通/generic struct 运行；Default 零配置；完整捕获/冷重开/连续三次 Commit |
+| G1：模式与当前配置 | 标准多模式保留，Application typed/resolver、缺失/错类型/异常、空实例；4/5 回捕模式稳定 |
+| G2：数据验证与历史 | 无当前 comparer 的 exact/Normalize、不运行不可达 resolver；持久重复与业务冲突分阶段拒绝；root null/零宽/非法 Delta |
+| G3：真实包与历史演进 | 两代泛型 Key/嵌套 struct，删除旧 CLR，显式双槽升级、强制 Base 后恢复增量；验收完整程序集边界 |
 
-三路独立分析分别从领域需求、最小架构、恢复语义提出方案，主线程对照源码并交叉质询。
-主要收敛：A 的严格 Default 子集可行；B 更利于普通领域类型继续演进；冷侧无需再生成一套历史领域 comparer；
-其他引用的 identity 叶纳入首片没有新增恢复阶段；comparer 来源检查不能仅靠 schema 相等。
+必要见证：
 
-没有发现需要立即砍掉 struct/generic struct、string 或 Nullable 组件的技术障碍。
-具体工厂/普通与泛型生成接线及 lookup 临时表示尚需 G0/G2 的代码见证，不宣称已验证性能或零改造成本。
-本轮只修改 6 份 Markdown；源代码对照及两路完整主稿复审完成，450 个本地链接、38 个锚点检查通过。
+1. 普通/泛型、私有 readonly、Nullable/string/identity 成分；Ignore Timestamp 的自定义 IEquatable；Transient 不同而持久状态相同不产生变化。
+2. 实际替换 key 的 Timestamp 或同内容 string 实例，生成 Remove+Add 并保留字段/引用；普通查询不 Capture、不分配 ObjectId。
+3. 同 CLR 的 Ordinal/IgnoreCase/ReferenceIdentity 并存，单元素无碰撞例也保留查询差异；标准模式不调用 Application resolver。
+4. Application 可以使用按位浮点 comparer 保存 ±0/不同 NaN；不可误走旧 ScalarDefault 的 lookup 检查；同型不同 custom 按统一当前配置恢复的边界有见证。
+5. Application resolver 返回 Default、Ordinal 或用户 comparer；Load 后 NoChange、value Delta 及下一轮冷重开均保持模式 5。
+6. CurrentDefault 持有模式 4 的恢复/回捕；历史 inline 从 struct 到 enum 的可表示变化不误分类为 0；反向无法承载标准 0 时明确拒绝而非默换业务规则。
+7. typed 精确项优先、唯一 resolver 按闭合类型成功缓存；泛型 comparer 位于数组/List/泛型外层仍一次闭合；异常、null、错类型不得回退。
+8. 空的实际 Application Capture/Allocate 缺配置失败；exact 读取和不可达 Normalize 不调用 resolver；全部引用/Schema 要求仍验证。
+9. 两键因丢弃 Transient 或 Empty 规范化产生同 canonical body 时拒绝；零宽 key/value 的 count>1 在 entries 分配前拒绝。
+10. 旧 DTO key 经显式升级后 canonical 冲突在 Normalize 失败；canonical 不同但当前 comparer 合并时在 TryAdd 失败，旧 DTO 仍可读取且不交付半个 World。
+11. Key→World/Dictionary 的 identity 环、共享数组/容器及 child-only 修改沿用 ObjectId；不得靠字典填充顺序偶然让引用内容 hash 测试通过。
+12. 真正 PackageReference 两代 Key：旧 CLR 删除、既有 accepted history 文件/hash 保留、完整 key/value Upgrade 与所有相关生成路径。
+13. 不改 Schema、不触发 Upgrade，只在两代程序中改变当前 Equals/comparer：旧 exact DTO 仍可读，Normalize 不调用 comparer，原本不同的键在当前 TryAdd 碰撞而使 Load 失败。
 
-建议用户采纳的核心选择只有两个：
+实现时运行根 solution build、相关/完整 tests 及真实包回归。正文只记录设计和源码依据，不将上述见证宣称为已通过。
 
-1. **全部持久字段构成键，显式框架 comparer 可以独立于类型自己的 Equals。** 若必须保留 Default 构造且类型满足严格资格，可选更窄的 A；若必须兼容领域自定义相等，则须另定业务比较合同，A 也不能覆盖。
-2. **先接受构造时显式传 comparer，继续保留 BCL Dictionary。** 若无参/默认构造的防误用更重要，采用 C 的固定语义容器外观，但比较核心仍沿用 B。
+## 10. 审阅结论与后续裁决
 
-ValueTuple/record struct 继续保留明确后继，不为本片承诺其外观；按字段选比较器、大小写模式、引用内容比较均可在真实需求下单独取舍。
+本轮先由需求/易用性、最小架构、恢复语义三路独立分析，再交叉检查标准策略丢失、Application 回捕漂移和不可达恢复边界。
+同 CLR 多标准策略有现成回归；因此保留选择标签比无条件删除更符合当前功能。
+新增模式包装只为解决恢复模式在下一次 Capture 改变的具体反例，不恢复旧稿的 comparer 语义证明体系。
+三路完整主稿复审完成；定稿补清 inner 的用户捕获边界、格式/领域失败阶段、共享 comparer 实例及不改 Schema 的行为变更见证。
+未发现需要新增恢复阶段或 comparer 平台的设计阻塞；未执行产品实验，不声称性能数据。
+本轮仅修改 8 份 Markdown；集成差异已审阅，510 个本地链接、46 个锚点及 git diff --check 通过。
+归档与 `77e4341` 原稿核对一致，仅增加归档说明和调整相对链接；未运行 dotnet 构建或产品测试。
 
-## 11. 证据入口
+推荐以本文作为下一片施工基础。只有以下需求变化才应重新选择结构：
 
-- 本库：[DB-054](0054-dictionary-content-object-slice.md)、[DictionaryObjectBinding](../../src/DurableGraph/DictionaryObjectBinding.cs)、
-  [StateModelRegistry](../../src/DurableGraph.StateStore/StateModelRegistry.cs)、[Dictionary snapshot](../../src/DurableGraph.StateStore/StateModelSnapshot.Dictionaries.cs)、
-  [生成形状检查](../../src/DurableGraph.Generator/DurableSchemaGenerator.Ancestry.cs)、[持久成员枚举](../../src/DurableGraph.Generator/DurableSchemaGenerator.cs)。
-- BCL Dictionary 允许选择 comparer，默认使用类型默认相等，要求键的 hash 依据在存入期间稳定；这支持“显式规则”与“普通 Default”必须分开的判断。
-  [Microsoft Dictionary 文档](https://learn.microsoft.com/en-us/dotnet/api/system.collections.generic.dictionary-2?view=net-10.0)。
-- record struct 合成相等涉及实例字段及其默认 comparer，且允许用户实现；其外观不证明与 Durable 持久字段集合相同。
-  [C# 规范 §16.5.3.3](https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/language-specification/structs#16533-equality-members)。
-- ValueTuple 默认逐分量比较；这与本文固定的持久字段/身份规则不能无条件等同。
-  [ValueTuple.Equals 文档](https://learn.microsoft.com/en-us/dotnet/api/system.valuetuple-2.equals?view=net-10.0)。
-- 浮点 Equals 的 NaN/零行为与原始位比较不同，查找 Hash 需配套。
-  [Double.Equals 文档](https://learn.microsoft.com/en-us/dotnet/api/system.double.equals?view=net-10.0)。
+- **同闭合类型的多种 Application 配置必须分别恢复**：需要持久角色标记或显式外部身份规则，不能在当前单策略合同下假装支持。
+- **comparer 必须读取引用目标内容**：需要确定恢复阶段及允许依赖，可能先做固定字典后填充；不能仅靠“不读 Transient”推导安全。
+- **必须保留历史业务查找语义**：需要另外的代码/策略保留合同，不能要求本片新增模式承担。
+
+ValueTuple/record struct 先完成其值布局、成员标注和历史能力，再自然使用当前 Default/自定义比较。
+Tuple 的元素名称不应成为键身份；record 的合成比较可能包含未持久字段，应用仍须遵守本片状态/行为合同。
+SortedDictionary 的排序与 OrderedDictionary 的顺序状态独立设计，不因共享 key/value DTO 就自动获得支持。
