@@ -18,13 +18,12 @@
 
 ## 当前焦点
 
-[DB-059 跨程序集模型目录与类型组合](../docs/design-branches/0059-cross-assembly-model-composition-slice.md) 已贯通
-metadata nominal / 动态表示参数、显式 Family 导出和普通 Model/reader 的名义证据桥接。
-两代独立模型包验证只替换目标库 DLL，AppModel/Host DLL 及 nominal-only World history 不变，升级后继续保存。
-G0–G3 已通过整体验收；固定外部 inline/base 模板导入仍未开放，history/wire 格式不变。
-当前没有另一份已采纳而待实施的工作单，后续从路线图选择具体模型或工作流缺口。
-DateTime 的 Local/DST 保存合同单独待定；ValueTuple 的多 child exact 布局与参数来源问题保留在 DB-057 §8。
-SchemaStore 自举仍待元数据引导与联合视图的具体裁决；不自动按 BCL 类型清单继续排期。
+[DB-059 跨程序集模型目录与类型组合](../docs/design-branches/0059-cross-assembly-model-composition-slice.md) 已完成；
+当前实现仍拒绝固定外部 inline/base，history/wire 格式不变。
+下一片推荐 [DB-060 跨程序集固定 inline 值与只读历史依赖](../docs/design-branches/0060-cross-assembly-inline-history-slice.md)，
+状态 Proposed，尚未实施：让 `RemotePoint` 可直接成为字段，消费方只读依赖库模板，复用其公开 DTO/body/projection，
+分别保留 history 所有权。问题、范围、替代路线与 G0–G3 验收集中在该文档，待采纳后施工。
+外部 base 的声明层访问另片处理；ValueTuple、DateTime 和 SchemaStore 自举仍按路线图的各自触发条件选择。
 
 ## 当前能力与实际边界
 
