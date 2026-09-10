@@ -1,6 +1,6 @@
 # DurableGraph 产品开发工作集
 
-> 校准：2026-09-10，[DB-058 日期时间标量](../docs/design-branches/0058-temporal-scalar-value-slice.md) 已贯通现有值/历史管线；验收结果集中在分片记录。本文只维护当前能力、边界与续工入口。
+> 校准：2026-09-10，[DB-059 跨程序集模型组合](../docs/design-branches/0059-cross-assembly-model-composition-slice.md) 的能力与验收集中在分片记录。本文只维护当前能力、边界与续工入口。
 > 文档不是实现授权；事实以当前源码、测试和工具输出为准。
 
 ## 从这里继续
@@ -18,12 +18,11 @@
 
 ## 当前焦点
 
-[DB-058 DateOnly / TimeOnly / DateTimeOffset](../docs/design-branches/0058-temporal-scalar-value-slice.md) 已贯通静态 body、
-Nullable/泛型/容器、history 与显式升级。DateTimeOffset 保留 clock ticks 与 offset，同瞬间改 offset 也保存；
-新写 history v9，旧 history 原样保留；对象/目录/容器格式版本不变。两代真实包验证旧 inline CLR 删除与升级续写。
-下一片推荐 [DB-059 跨程序集模型目录与类型组合](../docs/design-branches/0059-cross-assembly-model-composition-slice.md)（Proposed，待采纳）：
-外部 nominal 与动态表示参数、显式 Family 导出、普通 Model/Definition 登记桥接，以及独立模型包的历史升级见证。
-本轮仅规划，跨程序集产品支持尚未开放；固定外部 inline/base 模板导入不在该提案内。
+[DB-059 跨程序集模型目录与类型组合](../docs/design-branches/0059-cross-assembly-model-composition-slice.md) 已贯通
+metadata nominal / 动态表示参数、显式 Family 导出和普通 Model/reader 的名义证据桥接。
+两代独立模型包验证只替换目标库 DLL，AppModel/Host DLL 及 nominal-only World history 不变，升级后继续保存。
+G0–G3 已通过整体验收；固定外部 inline/base 模板导入仍未开放，history/wire 格式不变。
+当前没有另一份已采纳而待实施的工作单，后续从路线图选择具体模型或工作流缺口。
 DateTime 的 Local/DST 保存合同单独待定；ValueTuple 的多 child exact 布局与参数来源问题保留在 DB-057 §8。
 SchemaStore 自举仍待元数据引导与联合视图的具体裁决；不自动按 BCL 类型清单继续排期。
 
@@ -32,7 +31,7 @@ SchemaStore 自举仍待元数据引导与联合视图的具体裁决；不自�
 | 层 | 已验证能力 | 尚未闭合的边界 |
 |---|---|---|
 | [DurableGraph](DurableGraph/DurableGraph.csproj) | immutable Schema/exact DAG；统一 ObjectBinding、ObjectLayout、Capture/refs/恢复目录；SZ/rank 2–4 数组、List 与 Dictionary owned 状态；静态 StateEquals、数组稀疏/列表区间/字典键寻址 Delta、默认 Adaptive 与三种显式 List writer；独立 historical reader | 其他 BCL、数组协变；持久发布由 StateStore 拥有 |
-| [Generator](DurableGraph.Generator/DurableGraph.Generator.csproj) / [Build](DurableGraph.Build/DurableGraph.Build.csproj) | class/struct（含 record struct）开放模板、显式 enum、readonly DTO/静态 body、Capture/Hydrate、泛型继承与递归 Nullable/数组/List/Dictionary 组合；history v9；三参 Upgrade/旧二参适配、值规则/局部依赖 adapter | 其他 CLR 值类型、其他 BCL；跨程序集生成规则 |
+| [Generator](DurableGraph.Generator/DurableGraph.Generator.csproj) / [Build](DurableGraph.Build/DurableGraph.Build.csproj) | class/struct（含 record struct）开放模板、显式 enum、readonly DTO/静态 body、Capture/Hydrate、泛型继承与递归 Nullable/数组/List/Dictionary 组合；跨程序集 nominal/动态参数与显式 Family；history v9；三参 Upgrade/旧二参适配、值规则/局部依赖 adapter | 其他 CLR 值类型、其他 BCL；固定外部 inline/base 模板与跨程序集规则发现 |
 | [StateStore](DurableGraph.StateStore/DurableGraph.StateStore.csproj) | 统一闭合 Schema/数组/List/Dictionary 目录与整数依赖、单批次登记、Base v4 ID 头；完整 stored/current 引用验证、可达图两阶段恢复；公开 PrepareNew/fixed-Parent Prepare；GraphRepository 单 head/持久 WorldId 与 GraphSession 同实例 Commit；升级 Base/Remove | 无 branch/Reset/根替换或联合 Store 视图 |
 | [Storage](DurableGraph.StateStore.Storage/DurableGraph.StateStore.Storage.csproj) | AppendDurably 原 lease 屏障；local Base/Delta records、wire v3、exact Revision live map、Parent/prior 校验、object-first 原始重建链及实际 payload H；Base 精确/Delta 上界计量；真实 Segment/RBF 冷重开 | 不解码 typed body；不拥有持久 roots、类型目录或发布 head；重复读取暂未缓存 |
 | [Serialization](DurableGraph.StateStore.Serialization/DurableGraph.StateStore.Serialization.csproj) | 字节原语、string 内容 codec、拥有 raw bytes 的 PreparedBaseBody/PreparedDeltaBody、显式 body 的 typed slot、早期元素 ref 循环 | 完整数组/List 对象操作位于 Runtime；其他 BCL 内容 codec 尚无 |
@@ -40,7 +39,7 @@ SchemaStore 自举仍待元数据引导与联合视图的具体裁决；不自�
 容易混淆的限制：
 
 - SG DTO/body 支持递归 inline struct 与 19 种标量：bool、byte/sbyte、short/ushort、int/uint、long/ulong、char、Half、float、double、Guid、decimal、TimeSpan、DateOnly、TimeOnly、DateTimeOffset；string、受支持 durable class、数组、List 和 Dictionary 引用槽保存非泛型 ObjectId；字节层仍编码 UInt32。
-  `[DurableType]` class/struct 限同编译、顶层、非 record 的 partial class 链或显式 partial struct/record struct（包括 readonly），支持泛型；
+  SG 在声明所属编译中为顶层、非 record 的 partial class 链或显式 partial struct/record struct（包括 readonly）生成代码，支持泛型；
   支持 readonly 持久字段和没有无参构造器的领域类。RuntimeHelpers 分配、SG Hydrate/声明层 UnsafeAccessor
   不执行实例构造器或字段初始化表达式；Transient 由用户交付后重建。
 - Guid/decimal/TimeSpan 为内建值叶子，tag 19/20/21；DTO 直接存 CLR 值，无独立 Schema/对象行。
@@ -86,6 +85,13 @@ SchemaStore 自举仍待元数据引导与联合视图的具体裁决；不自�
   同 T 多处 exact 不一致、错误 arity/kind、未知定义及不支持的 CLR 闭合拒绝；nominal 边不递归展开对象 body。
   UpgradePlan 持有展平去重的 exact Schema requirement set；缓存命中在 callback 前统一核对后续已注册 Schema，
   冲突报告 owner endpoint 到具体 base/inline 字段的稳定路径。普通 binding 缓存仍复用同一闭包算法；共享 DAG 不按树重复展开。
+- 跨程序集 public 顶层 Durable 类型可进入 nominal 表达及动态表示参数；包括外部 class、容器元素、
+  `LocalBox<RemotePoint>` / `RemoteBox<LocalPoint>` 及本地 `InlineBox<T>` 闭合外部值。固定外部 inline/base 仍拒绝。
+  `DurableGraphGenerateDefinitions=true` 强制现有 Family 路径；未设置/false 保持自动选择。聚合器 `DurableDefinitions`
+  为 internal，各库以公开 Register/ RegisterReaders facade 登记；history 独立，不扫描程序集或复制外部模板。
+  nominal 查询优先 Definition，缺失时允许精确相同 nominal 的已登记普通 Model/reader，仅证明 ReferenceObject，
+  不调用目标工厂或补历史模板；普通匹配与 Upgrade 反推共用，实际 exact reader 仍须存在。
+  目标单独升版不改变 nominal-only owner；动态 inline 仍要求 owner 升版。程序集拆包不增加 CLR 二进制兼容保证。
 - 新 `DurableUpgrade` 方法使用非泛型 static host 中可访问的三参方法；运行时优先闭合 owner 特例，否则选择通用边。
   整条相邻链在该对象首次业务调用前绑定；中间 exact 布局来自显式 DTO 表示、已注册 Schema 或唯一历史推导，缺失则拒绝。
   不使用 latest 补缺，不自动升级 struct，失败不尝试另一业务规则。每对象/相邻边独立 UpgradeContext 含 ObjectId 及完整 Source/TargetObjectLayout；Schema 访问器仅适用于 durable owner。
@@ -224,6 +230,7 @@ DurableGraph runtime 也引用 Serialization，单一 runtime PackageReference �
 
 | 准备修改 | 先查源码/测试，再按需读合同 |
 |---|---|
+| 跨程序集 nominal/动态参数、显式 Family 与稳定消费者 DLL | [DB-059](../docs/design-branches/0059-cross-assembly-model-composition-slice.md)、[metadata 分类](DurableGraph.Generator/DurableSchemaGenerator.CrossAssembly.cs)、[真实包](../experiments/PackageConsumerProbe/CrossAssemblyConsumer/README.md) |
 | DateOnly/TimeOnly/DateTimeOffset、完整 offset 与 history v9 | [DB-058](../docs/design-branches/0058-temporal-scalar-value-slice.md)、[静态值操作](DurableGraph/TemporalScalarStateValues.cs)、[真实包](../experiments/PackageConsumerProbe/TemporalScalarConsumer/README.md) |
 | Guid/decimal/TimeSpan、非连续 builtin tag 与 history v8 | [DB-057](../docs/design-branches/0057-bcl-scalar-value-slice.md)、[静态值操作](DurableGraph/BclScalarStateValues.cs)、[真实包](../experiments/PackageConsumerProbe/BclScalarConsumer/README.md) |
 | record struct、backing storage 分类与字段投影 | [DB-056](../docs/design-branches/0056-record-struct-state-slice.md)、[字段分类](DurableGraph.Generator/DurableSchemaGenerator.Records.cs)、[投影](DurableGraph.Generator/DurableSchemaGenerator.GenericProjection.cs)、[真实包](../experiments/PackageConsumerProbe/RecordConsumer/README.md) |

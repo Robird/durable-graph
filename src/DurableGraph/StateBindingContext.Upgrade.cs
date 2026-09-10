@@ -162,11 +162,11 @@ public abstract partial class StateBindingContext {
             return DurableFieldInfo.Reference(1, nominal);
         }
         if (nominal.Kind != TypeExprKind.Named || !nominal.IsClosed) { throw new InvalidDataException("A value operand must have a closed nominal identity."); }
-        StateDefinitionBinding definition = GetDefinition(nominal.DefinitionId!);
-        if (definition.Kind == SchemaKind.ReferenceObject) {
+        if (GetNamedDeclarationKind(nominal) == SchemaKind.ReferenceObject) {
             if (stateType != typeof(ObjectId)) { throw new InvalidDataException("A durable reference DTO operand must contain an object ID."); }
             return DurableFieldInfo.Reference(1, nominal);
         }
+        StateDefinitionBinding definition = GetDefinition(nominal.DefinitionId!);
         Type stateDefinition = stateType.IsGenericType ? stateType.GetGenericTypeDefinition() : stateType;
         StateSchemaTemplate[] candidates = definition.Templates.Where(template => template.StateTypeDefinition == stateDefinition).ToArray();
         if (candidates.Length != 1) { throw new InvalidDataException("The explicit inline DTO does not uniquely identify retained history."); }
@@ -210,8 +210,7 @@ public abstract partial class StateBindingContext {
         }
         if (nominal.Kind == TypeExprKind.Builtin) { return new(1, nominal.BuiltinTag); }
         if (nominal.IsArray || nominal.IsList || nominal.IsDictionary) { return DurableFieldInfo.Reference(1, nominal); }
-        StateDefinitionBinding definition = GetDefinition(nominal.DefinitionId!);
-        if (definition.Kind == SchemaKind.ReferenceObject) { return DurableFieldInfo.Reference(1, nominal); }
+        if (GetNamedDeclarationKind(nominal) == SchemaKind.ReferenceObject) { return DurableFieldInfo.Reference(1, nominal); }
         if (!version.HasValue) {
             throw new InvalidDataException("An intermediate inline value has no unique historical layout; declare a closed owner conversion.");
         }

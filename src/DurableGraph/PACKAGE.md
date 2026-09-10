@@ -31,17 +31,23 @@ versions; they do not enumerate all closed combinations. Missing a generic owner
 therefore produce different first layouts in independent empty repositories. Existing conflicting
 definitions are rejected; a key alone is not a cross-repository equivalence guarantee.
 
-The supported closed value universe is bool, byte/sbyte, short/ushort, int/uint, long/ulong, char,
-Half, float, double, string, same-compilation durable classes and recursively inline durable structs.
-Arrays, BCL containers, nullable/enum/decimal, boxed identity, CLR nested or record types, ref structs,
-cross-assembly models and NativeAOT guarantees remain outside this slice. CLR generic constraints
+Supported scalars include bool, byte/sbyte, short/ushort, int/uint, long/ulong, char, Half, float,
+double, Guid, decimal, TimeSpan, DateOnly, TimeOnly and DateTimeOffset. Supported compositions include
+string and durable class references, inline durable structs/record structs/enums, Nullable values,
+zero-based SZ/rank 2–4 arrays, exact BCL List and Dictionary content objects. DateTime, ValueTuple,
+boxed identity, CLR nested types, record classes, ref structs, array covariance and NativeAOT
+guarantees remain outside the supported contract. CLR generic constraints
 are retained and enforced; `allows ref struct` is rejected, and a constraint does not make an
 otherwise unsupported closed value serializable.
 
 ### Definition registration and generic state hosts
 
 A compilation containing generic durable declarations/history, explicit `[DurableUpgrade]`
-registrations, or value-upgrade declarations uses the generated Family surface for all its durable declarations. Register the
+registrations, record structs/enums, Nullable compositions, or value-upgrade declarations uses the
+generated Family surface for all its durable declarations. A model library can also explicitly
+request this surface with `<DurableGraphGenerateDefinitions>true</DurableGraphGenerateDefinitions>`.
+Unset or false retains automatic selection; false does not disable an otherwise required Family path.
+Register the
 definition factories once; the operation snapshot closes actual supported types as needed:
 
 ```csharp
@@ -61,12 +67,61 @@ against the complete stored Schema. The framework does not discover models by as
 
 Historical DTOs are named `Atelia.DurableGraph.Generated.Family_<UTF8HexDefinitionId>.Vn<TState…>`.
 The host itself is non-generic and is independent of the current domain type. DTO type parameters
-represent only unresolved state values: references use UInt32 IDs, structs use exact nested DTOs,
+represent only unresolved state values: references use ObjectId, structs use exact nested DTOs,
 and unused nominal parameters need not produce DTO parameters. The generated execution templates
 separately use `IStateOps<TState>` and `IValueProjection<TDomain,TState>` static helpers. Their CLR
 types are derived execution metadata, not persisted type identities; known fields still call their
 operations directly. Resolve a closed Schema through its reader/model binding rather than assuming
 a generic DTO CLR type identifies the entire Schema or slot semantics.
+
+### Composing model libraries
+
+Each model project references `Atelia.DurableGraph` directly to receive the generator and build
+assets, owns its `.dgschema` history, and exposes a normal public registration facade:
+
+```csharp
+public static class DomainCatalog {
+    public static void Register(IStateModelRegistration models) {
+        Atelia.DurableGraph.Generated.DurableDefinitions.Register(models);
+    }
+    public static void RegisterReaders(IStateReaderRegistration readers) {
+        Atelia.DurableGraph.Generated.DurableDefinitions.Register(readers);
+    }
+}
+```
+
+The generated `DurableDefinitions` aggregator is internal to that assembly. The application calls
+each library's facade before creating or loading a session, rather than resolving generated type
+names across assemblies. `IStateModelRegistration` also accepts definitions, so the public facade
+signature can remain stable when a library switches from ordinary model registration to Family
+generation. Existing ordinary class libraries can wrap their local `__DurableState.RegisterModel`
+entry instead. Family/DTO/Definition types keep their existing visibility.
+For public stored-exact decoding, register each library's definitions/readers through its
+`RegisterReaders` facade into `StateReaderRegistry`; a reader's nominal evidence does not grant
+the ability to decode another missing historical version.
+
+An application can reference external durable classes or use external durable values through
+arrays, List, Dictionary and generic representation parameters. For example, `LocalBox<RemotePoint>`,
+`RemoteBox<LocalPoint>`, and a local `InlineBox<T>` closed over `RemotePoint` use registered factories
+without importing the dependency's generated DTO names. A plain struct library can enable
+`DurableGraphGenerateDefinitions` to export the required current/historical value factories.
+
+Direct fixed external inline fields such as `RemotePoint` or `RemotePoint?`, and local classes
+derived from an external durable base, remain unsupported: their generated bodies need an external
+exact template that this slice does not import. Existing CLR shapes, generic constraints, reference
+and comparer restrictions still apply. Model identity is the durable definition ID, not an assembly
+name; two libraries cannot independently claim the same identity in one operation catalog.
+
+Each referenced object retains its own Schema version. Updating its library does not change a
+nominal-only owner Schema, but preserving an already compiled consumer also requires compatible
+public CLR types and methods. Dynamic inline dependencies continue to require explicit owner
+version changes and Upgrade when their complete layout changes. Missing registration or retained
+history fails explicitly; the current implementation does not substitute for a historical reader.
+Changing generation mode may require updating library-internal DTO/helper references; it does not
+change persistent Schema identity, history or body encoding.
+
+See the [cross-assembly consumer](../../experiments/PackageConsumerProbe/CrossAssemblyConsumer/README.md)
+for independent model packages, public facades, two-generation history and an unchanged consumer DLL.
 
 Use a normal C# alias for readable historical types. For a declaration with ID `Box`, whose V2 adds
 an integer field after the retained value, a generic adjacent conversion is:
@@ -171,8 +226,8 @@ evidence are recorded in [DB-039 §8](../../docs/design-branches/0039-composable
 
 ### Retained non-generic generated helpers
 
-Pure non-generic compilations without explicit owner/value upgrade declarations retain the established
-generated API below. Introducing the Family path above changes generated names for the whole
+Compilations that neither select Family automatically nor request `DurableGraphGenerateDefinitions`
+retain the established generated API below. Introducing the Family path above changes generated names for the whole
 compilation; update direct DTO/helper references to Family aliases and definition registration.
 Existing non-generic two-parameter Upgrade methods can still be adapted to the common invocation
 contract, while new generic and explicitly registered providers use the three-parameter form.

@@ -8,6 +8,11 @@ This experiment verifies the reusable delivery boundary rather than project-to-p
 The consumer project has one `PackageReference` to `Atelia.DurableGraph`; it contains no manual
 analyzer reference, `AdditionalFiles`, build hook, or `Import`.
 
+The [cross-assembly consumer](CrossAssemblyConsumer/README.md) runs through `Run-CrossAssemblyProbe.ps1`:
+independent DomainLibrary and AppModel packages expose public registration catalogs, and a pure Host saves
+a shared cyclic graph. A compatible V2 library replacement leaves AppModel/Host DLL hashes and World history
+unchanged, restores deleted-inline-type historical DTOs, upgrades only the target, and resumes Base/Delta saves.
+
 Consumers use the runtime's non-generic `ObjectId` for captured/decoded identities, reference DTO
 slots and UpgradeContext tracing. Storage rows and probe-owned address sidecars retain numeric
 `uint` IDs; those boundaries use `.Value` or `new ObjectId(...)` explicitly. Ordinary numeric

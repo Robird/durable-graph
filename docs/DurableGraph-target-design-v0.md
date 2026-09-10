@@ -97,6 +97,18 @@ Source Generator 负责可在编译期确定的类型知识与机械代码，框
 跨对象升级、多根 API、Transient hook 和 boxed value 的重访条件由[路线图](DurableGraph-research-roadmap.md#4-明确延后及重访条件)
 维护。非零下界和非 SZ rank-1 数组按不支持处理，不作为默认后续待办。
 
+### 跨程序集模型组合
+
+领域库各自拥有声明、Schema history 和生成执行能力；应用通过库的公开登记 facade 将它们放进同一冻结目录。
+名义引用和动态表示参数可以跨程序集组合，不要求消费方复制依赖库的 history 或为其再生成一份 DTO。
+每个引用对象自己的 Base 决定其 exact 版本；目标升版不改变 nominal-only 引用方的 Schema。
+动态 inline 参数仍沿原规则传播完整布局变化，作者负责受影响 owner 的版本与显式 Upgrade。
+
+固定外部 inline/base 模板的导入不由此自动开放。程序集拆包也不授予任意 CLR 二进制兼容：
+保留消费者 DLL 仍需保持其使用的公共 CLR 类型和成员。缺少定义、reader 或升级能力时明确拒绝，
+不用当前源码代替历史代码，不用程序集名为相同 DefinitionId 提供额外身份隔离。
+具体边界及独立包见证见 [DB-059](design-branches/0059-cross-assembly-model-composition-slice.md)。
+
 ### 捕获状态与领域行为分离
 
 - 保存先从领域图捕获与完整精确 Schema 配对的版本化状态 DTO，形成捕获候选图（候选 DTO 视图）；后续比较、

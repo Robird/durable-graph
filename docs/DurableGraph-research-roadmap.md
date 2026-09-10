@@ -41,10 +41,10 @@ DB-038 的泛型 Schema/history、开放生成、保存恢复与通用/闭合 ow
 B/D/H 分别指本轮精确 Base payload、Delta payload 上界、已有对象重建链的实际 payload 字节；
 均排除 ObjectId、ObjectHeadMap 目录与共享 Revision Frame 结构。
 
-下一片推荐 [DB-059 跨程序集模型目录与类型组合](design-branches/0059-cross-assembly-model-composition-slice.md)
-（Proposed，待采纳）。用独立模型库与应用的具体消费者开放 external nominal / 动态表示参数，
-补齐显式 Family 导出及普通 Model 的 nominal 检查桥接；固定外部 inline/base 模板导入另排。
-这不是完整跨程序集支持或已实施能力，范围、替代方案与 G0–G3 验收集中在该提案。
+[DB-059 跨程序集模型目录与类型组合](design-branches/0059-cross-assembly-model-composition-slice.md) 已贯通
+external nominal / 动态表示参数、显式 Family 导出及普通 Model/reader 的 nominal 检查；能力与证据从该片进入。
+后续跨程序集工作限于固定外部 inline/base 模板、外部规则发现等剩余边界，不再把整个类型组合路径列为待实现。
+当前没有另一份已采纳而待实施的工作单；下一片按实际建模或工作流缺口选择。
 [DB-058 DateOnly / TimeOnly / DateTimeOffset](design-branches/0058-temporal-scalar-value-slice.md) 已贯通现有值/历史管线；
 能力与验收从 PROJECT-STATE/分片记录进入。剩余 DateTime 的保存合同、ValueTuple 和跨程序集各自独立。
 [DB-057](design-branches/0057-bcl-scalar-value-slice.md) 的 Guid/decimal/TimeSpan 主体与 history v8 已实现，
@@ -63,7 +63,7 @@ List 高效 Diff/Patch 已完成；额外性能工作按 [§3.2](#32-list-差分
 | 对象版本解释与保存来源 | Base 表示 ID 可解析 exact 布局与已登记历史 reader；完整 ObjectHeadMap 中 external object heads 的来源、候选对象身份连续性仍需产品 Save/Load 合同，不能由 Revision Parent 声明一致推导全局身份认证 |
 | 保存相等性与真实估算 | 同版 DTO 的浮点按位、引用槽按 ID、inline 值递归融合 Delta 已采纳；DB-043 数组复用元素操作，BCL 容器另定。已准备 body 计量见 [DB-029](design-branches/0029-prepared-object-revision-planning-slice.md)，ID 头见 [DB-045](design-branches/0045-persisted-representation-id-slice.md)；新增容器继续按实际对象 payload 计量 |
 | Schema 规范表示和持久引用 | 开放模板/参数与绑定模型的剩余问题见 §3.1；不再将已统一的闭合目录作为待办。未来 SchemaHash 与一般类型家族约束随消费者裁决，不用 GetHashCode 作持久身份 |
-| 跨程序集与一般类型形状 | 跨程序集 nominal / 动态表示参数的局部方案见 DB-059；固定外部 inline/base 历史材料、跨程序集业务规则扫描和独立闭合历史账本仍不开放。DateTime 的 Local/DST 合同、native int 等各自按需求选择；boxed value identity 已排除 MVP |
+| 跨程序集与一般类型形状 | DB-059 后，固定外部 inline/base 模板仍须明确导出材料、history 所有权和 helper 调用合同；有直接外部值字段/跨库继承的消费者时重访。跨程序集业务规则扫描与独立闭合历史账本分别裁决，不与 nominal 组合混同。DateTime 的 Local/DST 合同、native int 等各自按需求选择；boxed value identity 已排除 MVP |
 | 多态与运行时注册扩展 | 已标记 class 基类到登记派生实例按 DB-034 合同；DB-043 统一框架 object 参数不授予 object/interface 通配字段。数组协变还需空数组的历史元素 ancestry 证据，和跨程序集发现分别后继；不能自动回退成声明基类的 codec |
 | 捕获 BCL 内容的所有权 | 数组使用 owned frozen 元素 buffer，inline struct 递归捕获成标量/ID；后续容器同样不能以浅复制代替冻结，须按其内容模型验证 |
 | 根与持久目录扩展 | 单 WorldId/Revision 发布已闭合；后续仅在真实需求下选择 null/清空/替换、命名 branch 与 Reset，不建设多根 API |

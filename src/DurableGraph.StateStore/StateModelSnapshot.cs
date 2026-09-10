@@ -94,6 +94,19 @@ internal sealed partial class StateModelSnapshot : StateBindingContext {
         _definitions.TryGetValue(definitionId, out StateDefinitionBinding? definition) ? definition :
         throw new InvalidDataException($"No declaration factory is registered for {definitionId}.");
 
+    protected override SchemaKind GetNamedDeclarationKind(TypeExpr nominal) {
+        // Definition errors are authoritative; an existing concrete model must not mask them.
+        // Only an exact closed nominal match can replace missing reference declaration metadata.
+        // Explicit readers supply the same evidence for a read-only catalog without current models.
+        // Do not close current factories here: recursive reference graphs stop at this boundary.
+        if (nominal.Kind == TypeExprKind.Named && nominal.IsClosed &&
+            !_definitions.ContainsKey(nominal.DefinitionId!) &&
+            (_models.ContainsKey(nominal) || _readers.Keys.Any(key => key.Type == nominal))) {
+            return SchemaKind.ReferenceObject;
+        }
+        return base.GetNamedDeclarationKind(nominal);
+    }
+
     public override bool TryGetSchema(TypeExpr type, int version, out DurableSchema? schema) {
         if (_schemas is not null && _schemas.TryGet(new SchemaKey(type, version), out schema)) { return true; }
         schema = null;

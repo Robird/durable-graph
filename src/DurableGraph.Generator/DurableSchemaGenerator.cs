@@ -158,6 +158,11 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true);
 
+    private static readonly DiagnosticDescriptor InvalidDefinitionsOption = new(
+        id: "DG0022", title: "Invalid Definition generation option",
+        messageFormat: "DurableGraphGenerateDefinitions must be true or false; found '{0}'",
+        category: "DurableGraph.Generator", defaultSeverity: DiagnosticSeverity.Error, isEnabledByDefault: true);
+
     private static readonly SymbolDisplayFormat QualifiedNameFormat = new(
         globalNamespaceStyle: SymbolDisplayGlobalNamespaceStyle.Omitted,
         typeQualificationStyle: SymbolDisplayTypeQualificationStyle.NameAndContainingTypesAndNamespaces,
@@ -186,11 +191,14 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
                     file.GetText(cancellationToken)?.ToString()));
 
         context.RegisterSourceOutput(
-            durableTypes.Collect().Combine(schemaHistoryFiles.Collect()).Combine(context.CompilationProvider),
+            durableTypes.Collect().Combine(schemaHistoryFiles.Collect()).Combine(context.CompilationProvider)
+                .Combine(context.AnalyzerConfigOptionsProvider.Select(static (options, _) =>
+                    options.GlobalOptions.TryGetValue("build_property.DurableGraphGenerateDefinitions", out string? value) ? value : null)),
             static (productionContext, input) =>
                 GenerateSchemas(
                     productionContext,
-                    input.Left.Left,
+                    input.Left.Left.Left,
+                    input.Left.Left.Right,
                     input.Left.Right,
                     input.Right));
     }
@@ -199,7 +207,12 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
         SourceProductionContext context,
         ImmutableArray<INamedTypeSymbol> candidateTypes,
         ImmutableArray<SchemaHistoryText> schemaHistoryFiles,
-        Compilation compilation) {
+        Compilation compilation, string? definitionsOption) {
+        bool forceDefinitions = false;
+        if (!string.IsNullOrEmpty(definitionsOption) && !bool.TryParse(definitionsOption, out forceDefinitions)) {
+            context.ReportDiagnostic(Diagnostic.Create(InvalidDefinitionsOption, Location.None, definitionsOption));
+            return;
+        }
         // Resolve from the actual core library, not a source-defined System.Half lookalike.
         INamedTypeSymbol? halfType = compilation.GetSpecialType(SpecialType.System_Object)
             .ContainingAssembly.GetTypeByMetadataName("System.Half");
@@ -243,7 +256,7 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
         }
 
         if (validTypes.Count > 0 || (types.Count == 0 && hasValueUpgradeRegistrations)) {
-            if (hasUpgradeRegistrations || hasValueUpgradeRegistrations || UsesGenericTemplates(validTypes, history)) {
+            if (forceDefinitions || hasUpgradeRegistrations || hasValueUpgradeRegistrations || UsesGenericTemplates(validTypes, history)) {
                 if (ValidateGenericTemplateHistory(context, validTypes, history)) {
                     GenerateGenericStates(context, validTypes, history, historyParsedSuccessfully, compilation);
                 }
@@ -627,7 +640,7 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
         bool hasErrors = false;
         if (type.TypeKind == TypeKind.Class && type.BaseType is not null && type.BaseType.Arity > 0 &&
             !HasMetadataName(type.BaseType, DurableBaseMetadataName) &&
-            !TryGetTypePattern(type.BaseType, type, halfType, listType, dictionaryType, out _)) {
+            !TryGetTypePattern(type.BaseType, type, halfType, listType, dictionaryType, compilation, out _)) {
             context.ReportDiagnostic(Diagnostic.Create(InvalidTypeShape, GetSourceLocation(type), typeName));
             return null;
         }
@@ -740,7 +753,7 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
                 out string? typeTag,
                 out int typeTagValue,
                 out string? fieldTypeName) &&
-                !TryGetNominalReference(field.Type, type,
+                !TryGetNominalReference(field.Type, type, compilation,
                     context.CancellationToken, out typeTag, out typeTagValue, out fieldTypeName, out targetSchemaId) &&
                 !TryGetInlineValue(field.Type, type, context.CancellationToken,
                     out typeTag, out typeTagValue, out fieldTypeName, out inlineSchema) &&
@@ -748,7 +761,7 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
                 !TryGetArrayField(field.Type, out typeTag, out typeTagValue, out fieldTypeName) &&
                 !TryGetListField(field.Type, listType, out typeTag, out typeTagValue, out fieldTypeName) &&
                 !TryGetDictionaryField(field.Type, dictionaryType, out typeTag, out typeTagValue, out fieldTypeName) &&
-                !TryGetNullableField(field.Type, type, halfType, listType, dictionaryType, context.CancellationToken,
+                !TryGetNullableField(field.Type, type, halfType, listType, dictionaryType, compilation, context.CancellationToken,
                     out typeTag, out typeTagValue, out fieldTypeName, out inlineSchema)) {
                 context.ReportDiagnostic(Diagnostic.Create(
                     UnsupportedFieldType,
@@ -758,7 +771,7 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
                 hasErrors = true;
                 continue;
             }
-            if (!TryGetTypePattern(field.Type, type, halfType, listType, dictionaryType, out valuePattern)) {
+            if (!TryGetTypePattern(field.Type, type, halfType, listType, dictionaryType, compilation, out valuePattern)) {
                 context.ReportDiagnostic(Diagnostic.Create(UnsupportedFieldType, GetSourceLocation(field),
                     field.Name, field.Type.ToDisplayString(QualifiedNameFormat)));
                 hasErrors = true;
@@ -903,7 +916,7 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
     }
 
     private static bool TryGetNominalReference(
-        ITypeSymbol fieldType, INamedTypeSymbol owner,
+        ITypeSymbol fieldType, INamedTypeSymbol owner, Compilation compilation,
         System.Threading.CancellationToken cancellationToken,
         out string? typeTag, out int typeTagValue, out string? fieldTypeName, out string? targetSchemaId) {
         typeTag = null;
@@ -911,8 +924,9 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
         fieldTypeName = null;
         targetSchemaId = null;
         if (fieldType is not INamedTypeSymbol target || target.TypeKind != TypeKind.Class ||
-            !HasDurableTypeShape(target, cancellationToken) ||
-            !SymbolEqualityComparer.Default.Equals(target.ContainingAssembly, owner.ContainingAssembly)) {
+            !(SymbolEqualityComparer.Default.Equals(target.ContainingAssembly, owner.ContainingAssembly)
+                ? HasDurableTypeShape(target, cancellationToken)
+                : HasExternalDurableNominalShape(target, compilation))) {
             return false;
         }
         AttributeData? attribute = GetAttribute(target.GetAttributes(), DurableTypeAttributeMetadataName);

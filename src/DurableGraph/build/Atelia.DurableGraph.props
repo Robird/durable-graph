@@ -3,4 +3,7 @@
     <DurableGraphSchemaHistoryDirectory Condition="'$(DurableGraphSchemaHistoryDirectory)' == ''">$(MSBuildProjectDirectory)/DurableGraphSchemaHistory</DurableGraphSchemaHistoryDirectory>
     <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
   </PropertyGroup>
+  <ItemGroup>
+    <CompilerVisibleProperty Include="DurableGraphGenerateDefinitions" />
+  </ItemGroup>
 </Project>

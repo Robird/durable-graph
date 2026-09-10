@@ -30,12 +30,12 @@ public sealed partial class DurableSchemaGenerator {
         type is INamedTypeSymbol named && named.OriginalDefinition.SpecialType == SpecialType.System_Nullable_T;
 
     private static bool TryGetNullableField(ITypeSymbol type, INamedTypeSymbol owner,
-        INamedTypeSymbol? halfType, INamedTypeSymbol? listType, INamedTypeSymbol? dictionaryType, System.Threading.CancellationToken cancellationToken,
+        INamedTypeSymbol? halfType, INamedTypeSymbol? listType, INamedTypeSymbol? dictionaryType, Compilation compilation, System.Threading.CancellationToken cancellationToken,
         out string? tag, out int number, out string? name, out SchemaReference? inline) {
         tag = null; number = 0; name = null; inline = null;
         if (!IsNullableValue(type)) return false;
         ITypeSymbol child = ((INamedTypeSymbol)type).TypeArguments[0];
-        if (!TryGetTypePattern(type, owner, halfType, listType, dictionaryType, out _)) return false;
+        if (!TryGetTypePattern(type, owner, halfType, listType, dictionaryType, compilation, out _)) return false;
         if (child is INamedTypeSymbol named && GetAttribute(named.GetAttributes(), DurableTypeAttributeMetadataName) is not null &&
             !TryGetInlineValue(child, owner, cancellationToken, out _, out _, out _, out inline)) return false;
         tag = "Nullable"; number = 18; name = type.ToDisplayString(FullyQualifiedNameFormat);
@@ -70,7 +70,7 @@ public sealed partial class DurableSchemaGenerator {
         return true;
     }
 
-    private static bool TryGetTypePattern(ITypeSymbol type, INamedTypeSymbol owner, INamedTypeSymbol? halfType, INamedTypeSymbol? listType, INamedTypeSymbol? dictionaryType, out TypePattern? pattern) {
+    private static bool TryGetTypePattern(ITypeSymbol type, INamedTypeSymbol owner, INamedTypeSymbol? halfType, INamedTypeSymbol? listType, INamedTypeSymbol? dictionaryType, Compilation compilation, out TypePattern? pattern) {
         pattern = null;
         if (TryGetTypeTag(type, halfType, out _, out int builtin, out _)) {
             pattern = TypePattern.Builtin(builtin); return true;
@@ -81,18 +81,18 @@ public sealed partial class DurableSchemaGenerator {
         }
         if (IsNullableValue(type)) {
             ITypeSymbol child = ((INamedTypeSymbol)type).TypeArguments[0];
-            if (!child.IsValueType || !TryGetTypePattern(child, owner, halfType, listType, dictionaryType, out TypePattern? element)) return false;
+            if (!child.IsValueType || !TryGetTypePattern(child, owner, halfType, listType, dictionaryType, compilation, out TypePattern? element)) return false;
             try { pattern = TypePattern.NullableOf(element!); return true; }
             catch (ArgumentException) { return false; }
         }
         if (type is IArrayTypeSymbol array) {
             if (array.Rank > 4 || (array.Rank == 1 && !array.IsSZArray) ||
-                !TryGetTypePattern(array.ElementType, owner, halfType, listType, dictionaryType, out TypePattern? element)) return false;
+                !TryGetTypePattern(array.ElementType, owner, halfType, listType, dictionaryType, compilation, out TypePattern? element)) return false;
             try { pattern = TypePattern.ArrayOf(element!, array.Rank); return true; }
             catch (ArgumentException) { return false; }
         }
         if (IsBclList(type, listType)) {
-            if (!TryGetTypePattern(((INamedTypeSymbol)type).TypeArguments[0], owner, halfType, listType, dictionaryType, out TypePattern? element)) return false;
+            if (!TryGetTypePattern(((INamedTypeSymbol)type).TypeArguments[0], owner, halfType, listType, dictionaryType, compilation, out TypePattern? element)) return false;
             try { pattern = TypePattern.ListOf(element!); return true; }
             catch (ArgumentException) { return false; }
         }
@@ -102,19 +102,20 @@ public sealed partial class DurableSchemaGenerator {
             // Key representation uses the ordinary supported slot closure. Domain equality is
             // selected independently at Runtime; only a root Nullable key remains excluded.
             if (IsNullableValue(keyType)) return false;
-            if (!TryGetTypePattern(keyType, owner, halfType, listType, dictionaryType, out TypePattern? key) ||
-                !TryGetTypePattern(dictionary.TypeArguments[1], owner, halfType, listType, dictionaryType, out TypePattern? value)) return false;
+            if (!TryGetTypePattern(keyType, owner, halfType, listType, dictionaryType, compilation, out TypePattern? key) ||
+                !TryGetTypePattern(dictionary.TypeArguments[1], owner, halfType, listType, dictionaryType, compilation, out TypePattern? value)) return false;
             try { pattern = TypePattern.DictionaryOf(key!, value!); return true; }
             catch (ArgumentException) { return false; }
         }
         if (type is not INamedTypeSymbol named || named.Arity > 32 || named.IsRefLikeType || named.ContainingType is not null ||
-            !SymbolEqualityComparer.Default.Equals(named.ContainingAssembly, owner.ContainingAssembly)) return false;
+            (!SymbolEqualityComparer.Default.Equals(named.ContainingAssembly, owner.ContainingAssembly) &&
+                !HasExternalDurableNominalShape(named, compilation))) return false;
         AttributeData? attribute = GetAttribute(named.GetAttributes(), DurableTypeAttributeMetadataName);
         if (attribute is null || attribute.ConstructorArguments.Length != 2 ||
             attribute.ConstructorArguments[0].Value is not string id || string.IsNullOrWhiteSpace(id) || !CanEncodeStrictUtf8(id)) return false;
         TypePattern[] arguments = new TypePattern[named.TypeArguments.Length];
         for (int index = 0; index < arguments.Length; index++) {
-            if (!TryGetTypePattern(named.TypeArguments[index], owner, halfType, listType, dictionaryType, out TypePattern? argument)) return false;
+            if (!TryGetTypePattern(named.TypeArguments[index], owner, halfType, listType, dictionaryType, compilation, out TypePattern? argument)) return false;
             arguments[index] = argument!;
         }
         try { pattern = TypePattern.Named(id, arguments); return true; }

@@ -38,7 +38,7 @@ public sealed partial class DurableSchemaGenerator {
             AppendGenericFamilyDefinition(output, family.Value, types, compilation, context);
             output.AppendLine("}");
         }
-        output.AppendLine("public static class DurableDefinitions {");
+        output.AppendLine("internal static class DurableDefinitions {");
         output.Append("    public static void Register(").Append(RuntimeName).AppendLine("IStateDefinitionRegistration definitions) {");
         output.AppendLine("        global::System.ArgumentNullException.ThrowIfNull(definitions);");
         foreach (string id in families.Keys) output.Append("        definitions.Register(").Append(FamilyName(id)).AppendLine(".Definition);");

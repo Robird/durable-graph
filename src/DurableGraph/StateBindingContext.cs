@@ -40,6 +40,23 @@ public abstract partial class StateBindingContext : IStateModelResolver {
     public abstract StateDefinitionBinding GetDefinition(string definitionId);
     public abstract bool TryGetSchema(TypeExpr type, int version, out DurableSchema? schema);
 
+    /// <summary>Checks a closed named identity without binding the referenced object's body.</summary>
+    /// <remarks>
+    /// A catalog may supply reference-only evidence from an already registered exact nominal model or reader
+    /// when no Definition exists. This does not provide retained templates, readers or upgrades.
+    /// </remarks>
+    protected virtual SchemaKind GetNamedDeclarationKind(TypeExpr nominal) {
+        ArgumentNullException.ThrowIfNull(nominal);
+        if (nominal.Kind != TypeExprKind.Named || !nominal.IsClosed) {
+            throw new InvalidDataException("A named value requires a closed nominal identity.");
+        }
+        StateDefinitionBinding definition = GetDefinition(nominal.DefinitionId!);
+        if (definition.Arity != nominal.Arguments.Length) {
+            throw new InvalidDataException("A named value has the wrong generic arity.");
+        }
+        return definition.Kind;
+    }
+
     public StateModelBinding ResolveCurrentModel(Type domainType) =>
         TryGetCurrentModel(domainType, out StateModelBinding? model) ? model! :
         throw new InvalidDataException($"No current model is registered for {domainType}.");
@@ -109,9 +126,8 @@ public abstract partial class StateBindingContext : IStateModelResolver {
         void MatchValue(DurableFieldInfo slot, TypeExpr expression, int? inlineVersion, bool requiresFixedVersion) {
             TypeExpr nominal = Substitute(expression, rootArguments);
             if (nominal.Kind == TypeExprKind.Named) {
-                StateDefinitionBinding valueDefinition = GetDefinition(nominal.DefinitionId!);
-                if (valueDefinition.Arity != nominal.Arguments.Length ||
-                    (valueDefinition.Kind == SchemaKind.InlineValue) != (slot.TypeTag == TypeTag.InlineValue)) {
+                SchemaKind valueKind = GetNamedDeclarationKind(nominal);
+                if ((valueKind == SchemaKind.InlineValue) != (slot.TypeTag == TypeTag.InlineValue)) {
                     throw new InvalidDataException("A parameter or named field has the wrong declaration kind or generic arity.");
                 }
             }
