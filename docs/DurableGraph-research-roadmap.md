@@ -41,7 +41,10 @@ DB-038 的泛型 Schema/history、开放生成、保存恢复与通用/闭合 ow
 B/D/H 分别指本轮精确 Base payload、Delta payload 上界、已有对象重建链的实际 payload 字节；
 均排除 ObjectId、ObjectHeadMap 目录与共享 Revision Frame 结构。
 
-当前没有已设计并等待施工的下一分片；后续从 §3/§4 的具体需求选择。
+下一分片推荐 [DB-058 DateOnly / TimeOnly / DateTimeOffset](design-branches/0058-temporal-scalar-value-slice.md)，
+**Proposed，待采纳**。沿现有 builtin 路径贯通完整公开表示、静态 body、组合、history 与显式升级，
+重点验收同一瞬间只改 offset 的真实变化，以及字典业务比较与持久键配对的区别。
+施工边界与验收集中在该文档；不包含 DateTime、ValueTuple 或跨程序集。
 [DB-057](design-branches/0057-bcl-scalar-value-slice.md) 的 Guid/decimal/TimeSpan 主体与 history v8 已实现，
 能力与验收从 PROJECT-STATE/分片记录进入，不再列为待办。
 
@@ -58,7 +61,7 @@ List 高效 Diff/Patch 已完成；额外性能工作按 [§3.2](#32-list-差分
 | 对象版本解释与保存来源 | Base 表示 ID 可解析 exact 布局与已登记历史 reader；完整 ObjectHeadMap 中 external object heads 的来源、候选对象身份连续性仍需产品 Save/Load 合同，不能由 Revision Parent 声明一致推导全局身份认证 |
 | 保存相等性与真实估算 | 同版 DTO 的浮点按位、引用槽按 ID、inline 值递归融合 Delta 已采纳；DB-043 数组复用元素操作，BCL 容器另定。已准备 body 计量见 [DB-029](design-branches/0029-prepared-object-revision-planning-slice.md)，ID 头见 [DB-045](design-branches/0045-persisted-representation-id-slice.md)；新增容器继续按实际对象 payload 计量 |
 | Schema 规范表示和持久引用 | 开放模板/参数与绑定模型的剩余问题见 §3.1；不再将已统一的闭合目录作为待办。未来 SchemaHash 与一般类型家族约束随消费者裁决，不用 GetHashCode 作持久身份 |
-| 跨程序集与一般类型形状 | 其他日期时间值（DateTime/DateTimeOffset、DateOnly/TimeOnly）、native int 等分别待定；不自动沿 DB-057 扩范围。跨编译 helper 可见性、外部历史祖先仍待具体消费者；当前同编译泛型支持边界见 DB-038，boxed value identity 已排除 MVP |
+| 跨程序集与一般类型形状 | DateOnly/TimeOnly/DateTimeOffset 的下一片提案见 DB-058；DateTime 的 Local/DST 保存合同单独待定，不能默认为 ToBinary 无损快照。native int 等继续按需求选择。跨编译 helper 可见性、外部历史祖先仍待具体消费者；当前同编译泛型支持边界见 DB-038，boxed value identity 已排除 MVP |
 | 多态与运行时注册扩展 | 已标记 class 基类到登记派生实例按 DB-034 合同；DB-043 统一框架 object 参数不授予 object/interface 通配字段。数组协变还需空数组的历史元素 ancestry 证据，和跨程序集发现分别后继；不能自动回退成声明基类的 codec |
 | 捕获 BCL 内容的所有权 | 数组使用 owned frozen 元素 buffer，inline struct 递归捕获成标量/ID；后续容器同样不能以浅复制代替冻结，须按其内容模型验证 |
 | 根与持久目录扩展 | 单 WorldId/Revision 发布已闭合；后续仅在真实需求下选择 null/清空/替换、命名 branch 与 Reset，不建设多根 API |
@@ -122,6 +125,7 @@ DB-051 之外的性能工作以实际轨迹或测量问题触发，不自动扩�
 
 | 延后项 | 何时重访 / 届时要回答的问题 |
 |---|---|
+| DateTime 的完整保存合同 | 真实模型需要 DateTime 时，选择是否限制 UTC/Unspecified、接受公开状态规范化，或保留更完整的 Local ambiguous-DST 信息；需跨时区/DST 见证。三者公开行为不同，不随 DB-058 开放。平台依据及候选见 [DB-058 §3.3](design-branches/0058-temporal-scalar-value-slice.md#33-为什么-datetime-留在另一个问题中) |
 | ObjectId 数字回收 | 单调分配配合其他机制开发后，再定义候选隔离、retire/reuse 时机与恢复；可评估 StateJournal SlabBitmap/SlotPool，不能复用旧对象 Delta 链 |
 | 字典比较的进一步能力 | 同闭合类型多 Application 角色需要实例选择信息，引用内容比较需要确定恢复阶段，保留历史业务规则需要独立能力合同。均按真实需求重访；根 Nullable Key、ValueTuple 外观和标准模式迁移不随 DB-055/056 开放。比较合同仍沿 [DB-055 §10](design-branches/0055-composite-dictionary-key-design.md#10-审阅结论与后续裁决) |
 | 后续映射与 BCL 集合 | ValueTuple 先解决多 child exact 槽、参数来源、Item/Rest 组合及完整历史能力，调查入口见 [DB-057 §8](design-branches/0057-bcl-scalar-value-slice.md#8-valuetuple-后继保留的问题)，再组合现有字典；Nullable 根 key 另排。SortedDictionary 另定排序比较，OrderedDictionary 另定顺序状态，Set 等逐类型排期；自建外观仅在明确 API 痛点下重访 |

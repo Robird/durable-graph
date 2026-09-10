@@ -21,9 +21,10 @@
 [DB-057 Guid / decimal / TimeSpan 内建值槽](../docs/design-branches/0057-bcl-scalar-value-slice.md) 已贯通静态 body、
 Nullable/泛型/容器、history 与显式升级。decimal 保留完整公开表示，字典领域比较与持久差分分层；
 新写 history v8，旧 history 原样保留；对象/目录/容器格式版本不变。两代真实包验证旧 inline CLR 删除与升级续写。
-当前没有另一份已采纳而待实施的工作单；下一片从[路线图](../docs/DurableGraph-research-roadmap.md)的具体需求选择。
-ValueTuple 的多 child exact 布局与参数来源问题保留在 DB-057 §8，作为独立后继；其他日期时间值、
-跨程序集和 SchemaStore 自举仍分别按需求重访。
+下一片建议为 [DB-058 DateOnly / TimeOnly / DateTimeOffset](../docs/design-branches/0058-temporal-scalar-value-slice.md)，
+状态 Proposed，尚未采纳或实施：复用 builtin 叶子闭合日期、日内时刻与带偏移时间戳，完整保留 offset。
+DateTime 的 Local/DST 保存合同单独待定；ValueTuple 的多 child exact 布局与参数来源问题保留在 DB-057 §8。
+跨程序集和 SchemaStore 自举仍按具体需求重访；不自动按 BCL 类型清单继续排期。
 
 ## 当前能力与实际边界
 
