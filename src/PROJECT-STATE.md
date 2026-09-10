@@ -18,14 +18,12 @@
 
 ## 当前焦点
 
-[DB-056 record struct 持久值](../docs/design-branches/0056-record-struct-state-slice.md) 已支持 positional/readonly/generic、
-显式字段与 property backing storage，复用 Family、InlineValue、容器和显式 Upgrade。
-Capture/Hydrate 直达字段，不调用属性、构造器或初始化器；误标/未知存储明确拒绝。
-普通 struct 与 record 外观互换不改变同 FieldId/完整槽的 Schema；两代真实包已验证删除旧 record CLR 后的升级与续写。
-[DB-055](../docs/design-branches/0055-composite-dictionary-key-design.md) 的当前 Default/Application comparer 与完整 Key DTO 差分继续沿用。
-持久格式及既有能力保持下表/下文所述；完成证据从对应分片进入，不在当前焦点累积历史。
-ValueTuple、同型多 Application 角色、引用内容比较、跨程序集及 SchemaStore 自举继续按
-[路线图](../docs/DurableGraph-research-roadmap.md)的独立需求与触发条件选择。
+[DB-056 record struct](../docs/design-branches/0056-record-struct-state-slice.md) 已完成，能力见下文，验收从该分片进入。
+下一片推荐 [DB-057 Guid / decimal / TimeSpan 内建值槽](../docs/design-branches/0057-bcl-scalar-value-slice.md)，
+状态为 Proposed，尚未实施：三种叶子共同贯通静态 body、Nullable/泛型/容器、history 与显式升级。
+重点是保留 decimal 完整表示，并使其持久差分与 Dictionary 的领域数值比较继续分层。
+ValueTuple 的多 child exact 布局与参数来源问题已记入该片 §8，作为独立后继，不是 SG 无法支持。
+其他候选和重访条件仍由[路线图](../docs/DurableGraph-research-roadmap.md)维护；当前能力/格式不因规划改变。
 
 ## 当前能力与实际边界
 

@@ -41,8 +41,14 @@ DB-038 的泛型 Schema/history、开放生成、保存恢复与通用/闭合 ow
 B/D/H 分别指本轮精确 Base payload、Delta payload 上界、已有对象重建链的实际 payload 字节；
 均排除 ObjectId、ObjectHeadMap 目录与共享 Revision Frame 结构。
 
-目前没有已设计并等待施工的下一分片。后续从 §3/§4 的具体需求选择，
-不把已完成的复合 Key 和 record struct 主体重新列入待办；验收从 PROJECT-STATE/分片记录进入。
+下一片推荐 [DB-057 Guid、decimal 与 TimeSpan 内建标量值槽](design-branches/0057-bcl-scalar-value-slice.md)，
+状态为 Proposed，等待采纳与实施；不把规划当成已完成能力。
+三种无引用叶子共同贯通现有静态 body、Nullable/泛型/容器、历史绑定和显式升级，
+共享 builtin tag / history / 包验收的改造成本。decimal 推荐保留完整公开表示，
+字典领域比较与持久差分继续分层；候选比较、格式建议及 G0–G3 验收集中在该分片。
+
+ValueTuple 并非不可实现，但 record 已提供复合值建模路径，Tuple 还需一次多 child exact 布局扩展；
+关键反例与后继调查保留在 [DB-057 §8](design-branches/0057-bcl-scalar-value-slice.md#8-valuetuple-后继保留的问题)。
 
 List 高效 Diff/Patch 已完成；额外性能工作按 [§3.2](#32-list-差分算法选型与设计)的实测条件重访。
 
@@ -54,7 +60,7 @@ List 高效 Diff/Patch 已完成；额外性能工作按 [§3.2](#32-list-差分
 | 对象版本解释与保存来源 | Base 表示 ID 可解析 exact 布局与已登记历史 reader；完整 ObjectHeadMap 中 external object heads 的来源、候选对象身份连续性仍需产品 Save/Load 合同，不能由 Revision Parent 声明一致推导全局身份认证 |
 | 保存相等性与真实估算 | 同版 DTO 的浮点按位、引用槽按 ID、inline 值递归融合 Delta 已采纳；DB-043 数组复用元素操作，BCL 容器另定。已准备 body 计量见 [DB-029](design-branches/0029-prepared-object-revision-planning-slice.md)，ID 头见 [DB-045](design-branches/0045-persisted-representation-id-slice.md)；新增容器继续按实际对象 payload 计量 |
 | Schema 规范表示和持久引用 | 开放模板/参数与绑定模型的剩余问题见 §3.1；不再将已统一的闭合目录作为待办。未来 SchemaHash 与一般类型家族约束随消费者裁决，不用 GetHashCode 作持久身份 |
-| 跨程序集与一般类型形状 | Nullable 与显式 enum 已按 DB-052/053 支持。跨编译 helper 可见性、外部历史祖先、decimal/native int 等分别待定；当前同编译泛型支持边界见 DB-038，boxed value identity 已排除 MVP |
+| 跨程序集与一般类型形状 | Guid/decimal/TimeSpan 的内建值建议见 DB-057；其余日期时间/native int 等独立后继。跨编译 helper 可见性、外部历史祖先仍待具体消费者；当前同编译泛型支持边界见 DB-038，boxed value identity 已排除 MVP |
 | 多态与运行时注册扩展 | 已标记 class 基类到登记派生实例按 DB-034 合同；DB-043 统一框架 object 参数不授予 object/interface 通配字段。数组协变还需空数组的历史元素 ancestry 证据，和跨程序集发现分别后继；不能自动回退成声明基类的 codec |
 | 捕获 BCL 内容的所有权 | 数组使用 owned frozen 元素 buffer，inline struct 递归捕获成标量/ID；后续容器同样不能以浅复制代替冻结，须按其内容模型验证 |
 | 根与持久目录扩展 | 单 WorldId/Revision 发布已闭合；后续仅在真实需求下选择 null/清空/替换、命名 branch 与 Reset，不建设多根 API |
@@ -120,7 +126,7 @@ DB-051 之外的性能工作以实际轨迹或测量问题触发，不自动扩�
 |---|---|
 | ObjectId 数字回收 | 单调分配配合其他机制开发后，再定义候选隔离、retire/reuse 时机与恢复；可评估 StateJournal SlabBitmap/SlotPool，不能复用旧对象 Delta 链 |
 | 字典比较的进一步能力 | 同闭合类型多 Application 角色需要实例选择信息，引用内容比较需要确定恢复阶段，保留历史业务规则需要独立能力合同。均按真实需求重访；根 Nullable Key、ValueTuple 外观和标准模式迁移不随 DB-055/056 开放。比较合同仍沿 [DB-055 §10](design-branches/0055-composite-dictionary-key-design.md#10-审阅结论与后续裁决) |
-| 后续映射与 BCL 集合 | ValueTuple 先解决内建值布局、Item/Rest 组合及历史能力，再组合现有字典；Nullable 根 key 另排。SortedDictionary 另定排序比较，OrderedDictionary 另定顺序状态，Set 等逐类型排期；自建外观仅在明确 API 痛点下重访 |
+| 后续映射与 BCL 集合 | ValueTuple 先解决多 child exact 槽、参数来源、Item/Rest 组合及完整历史能力，调查入口见 [DB-057 §8](design-branches/0057-bcl-scalar-value-slice.md#8-valuetuple-后继保留的问题)，再组合现有字典；Nullable 根 key 另排。SortedDictionary 另定排序比较，OrderedDictionary 另定顺序状态，Set 等逐类型排期；自建外观仅在明确 API 痛点下重访 |
 | SchemaStore 后续能力 | MVP 单调注册已实现；联合 Commit/Ref 及复用 StateStore 的演进候选见下节，Dictionary 与内建类型 codec 完整后重访。多 writer、压缩/GC 另待真实需求 |
 | Schema/表示日志自动修复与分段 | 遇到真实坏尾恢复或容量需求时；无额外确认水位不能自动区分未完成尾部和已确认末帧损坏，当前严格拒绝。重访时先冻结故障模型，不绕过完整注册一致性 |
 | 发布恢复保证扩展 | DB-036 已闭合同实例 Commit、expected Parent、数据/发布屏障及严格重开；遇到真实可用性要求时再设计坏尾自动修复、OS crash/power loss 与目录持久性，不能默默回退旧 head |
