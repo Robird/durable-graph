@@ -36,7 +36,7 @@ public sealed partial class DurableSchemaGenerator {
     private static bool HasDurableTypeShape(
         INamedTypeSymbol type,
         System.Threading.CancellationToken cancellationToken) {
-        if ((type.TypeKind != TypeKind.Class && type.TypeKind != TypeKind.Struct && type.TypeKind != TypeKind.Enum) || type.IsRefLikeType || type.IsRecord || type.Arity > 32 ||
+        if ((type.TypeKind != TypeKind.Class && type.TypeKind != TypeKind.Struct && type.TypeKind != TypeKind.Enum) || type.IsRefLikeType || (type.IsRecord && type.TypeKind != TypeKind.Struct) || type.Arity > 32 ||
             type.ContainingType is not null || type.DeclaringSyntaxReferences.Length == 0) {
             return false;
         }

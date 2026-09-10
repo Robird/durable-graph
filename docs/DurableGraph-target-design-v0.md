@@ -43,7 +43,7 @@ Source Generator 负责可在编译期确定的类型知识与机械代码，框
 - 领域建模需要易用的复合值 Key；允许当前用户 Equals/GetHashCode 或外置 comparer 决定领域查找，
   包括忽略仍需完整保存的 Timestamp 等字段。库不保存任意比较代码的历史，也不证明任意业务方法都能安全恢复。
   映射先以白名单 BCL Dictionary 适配验证主体，但该 CLR 容器选择保持实验性，后续可改为近似的自定义 IDictionary 实现。
-  record struct/ValueTuple 等具体外观独立扩展，不把首片键白名单作为最终功能上限；后续工作见[路线图](DurableGraph-research-roadmap.md)。
+  record struct 按下面的值合同支持；ValueTuple 等具体外观独立扩展，不把首片键白名单作为最终功能上限；后续工作见[路线图](DurableGraph-research-roadmap.md)。
   映射保存无序逻辑键值；容量、hash/bucket 与枚举顺序不持久化。比较器的实现与实例选择是两回事，
   必要的选择信息可以保存，不能仅凭函数是 Transient 就假定同类型的所有字典采用相同行为。
   字典查找相等性和持久键相等性分开：后者按同 exact key 槽的 canonical Base bytes 对应条目；不同 ID/bits 的键可以 Remove+Add。
@@ -52,6 +52,11 @@ Source Generator 负责可在编译期确定的类型知识与机械代码，框
   不静默覆盖或合并。历史 DTO 可读取不代表当前业务规则必能接纳。框架已知标准策略可以继续提前校验；
   单个 snapshot 中同一闭合 Dictionary 类型的 Application 实例采用一份当前恢复规则；不承诺还原任意实例的不同自定义配置。
   Default 和框架标准选择独立保留，具体分层合同见 [DB-055](design-branches/0055-composite-dictionary-key-design.md)。
+- 显式 DurableType 的同编译、顶层 partial record struct 复用普通 struct 的 InlineValue 合同，支持 readonly/mutable、
+  positional/body 与泛型。位置参数、自动属性及 field-backed 属性的真实存储须以 field-target DurableField/Transient 分类，
+  不调用 getter/setter/构造器/初始化器。持久 Schema 不包含 record 关键字、backing 名或合成方法；同 FieldId/完整槽的外观变化不伪升版。
+  record 合成 Equals 不识别 Transient 标注，框架不替用户改写业务比较；Key 仍须满足当前恢复阶段的比较边界。
+  生成入口及误标诊断见 [DB-056](design-branches/0056-record-struct-state-slice.md)，不据此开放 record class 或一般 property 序列化。
 - 支持 CLR `Nullable<T>`，T 为受支持标量、Durable inline struct 或显式登记 enum，包括泛型 struct；可作为字段、
   泛型实参和数组/List 元素。DTO 使用 unmanaged `NullableState<TState>`，absent 不访问内部状态或产生引用边。
   Nullable 无独立对象身份或业务版本，内部 exact 布局变化沿原 inline 规则传播到 owner；

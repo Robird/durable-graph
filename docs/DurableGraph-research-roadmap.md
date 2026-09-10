@@ -18,9 +18,9 @@
 [DB-054 Dictionary 内容对象](design-branches/0054-dictionary-content-object-slice.md) 已完成白名单范围的保存、键寻址 Delta 与历史双槽升级。
 有限复合值 Key 与当前 comparer 见 [DB-055](design-branches/0055-composite-dictionary-key-design.md) 的实现及验收记录；
 领域比较采用当前业务代码，DTO 按全部持久字段独立配对。
-下一片推荐 [DB-056 record struct](design-branches/0056-record-struct-state-slice.md)：
-补齐 positional/readonly/generic 外观与 backing storage 的显式分类，复用现有 InlineValue 和历史链。
-该方案尚待采纳；ValueTuple、同型多 Application 角色及引用内容比较仍各自独立，不预建通用容器平台。
+[DB-056 record struct](design-branches/0056-record-struct-state-slice.md) 已补齐 positional/readonly/generic 外观、
+backing storage 显式分类及现有 InlineValue/历史链的组合。
+ValueTuple、同型多 Application 角色及引用内容比较仍各自独立，不预建通用容器平台。
 开放模板方案的评估结论与重访条件见 §3.1。
 DB-036 单 World/单 head 工作会话已实现；branch/Reset、联合 Store 视图及更强恢复保证仍独立排期。
 MVP 库内加载顺序为 exact 重建 → 单对象 Upgrade → 分配实例 → 填充/连接引用 → 完整交付 World；
@@ -41,10 +41,8 @@ DB-038 的泛型 Schema/history、开放生成、保存恢复与通用/闭合 ow
 B/D/H 分别指本轮精确 Base payload、Delta payload 上界、已有对象重建链的实际 payload 字节；
 均排除 ObjectId、ObjectHeadMap 目录与共享 Revision Frame 结构。
 
-下一片的具体推荐方案为 [DB-056](design-branches/0056-record-struct-state-slice.md)，**Proposed，尚未实施**。
-它承接已选复合值建模方向，推荐同编译、顶层 partial record struct，包含常用 positional/readonly/generic 形式；
-字段投影、生成 API 边界、历史及真实包验收统一维护在该文档，采纳后再施工。
-不把 DB-055 的已完成主体重新列入待办。
+目前没有已设计并等待施工的下一分片。后续从 §3/§4 的具体需求选择，
+不把已完成的复合 Key 和 record struct 主体重新列入待办；验收从 PROJECT-STATE/分片记录进入。
 
 List 高效 Diff/Patch 已完成；额外性能工作按 [§3.2](#32-list-差分算法选型与设计)的实测条件重访。
 
@@ -121,8 +119,8 @@ DB-051 之外的性能工作以实际轨迹或测量问题触发，不自动扩�
 | 延后项 | 何时重访 / 届时要回答的问题 |
 |---|---|
 | ObjectId 数字回收 | 单调分配配合其他机制开发后，再定义候选隔离、retire/reuse 时机与恢复；可评估 StateJournal SlabBitmap/SlotPool，不能复用旧对象 Delta 链 |
-| 字典比较的进一步能力 | 同闭合类型多 Application 角色需要实例选择信息，引用内容比较需要确定恢复阶段，保留历史业务规则需要独立能力合同。均按真实需求重访；根 Nullable Key、ValueTuple 外观和标准模式迁移不随 DB-055 开放。record 后继提案见 §2；比较合同仍沿 [DB-055 §10](design-branches/0055-composite-dictionary-key-design.md#10-审阅结论与后续裁决) |
-| 后续映射与 BCL 集合 | ValueTuple 先解决内建值布局、Item/Rest 组合及历史能力，再组合现有字典；record 已进入 DB-056 提案，Nullable 根 key 另排。SortedDictionary 另定排序比较，OrderedDictionary 另定顺序状态，Set 等逐类型排期；自建外观仅在明确 API 痛点下重访 |
+| 字典比较的进一步能力 | 同闭合类型多 Application 角色需要实例选择信息，引用内容比较需要确定恢复阶段，保留历史业务规则需要独立能力合同。均按真实需求重访；根 Nullable Key、ValueTuple 外观和标准模式迁移不随 DB-055/056 开放。比较合同仍沿 [DB-055 §10](design-branches/0055-composite-dictionary-key-design.md#10-审阅结论与后续裁决) |
+| 后续映射与 BCL 集合 | ValueTuple 先解决内建值布局、Item/Rest 组合及历史能力，再组合现有字典；Nullable 根 key 另排。SortedDictionary 另定排序比较，OrderedDictionary 另定顺序状态，Set 等逐类型排期；自建外观仅在明确 API 痛点下重访 |
 | SchemaStore 后续能力 | MVP 单调注册已实现；联合 Commit/Ref 及复用 StateStore 的演进候选见下节，Dictionary 与内建类型 codec 完整后重访。多 writer、压缩/GC 另待真实需求 |
 | Schema/表示日志自动修复与分段 | 遇到真实坏尾恢复或容量需求时；无额外确认水位不能自动区分未完成尾部和已确认末帧损坏，当前严格拒绝。重访时先冻结故障模型，不绕过完整注册一致性 |
 | 发布恢复保证扩展 | DB-036 已闭合同实例 Commit、expected Parent、数据/发布屏障及严格重开；遇到真实可用性要求时再设计坏尾自动修复、OS crash/power loss 与目录持久性，不能默默回退旧 head |

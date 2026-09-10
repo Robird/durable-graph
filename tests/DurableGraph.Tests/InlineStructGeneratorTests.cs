@@ -66,7 +66,6 @@ public sealed partial class DurableSchemaGeneratorTests {
 
     [Theory]
     [InlineData("ref partial struct Value")]
-    [InlineData("partial record struct Value")]
     public void UnsupportedStructShapesFailClosed(string declaration) {
         GeneratorTestRun run = RunGenerator("using Atelia.DurableGraph; [DurableType(\"value\",1)] public " + declaration + " {}");
         Assert.Contains(run.GeneratorDiagnostics, diagnostic => diagnostic.Id == "DG0001");

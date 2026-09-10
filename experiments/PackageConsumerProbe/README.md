@@ -22,6 +22,11 @@ The [composite Dictionary consumer](CompositeDictionaryConsumer/README.md) runs 
 typed/resolver Application configuration, preserved restoration modes, and retained nested key/value history.
 A separate same-Schema comparison change leaves exact DTO reading available while current TryAdd rejects a collision.
 
+The [record consumer](RecordConsumer/README.md) runs through `Run-RecordProbe.ps1`: readonly positional
+generic record keys and nested record values, explicit retained DTO upgrades after deleting old CLR names,
+and current Default/Application dictionaries progressing from upgraded Base through NoChange to Delta.
+Record-bearing compilations use the existing Family generated API; backing fields use `field:` attributes.
+
 The [Enum consumer](EnumConsumer/README.md) adds explicit durable enum coverage through
 `Run-EnumProbe.ps1`: unknown integer values, generic/Nullable/array/List composition,
 retained history after deleting the old CLR enum, and explicit upgrades followed by Base/Delta resaves.

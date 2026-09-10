@@ -1,9 +1,9 @@
 # DB-056：record struct 的持久值支持
 
-> 状态：**Proposed / 下一分片建议，未实施**。
+> 状态：**已实施 / G0–G3 验收通过**。
 > 日期：2026-09-10。调研基线：`d4c9e47`（DB-055）。
-> 本轮完成源码调查、局部编译器/Runtime 见证和方案审阅；不把手写访问器实验当作产品支持。
-> 当前能力从 [PROJECT-STATE](../../src/PROJECT-STATE.md) 查证；本分片经采纳后再进入产品施工。
+> 先完成源码调查与局部机制见证，再按用户授权实施；产品验收与边界见 §8。
+> 当前能力从 [PROJECT-STATE](../../src/PROJECT-STATE.md) 查证；本轮施工与验收记录见 §8。
 
 ## 1. 要回答的问题与选择理由
 
@@ -26,7 +26,7 @@ DB-055 已允许普通/generic Durable struct 作为 Key，并分开了当前领
 
 ## 2. 用户形状与明确边界
 
-建议支持以下示意；此代码在当前基线会被 SG 拒绝，实施验收后才成为产品用法：
+支持以下用法；包含 record 的编译使用 Family 登记入口，见 §3：
 
 ```csharp
 [DurableType("OrderLineKey", 1)]
@@ -49,7 +49,7 @@ public partial class World : DurableBase {
 不扩大 `DurableFieldAttribute` / `TransientAttribute` 的 AttributeTargets。
 C# 的 positional 属性和字段定向 Attribute 规则见 [Microsoft 文档](https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/builtin-types/record#positional-syntax-for-property-definition)。
 
-本片推荐合同：
+本片合同：
 
 - 同编译、顶层、显式 `[DurableType]`、partial record struct；支持 readonly / mutable、generic / 非 generic、
   positional / 显式 body，以及分散在多个 partial 声明中的成员。泛型约束沿用现有支持边界。
@@ -70,9 +70,9 @@ C# 的 positional 属性和字段定向 Attribute 规则见 [Microsoft 文档](h
 
 record 是领域 C# 外观，不新增持久 SchemaKind。它仍是 InlineValue，无独立 ObjectId、对象行或 Normalize。
 
-## 3. 当前源码证据与生成接缝
+## 3. 实施前源码证据与生成接缝
 
-| 当前事实 | 源码入口 | 推荐局部变更 |
+| 实施前基线事实 | 源码入口 | 本片局部变更 |
 |---|---|---|
 | `HasDurableTypeShape` 对全部 `IsRecord` 拒绝 | [Ancestry](../../src/DurableGraph.Generator/DurableSchemaGenerator.Ancestry.cs) | 仅接纳满足其他条件的 record struct，record class 仍拒绝；同步 DG0001 文案 |
 | `GetDirectFields` 过滤全部 `IsImplicitlyDeclared` | [Generator](../../src/DurableGraph.Generator/DurableSchemaGenerator.cs) | 对 record 纳入并校验真实 backing storage，保留字段 symbol / 所属属性 / 源位置 |
@@ -81,7 +81,7 @@ record 是领域 C# 外观，不新增持久 SchemaKind。它仍是 InlineValue�
 | Family 入口已有 enum 等当前形状触发 | [TemplateHistory](../../src/DurableGraph.Generator/DurableSchemaGenerator.TemplateHistory.cs) | 有当前 record 时选现有 Family；生成壳发出 `partial record struct` |
 | 普通/generic struct 已有历史 reader、值升级和 Dictionary 能力 | [GenericFactories](../../src/DurableGraph.Generator/DurableSchemaGenerator.GenericFactories.cs)、[DB-055](0055-composite-dictionary-key-design.md) | 组合验收；不新增 record 专用 Runtime reader / comparer / Upgrade 路由 |
 
-推荐让包含当前 record 的编译走已有 Family 路径，避免向传统 InlineState/Schema/StateModel 生成分支
+包含当前 record 的编译走已有 Family 路径，避免向传统 InlineState/Schema/StateModel 生成分支
 各复制一套 backing-field 处理。代价是同编译其他纯非泛型模型也会使用 Family 生成入口；
 依赖旧 `__DurableState` 等生成名字的源代码需迁至 Family alias/登记。此变化必须写进消费者说明，
 不能用“wire 不变”掩盖生成 API 的变化，也不为此新增兼容别名层。
@@ -94,7 +94,7 @@ helper 名使用既有 family/FieldId 规则，并验证与用户成员冲突；
 ## 4. Capture 与 Hydrate
 
 backing storage 不能直接生成 `value.<Name>k__BackingField`，也不应改成调用属性 getter/setter。
-建议复用已有 UnsafeAccessor，在当前 record 的泛型声明宿主上生成字段访问器。示意：
+复用已有 UnsafeAccessor，在当前 record 的泛型声明宿主上生成字段访问器。示意：
 
 ```csharp
 partial record struct ScopedKey<T> {
@@ -119,7 +119,7 @@ record 中的引用槽仍先捕获 ObjectId、恢复时从完整实例表解析�
 也不增加跨对象恢复阶段。访问器的泛型参数必须匹配声明宿主，不做闭合类型特例的反射热路径；
 相关 Runtime 规则见 [UnsafeAccessor 泛型合同](https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/9.0/unsafeaccessor-generics)。
 
-### 4.1 本轮已观察的技术见证
+### 4.1 设计阶段的技术见证
 
 2026-09-10，在 Roslyn **5.3.0.0**、.NET **10.0.5** 运行局部编译/调用实验：
 
@@ -158,12 +158,12 @@ DurableGraph 的 Attribute 不会改写 C# 生成的 Equals。作为 Key 时，�
 不能据“它是 record”推导引用内容在 Hydrate 时已就绪。
 DB-055 的 canonical 重复拒绝、历史 DTO 与当前 TryAdd 分层、模式 4/5 回捕稳定均继续成立；不加自动 comparer 修补。
 
-预期不改任何持久格式：history v7、SCB1 v2、Base v4、Storage wire v3、Dictionary codec 1 与 List codec 2。
-若实现发现必须新增格式或历史 record 标志，应先给出不能由现有 InlineValue 表达的反例，再回到设计。
+未改变持久格式：history v7、SCB1 v2、Base v4、Storage wire v3、Dictionary codec 1 与 List codec 2。
+后续若发现必须新增格式或历史 record 标志，应先给出不能由现有 InlineValue 表达的反例，再回到设计。
 
 ## 6. 施工顺序与最小验收
 
-这是经采纳后的一轮四步工作。可以并行准备互斥文件的测试/消费者，核心字段模型和最终集成由主线程统筹。
+本片按下面四步实施。互斥文件的测试/消费者并行准备，核心字段模型和最终集成由主线程统筹。
 
 | 步骤 | 范围 | 可观察验收 |
 |---|---|---|
@@ -206,13 +206,52 @@ DB-055 的 canonical 重复拒绝、历史 DTO 与当前 TryAdd 分层、模式 
 源码调查和独立方向审阅均推荐本片；已讨论“不做 positional 收益不足”与“为两套生成路径重复加逻辑”的代价，
 据此选择完整常用 record struct 外观 + 现有 Family。局部 Runtime 见证排除了 readonly/generic backing-field 访问的明显技术阻塞。
 
-仍需在 G0 固化的实现细节是诊断 ID、错误 Attribute 的源位置，以及实际符号到 accessor 的小型数据结构；
-这些不需要新增业务规则。若出现必须执行领域 getter/constructor、无法确定实际字段而可能静默漏数据、
+G0 以 DG0021 报告未知 storage / 未绑定到字段的分类标签，沿用 IFieldSymbol 及所属属性的源位置；
+生成 helper 碰撞沿用 DG0020。这些不需要新增业务规则。若后续出现必须执行领域 getter/constructor、无法确定实际字段而可能静默漏数据、
 必须改变同 key 布局政策等问题，先停止相关路径并回到设计，不以特殊反射序列化后端绕过。
 
 本片完成后，ValueTuple、跨程序集和 SchemaStore 自举仍按各自消费者及路线图触发；
 不因 record 验收自动进入下一轮施工。
 
-本轮文档验收：独立完整复审未发现阻塞；补入 field-backed 属性的 storage/行为区别及 alias、
+设计阶段文档验收：独立完整复审未发现阻塞；补入 field-backed 属性的 storage/行为区别及 alias、
 错误 target、positional 替代成员的负例。5 份 Markdown 的 398 个本地链接、35 个锚点和
 `git diff --check` 通过。产品代码未改动，未重跑产品 build/tests；§4.1 的局部机制实验单独执行。
+
+## 8. 实施与验收账本
+
+本轮只实现 §2–6：record struct 的字段适配、现有 Family 投影及完整组合/历史交付。
+持久格式、Runtime 槽模型和 Dictionary 比较合同不变；不引入 property 调用、record class、ValueTuple 或跨程序集支持。
+成员仍以 IFieldSymbol 为接缝；当前 backing field 从 AssociatedSymbol 识别、MetadataName 发出访问器，历史只保留原 FieldId/槽。
+
+| 要求 | 负责路径 | 验收 | 状态 |
+|---|---|---|---|
+| G0 分类与诊断 | [Records helper](../../src/DurableGraph.Generator/DurableSchemaGenerator.Records.cs)、Generator/Ancestry/TemplateHistory | [形状与误标 tests](../../tests/DurableGraph.Tests/RecordStructGeneratorTests.cs) | 已验证 |
+| G1 当前投影 | [GenericProjection](../../src/DurableGraph.Generator/DurableSchemaGenerator.GenericProjection.cs) | [静态 body/副作用隔离 tests](../../tests/DurableGraph.Tests/RecordStateProjectionTests.cs) | 已验证 |
+| G2 图与历史 | 复用原 Runtime/StateStore，未新增 record 专用 reader 或 Upgrade | [图与 keyed Delta tests](../../tests/DurableGraph.Tests/RecordStructGraphTests.cs)、[history tests](../../tests/DurableGraph.Tests/RecordStructHistoryTests.cs) | 已验证 |
+| G3 包与收口 | [真实包消费者](../../experiments/PackageConsumerProbe/RecordConsumer/README.md)、独立审阅 | 两代删除旧 CLR、显式双槽升级、Base/Delta 续写 | 已验证 |
+
+实现保持局部：仅 SG 增加 record 资格、字段检查和 current 投影；Runtime 仅补 Attribute 的用法说明。
+未扩大普通 class/struct 的 property 发现范围，未改变 Schema/history 模型或任何 body codec。
+record 的 private backing accessor 复用原 readonly helper 名；Capture 只交付 ref readonly，Hydrate 仍从 default 局部值恢复。
+
+误标检查直接使用 Roslyn 对 AttributeSyntax 的 Symbol/CandidateSymbols，不维护第二套 alias/后缀查找算法。
+独立审阅推动了这项简化：局部实测证明即使 field target 被忽略，编译器仍给出符号或歧义候选。
+普通 `[Transient]` 在同名别名与 DurableGraph 特性同时可见时可能有歧义；明确的 `[@Transient]` 别名则按真实类型判断。
+两类情况以及普通非 Attribute 类型同名的后缀选择均有回归，避免静默忽略 Durable 标签或误拒无关 Attribute。
+
+验收记录（2026-09-10，Windows dotnet 由主线程串行运行）：
+
+- 实施前根 build：0 warnings / 0 errors；基线 **2091** 项测试通过。
+- 最终 `dotnet build DurableGraph.slnx --no-restore`：**0 warnings / 0 errors**。
+- `dotnet test DurableGraph.slnx --no-restore`：**2146 passed，0 failed，0 skipped**；Runtime/SG 1290、StateStore 598、Serialization 103、Storage 155。
+  新增 56 项 record 验收，移除一条已过期的 record 拒绝用例；ref struct 的拒绝回归保留。
+- 相关 `FullyQualifiedName~Record` 筛选：81 项通过；完整集再次包含相同用例。
+- `Run-RecordProbe.ps1` 两代 Publish/Verify 通过；history **4 → 7**，旧 filename/hash 不变。
+  V2 删除旧 generic Key、Part、Value CLR 声明；192 次显式 Key/Part/Value 回调，两字典 Base 后恢复 NoChange/Delta，冷重开不重复升级。
+- 独立最终审阅未留下阻塞；源字段副作用隔离、完整 DTO key 差异、身份环、空容器升级能力与 helper 碰撞均通过实际生成执行测试。
+- 复用同一包 feed 的 `Run-GenericProbe.ps1` 与 `Run-CompositeDictionaryProbe.ps1` 均通过，
+  包括三代泛型、删除旧 inline CLR、当前 comparer 与同 Schema 行为变化的既有回归。
+- 集成差异检查通过；9 份 Markdown（含诊断发布表）的 466 个本地链接、43 个锚点均有效。
+
+真实包产物位于忽略目录 `experiments/PackageConsumerProbe/obj/record-20260910045526-19264-60b589aa`；
+产品构建/测试日志分别在 `obj/db056-final-build.log`、`obj/db056-final-tests.log`，不加入版本控制。

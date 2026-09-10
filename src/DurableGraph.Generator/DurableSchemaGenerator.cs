@@ -33,7 +33,7 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
     internal static readonly DiagnosticDescriptor InvalidTypeShape = new(
         id: "DG0001",
         title: "Invalid durable type shape",
-        messageFormat: "Type '{0}' must be a top-level enum, non-record partial struct, or partial class with supported generic constraints in an attributed hierarchy ending at Atelia.DurableGraph.DurableBase",
+        messageFormat: "Type '{0}' must be a top-level enum, partial struct (including record struct), or non-record partial class with supported generic constraints in an attributed hierarchy ending at Atelia.DurableGraph.DurableBase",
         category: "DurableGraph.Generator",
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true);
@@ -214,7 +214,7 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
 
         foreach (INamedTypeSymbol type in types) {
             context.CancellationToken.ThrowIfCancellationRequested();
-            DurableTypeModel? model = CreateTypeModel(context, type, halfType, listType, dictionaryType);
+            DurableTypeModel? model = CreateTypeModel(context, type, halfType, listType, dictionaryType, compilation);
 
             if (model.HasValue) {
                 validTypes.Add(model.Value);
@@ -612,7 +612,8 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
         INamedTypeSymbol type,
         INamedTypeSymbol? halfType,
         INamedTypeSymbol? listType,
-        INamedTypeSymbol? dictionaryType) {
+        INamedTypeSymbol? dictionaryType,
+        Compilation compilation) {
         string typeName = type.ToDisplayString(QualifiedNameFormat);
 
         if (!HasSupportedTypeShape(type, context.CancellationToken)) {
@@ -671,6 +672,7 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
 
         List<IFieldSymbol> fields = GetDirectFields(type);
         List<DurableFieldModel> durableFields = new();
+        if (type.IsRecord) hasErrors |= ReportRecordStorageErrors(context, type, fields, compilation);
 
         foreach (IFieldSymbol field in fields) {
             AttributeData? durableFieldAttribute = GetAttribute(
@@ -774,6 +776,7 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
 
         durableFields.Sort(static (left, right) => left.FieldId.CompareTo(right.FieldId));
         hasErrors |= ReportDuplicateFieldIds(context, typeName, durableFields);
+        if (type.IsRecord && schemaId is not null) hasErrors |= ReportRecordHelperCollisions(context, type, schemaId, durableFields);
 
         if (hasErrors) {
             return null;
@@ -812,7 +815,7 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
         List<IFieldSymbol> fields = new();
 
         foreach (ISymbol member in type.GetMembers()) {
-            if (member is IFieldSymbol field && !field.IsImplicitlyDeclared) {
+            if (member is IFieldSymbol field && (!field.IsImplicitlyDeclared || type.IsRecord)) {
                 fields.Add(field);
             }
         }
@@ -1087,6 +1090,9 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
     }
 
     private static Location GetSourceLocation(ISymbol symbol) {
+        if (symbol is IFieldSymbol field && field.IsImplicitlyDeclared && field.AssociatedSymbol is IPropertySymbol property) {
+            return GetSourceLocation(property);
+        }
         foreach (Location location in symbol.Locations) {
             if (location.IsInSource) {
                 return location;

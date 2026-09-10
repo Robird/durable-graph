@@ -22,3 +22,4 @@ DG0016 | DurableGraph.Generator | Error | Reserved Schema-support member collisi
 DG0017 | DurableGraph.Generator | Error | Duplicate durable schema ID
 DG0019 | DurableGraph.Generator | Error | Invalid durable schema ancestry
 DG0020 | DurableGraph.Generator | Error | Invalid generated durable state
+DG0021 | DurableGraph.Generator | Error | Invalid record storage classification

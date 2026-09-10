@@ -1,6 +1,6 @@
 # DurableGraph 产品开发工作集
 
-> 校准：2026-09-10，产品基线为 DB-055；下一片推荐 [DB-056 record struct](../docs/design-branches/0056-record-struct-state-slice.md)，尚未实施。本文只维护当前能力、边界与续工入口。
+> 校准：2026-09-10，[DB-056 record struct](../docs/design-branches/0056-record-struct-state-slice.md) 已接入现有值/历史管线；验收结果集中在分片记录。本文只维护当前能力、边界与续工入口。
 > 文档不是实现授权；事实以当前源码、测试和工具输出为准。
 
 ## 从这里继续
@@ -18,14 +18,12 @@
 
 ## 当前焦点
 
-下一片推荐 [DB-056 record struct 持久值](../docs/design-branches/0056-record-struct-state-slice.md)，状态 **Proposed**。
-问题、支持范围与四步验收集中在该文档；本轮只做规划和局部编译器/Runtime 见证。
-推荐支持 positional/readonly/generic 的常用外观，显式分类真实 backing storage，复用现有 Family、InlineValue、
-容器与显式 Upgrade。当前代码仍拒绝 record，不能把手写访问器实验当作产品能力。
-
-已完成基线为 [DB-055 复合 Dictionary Key](../docs/design-branches/0055-composite-dictionary-key-design.md)：
-普通/generic struct、当前 Default/Application comparer、完整 Key DTO 差分和两代历史续写均已验收。
-当前持久格式及既有能力保持下表/下文所述；完成证据从对应分片进入，不在当前焦点累积历史。
+[DB-056 record struct 持久值](../docs/design-branches/0056-record-struct-state-slice.md) 已支持 positional/readonly/generic、
+显式字段与 property backing storage，复用 Family、InlineValue、容器和显式 Upgrade。
+Capture/Hydrate 直达字段，不调用属性、构造器或初始化器；误标/未知存储明确拒绝。
+普通 struct 与 record 外观互换不改变同 FieldId/完整槽的 Schema；两代真实包已验证删除旧 record CLR 后的升级与续写。
+[DB-055](../docs/design-branches/0055-composite-dictionary-key-design.md) 的当前 Default/Application comparer 与完整 Key DTO 差分继续沿用。
+持久格式及既有能力保持下表/下文所述；完成证据从对应分片进入，不在当前焦点累积历史。
 ValueTuple、同型多 Application 角色、引用内容比较、跨程序集及 SchemaStore 自举继续按
 [路线图](../docs/DurableGraph-research-roadmap.md)的独立需求与触发条件选择。
 
@@ -34,7 +32,7 @@ ValueTuple、同型多 Application 角色、引用内容比较、跨程序集及
 | 层 | 已验证能力 | 尚未闭合的边界 |
 |---|---|---|
 | [DurableGraph](DurableGraph/DurableGraph.csproj) | immutable Schema/exact DAG；统一 ObjectBinding、ObjectLayout、Capture/refs/恢复目录；SZ/rank 2–4 数组、List 与 Dictionary owned 状态；静态 StateEquals、数组稀疏/列表区间/字典键寻址 Delta、默认 Adaptive 与三种显式 List writer；独立 historical reader | 其他 BCL、数组协变；持久发布由 StateStore 拥有 |
-| [Generator](DurableGraph.Generator/DurableGraph.Generator.csproj) / [Build](DurableGraph.Build/DurableGraph.Build.csproj) | class/struct 开放模板、显式 enum、readonly DTO/静态 body、Capture/Hydrate、泛型继承与递归 Nullable/数组/List/Dictionary 组合；history v7；三参 Upgrade/旧二参适配、值规则/局部依赖 adapter | 其他 CLR 值类型、其他 BCL；跨程序集生成规则 |
+| [Generator](DurableGraph.Generator/DurableGraph.Generator.csproj) / [Build](DurableGraph.Build/DurableGraph.Build.csproj) | class/struct（含 record struct）开放模板、显式 enum、readonly DTO/静态 body、Capture/Hydrate、泛型继承与递归 Nullable/数组/List/Dictionary 组合；history v7；三参 Upgrade/旧二参适配、值规则/局部依赖 adapter | 其他 CLR 值类型、其他 BCL；跨程序集生成规则 |
 | [StateStore](DurableGraph.StateStore/DurableGraph.StateStore.csproj) | 统一闭合 Schema/数组/List/Dictionary 目录与整数依赖、单批次登记、Base v4 ID 头；完整 stored/current 引用验证、可达图两阶段恢复；公开 PrepareNew/fixed-Parent Prepare；GraphRepository 单 head/持久 WorldId 与 GraphSession 同实例 Commit；升级 Base/Remove | 无 branch/Reset/根替换或联合 Store 视图 |
 | [Storage](DurableGraph.StateStore.Storage/DurableGraph.StateStore.Storage.csproj) | AppendDurably 原 lease 屏障；local Base/Delta records、wire v3、exact Revision live map、Parent/prior 校验、object-first 原始重建链及实际 payload H；Base 精确/Delta 上界计量；真实 Segment/RBF 冷重开 | 不解码 typed body；不拥有持久 roots、类型目录或发布 head；重复读取暂未缓存 |
 | [Serialization](DurableGraph.StateStore.Serialization/DurableGraph.StateStore.Serialization.csproj) | 字节原语、string 内容 codec、拥有 raw bytes 的 PreparedBaseBody/PreparedDeltaBody、显式 body 的 typed slot、早期元素 ref 循环 | 完整数组/List 对象操作位于 Runtime；其他 BCL 内容 codec 尚无 |
@@ -42,7 +40,7 @@ ValueTuple、同型多 Application 角色、引用内容比较、跨程序集及
 容易混淆的限制：
 
 - SG DTO/body 支持递归 inline struct 与 13 种标量：bool、byte/sbyte、short/ushort、int/uint、long/ulong、char、Half、float、double；string、受支持 durable class、数组、List 和 Dictionary 引用槽保存非泛型 ObjectId；字节层仍编码 UInt32。
-  `[DurableType]` class/struct 限同编译、顶层、非 record 的 partial class 链或显式 partial struct（包括 readonly），支持泛型；
+  `[DurableType]` class/struct 限同编译、顶层、非 record 的 partial class 链或显式 partial struct/record struct（包括 readonly），支持泛型；
   支持 readonly 持久字段和没有无参构造器的领域类。RuntimeHelpers 分配、SG Hydrate/声明层 UnsafeAccessor
   不执行实例构造器或字段初始化表达式；Transient 由用户交付后重建。
 - enum 显式标记 DurableType，支持同编译顶层 public/internal 声明及八种整数底层类型，不要求 partial。
@@ -61,12 +59,16 @@ ValueTuple、同型多 Application 角色、引用内容比较、跨程序集及
   readonly DTO 递归嵌套，引用投影为 ID；子 PrepareDelta 的 HasChanges/bytes 决定父位，置位但子无变化拒绝。
   共享值 DTO/body 按 exact key 生成，不依赖当前领域 struct CLR 宿主；owner Upgrade 通过强类型构造器显式转换，
   删除 struct 后仍可保留完整 owner 升级链。struct Hydrate 从 default 临时值经 ref accessor 填充，
-  完成后赋回字段/元素槽，不运行构造器或初始化器，Transient 默认。仍无 record/ref struct/CLR nested type 支持。
+  完成后赋回字段/元素槽，不运行构造器或初始化器，Transient 默认。仍无 record class/ref struct/CLR nested type 支持。
+- record struct 支持 positional、body 自动属性及 C# 14 field-backed storage，以 `[field: DurableField]` / `[field: Transient]` 显式分类；
+  未分类 backing、无实际字段的误标、未知事件存储和生成 helper 碰撞拒绝。属性方法不参与保存恢复，计算属性不自动入 Schema。
+  当前投影按 Roslyn MetadataName 发出强类型 UnsafeAccessor，历史不保存 backing 名或 record 标志；字段重命名/重排不改变持久布局。
+  record 的业务 Equals 仍由 C# 或用户决定，可能包含 Transient；作为 Key 沿 DB-055 比较/恢复边界，不自动生成替代 comparer。
 - `TypeExpr` 区分 builtin、named 定义及有序实参、声明内 parameter、SZ/rank 2–4 数组和内建 List/Nullable/Dictionary 构造；持久 key 为闭合 TypeExpr + 定义版本。
   SchemaId 只表示定义 ID，不能用来区分闭合族。base/inline 显式升版仍沿定义传播；Box<int> 也随 Box 定义升版。
   目标仓库内同 key 完整布局严格一致；两个独立空库仍可能首次登记同 key 异形，不提供闭合历史账本或跨库 key 互换保证。
   TypeExpr depth≤64、展开 nodes≤4096、arity≤32，exact 布局 DAG depth≤256。
-- 含泛型/Nullable 当前定义或历史、当前 enum、显式 DurableUpgrade 或值规则/依赖属性的编译，
+- 含泛型/Nullable 当前定义或历史、当前 enum/record struct、显式 DurableUpgrade 或值规则/依赖属性的编译，
   以及有当前声明且保留无当前声明的 inline history 的编译，使用 `Generated.Family_<UTF8HexId>.Vn<TState...>`，
   `Generated.DurableDefinitions.Register` 显式登记生成定义；亦可单独登记 Family.Definition。
   历史 DTO/body 不携带领域泛型参数，phantom 参数不产生状态参数。已知叶子直接调用，未知槽使用 IStateOps/IValueProjection 静态约束调用。
@@ -214,6 +216,7 @@ DurableGraph runtime 也引用 Serialization，单一 runtime PackageReference �
 
 | 准备修改 | 先查源码/测试，再按需读合同 |
 |---|---|
+| record struct、backing storage 分类与字段投影 | [DB-056](../docs/design-branches/0056-record-struct-state-slice.md)、[字段分类](DurableGraph.Generator/DurableSchemaGenerator.Records.cs)、[投影](DurableGraph.Generator/DurableSchemaGenerator.GenericProjection.cs)、[真实包](../experiments/PackageConsumerProbe/RecordConsumer/README.md) |
 | Dictionary 内容、复合 Key、当前 comparer 与历史双槽升级 | [DB-055](../docs/design-branches/0055-composite-dictionary-key-design.md)、[body](DurableGraph/DictionaryStateReader.cs)、[current binding](DurableGraph/DictionaryObjectBinding.cs)、[升级](DurableGraph/StateBindingContext.DictionaryUpgrade.cs)、[真实包](../experiments/PackageConsumerProbe/CompositeDictionaryConsumer/README.md) |
 | enum 表示、外置投影与历史升级 | [DB-053](../docs/design-branches/0053-enum-inline-state-slice.md)、[生成接缝](DurableGraph.Generator/DurableSchemaGenerator.Enums.cs)、[当前模板校验](DurableGraph/StateDefinitionBinding.cs)、[真实包](../experiments/PackageConsumerProbe/EnumConsumer/README.md) |
 | Nullable 值槽、history 与显式升级提升 | [DB-052](../docs/design-branches/0052-nullable-value-slot-slice.md)、[静态值操作](DurableGraph/NullableStateValues.cs)、[完整 child 布局](DurableGraph/NullableValueLayout.cs)、[真实包](../experiments/PackageConsumerProbe/NullableConsumer/README.md) |

@@ -53,7 +53,7 @@ public sealed partial class DurableSchemaGenerator {
         string dto = CurrentDto(type, layout);
         string parameters = CurrentExecutionParameters(layout);
         List<GenericDomainField> fields = GenericDomainFields(type.Symbol, types);
-        output.Append(type.IsInline ? "partial struct " : "partial class ").Append(EscapeIdentifier(type.Symbol.Name))
+        output.Append(type.Symbol.IsRecord ? "partial record struct " : type.IsInline ? "partial struct " : "partial class ").Append(EscapeIdentifier(type.Symbol.Name))
             .Append(DomainParameters(type.Symbol)).Append(DomainConstraints(type.Symbol)).AppendLine(" {");
         AppendGenericFieldAccessors(output, type);
         AppendGenericCurrentFactory(output, type, layout, fields);
@@ -104,17 +104,22 @@ public sealed partial class DurableSchemaGenerator {
             string fieldType = field.Symbol.Type.ToDisplayString(GenericQualifiedNameFormat.WithMiscellaneousOptions(
                 GenericQualifiedNameFormat.MiscellaneousOptions | SymbolDisplayMiscellaneousOptions.IncludeNullableReferenceTypeModifier));
             string suffix = FamilyName(type.SchemaId) + "_" + Number(field.FieldId);
+            bool backingStorage = field.Symbol.IsImplicitlyDeclared && field.Symbol.AssociatedSymbol is IPropertySymbol;
             output.Append("    internal static ref readonly ").Append(fieldType).Append(" __DurableRead_").Append(suffix).Append('(')
-                .Append(type.IsInline ? "in " : string.Empty).Append(domain).Append(" value) => ref value.").Append(EscapeIdentifier(field.Symbol.Name)).AppendLine(";");
-            if (field.Symbol.IsReadOnly) {
+                .Append(type.IsInline ? "in " : string.Empty).Append(domain).Append(" value) => ref ");
+            if (backingStorage) output.Append("__DurableReadonly_").Append(suffix)
+                .Append("(ref global::System.Runtime.CompilerServices.Unsafe.AsRef(in value))");
+            else output.Append("value.").Append(EscapeIdentifier(field.Symbol.Name));
+            output.AppendLine(";");
+            if (field.Symbol.IsReadOnly || backingStorage) {
                 output.Append("    [global::System.Runtime.CompilerServices.UnsafeAccessor(global::System.Runtime.CompilerServices.UnsafeAccessorKind.Field, Name = ")
-                    .Append(Literal(field.Symbol.Name)).AppendLine(")]");
+                    .Append(Literal(field.Symbol.MetadataName)).AppendLine(")]");
                 output.Append("    private static extern ref ").Append(fieldType).Append(" __DurableReadonly_").Append(suffix).Append('(')
                     .Append(type.IsInline ? "ref " : string.Empty).Append(domain).AppendLine(" value);");
             }
             output.Append("    internal static void __DurableWrite_").Append(suffix).Append('(').Append(type.IsInline ? "ref " : string.Empty)
                 .Append(domain).Append(" value, in ").Append(fieldType).Append(" field) => ");
-            if (field.Symbol.IsReadOnly) output.Append("__DurableReadonly_").Append(suffix).Append('(').Append(type.IsInline ? "ref " : string.Empty).Append("value)");
+            if (field.Symbol.IsReadOnly || backingStorage) output.Append("__DurableReadonly_").Append(suffix).Append('(').Append(type.IsInline ? "ref " : string.Empty).Append("value)");
             else output.Append("value.").Append(EscapeIdentifier(field.Symbol.Name));
             output.AppendLine(" = field;");
         }
