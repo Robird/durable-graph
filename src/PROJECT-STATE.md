@@ -19,10 +19,12 @@
 ## 当前焦点
 
 [DB-060 跨程序集固定 inline 值与只读历史依赖](../docs/design-branches/0060-cross-assembly-inline-history-slice.md)
-已完成 G0–G3：直接外部值字段、只读模板导出和独立 history 贯通，复用已有 DTO/body/projection。
-真实两代三库包验证 ref/lib、旧 CLR 删除、显式 Upgrade 与增量续写；验收集中在该文档 §9。
-固定外部 base 的声明层访问和自动跨库业务规则发现仍未开放；既有 history/State 格式不变。
-当前没有其他已采纳待实施的工作单；ValueTuple、DateTime 和 SchemaStore 自举仍按路线图的各自触发条件选择。
+已完成；实现验收集中在该文档 §9。
+下一片推荐 [DB-061 跨程序集继承与基类状态投影](../docs/design-branches/0061-cross-assembly-inheritance-slice.md)，
+状态为 Proposed，尚未实施。计划复用已绑定的 typed Capture/Hydrate、导入 exact base 历史，
+让 Family class 统一按本声明字段与 immediate base 组合，保留 leaf DTO/body 与升级语义。
+首个验收须覆盖基类 private 字段使用 internal 泛型值及其 Nullable 包装，不能只以 public 标量基类证明可行。
+自动跨库业务规则发现、ValueTuple、DateTime 和 SchemaStore 自举仍按路线图分别选择。
 
 ## 当前能力与实际边界
 

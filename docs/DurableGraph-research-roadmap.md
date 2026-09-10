@@ -9,6 +9,11 @@
 
 当前能力与已完成分片的验收从 PROJECT-STATE/其账本进入；这里仅保留后续增量。
 
+下一片推荐 [DB-061 跨程序集继承与基类状态投影](design-branches/0061-cross-assembly-inheritance-slice.md)，
+目前 Proposed，尚未实施。它补齐模型拆库后的继承能力：基类库封装私有字段投影，
+消费方组合公开 DTO；同时导入 exact base 历史，保留完整 leaf Upgrade 与持久格式。
+候选比较、明确的委托/复制代价及 G0–G3 验收只维护在该分片，不先扩展 ValueTuple 或联合 Store 视图。
+
 [DB-046 统一闭合 Schema 目录](design-branches/0046-unified-schema-catalog-slice.md) 已合并持久记录、批次和 exact 依赖引用。
 [DB-047 List<T> 内容对象](design-branches/0047-list-content-object-slice.md) 已完成；功能与验收以该分片为入口。
 [DB-051](design-branches/0051-bounded-list-delta-competition.md) 已完成默认 Adaptive，§3.2 只保留实测触发的后续优化。
@@ -43,8 +48,8 @@ B/D/H 分别指本轮精确 Base payload、Delta payload 上界、已有对象�
 
 [DB-059](design-branches/0059-cross-assembly-model-composition-slice.md) 的 nominal/动态组合与
 [DB-060](design-branches/0060-cross-assembly-inline-history-slice.md) 的固定外部 inline/只读历史依赖已完成，
-能力及验收从 PROJECT-STATE/各分片进入。后续只保留外部 base 的声明层访问和自动业务规则发现等剩余边界，
-不再将直接外部值字段列为待实现。下一片仍按具体建模或工作流缺口选择。
+能力及验收从 PROJECT-STATE/各分片进入。外部 base 的声明层访问与历史段组合已形成 DB-061 推荐方案；
+自动业务规则发现仍独立延后，不再将直接外部值字段列为待实现。
 [DB-058 DateOnly / TimeOnly / DateTimeOffset](design-branches/0058-temporal-scalar-value-slice.md) 已贯通现有值/历史管线；
 能力与验收从 PROJECT-STATE/分片记录进入。剩余 DateTime 的保存合同、ValueTuple 和跨程序集各自独立。
 [DB-057](design-branches/0057-bcl-scalar-value-slice.md) 的 Guid/decimal/TimeSpan 主体与 history v8 已实现，
@@ -63,7 +68,7 @@ List 高效 Diff/Patch 已完成；额外性能工作按 [§3.2](#32-list-差分
 | 对象版本解释与保存来源 | Base 表示 ID 可解析 exact 布局与已登记历史 reader；完整 ObjectHeadMap 中 external object heads 的来源、候选对象身份连续性仍需产品 Save/Load 合同，不能由 Revision Parent 声明一致推导全局身份认证 |
 | 保存相等性与真实估算 | 同版 DTO 的浮点按位、引用槽按 ID、inline 值递归融合 Delta 已采纳；DB-043 数组复用元素操作，BCL 容器另定。已准备 body 计量见 [DB-029](design-branches/0029-prepared-object-revision-planning-slice.md)，ID 头见 [DB-045](design-branches/0045-persisted-representation-id-slice.md)；新增容器继续按实际对象 payload 计量 |
 | Schema 规范表示和持久引用 | 开放模板/参数与绑定模型的剩余问题见 §3.1；不再将已统一的闭合目录作为待办。未来 SchemaHash 与一般类型家族约束随消费者裁决，不用 GetHashCode 作持久身份 |
-| 跨程序集与一般类型形状 | DB-060 后，跨库 base 仍需声明层访问与历史段执行合同，有跨库继承消费者时重访；现有固定/动态 inline 不作为阻碍。跨程序集业务规则扫描与独立闭合历史账本分别裁决，不与只读模板导入混同。DateTime 的 Local/DST 合同、native int 等各自按需求选择；boxed value identity 已排除 MVP |
+| 跨程序集与一般类型形状 | 跨库 base 的推荐施工范围及 typed projection/只读历史合同见 [DB-061](design-branches/0061-cross-assembly-inheritance-slice.md)，尚未实施；现有固定/动态 inline 不作为阻碍。跨程序集业务规则扫描与独立闭合历史账本分别裁决，不与只读模板导入混同。DateTime 的 Local/DST 合同、native int 等各自按需求选择；boxed value identity 已排除 MVP |
 | 多态与运行时注册扩展 | 已标记 class 基类到登记派生实例按 DB-034 合同；DB-043 统一框架 object 参数不授予 object/interface 通配字段。数组协变还需空数组的历史元素 ancestry 证据，和跨程序集发现分别后继；不能自动回退成声明基类的 codec |
 | 捕获 BCL 内容的所有权 | 数组使用 owned frozen 元素 buffer，inline struct 递归捕获成标量/ID；后续容器同样不能以浅复制代替冻结，须按其内容模型验证 |
 | 根与持久目录扩展 | 单 WorldId/Revision 发布已闭合；后续仅在真实需求下选择 null/清空/替换、命名 branch 与 Reset，不建设多根 API |
