@@ -1,6 +1,6 @@
 # DurableGraph 产品开发工作集
 
-> 校准：2026-09-10，实验性 Dictionary 已加入 [DB-055](../docs/design-branches/0055-composite-dictionary-key-design.md) 复合 Key 与当前 comparer；验收结果集中在分片记录。本文只维护当前能力、边界与续工入口。
+> 校准：2026-09-10，产品基线为 DB-055；下一片推荐 [DB-056 record struct](../docs/design-branches/0056-record-struct-state-slice.md)，尚未实施。本文只维护当前能力、边界与续工入口。
 > 文档不是实现授权；事实以当前源码、测试和工具输出为准。
 
 ## 从这里继续
@@ -18,41 +18,16 @@
 
 ## 当前焦点
 
-[DB-055 复合 Dictionary Key](../docs/design-branches/0055-composite-dictionary-key-design.md) 已接入普通/generic struct、
-当前 Default/IEquatable 与 Application comparer。DTO 继续完整捕获 Key，以原 canonical key body 配对 Delta；
-模式 4/5 恢复后回捕保留，typed 登记和泛型 resolver 随 snapshot 冻结并惰性缓存。
-历史 exact/Normalize 不执行当前业务比较；当前碰撞在实际 TryAdd 拒绝。
-根构建、全量测试和真实包已验证删除旧泛型 Key CLR、双槽升级与续写，以及同 Schema 仅比较逻辑改变的失败边界。
-沿用 [DB-054](../docs/design-branches/0054-dictionary-content-object-slice.md) codec 1、history v7、SCB1 v2、Base v4 与 Storage wire v3。
-同型多 Application 角色、引用内容比较的恢复顺序、record/ValueTuple 外观分别由[路线图](../docs/DurableGraph-research-roadmap.md)维护。
+下一片推荐 [DB-056 record struct 持久值](../docs/design-branches/0056-record-struct-state-slice.md)，状态 **Proposed**。
+问题、支持范围与四步验收集中在该文档；本轮只做规划和局部编译器/Runtime 见证。
+推荐支持 positional/readonly/generic 的常用外观，显式分类真实 backing storage，复用现有 Family、InlineValue、
+容器与显式 Upgrade。当前代码仍拒绝 record，不能把手写访问器实验当作产品能力。
 
-[DB-053](../docs/design-branches/0053-enum-inline-state-slice.md) 的单整数 InlineValue、Family DTO/body、
-外置 enum 投影及删除旧 CLR 后的显式升级继续沿用；常量表不入 Schema。
-
-[DB-052 可组合 Nullable 值槽](../docs/design-branches/0052-nullable-value-slot-slice.md) 的 exact child、
-unmanaged NullableState 与显式值升级提升继续沿用，enum 作为其已有 inline child 组合。
-
-[DB-051](../docs/design-branches/0051-bounded-list-delta-competition.md) 已完成默认 Adaptive：
-完整 Local Delta 作基准，停滞时尝试独立有界 Myers；只有严格更短的完整 body 胜出，达到基准长度即停止竞争编码。
-流式 patch 删除整段临时缓冲，三个显式旧 writer 保留；主要保证为候选 body 不大于原 Local。
-根构建/全量测试、真实包、白盒落盘、双 seed 矩阵及独立审查通过；成本与边界见[实测记录](../experiments/ListDeltaReplayProbe/ADAPTIVE.md)。
-
-[DB-049](../docs/design-branches/0049-list-range-delta-and-matcher-trial-slice.md) 已实现静态 StateEquals、统一 List codec 2，
-Position/LocalResync/BoundedMyers 共用 decoder，配置随模型 snapshot 冻结；根构建/tests、相关真实包和独立审查通过。
-[ListDeltaReplayProbe](../experiments/ListDeltaReplayProbe/README.md) 的普通落盘、[白盒](../experiments/ListDeltaReplayProbe/WHITEBOX.md)及
-[DB-050 回退研究](../experiments/ListDeltaReplayProbe/FALLBACK.md)保留证据：算法互补但搜索成功不保证 bytes 更小。
-当前默认 Adaptive，格式仍为 codec 2；保存成本与实际字节为主要评价，冷读优化最低优先级。后续优化仅按实测触发，见[路线图](../docs/DurableGraph-research-roadmap.md#32-list-差分算法选型与设计)。
-[DB-047](../docs/design-branches/0047-list-content-object-slice.md) 的完整元素闭包、冻结/恢复与 List owner Upgrade 继续沿用。
-
-[DB-046 统一闭合目录](../docs/design-branches/0046-unified-schema-catalog-slice.md) 的单批次登记、exact 整数依赖，
-以及 [DB-045](../docs/design-branches/0045-persisted-representation-id-slice.md) 的 Base v4 单 ID 边界继续沿用。
-开放模板持久化仍按[路线图](../docs/DurableGraph-research-roadmap.md#31-版本化表示类型头的统一寻址)的净简化条件重访。
-
-[DB-043](../docs/design-branches/0043-vector-array-object-slice.md) 已完成统一引用对象路径、可组合数组与数组元素 Upgrade；
-[DB-042](../docs/design-branches/0042-upgrade-schema-requirement-set.md) 已完成 plan 级 exact Schema 依赖证书；
-[DB-041](../docs/design-branches/0041-object-id-state-representation.md) 的非泛型 ObjectId、DB-039 可组合值 Upgrade
-及此前的同实例 GraphSession、泛型/inline Schema/history 能力继续沿用。[DB-040](../docs/design-branches/0040-typed-object-id-representation-research.md)
-的泛型目标品牌暂缓。
+已完成基线为 [DB-055 复合 Dictionary Key](../docs/design-branches/0055-composite-dictionary-key-design.md)：
+普通/generic struct、当前 Default/Application comparer、完整 Key DTO 差分和两代历史续写均已验收。
+当前持久格式及既有能力保持下表/下文所述；完成证据从对应分片进入，不在当前焦点累积历史。
+ValueTuple、同型多 Application 角色、引用内容比较、跨程序集及 SchemaStore 自举继续按
+[路线图](../docs/DurableGraph-research-roadmap.md)的独立需求与触发条件选择。
 
 ## 当前能力与实际边界
 
