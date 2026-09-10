@@ -106,11 +106,24 @@ arrays, List, Dictionary and generic representation parameters. For example, `Lo
 without importing the dependency's generated DTO names. A plain struct library can enable
 `DurableGraphGenerateDefinitions` to export the required current/historical value factories.
 
-Direct fixed external inline fields such as `RemotePoint` or `RemotePoint?`, and local classes
-derived from an external durable base, remain unsupported: their generated bodies need an external
-exact template that this slice does not import. Existing CLR shapes, generic constraints, reference
-and comparer restrictions still apply. Model identity is the durable definition ID, not an assembly
-name; two libraries cannot independently claim the same identity in one operation catalog.
+Direct fixed external values such as `RemotePoint`, `RemotePoint?`, and `RemotePair<LocalPoint>`
+use the providing library's generated inline-history exports. A library using the Family surface
+exports its own retained inline templates automatically; a plain struct library enables
+`DurableGraphGenerateDefinitions` as shown above. The consumer selects the Family surface when it
+needs these fixed dependencies, including dependencies retained only in old history.
+Public values may encapsulate private fields of internal durable value types: the library's
+projection handles those fields, while its public state helpers provide the historical layout.
+
+The generator reads the required exports through compiler metadata, including transitive inline
+dependencies. Each library continues to own and publish only its own `.dgschema` files. Do not copy
+dependency history into the consumer's directory. The build targets pass a generated read-only
+reference manifest to Publish/Verify; it is temporary build input, not another history directory.
+Missing exports, required old versions or conflicting definition ownership fail explicitly.
+Exports describe build capabilities; the host still registers each library through its facade.
+
+Local classes derived from an external durable base remain unsupported. Existing CLR shapes,
+generic constraints, reference and comparer restrictions still apply. Model identity is the durable
+definition ID, not an assembly name; two libraries cannot independently claim the same identity.
 
 Each referenced object retains its own Schema version. Updating its library does not change a
 nominal-only owner Schema, but preserving an already compiled consumer also requires compatible
@@ -120,8 +133,16 @@ history fails explicitly; the current implementation does not substitute for a h
 Changing generation mode may require updating library-internal DTO/helper references; it does not
 change persistent Schema identity, history or body encoding.
 
+For a fixed external inline field, changing the value's exact layout requires bumping the owner
+version and writing its explicit Upgrade, just as for a local inline value. Rebuild affected owners;
+the nominal-only DLL replacement guarantee does not extend to arbitrary inline layout changes.
+Old inline CLR declarations may be removed while the providing library retains their generated
+history DTO/body and the application retains the necessary upgrade path.
+
 See the [cross-assembly consumer](../../experiments/PackageConsumerProbe/CrossAssemblyConsumer/README.md)
 for independent model packages, public facades, two-generation history and an unchanged consumer DLL.
+The [inline library consumer](../../experiments/PackageConsumerProbe/InlineLibraryConsumer/README.md)
+demonstrates direct values across three model libraries, independent history and explicit upgrades.
 
 Use a normal C# alias for readable historical types. For a declaration with ID `Box`, whose V2 adds
 an integer field after the retained value, a generic adjacent conversion is:

@@ -3,8 +3,8 @@ using Microsoft.CodeAnalysis;
 namespace Atelia.DurableGraph.Generator;
 
 public sealed partial class DurableSchemaGenerator {
-    // Metadata supplies nominal identity only. Fixed external inline/base templates still
-    // require source-owned history and are rejected by their existing dependency checks.
+    // Nominal metadata admission is shared by reference and fixed-inline fields.
+    // Fixed inline additionally requires validated exported history and public execution helpers.
     private static bool HasExternalDurableNominalShape(INamedTypeSymbol type, Compilation compilation) {
         if (type.DeclaringSyntaxReferences.Length != 0 || type.DeclaredAccessibility != Accessibility.Public ||
             type.ContainingType is not null || type.Arity > 32 || type.IsRefLikeType ||

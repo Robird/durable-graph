@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>Atelia.InlineAppModel</AssemblyName>
+    <PackageId>Atelia.InlineAppModel</PackageId>
+    <WarningsAsErrors>$(WarningsAsErrors);CS0433;CS0436</WarningsAsErrors>
+    <HistoryVersion Condition="'$(HistoryVersion)' == ''">1</HistoryVersion>
+    <DefineConstants>$(DefineConstants);HISTORY_V$(HistoryVersion)</DefineConstants>
+    <TargetsForTfmSpecificContentInPackage>$(TargetsForTfmSpecificContentInPackage);PackModelReferenceAssembly</TargetsForTfmSpecificContentInPackage>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Atelia.DurableGraph" Version="$(DurableGraphPackageVersion)" />
+    <PackageReference Include="Atelia.InlineLibraryA" Version="$(ModelPackageVersion)" />
+  </ItemGroup>
+  <!-- Standard package content: downstream compilation must consume the SDK ref assembly. -->
+  <Target Name="PackModelReferenceAssembly">
+    <ItemGroup>
+      <TfmSpecificPackageFile Include="$(IntermediateOutputPath)ref/$(TargetFileName)" PackagePath="ref/$(TargetFramework)" />
+    </ItemGroup>
+  </Target>
+</Project>

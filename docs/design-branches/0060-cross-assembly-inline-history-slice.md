@@ -1,6 +1,6 @@
 # DB-060：跨程序集固定 inline 值与只读历史依赖
 
-> 状态：Proposed；下一分片建议，尚未实施，不表示新增导出合同已经获批。
+> 状态：已实施，G0–G3 验收通过；用户于 2026-09-10 授权，结果见 §9。
 > 日期：2026-09-10；调查基线：`0068694`（DB-059 已实施）。
 > 续工入口：[PROJECT-STATE](../../src/PROJECT-STATE.md)；目标：[目标设计](../DurableGraph-target-design-v0.md)。
 
@@ -26,7 +26,7 @@ DB-059 后，`RemotePoint[]`、`List<RemotePoint>`、本地泛型值 `LocalBox<R
 | 新建消费者外观/API | 现有 GraphRepository/GraphSession 已简短，真实包已覆盖完整流程；缺导航不足以证明需要新包装。自然领域示例并入本片验收 |
 | SchemaStore 自举、联合视图 | 尚需元数据引导与视图合同；替换日志后端本身不提供回滚/分叉，不作为本片前置 |
 
-## 2. 当前事实与真正缺口
+## 2. 实施前事实与真正缺口
 
 以下是源码调查，不是新方案已经运行的证明：
 
@@ -186,7 +186,7 @@ DB-059 的 nominal-only 目标升级、App/Host DLL 不变见证必须继续通�
 
 ## 6. 分阶段施工与验收
 
-本轮仅规划。获得实施授权后按下列依赖推进；每阶段将实际结果记入本文件，不提前宣称通过。
+以下为本片施工顺序与验收合同；实际结果集中在 §9。
 
 | 阶段 | 工作及最小验收 |
 |---|---|
@@ -208,7 +208,8 @@ DB-059 的 nominal-only 目标升级、App/Host DLL 不变见证必须继续通�
 - 当前字段已删除但 owned accepted 仍有外部 fixed 依赖：自动选择 Family，保留旧 reader；
   本地规则单独请求已不在当前字段中的外部历史端点，包括零 owned 声明的规则库，也完整导入校验。
 - 漏升 owner、缺外部旧模板、缺运行时 Definition/历史 factory、错 kind/arity、错误执行合同、伪标记、重复归属、
-  exact 循环/超深均拒绝；相应失败不发布新 head，缺升级工具仍在业务回调前拒绝。
+  exact 循环/超深均拒绝；相应失败不发布新 head，缺升级工具在受影响 owner 首次业务回调前拒绝。
+  此处不承诺整图所有对象的全局零回调：此前已处理的其他 owner 可以已经完成自身 Upgrade。
 - 删除仍被其他 owned accepted 记录 exact 引用的依赖版本，current candidate 恰好能补它时，
   SG 和直接 Publish/Verify 都拒绝；当前声明所需的旧版本缺口仍由既有 SG history 规则拒绝。
   不能借外部导入补同一个本地拥有定义的缺失版本。不检测已无剩余证据的整段 history 删除。
@@ -235,7 +236,7 @@ DB-059 的 nominal-only 目标升级、App/Host DLL 不变见证必须继续通�
 
 如果 G0 发现公开 helper 无法跨 reference assembly 稳定调用，或者只读模板通道必然要求广泛改变 DTO 形状，
 应报告具体反例并重访 §4，不能静默实施全部 inline 动态化、导入外部 base 或放弃历史校验。
-尚未运行任何本片新行为见证；实施可行性当前依据为源码接缝和两路审阅，具体格式/metadata 见证是首道闸门。
+规划时仅有源码与审阅依据；G0 的 metadata 见证及后续执行结果见 §9，不以规划审阅代替运行证据。
 
 ## 8. 规划审阅结论
 
@@ -245,3 +246,56 @@ DB-059 的 nominal-only 目标升级、App/Host DLL 不变见证必须继续通�
 旧 CLR 删除后保留历史 body、外部基类继续拒绝。终审另补齐 public 外部值的 internal 实现依赖、
 仅历史/仅规则的材料入口，以及历史删除与旧生成文件检测的可观察边界；不引入额外的完整回滚检测账本。
 本节不是运行验收记录。
+
+## 9. 施工合同与验收账本
+
+施工基线 `c26c9d8`，工作区干净；根 solution 基线 build 零警告、零错误。
+本轮实施 §3–§7，外部 base、全部 inline 动态化和新 State wire 不进入范围。
+主线程负责 Runtime 元数据属性、集成验证和文档；SG、Build/shared protocol、独立图测试、真实包分别拥有独立改动范围。
+
+下一波接口：`DurableSchemaExportAttribute(int contractVersion, string schemaId, int schemaVersion, string manifest)`；
+执行合同 1，manifest 为单记录的现有 v9 candidate 文本。SG 发出只含自有 inline 的属性。
+只读材料使用 `DurableGraphSchemaHistoryReferences.g.cs`，共享协议负责规范排序、解析与 SHA-256；
+存在引用材料时 owned manifest 附摘要，Build `Publish/Verify` 接受第三个可选 reference manifest 路径，
+包 targets 自动连接。无引用时保持旧 candidate 文本，旧 history/State 格式不变。
+
+| 要求 | 当前状态 | 负责人/落点 | 验收 |
+|---|---|---|---|
+| G0 metadata/ref assembly 与公开 helper | 已验证 | [导出标记](../../src/DurableGraph/DurableSchemaExportAttribute.cs)、[SG 导入导出](../../src/DurableGraph.Generator/DurableSchemaGenerator.SchemaExports.cs) | [SG tests](../../tests/DurableGraph.Tests/CrossAssemblyInlineGeneratorTests.cs)：真实 metadata-only/ref assembly、public helper 与 internal 实现依赖 |
+| G1 严格只读闭包与 own-only 发布 | 已验证 | [共享协议](../../src/Shared/SchemaHistoryReferenceProtocol.cs)、[Build 依赖](../../src/DurableGraph.Build/SchemaHistoryTool.References.cs)、包 targets | [Build tests](../../tests/DurableGraph.Tests/CrossAssemblyInlineBuildTests.cs)：canonical/摘要/归属、零候选、两阶段 history、禁止引用借本地补缺 |
+| G2 固定外部槽、历史/规则入口 | 已验证 | SG 字段/模板/生成 | SG tests：普通/record/enum/Nullable/generic、仅历史/仅规则、旧 DTO arity、placement Schema/history/Base/Delta 精确对比 |
+| G3 图与两代包 | 已验证 | [图 tests](../../tests/DurableGraph.Tests/CrossAssemblyInlineGraphTests.cs)、[历史 tests](../../tests/DurableGraph.Tests/CrossAssemblyInlineHistoryTests.cs)、[真实包](../../experiments/PackageConsumerProbe/InlineLibraryConsumer/README.md) | 冻结/共享/循环、删除旧 CLR、空值/空 List 的能力预检、Base→NoChange→Delta、三库各自 history 与 ref/lib 资产；五条相关旧包回归通过 |
+| 最终集成 | 已验证 | 主线程与独立 reviewer | 根 build 0 warning/error；2406 tests 全过；最终 diff/链接检查与提交 |
+
+G0 最终使用执行合同 1 的单记录 v9 manifest；reference 协议独立版本 1，规范 UTF-8 无 BOM/LF，
+按 owner/ID/version 排序，摘要只关联本次派生材料。包生成文件显式使用无 BOM 编码。
+不新增运行时绑定机制，不更改旧 State/Schema wire；既有本地 Family DTO/body 算法保持。
+
+观察与修正：
+
+- 外部模板的固定子依赖曾可命中消费方 owned 同 ID；SG 现显式拒绝，Build 先验证引用自身闭包，
+  然后联合 accepted。即使同模板也不能合并两个提供者，已有对应生成与直接工具负例。
+- 首轮 SG 回归因新增 current/history 预检次序改变了纯本地错误诊断；无外部材料请求现在直接跳过索引，
+  有引用时按 accepted/current 两阶段处理。旧诊断回归已在全套测试中通过。
+- 两个测试夹具修正了错误的动态 DLL 内部 API 调用及示例 DTO 泛型参数；未放宽产品可见性或改变 DTO 形状。
+- List 缺规则负例原误要求整图零回调；现独立计量该 List 的回调，验证明确错误、零 List 回调、head 不变，
+  允许先前 World 已完成自己的合法 Upgrade，不扩张为全图预绑定或副作用回滚。
+
+根验证：`dotnet build DurableGraph.slnx --no-restore` 零警告/错误；
+`dotnet test DurableGraph.slnx --no-build --no-restore` 全部 **2406** 通过，新增 **69**：
+Runtime/SG 1458、StateStore 630、Serialization 163、Storage 155，无失败或跳过。
+日志为忽略目录中的 `obj/db060-build-4.log`、`obj/db060-final-tests.log`；更早的失败日志保留用于区分修正过程。
+
+两代新包成功产物位于 `experiments/PackageConsumerProbe/obj/inline-library-20260910101449-29804-81bb3bc9`，
+运行日志 `obj/db060-package-inline-2.log`；隔离 runtime feed 版本
+`0.0.0-inline-library-e2e.20260910101449-29804-81bb3bc9`。
+LibraryB/A/AppModel history 分别从 2/2/1 到 4/3/2，旧 bytes/hash 原样，消费方没有发布外部记录；
+独立 reviewer 已复核全部最终历史与 `independent-history.json`，并抽查编译使用 ref DLL、运行使用 lib DLL。
+包 marker `InlineLibrarySeed`、`InlineLibraryUpgrade`、`InlineLibraryPackaging` 全部通过。
+测试模型包存在已说明的 NU5131（旧式 nuspec references 组）警告；此见证验证 PackageReference，不验证 packages.config。
+它不影响已观察的 ref/lib 资产与执行；根 build 的零警告声明不涵盖该包警告。
+
+同一最终 runtime feed 的 CrossAssembly、Generic、ValueUpgrade、Record、CompositeDictionary 五条旧包 lane 全部通过；
+日志为 `obj/db060-package-<Lane>.log`。CrossAssembly 仍验证 nominal-only App/Host DLL 与 World history 不变，
+不因新导出材料误升级 owner。独立审阅无未处理阻塞项；本片没有遗留待完成的范围内 TODO。
+最终检查 10 份修改 Markdown 的 516 个本地链接、49 个锚点，零错误；完整 diff 空白检查通过。

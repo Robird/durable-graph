@@ -38,18 +38,21 @@
                      and '$(Language)' == 'C#'">
     <ItemGroup>
       <_DurableGraphSchemaHistoryManifest Include="$(CompilerGeneratedFilesOutputPath)/**/DurableGraphSchemaHistoryCandidates.g.cs" />
+      <_DurableGraphSchemaHistoryReferences Include="$(CompilerGeneratedFilesOutputPath)/**/DurableGraphSchemaHistoryReferences.g.cs" />
     </ItemGroup>
 
     <Error Condition="'$(DurableGraphSchemaHistoryMode)' != 'Publish' and '$(DurableGraphSchemaHistoryMode)' != 'Verify'"
            Text="DurableGraphSchemaHistoryMode must be Publish, Verify, or Off; found '$(DurableGraphSchemaHistoryMode)'." />
     <Error Condition="'@(_DurableGraphSchemaHistoryManifest->Count())' != '1'"
            Text="DurableGraph expected exactly one Schema-history candidate manifest under '$(CompilerGeneratedFilesOutputPath)' but found @(_DurableGraphSchemaHistoryManifest->Count()). Clean the project and rebuild, and do not disable EmitCompilerGeneratedFiles." />
+    <Error Condition="'@(_DurableGraphSchemaHistoryReferences->Count())' != '1'"
+           Text="DurableGraph expected exactly one Schema-history reference manifest under '$(CompilerGeneratedFilesOutputPath)' but found @(_DurableGraphSchemaHistoryReferences->Count()). Clean the project and rebuild." />
     <Error Condition="!Exists('$(_DurableGraphBuildTool)')"
            Text="DurableGraph Schema-history tool was not found at '$(_DurableGraphBuildTool)'." />
 
     <Exec Condition="'@(_DurableGraphSchemaHistoryManifest->Count())' == '1' and '$(DurableGraphSchemaHistoryMode)' == 'Publish'"
-          Command="&quot;$(_DurableGraphDotNetHost)&quot; &quot;$(_DurableGraphBuildTool)&quot; publish --manifest &quot;@(_DurableGraphSchemaHistoryManifest)&quot; --schema-history &quot;$(DurableGraphSchemaHistoryDirectory)&quot;" />
+          Command="&quot;$(_DurableGraphDotNetHost)&quot; &quot;$(_DurableGraphBuildTool)&quot; publish --manifest &quot;@(_DurableGraphSchemaHistoryManifest)&quot; --schema-history &quot;$(DurableGraphSchemaHistoryDirectory)&quot; --reference-manifest &quot;@(_DurableGraphSchemaHistoryReferences)&quot;" />
     <Exec Condition="'@(_DurableGraphSchemaHistoryManifest->Count())' == '1' and '$(DurableGraphSchemaHistoryMode)' == 'Verify'"
-          Command="&quot;$(_DurableGraphDotNetHost)&quot; &quot;$(_DurableGraphBuildTool)&quot; verify --manifest &quot;@(_DurableGraphSchemaHistoryManifest)&quot; --schema-history &quot;$(DurableGraphSchemaHistoryDirectory)&quot;" />
+          Command="&quot;$(_DurableGraphDotNetHost)&quot; &quot;$(_DurableGraphBuildTool)&quot; verify --manifest &quot;@(_DurableGraphSchemaHistoryManifest)&quot; --schema-history &quot;$(DurableGraphSchemaHistoryDirectory)&quot; --reference-manifest &quot;@(_DurableGraphSchemaHistoryReferences)&quot;" />
   </Target>
 </Project>

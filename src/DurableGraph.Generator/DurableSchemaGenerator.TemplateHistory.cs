@@ -37,7 +37,7 @@ public sealed partial class DurableSchemaGenerator {
         ITypeSymbol child = ((INamedTypeSymbol)type).TypeArguments[0];
         if (!TryGetTypePattern(type, owner, halfType, listType, dictionaryType, compilation, out _)) return false;
         if (child is INamedTypeSymbol named && GetAttribute(named.GetAttributes(), DurableTypeAttributeMetadataName) is not null &&
-            !TryGetInlineValue(child, owner, cancellationToken, out _, out _, out _, out inline)) return false;
+            !TryGetInlineValue(child, owner, compilation, cancellationToken, out _, out _, out _, out inline)) return false;
         tag = "Nullable"; number = 18; name = type.ToDisplayString(FullyQualifiedNameFormat);
         return true;
     }

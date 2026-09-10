@@ -236,29 +236,34 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
 
         validTypes = RemoveDuplicateSchemaIds(context, validTypes);
         validTypes = ValidateSchemaChains(context, validTypes);
+        if (!TryImportSchemaReferences(context, compilation, validTypes, history, out List<SchemaHistoryModel> references, out string? referenceManifest)) return;
+        List<SchemaHistoryModel> availableHistory = new(history);
+        availableHistory.AddRange(references);
 
-        if (!ValidateHistoryClosure(context, history)) {
+        if (!ValidateHistoryClosure(context, availableHistory)) {
             return;
         }
         if (!ValidateUpgradeRegistrations(context, validTypes, compilation, out bool hasUpgradeRegistrations)) {
             return;
         }
-        if (!ValidateValueUpgradeRegistrations(context, validTypes, history, compilation, out bool hasValueUpgradeRegistrations)) {
+        if (!ValidateValueUpgradeRegistrations(context, validTypes, availableHistory, compilation, out bool hasValueUpgradeRegistrations)) {
             return;
         }
 
         if (validTypes.Count > 0 || types.Count == 0) {
             string manifestSource = RenderSchemaHistoryManifest(validTypes)
                 .Replace("\r\n", "\n");
+            if (references.Count > 0) manifestSource += "// references-sha256:" + SchemaHistoryReferenceProtocol.ComputeHash(referenceManifest!) + "\n";
+            context.AddSource("DurableGraphSchemaHistoryReferences.g.cs", SourceText.From(referenceManifest!, new UTF8Encoding(false)));
             context.AddSource(
                 "DurableGraphSchemaHistoryCandidates.g.cs",
                 SourceText.From(manifestSource, Encoding.UTF8));
         }
 
         if (validTypes.Count > 0 || (types.Count == 0 && hasValueUpgradeRegistrations)) {
-            if (forceDefinitions || hasUpgradeRegistrations || hasValueUpgradeRegistrations || UsesGenericTemplates(validTypes, history)) {
-                if (ValidateGenericTemplateHistory(context, validTypes, history)) {
-                    GenerateGenericStates(context, validTypes, history, historyParsedSuccessfully, compilation);
+            if (references.Count > 0 || forceDefinitions || hasUpgradeRegistrations || hasValueUpgradeRegistrations || UsesGenericTemplates(validTypes, history)) {
+                if (ValidateGenericTemplateHistory(context, validTypes, availableHistory)) {
+                    GenerateGenericStates(context, validTypes, history, historyParsedSuccessfully, compilation, references);
                 }
                 return;
             }
@@ -755,7 +760,7 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
                 out string? fieldTypeName) &&
                 !TryGetNominalReference(field.Type, type, compilation,
                     context.CancellationToken, out typeTag, out typeTagValue, out fieldTypeName, out targetSchemaId) &&
-                !TryGetInlineValue(field.Type, type, context.CancellationToken,
+                !TryGetInlineValue(field.Type, type, compilation, context.CancellationToken,
                     out typeTag, out typeTagValue, out fieldTypeName, out inlineSchema) &&
                 !TryGetParameterField(field.Type, out typeTag, out typeTagValue, out fieldTypeName) &&
                 !TryGetArrayField(field.Type, out typeTag, out typeTagValue, out fieldTypeName) &&
@@ -943,13 +948,14 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
     }
 
     private static bool TryGetInlineValue(
-        ITypeSymbol fieldType, INamedTypeSymbol owner,
+        ITypeSymbol fieldType, INamedTypeSymbol owner, Compilation compilation,
         System.Threading.CancellationToken cancellationToken,
         out string? typeTag, out int typeTagValue, out string? fieldTypeName, out SchemaReference? inlineSchema) {
         typeTag = null; typeTagValue = 0; fieldTypeName = null; inlineSchema = null;
         if (fieldType is not INamedTypeSymbol target || (target.TypeKind != TypeKind.Struct && target.TypeKind != TypeKind.Enum) ||
-            !HasDurableTypeShape(target, cancellationToken) ||
-            !SymbolEqualityComparer.Default.Equals(target.ContainingAssembly, owner.ContainingAssembly)) return false;
+            (SymbolEqualityComparer.Default.Equals(target.ContainingAssembly, owner.ContainingAssembly)
+                ? !HasDurableTypeShape(target, cancellationToken)
+                : !HasExternalDurableNominalShape(target, compilation))) return false;
         AttributeData? attribute = GetAttribute(target.GetAttributes(), DurableTypeAttributeMetadataName);
         if (attribute is null || attribute.ConstructorArguments.Length != 2 ||
             attribute.ConstructorArguments[0].Value is not string identity ||

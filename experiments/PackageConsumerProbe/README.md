@@ -13,6 +13,11 @@ independent DomainLibrary and AppModel packages expose public registration catal
 a shared cyclic graph. A compatible V2 library replacement leaves AppModel/Host DLL hashes and World history
 unchanged, restores deleted-inline-type historical DTOs, upgrades only the target, and resumes Base/Delta saves.
 
+The [fixed inline library consumer](InlineLibraryConsumer/README.md) runs through `Run-InlineLibraryProbe.ps1`:
+Host, AppModel and two value libraries compile from real package reference assemblies. Direct fields compose
+three layers of inline history, including private internal implementation values. Two generations retain
+independent library history, explicitly upgrade affected owners and resume Base/NoChange/Delta saves.
+
 Consumers use the runtime's non-generic `ObjectId` for captured/decoded identities, reference DTO
 slots and UpgradeContext tracing. Storage rows and probe-owned address sidecars retain numeric
 `uint` IDs; those boundaries use `.Value` or `new ObjectId(...)` explicitly. Ordinary numeric

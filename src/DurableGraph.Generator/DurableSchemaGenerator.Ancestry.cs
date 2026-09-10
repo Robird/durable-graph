@@ -111,7 +111,10 @@ public sealed partial class DurableSchemaGenerator {
         }
         foreach (DurableFieldModel field in type.Fields) {
             if (!field.InlineSchema.HasValue) continue;
-            int index = types.FindIndex(candidate => SymbolEqualityComparer.Default.Equals(candidate.Symbol, ((INamedTypeSymbol)(IsNullableValue(field.Symbol.Type) ? ((INamedTypeSymbol)field.Symbol.Type).TypeArguments[0] : field.Symbol.Type)).OriginalDefinition));
+            INamedTypeSymbol target = (INamedTypeSymbol)(IsNullableValue(field.Symbol.Type) ? ((INamedTypeSymbol)field.Symbol.Type).TypeArguments[0] : field.Symbol.Type);
+            int index = types.FindIndex(candidate => SymbolEqualityComparer.Default.Equals(candidate.Symbol, target.OriginalDefinition));
+            // Metadata inline templates are validated by the complete imported exact DAG below.
+            if (index < 0 && !SymbolEqualityComparer.Default.Equals(target.ContainingAssembly, type.Symbol.ContainingAssembly)) continue;
             if (index < 0 || !types[index].IsInline || !ValidateCurrentDependency(types[index], types, path, heights, depth + 1, out int childHeight)) return false;
             height = Math.Max(height, childHeight + 1);
         }

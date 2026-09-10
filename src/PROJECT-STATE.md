@@ -1,6 +1,6 @@
 # DurableGraph 产品开发工作集
 
-> 校准：2026-09-10，[DB-059 跨程序集模型组合](../docs/design-branches/0059-cross-assembly-model-composition-slice.md) 的能力与验收集中在分片记录。本文只维护当前能力、边界与续工入口。
+> 校准：2026-09-10，[DB-060 跨程序集固定 inline](../docs/design-branches/0060-cross-assembly-inline-history-slice.md) 的能力与验收集中在分片记录。本文只维护当前能力、边界与续工入口。
 > 文档不是实现授权；事实以当前源码、测试和工具输出为准。
 
 ## 从这里继续
@@ -18,19 +18,18 @@
 
 ## 当前焦点
 
-[DB-059 跨程序集模型目录与类型组合](../docs/design-branches/0059-cross-assembly-model-composition-slice.md) 已完成；
-当前实现仍拒绝固定外部 inline/base，history/wire 格式不变。
-下一片推荐 [DB-060 跨程序集固定 inline 值与只读历史依赖](../docs/design-branches/0060-cross-assembly-inline-history-slice.md)，
-状态 Proposed，尚未实施：让 `RemotePoint` 可直接成为字段，消费方只读依赖库模板，复用其公开 DTO/body/projection，
-分别保留 history 所有权。问题、范围、替代路线与 G0–G3 验收集中在该文档，待采纳后施工。
-外部 base 的声明层访问另片处理；ValueTuple、DateTime 和 SchemaStore 自举仍按路线图的各自触发条件选择。
+[DB-060 跨程序集固定 inline 值与只读历史依赖](../docs/design-branches/0060-cross-assembly-inline-history-slice.md)
+已完成 G0–G3：直接外部值字段、只读模板导出和独立 history 贯通，复用已有 DTO/body/projection。
+真实两代三库包验证 ref/lib、旧 CLR 删除、显式 Upgrade 与增量续写；验收集中在该文档 §9。
+固定外部 base 的声明层访问和自动跨库业务规则发现仍未开放；既有 history/State 格式不变。
+当前没有其他已采纳待实施的工作单；ValueTuple、DateTime 和 SchemaStore 自举仍按路线图的各自触发条件选择。
 
 ## 当前能力与实际边界
 
 | 层 | 已验证能力 | 尚未闭合的边界 |
 |---|---|---|
 | [DurableGraph](DurableGraph/DurableGraph.csproj) | immutable Schema/exact DAG；统一 ObjectBinding、ObjectLayout、Capture/refs/恢复目录；SZ/rank 2–4 数组、List 与 Dictionary owned 状态；静态 StateEquals、数组稀疏/列表区间/字典键寻址 Delta、默认 Adaptive 与三种显式 List writer；独立 historical reader | 其他 BCL、数组协变；持久发布由 StateStore 拥有 |
-| [Generator](DurableGraph.Generator/DurableGraph.Generator.csproj) / [Build](DurableGraph.Build/DurableGraph.Build.csproj) | class/struct（含 record struct）开放模板、显式 enum、readonly DTO/静态 body、Capture/Hydrate、泛型继承与递归 Nullable/数组/List/Dictionary 组合；跨程序集 nominal/动态参数与显式 Family；history v9；三参 Upgrade/旧二参适配、值规则/局部依赖 adapter | 其他 CLR 值类型、其他 BCL；固定外部 inline/base 模板与跨程序集规则发现 |
+| [Generator](DurableGraph.Generator/DurableGraph.Generator.csproj) / [Build](DurableGraph.Build/DurableGraph.Build.csproj) | class/struct（含 record struct）开放模板、显式 enum、readonly DTO/静态 body、Capture/Hydrate、泛型继承与递归 Nullable/数组/List/Dictionary 组合；跨程序集 nominal/动态参数、固定 inline 及只读模板导出；history v9；三参 Upgrade/旧二参适配、值规则/局部依赖 adapter | 其他 CLR 值类型、其他 BCL；外部 base 声明层访问与跨程序集规则发现 |
 | [StateStore](DurableGraph.StateStore/DurableGraph.StateStore.csproj) | 统一闭合 Schema/数组/List/Dictionary 目录与整数依赖、单批次登记、Base v4 ID 头；完整 stored/current 引用验证、可达图两阶段恢复；公开 PrepareNew/fixed-Parent Prepare；GraphRepository 单 head/持久 WorldId 与 GraphSession 同实例 Commit；升级 Base/Remove | 无 branch/Reset/根替换或联合 Store 视图 |
 | [Storage](DurableGraph.StateStore.Storage/DurableGraph.StateStore.Storage.csproj) | AppendDurably 原 lease 屏障；local Base/Delta records、wire v3、exact Revision live map、Parent/prior 校验、object-first 原始重建链及实际 payload H；Base 精确/Delta 上界计量；真实 Segment/RBF 冷重开 | 不解码 typed body；不拥有持久 roots、类型目录或发布 head；重复读取暂未缓存 |
 | [Serialization](DurableGraph.StateStore.Serialization/DurableGraph.StateStore.Serialization.csproj) | 字节原语、string 内容 codec、拥有 raw bytes 的 PreparedBaseBody/PreparedDeltaBody、显式 body 的 typed slot、早期元素 ref 循环 | 完整数组/List 对象操作位于 Runtime；其他 BCL 内容 codec 尚无 |
@@ -85,12 +84,18 @@
   UpgradePlan 持有展平去重的 exact Schema requirement set；缓存命中在 callback 前统一核对后续已注册 Schema，
   冲突报告 owner endpoint 到具体 base/inline 字段的稳定路径。普通 binding 缓存仍复用同一闭包算法；共享 DAG 不按树重复展开。
 - 跨程序集 public 顶层 Durable 类型可进入 nominal 表达及动态表示参数；包括外部 class、容器元素、
-  `LocalBox<RemotePoint>` / `RemoteBox<LocalPoint>` 及本地 `InlineBox<T>` 闭合外部值。固定外部 inline/base 仍拒绝。
+  `LocalBox<RemotePoint>` / `RemoteBox<LocalPoint>` 及本地 `InlineBox<T>` 闭合外部值；也支持直接固定外部值字段/Nullable/泛型值。
   `DurableGraphGenerateDefinitions=true` 强制现有 Family 路径；未设置/false 保持自动选择。聚合器 `DurableDefinitions`
-  为 internal，各库以公开 Register/ RegisterReaders facade 登记；history 独立，不扫描程序集或复制外部模板。
+  为 internal，各库以公开 Register/ RegisterReaders facade 登记；history 独立，Runtime 不扫描程序集。
   nominal 查询优先 Definition，缺失时允许精确相同 nominal 的已登记普通 Model/reader，仅证明 ReferenceObject，
   不调用目标工厂或补历史模板；普通匹配与 Upgrade 反推共用，实际 exact reader 仍须存在。
   目标单独升版不改变 nominal-only owner；动态 inline 仍要求 owner 升版。程序集拆包不增加 CLR 二进制兼容保证。
+- Family 编译以 DurableSchemaExportAttribute 导出自有 inline 当前/保留模板（执行合同 1、模板 v9），SG 按需读取编译引用元数据，
+  包括传递 internal 实现依赖、仅历史和仅本地规则端点；固定外部依赖自动选 Family，复用已有公开 DTO/body/projection。
+  不重生成/重导出外部 Family；Build 通过带候选摘要关联的 canonical reference manifest 校验，只 Publish owned candidate。
+  referenced 自闭包、accepted+referenced、最后 current 的顺序保留历史完整性；外部依赖不能借 owned 同 ID 补缺。
+  独立库同 ID 即使模板相同也拒绝；导出材料不授予 Runtime factory/reader/Upgrade。固定外部值改变仍要求 owner 升版。
+  普通无引用 candidate 与既有 Family DTO arity/Schema/body 保持；外部 base 和自动跨库业务规则发现仍未开放。见 DB-060。
 - 新 `DurableUpgrade` 方法使用非泛型 static host 中可访问的三参方法；运行时优先闭合 owner 特例，否则选择通用边。
   整条相邻链在该对象首次业务调用前绑定；中间 exact 布局来自显式 DTO 表示、已注册 Schema 或唯一历史推导，缺失则拒绝。
   不使用 latest 补缺，不自动升级 struct，失败不尝试另一业务规则。每对象/相邻边独立 UpgradeContext 含 ObjectId 及完整 Source/TargetObjectLayout；Schema 访问器仅适用于 durable owner。
@@ -229,6 +234,7 @@ DurableGraph runtime 也引用 Serialization，单一 runtime PackageReference �
 
 | 准备修改 | 先查源码/测试，再按需读合同 |
 |---|---|
+| 固定外部 inline、只读模板归属与构建闭包 | [DB-060](../docs/design-branches/0060-cross-assembly-inline-history-slice.md)、[SG 导入导出](DurableGraph.Generator/DurableSchemaGenerator.SchemaExports.cs)、[Build 依赖](DurableGraph.Build/SchemaHistoryTool.References.cs)、[真实包](../experiments/PackageConsumerProbe/InlineLibraryConsumer/README.md) |
 | 跨程序集 nominal/动态参数、显式 Family 与稳定消费者 DLL | [DB-059](../docs/design-branches/0059-cross-assembly-model-composition-slice.md)、[metadata 分类](DurableGraph.Generator/DurableSchemaGenerator.CrossAssembly.cs)、[真实包](../experiments/PackageConsumerProbe/CrossAssemblyConsumer/README.md) |
 | DateOnly/TimeOnly/DateTimeOffset、完整 offset 与 history v9 | [DB-058](../docs/design-branches/0058-temporal-scalar-value-slice.md)、[静态值操作](DurableGraph/TemporalScalarStateValues.cs)、[真实包](../experiments/PackageConsumerProbe/TemporalScalarConsumer/README.md) |
 | Guid/decimal/TimeSpan、非连续 builtin tag 与 history v8 | [DB-057](../docs/design-branches/0057-bcl-scalar-value-slice.md)、[静态值操作](DurableGraph/BclScalarStateValues.cs)、[真实包](../experiments/PackageConsumerProbe/BclScalarConsumer/README.md) |

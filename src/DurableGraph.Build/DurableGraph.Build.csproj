@@ -11,5 +11,6 @@
 
   <ItemGroup>
     <Compile Include="../Shared/SchemaHistoryTypePattern.cs" Link="SchemaHistoryTypePattern.cs" />
+    <Compile Include="../Shared/SchemaHistoryReferenceProtocol.cs" Link="SchemaHistoryReferenceProtocol.cs" />
   </ItemGroup>
 </Project>

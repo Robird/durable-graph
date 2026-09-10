@@ -135,12 +135,9 @@ public sealed partial class DurableSchemaGeneratorTests {
     }
 
     [Theory]
-    [InlineData("Remote.Point", "DurableBase", "DG0007")]
-    [InlineData("Remote.Point?", "DurableBase", "DG0007")]
-    [InlineData("Remote.Inline<int>", "DurableBase", "DG0007")]
     [InlineData("int", "Remote.Node", "DG0019")]
     [InlineData("int", "Remote.Box<int>", "DG0019")]
-    public void CrossAssemblyMetadataRejectsFixedExternalInlineAndBase(string field, string parent, string diagnostic) {
+    public void CrossAssemblyMetadataRejectsExternalBase(string field, string parent, string diagnostic) {
         var library = EmitCrossAssemblyReference(RunCrossAssemblyGenerator(CrossAssemblyRemoteSource, forceDefinitions: "true"));
         GeneratorTestRun run = RunCrossAssemblyGenerator($$"""
             using Atelia.DurableGraph;
@@ -151,14 +148,14 @@ public sealed partial class DurableSchemaGeneratorTests {
     }
 
     [Fact]
-    public void CrossAssemblyMetadataRejectsFixedExternalValueNestedInsideLocalStruct() {
+    public void CrossAssemblyMetadataSupportsFixedExternalValueNestedInsideLocalStruct() {
         var library = EmitCrossAssemblyReference(RunCrossAssemblyGenerator(CrossAssemblyRemoteSource, forceDefinitions: "true"));
         GeneratorTestRun run = RunCrossAssemblyGenerator("""
             using Atelia.DurableGraph;
             [DurableType("Inner",1)] public partial struct Inner { [DurableField(1)] public Remote.Point Point; }
             [DurableType("World",1)] public partial class World:DurableBase { [DurableField(1)] public Inner Value; }
             """, [library.Reference]);
-        Assert.Contains(run.GeneratorDiagnostics, error => error.Id == "DG0007");
+        AssertSchemaOnlyCompiles(run);
         Assert.DoesNotContain(run.GeneratorDiagnostics, error => error.Id == "CS8785");
     }
 

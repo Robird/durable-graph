@@ -9,8 +9,8 @@ internal static class Program {
             SchemaHistoryTool tool = new();
 
             SchemaHistoryResult result = command.Name switch {
-                "publish" => tool.Publish(command.ManifestPath, command.SchemaHistoryDirectory),
-                "verify" => tool.Verify(command.ManifestPath, command.SchemaHistoryDirectory),
+                "publish" => tool.Publish(command.ManifestPath, command.SchemaHistoryDirectory, command.ReferenceManifestPath),
+                "verify" => tool.Verify(command.ManifestPath, command.SchemaHistoryDirectory, command.ReferenceManifestPath),
                 _ => throw new CommandLineException($"unknown command '{command.Name}'"),
             };
 
@@ -35,13 +35,14 @@ internal static class Program {
 
     private static void WriteUsage() {
         Console.Error.WriteLine(
-            "usage: DurableGraph.Build <publish|verify> --manifest <generated.g.cs> --schema-history <directory>");
+            "usage: DurableGraph.Build <publish|verify> --manifest <generated.g.cs> --schema-history <directory> [--reference-manifest <generated.g.cs>]");
     }
 
     private sealed record Command(
         string Name,
         string ManifestPath,
-        string SchemaHistoryDirectory) {
+        string SchemaHistoryDirectory,
+        string? ReferenceManifestPath) {
         public static Command Parse(string[] args) {
             if (args.Length == 0) {
                 throw new CommandLineException("a command is required");
@@ -55,6 +56,7 @@ internal static class Program {
 
             string? manifestPath = null;
             string? schemaHistoryDirectory = null;
+            string? referenceManifestPath = null;
 
             for (int index = 1; index < args.Length; index += 2) {
                 if (index + 1 >= args.Length) {
@@ -75,8 +77,12 @@ internal static class Program {
                     case "--schema-history" when schemaHistoryDirectory is null:
                         schemaHistoryDirectory = value;
                         break;
+                    case "--reference-manifest" when referenceManifestPath is null:
+                        referenceManifestPath = value;
+                        break;
                     case "--manifest":
                     case "--schema-history":
+                    case "--reference-manifest":
                         throw new CommandLineException($"option '{option}' was specified more than once");
                     default:
                         throw new CommandLineException($"unknown option '{option}'");
@@ -91,7 +97,7 @@ internal static class Program {
                 throw new CommandLineException("option '--schema-history' is required");
             }
 
-            return new Command(name, manifestPath, schemaHistoryDirectory);
+            return new Command(name, manifestPath, schemaHistoryDirectory, referenceManifestPath);
         }
     }
 }

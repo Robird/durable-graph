@@ -23,7 +23,7 @@ DB-045 持久表示 ID、DB-046 统一闭合目录、DB-047 List 基础能力和
 
 | 文档 | 状态 | 实施范围 |
 |---|---|---|
-| [DB-060 跨程序集固定 inline 值与只读历史依赖](0060-cross-assembly-inline-history-slice.md) | Proposed / 尚未实施 | 补齐直接外部值字段；按需导入外部模板、复用公开 Family/投影，分离 owned/reference/candidate；规划独立 history、旧 CLR 删除和两代包验收，外部 base 另片 |
+| [DB-060 跨程序集固定 inline 值与只读历史依赖](0060-cross-assembly-inline-history-slice.md) | 已实施 / G0–G3 | 直接外部值字段、按需只读模板导出、独立 history/生成归属；真实 ref/lib 三库两代包验证旧 CLR 删除、显式 Upgrade 与增量续写；history/State 格式不变，外部 base 另片 |
 | [DB-059 跨程序集模型目录与类型组合](0059-cross-assembly-model-composition-slice.md) | 已实施 / G0–G3 | 外部 nominal/动态参数、显式 Family、普通 Model/reader 名义证据；独立模型包升级时 App/Host DLL 和 World history 不变，旧 inline CLR 删除后仍可恢复续写；固定外部 inline/base 模板另排 |
 | [DB-058 DateOnly / TimeOnly / DateTimeOffset 内建值槽](0058-temporal-scalar-value-slice.md) | 已实施 / G0–G3 | 三值完整公开表示、offset 持久相等性、静态 body/组合/history v9、字典双比较与显式升级；两代真实包保留旧 inline 历史并升级续写；DateTime Local/DST 独立后继 |
 | [DB-057 Guid / decimal / TimeSpan 内建值槽](0057-bcl-scalar-value-slice.md) | 已实施 / G0–G3 | 三种完整表示、静态 body、组合/history v8、字典双语义及显式升级；真实包保留旧 inline 历史并升级续写，Tuple 多 child 后继保留于 §8 |

@@ -104,7 +104,15 @@ Source Generator 负责可在编译期确定的类型知识与机械代码，框
 每个引用对象自己的 Base 决定其 exact 版本；目标升版不改变 nominal-only 引用方的 Schema。
 动态 inline 参数仍沿原规则传播完整布局变化，作者负责受影响 owner 的版本与显式 Upgrade。
 
-固定外部 inline/base 模板的导入不由此自动开放。程序集拆包也不授予任意 CLR 二进制兼容：
+固定外部 inline 值通过定义库的只读模板导出组合，消费方复用其公开历史 DTO/body 与当前投影。
+导出只含定义库自有 inline 模板；消费方按需解析传递 exact 依赖，分别维护自己的 history、生成代码和登记入口。
+外部值的 internal 实现依赖不必作为 public 领域类型暴露。构建材料的执行合同版本独立于 history 格式，
+模板导出不代替运行时 Definition/reader/Upgrade 登记，也不把 CLR 名称或程序集来源加入持久身份。
+引用材料须自行闭合，再与本地 accepted history 校验；本地 current candidate 不能修补旧缺口，
+本地或另一库的同 ID 定义不能冒充原提供者。具体合同见 [DB-060](design-branches/0060-cross-assembly-inline-history-slice.md)。
+
+固定外部值的 exact 布局变化仍要求受影响 owner 显式升版和 Upgrade，并重编译受影响消费者。
+外部 base 的声明层访问另行设计。程序集拆包也不授予任意 CLR 二进制兼容：
 保留消费者 DLL 仍需保持其使用的公共 CLR 类型和成员。缺少定义、reader 或升级能力时明确拒绝，
 不用当前源码代替历史代码，不用程序集名为相同 DefinitionId 提供额外身份隔离。
 具体边界及独立包见证见 [DB-059](design-branches/0059-cross-assembly-model-composition-slice.md)。

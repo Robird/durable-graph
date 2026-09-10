@@ -5,24 +5,23 @@ using Atelia.DurableGraph.SchemaHistory;
 
 namespace Atelia.DurableGraph.Build;
 
-internal sealed class SchemaHistoryTool {
+internal sealed partial class SchemaHistoryTool {
     private const string SchemaHistoryExtension = ".dgschema";
 
     public SchemaHistoryResult Publish(
         string manifestPath,
-        string schemaHistoryDirectory) {
+        string schemaHistoryDirectory,
+        string? referenceManifestPath = null) {
         IReadOnlyList<SchemaHistoryRecord> candidates = SchemaHistoryDocument.ParseManifest(manifestPath);
-
-        if (candidates.Count == 0 && !Directory.Exists(schemaHistoryDirectory)) {
-            return new SchemaHistoryResult(
-                "published 0 schema-history record(s); 0 already exact");
-        }
 
         Dictionary<SchemaHistoryKey, ExistingSchemaHistoryRecord> existing = Directory.Exists(schemaHistoryDirectory)
             ? LoadHistory(schemaHistoryDirectory)
             : new Dictionary<SchemaHistoryKey, ExistingSchemaHistoryRecord>();
-        Dictionary<SchemaHistoryKey, SchemaHistoryRecord> available = existing.ToDictionary(
-            pair => pair.Key, pair => pair.Value.Record);
+        Dictionary<SchemaHistoryKey, SchemaHistoryRecord> available = LoadAvailable(
+            manifestPath, referenceManifestPath, candidates, existing);
+        if (candidates.Count == 0 && !Directory.Exists(schemaHistoryDirectory)) {
+            return new SchemaHistoryResult("published 0 schema-history record(s); 0 already exact");
+        }
 
         foreach (SchemaHistoryRecord candidate in candidates) {
             if (available.TryGetValue(candidate.Key, out SchemaHistoryRecord? historical) &&
@@ -70,11 +69,13 @@ internal sealed class SchemaHistoryTool {
 
     public SchemaHistoryResult Verify(
         string manifestPath,
-        string schemaHistoryDirectory) {
+        string schemaHistoryDirectory,
+        string? referenceManifestPath = null) {
         IReadOnlyList<SchemaHistoryRecord> candidates = SchemaHistoryDocument.ParseManifest(manifestPath);
         Dictionary<SchemaHistoryKey, ExistingSchemaHistoryRecord> existing = Directory.Exists(schemaHistoryDirectory)
             ? LoadHistory(schemaHistoryDirectory)
             : new Dictionary<SchemaHistoryKey, ExistingSchemaHistoryRecord>();
+        LoadAvailable(manifestPath, referenceManifestPath, candidates, existing);
 
         foreach (SchemaHistoryRecord candidate in candidates) {
             if (!existing.TryGetValue(candidate.Key, out ExistingSchemaHistoryRecord? historical)) {
@@ -131,8 +132,6 @@ internal sealed class SchemaHistoryTool {
                 new ExistingSchemaHistoryRecord(actualFileName, record));
         }
 
-        // Accepted history must close by itself. A current candidate cannot repair it.
-        ValidateClosure(records.ToDictionary(pair => pair.Key, pair => pair.Value.Record));
         return records;
     }
 
@@ -315,7 +314,11 @@ internal static class SchemaHistoryDocument {
         throwOnInvalidBytes: true);
 
     public static IReadOnlyList<SchemaHistoryRecord> ParseManifest(string path) {
-        string text = ReadUtf8(path, allowByteOrderMark: true);
+        return ParseManifestText(path, ReadUtf8(path, allowByteOrderMark: true));
+    }
+
+    internal static IReadOnlyList<SchemaHistoryRecord> ParseManifestText(string path, string text) {
+        text = StripReferenceHash(path, text, out _);
         IReadOnlyList<SchemaHistoryRecord> records = Parse(
             path,
             text,
@@ -337,6 +340,36 @@ internal static class SchemaHistoryDocument {
         }
 
         return records;
+    }
+
+    internal static string StripReferenceHash(string path, string text, out string? hash) {
+        const string prefix = "// references-sha256:";
+        hash = null;
+        int marker = text.IndexOf(prefix, StringComparison.Ordinal);
+        if (marker < 0) return text;
+        if (marker == 0 || text[marker - 1] != '\n') throw Invalid(path, "invalid reference hash position");
+        string suffix = text.Substring(marker + prefix.Length);
+        if (suffix.EndsWith("\r\n", StringComparison.Ordinal)) suffix = suffix.Substring(0, suffix.Length - 2);
+        else if (suffix.EndsWith("\n", StringComparison.Ordinal)) suffix = suffix.Substring(0, suffix.Length - 1);
+        if (suffix.Length != 64 || suffix.Any(character => !(character >= '0' && character <= '9' || character >= 'a' && character <= 'f'))) {
+            throw Invalid(path, "reference hash must be one terminal lowercase SHA256 line");
+        }
+        hash = suffix;
+        return text.Substring(0, marker);
+    }
+
+    internal static string ReadManifestText(string path) => ReadUtf8(path, allowByteOrderMark: true);
+
+    internal static SchemaHistoryRecord ParseReference(SchemaHistoryReferenceEntry entry) {
+        string path = entry.Owner + ":" + entry.SchemaId;
+        IReadOnlyList<SchemaHistoryRecord> records = Parse(path, entry.Manifest, ManifestHeader, requireExactlyOneRecord: true);
+        SchemaHistoryRecord record = records[0];
+        string canonical = RenderHistory(record).Replace(HistoryHeader, ManifestHeader, StringComparison.Ordinal);
+        if (record.SourceFormatVersion != 9 || record.Kind != 2 || record.SchemaId != entry.SchemaId || record.Version != entry.SchemaVersion ||
+            !StringComparer.Ordinal.Equals(canonical, entry.Manifest)) {
+            throw Invalid(path, "reference must be a canonical v9 inline manifest matching its exported ID/version");
+        }
+        return record;
     }
 
     public static SchemaHistoryRecord ParseHistory(string path) {
