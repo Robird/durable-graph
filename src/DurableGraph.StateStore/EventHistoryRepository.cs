@@ -29,6 +29,12 @@ public sealed class EventHistoryRepository : IDisposable {
     }
 
     public bool IsReadOnly => _resources.IsReadOnly;
+    /// <summary>Whether this repository has faulted and must be disposed and reopened before further use.</summary>
+    /// <remarks>
+    /// Independent of GraphCommitException.Outcome: a NotPublished attempt can still fault the writer.
+    /// False does not mean application mutations were rolled back. Recovery must inspect persisted
+    /// history through a newly opened repository rather than reuse old domain objects or frame handles.
+    /// </remarks>
     public bool IsFaulted => _resources.IsFaulted;
     public static EventHistoryRepository CreateNew(string path, RbfSegmentStoreOptions? options = null) => Open(path, options, true, false);
     public static EventHistoryRepository OpenExisting(string path, RbfSegmentStoreOptions? options = null) => Open(path, options, false, false);
@@ -49,6 +55,22 @@ public sealed class EventHistoryRepository : IDisposable {
     }
 
     /// <summary>Publishes S0 and returns a session retaining the supplied domain instances.</summary>
+    /// <typeparam name="TState">The exact domain type of the initial State root.</typeparam>
+    /// <param name="branchName">A new, nonempty branch name.</param>
+    /// <param name="initialState">The nonnull initial State root; its instances are retained rather than cloned.</param>
+    /// <param name="models">The model and history capabilities to freeze for the session.</param>
+    /// <param name="parameters">Policy for this initial save only; null uses the library default. It does not set later Commit defaults.</param>
+    /// <returns>An active session whose S0 is already published, with no PendingEvent.</returns>
+    /// <remarks>
+    /// Requires a writable repository with no active session. This creates a saved initial State, not
+    /// an empty branch. Keep the graph stable during capture. Failure can occur after publication
+    /// but before a session is delivered; do not blindly retry branch creation. Check IsFaulted
+    /// independently of GraphCommitException.Outcome and reopen a faulted repository to inspect
+    /// persisted history. Pre-append failures can propagate their original exception, and domain
+    /// mutations are never automatically rolled back.
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">A session is already active, the branch already exists, or the repository cannot perform the operation.</exception>
+    /// <exception cref="GraphCommitException">An append/publication attempt failed; the branch may already have been published.</exception>
     public EventHistorySession<TState> CreateBranch<TState>(string branchName, TState initialState,
         StateModelRegistry models, ReadAmplificationBaseBudgetParameters? parameters = null) where TState : DurableBase {
         RequireFreeWriter();
@@ -64,6 +86,21 @@ public sealed class EventHistoryRepository : IDisposable {
     }
 
     /// <summary>Restores the chosen branch without replaying business handlers. An E head restores its preceding S too.</summary>
+    /// <typeparam name="TState">The exact current domain type of the State root.</typeparam>
+    /// <param name="branchName">The existing branch to resume at its persisted head.</param>
+    /// <param name="models">The model, historical reader and Upgrade capabilities to freeze for this session.</param>
+    /// <returns>An editable State session with PendingEvent populated only when the persisted head is an Event.</returns>
+    /// <remarks>
+    /// Requires a writable repository with no active session. At an Event head, State is restored from
+    /// the preceding State revision and PendingEvent from the Event revision, with independently
+    /// allocated mutable graphs. Resume runs decoding/Upgrade/materialization but no business handler;
+    /// application code must rebuild Transient state (constructors and field initializers are not run
+    /// during domain restoration). Process only the newly restored PendingEvent, if present. A State
+    /// head has no pending work to replay, but does not by itself identify a completed external request.
+    /// If Open or Resume fails, stop and report the failure; this API does not fall back to an older head.
+    /// </remarks>
+    /// <exception cref="ArgumentNullException">models is null.</exception>
+    /// <exception cref="InvalidOperationException">A session is already active or the repository cannot perform the operation.</exception>
     public EventHistorySession<TState> Resume<TState>(string branchName, StateModelRegistry models) where TState : DurableBase {
         RequireFreeWriter();
         ArgumentNullException.ThrowIfNull(models);
@@ -85,7 +122,16 @@ public sealed class EventHistoryRepository : IDisposable {
     public IReadOnlyList<string> ListBranches() { RequireAvailable(); return _history.Journal.ListBranches(); }
     public GraphFrame GetHead(string branchName) { RequireAvailable(); return HeadCore(branchName); }
 
-    /// <summary>Returns the selected logical chain in chronological order, excluding orphan appends.</summary>
+    /// <summary>Fully materializes the selected logical chain from oldest to newest, including State and Event handles.</summary>
+    /// <param name="branchName">The branch whose head is obtained once for this operation.</param>
+    /// <returns>A fully materialized, chronological list of handles owned by this open repository.</returns>
+    /// <remarks>
+    /// Reads the complete ancestor chain of the selected head; excludes physical orphan appends and
+    /// records unique to other branches. No domain objects are restored. Taking the last few results
+    /// does not avoid full-chain reading or allocation: this is not a paginated or lazy API.
+    /// Opening the repository separately validates physical Journal records and referenced revisions,
+    /// including orphans; that validation cost is distinct from this logical-chain enumeration.
+    /// </remarks>
     public IReadOnlyList<GraphFrame> ReadFrames(string branchName) {
         RequireAvailable();
         GraphFrame head = HeadCore(branchName);
@@ -93,6 +139,15 @@ public sealed class EventHistoryRepository : IDisposable {
             .Select(address => Issue(_history.Read(address))).ToArray();
     }
 
+    /// <summary>Fully materializes the branch's logical chain, then returns its Events from oldest to newest.</summary>
+    /// <param name="branchName">The branch whose head is obtained once for this operation.</param>
+    /// <returns>A fully materialized, chronological Event list owned by this open repository.</returns>
+    /// <remarks>
+    /// Uses ReadFrames and filters by Event role, excluding orphan appends and records unique to other
+    /// branches. No domain objects are restored. Taking only the latest N results still incurs the
+    /// complete chain read and materialization; this API supplies no pagination benefit. Repository
+    /// opening has separate full physical-history validation, including orphan records.
+    /// </remarks>
     public IReadOnlyList<GraphFrame> ReadEvents(string branchName) => ReadFrames(branchName).Where(frame => frame.Kind == GraphFrameKind.Event).ToArray();
     public GraphFrame GetPreviousState(GraphFrame eventFrame) {
         RequireAvailable();

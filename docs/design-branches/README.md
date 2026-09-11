@@ -23,7 +23,7 @@ DB-045 持久表示 ID、DB-046 统一闭合目录、DB-047 List 基础能力和
 
 | 文档 | 状态 | 实施范围 |
 |---|---|---|
-| [DB-065 EventHistory 消费者上手与恢复合同](0065-event-history-consumer-contract-slice.md) | Proposed | 首轮下游反馈裁决；默认调用、包内 XML、引用事件快照与恢复示例的设计及验收。尚未实施；locator/分页按需求后继 |
+| [DB-065 EventHistory 消费者上手与恢复合同](0065-event-history-consumer-contract-slice.md) | 已实施 / G0–G3 | 默认调用、包内 XML、引用事件快照、同源恢复故障测试和 README 原文/真实包验收；产品行为和格式保持，locator/分页按需求后继 |
 | [DB-062 独立图读取与可由外层发布的工作区](0062-independent-graph-workspace-slice.md) | 已实施 | 内部独立资源、快照、根替换与顺序双图读取；E/S 共享前 S baseline；公开 Journal 外观后继 DB-063 |
 | [DB-063 EventJournal 驱动的 EventHistory](0063-event-history-journal-slice.md) | 已实施 | Journal 唯一 ref、E/S 交错提交、同实例 State 根替换、历史分支/Move/Resume、独立浏览与实验性 ReadPair；旧发布器删除，示例迁入新外观；验收见分片 |
 | [DB-064 两份 Revision 共享读取](0064-shared-revision-decoding-design.md) | 已实施 | 操作内 exact DTO/string 解码复用、只读引用闭包共享与真实包验证；保持逐视图验证、冷 Resume 可变隔离及无跨图实例身份承诺，验收见分片 |

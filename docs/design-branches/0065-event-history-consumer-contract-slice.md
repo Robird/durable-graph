@@ -1,6 +1,6 @@
 # DB-065 · EventHistory 消费者上手与恢复合同
 
-> 状态：Proposed；2026-09-11 完成首轮反馈核对与设计，尚未实施。
+> 状态：已实施 / G0–G3 验收完成；2026-09-11。实际交付与证据见 §9。
 > 基线：`297619b`。本片改善已有外观的使用与交付，不改变 E/S 提交状态机或持久格式。
 > 来源：[DramaBoard 001 首轮 API 反馈](../../../drama-board/docs/feedback/durablegraph/001-eventhistory-api.md)。
 > 反馈基于 `1cace42` 的接口审阅及此前验证；DramaBoard 尚未完成真实接入，不能当作线上故障或性能测量。
@@ -40,7 +40,7 @@
 
 ### 额外发现：XML 文档没有交付
 
-本轮对 StateStore 执行 MSBuild 属性查询，得到 `GenerateDocumentationFile=false`、`DocumentationFile` 为空。
+设计核对时对 StateStore 执行 MSBuild 属性查询，得到 `GenerateDocumentationFile=false`、`DocumentationFile` 为空。
 现有 `event-history-20260911134050-18232-cc49dac5` feed 的 StateStore nupkg 中只有 `lib/net10.0/*.dll`，没有相邻 XML。
 因此仅补 C# 注释不足以满足 B 的编辑器可发现性；这是本片唯一需要调整的构建交付接缝。
 
@@ -179,7 +179,7 @@ Windows .NET 验证串行执行。
 
 实施后运行根 `dotnet build DurableGraph.slnx`、相关 StateStore 恢复测试、新示例与既有 EventHistory 真实包路径，
 以及变更文档的本地链接/锚点检查。生成代码/history 未变时，不为文档切片扩成全体类型消费者重新验收。
-本轮设计阶段仅检查源码、已有产物与文档；以上是施工验收要求，不是本轮新通过的测试结果。
+设计阶段只检查了源码、已有产物与文档；实施阶段的实际运行结果集中记录在 §9。
 
 ## 7. 未纳入本片的反馈
 
@@ -197,3 +197,34 @@ record class、接口集合等适配工作量继续从真实 DramaBoard 集成�
 复审收窄了三处：推荐示例采用原地领域处理而非额外复制整个 State；故障测试只共享普通恢复控制源码，
 不为示例给 StateStore.Tests 引入 SG；观察数据选择 List<string> 到私有 string[]，不额外引入多层复制模型。
 记录的是设计审查结论，不是新实现或新运行结果。
+
+## 9. 施工接缝与验收登记
+
+本轮边界为 A1/B1–B4/C1–C2/E1，不改产品提交逻辑、格式或增加 API。主线程负责集成、README 与验收。
+独立恢复例子使用 `EventHistoryRecovery.PendingRecovery.Complete<TState>(session, rebuildTransient, apply)`：
+先重建当前 State 的 Transient，仅当已有 PendingEvent 时处理并 CommitDomainState，返回是否处理；异常直接交给外层结束尝试。
+此普通源码同时供真实包例子与内部故障测试编译，不包含 SG 模型、不进入产品程序集。
+
+| 验收项 | 实施归属 | 证据 |
+|---|---|---|
+| B1、E1 调用处文档 | [StateStore 项目](../../src/DurableGraph.StateStore/DurableGraph.StateStore.csproj)、上述公开外观 | 新 nupkg/恢复目录 DLL/XML 相邻、XML 一致，12 个关键 member 的 summary/remarks 校验通过；仅项目局部忽略1591 |
+| C1、C2 快照/恢复例子 | [RecoveryConsumer](../../experiments/PackageConsumerProbe/EventHistoryRecoveryConsumer/README.md)、[runner](../../experiments/PackageConsumerProbe/Run-EventHistoryRecoveryProbe.ps1) | 热/冷多进程均 E.Hp=10、S.Hp=7、观察保持；再次恢复无 Pending 不写文件；后续 S.Hp=4 时只登记 Event/Snapshot 仍读回旧 E；只读字节/时间戳不变 |
+| B2–B4 恢复分支 | [同源故障测试](../../tests/DurableGraph.StateStore.Tests/EventHistoryConsumerRecoveryTests.cs) 链接 [PendingRecovery](../../experiments/PackageConsumerProbe/EventHistoryRecoveryConsumer/PendingRecovery.cs) | 新增 5 case；包含已发布后未交付的两个 checkpoint、NotPublished/faulted、原业务/写前异常；EventHistoryRepositoryTests 共 37/37 通过 |
+| A1、G3 | [README 原文 runner](../../experiments/PackageConsumerProbe/Run-ReadmeQuickStartProbe.ps1) 与根 README | 从正文提取真实项目/Models/Program/Upgrade/浏览代码；独立包两次 V1 得 HP99/98，按文档升版后 HP97/Day1；保留旧 history，Clean/Verify 成功 |
+
+独立审阅检查了调用处合同、共享恢复函数、快照模型、故障断言与两个新 runner，没有未解决的阻碍项。
+四个外观 C# 文件去除 XML 注释/空白后的可执行文本与施工前相同；产品提交状态机、持久格式和公共签名未改动。
+
+串行验证（2026-09-11）：
+
+- `dotnet test tests/DurableGraph.StateStore.Tests/DurableGraph.StateStore.Tests.csproj --no-restore -v:q --filter FullyQualifiedName~EventHistoryRepositoryTests`：37 通过，0 失败/跳过。
+- 新 Recovery runner 自建九包 feed，history 4 条 Publish/Verify 与 XML 验证通过；工作集 `event-recovery-20260911143309-59492-43efdcaf`。
+- README 原文 runner 复用该 feed、独立包缓存与项目，工作集 `readme-20260911143711-20068-aaa00e9d`，验证通过。
+- 既有 EventHistory V1/V2 runner 复用同批 feed，history 9/11、升级/共享/根替换等原证据通过；工作集 `event-history-20260911143801-55840-ddacd12e`。
+- 根 `dotnet build DurableGraph.slnx -v:q`：0 警告/错误。此片没有修改 SG、Runtime codec 或 Storage 行为，不重跑全部类型消费者。
+- 9 份变更 Markdown 的 337 个本地链接、20 个锚点检查通过，`git diff --check` 通过。
+
+调试发现的测试边界：文件快照必须在独占仓库关闭后采集。可写模式的 ReadFrames/ReadEvents 会经 EventJournal
+持久化派生 forward-plan 缓存；实际失败诊断新增的唯一文件位于 `journal/cache/forward-plans/v1`。
+零写入断言应包围 Resume + 无 Pending 的恢复操作，额外历史枚举放在之后，不排除任何文件来掩盖变化。
+只读浏览依然使用 OpenReadOnlyExisting，并保留完整文件字节/时间戳验收；该区别已写入根 README。

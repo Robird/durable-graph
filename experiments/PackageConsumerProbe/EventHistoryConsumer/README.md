@@ -17,6 +17,11 @@ V1 writes `S0 -> E1 -> S1 -> E2`, leaving E2 pending. World contains Alice and B
 contain Alice twice, Alice has a self-cycle and shared string labels. E1 records score 2, S1 score 3,
 and E2 score 4. Hot saves preserve the caller's World and transient cache.
 
+This fixture deliberately mutates Alice through a shared hot alias after recording an Event, to
+prove that persisted DTOs remain frozen. That also changes the original hot PendingEvent object;
+it is not the recommended read-only Event modeling pattern. For application usage, see the
+[snapshot/recovery consumer](../EventHistoryRecoveryConsumer/README.md), which isolates the observed content.
+
 V2 changes Alice's scalar representation and adds World.Generation through explicit adjacent
 upgrades, preserving Alice's stable creation timestamp. That meaningful stable field also makes
 the later one-field edit economically worth writing as Delta. From a fresh readonly open, a catalog containing only Observed and Alice reads E2;

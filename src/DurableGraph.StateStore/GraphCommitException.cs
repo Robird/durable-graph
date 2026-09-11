@@ -3,10 +3,24 @@ using Atelia.DurableGraph.StateStore.Storage;
 namespace Atelia.DurableGraph.StateStore;
 
 /// <summary>The publication outcome of an interrupted Commit, independently of domain mutations.</summary>
-public enum GraphCommitOutcome { NotPublished, Unknown, Published }
+public enum GraphCommitOutcome {
+    /// <summary>The attempted publication did not take effect; writes may still have faulted the repository.</summary>
+    NotPublished,
+    /// <summary>Publication was attempted, but its result could not be established.</summary>
+    Unknown,
+    /// <summary>Publication completed, but subsequent installation or delivery failed.</summary>
+    Published
+}
 
 /// <summary>A save failure with an explicit publication outcome and, when known, candidate address.</summary>
-/// <remarks>Unknown or Published outcomes must not be transparently retried. Dispose and reopen a faulted repository.</remarks>
+/// <remarks>
+/// <see cref="Outcome"/> describes publication, not repository health or rollback of domain mutations.
+/// Even <see cref="GraphCommitOutcome.NotPublished"/> can accompany a faulted repository.
+/// Unknown or Published outcomes must not be transparently retried. Dispose and reopen a faulted
+/// repository, then Resume the branch and inspect its newly restored PendingEvent before processing.
+/// Failures before an append attempt can instead propagate their original exception; absence of this
+/// wrapper does not imply that domain mutations were rolled back or that the repository is healthy.
+/// </remarks>
 public sealed class GraphCommitException : IOException {
     internal GraphCommitException(GraphCommitOutcome outcome, FrameAddress? candidate, Exception inner)
         : base($"Graph Commit interrupted; publication outcome: {outcome}.", inner) {
@@ -14,7 +28,9 @@ public sealed class GraphCommitException : IOException {
         CandidateRevisionAddress = candidate;
     }
 
+    /// <summary>The known publication result, independently of the repository's IsFaulted status.</summary>
     public GraphCommitOutcome Outcome { get; }
+    /// <summary>The candidate StateRevision address when known; it does not establish publication or form a bookmark.</summary>
     public FrameAddress? CandidateRevisionAddress { get; }
 }
 

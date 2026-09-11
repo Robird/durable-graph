@@ -1,6 +1,6 @@
 # DurableGraph 产品开发工作集
 
-> 校准：2026-09-11；产品实现截至 [DB-064](../docs/design-branches/0064-shared-revision-decoding-design.md)，首轮消费者反馈形成待实施的 [DB-065](../docs/design-branches/0065-event-history-consumer-contract-slice.md)。本文只维护当前能力、边界与续工入口。
+> 校准：2026-09-11；产品实现截至 [DB-065](../docs/design-branches/0065-event-history-consumer-contract-slice.md)，下一步优先下游真实模型接入与反馈。本文只维护当前能力、边界与续工入口。
 > 文档不是实现授权；事实以当前源码、测试和工具输出为准。
 
 ## 从这里继续
@@ -19,14 +19,12 @@
 
 ## 当前焦点
 
-[DB-064](../docs/design-branches/0064-shared-revision-decoding-design.md) 已实现操作内 exact DTO/string 解码复用、
-只读 ReadPair 安全引用闭包共享与冷 Resume 可变隔离；实现与验收证据集中在分片。
-ReadPair 提供非泛型入口，返回按输入位置对应的两个 DurableBase；泛型重载供已知类型时校验，不按 State/Event 角色重排输入。
-现有 EventHistory 外观与持久格式保持，跨图 ReferenceEquals 仍无保证；实际读取成本的后继优化由测量触发。
-[DramaBoard 首轮 API 反馈](../../drama-board/docs/feedback/durablegraph/001-eventhistory-api.md) 已按当前源码核对；
-推荐下一片 [DB-065](../docs/design-branches/0065-event-history-consumer-contract-slice.md)：默认调用、实际交付的 XML 文档、
-含引用的事件快照与仅完成 PendingEvent 的恢复示例，经真实包和故障路径共同验证。该片已设计，尚未实施。
-下游真实模型接入仍是优先工作；跨重开书签、局部事件浏览与类型适配扩展按路线图的具体需求触发。
+[DramaBoard 首轮 API 反馈](../../drama-board/docs/feedback/durablegraph/001-eventhistory-api.md) 的近期改进已由
+[DB-065](../docs/design-branches/0065-event-history-consumer-contract-slice.md) 完成：默认调用、包内 XML 文档、
+[引用事件快照与恢复示例](../experiments/PackageConsumerProbe/EventHistoryRecoveryConsumer/README.md)，以及 README 原文执行验证。
+恢复示例与内部故障测试共用 Pending 判断；已发布 S 不重放，失败后重新取得 State/Event，不复用旧的可变图。
+现有提交/格式、DB-064 只读共享与可写隔离合同保持。下一步让下游按公开入口接入真实模型，收集具体摩擦；
+跨重开书签、局部事件浏览与类型适配扩展按路线图的需求触发，不自动扩展本轮范围。
 自动跨库业务规则发现、ValueTuple、DateTime、程序集审视和 SchemaStore 自举不随本轮扩张。
 
 ## 当前能力与实际边界
@@ -259,6 +257,7 @@ DurableGraph runtime 也引用 Serialization，单一 runtime PackageReference �
 
 | 准备修改 | 先查源码/测试，再按需读合同 |
 |---|---|
+| 默认保存、事件快照和失败恢复用法 | [DB-065](../docs/design-branches/0065-event-history-consumer-contract-slice.md)、[包示例](../experiments/PackageConsumerProbe/EventHistoryRecoveryConsumer/README.md)、[同源恢复测试](../tests/DurableGraph.StateStore.Tests/EventHistoryConsumerRecoveryTests.cs)、[README 原文验证](../experiments/PackageConsumerProbe/Run-ReadmeQuickStartProbe.ps1) |
 | 跨程序集继承、hidden 字段与基类状态投影 | [DB-061](../docs/design-branches/0061-cross-assembly-inheritance-slice.md)、[Runtime 投影](DurableGraph/StateBaseProjection.cs)、[SG 当前投影](DurableGraph.Generator/DurableSchemaGenerator.GenericProjection.cs)、[真实包](../experiments/PackageConsumerProbe/InheritanceLibraryConsumer/README.md) |
 | 固定外部 inline、只读模板归属与构建闭包 | [DB-060](../docs/design-branches/0060-cross-assembly-inline-history-slice.md)、[SG 导入导出](DurableGraph.Generator/DurableSchemaGenerator.SchemaExports.cs)、[Build 依赖](DurableGraph.Build/SchemaHistoryTool.References.cs)、[真实包](../experiments/PackageConsumerProbe/InlineLibraryConsumer/README.md) |
 | 跨程序集 nominal/动态参数、显式 Family 与稳定消费者 DLL | [DB-059](../docs/design-branches/0059-cross-assembly-model-composition-slice.md)、[metadata 分类](DurableGraph.Generator/DurableSchemaGenerator.CrossAssembly.cs)、[真实包](../experiments/PackageConsumerProbe/CrossAssemblyConsumer/README.md) |

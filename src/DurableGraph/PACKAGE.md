@@ -390,6 +390,13 @@ State candidate. These calls alternate. State may be replaced with another root 
 type, while Event roots may have different registered durable types. The session owns the previous
 State's Revision, DTO baseline and instance-ID bindings; callers do not pass these separately.
 
+All these save calls have an optional policy; an override applies to that call only, not to later
+session defaults. The StateStore package includes XML documentation for the EventHistory facade.
+The [snapshot/recovery example](../../experiments/PackageConsumerProbe/EventHistoryRecoveryConsumer/README.md)
+separates new commands from completing an existing PendingEvent after reopening. A recovery with no
+PendingEvent does not create replacement work. Publication outcome and IsFaulted are independent;
+failed attempts do not undo caller mutations. The example abandons old references before resuming.
+
 `Resume<TState>` restores a branch's State and, at an Event head, its `PendingEvent`; it does not
 replay business handlers. `ReadState<T>` and `ReadEvent<T>` independently materialize a selected
 repository-issued `GraphFrame`. Experimental `ReadPair(first, second, models)` returns two
@@ -405,6 +412,10 @@ DTOs and strings but allocates separate mutable State/Event graphs. Upgrade and 
 run independently for each view. See [DB-064](../../docs/design-branches/0064-shared-revision-decoding-design.md)
 for the internal sharing boundary; there is no public cache configuration or new wire format.
 Close an active session before forking from a historical frame or moving a branch with an expected head.
+ReadFrames/ReadEvents return a fully materialized oldest-first logical chain, excluding orphan appends;
+they do not restore domain objects. Taking only the last N results does not reduce enumeration work.
+Strict Open still performs separate physical-history validation. GraphFrame handles are valid only
+in their issuing open repository, and their diagnostic addresses are not persistent bookmarks.
 
 Graph materialization decodes the complete stored-exact directory, validates and upgrades its rows,
 then allocates all reachable objects before hydrating references. Durable classes use

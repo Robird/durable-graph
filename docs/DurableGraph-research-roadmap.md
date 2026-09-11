@@ -13,11 +13,11 @@
 触发独立历史图、外部发布和分支需求。[DB-063](design-branches/0063-event-history-journal-slice.md) 已完成 EventHistory 外观。
 操作内解码复用与只读闭包共享的能力/验收从 [DB-064](design-branches/0064-shared-revision-decoding-design.md) 和 PROJECT-STATE 进入，不再列为待施工项。
 首轮 [API 反馈](../../drama-board/docs/feedback/durablegraph/001-eventhistory-api.md) 是接口评审，尚非真实接入故障或长轨迹测量；
-当前源码核对形成 [DB-065](design-branches/0065-event-history-consumer-contract-slice.md)，与下游真实接入继续互相校准：
+其近期默认调用、文档交付与恢复示例改进已由 [DB-065](design-branches/0065-event-history-consumer-contract-slice.md) 完成。
+后继仍与下游真实接入互相校准：
 
 | 分片 | 要解决的增量 |
 |---|---|
-| [DB-065 消费者上手与恢复合同](design-branches/0065-event-history-consumer-contract-slice.md)（Proposed） | 采纳 001-A/B/C 与 E 的文档部分：默认保存入口、包内 XML、业务快照隔离、只完成已有 PendingEvent 的恢复用法；真实包与故障路径共同验收，不改持久机制 |
 | DramaBoard 实际接入 | 按公开入口保存、浏览、恢复并续写真实模型，继续收集适配/注册/升级成本；尚未发生的需求不由首轮评审替代验证 |
 | 读取优化的后继 | DB-064 之外的 Frame/map 缓存、Normalize 复用和共享比较优化按真实读取测量重访，见 §4；不承诺跨图实例复用，不改变可写 Resume 隔离 |
 
@@ -142,7 +142,7 @@ DB-051 之外的性能工作以实际轨迹或测量问题触发，不自动扩�
 | 延后项 | 何时重访 / 届时要回答的问题 |
 |---|---|
 | 跨重开的历史记录定位（反馈 001-D） | 出现独立于可移动 branch 的调试书签、RL 样本或叙事引用需求后，设计“持久 locator → 本次有效 GraphFrame”。须明确仓库作用域/错误仓库、记录保留和 orphan 可见性、branch Move 后定位、无效/不可读错误；诊断 RevisionAddress 不能直接转正。现有命名分支只在应用保持它不移动时固定历史点，不是不可变书签 |
-| 局部倒序历史浏览（反馈 001-E） | 真实浏览流程需要最近 N 条或连续分页时，先冻结所浏览 head，再选择起点/方向/限制与续页表示，验证顺序、无重漏及无需恢复无关 State。分别测量严格 Open、frame 枚举、对象恢复；不由 IEnumerable/Reverse/Take 推导惰性读取，不为分页削弱全历史校验。现有整链物化合同的说明纳入 DB-065 |
+| 局部倒序历史浏览（反馈 001-E） | 真实浏览流程需要最近 N 条或连续分页时，先冻结所浏览 head，再选择起点/方向/限制与续页表示，验证顺序、无重漏及无需恢复无关 State。分别测量严格 Open、frame 枚举、对象恢复；不由 IEnumerable/Reverse/Take 推导惰性读取，不为分页削弱全历史校验。现有整链物化合同与只读入口见 README/DB-065 |
 | DateTime 的完整保存合同 | 真实模型需要 DateTime 时，选择是否限制 UTC/Unspecified、接受公开状态规范化，或保留更完整的 Local ambiguous-DST 信息；需跨时区/DST 见证。三者公开行为不同，不随 DB-058 开放。平台依据及候选见 [DB-058 §3.3](design-branches/0058-temporal-scalar-value-slice.md#33-为什么-datetime-留在另一个问题中) |
 | ObjectId 数字回收 | 单调分配配合其他机制开发后，再定义候选隔离、retire/reuse 时机与恢复；可评估 StateJournal SlabBitmap/SlotPool，不能复用旧对象 Delta 链 |
 | 字典比较的进一步能力 | 同闭合类型多 Application 角色需要实例选择信息，引用内容比较需要确定恢复阶段，保留历史业务规则需要独立能力合同。均按真实需求重访；根 Nullable Key、ValueTuple 外观和标准模式迁移不随 DB-055/056 开放。比较合同仍沿 [DB-055 §10](design-branches/0055-composite-dictionary-key-design.md#10-审阅结论与后续裁决) |

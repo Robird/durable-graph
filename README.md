@@ -94,14 +94,13 @@ if (args.Length != 1) {
 string path = Path.GetFullPath(args[0]);
 var models = new StateModelRegistry();
 Atelia.DurableGraph.Generated.DurableDefinitions.Register(models);
-var policy = new ReadAmplificationBaseBudgetParameters(3, 5);
 
 using var repository = Directory.Exists(path)
     ? EventHistoryRepository.OpenExisting(path)
     : EventHistoryRepository.CreateNew(path);
 using var session = repository.ListBranches().Contains("main")
     ? repository.Resume<World>("main", models)
-    : repository.CreateBranch("main", NewWorld(), models, policy); // 已保存初始 S0。
+    : repository.CreateBranch("main", NewWorld(), models); // 已保存初始 S0。
 
 World world = session.State;
 world.RebuildTransient(); // Load 不调用构造器/字段初始化器，也不自动执行此方法。
@@ -111,11 +110,11 @@ if (!ReferenceEquals(world.Hero, world.Characters[0]) ||
 }
 
 if (session.PendingEvent is null) {
-    session.CommitDomainEvent(new DamageEvent { Amount = 1 }, policy);
+    session.CommitDomainEvent(new DamageEvent { Amount = 1 });
 }
 DamageEvent pending = session.GetPendingEvent<DamageEvent>();
 world.Hero.Hp -= pending.Amount;
-var frame = session.CommitDomainState(policy);
+var frame = session.CommitDomainState();
 Console.WriteLine($"{world.Find("Alice").Name}: Hp={world.Hero.Hp}; Revision={frame.RevisionAddress}");
 
 static World NewWorld() {
@@ -139,9 +138,13 @@ dotnet run --project QuickStart/QuickStart.csproj --no-restore -p:DurableGraphPa
 
 第一次输出 `Hp=99`，第二个进程重开后输出 `Hp=98`。后续修改继续使用同一个 session 的 `State`；
 成功提交 State 保留领域实例及比较基线。若进程在 Event 发布后中止，Resume 交付前一个 State 和 PendingEvent。
-Dispose **不自动保存，也不撤销领域修改**。`CommitDomainState(nextState, policy)` 也支持替换同 exact 类型根，发布后才切换 `session.State`。
+Dispose **不自动保存，也不撤销领域修改**。`CommitDomainState(nextState)` 也支持替换同 exact 类型根，发布后才切换 `session.State`。
+这段程序每次运行会完成一条已有或新建的事件；处理失败后的恢复应采用下文的[仅完成 PendingEvent 入口](#事件快照与失败恢复)，
+不要把再次运行“创建新事件”的程序当作透明重试。
 
-`(3, 5)` 分别表示对象级读取放大倍率阈值与可选 Base 预算百分比。
+省略策略参数即可使用库的默认保存策略。需要调优时，在某次 CreateBranch 或 Commit 的 `parameters` 参数传入
+`new ReadAmplificationBaseBudgetParameters(3, 5)`；两个整数分别表示对象级读取放大倍率阈值与可选 Base 预算百分比。
+当前默认值也是 `(3, 5)`，可能随原型演进调整。覆盖只对该次调用生效，后续省略参数不会继承上次的覆盖值。
 这是性能策略，不是事务大小上限；新增/升级等必要 Base 不受该可选预算限制。
 无需自己估算尺寸、挑 Base/Delta 或调用 DTO 的二进制 body。
 
@@ -152,14 +155,20 @@ Dispose **不自动保存，也不撤销领域修改**。`CommitDomainState(next
 
 ```csharp
 using var history = EventHistoryRepository.OpenReadOnlyExisting(path);
-foreach (var eventFrame in history.ReadEvents("main")) {
+var events = history.ReadEvents("main");
+foreach (var eventFrame in events) {
     var damage = history.ReadEvent<DamageEvent>(eventFrame, models);
     Console.WriteLine(damage.Amount);
 }
-var lastEvent = history.ReadEvents("main").Last();
+var lastEvent = events.Last(); // 此示例已经保存过事件。
 var before = history.GetPreviousState(lastEvent);
 var pair = history.ReadPair(before, lastEvent, models);
 ```
+
+`ReadFrames` / `ReadEvents` 按本次取得的 branch head 返回**从旧到新的完整逻辑链**，排除未连入该链的 orphan 和其他分支独有记录。
+返回值已完整物化；`Reverse().Take(n)` 不会减少底层枚举量。枚举只取得 frame，不恢复领域图；ReadEvent 等操作才恢复对象。
+严格打开仓库仍校验全历史及相关元数据，包括 orphan；不要把只读一个 Event 等同于跳过这些检查。
+需要零写入浏览时使用示例中的 `OpenReadOnlyExisting`；可写打开下的枚举可能保存 Journal 派生缓存。
 
 `ReadPair` 是实验性只读快照 API：按输入顺序返回 First/Second，两边成功后才交付。
 默认返回两个 `DurableBase`，保留各自实际类型；通过输入 frame 的 `Kind` 判断 State/Event，通过模式匹配使用具体领域类型。
@@ -172,6 +181,25 @@ var pair = history.ReadPair(before, lastEvent, models);
 `MoveBranch("main", expectedHead, targetFrame)`；随后从目标分支 Resume。
 handle 从 `GetHead`、`ReadFrames` 或提交结果取得，只能用于签发它的这一次打开实例；不要跨库或跨重开复用。
 历史链是 `S0 → E1 → S1`，E1 与 S1 的 Revision Parent 都是 S0，Event 不成为 State 的增量比较基线。
+
+## 事件快照与失败恢复
+
+事件若需要记录角色“当时的 HP 和观察”，应保存所需的只读业务快照，通过业务 ActorId 找到当前角色进行修改。
+可以从可变 `List<string>` 复制为快照私有的 `string[]`，共享不可变 string；readonly 字段本身不会冻结数组或可变元素。
+领域采用不可变对象替换时，也可以让事件保留旧对象，不必额外维护一套快照类型。
+
+[可运行的快照与恢复示例](experiments/PackageConsumerProbe/EventHistoryRecoveryConsumer/README.md) 展示
+`E1.TargetSnapshot.Hp == 10`、`S1` 中角色 HP 为 7，热处理、冷 Resume 和独立浏览都保持事件观察值。
+它区分“提交新事件”和“仅完成已有 PendingEvent”两个入口，并与故障测试共用恢复判断。
+
+失败后先结束当前尝试，关闭 session/repository，再 OpenExisting、Resume 并重新取得 State/PendingEvent：
+
+- 有 PendingEvent：重建新 State 的 Transient，再从这份 State 处理该事件并保存结果。
+- 没有 PendingEvent：恢复入口交付当前 State，不创建新事件或再次应用旧事件。S 可能已发布，只是调用方没收到成功返回。
+- 打开或恢复失败：报告并停止；不自动退回旧 head 或修复文件。
+
+没有 PendingEvent 只表示当前没有待完成的事件，不能独自证明某个外部请求已经完成；E 发布前失败也可能得到这一结果。
+外部命令是否重新提交由应用决定。库不回滚内存修改，也不保证文件之外的业务副作用只执行一次。
 
 ## Schema 演化：保留 history，显式写转换
 

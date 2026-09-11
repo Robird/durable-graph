@@ -135,6 +135,20 @@ assertions; product behavior has no dependency on that allocation behavior or pr
 
 ## EventHistory publication and retained StateStore regressions
 
+For application onboarding, start with the [snapshot/recovery consumer](EventHistoryRecoveryConsumer/README.md):
+default policy calls, private readonly snapshot contents, event-only reading, and the same PendingEvent
+control function exercised by the internal failure regressions. Its runner also checks the packaged and
+restored StateStore XML documentation. The root README itself has a separate extraction-and-run witness:
+
+```powershell
+./experiments/PackageConsumerProbe/Run-EventHistoryRecoveryProbe.ps1
+./experiments/PackageConsumerProbe/Run-ReadmeQuickStartProbe.ps1 -PackageSource <matching-feed> -Version <version>
+```
+
+The README witness extracts the actual project, models, program, browsing and Upgrade blocks. It runs
+two V1 processes, then the documented V2 edits, checks retained history and builds again in Verify mode.
+Use the matching nine-package feed printed by the recovery runner, or another fresh feed from the same source.
+
 ```powershell
 ./experiments/PackageConsumerProbe/Run-EventHistoryProbe.ps1
 ./experiments/PackageConsumerProbe/Run-StateStoreProbe.ps1
@@ -151,6 +165,8 @@ StateStore and all model/history consumer lanes now use `EventHistoryRepository`
 subsequent model-regression steps explicitly publish an Event snapshot followed by State.
 Those regression Events may use the World itself as the snapshot root; the focused EventHistory
 lane instead uses `Observed(Alice)` to verify independent event membership and capabilities.
+They intentionally mutate caller-created aliases after capture to test frozen persistence; these are
+mechanism tests, not examples of keeping a hot PendingEvent's reachable CLR contents read-only.
 Journal refs provide the sole publication point; no `publication.rbf` is created.
 
 The StateStore runner retains the inherited Character's exact DTO/Base/Delta golden checks,
