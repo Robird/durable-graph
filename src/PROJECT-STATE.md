@@ -1,6 +1,6 @@
 # DurableGraph 产品开发工作集
 
-> 校准：2026-09-11；产品实现截至 [DB-064](../docs/design-branches/0064-shared-revision-decoding-design.md)，下一步优先下游接入与 API 反馈。本文只维护当前能力、边界与续工入口。
+> 校准：2026-09-11；产品实现截至 [DB-064](../docs/design-branches/0064-shared-revision-decoding-design.md)，首轮消费者反馈形成待实施的 [DB-065](../docs/design-branches/0065-event-history-consumer-contract-slice.md)。本文只维护当前能力、边界与续工入口。
 > 文档不是实现授权；事实以当前源码、测试和工具输出为准。
 
 ## 从这里继续
@@ -23,8 +23,10 @@
 只读 ReadPair 安全引用闭包共享与冷 Resume 可变隔离；实现与验收证据集中在分片。
 ReadPair 提供非泛型入口，返回按输入位置对应的两个 DurableBase；泛型重载供已知类型时校验，不按 State/Event 角色重排输入。
 现有 EventHistory 外观与持久格式保持，跨图 ReferenceEquals 仍无保证；实际读取成本的后继优化由测量触发。
-下一步优先让 [DramaBoard](../../drama-board/docs/research/event-journal-state-store-draft.md) 按[根 README](../README.md) 接入真实模型，
-收集 API、Schema 升级、事件浏览和恢复续写的具体反馈，再决定下一施工片。
+[DramaBoard 首轮 API 反馈](../../drama-board/docs/feedback/durablegraph/001-eventhistory-api.md) 已按当前源码核对；
+推荐下一片 [DB-065](../docs/design-branches/0065-event-history-consumer-contract-slice.md)：默认调用、实际交付的 XML 文档、
+含引用的事件快照与仅完成 PendingEvent 的恢复示例，经真实包和故障路径共同验证。该片已设计，尚未实施。
+下游真实模型接入仍是优先工作；跨重开书签、局部事件浏览与类型适配扩展按路线图的具体需求触发。
 自动跨库业务规则发现、ValueTuple、DateTime、程序集审视和 SchemaStore 自举不随本轮扩张。
 
 ## 当前能力与实际边界
