@@ -161,8 +161,10 @@ var before = history.GetPreviousState(lastEvent);
 var pair = history.ReadPair<World, DamageEvent>(before, lastEvent, models);
 ```
 
-`ReadPair` 是实验性只读快照 API：按输入顺序返回 First/Second，当前分别恢复两次；不承诺跨图 CLR 实例复用或隔离。
-可写 Resume 独立恢复 Event/State，避免框架制造跨图可变别名。热路径由用户保持 Event 内容只读；持久 DTO 冻结不会冻结原 CLR 对象。
+`ReadPair` 是实验性只读快照 API：按输入顺序返回 First/Second，两边成功后才交付。
+它在本次操作内复用相同 ObjectVersion 的解码结果，并可共享完整引用闭包都一致的领域实例。
+**两份结果都必须按只读快照使用**；不要依赖跨图 `ReferenceEquals` 判断业务身份或版本，也不要假定两图可隔离编辑。
+可写 Resume 只复用不可变 DTO/string，Event/State 的可变对象分别恢复。热路径由用户保持 Event 内容只读；持久 DTO 冻结不会冻结原 CLR 对象。
 
 可写仓库在**没有活动 session**时支持 `CreateBranch("fork", selectedFrame)` 和
 `MoveBranch("main", expectedHead, targetFrame)`；随后从目标分支 Resume。

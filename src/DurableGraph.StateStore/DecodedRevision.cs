@@ -11,16 +11,25 @@ namespace Atelia.DurableGraph.StateStore;
 public sealed class DecodedRevision {
     private readonly Dictionary<ObjectId, ObjectStateRecord> _objects;
 
-    internal DecodedRevision(FrameAddress revisionAddress, IEnumerable<ObjectStateRecord> objects, StringReadTable strings) {
+    // Synthetic exact-view fixtures have no persisted locators; product reads supply the actual map.
+    internal DecodedRevision(FrameAddress revisionAddress, IEnumerable<ObjectStateRecord> objects, StringReadTable strings)
+        : this(revisionAddress, objects, strings, new Dictionary<ObjectId, FrameAddress>()) { }
+
+    internal DecodedRevision(FrameAddress revisionAddress, IEnumerable<ObjectStateRecord> objects, StringReadTable strings,
+        IReadOnlyDictionary<ObjectId, FrameAddress> objectHeads) {
         RevisionAddress = revisionAddress;
         Objects = new FrozenList<ObjectStateRecord>(objects.OrderBy(static row => row.Id));
         _objects = Objects.ToDictionary(static row => row.Id);
         Strings = strings;
+        ObjectHeads = new System.Collections.ObjectModel.ReadOnlyDictionary<ObjectId, FrameAddress>(
+            objectHeads.ToDictionary(static pair => pair.Key, static pair => pair.Value));
     }
 
     public FrameAddress RevisionAddress { get; }
     public IReadOnlyList<ObjectStateRecord> Objects { get; }
     public StringReadTable Strings { get; }
+    // Actual per-view locators, not a guess from the queried Revision's address.
+    internal IReadOnlyDictionary<ObjectId, FrameAddress> ObjectHeads { get; }
 
     /// <summary>Returns the exact content for a live ID; zero and absent IDs are invalid.</summary>
     public ObjectStateRecord GetRequired(ObjectId objectId) => _objects.TryGetValue(objectId, out ObjectStateRecord? row)

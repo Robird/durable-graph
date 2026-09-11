@@ -393,8 +393,14 @@ State's Revision, DTO baseline and instance-ID bindings; callers do not pass the
 `Resume<TState>` restores a branch's State and, at an Event head, its `PendingEvent`; it does not
 replay business handlers. `ReadState<T>` and `ReadEvent<T>` independently materialize a selected
 repository-issued `GraphFrame`. Experimental `ReadPair<A,B>` returns two read-only snapshots in
-input order after both reads succeed; it currently performs independent reads and makes no
-cross-graph instance-sharing guarantee. The application must honor the read-only contract.
+input order after both reads succeed. Within one operation it reuses stored-exact decoding and may
+share domain instances whose complete current reference closure is safe to share. It makes no
+cross-graph sharing or separation guarantee: do not use cross-graph `ReferenceEquals` to infer
+business identity or version, or to choose program behavior. Both complete graphs must remain
+read-only; the library does not freeze ordinary CLR instances. Writable `Resume` can reuse frozen
+DTOs and strings but allocates separate mutable State/Event graphs. Upgrade and validation still
+run independently for each view. See [DB-064](../../docs/design-branches/0064-shared-revision-decoding-design.md)
+for the internal sharing boundary; there is no public cache configuration or new wire format.
 Close an active session before forking from a historical frame or moving a branch with an expected head.
 
 Graph materialization decodes the complete stored-exact directory, validates and upgrades its rows,

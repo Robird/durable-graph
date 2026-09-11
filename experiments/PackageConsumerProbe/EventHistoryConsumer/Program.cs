@@ -47,7 +47,8 @@ internal static class Program {
             Require(repository.ReadState<World>(frames[2], Models()).Alice.Score == 3, "S1 lost its recorded value.");
         }
         Require(!File.Exists(Path.Combine(directory, "publication.rbf")), "Legacy publisher was created.");
-        Console.WriteLine("EventHistorySeed:True:Siblings:True:PendingEvent:True:IndependentEvent:True");
+        SharedReadProbe.Seed(directory + "-shared-read");
+        Console.WriteLine("EventHistorySeed:True:Siblings:True:PendingEvent:True:IndependentEvent:True:SharedReadSeed:True");
 #else
         var before = SnapshotFiles(directory);
         using (var repository = EventHistoryRepository.OpenReadOnlyExisting(directory, Options)) {
@@ -105,7 +106,8 @@ internal static class Program {
         // Record observable closure size and physical bytes, not a claim about physical read I/O.
         long bytes = Directory.EnumerateFiles(directory, "*.rbf", SearchOption.AllDirectories).Sum(path => new FileInfo(path).Length);
         File.WriteAllText(Path.Combine(directory, "metrics.txt"), $"TotalRbfBytes={bytes}\nForcedBaseObjectWrites=2\nNoChangeObjectWrites=0\nDeltaObjectWrites=1\n");
-        Console.WriteLine("EventHistoryUpgrade:True:EventOnlyCatalog:True:ReadPair:True:PendingResume:True:ForcedBaseThenDelta:True:RootReplacement:True:Readonly:True");
+        SharedReadProbe.Verify(directory + "-shared-read");
+        Console.WriteLine("EventHistoryUpgrade:True:EventOnlyCatalog:True:ReadPair:True:PendingResume:True:ForcedBaseThenDelta:True:RootReplacement:True:Readonly:True:SharedRead:True");
 #endif
     }
 

@@ -42,22 +42,35 @@ public static class RevisionDecoder {
 
     private static DecodedRevision ReadCore(
         StateRevisionStore store, SchemaStore schemas, FrameAddress revisionAddress,
+        Func<DecodedBaseObjectBody, ObjectReaderBinding> resolveReader) =>
+        ReadCore(store, revisionAddress, (id, _) => ReadObject(store, schemas, revisionAddress, id, resolveReader));
+
+    internal static (ObjectStateRecord Row, ObjectReaderBinding Binding) ReadObject(
+        StateRevisionStore store, SchemaStore schemas, FrameAddress revisionAddress, ObjectId id,
         Func<DecodedBaseObjectBody, ObjectReaderBinding> resolveReader) {
+        ObjectVersionChain chain = store.ReadObjectVersionChain(revisionAddress, id.Value);
+        DecodedBaseObjectBody body = TypedObjectVersionReader.DecodeBase(chain, schemas);
+        ObjectReaderBinding binding = resolveReader(body);
+        if (!body.Layout.Equals(binding.Layout)) {
+            throw new InvalidDataException("The selected reader does not match the complete stored layout.");
+        }
+        // Readers return owned DTOs and consume the complete Base/Delta body chain.
+        ObjectStateRecord row = binding.Read(id, TypedObjectVersionReader.CreateBodySource(chain, body));
+        return (row, binding);
+    }
+
+    internal static DecodedRevision ReadCore(StateRevisionStore store, FrameAddress revisionAddress,
+        Func<ObjectId, FrameAddress, (ObjectStateRecord Row, ObjectReaderBinding Binding)> readObject) {
+        // Membership and references are properties of this view, never of a cached row.
+        IReadOnlyDictionary<ObjectId, FrameAddress> heads = store.ReadLiveObjectHeadMap(revisionAddress)
+            .ToDictionary(static pair => new ObjectId(pair.Key), static pair => pair.Value);
         List<ObjectStateRecord> objects = [];
         List<(ObjectStateRecord Row, ObjectReaderBinding Binding)> boundRows = [];
         List<(ObjectId Id, string Value)> strings = [];
 
         // Object-first reconstruction: only one raw chain is retained at a time.
-        foreach (uint rawId in store.ReadLiveObjectHeadMap(revisionAddress).Keys.Order()) {
-            ObjectId id = new(rawId);
-            ObjectVersionChain chain = store.ReadObjectVersionChain(revisionAddress, rawId);
-            DecodedBaseObjectBody body = TypedObjectVersionReader.DecodeBase(chain, schemas);
-            ObjectLayout layout = body.Layout;
-            ObjectReaderBinding binding = resolveReader(body);
-            if (!layout.Equals(binding.Layout)) {
-                throw new InvalidDataException("The selected reader does not match the complete stored layout.");
-            }
-            ObjectStateRecord row = binding.Read(id, TypedObjectVersionReader.CreateBodySource(chain, body));
+        foreach (ObjectId id in heads.Keys.Order()) {
+            (ObjectStateRecord row, ObjectReaderBinding binding) = readObject(id, heads[id]);
             objects.Add(row);
             boundRows.Add((row, binding));
             if (row.Kind == ObjectStateKind.String) { strings.Add((id, row.StringContent)); }
@@ -77,6 +90,6 @@ public static class RevisionDecoder {
                     ? target : throw new InvalidDataException($"Dictionary key object {id.Value} is not live."));
             }
         }
-        return new DecodedRevision(revisionAddress, objects, table);
+        return new DecodedRevision(revisionAddress, objects, table, heads);
     }
 }

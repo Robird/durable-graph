@@ -12,6 +12,8 @@
   <ItemGroup>
     <Compile Include="Program.cs" />
     <Compile Include="Model.cs" />
+    <Compile Include="SharedReadModel.cs" />
+    <Compile Include="SharedReadProbe.cs" />
     <PackageReference Include="Atelia.DurableGraph" Version="$(DurableGraphPackageVersion)" />
     <PackageReference Include="Atelia.DurableGraph.StateStore" Version="$(DurableGraphPackageVersion)" />
   </ItemGroup>

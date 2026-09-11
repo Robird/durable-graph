@@ -319,9 +319,15 @@ reader/Delta applier/引用遍历，当前 World 恢复还需要全部 source �
 
 因此同一 ObjectVersion 的 DTO 可以在不同 Revision 中复用，但其引用目标仍由各自 Revision 选择。
 “自身版本相同”不单独证明两份已连接引用的领域实例可以合并；子对象的不同版本可能要求 owner 也分别实例化。
-这一既有语义对合并读取的约束及候选算法见 [DB-064](design-branches/0064-shared-revision-decoding-design.md)。
-合并读取可先提供实验性 API，以两次独立还原实现；只承诺各图快照语义，不承诺跨图一定复用或一定不复用实例。
-只读合同自首版建立，优化逐步加入；可写恢复仍保证可变对象隔离，不以未来共享机会改变该行为。
+合并读取只承诺各图快照语义，不承诺跨图一定复用或一定不复用实例；跨图 ReferenceEquals
+不能用于判断业务身份、版本或决定程序控制流。调用方须将两份输出及其可达对象都作为只读快照使用；库不冻结普通 CLR 对象。
+可写恢复仍保证可变对象隔离；内部可复用同版本的冻结 DTO/string，但不能把只读共享图导入工作区。
+
+解码复用必须限于同一资源所有者、同一冻结模型目录，并同时核对 ObjectId 与实际 head；
+每份 Revision 的完整 source/current 引用及查找合法性仍各自验证，业务 Upgrade 仍各自执行。
+共享普通 CLR 实例还须证明 current 状态相同且所有引用目标可共享；仅有相同布局、未触发重写或 readonly 字段不足以证明。
+不同 ObjectVersion 不因内容相等而合并，空串继续沿全库 string.Empty 例外；非空 string 不做内容 intern。
+本轮算法与验收边界见 [DB-064](design-branches/0064-shared-revision-decoding-design.md)，缓存和比较策略不进入持久类型身份或 wire。
 
 比较忽略 transient，引用按身份比较，Artifact 引用按 exact address 比较；值和集合的 durable
 equality 必须明确，不能仅凭非密码学 hash 判相等。同版 DTO 的 Half/float/double 持久状态比较采用按位相等：

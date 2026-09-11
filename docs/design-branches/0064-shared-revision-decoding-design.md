@@ -1,10 +1,27 @@
 # DB-064：两份 Revision 合并读取与安全共享边界
 
-> 状态：阶段 0 已实现，2026-09-11；内部顺序读取随 DB-062 实现，公开 API 随 DB-063 交付；共享算法仍为未实施的低优先级后继。
+> 状态：阶段 A/B 已实施，2026-09-11；阶段 0 内部顺序读取随 DB-062 实现，公开 API 随 DB-063 交付。
 > 阶段 0 的内部入口纳入 [DB-062](0062-independent-graph-workspace-slice.md)，公开 API 纳入 [DB-063](0063-event-history-journal-slice.md) 首版。
-> 本文集中维护 API 的共享边界；阶段 A/B 的 DTO 缓存与普通只读对象共享另行排期，不阻塞下游试用。
+> 用户本轮已调度阶段 A/B；保持现有 ReadPair 只读合同与可写 Resume 隔离，不改持久格式。
 
-## 阶段 0：先交付实验性双图 API
+## 本轮施工与验收边界
+
+问题是同一读取操作能否减少 exact body 解码与只读实例分配，同时保持每份 Revision 的引用解释和完整验证。
+阶段 A 使用封闭资源/模型 snapshot 的内部 `RevisionReadSession`，按 `(ObjectId, head)` 缓存 owned stored row 与 reader；
+每份 `DecodedRevision` 内部保留实际 head map。阶段 B 在 `GraphReader.ReadPair` 中核对 current body 后计算最大安全引用闭合集，
+与可写 `MaterializedGraph` 导入路径分离。`Resume` 只使用阶段 A，State/Event 各自分配可变对象。
+
+| 工作包 | 代码接缝 | 最小可观测验收 |
+|---|---|---|
+| exact 解码缓存 | RevisionDecoder / RevisionReadSession / DecodedRevision | 同 key 一次 body 解码；cache hit 仍拒绝另一视图的坏引用/lookup |
+| 只读引用闭包共享 | GraphReader | 稳定环只分配/填充一次，changed-child 和同布局 Normalize 改值使依赖者分裂 |
+| 可写恢复接线 | WorldWorkspace / EventHistoryRepository | Pending Event 与 State 可变图隔离；同版 string 不导致续写新 ID 或额外 Base |
+| 集成与交付 | StateStore tests / EventHistory PackageConsumer | 真实 E/S heads、容器引用、冷重开、零写入、第二边失败不交付 |
+
+缓存仅活于一次操作；没有公共 cache/matcher 配置，不引入 Frame cache、跨操作缓存、多视图分区、内容 intern 或 wire 变更。
+验收使用内部 decoded/Allocate/Hydrate/shared 计数和真实包行为；不同于物理 I/O、实际 CLR 堆分配或峰值内存。
+
+## 阶段 0：已交付的实验性双图 API
 
 用户已选择 API 先行、算法后置。目标是与 DramaBoard 早期磨合调用方式，首版允许两次独立还原，
 不以缓存命中率、共享实例数或加速比例作为交付条件。
@@ -95,7 +112,7 @@ string DTO 自身即不可变 string；保留同 key 首次解码实例即可获
 
 在同一实验性 ReadPair 入口内部逐步加入闭包共享，调用方继续将两图全部视为只读。
 框架不自动冻结普通 CLR 对象；修改已共享对象会在另一视图可见，不能再将其声明为隔离编辑图。
-该调用结果不暴露接受为 GraphSession 的入口；未来深不可变类型白名单若有需求另定。
+该调用结果不暴露导入 EventHistorySession/WorldWorkspace 可写基线的入口；未来深不可变类型白名单若有需求另定。
 
 ### 共享集合
 
@@ -149,13 +166,68 @@ string 单独按阶段 A 的同 key/同实例条件处理；不能取得完整�
 独立 Event 读取的验收仍由 DB-063 保持；不为利用缓存先加载无关 State。
 真实包用从 DB-062 快照复用的真实 heads 验证 E/S，另用相邻 StateRevision 验证 changed-child 反例。
 
-## 5. 已选排期与后继
+## 5. 实现选择与后继
 
-1. DB-062 实现内部双图读取，DB-063 随 EventHistory 首版提供实验性 API；内部两次独立读取即可验收。
-2. DramaBoard 先试用 ReadPair 与 Resume，反馈输入/返回形状、错误边界和实际读取需求。
-3. 阶段 A/B 按读取/内存测量另行调度，允许始终无命中；未来优化不改变只读合同或可写会话隔离。
+DB-062/063 先交付 API；本轮按用户后续调度实现阶段 A/B，无须修改 public 签名。
+读取时仍分别物化两份完整 live map、Normalize 与 current 可达视图，不缓存升级结果。
+闭包候选会临时编码两份 current Base body；只读字段、record、领域 Equals 都不代替完整状态核对。
+Dictionary 的 Application comparer 不额外排除：本次模型 snapshot 已按闭合类型缓存成功 resolver 结果，
+业务比较稳定且不依赖未恢复内容/Transient 的既有约束仍适用；comparer 标签参与 Base body 比较。
+
+普通分配仍须提供 exact 类型的新实例。只读 pair 在任何 Hydrate 前完成两表分配及跨表唯一性检查；
+共享节点走显式复用路径，Empty 保留既有例外。可写 Resume 的两条独立恢复路径也共用操作级可变实例防重索引：
+若手工 allocator 意外返回前一图实例，在第二次 Hydrate 前拒绝，不交付会话。已执行回调的副作用不回滚。
+防重索引和 DTO 缓存都随本次操作结束释放，不作为跨操作领域实例缓存。
+
+后续让 DramaBoard 试用 ReadPair 与 Resume，反馈实际读取与内存压力。
+Frame/map 缓存、减少 current body 临时编码、升级后实例共享和多视图分区仍待独立需求与测量，
+不改变只读合同或可写会话隔离。内部优化测试会证明本实现的特定命中，消费者仍不能依赖跨图实例身份。
 
 DB-062/063 的已选保存拓扑仍可复用磁盘中真实未变的 ObjectVersion，独立于内存共享优化是否已经实现。
 
 本片不要求更换引用 wire、生成每个对象的传递版本、历史新 ID 分配器或通用冻结框架。
 从 `(ObjectId,head)` 到“完整引用环境”的区别属于现有语义本身；不能通过改名 ObjectVersion 消除。
+
+## 6. 实施与验收记录（2026-09-11）
+
+实现入口为 [RevisionReadSession](../../src/DurableGraph.StateStore/RevisionReadSession.cs)、
+[RevisionDecoder](../../src/DurableGraph.StateStore/RevisionDecoder.cs)、
+[GraphReader](../../src/DurableGraph.StateStore/GraphReader.cs)；
+[WorldWorkspace](../../src/DurableGraph.StateStore/WorldWorkspace.cs) 与
+[EventHistoryRepository](../../src/DurableGraph.StateStore/EventHistoryRepository.cs) 接通仅阶段 A 的冷 Resume。
+缓存按完整 head 的重建结果复用；不同 head 的链即使共享 Base 前缀，仍分别重建。
+
+| 证据 | 结果与边界 |
+|---|---|
+| [RevisionReadSessionTests](../../tests/DurableGraph.StateStore.Tests/RevisionReadSessionTests.cs) | 10 cases：实际 ID/head、同 Frame 多 ID、Delta 链、等值新 Base、owned 数据闭库后可用、cache hit 仍验证引用/nominal/Dictionary lookup、坏 head/未全消费拒绝、不跨操作缓存 |
+| [SharedGraphReaderTests](../../tests/DurableGraph.StateStore.Tests/SharedGraphReaderTests.cs) | 17 cases：双向选择、稳定/变化环、同值新版本、独立 owner 共享 leaf、Normalize 改值/边、升级与 source 验证、晚期失败、singleton、非空 string 与 Empty 例外 |
+| [SharedEventHistoryTests](../../tests/DurableGraph.StateStore.Tests/SharedEventHistoryTests.cs) | 3 cases：Pending 与 State 的 child/List 可变隔离；同版 string 复用后 ID 不漂移，未改立即提交零 local object writes；错误 allocator 拒绝且仓库仍可重试读取 |
+| StateStore suite | 聚焦 74、全量 702 通过，0 失败/跳过；包含既有独立 Event、错误 handle、发布与严格只读回归 |
+| Runtime/Generator suite | 全量 1519 通过，0 失败/跳过；两套全量合计 2221 个测试 |
+| 根构建与审阅 | `DurableGraph.slnx` build：0 警告/错误；独立实现/测试审阅无阻碍项，受影响 Markdown 本地链接与锚点校验通过 |
+| [真实 PackageReference 消费者](../../experiments/PackageConsumerProbe/EventHistoryConsumer/README.md) | V1/V2 独立进程、9/11 份 immutable history Publish/Verify 通过；真实 E/S 复用 heads、changed-child、稳定环、array/List/Dictionary key/value、独立 generic holder 中 inline/Nullable 引用、readonly 文件不变、Resume 编辑隔离 |
+
+执行入口：
+
+```powershell
+dotnet test tests/DurableGraph.StateStore.Tests/DurableGraph.StateStore.Tests.csproj --no-restore -v:q
+dotnet test tests/DurableGraph.Tests/DurableGraph.Tests.csproj --no-restore -v:q
+./experiments/PackageConsumerProbe/Run-EventHistoryProbe.ps1
+dotnet build DurableGraph.slnx --no-restore -v:q
+```
+
+内部稳定二节点环见证：两份图总共 decoded=2、cache hits=2、Allocate=2、Hydrate=2、shared=2；
+变化环 decoded=3、cache hits=1、Allocate=4、Hydrate=4、shared=0。
+这些是调用与对象行计数，不能等同于 CLR 堆分配或 RBF Frame 读取次数。
+
+真实包单次样例观测（`shared-read-metrics.txt`，run `event-history-20260911131936-53716-baee7149`）：
+
+| 选择 | 分别读取保留实例 | ReadPair 保留实例 | 分别读取托管分配 bytes | ReadPair 托管分配 bytes | 分别读取 / ReadPair 毫秒 |
+|---|---:|---:|---:|---:|---:|
+| S0/E1，整图 heads 复用 | 41 | 21 | 953184 | 559176 | 98.298 / 8.976 |
+| S0/S1，仅 child head 改变 | 40 | 28 | 893320 | 542296 | 4.624 / 7.537 |
+
+保留实例是本 fixture 的可达引用实例数，含 class、容器、string，不含 inline 值。
+S0/S1 的 root 不共享，稳定环/array/List/Dictionary 共享；这些是实现观测，不是 API 身份保证。
+每组只测一次同步调用，包含绑定/JIT 顺序影响；第二组也展示了额外比较成本可能使读取更慢。
+未测峰值内存、物理 I/O，不据此推导普遍速度或内存比例；性能后继按路线图的实际需求触发。

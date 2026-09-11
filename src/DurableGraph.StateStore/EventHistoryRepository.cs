@@ -72,10 +72,10 @@ public sealed class EventHistoryRepository : IDisposable {
             GraphFrame head = HeadCore(branchName);
             GraphFrame state = head.Kind == GraphFrameKind.State ? head : PreviousStateCore(head);
             StateModelSnapshot snapshot = models.Snapshot(_resources.Schemas);
-            var workspace = WorldWorkspace<TState>.LoadSnapshot(_resources.States, _resources.Schemas,
-                state.RevisionAddress, state.RootId, snapshot);
+            RevisionReadSession reads = new(_resources.States, _resources.Schemas, snapshot);
+            var workspace = WorldWorkspace<TState>.LoadSnapshot(reads, state.RevisionAddress, state.RootId);
             DurableBase? pending = head.Kind == GraphFrameKind.Event
-                ? GraphReader.Read<DurableBase>(_resources.States, _resources.Schemas, head.RevisionAddress, head.RootId, snapshot).Root : null;
+                ? GraphReader.Read<DurableBase>(reads, head.RevisionAddress, head.RootId).Root : null;
             var session = new EventHistorySession<TState>(this, branchName, workspace, head, pending);
             _activeSession = session;
             return session;
@@ -115,7 +115,10 @@ public sealed class EventHistoryRepository : IDisposable {
     }
 
     /// <summary>Experimental pair of read-only snapshots in input order; no cross-graph CLR sharing guarantee.</summary>
-    /// <remarks>Both reads must succeed before delivery. Application callback side effects are not rolled back.</remarks>
+    /// <remarks>
+    /// Both reads must succeed before delivery. Shared instances are possible: callers must
+    /// treat both graphs as read-only. Application callback side effects are not rolled back.
+    /// </remarks>
     public (TFirst First, TSecond Second) ReadPair<TFirst, TSecond>(GraphFrame first, GraphFrame second,
         StateModelRegistry models) where TFirst : DurableBase where TSecond : DurableBase {
         RequireAvailable();

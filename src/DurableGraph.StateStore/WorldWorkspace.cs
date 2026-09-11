@@ -53,10 +53,16 @@ internal sealed class WorldWorkspace<TWorld> where TWorld : DurableBase {
     }
 
     internal static WorldWorkspace<TWorld> LoadSnapshot(StateRevisionStore store, SchemaStore schemas,
-        FrameAddress revisionAddress, ObjectId worldId, StateModelSnapshot snapshot) {
-        MaterializedGraph<TWorld> loaded = GraphReader.Read<TWorld>(store, schemas, revisionAddress, worldId,
-            snapshot, requireExactRootType: true);
-        return new(store, schemas, loaded.Root, worldId, loaded.RootModel, snapshot,
+        FrameAddress revisionAddress, ObjectId worldId, StateModelSnapshot snapshot) =>
+        LoadSnapshot(new RevisionReadSession(store, schemas, snapshot), revisionAddress, worldId);
+
+    // Editable imports may share immutable decoded rows/strings with a pending Event, but
+    // must use the independently allocated path, never the read-only pair's CLR sharing.
+    internal static WorldWorkspace<TWorld> LoadSnapshot(RevisionReadSession reads,
+        FrameAddress revisionAddress, ObjectId worldId) {
+        MaterializedGraph<TWorld> loaded = GraphReader.Read<TWorld>(reads, revisionAddress, worldId,
+            requireExactRootType: true);
+        return new(reads.Store, reads.Schemas, loaded.Root, worldId, loaded.RootModel, reads.Models,
             loaded.Baseline, loaded.CreateCaptureSession());
     }
 
