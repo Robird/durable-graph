@@ -35,3 +35,10 @@ public partial struct Wide<T> {
     [DurableField(9)] public long G;
     [DurableField(10)] public long H;
 }
+
+// A minimal independent event makes the replay use the public E/S publication contract.
+// It deliberately never points at World, so event capture does not rerun List diff.
+[DurableType("replay.event", 1)]
+public partial class ReplayEvent : DurableBase {
+    [DurableField(1)] public byte Marker;
+}

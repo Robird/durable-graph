@@ -10,12 +10,13 @@
 当前能力与已完成分片的验收从 PROJECT-STATE/其账本进入；这里仅保留后续增量。
 
 2026-09-11 的真实消费者 [DramaBoard Event/State 草稿](../../drama-board/docs/research/event-journal-state-store-draft.md)
-触发独立历史图、外部发布和分支需求。[DB-062](design-branches/0062-independent-graph-workspace-slice.md) 已完成内部接缝；下一片接入公开 EventHistory：
+触发独立历史图、外部发布和分支需求。[DB-063](design-branches/0063-event-history-journal-slice.md) 已完成 EventHistory 外观。
+下一步优先下游真实接入和反馈，不自动进入共享优化施工：
 
 | 分片 | 要解决的增量 |
 |---|---|
-| [DB-063 EventHistory](design-branches/0063-event-history-journal-slice.md) | 独立浏览、交错提交、Resume、fork/Move、实验性 ReadPair；Journal 唯一发布，移除旧 public 外观/发布器并迁移示例；初版同程序集 |
-| [DB-064 共享优化](design-branches/0064-shared-revision-decoding-design.md) | API 合同先随 DB-062/063 交付；DTO/string 去重及只读闭包共享按测量后置，不承诺跨图实例复用，不改变可写 Resume 隔离 |
+| DramaBoard 接入与 API 反馈 | 按根 README 实际保存、浏览事件、恢复 pending Event 并续写；收集调用形状、模型注册与历史升级的具体摩擦，再选有证据的改进 |
+| [DB-064 共享优化](design-branches/0064-shared-revision-decoding-design.md) | 实验性 ReadPair 已交付；DTO/string 去重及只读闭包共享按测量后置，不承诺跨图实例复用，不改变可写 Resume 隔离 |
 
 ArtifactStore 在该路线中先由 EventHistory 覆盖事件/快照职责，不另建内容 Store；
 大附件/chunk、联合 Schema 视图与 Derived 仍未随之解决。以上方案不要求先实现 ValueTuple 或重排全部程序集。
@@ -33,13 +34,13 @@ ArtifactStore 在该路线中先由 EventHistory 覆盖事件/快照职责，不
 backing storage 显式分类及现有 InlineValue/历史链的组合。
 ValueTuple、同型多 Application 角色及引用内容比较仍各自独立，不预建通用容器平台。
 开放模板方案的评估结论与重访条件见 §3.1。
-DB-036 单 World/单 head 工作会话已实现；branch/Reset、联合 Store 视图及更强恢复保证仍独立排期。
+命名分支、历史 fork/Move 和同实例 State 提交已由 DB-063 闭合；联合 Store 视图及更强恢复保证仍独立排期。
 MVP 库内加载顺序为 exact 重建 → 单对象 Upgrade → 分配实例 → 填充/连接引用 → 完整交付 World；
 Transient 由用户在交付后处理，约束维护在[目标设计](DurableGraph-target-design-v0.md#恢复transient-与宿主边界)。
 数组形状、升级、单根、Transient hook、boxed value，以及无需无参构造器/readonly 字段的支持选择见
 [MVP 功能边界](DurableGraph-target-design-v0.md#mvp-功能边界)，不再作为开放范围反复讨论。
-GraphSession 的正常同实例 Commit 与严格重开从 PROJECT-STATE/DB-036 查证；不再列为未完成能力。
-当前公开宿主仍限定单活动会话、固定非空 World；内部工作区已允许根替换与独立快照，发布故障范围为正常关闭/进程中止和明确的 I/O 异常。
+EventHistory 的正常同实例 State 提交与严格重开从 PROJECT-STATE/DB-063 查证；不再列为未完成能力。
+当前公开宿主仍限定单活动会话、每图单个非空 durable 根；State 根可同类型替换，发布故障范围为正常关闭/进程中止和明确的 I/O 异常。
 DB-038 的泛型 Schema/history、开放生成、保存恢复与通用/闭合 owner Upgrade 从 PROJECT-STATE/施工记录查证，不再列为未实现机制。
 可组合值 Upgrade 的验收与实际范围见 [DB-039](design-branches/0039-composable-value-upgrade-design.md#8-产品施工合同与验收映射)。
 [DB-043 可组合数组与统一引用对象路径](design-branches/0043-vector-array-object-slice.md) 已通过整体验收；
@@ -76,7 +77,7 @@ List 高效 Diff/Patch 已完成；额外性能工作按 [§3.2](#32-list-差分
 | 跨程序集与一般类型形状 | 基类/固定 inline 不再是组合阻碍；跨程序集业务规则扫描、完全无当前声明空库的历史能力生成与独立闭合历史账本分别按具体需求裁决，不与只读模板导入混同。DateTime 的 Local/DST 合同、native int 等各自按需求选择；boxed value identity 已排除 MVP |
 | 多态与运行时注册扩展 | 已标记 class 基类到登记派生实例按 DB-034 合同；DB-043 统一框架 object 参数不授予 object/interface 通配字段。数组协变还需空数组的历史元素 ancestry 证据，和跨程序集发现分别后继；不能自动回退成声明基类的 codec |
 | 捕获 BCL 内容的所有权 | 数组使用 owned frozen 元素 buffer，inline struct 递归捕获成标量/ID；后续容器同样不能以浅复制代替冻结，须按其内容模型验证 |
-| 根与持久目录扩展 | DramaBoard 独立 E/S 需求已触发根替换、独立读取与 branch/Move 设计，见 DB-062/063；每份 Revision 仍一个根，不扩为任意命名根目录。null/清空另行裁决 |
+| 根与持久目录扩展 | 根替换、独立读取与 branch/Move 已实现，见 DB-063；每份 Revision 仍一个根，不扩为任意命名根目录。null/清空另行裁决 |
 
 设计证据：[DB-006](design-branches/0006-flat-graph-delta-prototype.md)、
 [旧路线图 R3/R4](archive/2026-09-06/DurableGraph-research-roadmap.md)、
@@ -143,7 +144,7 @@ DB-051 之外的性能工作以实际轨迹或测量问题触发，不自动扩�
 | 后续映射与 BCL 集合 | ValueTuple 先解决多 child exact 槽、参数来源、Item/Rest 组合及完整历史能力，调查入口见 [DB-057 §8](design-branches/0057-bcl-scalar-value-slice.md#8-valuetuple-后继保留的问题)，再组合现有字典；Nullable 根 key 另排。SortedDictionary 另定排序比较，OrderedDictionary 另定顺序状态，Set 等逐类型排期；自建外观仅在明确 API 痛点下重访 |
 | SchemaStore 后续能力 | MVP 单调注册已实现；联合 Commit/Ref 及复用 StateStore 的演进候选见下节，Dictionary 与内建类型 codec 完整后重访。多 writer、压缩/GC 另待真实需求 |
 | Schema/表示日志自动修复与分段 | 遇到真实坏尾恢复或容量需求时；无额外确认水位不能自动区分未完成尾部和已确认末帧损坏，当前严格拒绝。重访时先冻结故障模型，不绕过完整注册一致性 |
-| 发布恢复保证扩展 | DB-036 已闭合同实例 Commit、expected Parent、数据/发布屏障及严格重开；遇到真实可用性要求时再设计坏尾自动修复、OS crash/power loss 与目录持久性，不能默默回退旧 head |
+| 发布恢复保证扩展 | DB-063 已闭合交错提交、expected head、数据/Journal/ref 屏障及严格重开；遇到真实可用性要求时再设计坏尾自动修复、OS crash/power loss 与目录持久性，不能默默回退旧 head |
 | ArtifactStore | 事件/快照消费者已选 DB-063 EventHistory，暂不另建 ArtifactStore；大附件/chunk/外部地址尚无本轮证据，按实际需要重访，不强迫 State 常驻完整历史 |
 | DerivedStore | 真实昂贵派生消费者出现；定义 exact 输入围栏、recipe/builder/model 身份、stale/missing 及可删重建 |
 | 框架 Transient hook | MVP 明确不做，用户在完整图交付后自行重建；MVP 后若多个宿主确有重复的重建协调需求，再比较 hook/依赖调度及失败边界 |
@@ -153,7 +154,7 @@ DB-051 之外的性能工作以实际轨迹或测量问题触发，不自动扩�
 | TwoLeg / incremental cleaner | 多历史 Segment 无法满足实际有界 dependency file count、在线退休、backup/rescue 或 compaction SLO 时重访，见其 [技术储备（归档）](../experiments/ARCHIVE.md#two-leg "原路径：experiments/TwoLegRotationProbe/PROJECT-STATE.md") |
 | 性能优化 | MVP 后有具体测量再优化全量 Base 准备、缓冲复制、cache、typed buckets 或指纹；DB-061 的逐层基类委托/DTO 前缀复制在深继承实际成为热点后再优化，不恢复两套投影路径。DB-042 的 Upgrade requirement set 仍逐次复核，批量历史对象测出热点后可用 SchemaStore catalog generation 做透明快速路径；DB-028 先 object-first 直读 RBF，Frame cache 只减少重复 I/O/解码，重复完整 map 物化需另评估 map cache/单 ID 查询，必要时再按 Frame 合并批量读取 |
 | 加载内存预算 | 大数组/容器或不可信输入的资源控制成为实际需求时，设计独立的总分配/元素数预算；DB-043 先要求合法 shape、checked 计算及适用时的 payload 下界预检。零字节元素可产生大内存对象，单帧 256MB 不等于 CLR 内存上限 |
-| 并发、分支与跨 Repository | DB-063 建设命名 branch/fork/Move 与串行单活动写会话；DB-064 API 先行、共享优化后置。concurrent Capture、多 writer、merge、跨仓库身份仍延期 |
+| 并发、分支与跨 Repository | DB-063 已提供命名 branch/fork/Move 与串行单活动写会话；DB-064 的实际共享仍后置。concurrent Capture、多 writer、merge、跨仓库身份仍延期 |
 | 跨对象升级与外部副作用 | MVP 仅单对象字段转换；读取其他对象、拆分/合并及创建持久新对象均延后。MVP 后有真实迁移案例时，再讨论图访问、新 ID 与失败隔离；不借普通升级默认授权 |
 | 无 CLR 迁移壳的 current Normalize | Family 路径可以保留 state-only exact reader，但 editable Load 仍需要 source 对象族的 current/migration CLR 模型。应用需要删除这层模型而继续加载旧 Revision 时，再设计独立 Normalize/退休协议；不能借 World 删除引用跳过 source 行 |
 | 历史工具/升级调用优化 | 有 package/history 或升级调用的真实限制后，再重访 DB-003 的 Try/result/ABI 和 DB-004 的多 writer/多 TFM 与批次原子性，不顺带做兼容框架 |

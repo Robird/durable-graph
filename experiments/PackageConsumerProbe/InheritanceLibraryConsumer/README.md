@@ -4,7 +4,7 @@ Run from the repository root:
 
 ```powershell
 ./experiments/PackageConsumerProbe/Run-InheritanceLibraryProbe.ps1
-# Or reuse a matching feed with the eight Runtime/StateStore dependency packages:
+# Or reuse a matching feed with the nine Runtime/StateStore dependency packages:
 ./experiments/PackageConsumerProbe/Run-InheritanceLibraryProbe.ps1 -PackageSource <feed> -Version <version>
 ```
 
@@ -47,10 +47,11 @@ var models = new StateModelRegistry();
 AppCatalog.Register(models);
 MiddleCatalog.Register(models);
 BaseCatalog.Register(models);
-using var repository = GraphRepository.OpenExisting(directory);
-using var session = repository.Load<Leaf>(models);
-session.World.Ancestor++;
-session.Commit(new ReadAmplificationBaseBudgetParameters(8, 10));
+using var repository = EventHistoryRepository.OpenExisting(directory);
+using var session = repository.Resume<Leaf>("main", models);
+session.State.Ancestor++;
+session.CommitDomainEvent(session.State);
+session.CommitDomainState(new ReadAmplificationBaseBudgetParameters(8, 10));
 ```
 
 Each library calls its own internal `Generated.DurableDefinitions`; `RegisterReaders` provides

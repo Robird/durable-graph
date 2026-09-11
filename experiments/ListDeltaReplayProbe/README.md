@@ -38,9 +38,9 @@ Run from the repository root, with no competing builds or benchmark processes:
 
 The runner builds Release unless `-NoBuild` is supplied. `-Output` must name a new directory;
 existing repositories are never adopted, deleted or reused. Defaults retain artifacts below ignored
-`obj/`. The representative ordinary run executes 2,520 measured Commit calls and 80 warmup Commit calls;
+`obj/`. The representative ordinary run executes 2,520 measured save steps and 80 warmup save steps;
 budget several minutes depending on flush latency and historical-chain verification. The smoke
-executes 300 measured plus 80 warmup Commit calls. No timeout changes the algorithms or pass criteria.
+executes 300 measured plus 80 warmup save steps. No timeout changes the algorithms or pass criteria.
 Count accepts 8–50,000, Repeats 1–20, Rounds 1–20, DiffRepeats 1–100. `-Seed`,
 `-ReadAmplification` (X, default 8) and `-BaseBudgetPercent` (Y, default 5) are recorded unchanged
 for every algorithm. The widest inline workload caps count at 512 and deduplicates capped sizes.
@@ -96,10 +96,14 @@ repository-assigned ObjectIds to address edits. Reference cases intentionally co
 their deletions use deterministic positions rather than pretending references have unique keys.
 
 Each workload/scale/repetition/algorithm gets a fresh independent repository and domain graph.
-One GraphSession performs its complete trace; no reopen happens between measured Commit calls.
+One EventHistorySession performs its complete trace; no reopen happens between measured edit steps.
 All first binding/JIT/publication warmups are separate. Algorithm order rotates between workloads,
 scales and repetitions. Edits and fingerprints are outside timing; the complete synchronous Commit
-includes Capture, PrepareBase, planner chain reads, append and publication flush.
+includes a minimal independent marker Event followed by State, both captures, graph writes,
+and both Journal ref publication barriers. The marker has no World/List reference. The initial
+step measures CreateBranch (S0); repository creation is Setup. Per-step payload counters and
+isolated Diff samples remain State-only. Report Measurement.Version is 2: whole-save timings
+and repository bytes are not directly comparable with the earlier publication.rbf reports.
 
 After closing the writer, fresh readers materialize every historical Revision and verify complete
 content/order/count, shared List identity, repeated children and cycles. An additional Repository
@@ -130,7 +134,9 @@ Reports:
   or maximum cold-read latency is required.
 
 Object payload bytes exclude ObjectId, membership and shared frame overhead. State, Schema and
-publication file sizes are separately reported in each RunResult. Candidate Delta sizes include
+Journal directory sizes (`JournalFileBytes`) are separately reported in each RunResult. State
+file totals include marker Event revisions; State per-step payload counts exclude them. Historical
+RESULTS/WHITEBOX reports retain their original measurement boundary. Candidate Delta sizes include
 NoChange bodies as preparation observations. Undo and child-only edits must leave List slot state
 unchanged and cannot produce a List Delta; the policy may still choose an ordinary Base rewrite
 to reduce read amplification, and that write remains included in the actual-byte report.

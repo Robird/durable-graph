@@ -1,6 +1,6 @@
 # DB-063：EventJournal 驱动的 EventHistory 外观
 
-> 状态：Chosen / 待实施，2026-09-11；用户已采纳外观方向，依赖 [DB-062](0062-independent-graph-workspace-slice.md)，实施另行调度。
+> 状态：已实施，2026-09-11；依赖 [DB-062](0062-independent-graph-workspace-slice.md)。完成证据见 §8。
 > 消费者合同：[DramaBoard 草稿](../../../drama-board/docs/research/event-journal-state-store-draft.md)。
 > 实验性合并读取 API 随本片首版交付；[DB-064](0064-shared-revision-decoding-design.md) 的实际去重/共享算法低优先级后置。
 
@@ -43,8 +43,8 @@ Journal Parent： S0 → E1 → S1 → E2 → S2
 Revision Parent：E1 → S0，S1 → S0；E2 → S1，S2 → S1
 ```
 
-建议 opaque kind 分别使用本外观保留的 Event/State 两个值；具体常量随 wire codec/golden test 冻结。
-共同 payload：外观 magic/version、DG Revision 的 FileNumber + FrameTicket、非零 RootId。
+opaque kind 固定 Event=1、State=2；共同 payload：ASCII `DGH1`、格式 byte=1、
+canonical UInt32 FileNumber、UInt64 SizedPtr 序列化值、UInt32 非零 RootId；golden test 冻结。
 kind 只由头部表达一次；未知 kind/version、非规范整数、错误 ticket 或尾随数据拒绝。
 不重复保存领域类型、Schema/DTO、业务 EventKind、logical time 或 branch head；业务元数据可存在事件根中。
 
@@ -71,7 +71,7 @@ EventJournal 与 StateStore 都有叫 FrameAddress 的概念，但分段号和 T
 
 ## 4. 候选外观与易用性
 
-以下是语义草图，名称及返回类型待施工时保持最小；不是当前可编译 API：
+当前公开使用形状如下；完整可运行包示例见[根 README](../../README.md)：
 
 ```csharp
 using (var repository = EventHistoryRepository.OpenExisting(path)) {
@@ -94,6 +94,9 @@ foreach (var frame in history.ReadEvents("main")) {
 ```
 
 新库另提供 CreateNew/CreateBranch(initialState) 路径：初始 S0 也经过一次完整发布，见下节初始化顺序。
+`CreateBranch<TState>(name, initialState, models, policy)` 返回已经发布 S0 的 `EventHistorySession<TState>`，
+保留传入的 CLR 实例；`session.Head` 取得初始 `GraphFrame`。这避免初次写入后再 Resume 丢弃调用方实例。
+策略参数可省略，默认 `(3, 5)`；CommitDomainState 的无根参数形式使用 session.State。
 不要求调用方传 roots list、Parent、ObjectId 或 DTO baseline；需要明确查看世界时调用 ReadState，
 需要处理基态时从 EventFrame 查询其直接前 S。读取可以返回请求基类的异构事件子类。
 注册方式沿 README/现有模型 facade；不引入事件专用 Schema 注册体系。
@@ -162,6 +165,9 @@ CAS 本来就是发布防误用边界，不能用仓库单 writer 假设省略 e
 
 保留 NotPublished/Unknown/Published 的含义和 faulted 后禁止续写；返回的图地址或 orphan 地址仅用于诊断。
 I/O 失败不推断“肯定没写入”；尝试 ref 写后无法裁决的结果为 Unknown。发布后内存安装失败为 Published。
+EventJournal 明确返回的 `RefCasMismatch` 保留 NotPublished；若已经写入 State/Journal，仓库仍停止续写。
+上游 `CreateBranch` 是一个整体调用，不暴露内部 Create/Init/BindName 的失败位置，因此其无法裁决的失败保守报告 Unknown，
+即使重开最终证明名称尚未绑定。只在测试层对真实 ref-op I/O 注入中断，不在产品中复制上游发布协议。
 错误重开不会撤销任意领域修改、外部副作用或重新调用业务处理器。
 
 显式关闭 EventSegmentStoreOptions、RefSegmentStoreOptions 和 RefOpLogOptions 的 RecoverActiveTailOnOpen；
@@ -182,6 +188,12 @@ I/O 失败不推断“肯定没写入”；尝试 ref 写后无法裁决的结�
 不能用“只查看已经打开且提前解码过 World 的仓库”通过独立事件浏览测试。
 先完成根 build/相关 tests，再串行真实包 lane；新包依赖必须在隔离 feed 可解析。
 
+施工分工：G0 为 HistoryJournal/GraphEnvelopeCodec；G1–G3 为 EventHistoryRepository/Session 与内部工作区；
+G4 为真实包消费者及 README。旧生成器机制测试通过测试程序集内的 Fixture bridge 继续验证原有 body/history 语义，
+它不属于产品兼容外观，也不替代直接使用 EventHistory 的外观与 PackageReference 验收。
+LoadedWorld/PreparedWorldRevision 仅保留为内部机制入口；旧 GraphRepository/GraphSession/PublicationLog 已删除。
+严格可写打开先持有仓库锁、只读校验 Journal，再确认 Schema/State 和原始图依赖，最后按 Event→ref objects→ref-op-log 顺序确认 Journal。
+
 DramaBoard 接入是后续消费者工作：使用真实 Kernel 提交边界验证 Game+Spatial+Kernel 完整恢复，
 不是只替换 IJournalSink 或验证 WorldSnapshot。CandidateKey、逻辑时刻等继续由领域决定。
 
@@ -193,3 +205,33 @@ DramaBoard 接入是后续消费者工作：使用真实 Kernel 提交边界验�
 
 本片仍用仓库内单调 SchemaStore；联合 Schema 分支视图、自举和完整 CommitManifest 没有随之完成。
 EventFrame/StateFrame 在本文是外观角色；落盘均复用 EventJournal 的现有 EventFrame，不混淆物理类型名。
+
+## 8. 实现与验收记录（2026-09-11）
+
+| 合同 | 实现与证据 |
+|---|---|
+| G0 严格打开、信封与来源 | [HistoryJournal](../../src/DurableGraph.StateStore/HistoryJournal.cs)、[GraphEnvelopeCodec](../../src/DurableGraph.StateStore/GraphEnvelopeCodec.cs)、[GraphFrame](../../src/DurableGraph.StateStore/GraphFrame.cs)；[信封 tests](../../tests/DurableGraph.StateStore.Tests/GraphEnvelopeCodecTests.cs)、[资源与屏障 tests](../../tests/DurableGraph.StateStore.Tests/HistoryJournalTests.cs) |
+| G1–G3 交错提交、独立读取、Resume、分支与中断 | [Repository](../../src/DurableGraph.StateStore/EventHistoryRepository.cs)、[Session](../../src/DurableGraph.StateStore/EventHistorySession.cs)；[外观集成](../../tests/DurableGraph.StateStore.Tests/EventHistoryRepositoryTests.cs)、[真实 ref-op 故障注入](../../tests/DurableGraph.StateStore.Tests/EventHistoryPublicationFailureTests.cs) |
+| G4 独立包消费及历史能力 | [EventHistoryConsumer](../../experiments/PackageConsumerProbe/EventHistoryConsumer/README.md)、[Run-EventHistoryProbe](../../experiments/PackageConsumerProbe/Run-EventHistoryProbe.ps1)；[全部包实验入口](../../experiments/PackageConsumerProbe/README.md)、[应用快速上手](../../README.md) |
+
+- 根 `dotnet build DurableGraph.slnx --no-restore -v:q` 通过，零警告/错误。
+- `DurableGraph.StateStore.Tests` 672 项、`DurableGraph.Tests` 1519 项通过；合计 2191，零失败/跳过。
+  存储格式与二进制 body 未改；本片未另行重跑 Storage/Serialization 独立套件。
+- 新 EventHistory lane 与迁移后的 17 条活动包 lane 均通过：StateStore、HistoryCapability、Array、List、Dictionary、
+  CompositeDictionary、Nullable、Enum、Record、BclScalar、TemporalScalar、Generic、ValueUpgrade、InlineStruct、
+  CrossAssembly、InlineLibrary、InheritanceLibrary。隔离 feed 包含 EventJournal 在内的九个依赖包。
+- 新 lane 从 V1 的 E head 在第二进程/第二代程序读取：E-only 目录不含 World/Bob；ReadPair 保持各自版本值；
+  Resume 的 World Upgrade 调用 1 次、Alice 调用 2 次（两份独立图）；World 与 Alice 强制 Base 后，
+  后续 State 分别为零对象写入与一个 Delta 写入；根替换、共享/循环及只读文件零改变均通过。
+  本次 fixture 最终 RBF 文件共 3676 字节，指标写入其 `metrics.txt`；这不是物理读取 I/O 或一般性能结论。
+- README 的项目、Models.cs、Program.cs 原样提取，用真实 PackageReference 构建，两个独立进程依次输出 Hp=99、Hp=98。
+- [ListDeltaReplayProbe](../../experiments/ListDeltaReplayProbe/README.md) 的 `Counts=32, Repeats=1, Rounds=1, DiffRepeats=1`
+  smoke 通过：20 个独立测量仓库、300 份已验证 State Revision。报告 v2 明确计时包含 marker E 与后继 S，
+  State 对象 payload 指标仍单独计量；不与旧单次发布报告直接比较。
+- 独立代码审阅无未解决阻断项。修正了非法分支名预检、已知 CAS 拒绝分类及重开屏障顺序。
+  包迁移时给两个极小对象夹具增加稳定持久字段，保留真实 Delta 链断言；按实际字节数选择更小 Base 的产品策略未改。
+
+旧 public GraphRepository/GraphSession、PublicationLog 与旧 publication.rbf 路径已退出产品；没有兼容或迁移层。
+原有低层生成器/容器测试的 Fixture bridge 只在测试程序集，真实包消费者直接使用新外观。
+独立 ordinal RBF 的 PublicationCrashProbe 仍是底层进程中止见证，不被冒充为本片 EventHistory wire 验收。
+本片完成后优先安排 DramaBoard 实际接入与 API 反馈；DB-064 的实际共享、联合 Schema 分支视图及更强故障保证继续后置。

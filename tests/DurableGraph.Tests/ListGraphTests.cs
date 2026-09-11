@@ -12,8 +12,8 @@ public sealed partial class DurableSchemaGeneratorTests {
         AssertSchemaOnlyCompiles(run);
         Type host = EmitAndLoad(run.OutputCompilation).GetType("ListGraph.Host")!;
         T Method<T>(string name) where T : Delegate => (T)host.GetMethod(name)!.CreateDelegate(typeof(T));
-        var create = Method<Func<GraphRepository, object>>("Create");
-        var load = Method<Func<GraphRepository, object>>("Load");
+        var create = Method<Func<FixtureGraphRepository, object>>("Create");
+        var load = Method<Func<FixtureGraphRepository, object>>("Load");
         var world = Method<Func<object, object>>("World");
         var numbers = Method<Func<object, object>>("Numbers");
         var commit = Method<Func<object, FrameAddress>>("Commit");
@@ -22,7 +22,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         using RawBaseDirectory directory = new();
         FrameAddress first, unchanged, appended, childOnly, replaced, removed;
         object originalWorld, originalNumbers;
-        using (GraphRepository repository = GraphRepository.CreateNew(directory.Path)) {
+        using (FixtureGraphRepository repository = FixtureGraphRepository.CreateNew(directory.Path)) {
             using IDisposable session = (IDisposable)create(repository);
             originalWorld = world(session);
             originalNumbers = numbers(originalWorld);
@@ -63,7 +63,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             Assert.Equal(states.ReadLiveObjectHeadMap(first).Count - 2, states.ReadLiveObjectHeadMap(removed).Count);
         }
         FrameAddress resumed;
-        using (GraphRepository repository = GraphRepository.OpenExisting(directory.Path)) {
+        using (FixtureGraphRepository repository = FixtureGraphRepository.OpenExisting(directory.Path)) {
             using IDisposable session = (IDisposable)load(repository);
             check(world(session), 4);
             Assert.NotSame(originalWorld, world(session));
@@ -88,9 +88,9 @@ public sealed partial class DurableSchemaGeneratorTests {
         using IRbfFile file = RbfFile.CreateNew(Path.Combine(directory.Path, "schemas.rbf"));
         StateRevisionStore states = new(segments);
         SchemaStore schemas = new(file);
-        var freeze = (Func<StateRevisionStore, SchemaStore, PreparedWorldRevision>)host.GetMethod("PrepareAndMutate")!.CreateDelegate(
-            typeof(Func<StateRevisionStore, SchemaStore, PreparedWorldRevision>));
-        PreparedWorldRevision prepared = freeze(states, schemas);
+        var freeze = (Func<StateRevisionStore, SchemaStore, FixturePreparedWorldRevision>)host.GetMethod("PrepareAndMutate")!.CreateDelegate(
+            typeof(Func<StateRevisionStore, SchemaStore, FixturePreparedWorldRevision>));
+        FixturePreparedWorldRevision prepared = freeze(states, schemas);
         FrameAddress address = states.Append(prepared.Revision);
         var verify = (Action<StateRevisionStore, SchemaStore, FrameAddress, ObjectId>)host.GetMethod("LoadAndCheck")!.CreateDelegate(
             typeof(Action<StateRevisionStore, SchemaStore, FrameAddress, ObjectId>));
@@ -160,11 +160,11 @@ public sealed partial class DurableSchemaGeneratorTests {
         }
         public static class Host {
             static StateModelRegistry Models() { StateModelRegistry m=new(); Atelia.DurableGraph.Generated.DurableDefinitions.Register(m); return m; }
-            public static object Create(GraphRepository r)=>r.Create(new World(),Models());
-            public static object Load(GraphRepository r)=>r.Load<World>(Models());
-            public static object World(object s)=>((GraphSession<World>)s).World;
+            public static object Create(FixtureGraphRepository r)=>r.Create(new World(),Models());
+            public static object Load(FixtureGraphRepository r)=>r.Load<World>(Models());
+            public static object World(object s)=>((FixtureGraphSession<World>)s).World;
             public static object Numbers(object w)=>((World)w).Numbers;
-            public static FrameAddress Commit(object s)=>((GraphSession<World>)s).Commit(new(1000000,1));
+            public static FrameAddress Commit(object s)=>((FixtureGraphSession<World>)s).Commit(new(1000000,1));
             public static void Check(object w,int stage)=>((World)w).Check(stage);
             public static void Change(object w,int stage) {
                 World v=(World)w;
@@ -174,14 +174,14 @@ public sealed partial class DurableSchemaGeneratorTests {
                 if(stage==3) v.Replaceable=new List<int>(v.Replaceable);
                 if(stage==4) v.Island=null;
             }
-            public static PreparedWorldRevision PrepareAndMutate(StateRevisionStore states,SchemaStore schemas) {
+            public static FixturePreparedWorldRevision PrepareAndMutate(StateRevisionStore states,SchemaStore schemas) {
                 World world=new();
-                PreparedWorldRevision result=LoadedWorld.PrepareNew(states,schemas,world,Models(),new(1000000,1));
+                FixturePreparedWorldRevision result=FixtureLoadedWorld.PrepareNew(states,schemas,world,Models(),new(1000000,1));
                 world.Numbers.Clear(); world.Points[0]=new Point {X=999}; world.Strings.Clear();
                 return result;
             }
             public static void LoadAndCheck(StateRevisionStore states,SchemaStore schemas,FrameAddress address,ObjectId id) =>
-                LoadedWorld.Load<World>(states,schemas,address,id,Models()).World.Check(0);
+                FixtureLoadedWorld.Load<World>(states,schemas,address,id,Models()).World.Check(0);
         }
         """;
 }

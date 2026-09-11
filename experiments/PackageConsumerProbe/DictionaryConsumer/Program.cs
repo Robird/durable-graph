@@ -54,27 +54,33 @@ internal static class Program {
         World world = World.Seed();
         FrameAddress first, patched, churned, edited, reordered, historical, unchanged;
         ObjectId worldId;
-        using (GraphRepository repository = GraphRepository.CreateNew(directory, Options)) {
-            using GraphSession<World> session = repository.Create(world, Models());
-            first = session.Commit(Policy);
-            worldId = session.WorldId!.Value;
+        using (EventHistoryRepository repository = EventHistoryRepository.CreateNew(directory, Options)) {
+            using EventHistorySession<World> session = repository.CreateBranch("main", world, Models(), Policy);
+            first = session.StateRevisionAddress;
+            worldId = session.StateId;
             Set(world.Points, world.FirstKey, 101);
-            patched = session.Commit(Policy);
+            session.CommitDomainEvent(session.State, Policy);
+            patched = session.CommitDomainState(Policy).RevisionAddress;
             Node node = world.Points[world.FirstKey].Link!;
             Require(world.Points.Remove("key-005"), "Seed key missing before removal.");
             world.Points.Add(new("new-key".ToCharArray()), new Point { Value = 999, Link = node });
-            churned = session.Commit(Policy);
+            session.CommitDomainEvent(session.State, Policy);
+            churned = session.CommitDomainState(Policy).RevisionAddress;
             Set(world.Points, "key-006", 606);
-            edited = session.Commit(Policy);
+            session.CommitDomainEvent(session.State, Policy);
+            edited = session.CommitDomainState(Policy).RevisionAddress;
             var reverse = world.Points.Reverse().ToArray();
             world.Points.Clear();
             foreach (var entry in reverse) world.Points.Add(entry.Key, entry.Value);
             world.Points.EnsureCapacity(1000);
-            reordered = session.Commit(Policy);
+            session.CommitDomainEvent(session.State, Policy);
+            reordered = session.CommitDomainState(Policy).RevisionAddress;
             Set(world.Points, "key-007", 707);
-            historical = session.Commit(Policy);
-            unchanged = session.Commit(Policy);
-            Require(ReferenceEquals(world, session.World) && ReferenceEquals(world.Points, world.Alias),
+            session.CommitDomainEvent(session.State, Policy);
+            historical = session.CommitDomainState(Policy).RevisionAddress;
+            session.CommitDomainEvent(session.State, Policy);
+            unchanged = session.CommitDomainState(Policy).RevisionAddress;
+            Require(ReferenceEquals(world, session.State) && ReferenceEquals(world.Points, world.Alias),
                 "Commit replaced the working domain or shared Dictionary instance.");
         }
         Inspect(directory, (store, schemas) => {
@@ -91,36 +97,30 @@ internal static class Program {
             CheckHistorical(store, schemas, edited, worldId, 101, 606, 107, true);
         });
         File.WriteAllText(Path.Combine(directory, "historical.txt"), $"{historical.FileNumber}:{historical.FrameTicket.Packed}:{worldId.Value}");
-        using (GraphRepository repository = GraphRepository.OpenExisting(directory, Options)) {
-            using GraphSession<World> session = repository.Load<World>(Models());
-            CheckGraph(session.World, 101, 606, 707, true, 0);
+        using (EventHistoryRepository repository = EventHistoryRepository.OpenExisting(directory, Options)) {
+            using EventHistorySession<World> session = repository.Resume<World>("main", Models());
+            CheckGraph(session.State, 101, 606, 707, true, 0);
         }
-        CheckFrozenPreparation(directory + "-frozen");
+        CheckSavedContentIsolation(directory + "-frozen");
     }
 
-    private static void CheckFrozenPreparation(string directory) {
-        Directory.CreateDirectory(directory);
-        using var file = RbfFile.CreateNew(Path.Combine(directory, "schemas.rbf"));
-        using SegmentStore segments = SegmentStore.CreateNew(Path.Combine(directory, "state"), Options);
-        var schemas = new SchemaStore(file);
-        var store = new StateRevisionStore(segments);
+    private static void CheckSavedContentIsolation(string directory) {
         World world = World.Seed();
-        PreparedWorldRevision first = LoadedWorld.PrepareNew(store, schemas, world, Models(), Policy);
+        using var repository = EventHistoryRepository.CreateNew(directory, Options);
+        using var first = repository.CreateBranch("main", world, Models(), Policy);
         world.Points.Clear();
         world.Modes.Clear();
         world.IgnoreCase.Clear();
         world.Identity.Clear();
-        FrameAddress initial = store.Append(first.Revision);
-        LoadedWorld<World> loaded = LoadedWorld.Load<World>(store, schemas, initial, first.WorldId, Models());
-        CheckGraph(loaded.World, 100, 106, 107, false, 0);
-        Set(loaded.World.Points, loaded.World.FirstKey, 555);
-        PreparedWorldRevision delta = loaded.Prepare(Policy);
-        Require(delta.Revision.LocalObjects.Count == 1 && delta.Revision.LocalObjects[0].Kind == ObjectVersionKind.Delta,
-            "One frozen value edit must prepare one Dictionary Delta.");
-        loaded.World.Points.Clear();
-        FrameAddress changed = store.Append(delta.Revision);
-        LoadedWorld<World> restored = LoadedWorld.Load<World>(store, schemas, changed, first.WorldId, Models());
-        CheckGraph(restored.World, 555, 106, 107, false, 0);
+        first.Dispose();
+        using EventHistorySession<World> loaded = repository.Resume<World>("main", Models());
+        CheckGraph(loaded.State, 100, 106, 107, false, 0);
+        Set(loaded.State.Points, loaded.State.FirstKey, 555);
+        loaded.CommitDomainEvent(loaded.State, Policy);
+        GraphFrame changed = loaded.CommitDomainState(Policy);
+        loaded.State.Points.Clear();
+        World restored = repository.ReadState<World>(changed, Models());
+        CheckGraph(restored, 555, 106, 107, false, 0);
     }
 #else
     private static void Upgrade(string directory) {
@@ -134,9 +134,9 @@ internal static class Program {
         Inspect(directory, (store, schemas) => ids = CheckHistorical(store, schemas, historical, worldId, 101, 606, 707, true));
         Require(Upgrades.Calls.Count == 0, "Stored-exact decoding invoked a key/value business conversion.");
         FrameAddress upgraded, unchanged, changed;
-        using (GraphRepository repository = GraphRepository.OpenExisting(directory, Options)) {
-            using GraphSession<World> session = repository.Load<World>(Models());
-            World world = session.World;
+        using (EventHistoryRepository repository = EventHistoryRepository.OpenExisting(directory, Options)) {
+            using EventHistorySession<World> session = repository.Resume<World>("main", Models());
+            World world = session.State;
             var points = world.Points;
             CheckGraph(world, 1101, 1606, 1707, true, 1000);
             Require(Upgrades.Calls.Count == 96 && Upgrades.Calls.All(call => call.Count == 32) &&
@@ -144,11 +144,14 @@ internal static class Program {
                 Upgrades.Calls.Count(call => call.Id == ids.Modes && call.Side == "key") == 32 &&
                 Upgrades.Calls.Count(call => call.Id == ids.Modes && call.Side == "value") == 32,
                 "Separate key/value conversions must run once per entry and shared Dictionary owner.");
-            upgraded = session.Commit(Policy);
-            unchanged = session.Commit(Policy);
+            session.CommitDomainEvent(session.State, Policy);
+            upgraded = session.CommitDomainState(Policy).RevisionAddress;
+            session.CommitDomainEvent(session.State, Policy);
+            unchanged = session.CommitDomainState(Policy).RevisionAddress;
             Set(world.Points, world.FirstKey, 1102);
-            changed = session.Commit(Policy);
-            Require(ReferenceEquals(world, session.World) && ReferenceEquals(points, world.Points), "Commit replaced working instances.");
+            session.CommitDomainEvent(session.State, Policy);
+            changed = session.CommitDomainState(Policy).RevisionAddress;
+            Require(ReferenceEquals(world, session.State) && ReferenceEquals(points, world.Points), "Commit replaced working instances.");
         }
         Inspect(directory, (store, schemas) => {
             StateRevision rewrite = store.Read(upgraded);
@@ -160,9 +163,9 @@ internal static class Program {
             RequireDictionaryDelta(store.Read(changed), ids.Points, onlyObject: true);
             CheckHistorical(store, schemas, historical, worldId, 101, 606, 707, true);
         });
-        using GraphRepository finalRepository = GraphRepository.OpenExisting(directory, Options);
-        using GraphSession<World> finalSession = finalRepository.Load<World>(Models());
-        CheckGraph(finalSession.World, 1102, 1606, 1707, true, 1000);
+        using EventHistoryRepository finalRepository = EventHistoryRepository.OpenExisting(directory, Options);
+        using EventHistorySession<World> finalSession = finalRepository.Resume<World>("main", Models());
+        CheckGraph(finalSession.State, 1102, 1606, 1707, true, 1000);
         Require(Upgrades.Calls.Count == 96, "Current Base/Delta reopen repeated historical conversion.");
     }
 #endif

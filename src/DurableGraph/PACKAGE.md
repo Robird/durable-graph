@@ -54,12 +54,16 @@ definition factories once; the operation snapshot closes actual supported types 
 var models = new StateModelRegistry();
 Atelia.DurableGraph.Generated.DurableDefinitions.Register(models);
 
-using var repository = GraphRepository.CreateNew(repositoryPath);
-using var session = repository.Create(world, models);
-var revision = session.Commit(new ReadAmplificationBaseBudgetParameters(3, 5));
+using var repository = EventHistoryRepository.CreateNew(repositoryPath);
+using var session = repository.CreateBranch(
+    "main", world, models, new ReadAmplificationBaseBudgetParameters(3, 5));
+var initialStateFrame = session.Head; // S0 is already published; world retains its identity.
 ```
 
 These storage APIs require `Atelia.DurableGraph.StateStore` in addition to the runtime package.
+The [repository quickstart](../../README.md) provides the complete Event/State commit, reopen and
+pending-Event example. Event and succeeding State both compare against the preceding State;
+committing an Event does not advance the State baseline.
 For stored-exact decoding, register the same generated definitions into a `StateReaderRegistry`.
 An operation freezes its definition/model directory; later registration cannot alter that operation.
 Current bindings use actual closed CLR types, while historical readers bind retained templates
@@ -280,7 +284,7 @@ version. Each DTO's static `Schema` property is the same cached exact definition
 `GetSchema(n)`. DTOs are regenerated from accepted `.dgschema` history and the current definition;
 there is no separate DTO source history to maintain. Current and historical layouts support bool,
 byte/sbyte, short/ushort, int/uint, long/ulong, char, Half, float, double, string, and supported
-durable references. Reference fields become UInt32 ObjectId slots while their Schema type retains
+durable references. Reference fields become `ObjectId` slots (UInt32 on the wire) while their Schema type retains
 String or its nominal durable target.
 
 Each DTO physically flattens the exact ancestor chain into fields such as `Segment0Field1`: base
@@ -307,12 +311,13 @@ Base and fused Delta bodies compose through static nested calls. A changed compo
 contains a nonempty child Delta, without another Schema header or length. Struct ref Hydrate starts
 with a default temporary and fills private/readonly fields without running constructors or
 initializers; Transient fields remain default. Field and array-element slots can use this same
-helper, but array-object serialization is not yet supported. Current Capture/Hydrate bridges keep
+helper; supported arrays also use independent content-object bindings. Current Capture/Hydrate bridges keep
 domain and state types separate; the Family path uses that separation for generic composition.
 
-Schema history/manifest and runtime Schema batches write format v3 and retain strict readers for
-v1/v2. Already accepted history files are not rewritten. Base type headers encode the closed Schema
-identity; same-Schema Deltas still use the Base's type information.
+Build-time Schema history and runtime SchemaStore batches have separate formats. Already accepted
+history files are not rewritten merely because the writer advances. Object Base headers reference a
+repository-local integer RepresentationId, resolved through SchemaStore to the complete exact layout;
+same-Schema Deltas still use the Base's type information.
 
 For a scalar-only layout:
 
@@ -359,7 +364,7 @@ generated `AddRoot` supplies the exact model binding:
 ```csharp
 var session = new CaptureSession();
 using var capture = session.BeginCapture();
-uint rootId = Character.__DurableState.AddRoot(capture, character);
+ObjectId rootId = Character.__DurableState.AddRoot(capture, character);
 var candidate = capture.Seal();
 session.Accept(candidate); // Or session.Discard(candidate).
 ```
@@ -377,19 +382,33 @@ accepted graph, although allocated numeric IDs can remain consumed.
 
 ## Typed StateStore path
 
-Product loading registers generated readers/models or definition factories with `StateReaderRegistry`
-and `StateModelRegistry`. `RevisionDecoder` reconstructs a complete stored-exact DTO/string directory.
-`LoadedWorld.Load` then validates, upgrades, allocates all reachable objects, and hydrates references
-before exposing the single World root. It uses `RuntimeHelpers.GetUninitializedObject`; constructors,
-field initializers, and Transient rebuild hooks do not run. User code rebuilds Transient state after
-delivery.
+Register generated models or definition factories with `StateModelRegistry`, then use
+`EventHistoryRepository` for product persistence. `CreateBranch(name, initialState, models)` commits
+S0 and returns a session retaining the supplied domain instances. `CommitDomainEvent` records an
+independent Event snapshot; `CommitDomainState` saves its processing result and installs the frozen
+State candidate. These calls alternate. State may be replaced with another root of the same exact CLR
+type, while Event roots may have different registered durable types. The session owns the previous
+State's Revision, DTO baseline and instance-ID bindings; callers do not pass these separately.
 
-For a new graph, use `LoadedWorld.PrepareNew`. For an explicitly selected Revision and WorldId, use
-`LoadedWorld.Load`, mutate `World`, and call `Prepare`. Prepare may persist Schema registrations but
-does not append State, publish a head, or advance the loaded Parent. The host appends the returned
-`StateRevision` and reloads its exact address to establish the next baseline on this low-level path.
-For continuous saves retaining the same domain instances, use `GraphRepository.Create/Load` and
-`GraphSession.Commit`; it owns the published Parent, frozen baseline and instance identity bindings.
+`Resume<TState>` restores a branch's State and, at an Event head, its `PendingEvent`; it does not
+replay business handlers. `ReadState<T>` and `ReadEvent<T>` independently materialize a selected
+repository-issued `GraphFrame`. Experimental `ReadPair<A,B>` returns two read-only snapshots in
+input order after both reads succeed; it currently performs independent reads and makes no
+cross-graph instance-sharing guarantee. The application must honor the read-only contract.
+Close an active session before forking from a historical frame or moving a branch with an expected head.
+
+Graph materialization decodes the complete stored-exact directory, validates and upgrades its rows,
+then allocates all reachable objects before hydrating references. Durable classes use
+`RuntimeHelpers.GetUninitializedObject`; constructors, field initializers and Transient hooks do
+not run. User code rebuilds Transient state after delivery. For explicit stored-exact DTO inspection,
+register retained readers/definitions with `StateReaderRegistry` and use `RevisionDecoder`.
+`LoadedWorld` and its prepare/load surface are internal mechanism helpers, not application APIs.
+
+Journal branch refs are the sole publication authority. Schema/State data becomes durable before
+the Journal graph frame, and the ref is published last; unreferenced appends do not advance a branch.
+Read-only opening does not create, flush or repair files. Reopening is strict, without automatic tail
+recovery or transparent retries after uncertain publication. See the
+[quickstart and failure boundaries](../../README.md) for runnable calls and operational limits.
 
 The Base type-header codec is internal to StateStore. Public generated bodies are raw;
 `EncodedBaseObjectBody` brands the internal `[type header | raw Base body]` result so the typed

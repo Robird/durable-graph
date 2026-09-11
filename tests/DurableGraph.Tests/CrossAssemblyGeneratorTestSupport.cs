@@ -12,13 +12,14 @@ public sealed partial class DurableSchemaGeneratorTests {
         AdditionalText[]? history = null, string? forceDefinitions = null, string? assemblyName = null) {
         CSharpCompilation compilation = CSharpCompilation.Create(
             assemblyName ?? $"CrossAssembly_{Guid.NewGuid():N}",
-            [CSharpSyntaxTree.ParseText(source, ParseOptions)],
+            [CSharpSyntaxTree.ParseText(WithFixtureBridgeImport(source), ParseOptions)],
             PlatformReferences().Concat(new[] {
                 typeof(DurableBase).Assembly,
                 typeof(StateStore.Serialization.BinaryPayloadReader).Assembly,
                 typeof(StateStore.SchemaStore).Assembly,
                 typeof(StateStore.Storage.ObjectVersionChain).Assembly,
             }.Select(assembly => MetadataReference.CreateFromFile(assembly.Location)))
+                .Concat(FixtureBridgeReferences(source))
                 .Concat(extraReferences ?? []),
             new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary, nullableContextOptions: NullableContextOptions.Enable));
         GeneratorDriver driver = CSharpGeneratorDriver.Create(

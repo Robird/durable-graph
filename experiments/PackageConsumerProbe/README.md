@@ -133,74 +133,41 @@ consumer proves this through generated Capture with independently allocated empt
 then byte-only loading. Public `Replace` calls supply those test inputs with explicit identity
 assertions; product behavior has no dependency on that allocation behavior or private runtime hooks.
 
-An additional public StateStore package consumer exercises persistent Schema/representation registration and
-Base-only representation IDs through actual packages:
+## EventHistory publication and retained StateStore regressions
 
 ```powershell
+./experiments/PackageConsumerProbe/Run-EventHistoryProbe.ps1
 ./experiments/PackageConsumerProbe/Run-StateStoreProbe.ps1
 ```
 
-This independent script packs the eight local dependency packages into an isolated feed/cache,
-including the unmodified sibling `atelia` substrate projects. Its consumer explicitly references
-`Atelia.DurableGraph` for generator/build assets and `Atelia.DurableGraph.StateStore` for storage
-operations, with no manual analyzer, import or project-reference wiring. Public
-`LoadedWorld.PrepareNew` freezes an inherited Character whose base and leaf fields share a string,
-registers the complete Schema closure and object representations, and produces its no-Parent Base plan. Registration is
-idempotent and rejects a conflicting batch before append. Loading that Revision and editing the
-domain object produces an ordinary raw Delta through `LoadedWorld.Prepare`; read-only reopening recovers exact Schema definitions and
-uses generated `RegisterReaders` with the public `StateReaderRegistry` and `RevisionDecoder.Read`
-to reconstruct complete stored-exact DTO/string directories for both revisions. No per-object
-reader selection, Base-envelope codec, or manual string-table construction coordinates decoding.
-The consumer checks all live rows, selected Revision addresses, the frozen pre-mutation Base, the
-raw Delta bytes, and shared string identity across inherited fields. Repeating generated registration
-is idempotent. The script requires `PersistedSchema`, `PreparedWorld`, `RawDelta`, `ColdTypedRead`,
-`SharedString`, `ConflictBeforeAppend`, and `DecodedRevision` markers and retains artifacts under its
-unique ignored `obj` directory. This first phase retains its inherited stored-exact witness and two
-history files.
+The [EventHistory consumer](EventHistoryConsumer/README.md) is DB-063's two-process, two-generation
+public facade witness. It publishes S0/Event/State/pending Event, independently browses an Event
+with no World/Bob model registrations, reads a pair of selected graphs, resumes the pending Event,
+upgrades the old State, and continues through required Base, NoChange and ordinary Delta saves.
+Root replacement is checked separately. Readonly browsing preserves every file's bytes and mtime.
 
-The script then builds and runs a separate `World` model at V1, then builds and runs V2 against the
-same actual packages and V1-created database. It publishes and consumes real generated history
-(three history files after V1; eight after V2,
-including the four reference-graph models described below). The V2
-consumer receives the V1 process's exact Revision address and World ID through a probe-owned sidecar.
-The V1 process writes its Base plus two Deltas through `PrepareNew`, `Load`, and `Prepare`, then closes
-the files. After writable reopening,
-public `LoadedWorld.Load<World>` upgrades the complete old DTO, allocates without a constructor,
-and hydrates private readonly scalar/string fields. `Prepare` forces an unchanged upgraded object
-to a Base for the current-version DTO; a later domain mutation cannot change that prepared content. The host explicitly
-appends and loads a new owner, whose unchanged plan contains no object writes and whose next edit
-uses ordinary Delta. A second cold reopening restores that Base/Delta pair and still reads the
-original historical revision. No fixture-owned DTO migration or planning coordinator substitutes
-for the public loading/preparation APIs.
+StateStore and all model/history consumer lanes now use `EventHistoryRepository` and
+`EventHistorySession<T>`. `CreateBranch` publishes S0 and preserves the original instances;
+subsequent model-regression steps explicitly publish an Event snapshot followed by State.
+Those regression Events may use the World itself as the snapshot root; the focused EventHistory
+lane instead uses `Observed(Alice)` to verify independent event membership and capabilities.
+Journal refs provide the sole publication point; no `publication.rbf` is created.
 
-Additional required markers are `HistoricalUpgrade`, `ConstructorFree`, `ReadonlyHydrate`,
-`ForcedBase`, `UnchangedResave`, `NormalDelta`, and `ReopenedWorld`, each followed by `True`.
-The historical witness supplies the explicit World ID and exact Revision address; it does not publish
-a head, discover roots/CLR types, hand-build old DTO bodies, or invoke transient hooks. Mixed historical model families
-and failure boundaries remain covered by product integration tests.
+The StateStore runner retains the inherited Character's exact DTO/Base/Delta golden checks,
+Schema registration idempotence/conflict checks, and shared strings. Its V1/V2 World lane retains
+real generated history, explicit Upgrade, constructor-free private readonly hydration, required
+Base rewrite followed by NoChange and Delta, and cold historical reading. The graph lane retains
+shared derived targets, cycles, child-only Delta, unreachable-cycle removal, continuous instance
+identity and historical snapshots. Raw `RevisionDecoder` and Storage reads remain diagnostic
+assertions; consumers no longer own the save pipeline or call internal preparation APIs.
 
-The V2 consumer additionally constructs an ordinary `GraphWorld` with a shared derived
-`GraphCharacter` in nominal base fields. The Character and Item retain readonly mutual references;
-the Item also refers to itself, and its label shares the Character's inherited readonly name.
-Public `LoadedWorld.PrepareNew` produces the initial no-Parent plan, which the host appends without
-hand-built DTOs or bootstrap records. Mutating and disconnecting the original graph after preparation
-cannot change those saved bytes. Closing and reopening restores the exact derived type, sharing,
-cycles and readonly fields without executing constructors or transient initializers.
-
-A child-only edit produces one Character Delta and retains the World object's prior object head. Repeated
-preparation is equivalent, reloading an unchanged graph produces no writes, and disconnecting both
-World references removes the entire cyclic island and its string from the new view. A final cold
-reopening checks the removed view and both earlier graphs. Required markers are `PrepareNewGraph`,
-`SharedDerived`, `ReadonlyCycles`, `ChildOnlyDelta`, `UnreachableCycleRemoved`, and
-`HistoricalGraphPreserved`, each followed by `True`. The host still retains the explicit WorldId
-and Revision address; preparation and Append do not publish a head or advance the loaded baseline.
-
-DB-036 adds a separate public `GraphRepository` / `GraphSession` exercise using the same generated
-graph. Three consecutive commits preserve the original World/Character/Item instances and their
-transient state. Reopening needs only the repository path and model directory: the persistent head
-selects the World ID and Revision. The loaded session commits again without reloading, and a final
-reopen verifies the result. The script requires `GraphSessionContinuousCommit:True` as well as all
-earlier markers. The low-level fixed-Parent exercises above remain unchanged.
+The local feed contains **nine** packages, including the unmodified sibling EventJournal substrate.
+Each consumer references `Atelia.DurableGraph` for generator/build assets and
+`Atelia.DurableGraph.StateStore` for the facade, without manual analyzer/import/project wiring.
+Most runners accept `-PackageSource <feed> -Version <version>` to reuse a matching feed. Accepted
+history hashes remain immutable across consumer builds. Frozen-content probes now save through
+the facade and then mutate/clear their source objects before reading the saved graph; staging and
+publication-failure isolation remain the responsibility of product integration tests.
 
 ## Guid, decimal and TimeSpan values
 
@@ -218,7 +185,7 @@ Run `./experiments/PackageConsumerProbe/Run-TemporalScalarProbe.ps1` for the
 composition, exact offset changes at the same instant, Dictionary key Remove/Add, deleted inline
 CLR history and explicit owner/shared List value upgrades. Upgraded objects rewrite Base, then
 resume NoChange and ordinary Delta with no repeated business calls after cold reopen. New history
-uses v9 while accepted filenames, hashes and bytes remain unchanged. A matching eight-package
+uses v9 while accepted filenames, hashes and bytes remain unchanged. A matching nine-package
 feed can be reused with `-PackageSource <feed> -Version <version>`.
 
 ## Historical capability retention
@@ -237,7 +204,7 @@ Existing history hashes must remain unchanged. The witness freezes no automatic 
 
 An application that still promises to load older Revisions must retain their reader and normalization
 capabilities. Removing a family from a newer Revision does not make its older versions independently
-recoverable from metadata. `-PackageSource <feed> -Version <version>` can reuse an existing eight-package
+recoverable from metadata. `-PackageSource <feed> -Version <version>` can reuse an existing nine-package
 feed; the default invocation packs its own isolated dependency closure.
 
 
@@ -255,7 +222,7 @@ readonly fields and defaults transient state without running value constructors.
 
 V2 changes the inner value's numeric layout and explicitly advances the outer value, base owner
 and derived World Schemas. The owner Upgrade constructs nested historical DTOs through target-typed
-constructors. GraphSession rewrites upgraded objects as Base, then compares unchanged while retaining
+constructors. EventHistorySession rewrites upgraded objects as Base, then compares unchanged while retaining
 the same domain instances. A separate rebuild advances only the nominal child's version: owner and
 inline Schema versions remain unchanged, and the next save writes only a required child Base.
 
@@ -269,7 +236,7 @@ The script requires all stage markers and history counts `5 -> 10 -> 11 -> 13`, 
 modification of previously published `.dgschema` files, and checks that new history uses text format v9.
 The unchanged score uses a five-byte integer value so the nested leaf change remains a real Delta
 candidate after Base v4 shortened the type header; the ordinary B/D policy is unchanged.
-It packs the same eight-package dependency closure by default; `-PackageSource <feed> -Version <version>`
+It packs the same nine-package dependency closure by default; `-PackageSource <feed> -Version <version>`
 reuses an existing feed. Generated artifacts and probe-owned address sidecars remain under the unique
 ignored `obj` run directory.
 
@@ -316,7 +283,7 @@ old inline domain struct while retaining its generated history DTO and value pro
 checks multi-step loading from V1, forced Base, unchanged resave, ordinary Delta, and cold reopening.
 It preserves accepted history hashes across builds; it does not change any persistent format.
 
-The runner packs an isolated eight-package feed by default; use `-PackageSource <feed> -Version <version>`
+The runner packs an isolated nine-package feed by default; use `-PackageSource <feed> -Version <version>`
 to reuse a matching feed. Exact stage markers and boundaries live in the consumer README;
 construction and acceptance evidence are recorded in
 [DB-039 §8](../../docs/design-branches/0039-composable-value-upgrade-design.md#8-产品施工合同与验收映射).
@@ -348,13 +315,13 @@ The [list consumer](ListConsumer/README.md) exercises the DB-047 content object 
 package builds. Nested lists, arrays in lists and lists in arrays, generic class/struct operands,
 shared identity and World/list cycles survive continuous saves and cold reopening. Element edits,
 append and middle/tail deletion preserve the List ObjectId; Capacity-only changes write no objects.
-Separate prepared Base/Delta plans survive clearing their source lists before append.
+Saved Base/Delta content survives clearing the source lists before reading it back.
 
 The next build removes the old inline domain CLR declaration while retaining its versioned state
 history. Explicit list-owned value Upgrade runs once for the shared list, forces Base and then
 resumes ordinary Delta. Representation IDs remain persistent, with a new ID only for the upgraded
 list layout. The runner requires stage markers, immutable history hashes and new history v9;
-it accepts `-PackageSource <feed> -Version <version>` to reuse the existing eight-package feed.
+it accepts `-PackageSource <feed> -Version <version>` to reuse the existing nine-package feed.
 The consumer uses DB-049's List range codec 2 and DB-051's default Adaptive writer. Algorithm comparisons
 and same-history measurements live in [ListDeltaReplayProbe](../ListDeltaReplayProbe/README.md); this lane verifies package delivery.
 
@@ -366,4 +333,4 @@ a shared List, vector and rank-four array, retaining reference sharing and cycle
 The second build deletes the old struct CLR declaration while retaining exact history, explicitly lifts
 the child conversion, rewrites upgraded owners as Base and resumes Delta. Clearing nullable values
 removes the unreachable cyclic island. History v9 hashes and counts are checked in packaged Publish
-and Verify modes; the runner also accepts an existing matching eight-package feed.
+and Verify modes; the runner also accepts an existing matching nine-package feed.

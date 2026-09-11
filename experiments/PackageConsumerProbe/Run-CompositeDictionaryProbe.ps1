@@ -36,6 +36,7 @@ try {
             "../atelia/src/Primitives/Primitives.csproj",
             "../atelia/src/Rbf/Rbf.csproj",
             "../atelia/src/RbfSegmentStore/RbfSegmentStore.csproj",
+            "../atelia/src/EventJournal/EventJournal.csproj",
             "src/DurableGraph.StateStore.Serialization/DurableGraph.StateStore.Serialization.csproj",
             "src/DurableGraph/DurableGraph.csproj",
             "src/DurableGraph.StateStore.Storage/DurableGraph.StateStore.Storage.csproj",
@@ -43,7 +44,7 @@ try {
         )) {
             Invoke-DotNet @("pack", $project, "--configuration", "Release", "--output", $PackageSource, "-p:PackageVersion=$Version")
         }
-        if (@(Get-ChildItem -LiteralPath $PackageSource -Filter *.nupkg -File).Count -ne 8) { throw "Expected eight dependency packages." }
+        if (@(Get-ChildItem -LiteralPath $PackageSource -Filter *.nupkg -File).Count -ne 9) { throw "Expected nine dependency packages." }
     }
     $properties = @(
         "-p:DurableGraphPackageVersion=$Version",

@@ -138,7 +138,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             Assert.True(host.GetMethod("UnchangedOwnerFailsWithoutPublishing")!
                 .CreateDelegate<Func<string, bool>>()(directory.Path));
         }
-        using var repository = GraphRepository.OpenExisting(directory.Path);
+        using var repository = FixtureGraphRepository.OpenExisting(directory.Path);
         Assert.Equal(original, repository.HeadRevisionAddress);
     }
 
@@ -192,25 +192,25 @@ public sealed partial class DurableSchemaGeneratorTests {
             public static FrameAddress Seed(string path,bool empty) {
                 var world=new World<Inline<Point>>{Value=new(){Value=new(){X=10000}}};
                 if(!empty)for(int i=0;i<32;i++)world.Points.Add(new(){X=20000+i});
-                using var repo=GraphRepository.CreateNew(path);using var session=repo.Create(world,Models(true));
+                using var repo=FixtureGraphRepository.CreateNew(path);using var session=repo.Create(world,Models(true));
                 return session.Commit(new(1000000,1));
             }
             public static bool UnchangedOwnerFailsWithoutPublishing(string path) {
-                using var repo=GraphRepository.OpenExisting(path);var head=repo.HeadRevisionAddress;
+                using var repo=FixtureGraphRepository.OpenExisting(path);var head=repo.HeadRevisionAddress;
                 try {using var session=repo.Load<World<Inline<Point>>>(Models(true));return false;}
                 catch(InvalidDataException) {return repo.HeadRevisionAddress==head;}
                 catch(SchemaConflictException) {return repo.HeadRevisionAddress==head;}
             }
         {{{{(version == 2 ? """
             public static bool MissingListRuleFailsWithoutPublishing(string path) {
-                using var repo=GraphRepository.OpenExisting(path);var head=repo.HeadRevisionAddress;
+                using var repo=FixtureGraphRepository.OpenExisting(path);var head=repo.HeadRevisionAddress;
                 try {using var session=repo.Load<World<Inline<Point>>>(Models(false));return false;}
                 catch(InvalidDataException) {return repo.HeadRevisionAddress==head;}
             }
             public static FrameAddress[] UpgradeAndSave(string path,bool empty) {
                 Upgrades.OwnerCalls=Upgrades.InlineCalls=CrossHistoryRemote.Upgrades.Calls=0;
                 var models=Models(true);var addresses=new List<FrameAddress>();
-                using(var repo=GraphRepository.OpenExisting(path))using(var session=repo.Load<World<Inline<Point>>>(models)) {
+                using(var repo=FixtureGraphRepository.OpenExisting(path))using(var session=repo.Load<World<Inline<Point>>>(models)) {
                     var world=session.World;
                     if(world.Value.Value.X!=11000 || world.Points.Count!=(empty?0:32) || world.Points.Any(p=>p.X<21000))throw new InvalidOperationException("upgrade values");
                     if(Upgrades.OwnerCalls!=1 || Upgrades.InlineCalls!=1 || CrossHistoryRemote.Upgrades.Calls!=(empty?1:33))throw new InvalidOperationException("explicit callback counts");
@@ -218,7 +218,7 @@ public sealed partial class DurableSchemaGeneratorTests {
                     if(empty)world.Points.Add(new(){X=99999});else {var p=world.Points[0];p.X++;world.Points[0]=p;}
                     addresses.Add(session.Commit(new(1000000,1)));
                 }
-                using(var repo=GraphRepository.OpenExisting(path))using(var session=repo.Load<World<Inline<Point>>>(models)) {
+                using(var repo=FixtureGraphRepository.OpenExisting(path))using(var session=repo.Load<World<Inline<Point>>>(models)) {
                     if(session.World.Points[0].X!=(empty?99999:21001))throw new InvalidOperationException("cold delta");
                     if(Upgrades.OwnerCalls!=1 || CrossHistoryRemote.Upgrades.Calls!=(empty?1:33))throw new InvalidOperationException("repeated upgrade");
                     addresses.Add(session.Commit(new(1000000,1)));

@@ -9,8 +9,8 @@ DurableGraph 捕获独立的版本化状态 DTO，比较上次提交状态，以
 目前是快速演进的 **.NET 10 原型**，API 和格式尚未冻结。本文面向首次接入的应用开发者和 Coding Agent，
 只介绍当前可用入口；详细能力边界见 [产品工作集](src/PROJECT-STATE.md)。
 
-已选后继 [EventHistory 外观](docs/design-branches/0063-event-history-journal-slice.md) 将统一事件/状态读写与 Journal 发布，
-替换下文的早期仓库/会话 API；目前尚未实施。即将接入的示范应用可据此协调时点，当前示例仍反映现有可运行版本。
+公开入口是 [EventHistory](docs/design-branches/0063-event-history-journal-slice.md)：记录 Event 快照，随后保存处理结果 State。
+Journal 的命名 branch ref 是唯一发布点；恢复读取已保存的结果，不重新执行历史业务处理器。
 
 ## 最短接入路径
 
@@ -68,6 +68,11 @@ public partial class World : DurableBase {
 
     public Character Find(string name) => _byName[name];
 }
+
+[DurableType("DamageEvent", 1)]
+public partial class DamageEvent : DurableBase {
+    [DurableField(1)] public int Amount;
+}
 ```
 
 领域 class/struct 使用顶层 `partial` 声明。class 继承链最终到 `DurableBase`；每个参与持久化的声明显式标记
@@ -92,22 +97,26 @@ Atelia.DurableGraph.Generated.DurableDefinitions.Register(models);
 var policy = new ReadAmplificationBaseBudgetParameters(3, 5);
 
 using var repository = Directory.Exists(path)
-    ? GraphRepository.OpenExisting(path)
-    : GraphRepository.CreateNew(path);
-using var session = repository.HeadRevisionAddress is null
-    ? repository.Create(NewWorld(), models)
-    : repository.Load<World>(models);
+    ? EventHistoryRepository.OpenExisting(path)
+    : EventHistoryRepository.CreateNew(path);
+using var session = repository.ListBranches().Contains("main")
+    ? repository.Resume<World>("main", models)
+    : repository.CreateBranch("main", NewWorld(), models, policy); // 已保存初始 S0。
 
-World world = session.World;
+World world = session.State;
 world.RebuildTransient(); // Load 不调用构造器/字段初始化器，也不自动执行此方法。
 if (!ReferenceEquals(world.Hero, world.Characters[0]) ||
     !ReferenceEquals(world.Hero.Partner!.Partner, world.Hero)) {
     throw new InvalidOperationException("Object identity was not preserved.");
 }
 
-world.Hero.Hp--;
-var revision = session.Commit(policy);
-Console.WriteLine($"{world.Find("Alice").Name}: Hp={world.Hero.Hp}; Revision={revision}");
+if (session.PendingEvent is null) {
+    session.CommitDomainEvent(new DamageEvent { Amount = 1 }, policy);
+}
+DamageEvent pending = session.GetPendingEvent<DamageEvent>();
+world.Hero.Hp -= pending.Amount;
+var frame = session.CommitDomainState(policy);
+Console.WriteLine($"{world.Find("Alice").Name}: Hp={world.Hero.Hp}; Revision={frame.RevisionAddress}");
 
 static World NewWorld() {
     var alice = new Character { Name = "Alice", Hp = 100 };
@@ -128,12 +137,37 @@ dotnet run --project QuickStart/QuickStart.csproj --no-restore -p:DurableGraphPa
 dotnet run --project QuickStart/QuickStart.csproj --no-restore -p:DurableGraphPackageVersion=$version -- $data
 ```
 
-第一次输出 `Hp=99`，第二个进程重开后输出 `Hp=98`。后续修改继续使用同一个 session 的 `World`；
-成功 Commit 保留领域实例及比较基线。Dispose **不自动保存，也不撤销领域修改**。
+第一次输出 `Hp=99`，第二个进程重开后输出 `Hp=98`。后续修改继续使用同一个 session 的 `State`；
+成功提交 State 保留领域实例及比较基线。若进程在 Event 发布后中止，Resume 交付前一个 State 和 PendingEvent。
+Dispose **不自动保存，也不撤销领域修改**。`CommitDomainState(nextState, policy)` 也支持替换同 exact 类型根，发布后才切换 `session.State`。
 
 `(3, 5)` 分别表示对象级读取放大倍率阈值与可选 Base 预算百分比。
 这是性能策略，不是事务大小上限；新增/升级等必要 Base 不受该可选预算限制。
 无需自己估算尺寸、挑 Base/Delta 或调用 DTO 的二进制 body。
+
+### 3. 独立浏览与分支
+
+关闭 writer 后，可以只加载某个 Event；不需要先构造 World，也不必注册完全不在该 Event 图中的模型。
+每次操作仍需要所选图的完整 reader/Upgrade 能力。
+
+```csharp
+using var history = EventHistoryRepository.OpenReadOnlyExisting(path);
+foreach (var eventFrame in history.ReadEvents("main")) {
+    var damage = history.ReadEvent<DamageEvent>(eventFrame, models);
+    Console.WriteLine(damage.Amount);
+}
+var lastEvent = history.ReadEvents("main").Last();
+var before = history.GetPreviousState(lastEvent);
+var pair = history.ReadPair<World, DamageEvent>(before, lastEvent, models);
+```
+
+`ReadPair` 是实验性只读快照 API：按输入顺序返回 First/Second，当前分别恢复两次；不承诺跨图 CLR 实例复用或隔离。
+可写 Resume 独立恢复 Event/State，避免框架制造跨图可变别名。热路径由用户保持 Event 内容只读；持久 DTO 冻结不会冻结原 CLR 对象。
+
+可写仓库在**没有活动 session**时支持 `CreateBranch("fork", selectedFrame)` 和
+`MoveBranch("main", expectedHead, targetFrame)`；随后从目标分支 Resume。
+handle 从 `GetHead`、`ReadFrames` 或提交结果取得，只能用于签发它的这一次打开实例；不要跨库或跨重开复用。
+历史链是 `S0 → E1 → S1`，E1 与 S1 的 Revision Parent 都是 S0，Event 不成为 State 的增量比较基线。
 
 ## Schema 演化：保留 history，显式写转换
 
@@ -205,12 +239,13 @@ Transient 索引/缓存由应用在 Load 交付完整图后重建。自定义字
 ## 多模型库与运行约束
 
 每个模型库保有自己的 history，并以公开 facade 包住该库 internal 的 `Generated.DurableDefinitions.Register`。
-宿主在 Create/Load 前登记所有模型库；不依赖程序集自动扫描，也不把别人的 `.dgschema` 复制到本库。
+宿主在 CreateBranch/Resume 前登记所需模型库；不依赖程序集自动扫描，也不把别人的 `.dgschema` 复制到本库。
 跨库接法见 [跨库继承示例](experiments/PackageConsumerProbe/InheritanceLibraryConsumer/README.md)。
 
-当前外层 API 是**一个 Repository、一个固定非空 World、一个活动 GraphSession、单 writer**。
+当前外层 API 是**一个 Repository、一个活动 EventHistorySession、单 writer**；每份 Event/State 图选一个非空 durable 根。
 同步 Commit 期间宿主须停止对领域图的并发修改；DTO 冻结不提供任意并发读写下的快照隔离。
-还没有 branch/Reset/根替换、自动坏尾修复或完整 OS crash/power-loss 保证。
+没有自动坏尾修复或完整 OS crash/power-loss 保证。文件布局为 schemas.rbf、state/、journal/ 和 repository.lock。
+旧仓库/会话 API 与 publication.rbf 发布器已移除；原型没有旧格式迁移路径。
 
 保存失败时不要一律重试：`GraphCommitException.Outcome` 区分 NotPublished / Unknown / Published，
 同时检查 Repository/Session 的 `IsFaulted`。Unknown/Published 不可透明重试；faulted 实例须 Dispose 后重开，
@@ -228,6 +263,7 @@ $feed = Join-Path (Get-Location) "artifacts/nuget/$version"
 foreach ($project in @(
     "../atelia/src/Data/Data.csproj", "../atelia/src/Primitives/Primitives.csproj",
     "../atelia/src/Rbf/Rbf.csproj", "../atelia/src/RbfSegmentStore/RbfSegmentStore.csproj",
+    "../atelia/src/EventJournal/EventJournal.csproj",
     "src/DurableGraph.StateStore.Serialization/DurableGraph.StateStore.Serialization.csproj",
     "src/DurableGraph/DurableGraph.csproj",
     "src/DurableGraph.StateStore.Storage/DurableGraph.StateStore.Storage.csproj",

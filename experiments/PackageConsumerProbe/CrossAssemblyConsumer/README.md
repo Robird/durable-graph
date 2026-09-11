@@ -44,10 +44,9 @@ Host registers both catalogs before opening a session:
 var models = new StateModelRegistry();
 DomainCatalog.Register(models);
 AppCatalog.Register(models);
-using var repository = GraphRepository.CreateNew(path, options);
-using var session = repository.Create(World.Create(), models);
-session.Commit(policy);
-// Later: GraphRepository.OpenExisting(path, options), then repository.Load<World>(models).
+using var repository = EventHistoryRepository.CreateNew(path, options);
+using var session = repository.CreateBranch("main", World.Create(), models, policy);
+// Later: EventHistoryRepository.OpenExisting(path, options), then repository.Resume<World>("main", models).
 ```
 
 Each library can similarly expose `RegisterReaders(IStateReaderRegistration)` for stored-exact inspection.

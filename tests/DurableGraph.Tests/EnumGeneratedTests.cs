@@ -22,10 +22,10 @@ public sealed partial class DurableSchemaGeneratorTests {
             public static class Host {
                 public static bool Probe(string path) {
                     var models=new StateModelRegistry(); DurableDefinitions.Register(models);
-                    using(var repo=GraphRepository.CreateNew(path)) {
+                    using(var repo=FixtureGraphRepository.CreateNew(path)) {
                         using var session=repo.Create(new World(),models); session.Commit(new(100,100));
                     }
-                    using(var repo=GraphRepository.OpenExisting(path)) {
+                    using(var repo=FixtureGraphRepository.OpenExisting(path)) {
                         using var session=repo.Load<World>(models); return session.World.Check();
                     }
                 }
@@ -156,11 +156,11 @@ public sealed partial class DurableSchemaGeneratorTests {
             public static class Host {
                 public static bool Probe(string path) {
                     var models=new StateModelRegistry(); DurableDefinitions.Register(models);
-                    using(var repo=GraphRepository.CreateNew(path)) {
+                    using(var repo=FixtureGraphRepository.CreateNew(path)) {
                         var world=new World(); using var session=repo.Create(world,models); session.Commit(new(100,100));
                         world.Change(); session.Commit(new(100,100)); if(!ReferenceEquals(world,session.World)) return false;
                     }
-                    using(var repo=GraphRepository.OpenExisting(path)) {
+                    using(var repo=FixtureGraphRepository.OpenExisting(path)) {
                         using var session=repo.Load<World>(models); if(!session.World.Check()) return false; session.Commit(new(100,100));
                     }
                     return true;

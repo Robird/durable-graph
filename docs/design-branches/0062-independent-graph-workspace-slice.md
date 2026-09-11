@@ -25,7 +25,7 @@ E1 不推进或破坏 S0 比较基线，S1 正确产生相对 S0 的 Delta；E1 
 | [ObjectRevisionPlanner](../../src/DurableGraph.StateStore/ObjectRevisionPlanner.cs) | 有 Parent 时固定输出 map Delta 及完整差集 Removes；需要另一种目录输出方式，正文策略不用替换 |
 | [StateRevision](../../src/DurableGraph.StateStore.Storage/StateRevision.cs) | 已允许有 Parent 的 map Base、local Delta 与 external heads；这种组合无需新 Storage 格式 |
 | [RevisionDecoder](../../src/DurableGraph.StateStore/RevisionDecoder.cs) | 解码指定 Revision 全部 live 行；只要 E 的 membership 本身独立，既有路径即可避免解码无关 State 行 |
-| [GraphRepository](../../src/DurableGraph.StateStore/GraphRepository.cs) / [PreparedWorldSave](../../src/DurableGraph.StateStore/PreparedWorldSave.cs) | 已有数据屏障、单次候选、发布后安装的核心顺序；专用 publication Parent 必须等于 Revision Parent 的校验仅适用旧外观 |
+| 旧 GraphRepository（后由 [DB-063](0063-event-history-journal-slice.md) 替代） / [PreparedWorldSave](../../src/DurableGraph.StateStore/PreparedWorldSave.cs) | 已有数据屏障、单次候选、发布后安装的核心顺序；专用 publication Parent 必须等于 Revision Parent 的校验仅适用旧外观 |
 
 上述表格记录实施前的代码接缝；实施后的职责与执行结果见 §7。
 

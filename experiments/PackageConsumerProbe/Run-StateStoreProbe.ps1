@@ -37,6 +37,7 @@ try {
         "../atelia/src/Primitives/Primitives.csproj",
         "../atelia/src/Rbf/Rbf.csproj",
         "../atelia/src/RbfSegmentStore/RbfSegmentStore.csproj",
+        "../atelia/src/EventJournal/EventJournal.csproj",
         "src/DurableGraph.StateStore.Serialization/DurableGraph.StateStore.Serialization.csproj",
         "src/DurableGraph/DurableGraph.csproj",
         "src/DurableGraph.StateStore.Storage/DurableGraph.StateStore.Storage.csproj",
@@ -45,7 +46,7 @@ try {
         Invoke-DotNet @("pack", $project, "--configuration", "Release", "--output", $feed, "-p:PackageVersion=$packageVersion")
     }
     $packages = @(Get-ChildItem -LiteralPath $feed -Filter *.nupkg -File)
-    if ($packages.Count -ne 8) { throw "Expected 8 dependency packages, found $($packages.Count)." }
+    if ($packages.Count -ne 9) { throw "Expected 9 dependency packages, found $($packages.Count)." }
 
     $consumerProperties = @(
         "-p:DurableGraphPackageVersion=$packageVersion",
@@ -60,7 +61,7 @@ try {
 
     $consumerAssembly = Join-Path $output "Debug/net10.0/Atelia.StateStoreConsumer.dll"
     $consumerOutput = (& dotnet $consumerAssembly (Join-Path $workRoot "database") | Out-String).Trim()
-    if ($LASTEXITCODE -ne 0 -or $consumerOutput -ne "PersistedSchema:True:PreparedWorld:True:RawDelta:True:ColdTypedRead:True:SharedString:True:ConflictBeforeAppend:True:DecodedRevision:True") {
+    if ($LASTEXITCODE -ne 0 -or $consumerOutput -ne "PersistedSchema:True:InitialState:True:RawDelta:True:ColdTypedRead:True:SharedString:True:ConflictBeforeAppend:True:DecodedRevision:True") {
         throw "Packaged StateStore exercise failed; output was '$consumerOutput'."
     }
     Write-Host $consumerOutput
@@ -82,8 +83,8 @@ try {
     if ($historyFiles.Count -ne 8) { throw "Expected original two plus World V1/V2 and four graph model histories, found $($historyFiles.Count)." }
     $restoreOutput = (& dotnet $consumerAssembly $upgradeDatabase | Out-String).Trim().Replace("`r`n", "`n")
     $expectedRestore = $consumerOutput + "`nHistoricalUpgrade:True:ConstructorFree:True:ReadonlyHydrate:True:ForcedBase:True:UnchangedResave:True:NormalDelta:True:ReopenedWorld:True"
-    $expectedRestore += "`nGraphSessionContinuousCommit:True"
-    $expectedRestore += "`nPrepareNewGraph:True:SharedDerived:True:ReadonlyCycles:True:ChildOnlyDelta:True:UnreachableCycleRemoved:True:HistoricalGraphPreserved:True"
+    $expectedRestore += "`nEventHistoryContinuousCommit:True"
+    $expectedRestore += "`nInitialGraph:True:SharedDerived:True:ReadonlyCycles:True:ChildOnlyDelta:True:UnreachableCycleRemoved:True:HistoricalGraphPreserved:True"
     if ($LASTEXITCODE -ne 0 -or $restoreOutput -ne $expectedRestore) {
         throw "Packaged upgrade/restore/resave exercise failed; output was '$restoreOutput'."
     }

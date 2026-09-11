@@ -134,14 +134,15 @@ internal static class Report {
                 Runtime = RuntimeInformation.FrameworkDescription, OS = RuntimeInformation.OSDescription,
                 RuntimeInformation.ProcessArchitecture, Environment.ProcessorCount, Stopwatch.Frequency,
                 ServerGC = System.Runtime.GCSettings.IsServerGC, TieredCompilation = Environment.GetEnvironmentVariable("DOTNET_TieredCompilation") ?? "runtime-default",
-                Binaries = new[] { typeof(Program).Assembly, typeof(DurableSchema).Assembly, typeof(GraphRepository).Assembly }
+                Binaries = new[] { typeof(Program).Assembly, typeof(DurableSchema).Assembly, typeof(EventHistoryRepository).Assembly }
                     .Select(assembly => new { assembly.FullName, Sha256 = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(assembly.Location))) }).ToArray(),
             },
             AlgorithmBudgets = new { LocalLookahead = ListDeltaMatcher<int, Int32StateOps>.LocalLookahead,
                 MyersMaxEditDepth = ListDeltaMatcher<int, Int32StateOps>.MaximumMyersDepth,
                 MyersTraceLimitBytes = ListDeltaMatcher<int, Int32StateOps>.MaximumTraceBytes,
                 ExtraComparisons = "min(1000000, 4096 + 8 * (oldCount + newCount))", Source = "Product constants and ListDeltaMatcher.Plan formula; compiled binaries fingerprinted above" },
-            Measurement = new { Commit = "synchronous GraphSession.Commit including Capture, PrepareBase, planner chain reads and append/flush; edits and validation excluded",
+            Measurement = new { Version = 2, Commit = "Initial: CreateBranch S0. Edits: CommitDomainEvent(marker) plus CommitDomainState, including both captures, graph writes and Journal ref barriers; domain edits and validation excluded",
+                FileBytes = "StateFileBytes includes marker Event revisions; JournalFileBytes sums the journal directory; per-step payload counters describe only State revisions",
                 Allocation = "GC.GetAllocatedBytesForCurrentThread, excludes other-thread allocations and unmanaged memory",
                 ObjectBytes = "actual decoded ObjectVersion payload, excluding ObjectId/membership/shared frames; physical file sizes separate",
                 Cold = "fresh file handles and bindings, not a flushed OS page cache; writable Repository reopen includes integrity validation and flush",
@@ -158,7 +159,7 @@ internal static class Report {
         }
         File.WriteAllLines(Path.Combine(settings.Output, "steps.csv"), csv);
         StringBuilder text = new("# List Delta replay result\n\nAll domain histories, identities, exact states and candidate roundtrips passed.\n\n");
-        text.AppendLine("The JSON summary reports median/min/max across fresh-repository repetitions. Initial Commit and warmup are separate. Whole Commit includes publication flush; isolated Diff explains only the matcher/body contribution. No automatic ranking or cold-read optimization gate is applied.");
+        text.AppendLine("The JSON summary reports median/min/max across fresh-repository repetitions. Initial Commit and warmup are separate. Whole edit Commit includes marker Event plus State publication and both Journal ref barriers; isolated Diff explains only the matcher/body contribution. No automatic ranking or cold-read optimization gate is applied.");
         text.AppendLine().AppendLine("| Workload | Count | Algorithm | Edit Commit total ms (median / min / max) | Candidate Delta bytes | Actual edit payload bytes |")
             .AppendLine("|---|---:|---|---:|---:|---:|");
         foreach (var group in runs.GroupBy(run => (run.Workload, run.Count, run.Algorithm))) {

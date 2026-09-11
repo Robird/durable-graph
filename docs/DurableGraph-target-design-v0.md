@@ -351,27 +351,30 @@ State/Artifact/Schema 输入及 recipe/builder 版本；围栏不匹配应为 mi
 
 ### 单一发布权威与明确故障结果
 
-上层 API 采用由 Repository 创建/加载的工作会话（暂称 WorkingTree / GraphSession），对外提供
-checkout/create、访问领域根（MVP 单 World）和 Commit。它同时拥有所选持久 Revision Parent、对应的冻结当前版本 DTO 比较基线、
+上层 API 采用由 EventHistoryRepository 创建/恢复的 EventHistorySession，对外提供
+创建分支/Resume、访问 State 根及交错提交 Event/State。它同时拥有所选持久 Revision Parent、对应的冻结当前版本 DTO 比较基线、
 领域实例到 ObjectId 的绑定及分配状态；普通调用方不分别传入或设置这几份状态。
 仅由受控加载和成功提交流程建立、推进其对应关系，不为此另造独立的认证或 receipt 框架。
 Capture/Prepare/Accept 是会话内部组件；其单独可调用不意味着完成持久 Commit。
 
 提交以这次冻结候选完成追加、规定的持久化屏障和 head 发布后，再推进基线与身份绑定；
-不重新 Capture 冒充已提交结果。发布还须保证 branch head 未偏离所选 Parent；MVP 可用单 branch
+不重新 Capture 冒充已提交结果。发布还须保证 branch head 未偏离会话所选 Journal head；MVP 可用仓库内
 单活动工作会话和受控修改保证，不提前承诺多 checkout / 多 writer。branch 的持久引用与内存工作
 会话是不同概念，但不要求为命名立即拆类或程序集。
 
-无历史的新分支建立空会话；重置到历史 Revision 则从目标重建对应状态，推荐使旧会话失效并返回
-新会话。若提供清空操作，它表示沿原 Parent 清空新视图，不等于创建无历史分支；
-单 World API 是否接受 null 以及如何表达清空，留待该分片确定。
+无历史的新分支必须提交非空 S0 后才能交付会话并公开名字，不暴露空 head。
+移动分支或从历史帧分叉须先关闭活动会话，再 Resume 目标；从 E 恢复时同时恢复 preceding State 与 PendingEvent，
+不重放业务处理器。State 可替换同 exact 类型根；null/清空另行裁决。
 EventHistory 收敛仓库/会话外观，用户无需分别维护 Parent、DTO baseline 或实例-ID 绑定。
-旧 GraphRepository/GraphSession 等早期外观没有下游兼容负担；可重设计、收窄或删除，
-不增加旧 publication.rbf 格式兼容、迁移或双发布机制。施工交接和示例迁移由 DB-062/063 维护。
+旧 GraphRepository/GraphSession 等早期外观没有下游兼容负担，统一由 EventHistory 外观替代；
+不增加旧 publication.rbf 格式兼容、迁移或双发布机制。施工交接和示例迁移由 DB-063 维护。
 
 Journal 的逻辑顺序为 S0→E1→S1→E2→S2；E1 与 S1 的 Revision Parent 均为 S0，后续同理。
 事件只保存自身可达闭包，发布后不安装为 State 比较基线；State 发布后才推进对应工作区。
-Journal ref 是目标外观的唯一发布前沿，图追加与 head 发布分开，由同一外观统一编排。
+Journal ref 是外观的唯一发布前沿，图追加与 head 发布分开，由同一外观统一编排。
+历史读写使用当前 Repository 签发的 GraphFrame，不以裸地址证明来源。独立浏览不恢复另一份业务图；
+实验性 ReadPair 保持输入顺序、两边完整成功才交付，按只读快照使用且不承诺跨图实例共享。
+冷 Resume 独立恢复可变 State/Event；热调用中用户创建的别名仍由用户管理。
 
 长期目标是让 Schema、State、Artifact 的共同引用有一个可裁决的发布点，而不是各自发布
 无法协调的 head；Derived 不充当权威提交的参与者。CommitManifest 是候选表达形状，
@@ -418,7 +421,7 @@ source 目录与升级后 World 可达集合，不能假定两者始终一一对
 Empty 多 ID 的反向绑定确定选择最小 source ID，但基线引用槽保留原 ID，让下一 Capture 产生
 实际引用差异。新加载会话从完整 source live max+1 开始分配，只承诺会话内单调；uint 耗尽仅阻止
 新增 ID，不阻止加载或已有对象保存。固定 Parent 的低层 Prepare 不就地接受新地址，需 Append 后重新 Load；
-普通连续保存使用受控 GraphSession.Commit，发布成功后直接安装原候选并保留领域实例。
+普通连续 State 保存使用受控 EventHistorySession.CommitDomainState，发布成功后直接安装原候选并保留领域实例；Event 提交不推进 State 基线。
 List 适配器先分配空列表，待全部实例登记后逐元素 Hydrate 并按序 Add，保留共享和循环；
 这类内建构造不改变用户领域类不执行构造器的恢复合同。
 

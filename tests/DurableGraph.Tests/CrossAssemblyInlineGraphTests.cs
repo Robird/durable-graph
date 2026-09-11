@@ -169,11 +169,11 @@ public sealed partial class DurableSchemaGeneratorTests {
             }
             public static FrameAddress[] Exercise(string path,bool reverse) {
                 var models=Models(reverse);var addresses=new List<FrameAddress>();var world=(World)Seed();
-                using(var repo=GraphRepository.CreateNew(path))using(var session=repo.Create(world,models)) {
+                using(var repo=FixtureGraphRepository.CreateNew(path))using(var session=repo.Create(world,models)) {
                     void Save()=>addresses.Add(session.Commit(new(1000000,1)));
                     Save();Save();world.Payload.Link.Value++;Save();MutateValue(world);Save();Save();
                 }
-                using(var repo=GraphRepository.OpenExisting(path))using(var session=repo.Load<World>(models)) {
+                using(var repo=FixtureGraphRepository.OpenExisting(path))using(var session=repo.Load<World>(models)) {
                     Check(session.World);addresses.Add(session.Commit(new(1000000,1)));
                 }
                 return addresses.ToArray();

@@ -78,6 +78,7 @@ try {
         foreach ($project in @(
             "../atelia/src/Data/Data.csproj", "../atelia/src/Primitives/Primitives.csproj",
             "../atelia/src/Rbf/Rbf.csproj", "../atelia/src/RbfSegmentStore/RbfSegmentStore.csproj",
+        "../atelia/src/EventJournal/EventJournal.csproj",
             "src/DurableGraph.StateStore.Serialization/DurableGraph.StateStore.Serialization.csproj",
             "src/DurableGraph/DurableGraph.csproj",
             "src/DurableGraph.StateStore.Storage/DurableGraph.StateStore.Storage.csproj",
@@ -85,7 +86,7 @@ try {
         )) {
             Invoke-DotNet @("pack", $project, "--configuration", "Release", "--output", $PackageSource, "-p:PackageVersion=$Version")
         }
-        if (@(Get-ChildItem -LiteralPath $PackageSource -Filter *.nupkg -File).Count -ne 8) { throw "Expected eight runtime dependency packages." }
+        if (@(Get-ChildItem -LiteralPath $PackageSource -Filter *.nupkg -File).Count -ne 9) { throw "Expected nine runtime dependency packages." }
     }
     foreach ($generation in @(1, 2)) {
         $modelVersion = "0.0.0-inline-library-v$generation.$runStamp"

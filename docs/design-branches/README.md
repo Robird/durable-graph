@@ -24,7 +24,7 @@ DB-045 持久表示 ID、DB-046 统一闭合目录、DB-047 List 基础能力和
 | 文档 | 状态 | 实施范围 |
 |---|---|---|
 | [DB-062 独立图读取与可由外层发布的工作区](0062-independent-graph-workspace-slice.md) | 已实施 | 内部独立资源、快照、根替换与顺序双图读取；E/S 共享前 S baseline；公开 Journal 外观后继 DB-063 |
-| [DB-063 EventJournal 驱动的 EventHistory](0063-event-history-journal-slice.md) | Chosen / 依赖 DB-062 | 独立读写、实验性 ReadPair、Journal 唯一 ref、Resume 与分支；移除旧发布器，迁移包示例；覆盖事件/快照 Artifact 职责 |
+| [DB-063 EventJournal 驱动的 EventHistory](0063-event-history-journal-slice.md) | 已实施 | Journal 唯一 ref、E/S 交错提交、同实例 State 根替换、历史分支/Move/Resume、独立浏览与实验性 ReadPair；旧发布器删除，示例迁入新外观；验收见分片 |
 | [DB-064 两份 Revision 共享读取](0064-shared-revision-decoding-design.md) | API 方向已选 / 优化后置 | 阶段 0 纳入 DB-062/063；后继 A/B 是 DTO/string 去重与只读闭包共享，不以实例复用承诺限制实验性 API |
 | [DB-061 跨程序集继承与基类状态投影](0061-cross-assembly-inheritance-slice.md) | 已实施 / G0–G3 | typed base projection、Family own + immediate base、class 只读历史与严格 helper 合同；隐藏泛型/Nullable、参数合流/重排、旧 CLR 删除及 leaf-only Upgrade 经测试和两代真实包验证；展开 DTO/body 与 State 格式不变 |
 | [DB-060 跨程序集固定 inline 值与只读历史依赖](0060-cross-assembly-inline-history-slice.md) | 已实施 / G0–G3 | 直接外部值字段、按需只读模板导出、独立 history/生成归属；真实 ref/lib 三库两代包验证旧 CLR 删除、显式 Upgrade 与增量续写；history/State 格式不变，外部 base 另片 |

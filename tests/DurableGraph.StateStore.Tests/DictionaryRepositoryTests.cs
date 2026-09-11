@@ -23,8 +23,8 @@ public sealed class DictionaryRepositoryTests : IDisposable {
         World world = new() { Values = values, Alias = values };
         List<(FrameAddress Address, Dictionary<string, int> Expected)> revisions = [];
         FrameAddress reordered;
-        using (GraphRepository repository = CreateRepository()) {
-            using GraphSession<World> session = repository.Create(world, Models());
+        using (StateSaveHarness repository = CreateRepository()) {
+            using StateSaveSession<World> session = repository.Create(world, Models());
             revisions.Add((session.Commit(NoRebase), new(values)));
             KeyValuePair<string, int>[] reverse = values.Reverse().ToArray();
             values.Clear();
@@ -70,8 +70,8 @@ public sealed class DictionaryRepositoryTests : IDisposable {
             }
         }
         FrameAddress unchanged;
-        using (GraphRepository repository = GraphRepository.OpenExisting(_root)) {
-            using GraphSession<World> session = repository.Load<World>(Models());
+        using (StateSaveHarness repository = StateSaveHarness.OpenExisting(_root)) {
+            using StateSaveSession<World> session = repository.Load<World>(Models());
             Assert.Equal(values.OrderBy(pair => pair.Key), session.World.Values!.OrderBy(pair => pair.Key));
             Assert.Same(session.World.Values, session.World.Alias);
             unchanged = session.Commit(NoRebase);
@@ -91,14 +91,14 @@ public sealed class DictionaryRepositoryTests : IDisposable {
         Dictionary<World, World> links = new(ReferenceEqualityComparer.Instance) { [world] = child, [child] = world };
         world.Links = child.Links = links;
         FrameAddress childOnly, removed;
-        using (GraphRepository repository = CreateRepository()) {
-            using GraphSession<World> session = repository.Create(world, Models());
+        using (StateSaveHarness repository = CreateRepository()) {
+            using StateSaveSession<World> session = repository.Create(world, Models());
             session.Commit(NoRebase);
             child.Value = 4;
             childOnly = session.Commit(NoRebase);
         }
-        using (GraphRepository repository = GraphRepository.OpenExisting(_root)) {
-            using GraphSession<World> session = repository.Load<World>(Models());
+        using (StateSaveHarness repository = StateSaveHarness.OpenExisting(_root)) {
+            using StateSaveSession<World> session = repository.Load<World>(Models());
             World loaded = session.World;
             Assert.False(loaded.Values!.ContainsKey("a"));
             Assert.Equal(2, loaded.Alias!["b"]);
@@ -121,12 +121,12 @@ public sealed class DictionaryRepositoryTests : IDisposable {
         string second = new("same".ToCharArray());
         Assert.NotSame(first, second);
         World world = new() { KeyAlias = first, Values = new(ReferenceEqualityComparer.Instance) { [first] = 1, [second] = 2 } };
-        using (GraphRepository repository = CreateRepository()) {
-            using GraphSession<World> session = repository.Create(world, Models());
+        using (StateSaveHarness repository = CreateRepository()) {
+            using StateSaveSession<World> session = repository.Create(world, Models());
             session.Commit(NoRebase);
         }
-        using GraphRepository cold = GraphRepository.OpenExisting(_root);
-        using GraphSession<World> loaded = cold.Load<World>(Models());
+        using StateSaveHarness cold = StateSaveHarness.OpenExisting(_root);
+        using StateSaveSession<World> loaded = cold.Load<World>(Models());
         Dictionary<string, int> map = loaded.World.Values!;
         Assert.Equal(2, map.Count);
         Assert.Equal(1, map[loaded.World.KeyAlias!]);
@@ -140,8 +140,8 @@ public sealed class DictionaryRepositoryTests : IDisposable {
     public void UnsupportedComparerFailsBeforePublicationAndDoesNotReplaceBaseline() {
         Dictionary<string, int> original = new() { ["a"] = 1 };
         World world = new() { Values = original };
-        using GraphRepository repository = CreateRepository();
-        using GraphSession<World> session = repository.Create(world, Models());
+        using StateSaveHarness repository = CreateRepository();
+        using StateSaveSession<World> session = repository.Create(world, Models());
         FrameAddress prior = session.Commit(NoRebase);
         CountingComparer comparer = new();
         world.Values = new(comparer) { ["b"] = 2 };
@@ -284,7 +284,7 @@ public sealed class DictionaryRepositoryTests : IDisposable {
     }
     private static ObjectVersionRecord Text(uint id, string value) =>
         ObjectVersionRecord.CreateBase(id, BaseObjectBodyCodec.EncodeString(StringPayloadCodec.PrepareBase(value)).Body);
-    private GraphRepository CreateRepository() => GraphRepository.CreateNew(_root, new() { NewStoreLayout = RbfSegmentStoreLayout.Flat });
+    private StateSaveHarness CreateRepository() => StateSaveHarness.CreateNew(_root, new() { NewStoreLayout = RbfSegmentStoreLayout.Flat });
     private SegmentStore OpenState() => SegmentStore.OpenExisting(Path.Combine(_root, "state"));
     public void Dispose() {
         string resolved = Path.GetFullPath(_root);

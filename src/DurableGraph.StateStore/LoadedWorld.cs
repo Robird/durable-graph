@@ -3,7 +3,7 @@ using Atelia.DurableGraph.StateStore.Storage;
 namespace Atelia.DurableGraph.StateStore;
 
 /// <summary>Loads one explicitly selected World after complete exact decoding and current DTO normalization.</summary>
-public static class LoadedWorld {
+internal static class LoadedWorld {
     /// <summary>
     /// Freezes a new World graph into a no-Parent plan. May persist Schema registrations;
     /// does not append State, run its persistence barrier, publish, or install a baseline.
@@ -39,7 +39,7 @@ public static class LoadedWorld {
 /// Single-threaded. Prepare never advances this baseline. The host appends its owned plan,
 /// then loads the returned address to obtain a new baseline. This is not Commit or publication.
 /// </remarks>
-public sealed class LoadedWorld<TWorld> where TWorld : DurableBase {
+internal sealed class LoadedWorld<TWorld> where TWorld : DurableBase {
     private readonly WorldWorkspace<TWorld> _workspace;
 
     internal LoadedWorld(WorldWorkspace<TWorld> workspace) => _workspace = workspace;
@@ -60,7 +60,7 @@ public sealed class LoadedWorld<TWorld> where TWorld : DurableBase {
 
 /// <summary>Owned frozen State contents with a fixed Parent and the selected World ID.</summary>
 /// <remarks>Pass Revision to Storage.Append; the returned address still needs host publication.</remarks>
-public sealed class PreparedWorldRevision {
+internal sealed class PreparedWorldRevision {
     internal PreparedWorldRevision(ObjectId worldId, StateRevision revision) {
         WorldId = worldId;
         Revision = revision;

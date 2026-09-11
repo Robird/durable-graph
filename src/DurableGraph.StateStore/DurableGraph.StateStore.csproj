@@ -9,6 +9,7 @@
   <ItemGroup>
     <ProjectReference Include="..\DurableGraph\DurableGraph.csproj" />
     <ProjectReference Include="..\DurableGraph.StateStore.Storage\DurableGraph.StateStore.Storage.csproj" />
+    <ProjectReference Include="..\..\..\atelia\src\EventJournal\EventJournal.csproj" />
   </ItemGroup>
 
   <ItemGroup>

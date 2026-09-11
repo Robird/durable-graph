@@ -27,5 +27,12 @@ public sealed partial class World : DurableBase {
     }
 #endif
 #endif
+    internal World SnapshotEvent() {
+#if HISTORY_V1
+        return new World(_score, _legacy!.SnapshotEvent());
+#else
+        return new World(_score);
+#endif
+    }
     internal int Score => _score;
 }

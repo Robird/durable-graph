@@ -6,7 +6,7 @@ DB-053 delivery witness. Run from the repository root:
 ./experiments/PackageConsumerProbe/Run-EnumProbe.ps1
 ```
 
-The runner creates an isolated eight-package feed and cache, publishes generated history and
+The runner creates an isolated nine-package feed and cache, publishes generated history and
 then verifies it with the packaged build assets. Both consumer references are ordinary
 PackageReference entries. Pass both `-PackageSource` and `-Version` to reuse an existing matching
 feed. Artifacts remain under the unique ignored `obj/enum-*` run directory.
@@ -16,8 +16,8 @@ negative numbers, unnamed values, `int.MinValue` and `int.MaxValue`. A World con
 nullable enum, shared List, vector, nullable rank-four array, `Box<T>.T? where T : struct, Enum`, and
 inline `Cell<T> where T : unmanaged, Enum`. The five reference objects survive continuous saves;
 inline enum and Cell values have no object IDs. One List element edit produces an actual Delta,
-unchanged saving writes no object versions, and separately prepared Base/Delta bytes survive
-clearing or overwriting every corresponding source value before append.
+unchanged saving writes no object versions, and saved Base/Delta bytes survive
+clearing or overwriting every corresponding source value before reading them back.
 
 V2 deletes the old CLR enum declaration and introduces `CurrentMode : long` with the same durable
 identity and version 2. Its current constant table differs deliberately. Stored-exact decoding

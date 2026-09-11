@@ -59,9 +59,9 @@ public sealed class RepresentationIntegrationTests : IDisposable {
             Assert.Equal(ObjectLayout.ForDurable(WorldSchema), schemas.GetRepresentation(representation));
             Assert.Equal(schemaTail, schemaFile.TailOffset);
         }
-        using GraphRepository reopened = GraphRepository.OpenExisting(_root, Options);
-        Assert.Equal(rewritten, reopened.HeadRevisionAddress);
-        Assert.Equal(new ObjectId(1), reopened.WorldId);
+        using EventHistoryRepository reopened = EventHistoryRepository.OpenExisting(_root, Options);
+        Assert.Equal(rewritten, reopened.GetHead("main").RevisionAddress);
+        Assert.Equal(new ObjectId(1), reopened.GetHead("main").RootId);
     }
 
     [Theory]
@@ -82,7 +82,7 @@ public sealed class RepresentationIntegrationTests : IDisposable {
         Publish(null, published);
         var before = Directory.GetFiles(_root, "*", SearchOption.AllDirectories).ToDictionary(path => path, File.ReadAllBytes);
         Assert.Throws<InvalidDataException>(() => {
-            using GraphRepository rejected = GraphRepository.OpenExisting(_root, Options);
+            using EventHistoryRepository rejected = EventHistoryRepository.OpenExisting(_root, Options);
         });
         Assert.Equal(before.Keys.Order(), Directory.GetFiles(_root, "*", SearchOption.AllDirectories).Order());
         foreach ((string path, byte[] bytes) in before) { Assert.Equal(bytes, File.ReadAllBytes(path)); }
@@ -114,14 +114,13 @@ public sealed class RepresentationIntegrationTests : IDisposable {
             Assert.Equal(objects.Length, states.Read(published).LocalObjects.Count);
         }
         Publish(null, published);
-        using (IRbfFile publication = RbfFile.OpenReadOnlyExisting(Path.Combine(_root, "publication.rbf"))) {
-            PublicationLog framing = new(publication, (_, _) => { });
-            Assert.Equal(published, framing.Head!.RevisionAddress);
+        using (HistoryJournal framing = HistoryJournal.Open(_root, readOnly: true)) {
+            Assert.Equal(published, Assert.Single(framing.ReadAllFrames()).RevisionAddress);
         }
         var before = Directory.GetFiles(_root, "*", SearchOption.AllDirectories)
             .ToDictionary(path => path, File.ReadAllBytes);
         Assert.Throws<InvalidDataException>(() => {
-            using GraphRepository rejected = GraphRepository.OpenExisting(_root, Options);
+            using EventHistoryRepository rejected = EventHistoryRepository.OpenExisting(_root, Options);
         });
         Assert.Equal(before.Keys.Order(), Directory.GetFiles(_root, "*", SearchOption.AllDirectories).Order());
         foreach ((string path, byte[] bytes) in before) { Assert.Equal(bytes, File.ReadAllBytes(path)); }
@@ -193,16 +192,35 @@ public sealed class RepresentationIntegrationTests : IDisposable {
     }
 
     private void CreateEmptyRepository() {
-        using GraphRepository repository = GraphRepository.CreateNew(_root, Options);
+        using EventHistoryRepository repository = EventHistoryRepository.CreateNew(_root, Options);
     }
 
     private IRbfFile OpenSchemas() => RbfFile.OpenExisting(Path.Combine(_root, "schemas.rbf"));
     private SegmentStore OpenState() => SegmentStore.OpenExisting(Path.Combine(_root, "state"), Options);
 
     private void Publish(FrameAddress? prior, FrameAddress next) {
-        using IRbfFile file = RbfFile.OpenExisting(Path.Combine(_root, "publication.rbf"));
-        PublicationLog publication = new(file, (_, _) => { });
-        publication.Publish(prior, new(next, new ObjectId(1)));
+        using HistoryJournal history = HistoryJournal.Open(_root, readOnly: false);
+        history.ConfirmDurable();
+        if (prior is null) {
+            var initial = history.Append(GraphFrameKind.State, next, new ObjectId(1), null);
+            history.Journal.CreateBranch("main", initial).Unwrap();
+            return;
+        }
+        // These fixtures exercise raw State versions. Supply a real independent Event
+        // snapshot between each pair of State saves, without decoding domain objects.
+        FrameAddress eventRevision;
+        using (SegmentStore segments = OpenState()) {
+            StateRevisionStore states = new(segments);
+            var heads = states.ReadLiveObjectHeadMap(prior.Value);
+            eventRevision = states.AppendDurably(StateRevision.CreateObjectHeadMapBase(prior,
+                [], heads));
+        }
+        var branch = history.Journal.OpenBranch("main").Unwrap();
+        var expected = history.Journal.GetHead(branch);
+        var eventAddress = history.Append(GraphFrameKind.Event, eventRevision, new ObjectId(1), expected);
+        history.Journal.AdvanceRef(branch, expected, eventAddress).Unwrap();
+        var stateAddress = history.Append(GraphFrameKind.State, next, new ObjectId(1), eventAddress);
+        history.Journal.AdvanceRef(branch, eventAddress, stateAddress).Unwrap();
     }
 
     public void Dispose() {

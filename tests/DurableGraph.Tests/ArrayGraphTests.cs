@@ -13,7 +13,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         FrameAddress first, unchanged, vectorChange, compositeChange, replaced, removed;
         ObjectId worldId;
         object originalWorld, originalVector;
-        using (GraphRepository repository = GraphRepository.CreateNew(directory.Path)) {
+        using (FixtureGraphRepository repository = FixtureGraphRepository.CreateNew(directory.Path)) {
             using IDisposable session = (IDisposable)fixture.CreateSession(repository);
             originalWorld = fixture.World(session);
             originalVector = fixture.Vector(originalWorld);
@@ -75,7 +75,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         }
 
         FrameAddress reopened;
-        using (GraphRepository repository = GraphRepository.OpenExisting(directory.Path)) {
+        using (FixtureGraphRepository repository = FixtureGraphRepository.OpenExisting(directory.Path)) {
             using IDisposable session = (IDisposable)fixture.LoadSession(repository);
             object world = fixture.World(session);
             Assert.NotSame(originalWorld, world);
@@ -98,7 +98,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         using RawBaseDirectory directory = new();
         FrameAddress first, sparse, dense;
         ObjectId worldId;
-        using (GraphRepository repository = GraphRepository.CreateNew(directory.Path)) {
+        using (FixtureGraphRepository repository = FixtureGraphRepository.CreateNew(directory.Path)) {
             using IDisposable session = (IDisposable)fixture.CreateSession(repository);
             object world = fixture.World(session);
             object array = fixture.Vector(world);
@@ -152,7 +152,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             StateRevisionStore states = new(segments);
             SchemaStore schemas = new(schemaFile);
             object world = fixture.NewWorld();
-            PreparedWorldRevision prepared = fixture.PrepareNew(states, schemas, world);
+            FixturePreparedWorldRevision prepared = fixture.PrepareNew(states, schemas, world);
             worldId = prepared.WorldId;
             fixture.Change(world, 1);
             fixture.Change(world, 2);
@@ -175,7 +175,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         ArrayGraphFixture fixture = CompileArrayGraph();
         using RawBaseDirectory directory = new();
         FrameAddress first, recovered;
-        using (GraphRepository repository = GraphRepository.CreateNew(directory.Path)) {
+        using (FixtureGraphRepository repository = FixtureGraphRepository.CreateNew(directory.Path)) {
             using IDisposable session = (IDisposable)fixture.CreateSession(repository);
             object world = fixture.World(session);
             first = fixture.Commit(session);
@@ -203,8 +203,8 @@ public sealed partial class DurableSchemaGeneratorTests {
     private sealed class ArrayGraphFixture(Type host) {
         private T Method<T>(string name) where T : Delegate => host.GetMethod(name)!.CreateDelegate<T>();
         public object NewWorld() => Method<Func<object>>("NewWorld")();
-        public object CreateSession(GraphRepository repository) => Method<Func<GraphRepository, object>>("CreateSession")(repository);
-        public object LoadSession(GraphRepository repository) => Method<Func<GraphRepository, object>>("LoadSession")(repository);
+        public object CreateSession(FixtureGraphRepository repository) => Method<Func<FixtureGraphRepository, object>>("CreateSession")(repository);
+        public object LoadSession(FixtureGraphRepository repository) => Method<Func<FixtureGraphRepository, object>>("LoadSession")(repository);
         public object World(object session) => Method<Func<object, object>>("World")(session);
         public object Vector(object world) => Method<Func<object, object>>("Vector")(world);
         public ObjectId WorldId(object session) => Method<Func<object, ObjectId>>("WorldId")(session);
@@ -218,8 +218,8 @@ public sealed partial class DurableSchemaGeneratorTests {
         public void Repair(object world, object old, int failure) => Method<Action<object, object, int>>("Repair")(world, old, failure);
         public void Check(object world, int stage, bool replaced, bool detached) =>
             Method<Action<object, int, bool, bool>>("Check")(world, stage, replaced, detached);
-        public PreparedWorldRevision PrepareNew(StateRevisionStore states, SchemaStore schemas, object world) =>
-            Method<Func<StateRevisionStore, SchemaStore, object, PreparedWorldRevision>>("PrepareNew")(states, schemas, world);
+        public FixturePreparedWorldRevision PrepareNew(StateRevisionStore states, SchemaStore schemas, object world) =>
+            Method<Func<StateRevisionStore, SchemaStore, object, FixturePreparedWorldRevision>>("PrepareNew")(states, schemas, world);
         public object LoadOld(StateRevisionStore states, SchemaStore schemas, FrameAddress address, ObjectId worldId) =>
             Method<Func<StateRevisionStore, SchemaStore, FrameAddress, ObjectId, object>>("LoadOld")(states, schemas, address, worldId);
     }
@@ -330,12 +330,12 @@ public sealed partial class DurableSchemaGeneratorTests {
                 return models;
             }
             public static object NewWorld() => new World();
-            public static object CreateSession(GraphRepository repository) => repository.Create(new World(),Models());
-            public static object LoadSession(GraphRepository repository) => repository.Load<World>(Models());
-            public static object World(object session) => ((GraphSession<World>)session).World;
+            public static object CreateSession(FixtureGraphRepository repository) => repository.Create(new World(),Models());
+            public static object LoadSession(FixtureGraphRepository repository) => repository.Load<World>(Models());
+            public static object World(object session) => ((FixtureGraphSession<World>)session).World;
             public static object Vector(object world) => ((World)world).Numbers;
-            public static ObjectId WorldId(object session) => ((GraphSession<World>)session).WorldId!.Value;
-            public static FrameAddress Commit(object session) => ((GraphSession<World>)session).Commit(new(1000000,1));
+            public static ObjectId WorldId(object session) => ((FixtureGraphSession<World>)session).WorldId!.Value;
+            public static FrameAddress Commit(object session) => ((FixtureGraphSession<World>)session).Commit(new(1000000,1));
             public static void Check(object world,int stage,bool replaced,bool detached) => ((World)world).Check(stage,replaced,detached);
             public static void Change(object world,int stage) {
                 World value=(World)world;
@@ -363,10 +363,10 @@ public sealed partial class DurableSchemaGeneratorTests {
                 if(failure==0) ((World)world).Island=(Node[])old;
                 else ((World)world).Matrix=(int[,])old;
             }
-            public static PreparedWorldRevision PrepareNew(StateRevisionStore states,SchemaStore schemas,object world) =>
-                LoadedWorld.PrepareNew(states,schemas,(World)world,Models(),new(1000000,1));
+            public static FixturePreparedWorldRevision PrepareNew(StateRevisionStore states,SchemaStore schemas,object world) =>
+                FixtureLoadedWorld.PrepareNew(states,schemas,(World)world,Models(),new(1000000,1));
             public static object LoadOld(StateRevisionStore states,SchemaStore schemas,FrameAddress address,ObjectId worldId) =>
-                LoadedWorld.Load<World>(states,schemas,address,worldId,Models()).World;
+                FixtureLoadedWorld.Load<World>(states,schemas,address,worldId,Models()).World;
         }
         """;
 }

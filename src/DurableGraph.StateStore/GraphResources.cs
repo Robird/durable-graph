@@ -38,7 +38,7 @@ internal sealed class GraphResources : IDisposable {
         return CreateInExistingDirectory(root, options);
     }
 
-    // Allows the temporary publication host to acquire its exclusive publication lock first.
+    // The publication host acquires its repository lock before opening these resources.
     internal static GraphResources CreateInExistingDirectory(string path, RbfSegmentStoreOptions? options = null) =>
         Open(path, options, create: true, readOnly: false);
 

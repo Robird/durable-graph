@@ -16,12 +16,12 @@ internal static class Program {
         Console.WriteLine("HistoricalWorldSeeded:True");
 #else
         Character.Exercise(artifactDirectory);
-        Console.WriteLine("PersistedSchema:True:PreparedWorld:True:RawDelta:True:ColdTypedRead:True:SharedString:True:ConflictBeforeAppend:True:DecodedRevision:True");
+        Console.WriteLine("PersistedSchema:True:InitialState:True:RawDelta:True:ColdTypedRead:True:SharedString:True:ConflictBeforeAppend:True:DecodedRevision:True");
 #if RESTORE_V2
         World.Exercise(Path.Combine(artifactDirectory, "restore"));
         Console.WriteLine("HistoricalUpgrade:True:ConstructorFree:True:ReadonlyHydrate:True:ForcedBase:True:UnchangedResave:True:NormalDelta:True:ReopenedWorld:True");
         GraphWorld.Exercise(Path.Combine(artifactDirectory, "graph"));
-        Console.WriteLine("PrepareNewGraph:True:SharedDerived:True:ReadonlyCycles:True:ChildOnlyDelta:True:UnreachableCycleRemoved:True:HistoricalGraphPreserved:True");
+        Console.WriteLine("InitialGraph:True:SharedDerived:True:ReadonlyCycles:True:ChildOnlyDelta:True:UnreachableCycleRemoved:True:HistoricalGraphPreserved:True");
 #endif
 #endif
     }
@@ -43,63 +43,61 @@ public sealed partial class Character : NamedObject {
     private Character(string name, int score) : base(name) { _score = score; _alias = name; _createdAtTicks = 638_625_600_000_000_000; }
 
     internal static void Exercise(string directory) {
-        Directory.CreateDirectory(directory);
-        string schemaPath = Path.Combine(directory, "schemas.rbf");
-        string statePath = Path.Combine(directory, "state");
+        string repositoryPath = Path.Combine(directory, "character");
+        string schemaPath = Path.Combine(repositoryPath, "schemas.rbf");
+        string statePath = Path.Combine(repositoryPath, "state");
         FrameAddress firstRevision, secondRevision;
         ObjectId characterId, stringId;
         RbfSegmentStoreOptions options = new() { NewStoreLayout = RbfSegmentStoreLayout.Flat };
         ReadAmplificationBaseBudgetParameters policy = new(int.MaxValue, 1);
         StateModelRegistry models = new();
         __DurableState.RegisterModel(models);
-
-        using (var schemaFile = RbfFile.CreateNew(schemaPath))
-        using (SegmentStore segments = SegmentStore.CreateNew(statePath, options)) {
-            SchemaStore schemas = new(schemaFile);
-            StateRevisionStore store = new(segments);
+        using (var repository = EventHistoryRepository.CreateNew(repositoryPath, options)) {
             string shared = new('A', 1);
             Character source = new(shared, 7);
-
-            PreparedWorldRevision first = LoadedWorld.PrepareNew(store, schemas, source, models, policy);
-            characterId = first.WorldId;
-            stringId = new ObjectId(first.Revision.LocalObjectIds.Single(id => id != characterId.Value));
-            Require(first.Revision.ParentRevisionAddress is null && first.Revision.LocalObjects.Count == 2 &&
-                first.Revision.LocalObjects.All(record => record.Kind == ObjectVersionKind.Base),
-                "A new Character and its shared string must be prepared as Base records.");
+            using var session = repository.CreateBranch("main", source, models, policy);
+            firstRevision = session.StateRevisionAddress;
+            characterId = session.StateId;
+            session.CommitDomainEvent(new Character(shared, 7), policy);
+            source._score = 8;
+            secondRevision = session.CommitDomainState(policy).RevisionAddress;
+            Require(ReferenceEquals(session.State, source), "Commit replaced application-held instances.");
+        }
+        using (var repository = EventHistoryRepository.OpenReadOnlyExisting(repositoryPath, options)) {
+            var frames = repository.ReadFrames("main").ToArray();
+            Character original = repository.ReadState<Character>(frames[0], models);
+            Require(original._score == 7 && original.Name == "A" &&
+                original._createdAtTicks == 638_625_600_000_000_000 &&
+                ReferenceEquals(original.Name, original._alias), "Historical State lost values or sharing.");
+            var pair = repository.ReadPair<Character, Character>(frames[1], frames[2], models);
+            Require(pair.First._score == 7 && pair.Second._score == 8, "Event/State pair lost selected values.");
+        }
+        // Inspect exact payload and registration behavior after closing the facade's writer.
+        using (var schemaFile = RbfFile.OpenExisting(schemaPath)) {
+            SchemaStore schemas = new(schemaFile);
             Require(schemas.Count == 2 && schemas.GetRequired(Schema.SchemaId, 1).BaseSchema!.Equals(NamedObject.Schema),
                 "Ancestor closure registration failed.");
-
             long registeredLength = new FileInfo(schemaPath).Length;
             schemas.RegisterBatch([Schema]);
             Require(new FileInfo(schemaPath).Length == registeredLength, "Idempotent registration appended bytes.");
-            DurableSchema conflict = new(Schema.SchemaId, 1, []);
             bool rejected = false;
-            try { schemas.RegisterBatch([new DurableSchema("package.unpublished", 1, []), conflict]); }
+            try { schemas.RegisterBatch([new DurableSchema("package.unpublished", 1, []), new DurableSchema(Schema.SchemaId, 1, [])]); }
             catch (SchemaConflictException) { rejected = true; }
             Require(rejected && schemas.Count == 2 && new FileInfo(schemaPath).Length == registeredLength,
                 "Schema conflict must reject the complete batch before append.");
-
-            source._score = 999; // The prepared plan must retain the frozen score 7.
-            firstRevision = store.Append(first.Revision);
-            LoadedWorld<Character> loaded = LoadedWorld.Load<Character>(store, schemas, firstRevision, characterId, models);
-            Require(loaded.World._score == 7 && loaded.World.Name == "A" &&
-                loaded.World._createdAtTicks == 638_625_600_000_000_000 &&
-                ReferenceEquals(loaded.World.Name, loaded.World._alias),
-                "High-level loading lost the frozen state or shared string identity.");
-            loaded.World._score = 8;
-            PreparedWorldRevision changed = loaded.Prepare(policy);
-            Require(changed.Revision.LocalObjects.Count == 1 && changed.Revision.RemovedObjectIds.Count == 0,
-                "Changing only the score must prepare one object update.");
-            ObjectVersionRecord delta = changed.Revision.LocalObjects[0];
-            Require(delta.ObjectId == characterId.Value && delta.Kind == ObjectVersionKind.Delta &&
-                delta.Body.SequenceEqual(new byte[] { 2, 16 }), "Unexpected raw Delta body.");
-            secondRevision = store.Append(changed.Revision);
         }
 
         using var coldSchemaFile = RbfFile.OpenReadOnlyExisting(schemaPath);
         SchemaStore coldSchemas = new(coldSchemaFile, readOnly: true);
         using SegmentStore coldSegments = SegmentStore.OpenReadOnlyExisting(statePath, options);
         StateRevisionStore cold = new(coldSegments);
+        StateRevision first = cold.Read(firstRevision);
+        stringId = new ObjectId(first.LocalObjectIds.Single(id => id != characterId.Value));
+        Require(first.ParentRevisionAddress is null && first.LocalObjects.Count == 2 &&
+            first.LocalObjects.All(record => record.Kind == ObjectVersionKind.Base), "Initial graph must contain two Bases.");
+        StateRevision changed = cold.Read(secondRevision);
+        Require(changed.ParentRevisionAddress == firstRevision && changed.LocalObjects.Count == 1 &&
+            changed.RemovedObjectIds.Count == 0, "State must compare against S0, not the Event snapshot.");
         Require(coldSchemas.Count == 2 && coldSchemas.GetRequired(Schema.SchemaId, 1).BaseSchema!.Equals(NamedObject.Schema),
             "Cold Schema recovery lost its exact ancestor.");
         ObjectVersionChain characterChain = cold.ReadObjectVersionChain(secondRevision, characterId.Value);

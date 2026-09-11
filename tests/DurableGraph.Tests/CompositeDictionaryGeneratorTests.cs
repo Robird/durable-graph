@@ -298,7 +298,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             }
             public static FrameAddress[] SaveAndLoad(string path) {
                 var addresses=new List<FrameAddress>();var models=Models();var w=Seed();var original=w.Primary;
-                using(var repo=GraphRepository.CreateNew(path))using(var session=repo.Create(w,models)) {
+                using(var repo=FixtureGraphRepository.CreateNew(path))using(var session=repo.Create(w,models)) {
                     addresses.Add(session.Commit(new(1000000,1)));
                     Replace(w,0);addresses.Add(session.Commit(new(1000000,1)));
                     Replace(w,1);addresses.Add(session.Commit(new(1000000,1)));
@@ -307,7 +307,7 @@ public sealed partial class DurableSchemaGeneratorTests {
                     w.Score++;addresses.Add(session.Commit(new(1000000,1)));
                     Require(ReferenceEquals(w,session.World) && ReferenceEquals(original,session.World.Primary),"same instances after commit");
                 }
-                using(var repo=GraphRepository.OpenExisting(path)) {
+                using(var repo=FixtureGraphRepository.OpenExisting(path)) {
                     int constructors=Scope.Constructions+PlainKey.Constructions;
                     using var session=repo.Load<World>(models);
                     Require(constructors==Scope.Constructions+PlainKey.Constructions,"restore bypasses constructors");
@@ -315,7 +315,7 @@ public sealed partial class DurableSchemaGeneratorTests {
                     var key=session.World.Primary.Keys.Single(k=>k.Part==1);session.World.Primary[key]+=5;
                     addresses.Add(session.Commit(new(1000000,1)));
                 }
-                using(var repo=GraphRepository.OpenExisting(path))using(var session=repo.Load<World>(models)) {
+                using(var repo=FixtureGraphRepository.OpenExisting(path))using(var session=repo.Load<World>(models)) {
                     Check(session.World);Require(session.World.Primary[session.World.Primary.Keys.Single(k=>k.Part==1)]==2227,"value delta after cold load");
                     addresses.Add(session.Commit(new(1000000,1)));
                 }

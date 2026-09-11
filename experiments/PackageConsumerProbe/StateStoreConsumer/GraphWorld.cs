@@ -21,147 +21,72 @@ public sealed partial class GraphWorld : DurableBase {
     private void Disconnect() { _primary = null; _alias = null; }
 
     internal static void Exercise(string directory) {
-        Directory.CreateDirectory(directory);
-        string schemaPath = Path.Combine(directory, "schemas.rbf");
-        string statePath = Path.Combine(directory, "state");
         RbfSegmentStoreOptions options = new() { NewStoreLayout = RbfSegmentStoreLayout.Flat };
         ReadAmplificationBaseBudgetParameters policy = new(int.MaxValue, 1);
         StateModelRegistry models = new();
         __DurableState.RegisterModel(models);
         GraphCharacter.__DurableState.RegisterModel(models);
         GraphItem.__DurableState.RegisterModel(models);
-        ObjectId worldId, characterId;
-        uint[] initialIds;
+        ObjectId worldId;
         FrameAddress initialRevision, childRevision, removedRevision;
-        int constructed;
-
-        using (var file = RbfFile.CreateNew(schemaPath))
-        using (SegmentStore segments = SegmentStore.CreateNew(statePath, options)) {
-            SchemaStore schemas = new(file);
-            StateRevisionStore store = new(segments);
-            string shared = new('G', 1);
-            GraphCharacter character = new(shared, 7);
-            GraphWorld world = new(character);
-            constructed = GraphConstruction.Count;
-
-            // Ordinary domain construction enters through the public planning API. No hand-built DTOs or records.
-            PreparedWorldRevision first = LoadedWorld.PrepareNew(store, schemas, world, models, policy);
-            worldId = first.WorldId;
-            initialIds = first.Revision.LocalObjectIds.ToArray();
-            Require(first.Revision.ParentRevisionAddress is null && first.Revision.LocalObjects.Count == 4 &&
-                first.Revision.LocalObjects.All(record => record.Kind == ObjectVersionKind.Base),
-                "New graph must contain one World, Character, Item and shared string, all as Base.");
-            Require(schemas.Count == 4, "Graph registration lost the nominal target's exact ancestor Schema.");
-            character.Score = 999;
-            world.Disconnect(); // Neither object mutation nor removal can change the frozen first plan.
-            initialRevision = store.Append(first.Revision);
-        }
-
-        using (var file = RbfFile.OpenExisting(schemaPath))
-        using (SegmentStore segments = SegmentStore.OpenExisting(statePath, options)) {
-            SchemaStore schemas = new(file);
-            StateRevisionStore store = new(segments);
-            var loaded = LoadedWorld.Load<GraphWorld>(store, schemas, initialRevision, worldId, models);
-            AssertGraph(loaded.World, 7, constructed);
-            GraphCharacter character = (GraphCharacter)loaded.World._primary!;
-            character.Score = 8;
-            PreparedWorldRevision changed = loaded.Prepare(policy);
-            PreparedWorldRevision repeated = loaded.Prepare(policy);
-            Require(changed.Revision.LocalObjects.Count == 1 && changed.Revision.RemovedObjectIds.Count == 0,
-                "Changing only Child must leave the World, Item and string unchanged.");
-            ObjectVersionRecord delta = changed.Revision.LocalObjects[0];
-            characterId = new ObjectId(delta.ObjectId);
-            Require(delta.Kind == ObjectVersionKind.Delta &&
-                repeated.Revision.LocalObjects.Count == 1 &&
-                repeated.Revision.LocalObjects[0].Body.SequenceEqual(delta.Body),
-                "Repeated child preparation must retain its identity and produce an equivalent ordinary Delta.");
-            character.Score = 99;
-            childRevision = store.Append(changed.Revision);
-            Require(loaded.ParentRevisionAddress == initialRevision,
-                "Host Append must not advance the original loaded baseline.");
-            var current = LoadedWorld.Load<GraphWorld>(store, schemas, childRevision, worldId, models);
-            AssertGraph(current.World, 8, constructed);
-            Require(store.ReadLiveObjectHeadMap(childRevision)[worldId.Value] == initialRevision &&
-                store.ReadObjectVersionChain(childRevision, characterId.Value).Records.Count == 2,
-                "A child-only edit must reuse the World head and extend only the child's content chain.");
-            var unchanged = current.Prepare(policy);
-            Require(unchanged.Revision.LocalObjects.Count == 0 && unchanged.Revision.RemovedObjectIds.Count == 0,
-                "Restored reference identities must not cause a spurious resave.");
-
-            current.World.Disconnect();
-            PreparedWorldRevision removed = current.Prepare(policy);
-            Require(removed.Revision.LocalObjects.Count == 1 && removed.Revision.LocalObjects[0].ObjectId == worldId.Value &&
-                removed.Revision.RemovedObjectIds.Order().SequenceEqual(initialIds.Where(id => id != worldId.Value).Order()),
-                "Disconnecting the last World paths must remove the cyclic island and its string.");
-            removedRevision = store.Append(removed.Revision);
-        }
-
-        using (var file = RbfFile.OpenReadOnlyExisting(schemaPath))
-        using (SegmentStore segments = SegmentStore.OpenReadOnlyExisting(statePath, options)) {
-            SchemaStore schemas = new(file, readOnly: true);
-            StateRevisionStore store = new(segments);
-            var removed = LoadedWorld.Load<GraphWorld>(store, schemas, removedRevision, worldId, models);
-            Require(removed.World._primary is null && removed.World._alias is null &&
-                store.ReadLiveObjectHeadMap(removedRevision).Keys.SequenceEqual(new[] { worldId.Value }),
-                "Cold reopening must retain the removed graph's exact membership.");
-            AssertGraph(LoadedWorld.Load<GraphWorld>(store, schemas, initialRevision, worldId, models).World, 7, constructed);
-            AssertGraph(LoadedWorld.Load<GraphWorld>(store, schemas, childRevision, worldId, models).World, 8, constructed);
-        }
-
-        ExerciseSession(Path.Combine(directory, "repository"), models);
-        Console.WriteLine("GraphSessionContinuousCommit:True");
-    }
-
-    private static void ExerciseSession(string directory, StateModelRegistry models) {
-        ReadAmplificationBaseBudgetParameters policy = new(int.MaxValue, 1);
-        GraphCharacter character = new(new string('G', 1), 20);
-        GraphItem item = character.Item;
+        string shared = new('G', 1);
+        GraphCharacter character = new(shared, 7);
         GraphWorld world = new(character);
+        GraphItem item = character.Item;
         int constructed = GraphConstruction.Count;
-        FrameAddress last;
-
-        using (GraphRepository repository = GraphRepository.CreateNew(directory))
-        using (GraphSession<GraphWorld> session = repository.Create(world, models)) {
-            Require(ReferenceEquals(session.World, world) && session.ParentRevisionAddress is null,
-                "Create must retain the supplied World without a preexisting published Parent.");
-            last = session.Commit(policy);
-            for (int score = 21; score <= 22; score++) {
-                character.Score = score; // Held by the application, without fetching another object graph.
-                FrameAddress previous = last;
-                last = session.Commit(policy);
-                Require(last != previous && session.ParentRevisionAddress == last && repository.HeadRevisionAddress == last,
-                    "Each successful Commit must advance the session and repository together.");
-                Require(ReferenceEquals(session.World, world) && ReferenceEquals(world._primary, character) &&
-                    ReferenceEquals(world._alias, character) && ReferenceEquals(character.Item, item) &&
-                    ReferenceEquals(item.Owner, character) && ReferenceEquals(item.Self, item),
-                    "Continuous commits must preserve application-held domain instances and readonly cycles.");
-                Require(character.Score == score && item.Cache == 17 && GraphConstruction.Count == constructed,
-                    "Commit must not reconstruct domain objects or reset their transient state.");
-            }
+        using (var repository = EventHistoryRepository.CreateNew(directory, options))
+        using (var session = repository.CreateBranch("main", world, models, policy)) {
+            worldId = session.StateId;
+            initialRevision = session.StateRevisionAddress;
+            session.CommitDomainEvent(repository.ReadState<GraphWorld>(session.Head, models)._primary!, policy);
+            character.Score = 8;
+            childRevision = session.CommitDomainState(policy).RevisionAddress;
+            Require(ReferenceEquals(session.State, world) && ReferenceEquals(world._primary, character) &&
+                ReferenceEquals(character.Item, item) && ReferenceEquals(item.Owner, character) &&
+                item.Cache == 17 && GraphConstruction.Count == constructed,
+                "Continuous commits must preserve application instances, cycles and transient fields.");
         }
-
-        // Only the repository directory and model code are supplied: head and World ID are persisted.
-        using (GraphRepository repository = GraphRepository.OpenExisting(directory))
-        using (GraphSession<GraphWorld> session = repository.Load<GraphWorld>(models)) {
-            Require(session.ParentRevisionAddress == last, "Reopen selected an older published Revision.");
-            AssertGraph(session.World, 22, constructed);
-            GraphWorld restoredWorld = session.World;
-            GraphCharacter restoredCharacter = (GraphCharacter)restoredWorld._primary!;
-            GraphItem restoredItem = restoredCharacter.Item;
-            restoredCharacter.Score = 23;
-            last = session.Commit(policy);
-            Require(ReferenceEquals(session.World, restoredWorld) &&
-                ReferenceEquals(restoredWorld._primary, restoredCharacter) &&
-                ReferenceEquals(restoredCharacter.Item, restoredItem) && session.ParentRevisionAddress == last,
-                "The loaded session must retain its domain instances when installing its next baseline.");
-            AssertGraph(session.World, 23, constructed);
+        using (var repository = EventHistoryRepository.OpenExisting(directory, options))
+        using (var session = repository.Resume<GraphWorld>("main", models)) {
+            Require(session.StateRevisionAddress == childRevision, "Resume selected an older State.");
+            AssertGraph(session.State, 8, constructed);
+            GraphWorld original = session.State;
+            session.CommitDomainEvent(repository.ReadState<GraphWorld>(session.Head, models)._primary!, policy);
+            original.Disconnect();
+            removedRevision = session.CommitDomainState(policy).RevisionAddress;
+            Require(ReferenceEquals(session.State, original), "Resumed commit replaced the application root.");
         }
-
-        using (GraphRepository repository = GraphRepository.OpenExisting(directory))
-        using (GraphSession<GraphWorld> session = repository.Load<GraphWorld>(models)) {
-            Require(session.ParentRevisionAddress == last, "The continued loaded-session commit was not published.");
-            AssertGraph(session.World, 23, constructed);
+        using (var repository = EventHistoryRepository.OpenReadOnlyExisting(directory, options)) {
+            var frames = repository.ReadFrames("main").ToArray();
+            GraphWorld removed = repository.ReadState<GraphWorld>(frames[^1], models);
+            Require(removed._primary is null && removed._alias is null, "Removed graph was not restored.");
+            AssertGraph(repository.ReadState<GraphWorld>(frames[0], models), 7, constructed);
+            AssertGraph(repository.ReadState<GraphWorld>(frames[2], models), 8, constructed);
+            var pair = repository.ReadPair<GraphCharacter, GraphWorld>(frames[1], frames[2], models);
+            Require(pair.First.Score == 7 && ((GraphCharacter)pair.Second._primary!).Score == 8,
+                "Pair must restore each selected version.");
         }
+        using var schemaFile = RbfFile.OpenReadOnlyExisting(Path.Combine(directory, "schemas.rbf"));
+        SchemaStore schemas = new(schemaFile, readOnly: true);
+        using SegmentStore segments = SegmentStore.OpenReadOnlyExisting(Path.Combine(directory, "state"), options);
+        StateRevisionStore store = new(segments);
+        StateRevision initial = store.Read(initialRevision);
+        Require(initial.ParentRevisionAddress is null && initial.LocalObjects.Count == 4 &&
+            initial.LocalObjects.All(record => record.Kind == ObjectVersionKind.Base) && schemas.Count == 4,
+            "Initial graph must preserve all exact Schemas and four Base objects.");
+        StateRevision changed = store.Read(childRevision);
+        ObjectVersionRecord delta = changed.LocalObjects.Single();
+        Require(delta.ObjectId != worldId.Value && delta.Kind == ObjectVersionKind.Delta &&
+            changed.RemovedObjectIds.Count == 0 && changed.ParentRevisionAddress == initialRevision &&
+            store.ReadLiveObjectHeadMap(childRevision)[worldId.Value] == initialRevision &&
+            store.ReadObjectVersionChain(childRevision, delta.ObjectId).Records.Count == 2,
+            "A child-only edit must extend only the child content chain against S0.");
+        StateRevision removedRevisionData = store.Read(removedRevision);
+        Require(removedRevisionData.LocalObjects.Single().ObjectId == worldId.Value &&
+            removedRevisionData.RemovedObjectIds.Order().SequenceEqual(initial.LocalObjectIds.Where(id => id != worldId.Value).Order()) &&
+            store.ReadLiveObjectHeadMap(removedRevision).Keys.SequenceEqual(new[] { worldId.Value }),
+            "Disconnecting the final World paths must remove the cyclic island and its string.");
+        Console.WriteLine("EventHistoryContinuousCommit:True");
     }
 
     private static void AssertGraph(GraphWorld world, int score, int constructed) {

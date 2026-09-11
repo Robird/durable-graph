@@ -21,25 +21,24 @@
 
 ```mermaid
 flowchart TD
-    R["选定 Revision 地址与 WorldId"] --> D["stored DTO 全目录：解码并验证"]
+    R["GraphFrame：Revision 地址与 RootId"] --> D["stored DTO 全目录：解码并验证"]
     D --> N["current DTO 全目录：Upgrade 后再验证"]
-    N --> C["World 可达闭包"]
+    N --> C["根可达闭包"]
     C --> A["全部 Allocate，再 Hydrate"]
-    A --> W["可编辑领域图"]
-    New["普通 new World"] --> W
+    A --> W["领域 State 或 Event 图"]
+    New["普通 new 领域图"] --> W
     W --> F["Capture / Seal：冻结候选图"]
-    F --> P["保存准备：准备内容、选择表示、生成计划"]
-    N -. "加载得到的比较基线" .-> P
-    P --> S["宿主 Append：得到 Revision 地址"]
-    S --> B["GraphSession：State 屏障 → 发布 head"]
-    B --> I["安装同一候选基线与 live 身份"]
+    F --> P["准备内容、选择表示、生成计划"]
+    N -. "前 State 比较基线" .-> P
+    P --> S["Schema/State 屏障 → Journal 帧 → branch ref"]
+    S --> I["State：安装同一候选基线与 live 身份"]
+    S --> E["Event：释放候选，保持 State 基线"]
     I -. "保留领域实例继续编辑" .-> W
-    S -. "低层显式地址路径：重新 Load" .-> R
 ```
 
-新建图的 `PrepareNew` 使用无 Parent 计划；已加载图的 `Prepare` 使用固定 Parent。
-图中展开了 LoadedWorld 保存准备的内部流程；内容层 `CaptureSession.Prepare` 只消费已经 Seal 的候选。
-GraphSession.Commit 受控完成整条发布与安装路径；低层 Append 自身仍不发布。各阶段推进什么状态见下列词条。
+EventHistorySession 受控完成发布与安装；低层 Append 自身仍不发布。
+Journal 的 S0→E1→S1 与 Revision Parent 不同：E1、S1 均以 S0 为比较来源。
+内容层 `CaptureSession.Prepare` 只消费已经 Seal 的候选。各阶段推进什么状态见下列词条。
 
 ## Schema、类型与生成代码
 
@@ -80,7 +79,7 @@ GraphSession.Commit 受控完成整条发布与安装路径；低层 Append 自�
 
 | 项目内术语／代码符号 | 释义与示意 | 关键代码 |
 |---|---|---|
-| <a id="domain-graph"></a>**领域对象图与 World 根（domain graph / World）** | 用户可变领域实例及其持久引用关系，例如 `World → A ↔ B`。World 是入口选定的单根角色，不要求类型名为 World；当前外层加载/准备要求一个非空 exact 类型根。 | [LoadedWorld](../src/DurableGraph.StateStore/LoadedWorld.cs)、[DurableBase](../src/DurableGraph/DurableBase.cs) |
+| <a id="domain-graph"></a>**领域对象图与单根（domain graph / root）** | 用户领域实例及其持久引用关系，例如 `World → A ↔ B`。每个 State/Event 选一个非空 durable 根；State 会话要求 exact 类型，历史读取可请求根的基类。World 是根的历史角色名，不要求类型名为 World。 | [EventHistorySession](../src/DurableGraph.StateStore/EventHistorySession.cs)、[DurableBase](../src/DurableGraph/DurableBase.cs) |
 | <a id="object-identity"></a>**CLR 引用身份与对象 ID（reference identity / ObjectId）** | 引用身份区分 CLR 实例；`ObjectId(uint Value)` 是无隐式数值转换的语义包装，在指定 Revision 视图内解释，引用槽中的 0 表示 null，实际对象行 ID 必须非零。Capture 用引用相等关联实例与 ID。值相同的不同非空 string 不合并；空串统一 `string.Empty` 是明确例外。ID 不是 CLR 地址或全仓库永久唯一号。 | [ObjectId](../src/DurableGraph/ObjectId.cs)、[CaptureContext](../src/DurableGraph/CaptureContext.cs)、[CaptureSession](../src/DurableGraph/CaptureSession.cs) |
 | <a id="object-state-record"></a>**对象状态记录**／`ObjectStateRecord` | 不可变单对象内存记录：`ID + exact ObjectLayout + frozen 内容`；内容为用户 DTO、string、FrozenArrayState、FrozenListState 或 FrozenDictionaryState。同一代码类型承载捕获、解码与归一化结果；仅有该行不证明它是已接受候选。 | [ObjectStateRecord](../src/DurableGraph/ObjectStateRecord.cs) |
 | <a id="object-layout"></a>**精确对象布局（ObjectLayout / ArrayLayout / ListLayout / DictionaryLayout）** | ObjectLayout 是 String / 用户 reference exact DurableSchema / exact ArrayLayout / exact ListLayout / exact DictionaryLayout 的受控判别值，可由合法对象表示 ID 解析得到；inline 目录节点不对应 ObjectLayout。ArrayLayout 保存 codec 版本、数组构造和完整元素槽；ListLayout 保存 codec 版本与完整元素槽，当前仅接受 List codec 2；DictionaryLayout 保存两个 exact 槽与 codec 1。元素 inline Schema 精确绑定，引用元素只保存目标名义约束；数组 shape、容器 Count、Dictionary comparer 和匹配算法不属于类型布局。 | [ObjectLayout / ArrayLayout](../src/DurableGraph/ObjectLayout.cs)、[ListLayout](../src/DurableGraph/ListLayout.cs)、[统一目录格式](../src/DurableGraph.StateStore/SchemaCatalogWireCodec.cs) |
@@ -88,12 +87,12 @@ GraphSession.Commit 受控完成整条发布与安装路径；低层 Append 自�
 | <a id="list-content-object"></a>**列表内容对象（List content object）** | exact BCL `List<T>` 的独立引用对象，只保存 Count、元素顺序与逻辑内容；Capacity、内部数组和修改计数不持久化。元素使用受支持槽闭包，可递归组合 List、数组和用户泛型；同实例增删保留 ObjectId，同内容的新实例仍是新对象。不包括 List 子类或集合接口字段。 | [ListObjectBinding](../src/DurableGraph/ListObjectBinding.cs)、[列表绑定快照](../src/DurableGraph.StateStore/StateModelSnapshot.Lists.cs) |
 | <a id="frozen-list-state"></a>**冻结列表状态（FrozenListState）** | 一个列表对象的 owned 有序元素状态 buffer；Count 为该 buffer 的长度，元素为标量、ObjectId 或生成 struct DTO。后续领域修改不能污染它；嵌套列表保存子列表 ID。没有 ArrayShape，不保存领域 List 的 Capacity。 | [FrozenListState](../src/DurableGraph/FrozenListState.cs)、[ListObjectBinding](../src/DurableGraph/ListObjectBinding.cs) |
 | <a id="frozen-dictionary-state"></a>**冻结映射状态（FrozenDictionaryState）** | 实验性 BCL Dictionary 的 owned key/value DTO 条目及 ComparerKind，语义无序。Count 为条目数；两侧引用均为 ObjectId。内部排列、容量、hash/bucket 不构成持久内容；Delta 按 canonical key body 寻址 Remove/Add/PatchValue。完整 source/current DTO 均验证 canonical key 唯一和引用；模式 4/5 的当前业务查找碰撞只在可达图恢复的 TryAdd 拒绝。 | [FrozenDictionaryState](../src/DurableGraph/FrozenDictionaryState.cs)、[DictionaryObjectBinding](../src/DurableGraph/DictionaryObjectBinding.cs)、[DictionaryStateReader](../src/DurableGraph/DictionaryStateReader.cs) |
-| <a id="candidate-view"></a>**捕获候选图／候选 DTO 视图（candidate view）**／`CapturedGraph` | 本次 Seal 冻结的根 ID 列表及完整可达对象状态集合；后续领域修改不影响它。durable 行使用捕获模型的当前 DTO。Capture 内核可登记多根，LoadedWorld 产品入口只选一个 World。 | [CapturedGraph](../src/DurableGraph/CapturedGraph.cs)、[CaptureContext](../src/DurableGraph/CaptureContext.cs) |
+| <a id="candidate-view"></a>**捕获候选图／候选 DTO 视图（candidate view）**／`CapturedGraph` | 本次 Seal 冻结的根 ID 列表及完整可达对象状态集合；后续领域修改不影响它。durable 行使用捕获模型的当前 DTO。Capture 内核可登记多根，每份产品 State/Event 只选一个根。 | [CapturedGraph](../src/DurableGraph/CapturedGraph.cs)、[CaptureContext](../src/DurableGraph/CaptureContext.cs) |
 | <a id="capture-session"></a>**捕获会话与候选协议**／`CaptureSession`、Capture–Seal–Accept–Discard | `BeginCapture → AddRoot → Seal → Accept 或 Discard`。Seal 遍历并复制状态；Accept 安装候选及 live 实例-ID 绑定；Discard 放弃候选，已分配数字仍消耗。`CaptureSession.Current` 是已 Accept 的内存图，接受不等于保存或发布。 | [CaptureSession](../src/DurableGraph/CaptureSession.cs)、[CaptureContext](../src/DurableGraph/CaptureContext.cs) |
 | <a id="stored-view"></a>**落盘版本 DTO 视图（stored DTO view）**／`DecodedRevision` | 选定 Revision 的完整 live 冻结状态目录，逐对象保持落盘 exact ObjectLayout，如同目录包含 `A/V1`、`B/V3` 与旧版 Point 元素数组。已解码并验证引用，尚未 Upgrade；无领域实例或可编辑基线。 | [DecodedRevision](../src/DurableGraph.StateStore/DecodedRevision.cs)、[RevisionDecoder](../src/DurableGraph.StateStore/RevisionDecoder.cs) |
 | <a id="current-view"></a>**当前版本 DTO 视图（current DTO view）**／`NormalizedRevision` | 全部 source 行按本次操作目录归一化后的冻结状态目录；保留 ID、source ObjectLayout 与 `RequiresRewrite`。current 指模型/表示版本，不是用户刚修改的值，也不是 `CaptureSession.Current`。 | [NormalizedRevision](../src/DurableGraph.StateStore/NormalizedRevision.cs)、[ObjectBinding](../src/DurableGraph/ObjectBinding.cs) |
-| <a id="membership-reachability"></a>**源成员集合与根可达闭包（source membership / reachable closure）** | source 是所读 Revision 的全部 live IDs；闭包是 current DTO 图从 World 可达的 IDs。Upgrade 删边后，孤立 A/B 仍须解码、升级、验证，但不再 Allocate；后继候选不含它们时才产生 Remove。使用 live 时说明是哪一个集合。 | [NormalizedRevision](../src/DurableGraph.StateStore/NormalizedRevision.cs)、[LoadedWorld](../src/DurableGraph.StateStore/LoadedWorld.cs) |
-| <a id="loaded-baseline"></a>**已加载 World 与固定 Parent 比较基线**／`LoadedWorld<TWorld>` | 可编辑领域 World 配有固定 Parent 地址、完整 source membership、current DTO 比较状态及实例身份关联。Prepare 读取最新领域值，始终相对于此基线；此低层路径由宿主 Append 后重新 Load 建立下一基线；同实例连续保存用 GraphSession。 | [LoadedWorld](../src/DurableGraph.StateStore/LoadedWorld.cs)、[LoadedRevisionPlanner](../src/DurableGraph.StateStore/LoadedRevisionPlanner.cs) |
+| <a id="membership-reachability"></a>**源成员集合与根可达闭包（source membership / reachable closure）** | source 是所读 Revision 的全部 live IDs；闭包是 current DTO 图从所选根可达的 IDs。Upgrade 删边后，孤立 A/B 仍须解码、升级、验证，但不再 Allocate；后继候选不含它们时才产生 Remove。使用 live 时说明是哪一个集合。 | [NormalizedRevision](../src/DurableGraph.StateStore/NormalizedRevision.cs)、[LoadedWorld](../src/DurableGraph.StateStore/LoadedWorld.cs) |
+| <a id="loaded-baseline"></a>**固定 Parent 比较基线／内部 LoadedWorld** | 领域根配有固定 Parent、完整 source membership、current DTO 和实例身份关联。LoadedWorld 仅为内部低层准备/测试桥接，Prepare 后由宿主 Append/重新 Load；公开会话连续保存由 WorldWorkspace 安装原候选推进。 | [LoadedWorld](../src/DurableGraph.StateStore/LoadedWorld.cs)、[WorldWorkspace](../src/DurableGraph.StateStore/WorldWorkspace.cs) |
 | <a id="upgrade-normalize"></a>**DTO 升级与归一化（Upgrade / Normalize）** | 用户 class Normalize 按相邻版本执行完整 leaf DTO 转换，不重复升级祖先。数组与 List 各自作为独立内建 owner，以分别选定的 source→current 元素规则转换 owned buffer；不自动搜索相邻值规则路径，空内容也验证能力。均不查询其他对象或分配新 ID；数组保持 shape，List 保持 Count/位置，升级行仍 live 时下次强制 Base。 | [用户 model/Upgrade](../src/DurableGraph.Generator/DurableSchemaGenerator.StateModel.cs)、[数组 owner Upgrade](../src/DurableGraph/StateBindingContext.ArrayUpgrade.cs)、[List owner Upgrade](../src/DurableGraph/StateBindingContext.ListUpgrade.cs)、[NormalizedRevision](../src/DurableGraph.StateStore/NormalizedRevision.cs) |
 | <a id="owner-upgrade-provider"></a>**owner 升级提供者（StateUpgradeProvider）** | 明确声明某定义相邻边的通用方法，或某闭合族的专用方法；闭合 provider 优先，选中后失败不回退。框架在该对象首次业务 callback 前绑定完整相邻链及其声明的值依赖；中间 exact 布局必须有依据，不能用 latest 补猜。 | [DurableUpgrade / StateUpgradeProvider](../src/DurableGraph/StateUpgradeProvider.cs)、[Upgrade 绑定](../src/DurableGraph/StateBindingContext.Upgrade.cs) |
 | <a id="upgrade-context"></a>**升级上下文（UpgradeContext）** | 一次同步转换的 ObjectId、Source/TargetObjectLayout 与当前 provider 已绑定工具表；array owner 另带 ArrayShape，List/Dictionary owner 分别使用独立 nullable ListCount/DictionaryCount（其他 owner 为 null），Schema 访问器只适用于 durable owner。子值 Context 继承 owner 事实并拥有独立依赖作用域。`GetValueUpgrade<A,B>(key)` 只查本表并核对状态类型，不解析新规则或回查父表。不含图访问/ID 分配，不跨调用保留。 | [UpgradeContext / ValueUpgrade](../src/DurableGraph/UpgradeContext.cs)、[值工具绑定](../src/DurableGraph/StateBindingContext.ValueUpgrade.cs) |
@@ -137,7 +136,7 @@ Base 记录的 `body` 已含类型头；Delta 记录的 `body` 没有该头。�
 | <a id="bdh"></a>**对象写入成本 B／D 与重建成本 H** | B 是本轮 Base payload 精确大小，包括表示 ID 的实际宽度；D 是本轮 Delta payload 上界，未定 prior 文件距离造成 0–4 bytes 超额；H 是已有重建链实际 payload 字节之和。均排除 ObjectId、目录、共享 Frame、Schema/表示登记日志；H 不是总冷读 I/O。 | [ObjectVersionPayloadSize](../src/DurableGraph.StateStore.Storage/ObjectVersionPayloadSize.cs)、[ObjectVersionChain](../src/DurableGraph.StateStore.Storage/ObjectVersionChain.cs) |
 | <a id="base-budget"></a>**读放大动机与可选 Base 预算** | 未变对象考察 H/B、变化对象考察 (H+D)/B，严格超过整数倍率阈值才有可选 Base 动机。预算取全部 post-live 对象 B 总和的整数百分比；强制 Base 不占可选预算，首个候选允许超预算，因此不是总写入硬上限。 | [ReadAmplificationBaseBudgetPolicy](../src/DurableGraph.StateStore/ReadAmplificationBaseBudgetPolicy.cs) |
 | <a id="content-preparation-planning"></a>**内容准备与修订规划（content preparation / revision planning）** | `CaptureSession.Prepare` 消费已经 Seal 的候选，产生可复用内容及比较结果，不进行 Capture 或生成 StateRevision。修订规划另核对 Parent、应用表示策略并构建 StateRevision；规划结果不是已追加的 Frame。 | [CaptureSession.Prepare](../src/DurableGraph/CaptureSession.cs)、[ObjectRevisionPlanner](../src/DurableGraph.StateStore/ObjectRevisionPlanner.cs) |
-| <a id="prepare-append-commit"></a>**World 保存准备、追加与提交发布（Prepare / Append / Commit）** | `LoadedWorld.Prepare/PrepareNew` 编排 Capture/Seal、内容准备和修订规划；可持久注册 Schema，不追加 State 或推进基线。Append 写入 Revision Frame 并返回地址。GraphSession.Commit 绑定 Schema/State 屏障、publication 发布及原候选基线安装；AppendDurably 只确认 State 文件屏障。 | [LoadedWorld / PreparedWorldRevision](../src/DurableGraph.StateStore/LoadedWorld.cs)、[StateRevisionStore.Append](../src/DurableGraph.StateStore.Storage/StateRevisionStore.cs)；[GraphRepository](../src/DurableGraph.StateStore/GraphRepository.cs) |
+| <a id="prepare-append-commit"></a>**图保存准备、追加与提交发布（Prepare / Append / Commit）** | 工作区编排 Capture/Seal、内容准备和修订规划，可持久注册 Schema。AppendDurably 只确认 State 文件屏障；EventHistory 继续追加 Journal 帧并更新 branch ref。State 发布后安装原候选，Event 发布后释放候选、不推进 State 基线。 | [WorldWorkspace](../src/DurableGraph.StateStore/WorldWorkspace.cs)、[StateRevisionStore](../src/DurableGraph.StateStore.Storage/StateRevisionStore.cs)、[EventHistoryRepository](../src/DurableGraph.StateStore/EventHistoryRepository.cs) |
 
 规划输入是**完整 post-live 集合**，策略 `Writes` 只列实际选写对象：未变对象可能不写，也可能因读放大而写 Base。
 推进 State 时，Remove 来自 Parent 完整成员集合减去候选成员集合；独立快照使用 map Base，仅列候选的 local records 与 exact Parent external heads；[ObjectRevisionPlanner](../src/DurableGraph.StateStore/ObjectRevisionPlanner.cs)
@@ -147,12 +146,16 @@ Base 记录的 `body` 已含类型头；Delta 记录的 `body` 没有该头。�
 
 | 项目内术语／代码符号 | 释义与示意 | 关键代码 |
 |---|---|---|
-| <a id="graph-repository"></a>**图仓库**／`GraphRepository` | 独占匹配的 State/Schema 文件和一个发布 head，最多一个活动会话；CreateNew/OpenExisting 委托内部 GraphResources 管资源，Create/Load 交付可编辑 World。它是 DB-063 前的临时 publication 宿主。单调 Schema 尚非联合版本视图。 | [GraphRepository](../src/DurableGraph.StateStore/GraphRepository.cs) |
+| <a id="graph-repository"></a>**事件历史仓库**／`EventHistoryRepository` | 拥有匹配的 Schema/State/Journal 资源和命名分支；可写打开独占 repository.lock，最多一个活动会话。Journal ref 是唯一发布前沿，Schema 仍为单调注册表、尚非联合版本视图；只读打开不写入或修尾。 | [EventHistoryRepository](../src/DurableGraph.StateStore/EventHistoryRepository.cs)、[HistoryJournal](../src/DurableGraph.StateStore/HistoryJournal.cs) |
 | **图资源**／`GraphResources` | 匹配 Schema/State 文件的内部所有者；严格只读/可写打开、释放和故障状态，不选择业务 head、不运行模型回调。 | [GraphResources](../src/DurableGraph.StateStore/GraphResources.cs) |
-| **独立图读取**／`GraphReader` | 显式 Revision + RootId 的 exact 解码、升级与两阶段恢复；可请求实际 durable 根的基类。内部 ReadPair 在同一模型快照下顺序还原两图，仅完整成功才返回；结果按只读快照使用，无跨图实例身份承诺。 | [GraphReader](../src/DurableGraph.StateStore/GraphReader.cs) |
+| **独立图读取**／`GraphReader` | 显式 Revision + RootId 的 exact 解码、升级与两阶段恢复；可请求实际 durable 根的基类。公开 ReadPair 经此内部核心在同一模型快照下顺序还原两图，仅完整成功才返回；结果按只读快照使用，无跨图实例身份承诺。 | [GraphReader](../src/DurableGraph.StateStore/GraphReader.cs) |
 | **State 工作区与独立快照**／`WorldWorkspace` | 拥有一份 State 的冻结 DTO、根、实例-ID 绑定和串行 cursor。推进候选可替换同类型根，发布后安装；独立快照借用 State 基线，完成后释放候选，不安装到 State。 | [WorldWorkspace](../src/DurableGraph.StateStore/WorldWorkspace.cs)、[PreparedWorldSave](../src/DurableGraph.StateStore/PreparedWorldSave.cs) |
-| <a id="graph-session"></a>**图工作会话**／`GraphSession<TWorld>` | 同时拥有领域 World、已发布 Parent 对应比较基线和实例-ID 绑定；Commit 成功后安装原候选并保持领域实例，Dispose 不自动保存。首次成功前 Parent/WorldId 可空。 | [GraphSession](../src/DurableGraph.StateStore/GraphSession.cs)、[WorldWorkspace](../src/DurableGraph.StateStore/WorldWorkspace.cs) |
-| <a id="publication-head"></a>**发布 head／发布日志** | 当前权威的 RevisionAddress + WorldId；专用 RBF 日志还记录 exact 前驱。数据先 flush，发布记录再 flush；完整严格重放并验证引用，坏尾不猜测旧 head。 | [PublicationLog](../src/DurableGraph.StateStore/PublicationLog.cs) |
+| <a id="graph-session"></a>**事件历史工作会话**／`EventHistorySession<TState>` | 拥有分支当前 head、State 工作区及可选 PendingEvent。CreateBranch 先发布 S0 再交付；E/S 严格交替，State 提交保留实例并可替换同类型根。Resume 不重放业务处理器；Dispose 不自动保存。 | [EventHistorySession](../src/DurableGraph.StateStore/EventHistorySession.cs)、[WorldWorkspace](../src/DurableGraph.StateStore/WorldWorkspace.cs) |
+| <a id="publication-head"></a>**发布 head／Journal ref** | 命名分支 ref 指向权威 Journal 帧，该帧引用 RevisionAddress + RootId。Schema/State 先确认，再追加 Journal 帧，最后发布 ref；严格重开不从坏尾猜测旧 head。初始 S0 完成后才绑定分支名字。 | [HistoryJournal](../src/DurableGraph.StateStore/HistoryJournal.cs)、[EventHistoryRepository](../src/DurableGraph.StateStore/EventHistoryRepository.cs) |
+| **图帧 handle**／`GraphFrame` | 当前 Repository 签发的 Event/State 定位，含 Kind、RootId 与诊断用 RevisionAddress。跨 Repository 实例的 handle 拒绝，不能通过裸地址伪造来源；不是原始 RBF 帧或 DTO。 | [GraphFrame](../src/DurableGraph.StateStore/GraphFrame.cs) |
+| **EventHistory、EventFrame / StateFrame** | 独立事件快照图与状态图构成 S0→E1→S1 逻辑历史；两种角色共用 EventJournal 的 EventFrame，用 kind 与 payload 引用图，不是新增两种底层 RBF 帧。E1/S1 的 Revision Parent 均为 S0。 | [GraphEnvelopeCodec](../src/DurableGraph.StateStore/GraphEnvelopeCodec.cs)、[DB-063](design-branches/0063-event-history-journal-slice.md) |
+| **Branch／工作会话** | Branch 是持久命名 ref；Session 是选定 branch 的可变 State 与比较基线。先关闭活动会话才可从历史 E/S 创建分支或按 expected head Move；随后 Resume 目标，不复用旧会话基线。 | [EventHistoryRepository](../src/DurableGraph.StateStore/EventHistoryRepository.cs) |
+| **实验性双图读取**／`ReadPair` | 同一次调用按输入顺序完整还原两个只读快照；第二边失败不交付 pair，不撤销用户回调副作用。首版两次独立读取，不承诺跨图实例复用或分离；冷 Resume 仍独立恢复可变图。 | [EventHistoryRepository](../src/DurableGraph.StateStore/EventHistoryRepository.cs)、[GraphReader](../src/DurableGraph.StateStore/GraphReader.cs) |
 | <a id="commit-outcome"></a>**提交结果**／`GraphCommitOutcome` | NotPublished、Unknown、Published 描述持久发布结果，不描述领域修改是否撤销；Unknown 或发布后安装失败须使会话停止续写，dispose/reopen 裁决。NotPublished 也需检查资源是否 faulted。 | [GraphCommitException](../src/DurableGraph.StateStore/GraphCommitException.cs) |
 | <a id="migration-shell"></a>**迁移壳** | 已退出业务模型、仍承载历史 reader/Upgrade 的声明角色，不是新 attribute 或独立框架类型；不可达壳仍完成 source 验证，支持旧 Revision 的程序仍须保留对应能力。 | [真实包见证](../experiments/PackageConsumerProbe/HistoryCapabilityConsumer/Legacy.V2.cs)、[能力合同](design-branches/0036-working-session-and-history-capabilities.md#4-并行小线明确历史恢复能力合同) |
 
@@ -162,6 +165,7 @@ Base 记录的 `body` 已含类型头；Delta 记录的 `body` 没有该头。�
 
 | 遇到的用语 | 当前应区分或采用的表达 | 依据 |
 |---|---|---|
+| `GraphRepository` / `GraphSession` / `PublicationLog` | DB-063 已删除的早期单 head 外观/发布器；当前使用 EventHistoryRepository、EventHistorySession 与 Journal ref，不提供旧仓库兼容。LoadedWorld 只保留为内部机制桥接。 | [事件历史仓库](#graph-repository)、[工作会话](#graph-session) |
 | `VersionedSchema`、Schema descriptor | 描述版本化类型定义时落到[完整精确 Schema](#exact-schema)；索引键另称 SchemaKey。这是概念到实现的对应，不声称曾存在一次正式类重命名。 | [DurableSchema](../src/DurableGraph/DurableSchema.cs) |
 | `Snapshot` | `.dgsnapshot` 是已拒绝的旧构建历史格式；当前[Schema 历史材料](#schema-history)使用 `.dgschema`。早期 SG `__DurableSnapshotVn` 与 InMemoryStateStore snapshot 路径已在 DB-035 Wave 1 删除；当前产品用[版本化 DTO](#state-dto)及明确的 stored/current/candidate 视图。旧名仅供检索历史，不能再当作当前 API。 | [Schema 历史材料](#schema-history)、[版本化 DTO](#state-dto) |
 | `SchemaOnly`、`GenerateBinaryBody` | DB-035 Wave 1 已删除的增量开发开关。裸 `[DurableType]` 现在是唯一生成模式，产生 exact Schema/history、版本化 DTO/body；class 还生成 State model，struct 使用静态值桥接；不支持的形状直接诊断。 | [唯一生成入口](../src/DurableGraph.Generator/DurableSchemaGenerator.cs) |
@@ -176,9 +180,7 @@ Base 记录的 `body` 已含类型头；Delta 记录的 `body` 没有该头。�
 
 | 目标术语 | 含义与使用边界 | 设计落点（尚非完整产品实现） |
 |---|---|---|
-| **WorkingTree / Branch** | 工作树与命名分支的长期概念；当前 GraphSession 已承担单 head 编辑会话，尚无 branch/Reset，二者不是完整同义词。 | [工作会话路线](DurableGraph-research-roadmap.md#2-已采纳方向中的未完成能力) |
-| **EventHistory、EventFrame / StateFrame（已选、待实施的外观角色）** | 独立事件快照图与领域状态图的逻辑历史；复用 EventJournal 的现有 EventFrame payload 引用 Revision/RootId，branch ref 为唯一发布前沿，替代旧发布外观。不是已新增的两种底层 RBF 帧。 | [DB-063](design-branches/0063-event-history-journal-slice.md) |
-| **合并读取 / 闭包共享（API 先行、优化后置）** | 实验性双图 API 首版允许两次独立还原，不承诺跨图实例复用；DTO 去重与普通 CLR 闭包共享后置。只读合同固定，可写 Resume 保持可变实例隔离。 | [DB-064](design-branches/0064-shared-revision-decoding-design.md) |
-| **CommitManifest** | 联合 State/Schema/Artifact exact 视图的长期表达；当前单 State head 的发布日志不是完整联合 manifest。 | [单一发布权威](DurableGraph-target-design-v0.md#单一发布权威与明确故障结果) |
+| **合并读取 / 闭包共享（API 先行、优化后置）** | 实验性 ReadPair 已公开；DTO 去重与普通 CLR 闭包共享仍后置。相同 ObjectVersion 不保证传递引用相同，不能据此直接共享领域实例；优化仍须遵守只读合同与冷 Resume 隔离。 | [DB-064](design-branches/0064-shared-revision-decoding-design.md) |
+| **CommitManifest** | 联合 State/Schema/Artifact exact 视图的长期表达；当前 Journal ref 不选择 Schema 的历史视图，不是完整联合 manifest。 | [单一发布权威](DurableGraph-target-design-v0.md#单一发布权威与明确故障结果) |
 | **通用 TypeCodec** | 受支持类型组合的完整编码/解码能力；TypeExpr/wire 表达标量/string/用户泛型、SZ/rank 2–4 递归数组与内建 List；其他 BCL 内容 codec 仍须逐类型扩展。完整表示以目录 ID 寻址；持久开放模板与必要 exact 实参能否简化绑定另行研究。能表达类型与拥有内容 codec 仍是两项能力。 | [类型表达](#type-expression)、[表示 ID](#representation-id)、[后继问题](DurableGraph-research-roadmap.md#31-版本化表示类型头的统一寻址) |
 | **ArtifactStore / DerivedStore** | 分别承担独立历史内容与可重建派生数据的目标职责；不凭现有 StateStore 类推已实现其存储合同。 | [四类 Store 的逻辑职责](DurableGraph-target-design-v0.md#四类-store-的逻辑职责) |

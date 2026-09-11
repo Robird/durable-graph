@@ -1,6 +1,6 @@
 # DB-064：两份 Revision 合并读取与安全共享边界
 
-> 状态：实验性 API 方向已采纳，2026-09-11；阶段 0 内部顺序读取已随 DB-062 实现；公开 API 待 DB-063，共享算法仍为未实施的低优先级后继。
+> 状态：阶段 0 已实现，2026-09-11；内部顺序读取随 DB-062 实现，公开 API 随 DB-063 交付；共享算法仍为未实施的低优先级后继。
 > 阶段 0 的内部入口纳入 [DB-062](0062-independent-graph-workspace-slice.md)，公开 API 纳入 [DB-063](0063-event-history-journal-slice.md) 首版。
 > 本文集中维护 API 的共享边界；阶段 A/B 的 DTO 缓存与普通只读对象共享另行排期，不阻塞下游试用。
 
@@ -45,7 +45,7 @@ A 自己的字段没变，两个 Revision 复用 a1 完全正确；但已 Hydrat
 不能同时指向 B 的两个版本。即使 A 的 Next 字段是 readonly，问题仍存在。
 引用版本是 Revision 的解释结果；不应为简化加载而给每个祖先重写 ObjectVersion，破坏现有增量语义。
 
-这不是新假设：[GraphRepositoryTests](../../tests/DurableGraph.StateStore.Tests/GraphRepositoryTests.cs)
+这不是新假设：[EventHistoryRepositoryTests](../../tests/DurableGraph.StateStore.Tests/EventHistoryRepositoryTests.cs)
 的 `ThreeCommitsRetainInstancesAndAdvanceExactParentThenReopenFromPublishedWorldId` 已写出只 child 变化、root 不写且有循环的见证；
 [LoadedReferenceWorldTests](../../tests/DurableGraph.StateStore.Tests/LoadedReferenceWorldTests.cs)
 检验未变 owner 的引用仍按当前 Revision 验证。

@@ -65,13 +65,14 @@ internal static class Program {
         FrameAddress initial;
         FrameAddress historical;
         ObjectId worldId;
-        using (GraphRepository repository = GraphRepository.CreateNew(directory, Options)) {
-            using GraphSession<World> session = repository.Create(world, Models());
-            initial = session.Commit(Policy);
-            worldId = session.WorldId!.Value;
+        using (EventHistoryRepository repository = EventHistoryRepository.CreateNew(directory, Options)) {
+            using EventHistorySession<World> session = repository.CreateBranch("main", world, Models(), Policy);
+            initial = session.StateRevisionAddress;
+            worldId = session.StateId;
             world.ChangeLeft(12);
-            historical = session.Commit(Policy);
-            Require(ReferenceEquals(session.World, world) && ReferenceEquals(world.Links.Left.Node, node) &&
+            session.CommitDomainEvent(session.State, Policy);
+            historical = session.CommitDomainState(Policy).RevisionAddress;
+            Require(ReferenceEquals(session.State, world) && ReferenceEquals(world.Links.Left.Node, node) &&
                 world.TransientValue == 77 && world.Links.Left.TransientValue == 99,
                 "Consecutive Commit must retain domain instances and transient values.");
         }
@@ -87,25 +88,27 @@ internal static class Program {
             CheckHistoricalDto(store, schemas, historical, worldId);
         });
         WriteAddress(directory, "historical", historical, worldId);
-        using GraphRepository reopened = GraphRepository.OpenExisting(directory, Options);
-        using GraphSession<World> restored = reopened.Load<World>(Models());
-        CheckLinks(restored.World, 12, 31);
+        using EventHistoryRepository reopened = EventHistoryRepository.OpenExisting(directory, Options);
+        using EventHistorySession<World> restored = reopened.Resume<World>("main", Models());
+        CheckLinks(restored.State, 12, 31);
     }
 #elif HISTORY_V2 && CHILD_V2
     private static void Migrate(string directory) {
         var (historical, worldId) = ReadAddress(directory, "historical");
         FrameAddress upgraded;
         FrameAddress unchanged;
-        using (GraphRepository repository = GraphRepository.OpenExisting(directory, Options)) {
-            using GraphSession<World> session = repository.Load<World>(Models());
-            World world = session.World;
+        using (EventHistoryRepository repository = EventHistoryRepository.OpenExisting(directory, Options)) {
+            using EventHistorySession<World> session = repository.Resume<World>("main", Models());
+            World world = session.State;
             Node node = world.Links.Left.Node;
             Require(World.UpgradeCalls == 1 && Node.UpgradeCalls == 1, "Each stored object must be upgraded exactly once.");
             CheckLinks(world, 1012, 131);
             Require(world.Score == World.InitialScore + 100 && world.Links.Right.Value == 1021, "Owner upgrade did not rebuild nested V2 DTOs.");
-            upgraded = session.Commit(Policy);
-            unchanged = session.Commit(Policy);
-            Require(ReferenceEquals(world, session.World) && ReferenceEquals(node, session.World.Links.Left.Node) &&
+            session.CommitDomainEvent(session.State, Policy);
+            upgraded = session.CommitDomainState(Policy).RevisionAddress;
+            session.CommitDomainEvent(session.State, Policy);
+            unchanged = session.CommitDomainState(Policy).RevisionAddress;
+            Require(ReferenceEquals(world, session.State) && ReferenceEquals(node, session.State.Links.Left.Node) &&
                 World.UpgradeCalls == 1 && Node.UpgradeCalls == 1, "Install must retain domain instances and avoid re-upgrading.");
         }
         Inspect(directory, (store, schemas) => {
@@ -124,15 +127,17 @@ internal static class Program {
         var (_, worldId) = ReadAddress(directory, "historical");
         FrameAddress upgraded;
         FrameAddress unchanged;
-        using (GraphRepository repository = GraphRepository.OpenExisting(directory, Options)) {
-            using GraphSession<World> session = repository.Load<World>(Models());
-            World world = session.World;
+        using (EventHistoryRepository repository = EventHistoryRepository.OpenExisting(directory, Options)) {
+            using EventHistorySession<World> session = repository.Resume<World>("main", Models());
+            World world = session.State;
             CheckLinks(world, 1012, 231);
             Require(World.UpgradeCalls == 0 && Node.UpgradeCalls == 1,
                 "A nominal child version change must not require owner or inline layout upgrades.");
-            upgraded = session.Commit(Policy);
-            unchanged = session.Commit(Policy);
-            Require(ReferenceEquals(world, session.World), "Child migration replaced the World domain object.");
+            session.CommitDomainEvent(session.State, Policy);
+            upgraded = session.CommitDomainState(Policy).RevisionAddress;
+            session.CommitDomainEvent(session.State, Policy);
+            unchanged = session.CommitDomainState(Policy).RevisionAddress;
+            Require(ReferenceEquals(world, session.State), "Child migration replaced the World domain object.");
         }
         Inspect(directory, (store, schemas) => {
             StateRevision revision = store.Read(upgraded);
@@ -152,19 +157,20 @@ internal static class Program {
         Inspect(directory, (store, schemas) => {
             CheckHistoricalDto(store, schemas, historical, worldId);
             Require(World.UpgradeCalls == 0, "Stored-exact reading must not call Upgrade.");
-            LoadedWorld<World> old = LoadedWorld.Load<World>(store, schemas, historical, worldId, Models());
-            Require(old.World.Summary == 2033L && old.World.Score == World.InitialScore + 1100 && World.UpgradeCalls == 2 && Node.UpgradeCalls == 2,
+            World old = ReadHistorical(directory, historical);
+            Require(old.Summary == 2033L && old.Score == World.InitialScore + 1100 && World.UpgradeCalls == 2 && Node.UpgradeCalls == 2,
                 "Old owner must traverse V1 -> V2 -> V3 using retained historical nested DTO constructors.");
         });
         World.UpgradeCalls = Node.UpgradeCalls = 0;
         FrameAddress removed;
-        using (GraphRepository repository = GraphRepository.OpenExisting(directory, Options)) {
-            using GraphSession<World> session = repository.Load<World>(Models());
-            World world = session.World;
+        using (EventHistoryRepository repository = EventHistoryRepository.OpenExisting(directory, Options)) {
+            using EventHistorySession<World> session = repository.Resume<World>("main", Models());
+            World world = session.State;
             Require(world.Summary == 2033L && world.Score == World.InitialScore + 1100 && World.UpgradeCalls == 1 && Node.UpgradeCalls == 0,
                 "The current V2 head must use just the remaining V2 -> V3 owner upgrade.");
-            removed = session.Commit(Policy);
-            Require(ReferenceEquals(world, session.World), "Removing inline state replaced the domain World.");
+            session.CommitDomainEvent(session.State, Policy);
+            removed = session.CommitDomainState(Policy).RevisionAddress;
+            Require(ReferenceEquals(world, session.State), "Removing inline state replaced the domain World.");
         }
         Inspect(directory, (store, schemas) => {
             StateRevision revision = store.Read(removed);
@@ -174,10 +180,10 @@ internal static class Program {
             Require(RevisionDecoder.Read(store, schemas, removed, Readers()).Objects.Count == 1, "New membership retains the old inline-referenced graph.");
             CheckHistoricalDto(store, schemas, historical, worldId);
         });
-        using GraphRepository reopened = GraphRepository.OpenExisting(directory, Options);
-        using GraphSession<World> current = reopened.Load<World>(Models());
-        Require(current.World.Summary == 2033L && current.World.Score == World.InitialScore + 1100 &&
-            reopened.HeadRevisionAddress == removed, "Published V3 head cannot be reopened after deleting inline CLR declarations.");
+        using EventHistoryRepository reopened = EventHistoryRepository.OpenExisting(directory, Options);
+        using EventHistorySession<World> current = reopened.Resume<World>("main", Models());
+        Require(current.State.Summary == 2033L && current.State.Score == World.InitialScore + 1100 &&
+            reopened.GetHead("main").RevisionAddress == removed, "Published V3 head cannot be reopened after deleting inline CLR declarations.");
     }
 #endif
 
@@ -206,6 +212,12 @@ internal static class Program {
             state.Segment0Field1.Segment0Field1.Segment0Field1 == 12 &&
             state.Segment0Field1.Segment0Field2.Segment0Field1 == 21 && state.Segment1Field1 == World.InitialScore,
             "Historical exact nested DTO/Base+Delta reconstruction changed across consumer builds.");
+    }
+
+    private static World ReadHistorical(string directory, FrameAddress address) {
+        using var repository = EventHistoryRepository.OpenReadOnlyExisting(directory, Options);
+        GraphFrame frame = repository.ReadFrames("main").Single(frame => frame.RevisionAddress == address);
+        return repository.ReadState<World>(frame, Models());
     }
 
     private static void Inspect(string directory, Action<StateRevisionStore, SchemaStore> action) {

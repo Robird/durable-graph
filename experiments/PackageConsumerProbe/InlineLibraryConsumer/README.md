@@ -4,7 +4,7 @@ Run from the repository root:
 
 ```powershell
 ./experiments/PackageConsumerProbe/Run-InlineLibraryProbe.ps1
-# Reuse a matching feed containing the eight Runtime/StateStore dependency packages:
+# Reuse a matching feed containing the nine Runtime/StateStore dependency packages:
 ./experiments/PackageConsumerProbe/Run-InlineLibraryProbe.ps1 -PackageSource <feed> -Version <version>
 ```
 

@@ -1,4 +1,3 @@
-using Atelia.Data;
 using Atelia.DurableGraph;
 using Atelia.DurableGraph.StateStore;
 using Atelia.DurableGraph.StateStore.Storage;
@@ -29,70 +28,49 @@ public sealed partial class World : DurableBase {
     }
 
     internal static void Exercise(string directory) {
-        string schemaPath = Path.Combine(directory, "schemas.rbf");
-        string statePath = Path.Combine(directory, "state");
-        (FrameAddress oldRevision, ObjectId worldId) = ReadV1Address(Path.Combine(directory, "v1-revision.txt"));
         RbfSegmentStoreOptions options = new() { NewStoreLayout = RbfSegmentStoreLayout.Flat };
-        FrameAddress upgradedRevision, finalRevision;
+        FrameAddress oldRevision, upgradedRevision, unchangedRevision, finalRevision;
+        ObjectId worldId;
         StateModelRegistry models = new();
         __DurableState.RegisterModel(models);
         __DurableState.RegisterModel(models);
         ReadAmplificationBaseBudgetParameters policy = new(int.MaxValue, 1);
-
-        // The V2 process consumes the actual V1 process's files and exact Revision address.
-        using (var file = RbfFile.OpenExisting(schemaPath))
-        using (SegmentStore segments = SegmentStore.OpenExisting(statePath, options)) {
-            SchemaStore schemas = new(file);
-            StateRevisionStore store = new(segments);
-            Require(store.ReadObjectVersionChain(oldRevision, worldId.Value).Records.Count == 3, "Old Delta chain missing.");
-            LoadedWorld<World> loaded = LoadedWorld.Load<World>(store, schemas, oldRevision, worldId, models);
-            Require(loaded.ParentRevisionAddress == oldRevision && loaded.WorldId == worldId && _upgradeCalls == 1,
-                "Loading lost Parent/World identity or upgraded more than once.");
-            Require(loaded.World._score == 109 && loaded.World._name == "A" && loaded.World._generation == 73 &&
-                loaded.World._createdAtTicks == 638_625_600_000_000_000 &&
-                loaded.World._cache == 0 && _constructorCalls == 0, "Upgrade/readonly/constructor-free restoration failed.");
-            PreparedWorldRevision prepared = loaded.Prepare(policy);
-            Require(prepared.WorldId == worldId && prepared.Revision.ParentRevisionAddress == oldRevision &&
-                prepared.Revision.LocalObjects.Count == 1 && prepared.Revision.LocalObjects[0].Kind == ObjectVersionKind.Base,
-                "An upgraded unchanged object must be rewritten as current Base.");
-            loaded.World._score = 999; // The prepared body must remain independent of later edits.
-            upgradedRevision = store.Append(prepared.Revision);
-            Require(loaded.ParentRevisionAddress == oldRevision, "Append advanced the original loaded owner.");
-            LoadedWorld<World> current = LoadedWorld.Load<World>(store, schemas, upgradedRevision, worldId, models);
-            Require(current.World._score == 109 && _upgradeCalls == 1, "Prepared bytes changed or current load reran Upgrade.");
-            PreparedWorldRevision unchanged = current.Prepare(policy);
-            Require(unchanged.Revision.LocalObjects.Count == 0 && unchanged.Revision.RemovedObjectIds.Count == 0,
-                "Current unchanged World should require no object write without policy motive.");
-            current.World._score = 110;
-            PreparedWorldRevision edited = current.Prepare(policy);
-            Require(edited.Revision.LocalObjects.Count == 1 && edited.Revision.LocalObjects[0].Kind == ObjectVersionKind.Delta,
-                "A subsequent same-Schema edit should use ordinary Delta.");
-            finalRevision = store.Append(edited.Revision);
+        using (var repository = EventHistoryRepository.OpenExisting(directory, options))
+        using (var session = repository.Resume<World>("main", models)) {
+            oldRevision = session.StateRevisionAddress;
+            worldId = session.StateId;
+            Require(_upgradeCalls == 1 && session.State._score == 109 && session.State._name == "A" &&
+                session.State._generation == 73 && session.State._createdAtTicks == 638_625_600_000_000_000 &&
+                session.State._cache == 0 && _constructorCalls == 0, "Upgrade/readonly/constructor-free restoration failed.");
+            World original = session.State;
+            World marker = new(0, "Event");
+            session.CommitDomainEvent(marker, policy);
+            upgradedRevision = session.CommitDomainState(policy).RevisionAddress;
+            Require(ReferenceEquals(session.State, original) && _upgradeCalls == 1, "Saving rebuilt or re-upgraded State.");
+            session.CommitDomainEvent(marker, policy);
+            unchangedRevision = session.CommitDomainState(policy).RevisionAddress;
+            session.CommitDomainEvent(marker, policy);
+            original._score = 110;
+            finalRevision = session.CommitDomainState(policy).RevisionAddress;
         }
-
-        using (var file = RbfFile.OpenReadOnlyExisting(schemaPath))
-        using (SegmentStore segments = SegmentStore.OpenReadOnlyExisting(statePath, options)) {
-            SchemaStore schemas = new(file, readOnly: true);
-            StateRevisionStore store = new(segments);
-            LoadedWorld<World> final = LoadedWorld.Load<World>(store, schemas, finalRevision, worldId, models);
-            Require(final.World._score == 110 && final.World._generation == 73 && final.World._name == "A" &&
-                final.World._createdAtTicks == 638_625_600_000_000_000 &&
-                final.World._cache == 0 && _constructorCalls == 0 && _upgradeCalls == 1,
-                "Cold reopening failed to restore the current Base plus Delta.");
-            Require(store.ReadObjectVersionChain(finalRevision, worldId.Value).Records.Count == 2,
-                "Forced Base failed to cut the historical content chain.");
-            LoadedWorld<World> oldAgain = LoadedWorld.Load<World>(store, schemas, oldRevision, worldId, models);
-            Require(oldAgain.World._score == 109 && _upgradeCalls == 2, "The original historical revision was not preserved.");
+        using (var repository = EventHistoryRepository.OpenReadOnlyExisting(directory, options)) {
+            World final = repository.ReadState<World>(repository.GetHead("main"), models);
+            Require(final._score == 110 && final._generation == 73 && final._name == "A" &&
+                final._createdAtTicks == 638_625_600_000_000_000 && final._cache == 0 &&
+                _constructorCalls == 1 && _upgradeCalls == 1, "Cold reopening failed to restore current Base plus Delta.");
+            var historical = repository.ReadFrames("main").Single(frame => frame.RevisionAddress == oldRevision);
+            Require(repository.ReadState<World>(historical, models)._score == 109 && _upgradeCalls == 2,
+                "Original historical revision was not preserved.");
         }
-    }
-
-    private static (FrameAddress Revision, ObjectId WorldId) ReadV1Address(string path) {
-        string[] parts = File.ReadAllText(path).Split(':');
-        if (parts.Length != 3 || !uint.TryParse(parts[0], out uint fileNumber) ||
-            !ulong.TryParse(parts[1], out ulong packedTicket) || !uint.TryParse(parts[2], out uint worldId)) {
-            throw new InvalidDataException("Invalid V1 Revision address handoff.");
-        }
-        return (new FrameAddress(fileNumber, SizedPtr.FromPacked(packedTicket)), new ObjectId(worldId));
+        using SegmentStore segments = SegmentStore.OpenReadOnlyExisting(Path.Combine(directory, "state"), options);
+        StateRevisionStore store = new(segments);
+        Require(store.ReadObjectVersionChain(oldRevision, worldId.Value).Records.Count == 3, "Old Delta chain missing.");
+        StateRevision upgraded = store.Read(upgradedRevision);
+        Require(upgraded.ParentRevisionAddress == oldRevision && upgraded.LocalObjects.Count == 1 &&
+            upgraded.LocalObjects[0].Kind == ObjectVersionKind.Base, "Upgrade must force a current Base even after Event save.");
+        Require(store.Read(unchangedRevision).LocalObjects.Count == 0, "Unchanged State requires no object write.");
+        Require(store.Read(finalRevision).LocalObjects.Single().Kind == ObjectVersionKind.Delta &&
+            store.ReadObjectVersionChain(finalRevision, worldId.Value).Records.Count == 2, "Expected ordinary Delta after forced Base.");
     }
 
     private static void Require(bool condition, string message) {

@@ -343,14 +343,30 @@ public sealed partial class DurableSchemaGeneratorTests {
             """;
     }
 
+    // Only graph persistence witnesses need the test bridge. Schema-only compilations must
+    // retain their original reference/import environment (including historical-name probes).
+    private static bool NeedsFixtureBridge(string source) =>
+        source.Contains("FixtureGraphRepository", StringComparison.Ordinal) ||
+        source.Contains("FixtureGraphSession", StringComparison.Ordinal) ||
+        source.Contains("FixtureLoadedWorld", StringComparison.Ordinal) ||
+        source.Contains("FixturePreparedWorldRevision", StringComparison.Ordinal);
+
+    private static string WithFixtureBridgeImport(string source) => NeedsFixtureBridge(source)
+        ? "using Atelia.DurableGraph.Tests;\n" + source : source;
+
+    private static IEnumerable<MetadataReference> FixtureBridgeReferences(string source) =>
+        NeedsFixtureBridge(source)
+            ? [MetadataReference.CreateFromFile(typeof(FixtureGraphRepository).Assembly.Location)]
+            : [];
+
     private static GeneratorTestRun RunGenerator(
         string source,
         params AdditionalText[] additionalTexts) {
-        SyntaxTree syntaxTree = CSharpSyntaxTree.ParseText(source, ParseOptions);
+        SyntaxTree syntaxTree = CSharpSyntaxTree.ParseText(WithFixtureBridgeImport(source), ParseOptions);
         CSharpCompilation compilation = CSharpCompilation.Create(
             assemblyName: $"GeneratorTests_{Guid.NewGuid():N}",
             syntaxTrees: [syntaxTree],
-            references: PlatformReferences().Append(
+            references: PlatformReferences().Concat(FixtureBridgeReferences(source)).Append(
                 MetadataReference.CreateFromFile(typeof(DurableBase).Assembly.Location)).Append(
                 MetadataReference.CreateFromFile(typeof(Atelia.DurableGraph.StateStore.Serialization.BinaryPayloadReader).Assembly.Location)).Append(
                 MetadataReference.CreateFromFile(typeof(Atelia.DurableGraph.StateStore.SchemaStore).Assembly.Location)).Append(

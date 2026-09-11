@@ -53,7 +53,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             object loaded = fixture.Load(store, schemas, third);
             fixture.Check(loaded, 3);
             Assert.Equal(1, fixture.UpgradeCalls()); // One upgrade after both old Deltas have been applied.
-            PreparedWorldRevision plan = fixture.Prepare(loaded);
+            FixturePreparedWorldRevision plan = fixture.Prepare(loaded);
             Assert.Equal(new ObjectId(1), plan.WorldId);
             Assert.Equal(third, plan.Revision.ParentRevisionAddress);
             Assert.Equal<uint>([20], plan.Revision.RemovedObjectIds);
@@ -68,7 +68,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             Assert.Single(store.ReadObjectVersionChain(rewritten, 1).Records);
             Assert.Equal<uint>([1, 10, 11, 12], store.ReadLiveObjectHeadMap(rewritten).Keys.Order());
             fixture.Change(loaded, 3);
-            PreparedWorldRevision repeated = fixture.Prepare(loaded);
+            FixturePreparedWorldRevision repeated = fixture.Prepare(loaded);
             Assert.Equal(third, repeated.Revision.ParentRevisionAddress);
             Assert.Equal(ObjectVersionKind.Base, Assert.Single(repeated.Revision.LocalObjects).Kind);
             Assert.Equal(rewrite.Body.ToArray(), Assert.Single(repeated.Revision.LocalObjects).Body.ToArray());
@@ -82,13 +82,13 @@ public sealed partial class DurableSchemaGeneratorTests {
             object loaded = fixture.Load(store, schemas, rewritten);
             fixture.Check(loaded, 3);
             Assert.Equal(upgrades, fixture.UpgradeCalls());
-            PreparedWorldRevision noChange = fixture.Prepare(loaded);
+            FixturePreparedWorldRevision noChange = fixture.Prepare(loaded);
             Assert.Empty(noChange.Revision.LocalObjects);
             Assert.Empty(noChange.Revision.RemovedObjectIds);
             unchanged = store.Append(noChange.Revision);
             object fresh = fixture.Load(store, schemas, unchanged);
             fixture.Change(fresh, 4);
-            PreparedWorldRevision update = fixture.Prepare(fresh);
+            FixturePreparedWorldRevision update = fixture.Prepare(fresh);
             Assert.Equal(unchanged, update.Revision.ParentRevisionAddress);
             Assert.Equal(ObjectVersionKind.Delta, Assert.Single(update.Revision.LocalObjects).Kind);
             changed = store.Append(update.Revision);
@@ -109,11 +109,11 @@ public sealed partial class DurableSchemaGeneratorTests {
             // A read-only Segment gives a definite pre-append failure, not an uncertain IO outcome.
             // Schema registration remains writable; its exact current definitions already exist.
             object oldOwner = fixture.Load(store, schemas, third);
-            PreparedWorldRevision beforeFailure = fixture.Prepare(oldOwner);
+            FixturePreparedWorldRevision beforeFailure = fixture.Prepare(oldOwner);
             var bytesBefore = Directory.EnumerateFiles(directory.Path, "*", SearchOption.AllDirectories)
                 .ToDictionary(path => path, File.ReadAllBytes);
             Assert.Throws<InvalidOperationException>(() => store.Append(beforeFailure.Revision));
-            PreparedWorldRevision afterFailure = fixture.Prepare(oldOwner);
+            FixturePreparedWorldRevision afterFailure = fixture.Prepare(oldOwner);
             Assert.Equal(third, afterFailure.Revision.ParentRevisionAddress);
             Assert.Equal(ObjectVersionKind.Base, Assert.Single(afterFailure.Revision.LocalObjects).Kind);
             Assert.Equal(Assert.Single(beforeFailure.Revision.LocalObjects).Body.ToArray(),
@@ -148,7 +148,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             object loaded = fixture.Load(store, schemas, original);
             fixture.Check(loaded, 3);
             Assert.Equal(0, fixture.UpgradeCalls());
-            PreparedWorldRevision plan = fixture.Prepare(loaded);
+            FixturePreparedWorldRevision plan = fixture.Prepare(loaded);
             Assert.Equal(original, plan.Revision.ParentRevisionAddress);
             Assert.Equal<uint>([13], plan.Revision.RemovedObjectIds);
             ObjectVersionRecord delta = Assert.Single(plan.Revision.LocalObjects);
@@ -208,8 +208,8 @@ public sealed partial class DurableSchemaGeneratorTests {
         public DurableSchema CurrentSchema { get; } = currentSchema;
         public Func<StateRevisionStore, SchemaStore, FrameAddress, object> Load { get; } =
             host.GetMethod("Load")!.CreateDelegate<Func<StateRevisionStore, SchemaStore, FrameAddress, object>>();
-        public Func<object, PreparedWorldRevision> Prepare { get; } =
-            host.GetMethod("Prepare")!.CreateDelegate<Func<object, PreparedWorldRevision>>();
+        public Func<object, FixturePreparedWorldRevision> Prepare { get; } =
+            host.GetMethod("Prepare")!.CreateDelegate<Func<object, FixturePreparedWorldRevision>>();
         public Action<object, int> Check { get; } = host.GetMethod("Check")!.CreateDelegate<Action<object, int>>();
         public Action<object, int> Change { get; } = host.GetMethod("Change")!.CreateDelegate<Action<object, int>>();
         public Func<int> UpgradeCalls { get; } = host.GetMethod("UpgradeCalls")!.CreateDelegate<Func<int>>();
@@ -260,14 +260,14 @@ public sealed partial class DurableSchemaGeneratorTests {
                 Atelia.DurableGraph.StateStore.SchemaStore schemas, Atelia.DurableGraph.StateStore.Storage.FrameAddress revision) {
                 var models = new Atelia.DurableGraph.StateStore.StateModelRegistry();
                 Leaf.__DurableState.RegisterModel(models);
-                return Atelia.DurableGraph.StateStore.LoadedWorld.Load<Leaf>(store, schemas, revision, new(1), models);
+                return Atelia.DurableGraph.Tests.FixtureLoadedWorld.Load<Leaf>(store, schemas, revision, new(1), models);
             }
-            public static Atelia.DurableGraph.StateStore.PreparedWorldRevision Prepare(object loaded) =>
-                ((Atelia.DurableGraph.StateStore.LoadedWorld<Leaf>)loaded).Prepare(new(1000000, 1));
+            public static Atelia.DurableGraph.Tests.FixturePreparedWorldRevision Prepare(object loaded) =>
+                ((Atelia.DurableGraph.Tests.FixtureLoadedWorld<Leaf>)loaded).Prepare(new(1000000, 1));
             public static void Check(object loaded, int expected) =>
-                ((Atelia.DurableGraph.StateStore.LoadedWorld<Leaf>)loaded).World.Check(expected);
+                ((Atelia.DurableGraph.Tests.FixtureLoadedWorld<Leaf>)loaded).World.Check(expected);
             public static void Change(object loaded, int value) =>
-                ((Atelia.DurableGraph.StateStore.LoadedWorld<Leaf>)loaded).World.Change(value);
+                ((Atelia.DurableGraph.Tests.FixtureLoadedWorld<Leaf>)loaded).World.Change(value);
             public static int UpgradeCalls() => Leaf.Upgrades;
             public static byte[] ReadStored(Atelia.DurableGraph.StateStore.Storage.StateRevisionStore store,
                 Atelia.DurableGraph.StateStore.SchemaStore schemas, Atelia.DurableGraph.StateStore.Storage.FrameAddress revision) {

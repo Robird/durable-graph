@@ -47,21 +47,24 @@ internal static class Program {
         World world = World.Seed();
         FrameAddress first, offsetChanged, historical, unchanged;
         ObjectId worldId;
-        using (GraphRepository repository = GraphRepository.CreateNew(directory, Options)) {
-            using GraphSession<World> session = repository.Create(world, Models());
-            first = session.Commit(Policy);
-            worldId = session.WorldId!.Value;
+        using (EventHistoryRepository repository = EventHistoryRepository.CreateNew(directory, Options)) {
+            using EventHistorySession<World> session = repository.CreateBranch("main", world, Models(), Policy);
+            first = session.StateRevisionAddress;
+            worldId = session.StateId;
             world.Timestamp = Moment(8);
             world.Point = world.Point with { Timestamp = Moment(8) };
             world.Points[0] = world.Points[0] with { Timestamp = Moment(8) };
             world.Timestamps[0] = Moment(8);
             world.OptionalTimestamps[1] = Moment(8);
-            offsetChanged = session.Commit(Policy);
+            session.CommitDomainEvent(session.State, Policy);
+            offsetChanged = session.CommitDomainState(Policy).RevisionAddress;
             Require(world.Keys.Remove(Moment(0)), "Missing timestamp key before actual stored-key replacement.");
             world.Keys.Add(Moment(8), World.SampleDate);
-            historical = session.Commit(Policy);
-            unchanged = session.Commit(Policy);
-            Require(ReferenceEquals(session.World, world), "Commit replaced the working graph.");
+            session.CommitDomainEvent(session.State, Policy);
+            historical = session.CommitDomainState(Policy).RevisionAddress;
+            session.CommitDomainEvent(session.State, Policy);
+            unchanged = session.CommitDomainState(Policy).RevisionAddress;
+            Require(ReferenceEquals(session.State, world), "Commit replaced the working graph.");
         }
         Inspect(directory, (store, schemas) => {
             var ids = CheckHistorical(store, schemas, historical, worldId, 8, 8);
@@ -77,10 +80,11 @@ internal static class Program {
         });
         File.WriteAllText(Path.Combine(directory, "historical.txt"), $"{historical.FileNumber}:{historical.FrameTicket.Packed}:{worldId.Value}");
         FrameAddress recaptured;
-        using (GraphRepository reopened = GraphRepository.OpenExisting(directory, Options)) {
-            using GraphSession<World> restored = reopened.Load<World>(Models());
-            CheckGraph(restored.World, 0, 8);
-            recaptured = restored.Commit(Policy);
+        using (EventHistoryRepository reopened = EventHistoryRepository.OpenExisting(directory, Options)) {
+            using EventHistorySession<World> restored = reopened.Resume<World>("main", Models());
+            CheckGraph(restored.State, 0, 8);
+            restored.CommitDomainEvent(restored.State, Policy);
+            recaptured = restored.CommitDomainState(Policy).RevisionAddress;
         }
         Inspect(directory, (store, _) => Require(store.Read(recaptured).LocalObjects.Count == 0,
             "ScalarDefault DateOnly/DateTimeOffset/TimeOnly modes changed after Load and recapture."));
@@ -96,20 +100,23 @@ internal static class Program {
         Inspect(directory, (store, schemas) => ids = CheckHistorical(store, schemas, historical, worldId, 8, 8));
         Require(Upgrades.OwnerCalls == 0 && Upgrades.ValueCalls.Count == 0, "Exact reading ran business upgrades.");
         FrameAddress rewritten, unchanged, changed;
-        using (GraphRepository repository = GraphRepository.OpenExisting(directory, Options)) {
-            using GraphSession<World> session = repository.Load<World>(Models());
-            World world = session.World;
+        using (EventHistoryRepository repository = EventHistoryRepository.OpenExisting(directory, Options)) {
+            using EventHistorySession<World> session = repository.Resume<World>("main", Models());
+            World world = session.State;
             CheckGraph(world, 1000, 8);
             Require(Upgrades.OwnerCalls == 1 && Upgrades.ValueCalls.Count == 33 &&
                 Upgrades.ValueCalls.Count(call => call.Id == worldId) == 1 &&
                 Upgrades.ValueCalls.Count(call => call.Id == ids.Points) == 32,
                 "Explicit owner dependency and List element conversion must each run exactly once per value.");
-            rewritten = session.Commit(Policy);
-            unchanged = session.Commit(Policy);
+            session.CommitDomainEvent(session.State, Policy);
+            rewritten = session.CommitDomainState(Policy).RevisionAddress;
+            session.CommitDomainEvent(session.State, Policy);
+            unchanged = session.CommitDomainState(Policy).RevisionAddress;
             world.Timestamp = Moment(-4);
             world.Points[0] = world.Points[0] with { Timestamp = Moment(-4) };
-            changed = session.Commit(Policy);
-            Require(ReferenceEquals(session.World, world), "Upgrade resave replaced the working graph.");
+            session.CommitDomainEvent(session.State, Policy);
+            changed = session.CommitDomainState(Policy).RevisionAddress;
+            Require(ReferenceEquals(session.State, world), "Upgrade resave replaced the working graph.");
         }
         Inspect(directory, (store, schemas) => {
             var rows = store.Read(rewritten).LocalObjects;
@@ -122,9 +129,9 @@ internal static class Program {
                 "Scalar edits must resume ordinary owner and List Delta after upgraded Base.");
             CheckHistorical(store, schemas, historical, worldId, 8, 8);
         });
-        using GraphRepository reopened = GraphRepository.OpenExisting(directory, Options);
-        using GraphSession<World> restored = reopened.Load<World>(Models());
-        CheckGraph(restored.World, 1000, -4);
+        using EventHistoryRepository reopened = EventHistoryRepository.OpenExisting(directory, Options);
+        using EventHistorySession<World> restored = reopened.Resume<World>("main", Models());
+        CheckGraph(restored.State, 1000, -4);
         Require(Upgrades.OwnerCalls == 1 && Upgrades.ValueCalls.Count == 33, "Cold reopen repeated business upgrade.");
     }
 #endif

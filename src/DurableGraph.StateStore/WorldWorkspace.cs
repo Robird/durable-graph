@@ -49,6 +49,11 @@ internal sealed class WorldWorkspace<TWorld> where TWorld : DurableBase {
         ArgumentNullException.ThrowIfNull(models);
         ArgumentOutOfRangeException.ThrowIfZero(worldId.Value, nameof(worldId));
         StateModelSnapshot snapshot = models.Snapshot(schemas);
+        return LoadSnapshot(store, schemas, revisionAddress, worldId, snapshot);
+    }
+
+    internal static WorldWorkspace<TWorld> LoadSnapshot(StateRevisionStore store, SchemaStore schemas,
+        FrameAddress revisionAddress, ObjectId worldId, StateModelSnapshot snapshot) {
         MaterializedGraph<TWorld> loaded = GraphReader.Read<TWorld>(store, schemas, revisionAddress, worldId,
             snapshot, requireExactRootType: true);
         return new(store, schemas, loaded.Root, worldId, loaded.RootModel, snapshot,

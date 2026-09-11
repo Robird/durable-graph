@@ -15,7 +15,11 @@ Commands, measurement boundaries and workload inventory live in [README.md](READ
 Selected invariants: exact same script and initial content per case; repository-local ObjectIds
 never address cross-run edits; one Session per trace; all persisted revisions and all prepared
 candidate Deltas validate; no writer selector needed by readers; algorithm order interleaved and
-warmup/initial binding recorded separately. Whole Commit includes all product work and flushes.
+warmup/initial binding recorded separately. Under DB-063, an initial step publishes S0, and each
+edit step publishes an independent marker Event followed by State through EventHistorySession.
+Whole-step timing includes both publications; State payload counters and isolated Diff remain
+State-only. Journal directory bytes replace the old publication-file metric. Measurement version 2
+is intentionally not whole-save-comparable with frozen pre-DB-063 reports.
 
 Output is ignored per-run JSON/CSV/Markdown plus independent repositories. Root product context is
 [src/PROJECT-STATE.md](../../src/PROJECT-STATE.md); design/acceptance authority is

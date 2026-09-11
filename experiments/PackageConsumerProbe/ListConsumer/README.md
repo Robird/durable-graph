@@ -10,7 +10,7 @@ without project references or manual generator/build wiring. V1 saves a shared `
 Consecutive commits cover element replacement, append, middle insert/remove and tail removal while
 retaining the same list identity. Increasing Capacity writes no object changes. All intermediate
 revisions decode their respective frozen contents; a separate low-level preparation witness clears
-the domain list after preparing both Base and Delta and then appends and restores the prepared data.
+the domain list after saving both Base and Delta and then restores the saved data.
 
 V2 deletes the LegacyPoint CLR declaration and supplies CurrentPoint with the same Schema ID at V2.
 Retained history generates the old exact state DTO and reader. An explicit list element rule set

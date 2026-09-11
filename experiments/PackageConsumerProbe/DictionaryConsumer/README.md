@@ -6,7 +6,7 @@ DB-054 delivery witness. Run from the repository root:
 ./experiments/PackageConsumerProbe/Run-DictionaryProbe.ps1
 ```
 
-The runner packs eight local dependency packages into an isolated feed/cache. The consumer has
+The runner packs nine local dependency packages into an isolated feed/cache. The consumer has
 only ordinary Runtime and StateStore PackageReference entries; generation and history publication
 arrive through package assets. Pass both `-PackageSource` and `-Version` to reuse a matching feed.
 Artifacts stay beneath the unique ignored `obj/dictionary-*` directory.
@@ -21,8 +21,8 @@ Continuous commits patch one value, remove/add a key, patch another value, rever
 order while increasing Capacity, and patch again. Every meaningful Dictionary edit must produce
 an actual key-addressed Delta. The order/Capacity-only commit and unchanged commit write no local
 objects. Reading every earlier revision checks that a changed enumeration position never redirects
-a subsequent Delta. Separate prepared Base and Delta content survives clearing the source
-Dictionaries before append. All source instances remain ordinary BCL Dictionaries.
+a subsequent Delta. Saved Base and Delta content survives clearing the source
+Dictionaries before reading it back. All source instances remain ordinary BCL Dictionaries.
 
 V2 removes both old domain declarations. Their replacements retain durable identities but advance
 the enum from int to long and Point from int to long. Stored-exact reading first retrieves the

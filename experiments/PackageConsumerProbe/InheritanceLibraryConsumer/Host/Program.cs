@@ -37,23 +37,26 @@ internal static class Program {
         Require(!BaseCatalog.LegacyClrAbsent, "V1 must contain its original base and hidden inline CLR types.");
         FrameAddress ancestorChange, leafChange, historical, noChange;
         ObjectId worldId;
-        using (GraphRepository repository = GraphRepository.CreateNew(directory, Options)) {
+        using (EventHistoryRepository repository = EventHistoryRepository.CreateNew(directory, Options)) {
             Leaf world = new(10, true), child = new(11, false);
             world.Link = child;
             child.Link = world;
             world.Alias = child;
             world.Peers = [world, child, child];
-            using GraphSession<Leaf> session = repository.Create(world, Models());
-            session.Commit(Policy);
-            worldId = session.WorldId!.Value;
+            using EventHistorySession<Leaf> session = repository.CreateBranch("main", world, Models(), Policy);
+            worldId = session.StateId;
             world.Ancestor++;
-            ancestorChange = session.Commit(Policy);
+            session.CommitDomainEvent(session.State, Policy);
+            ancestorChange = session.CommitDomainState(Policy).RevisionAddress;
             world.LeafValue++;
-            leafChange = session.Commit(Policy);
+            session.CommitDomainEvent(session.State, Policy);
+            leafChange = session.CommitDomainState(Policy).RevisionAddress;
             child.Ancestor++;
-            historical = session.Commit(Policy);
-            noChange = session.Commit(Policy);
-            Require(ReferenceEquals(session.World, world), "Commit replaced the domain graph.");
+            session.CommitDomainEvent(session.State, Policy);
+            historical = session.CommitDomainState(Policy).RevisionAddress;
+            session.CommitDomainEvent(session.State, Policy);
+            noChange = session.CommitDomainState(Policy).RevisionAddress;
+            Require(ReferenceEquals(session.State, world), "Commit replaced the domain graph.");
             CheckGraph(world, false, 41, 50);
         }
         Inspect(directory, (store, schemas) => {
@@ -66,10 +69,11 @@ internal static class Program {
         File.WriteAllText(Path.Combine(directory, "historical.txt"), $"{historical.FileNumber}:{historical.FrameTicket.Packed}:{worldId.Value}");
         Require(BaseCatalog.ConstructorCalls == 2 && MiddleCatalog.ConstructorCalls == 2 && AppCatalog.ConstructorCalls == 2,
             "Expected only the two manually constructed leaf instances.");
-        using (GraphRepository repository = GraphRepository.OpenExisting(directory, Options)) {
-            using GraphSession<Leaf> session = repository.Load<Leaf>(Models());
-            CheckGraph(session.World, false, 41, 50);
-            noChange = session.Commit(Policy);
+        using (EventHistoryRepository repository = EventHistoryRepository.OpenExisting(directory, Options)) {
+            using EventHistorySession<Leaf> session = repository.Resume<Leaf>("main", Models());
+            CheckGraph(session.State, false, 41, 50);
+            session.CommitDomainEvent(session.State, Policy);
+            noChange = session.CommitDomainState(Policy).RevisionAddress;
         }
         Require(BaseCatalog.ConstructorCalls == 2 && MiddleCatalog.ConstructorCalls == 2 && AppCatalog.ConstructorCalls == 2,
             "Hydrate ran domain constructors or initializers.");
@@ -86,15 +90,18 @@ internal static class Program {
         Require(AppCatalog.UpgradeCalls == 0 && BaseCatalog.UpgradeCalls == 0 && MiddleCatalog.UpgradeCalls == 0,
             "Stored exact reading ran business upgrades.");
         FrameAddress rewritten, noChange, changed;
-        using (GraphRepository repository = GraphRepository.OpenExisting(directory, Options)) {
-            using GraphSession<Leaf> session = repository.Load<Leaf>(Models());
-            CheckGraph(session.World, true, 41, 50);
+        using (EventHistoryRepository repository = EventHistoryRepository.OpenExisting(directory, Options)) {
+            using EventHistorySession<Leaf> session = repository.Resume<Leaf>("main", Models());
+            CheckGraph(session.State, true, 41, 50);
             CheckUpgradeCounters();
-            rewritten = session.Commit(Policy);
-            noChange = session.Commit(Policy);
-            session.World.Ancestor++;
-            ((Leaf)session.World.Link!).LeafValue++;
-            changed = session.Commit(Policy);
+            session.CommitDomainEvent(session.State, Policy);
+            rewritten = session.CommitDomainState(Policy).RevisionAddress;
+            session.CommitDomainEvent(session.State, Policy);
+            noChange = session.CommitDomainState(Policy).RevisionAddress;
+            session.State.Ancestor++;
+            ((Leaf)session.State.Link!).LeafValue++;
+            session.CommitDomainEvent(session.State, Policy);
+            changed = session.CommitDomainState(Policy).RevisionAddress;
         }
         Inspect(directory, (store, schemas) => {
             CheckWrites(store, rewritten, ObjectVersionKind.Base, worldId, childId);
@@ -102,11 +109,12 @@ internal static class Program {
             CheckWrites(store, changed, ObjectVersionKind.Delta, worldId, childId);
             CheckHistorical(store, schemas, historical, worldId);
         });
-        using (GraphRepository repository = GraphRepository.OpenExisting(directory, Options)) {
-            using GraphSession<Leaf> session = repository.Load<Leaf>(Models());
-            CheckGraph(session.World, true, 42, 51);
+        using (EventHistoryRepository repository = EventHistoryRepository.OpenExisting(directory, Options)) {
+            using EventHistorySession<Leaf> session = repository.Resume<Leaf>("main", Models());
+            CheckGraph(session.State, true, 42, 51);
             CheckUpgradeCounters();
-            noChange = session.Commit(Policy);
+            session.CommitDomainEvent(session.State, Policy);
+            noChange = session.CommitDomainState(Policy).RevisionAddress;
         }
         Require(BaseCatalog.ConstructorCalls == 0 && MiddleCatalog.ConstructorCalls == 0 && AppCatalog.ConstructorCalls == 0,
             "Loading ran a base or leaf domain constructor.");

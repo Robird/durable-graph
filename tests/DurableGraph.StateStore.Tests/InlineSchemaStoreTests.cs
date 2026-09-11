@@ -196,7 +196,7 @@ public sealed class InlineSchemaStoreTests : IDisposable {
     [Fact]
     public void PublishedBasePointingAtInlineSchemaRefusesRepositoryOpen() {
         string repositoryPath = NextPath();
-        using (GraphRepository repository = GraphRepository.CreateNew(repositoryPath)) { }
+        using (EventHistoryRepository repository = EventHistoryRepository.CreateNew(repositoryPath)) { }
         using (IRbfFile schemasFile = RbfFile.OpenExisting(Path.Combine(repositoryPath, "schemas.rbf"))) {
             new SchemaStore(schemasFile).Register(new("A", 1, SchemaKind.InlineValue));
         }
@@ -207,13 +207,14 @@ public sealed class InlineSchemaStoreTests : IDisposable {
             address = states.AppendDurably(StateRevision.CreateObjectHeadMapBase(null,
                 [ObjectVersionRecord.CreateBase(1, new byte[] { 4, 2 })], []));
         }
-        using (IRbfFile publication = RbfFile.OpenExisting(Path.Combine(repositoryPath, "publication.rbf"))) {
-            PublicationLog log = new(publication, static (_, _) => { });
-            log.Publish(null, new(address, new ObjectId(1)));
+        using (HistoryJournal history = HistoryJournal.Open(repositoryPath, readOnly: false)) {
+            history.ConfirmDurable();
+            var frame = history.Append(GraphFrameKind.State, address, new ObjectId(1), null);
+            history.Journal.CreateBranch("main", frame).Unwrap();
         }
         Dictionary<string, byte[]> before = Directory.GetFiles(repositoryPath, "*", SearchOption.AllDirectories)
             .ToDictionary(static path => path, File.ReadAllBytes);
-        Assert.Throws<InvalidDataException>(() => GraphRepository.OpenExisting(repositoryPath));
+        Assert.Throws<InvalidDataException>(() => EventHistoryRepository.OpenExisting(repositoryPath));
         foreach ((string path, byte[] bytes) in before) { Assert.Equal(bytes, File.ReadAllBytes(path)); }
     }
 

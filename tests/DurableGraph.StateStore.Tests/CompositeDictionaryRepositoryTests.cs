@@ -20,8 +20,8 @@ public sealed class CompositeDictionaryRepositoryTests : IDisposable {
         StateModelRegistry models = Models<string>();
         models.UseDictionaryComparer<string, int>(StringComparer.Ordinal);
         FrameAddress seed, unchanged, changed, final;
-        using (GraphRepository repository = GraphRepository.CreateNew(_root)) {
-            using GraphSession<World<string>> session = repository.Create(world, models);
+        using (StateSaveHarness repository = StateSaveHarness.CreateNew(_root)) {
+            using StateSaveSession<World<string>> session = repository.Create(world, models);
             seed = session.Commit(NoRebase);
         }
         int calls = 0;
@@ -35,8 +35,8 @@ public sealed class CompositeDictionaryRepositoryTests : IDisposable {
                 _ => new StringProxy(StringComparer.Ordinal),
             };
         });
-        using (GraphRepository repository = GraphRepository.OpenExisting(_root)) {
-            using GraphSession<World<string>> session = repository.Load<World<string>>(current);
+        using (StateSaveHarness repository = StateSaveHarness.OpenExisting(_root)) {
+            using StateSaveSession<World<string>> session = repository.Load<World<string>>(current);
             Assert.Equal(1, calls);
             Assert.Same(session.World.First, session.World.Second);
             unchanged = session.Commit(NoRebase);
@@ -44,8 +44,8 @@ public sealed class CompositeDictionaryRepositoryTests : IDisposable {
             changed = session.Commit(NoRebase);
             Assert.Equal(1, calls);
         }
-        using (GraphRepository repository = GraphRepository.OpenExisting(_root)) {
-            using GraphSession<World<string>> session = repository.Load<World<string>>(current);
+        using (StateSaveHarness repository = StateSaveHarness.OpenExisting(_root)) {
+            using StateSaveSession<World<string>> session = repository.Load<World<string>>(current);
             Assert.Equal(2, calls); // A new operation snapshot resolves independently.
             Assert.Equal(900, session.World.First!["key-070"]);
             final = session.Commit(NoRebase);
@@ -72,16 +72,16 @@ public sealed class CompositeDictionaryRepositoryTests : IDisposable {
         StateModelRegistry models = Models<Key>();
         models.UseDictionaryComparerResolver(_ => throw new InvalidOperationException("Default must not resolve Application."));
         FrameAddress seed, replaced, unchanged;
-        using (GraphRepository repository = GraphRepository.CreateNew(_root)) {
-            using GraphSession<World<Key>> session = repository.Create(world, models);
+        using (StateSaveHarness repository = StateSaveHarness.CreateNew(_root)) {
+            using StateSaveSession<World<Key>> session = repository.Create(world, models);
             seed = session.Commit(NoRebase);
             Assert.Equal(10007, values[new Key(7, -1)]);
             values.Remove(new Key(7, -1));
             values.Add(new Key(7, 7777), 10007);
             replaced = session.Commit(NoRebase);
         }
-        using (GraphRepository repository = GraphRepository.OpenExisting(_root)) {
-            using GraphSession<World<Key>> session = repository.Load<World<Key>>(models);
+        using (StateSaveHarness repository = StateSaveHarness.OpenExisting(_root)) {
+            using StateSaveSession<World<Key>> session = repository.Load<World<Key>>(models);
             Assert.Equal(10007, session.World.First![new Key(7, -1)]);
             Assert.Equal(7777, Assert.Single(session.World.First.Keys, key => key.Id == 7).Timestamp);
             unchanged = session.Commit(NoRebase);
@@ -117,13 +117,13 @@ public sealed class CompositeDictionaryRepositoryTests : IDisposable {
             First = new(new StringProxy(StringComparer.Ordinal)) { ["MiXeD"] = 1 },
             Second = new(new StringProxy(StringComparer.OrdinalIgnoreCase)) { ["OTHER"] = 2 },
         };
-        using (GraphRepository repository = GraphRepository.CreateNew(_root)) {
-            using GraphSession<World<string>> session = repository.Create(world, models);
+        using (StateSaveHarness repository = StateSaveHarness.CreateNew(_root)) {
+            using StateSaveSession<World<string>> session = repository.Create(world, models);
             session.Commit(NoRebase);
             Assert.False(world.First.ContainsKey("mixed")); // Save does not replace the source comparer.
         }
-        using (GraphRepository repository = GraphRepository.OpenExisting(_root)) {
-            using GraphSession<World<string>> session = repository.Load<World<string>>(models);
+        using (StateSaveHarness repository = StateSaveHarness.OpenExisting(_root)) {
+            using StateSaveSession<World<string>> session = repository.Load<World<string>>(models);
             Assert.Equal(1, session.World.First!["mixed"]);
             Assert.Equal(2, session.World.Second!["other"]);
         }
@@ -142,8 +142,8 @@ public sealed class CompositeDictionaryRepositoryTests : IDisposable {
         Dictionary<string, int> first = Numbers(new StringProxy(StringComparer.Ordinal));
         Dictionary<string, int> second = new(new StringProxy(StringComparer.Ordinal)) { ["other"] = 42 };
         World<string> world = new() { First = first, Second = second, Containers = [[first, second]] };
-        using (GraphRepository repository = GraphRepository.CreateNew(_root)) {
-            using GraphSession<World<string>> session = repository.Create(world, models);
+        using (StateSaveHarness repository = StateSaveHarness.CreateNew(_root)) {
+            using StateSaveSession<World<string>> session = repository.Create(world, models);
             Assert.Equal(0, calls);
             session.Commit(NoRebase);
             session.Commit(NoRebase);
@@ -151,8 +151,8 @@ public sealed class CompositeDictionaryRepositoryTests : IDisposable {
             session.Commit(NoRebase);
             Assert.Equal(1, calls);
         }
-        using (GraphRepository repository = GraphRepository.OpenExisting(_root)) {
-            using GraphSession<World<string>> session = repository.Load<World<string>>(models);
+        using (StateSaveHarness repository = StateSaveHarness.OpenExisting(_root)) {
+            using StateSaveSession<World<string>> session = repository.Load<World<string>>(models);
             Assert.Equal(2, calls);
             Assert.Same(session.World.First, session.World.Containers![0][0]);
             Assert.Same(session.World.Second, session.World.Containers[0][1]);
@@ -164,16 +164,23 @@ public sealed class CompositeDictionaryRepositoryTests : IDisposable {
     [Fact]
     public void ConfigurationAddedAfterSessionCreationCannotEnterItsFrozenSnapshot() {
         StateModelRegistry models = Models<string>();
-        World<string> world = new() { First = new(new StringProxy(StringComparer.Ordinal)) };
-        using GraphRepository repository = GraphRepository.CreateNew(_root);
-        using (GraphSession<World<string>> session = repository.Create(world, models)) {
+        World<string> world = new();
+        using EventHistoryRepository repository = EventHistoryRepository.CreateNew(_root);
+        FrameAddress seed;
+        using (EventHistorySession<World<string>> session = repository.CreateBranch("main", world, models, NoRebase)) {
+            seed = session.StateRevisionAddress;
+            session.CommitDomainEvent(new World<string>(), NoRebase);
             models.UseDictionaryComparer<string, int>(StringComparer.Ordinal);
-            Assert.Throws<InvalidDataException>(() => session.Commit(NoRebase));
-            Assert.Null(repository.HeadRevisionAddress);
+            world.First = new(new StringProxy(StringComparer.Ordinal));
+            Assert.Throws<InvalidDataException>(() => session.CommitDomainState(NoRebase));
+            Assert.Equal(seed, session.StateRevisionAddress);
+            Assert.False(repository.IsFaulted);
         }
-        using (GraphSession<World<string>> session = repository.Create(world, models)) {
-            session.Commit(NoRebase);
-            Assert.NotNull(repository.HeadRevisionAddress);
+        using (EventHistorySession<World<string>> session = repository.Resume<World<string>>("main", models)) {
+            session.State.First = new(new StringProxy(StringComparer.Ordinal));
+            session.CommitDomainState(NoRebase);
+            Assert.NotEqual(seed, session.StateRevisionAddress);
+            Assert.Null(session.PendingEvent);
         }
     }
 
@@ -187,12 +194,12 @@ public sealed class CompositeDictionaryRepositoryTests : IDisposable {
             Second = new(StringComparer.OrdinalIgnoreCase) { ["B"] = 2 },
             Containers = [[identity]],
         };
-        using (GraphRepository repository = GraphRepository.CreateNew(_root)) {
-            using GraphSession<World<string>> session = repository.Create(world, models);
+        using (StateSaveHarness repository = StateSaveHarness.CreateNew(_root)) {
+            using StateSaveSession<World<string>> session = repository.Create(world, models);
             session.Commit(NoRebase);
         }
-        using GraphRepository cold = GraphRepository.OpenExisting(_root);
-        using GraphSession<World<string>> loaded = cold.Load<World<string>>(models);
+        using StateSaveHarness cold = StateSaveHarness.OpenExisting(_root);
+        using StateSaveSession<World<string>> loaded = cold.Load<World<string>>(models);
         Assert.False(loaded.World.First!.ContainsKey("a"));
         Assert.Equal(2, loaded.World.Second!["b"]);
         Assert.False(loaded.World.Containers![0][0].ContainsKey(new string('a', 1)));
@@ -211,8 +218,8 @@ public sealed class CompositeDictionaryRepositoryTests : IDisposable {
             _ => throw new ResolverFailure(),
         });
         World<string> world = new() { First = new(new StringProxy(StringComparer.Ordinal)) };
-        using GraphRepository repository = GraphRepository.CreateNew(_root);
-        using GraphSession<World<string>> session = repository.Create(world, models);
+        using StateSaveHarness repository = StateSaveHarness.CreateNew(_root);
+        using StateSaveSession<World<string>> session = repository.Create(world, models);
         Exception? error = Record.Exception(() => session.Commit(NoRebase));
         Assert.NotNull(error);
         Assert.Null(repository.HeadRevisionAddress);
@@ -226,8 +233,8 @@ public sealed class CompositeDictionaryRepositoryTests : IDisposable {
         models.UseDictionaryComparer<string, int>(StringComparer.Ordinal);
         FrameAddress seed;
         ObjectId worldId;
-        using (GraphRepository repository = GraphRepository.CreateNew(_root)) {
-            using GraphSession<World<string>> session = repository.Create(new World<string> { First = new(new StringProxy(StringComparer.Ordinal)) }, models);
+        using (StateSaveHarness repository = StateSaveHarness.CreateNew(_root)) {
+            using StateSaveSession<World<string>> session = repository.Create(new World<string> { First = new(new StringProxy(StringComparer.Ordinal)) }, models);
             seed = session.Commit(NoRebase);
             worldId = repository.WorldId!.Value;
         }
@@ -252,8 +259,8 @@ public sealed class CompositeDictionaryRepositoryTests : IDisposable {
         models.UseDictionaryComparer<string, int>(StringComparer.OrdinalIgnoreCase);
         FrameAddress seed;
         ObjectId worldId;
-        using (GraphRepository repository = GraphRepository.CreateNew(_root)) {
-            using GraphSession<World<string>> session = repository.Create(world, models);
+        using (StateSaveHarness repository = StateSaveHarness.CreateNew(_root)) {
+            using StateSaveSession<World<string>> session = repository.Create(world, models);
             seed = session.Commit(NoRebase);
             worldId = repository.WorldId!.Value;
         }
@@ -276,12 +283,12 @@ public sealed class CompositeDictionaryRepositoryTests : IDisposable {
         World<double> world = new() { First = new(comparer) { [0.0] = 1, [-0.0] = 2, [nan1] = 3, [nan2] = 4 } };
         StateModelRegistry models = Models<double>();
         models.UseDictionaryComparer<double, int>(comparer);
-        using (GraphRepository repository = GraphRepository.CreateNew(_root)) {
-            using GraphSession<World<double>> session = repository.Create(world, models);
+        using (StateSaveHarness repository = StateSaveHarness.CreateNew(_root)) {
+            using StateSaveSession<World<double>> session = repository.Create(world, models);
             session.Commit(NoRebase);
         }
-        using GraphRepository cold = GraphRepository.OpenExisting(_root);
-        using GraphSession<World<double>> loaded = cold.Load<World<double>>(models);
+        using StateSaveHarness cold = StateSaveHarness.OpenExisting(_root);
+        using StateSaveSession<World<double>> loaded = cold.Load<World<double>>(models);
         Assert.Equal(4, loaded.World.First!.Count);
         Assert.Equal(1, loaded.World.First[0.0]);
         Assert.Equal(2, loaded.World.First[-0.0]);
@@ -296,8 +303,8 @@ public sealed class CompositeDictionaryRepositoryTests : IDisposable {
         World<Key> world = new() { First = new(source) { [new Key(1, 2, 10)] = 1, [new Key(1, 2, 20)] = 2 } };
         StateModelRegistry models = Models<Key>();
         models.UseDictionaryComparer<Key, int>(EqualityComparer<Key>.Default);
-        using GraphRepository repository = GraphRepository.CreateNew(_root);
-        using GraphSession<World<Key>> session = repository.Create(world, models);
+        using StateSaveHarness repository = StateSaveHarness.CreateNew(_root);
+        using StateSaveSession<World<Key>> session = repository.Create(world, models);
         Assert.Throws<InvalidDataException>(() => session.Commit(NoRebase));
         Assert.Null(repository.HeadRevisionAddress);
     }
@@ -317,8 +324,8 @@ public sealed class CompositeDictionaryRepositoryTests : IDisposable {
         Assert.Equal(2, values.Count);
         StateModelRegistry models = Models<string>();
         models.UseDictionaryComparer<string, int>(ReferenceEqualityComparer.Instance);
-        using GraphRepository repository = GraphRepository.CreateNew(_root);
-        using GraphSession<World<string>> session = repository.Create(new World<string> { First = values }, models);
+        using StateSaveHarness repository = StateSaveHarness.CreateNew(_root);
+        using StateSaveSession<World<string>> session = repository.Create(new World<string> { First = values }, models);
         InvalidDataException error = Assert.Throws<InvalidDataException>(() => session.Commit(NoRebase));
         Assert.Contains("duplicate persistent keys", error.Message);
         Assert.Null(repository.HeadRevisionAddress);
@@ -332,8 +339,8 @@ public sealed class CompositeDictionaryRepositoryTests : IDisposable {
         writerModels.UseDictionaryComparer<string, int>(StringComparer.Ordinal);
         FrameAddress seed;
         ObjectId worldId;
-        using (GraphRepository repository = GraphRepository.CreateNew(_root)) {
-            using GraphSession<World<string>> session = repository.Create(new World<string> {
+        using (StateSaveHarness repository = StateSaveHarness.CreateNew(_root)) {
+            using StateSaveSession<World<string>> session = repository.Create(new World<string> {
                 First = new(new StringProxy(StringComparer.Ordinal)) { ["key"] = 10 },
             }, writerModels);
             seed = session.Commit(NoRebase);
