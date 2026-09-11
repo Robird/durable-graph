@@ -158,10 +158,12 @@ foreach (var eventFrame in history.ReadEvents("main")) {
 }
 var lastEvent = history.ReadEvents("main").Last();
 var before = history.GetPreviousState(lastEvent);
-var pair = history.ReadPair<World, DamageEvent>(before, lastEvent, models);
+var pair = history.ReadPair(before, lastEvent, models);
 ```
 
 `ReadPair` 是实验性只读快照 API：按输入顺序返回 First/Second，两边成功后才交付。
+默认返回两个 `DurableBase`，保留各自实际类型；通过输入 frame 的 `Kind` 判断 State/Event，通过模式匹配使用具体领域类型。
+两个输入无需相邻，也不要求一份 State、一份 Event；已知类型时仍可使用 `ReadPair<TFirst,TSecond>` 进行返回类型校验。
 它在本次操作内复用相同 ObjectVersion 的解码结果，并可共享完整引用闭包都一致的领域实例。
 **两份结果都必须按只读快照使用**；不要依赖跨图 `ReferenceEquals` 判断业务身份或版本，也不要假定两图可隔离编辑。
 可写 Resume 只复用不可变 DTO/string，Event/State 的可变对象分别恢复。热路径由用户保持 Event 内容只读；持久 DTO 冻结不会冻结原 CLR 对象。

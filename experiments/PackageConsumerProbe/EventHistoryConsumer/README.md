@@ -45,7 +45,9 @@ equal nonempty strings, arrays, lists, string-key dictionaries, reference-identi
 and present inline/Nullable structs carrying references. Two generic holder objects have only
 an inline or Nullable reference to the changed child, so missing these edges cannot be hidden by
 another direct field on the same owner. Every selected graph must retain its own
-values and graph-local aliases. It also reads the same selection twice and checks that readonly
+values and graph-local aliases. The non-generic ReadPair overload is exercised with State/Event,
+Event/State, Event/Event and State/State inputs, checking actual root types and positional values.
+It also reads the same selection twice and checks that readonly
 operations leave file content and modification times unchanged. After cold Resume, mutating both
 stable/changed State nodes and containers must leave the pending Event unchanged.
 

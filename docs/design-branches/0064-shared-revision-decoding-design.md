@@ -32,6 +32,13 @@ DB-063 公开 selection 使用该仓库的 frame handle，应用不自己维护 
 两个输入均显式指定，不自动解析为“最新”；保持一次操作的同一冻结模型目录、资源范围和稳定读取条件，
 但初版两条 Decode/Normalize/Allocate/Hydrate 路径各自独立执行。
 
+后续 API 打磨提供 `ReadPair(first, second, models)` 非泛型重载，返回 `(DurableBase First, DurableBase Second)`。
+实际根类型完整保留，位置对应输入，不按 State/Event 角色重排，也不要求两个选择相邻或异类。
+调用方以 frame.Kind 判断角色、以模式匹配使用领域类型；泛型重载保留为已知类型时的校验入口。
+该重载直接调用既有共享读取管线，不改变提交拓扑或持久格式。
+真实包覆盖 State/Event、Event/State、Event/Event 和 State/State，既有公开读取回归覆盖同帧与错误来源 handle。
+此重载增补经 32 个 EventHistory 回归、真实包双进程 Publish/Verify 和根构建验证通过；构建 0 警告/错误。
+
 从首版起固定以下行为：
 
 - 每份图自身的值、actual 类型、共享/循环与 Revision 解释正确；不同版本不能为了省内存混为一个，Empty 沿既有例外。

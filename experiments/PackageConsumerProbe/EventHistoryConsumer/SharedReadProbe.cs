@@ -100,6 +100,14 @@ internal static class SharedReadProbe {
             var identical = repository.ReadPair<SharedRoot, SharedRoot>(frames[0], frames[0], models);
             CheckRoot(identical.First, 10);
             CheckRoot(identical.Second, 10);
+
+            // No type arguments or State/Event ordering assumption at the call site.
+            int[] values = [10, 10, 20, 30];
+            foreach (var (first, second) in new[] { (0, 1), (1, 0), (1, 3), (0, 2) }) {
+                var pair = repository.ReadPair(frames[first], frames[second], models);
+                CheckSelection(frames[first], pair.First, values[first]);
+                CheckSelection(frames[second], pair.Second, values[second]);
+            }
         }
         Require(before.SequenceEqual(SnapshotFiles(directory)), "Readonly shared-read operations changed repository files.");
 
@@ -138,6 +146,19 @@ internal static class SharedReadProbe {
             "The changed-child fixture must retain the owner's exact head.");
         Require(s0.Count == s1.Count && s0.Count(row => s1[row.Key] != row.Value) == 1,
             "S1 must change exactly the child's head, leaving arrays, lists, dictionaries and owners unchanged.");
+    }
+
+    private static void CheckSelection(GraphFrame frame, DurableBase root, int expectedValue) {
+        switch (root) {
+            case SharedRoot state when frame.Kind == GraphFrameKind.State:
+                CheckRoot(state, expectedValue);
+                break;
+            case SharedEvent domainEvent when frame.Kind == GraphFrameKind.Event:
+                CheckRoot(domainEvent.View, expectedValue);
+                break;
+            default:
+                throw new InvalidOperationException("Non-generic pair lost the selected root's actual type or input position.");
+        }
     }
 
     private static void CheckRoot(SharedRoot root, int expectedChangingValue) {

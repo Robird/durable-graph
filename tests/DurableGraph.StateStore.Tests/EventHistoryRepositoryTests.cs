@@ -207,11 +207,13 @@ public sealed partial class EventHistoryRepositoryTests : IDisposable {
         using (EventHistoryRepository reader = EventHistoryRepository.OpenReadOnlyExisting(_root)) {
             var head = reader.GetHead("main");
             Assert.ThrowsAny<Exception>(() => reader.ReadState<Node>(oldHandle, Models()));
-            Assert.ThrowsAny<Exception>(() => reader.ReadPair<Node, Node>(head, oldHandle, Models()));
+            Assert.ThrowsAny<Exception>(() => reader.ReadPair(head, oldHandle, Models()));
             Assert.ThrowsAny<Exception>(() => reader.Resume<Node>("main", Models()));
             Assert.ThrowsAny<Exception>(() => reader.CreateBranch("fork", head));
             reader.ReadState<Node>(head, Models());
-            reader.ReadPair<Node, Node>(head, head, Models());
+            var pair = reader.ReadPair(head, head, Models());
+            Assert.IsType<Node>(pair.First);
+            Assert.IsType<Node>(pair.Second);
         }
         AssertFiles(before);
     }

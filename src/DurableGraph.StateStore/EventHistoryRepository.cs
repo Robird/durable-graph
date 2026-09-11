@@ -114,7 +114,17 @@ public sealed class EventHistoryRepository : IDisposable {
         } finally { _busy = false; }
     }
 
-    /// <summary>Experimental pair of read-only snapshots in input order; no cross-graph CLR sharing guarantee.</summary>
+    /// <summary>Experimental read-only pair without requiring the current root types in advance.</summary>
+    /// <remarks>
+    /// First and Second follow input order, independently of each frame's State/Event kind.
+    /// Actual root types are preserved. Both graphs must be treated as read-only; cross-graph
+    /// instance identity is not guaranteed, and both reads must succeed before delivery.
+    /// Application callback side effects are not rolled back.
+    /// </remarks>
+    public (DurableBase First, DurableBase Second) ReadPair(GraphFrame first, GraphFrame second,
+        StateModelRegistry models) => ReadPair<DurableBase, DurableBase>(first, second, models);
+
+    /// <summary>Experimental pair of read-only snapshots with caller-specified root type checks.</summary>
     /// <remarks>
     /// Both reads must succeed before delivery. Shared instances are possible: callers must
     /// treat both graphs as read-only. Application callback side effects are not rolled back.

@@ -392,8 +392,11 @@ State's Revision, DTO baseline and instance-ID bindings; callers do not pass the
 
 `Resume<TState>` restores a branch's State and, at an Event head, its `PendingEvent`; it does not
 replay business handlers. `ReadState<T>` and `ReadEvent<T>` independently materialize a selected
-repository-issued `GraphFrame`. Experimental `ReadPair<A,B>` returns two read-only snapshots in
-input order after both reads succeed. Within one operation it reuses stored-exact decoding and may
+repository-issued `GraphFrame`. Experimental `ReadPair(first, second, models)` returns two
+`DurableBase` roots with their actual types preserved, in input order after both reads succeed.
+Selections may have either State/Event kind and need not be adjacent. Use each input frame's `Kind`
+for its role and pattern matching for its domain type; `ReadPair<A,B>` remains available for known root types.
+Within one operation it reuses stored-exact decoding and may
 share domain instances whose complete current reference closure is safe to share. It makes no
 cross-graph sharing or separation guarantee: do not use cross-graph `ReferenceEquals` to infer
 business identity or version, or to choose program behavior. Both complete graphs must remain

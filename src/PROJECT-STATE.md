@@ -21,6 +21,7 @@
 
 [DB-064](../docs/design-branches/0064-shared-revision-decoding-design.md) 已实现操作内 exact DTO/string 解码复用、
 只读 ReadPair 安全引用闭包共享与冷 Resume 可变隔离；实现与验收证据集中在分片。
+ReadPair 提供非泛型入口，返回按输入位置对应的两个 DurableBase；泛型重载供已知类型时校验，不按 State/Event 角色重排输入。
 现有 EventHistory 外观与持久格式保持，跨图 ReferenceEquals 仍无保证；实际读取成本的后继优化由测量触发。
 下一步优先让 [DramaBoard](../../drama-board/docs/research/event-journal-state-store-draft.md) 按[根 README](../README.md) 接入真实模型，
 收集 API、Schema 升级、事件浏览和恢复续写的具体反馈，再决定下一施工片。
