@@ -174,6 +174,8 @@ Remove 来自 Parent 完整成员集合减去候选成员集合；[ObjectRevisio
 | 目标术语 | 含义与使用边界 | 设计落点（尚非完整产品实现） |
 |---|---|---|
 | **WorkingTree / Branch** | 工作树与命名分支的长期概念；当前 GraphSession 已承担单 head 编辑会话，尚无 branch/Reset，二者不是完整同义词。 | [工作会话路线](DurableGraph-research-roadmap.md#2-已采纳方向中的未完成能力) |
+| **EventHistory、EventFrame / StateFrame（候选外观角色）** | 独立事件快照图与领域状态图的逻辑历史；候选实现均用 EventJournal 的现有 EventFrame payload 引用一份 Revision/RootId，branch ref 为唯一发布前沿。不是已新增的两种底层 RBF 帧。 | [DB-063](design-branches/0063-event-history-journal-slice.md) |
+| **合并读取 / 闭包共享（候选能力）** | 同一操作内复用 exact ObjectVersion 的 stored DTO；普通 CLR 实例还需完整引用闭包相容及只读合同。同 head 不代表其子引用在两个 Revision 中选中相同版本。 | [DB-064](design-branches/0064-shared-revision-decoding-design.md) |
 | **CommitManifest** | 联合 State/Schema/Artifact exact 视图的长期表达；当前单 State head 的发布日志不是完整联合 manifest。 | [单一发布权威](DurableGraph-target-design-v0.md#单一发布权威与明确故障结果) |
 | **通用 TypeCodec** | 受支持类型组合的完整编码/解码能力；TypeExpr/wire 表达标量/string/用户泛型、SZ/rank 2–4 递归数组与内建 List；其他 BCL 内容 codec 仍须逐类型扩展。完整表示以目录 ID 寻址；持久开放模板与必要 exact 实参能否简化绑定另行研究。能表达类型与拥有内容 codec 仍是两项能力。 | [类型表达](#type-expression)、[表示 ID](#representation-id)、[后继问题](DurableGraph-research-roadmap.md#31-版本化表示类型头的统一寻址) |
 | **ArtifactStore / DerivedStore** | 分别承担独立历史内容与可重建派生数据的目标职责；不凭现有 StateStore 类推已实现其存储合同。 | [四类 Store 的逻辑职责](DurableGraph-target-design-v0.md#四类-store-的逻辑职责) |

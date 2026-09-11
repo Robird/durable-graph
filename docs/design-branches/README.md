@@ -23,6 +23,9 @@ DB-045 持久表示 ID、DB-046 统一闭合目录、DB-047 List 基础能力和
 
 | 文档 | 状态 | 实施范围 |
 |---|---|---|
+| [DB-062 独立图读取与可由外层发布的工作区](0062-independent-graph-workspace-slice.md) | Proposed / 未实施 | 独立快照与 State 根替换；E/S 共享前 S baseline，E map Base 仅自身闭包；保留旧 GraphRepository 外观 |
+| [DB-063 EventJournal 驱动的 EventHistory](0063-event-history-journal-slice.md) | Proposed / 依赖 DB-062 | 独立 Event/State 读取、交错提交、单 ref 发布、Resume 与分支；暂以此覆盖事件/快照 Artifact 职责 |
+| [DB-064 两份 Revision 共享读取](0064-shared-revision-decoding-design.md) | Proposed / 两阶段 | DTO/string 操作内去重；只读普通实例按完整引用闭包共享，不能仅按自身 ObjectVersion 合并可变图 |
 | [DB-061 跨程序集继承与基类状态投影](0061-cross-assembly-inheritance-slice.md) | 已实施 / G0–G3 | typed base projection、Family own + immediate base、class 只读历史与严格 helper 合同；隐藏泛型/Nullable、参数合流/重排、旧 CLR 删除及 leaf-only Upgrade 经测试和两代真实包验证；展开 DTO/body 与 State 格式不变 |
 | [DB-060 跨程序集固定 inline 值与只读历史依赖](0060-cross-assembly-inline-history-slice.md) | 已实施 / G0–G3 | 直接外部值字段、按需只读模板导出、独立 history/生成归属；真实 ref/lib 三库两代包验证旧 CLR 删除、显式 Upgrade 与增量续写；history/State 格式不变，外部 base 另片 |
 | [DB-059 跨程序集模型目录与类型组合](0059-cross-assembly-model-composition-slice.md) | 已实施 / G0–G3 | 外部 nominal/动态参数、显式 Family、普通 Model/reader 名义证据；独立模型包升级时 App/Host DLL 和 World history 不变，旧 inline CLR 删除后仍可恢复续写；固定外部 inline/base 模板另排 |

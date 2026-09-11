@@ -317,6 +317,10 @@ reader/Delta applier/引用遍历，当前 World 恢复还需要全部 source �
 父对象的引用身份没有变化时，不应仅因子对象变化而制造业务差异。
 不再可达的对象退出新视图，不能因此改写历史 Revision；编号复用仍按各自 Revision 解释。
 
+因此同一 ObjectVersion 的 DTO 可以在不同 Revision 中复用，但其引用目标仍由各自 Revision 选择。
+“自身版本相同”不单独证明两份已连接引用的领域实例可以合并；子对象的不同版本可能要求 owner 也分别实例化。
+这一既有语义对合并读取的约束及候选算法见 [DB-064](design-branches/0064-shared-revision-decoding-design.md)。
+
 比较忽略 transient，引用按身份比较，Artifact 引用按 exact address 比较；值和集合的 durable
 equality 必须明确，不能仅凭非密码学 hash 判相等。同版 DTO 的 Half/float/double 持久状态比较采用按位相等：
 相同 NaN 位无变化，不同 NaN payload 和正负零保留为变化；这不替领域对象定义业务 Equals。
@@ -333,6 +337,11 @@ equality 必须明确，不能仅凭非密码学 hash 判相等。同版 DTO 的
 Artifact 面向 HistoryLog、LLM 消息、附件与历史输入输出等内容，允许只读 View/Query。
 Artifact 引用不把完整内容并入 State 对象可达闭包，恢复时不允许模糊 latest fallback。
 地址采用内容 hash、append 地址或其他组合，属于待裁决机制。
+
+真实事件/快照消费者已提出由 EventJournal 引用独立 StateRevision 的
+[EventHistory 候选路线](design-branches/0063-event-history-journal-slice.md)。
+它可以覆盖上述部分历史内容职责，先屏蔽独立 ArtifactStore 的建设；四类逻辑职责不要求四个独立存储实现。
+这不是对附件分块/外部大对象能力的完成声明，也不改变尚待实现的联合 Schema 视图边界。
 
 Derived 面向 Recap、DynamicMemory、embedding、搜索索引等昂贵派生内容。命中必须绑定精确
 State/Artifact/Schema 输入及 recipe/builder 版本；围栏不匹配应为 miss/stale，不能通过全库

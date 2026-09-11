@@ -1,6 +1,6 @@
 # DurableGraph 产品开发工作集
 
-> 校准：2026-09-10，[DB-061 跨程序集继承](../docs/design-branches/0061-cross-assembly-inheritance-slice.md) 的能力与验收集中在分片记录。本文只维护当前能力、边界与续工入口。
+> 校准：2026-09-11；产品实现截至 [DB-061](../docs/design-branches/0061-cross-assembly-inheritance-slice.md)，EventHistory 后继处于设计阶段。本文只维护当前能力、边界与续工入口。
 > 文档不是实现授权；事实以当前源码、测试和工具输出为准。
 
 ## 从这里继续
@@ -19,11 +19,15 @@
 
 ## 当前焦点
 
-[DB-061 跨程序集继承与基类状态投影](../docs/design-branches/0061-cross-assembly-inheritance-slice.md)
-已完成 G0–G3，验收集中在该文档 §10。Family class 统一按本声明字段与 immediate base 组合，
-支持隐藏泛型/Nullable 实现及独立 base history，保留完整 leaf DTO/body 与显式升级语义。
-真实两代多库包已验证旧 CLR 删除、leaf-only Upgrade 和增量续写。
-当前没有其他已采纳待实施的工作单；自动跨库业务规则发现、ValueTuple、DateTime 和 SchemaStore 自举按路线图分别选择。
+基于 [DramaBoard Event/State 需求稿](../../drama-board/docs/research/event-journal-state-store-draft.md)，
+推荐依次实施 [DB-062 独立图工作区](../docs/design-branches/0062-independent-graph-workspace-slice.md)、
+[DB-063 EventHistory 外观](../docs/design-branches/0063-event-history-journal-slice.md)，
+再加入 [DB-064 两份 Revision 的共享读取](../docs/design-branches/0064-shared-revision-decoding-design.md)。
+目前仅完成源码调查与分片设计，等待方案采纳和实施授权；现有能力与文件格式未变。
+推荐 E 和后继 S 都相对前 S 保存，E 不安装为 State 基线；Journal ref 为新外观唯一发布前沿。
+同 ObjectVersion 可复用 stored DTO，但普通 CLR 实例还受传递引用版本与后续可变性约束；
+可写 Resume 默认不共享可变 Event/State 实例。完整合同与反例只维护在上述分片。
+自动跨库业务规则发现、ValueTuple、DateTime、程序集审视和 SchemaStore 自举不随本轮扩张。
 
 ## 当前能力与实际边界
 
