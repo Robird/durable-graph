@@ -1,9 +1,9 @@
 # DB-066 · ReadPair 比较能力与 Transient 使用合同
 
-> 状态：Proposed / 推荐施工片，2026-09-11；本轮只评估与设计，尚未实施。
+> 状态：Implemented / G0–G3 已完成，2026-09-11；实现与验收见 §8。
 > 核对基线：`79be2c2`，包含 DB-065 的公开 XML 交付和恢复示例。
 > 来源：[DramaBoard 002 共享读取反馈](../../../drama-board/docs/feedback/durablegraph/002-readpair-sharing-contract.md)。
-> 反馈与本轮评估均为源码、既有证据的静态核对；没有新运行的故障复现或性能测试。
+> 初始反馈评估为静态核对；本轮施工与实际运行证据集中见 §8，不新增性能结论。
 
 ## 1. 问题、推荐与最小成功标准
 
@@ -21,7 +21,7 @@ ReadPair 为优化实例共享，是否需要额外依赖对象编码成功？�
 单读与 ReadPair 均可正确恢复，后者只通过可选比较能力决定共享，不调用这些 preparer。
 另有真实包示例为两份 World 分别建立图外索引，查询始终返回对应视图的世界信息。
 
-## 2. 事实与反馈裁决
+## 2. 施工前事实与反馈裁决
 
 | 项目 | 当前事实 | 本片选择 |
 |---|---|---|
@@ -177,5 +177,34 @@ Transient 表示不进入持久布局，**不表示修改没有可见效果**。
 | 将 read/write/comparison 各建正式目录 | 暂缓；目前只需一个可选委托，未出现独立注册平台的消费者 |
 | 无序 Dictionary 比较、共享开关或深不可变标记 | 暂缓；本片保守 proof 已满足正确性和现有主要共享场景 |
 
-本片提出了明确可施工的推荐，尚待用户调度实施；没有因反馈而自动修改当前读取行为。
+本片经用户确认进入实施；后续能力仍不随本片扩张。
 若未来需要专用只读模型注册、图内 per-view Transient 或更一般多视图缓存，再依据具体模型与可执行复现选片。
+
+## 8. 施工与验收记录
+
+本轮以 `5dd828a` 为干净工作树基线，保留 DB-065 的包文档与恢复示例。
+冻结的接缝即 §4 的可选 `StateEquality<TState>` 第四构造参数及内部 `ProvesSameState`；
+Runtime、SG、公开合同/真实包示例分工实现，主线程负责 GraphReader、共享失败回归和统一验收。
+独立审阅核对完整值比较、双方校验、错误传播、引用闭包、生成接线和使用合同，未发现阻塞项。
+
+| 要求 | 实现与可执行见证 |
+|---|---|
+| 可选完整 proof，缺能力与错误区分 | [CapturedStatePreparation](../../src/DurableGraph/CapturedStatePreparation.cs)、[ObjectStateComparisonTests](../../tests/DurableGraph.Tests/ObjectStateComparisonTests.cs)；双方 exact Schema/DTO 均校验，不回退编码 |
+| 容器完整比较且不编码 | 三种 binding；上述 tests 用抛错槽 writer 验证 shape、零长度维度、Count、ComparerKind、key/value 和顺序 |
+| SG 自动登记及完整表示 | [GeneratedComparisonRegistrationTests](../../tests/DurableGraph.Tests/GeneratedComparisonRegistrationTests.cs)；普通/Family 分别 Capture 并调用已登记 proof，冷重开 ReadPair 证明实际共享；覆盖继承、inline/generic 引用、特殊浮点、decimal、offset、Nullable |
+| 读取仅依赖比较，错误不重试 | [SharedGraphReaderTests](../../tests/DurableGraph.StateStore.Tests/SharedGraphReaderTests.cs)；保存后用抛错 preparer 读取，缺 proof 与循环依赖、比较异常计数，以及同版 Normalize 改值/改边 |
+| 两种 Transient 用法与包交付 | [SharedReadProbe](../../experiments/PackageConsumerProbe/EventHistoryConsumer/SharedReadProbe.cs)；两个 WorldView 查询各自上下文，独立只读打开后原位初始化；[XML gate](../../experiments/PackageConsumerProbe/Run-EventHistoryRecoveryProbe.ps1) 检查两种 ReadPair remarks |
+
+串行验证（2026-09-11），日志存放于未跟踪的 `artifacts/db066-validation/`：
+
+- 根 `dotnet build DurableGraph.slnx -t:Rebuild`：0 警告/错误。
+- Runtime/Generator 完整 `DurableGraph.Tests`：1,534 通过，0 失败/跳过；包括新增 11 项 Runtime、4 项 SG 接线/冷读用例。
+- StateStore 完整 `DurableGraph.StateStore.Tests`：711 通过，0 失败/跳过；保留 canonical key 重复拒绝、source 校验和 Resume 隔离回归。
+- EventHistory V1/V2 真实包：history 9/11 不变，外部 WorldView 与独立 Transient 初始化、升级/共享/根替换/只读回归通过；工作集 `event-history-20260911152344-55424-2e3ed686`。
+- Recovery 真实包：包内与恢复目录 XML 一致、两种 ReadPair 的 Transient remarks 检查通过；热/冷恢复及只读验证通过；工作集 `event-recovery-20260911152519-9296-5904674b`。
+- README 原文 runner 复用同批 feed，独立包缓存与项目：HP99/98、升版 HP97/Day1 和历史保留验证通过；工作集 `readme-20260911152544-9296-120b7a64`。
+- 变更文档的本地链接/锚点与 `git diff --check` 通过；没有未解决的独立审阅发现。
+
+调试中修正了新测试把根擦除为 DurableBase 后调用 CreateBranch 的夹具错误，改由生成宿主以 exact 根类型保存；
+并更新一处旧生成文本断言，以包含第四个 StateEquals 参数。一次修正与编译重叠产生了旧测试二进制，
+随后强制 Rebuild、定向 5 项与完整套件重新验证。没有用放宽产品 exact 根校验或回退编码来通过测试。

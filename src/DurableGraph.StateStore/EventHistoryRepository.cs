@@ -9,7 +9,10 @@ namespace Atelia.DurableGraph.StateStore;
 /// <remarks>
 /// Single-threaded, one writer and one active editing session. Close a session before moving or forking refs.
 /// Strict reopening rejects damaged tails; no automatic repair, transparent retry or power-loss guarantee.
-/// Handles belong to one open repository instance. Read results are caller-enforced read-only snapshots.
+/// Handles belong to one open repository instance. Persisted members of read results are historical snapshots.
+/// Independent ReadState/ReadEvent calls allow application-side Transient initialization without a writer.
+/// ReadPair may share reachable instances: its read-only constraint includes observable Transient mutation.
+/// Keep per-view owner/context/cache outside paired graphs. Use Resume to continue editing and committing.
 /// </remarks>
 public sealed class EventHistoryRepository : IDisposable {
     private readonly HistoryJournal _history;
@@ -155,7 +158,23 @@ public sealed class EventHistoryRepository : IDisposable {
         return PreviousStateCore(eventFrame);
     }
 
+    /// <summary>Independently restores an Event snapshot with a caller-specified root type check.</summary>
+    /// <remarks>
+    /// Each call restores its own mutable domain instances. Application code may initialize their
+    /// Transient state after delivery, without opening a writer; persisted members remain a historical
+    /// snapshot. Constructors and field initializers do not run. This does not install a saving baseline:
+    /// use Resume to continue editing and committing. Strings and application-owned global objects do
+    /// not acquire a general deep-copy guarantee.
+    /// </remarks>
     public TEvent ReadEvent<TEvent>(GraphFrame frame, StateModelRegistry models) where TEvent : DurableBase => Read<TEvent>(frame, models, GraphFrameKind.Event);
+    /// <summary>Independently restores a State snapshot with a caller-specified root type check.</summary>
+    /// <remarks>
+    /// Each call restores its own mutable domain instances. Application code may initialize their
+    /// Transient state after delivery, without opening a writer; persisted members remain a historical
+    /// snapshot. Constructors and field initializers do not run. This does not install a saving baseline:
+    /// use Resume to continue editing and committing. Strings and application-owned global objects do
+    /// not acquire a general deep-copy guarantee.
+    /// </remarks>
     public TState ReadState<TState>(GraphFrame frame, StateModelRegistry models) where TState : DurableBase => Read<TState>(frame, models, GraphFrameKind.State);
 
     private T Read<T>(GraphFrame frame, StateModelRegistry models, GraphFrameKind kind) where T : DurableBase {
@@ -174,6 +193,11 @@ public sealed class EventHistoryRepository : IDisposable {
     /// First and Second follow input order, independently of each frame's State/Event kind.
     /// Actual root types are preserved. Both graphs must be treated as read-only; cross-graph
     /// instance identity is not guaranteed, and both reads must succeed before delivery.
+    /// This includes observable Transient mutation on any reachable object. Keep per-view owner,
+    /// context, indexes and caches outside the graphs, since a node may belong to both views.
+    /// Use independent ReadState/ReadEvent calls for per-view Transient initialization without a writer;
+    /// use Resume to continue editing and committing. Sharing comparison does not prepare object
+    /// Base/Delta payloads; ordinary read validation can still encode canonical Dictionary keys.
     /// Application callback side effects are not rolled back.
     /// </remarks>
     public (DurableBase First, DurableBase Second) ReadPair(GraphFrame first, GraphFrame second,
@@ -181,8 +205,14 @@ public sealed class EventHistoryRepository : IDisposable {
 
     /// <summary>Experimental pair of read-only snapshots with caller-specified root type checks.</summary>
     /// <remarks>
-    /// Both reads must succeed before delivery. Shared instances are possible: callers must
-    /// treat both graphs as read-only. Application callback side effects are not rolled back.
+    /// First and Second follow input order, independently of each frame's State/Event kind.
+    /// Both reads must succeed before delivery. Shared instances are possible, with no cross-graph
+    /// instance identity guarantee: callers must treat both graphs as read-only, including observable
+    /// Transient mutation on any reachable object. Keep per-view owner, context, indexes and caches
+    /// outside the graphs. Use independent ReadState/ReadEvent calls for per-view Transient initialization
+    /// without a writer; use Resume to continue editing and committing. Sharing comparison does not
+    /// prepare object Base/Delta payloads; ordinary read validation can still encode canonical Dictionary
+    /// keys. Application callback side effects are not rolled back.
     /// </remarks>
     public (TFirst First, TSecond Second) ReadPair<TFirst, TSecond>(GraphFrame first, GraphFrame second,
         StateModelRegistry models) where TFirst : DurableBase where TSecond : DurableBase {

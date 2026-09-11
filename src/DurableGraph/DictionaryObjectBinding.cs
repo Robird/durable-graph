@@ -142,6 +142,26 @@ internal sealed class DictionaryObjectBinding<KDomain, K, KProjection, KOps, VDo
         DictionaryKeyPolicy.RequireStoredPolicy(state.ComparerKind, DictionaryLayout.KeySlot);
     }
 
+    bool ICapturedStatePreparation.ProvesSameState(ObjectStateRecord left, ObjectStateRecord right) {
+        ((ICapturedStatePreparation)this).Validate(left);
+        ((ICapturedStatePreparation)this).Validate(right);
+        FrozenDictionaryState<K, V> leftState = left.GetDictionaryState<K, V>();
+        FrozenDictionaryState<K, V> rightState = right.GetDictionaryState<K, V>();
+        if (leftState.ComparerKind != rightState.ComparerKind || leftState.Count != rightState.Count) { return false; }
+        // Entry order supplies a conservative proof, not a definition of unordered mapping equality.
+        for (int index = 0; index < leftState.Count; index++) {
+            DictionaryEntryState<K, V> leftEntry = leftState[index];
+            DictionaryEntryState<K, V> rightEntry = rightState[index];
+            K leftKey = leftEntry.Key;
+            K rightKey = rightEntry.Key;
+            V leftValue = leftEntry.Value;
+            V rightValue = rightEntry.Value;
+            if (!KOps.StateEquals(in leftKey, in rightKey, DictionaryLayout.KeySlot) ||
+                !VOps.StateEquals(in leftValue, in rightValue, DictionaryLayout.ValueSlot)) { return false; }
+        }
+        return true;
+    }
+
     PreparedBaseBody ICapturedStatePreparation.PrepareBase(ObjectStateRecord current) {
         ((ICapturedStatePreparation)this).Validate(current);
         return DictionaryStateBody<K, V, KOps, VOps>.PrepareBase(current.GetDictionaryState<K, V>(), DictionaryLayout);

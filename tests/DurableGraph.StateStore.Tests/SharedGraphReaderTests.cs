@@ -28,6 +28,78 @@ public sealed class SharedGraphReaderTests : IDisposable {
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
+    public void SingleAndPairReadsDoNotPrepareBodiesEvenWithoutEquality(bool includeEquality) {
+        FrameAddress first = Seed((1, new(2, 2, 0, 10)), (2, new(1, 1, 0, 20)));
+        FrameAddress second = Reuse(first, 1, 2);
+        int bases = 0, deltas = 0;
+        StateModelSnapshot models = SharedReadModel.Models(includeEquality: includeEquality,
+            prepareBase: (in State _) => { bases++; throw new NotSupportedException("No Base writer for this read."); },
+            prepareDelta: (in State _, in State _) => { deltas++; throw new NotSupportedException("No Delta writer for this read."); })
+            .Snapshot(_schemas);
+
+        Node single = GraphReader.Read<Node>(_store, _schemas, first, new(1), models).Root;
+        var pair = GraphReader.ReadPair<Node, Node>(_store, _schemas, first, new(1), second, new(1), models);
+
+        Assert.Equal((byte)10, single.Value);
+        Assert.Same(single, single.Next!.Next);
+        foreach (Node root in new[] { pair.First, pair.Second }) {
+            Assert.Equal((byte)10, root.Value);
+            Assert.Equal((byte)20, root.Next!.Value);
+            Assert.Same(root, root.Next.Next);
+            Assert.Same(root.Next, root.Alias);
+        }
+        if (includeEquality) {
+            Assert.Same(pair.First, pair.Second);
+        } else {
+            Assert.NotSame(pair.First, pair.Second);
+            Assert.NotSame(pair.First.Next, pair.Second.Next);
+        }
+        Assert.Equal(0, bases);
+        Assert.Equal(0, deltas);
+    }
+
+    [Fact]
+    public void UnprovenCycleExcludesItsOwnersButNotAnIndependentProvenLeaf() {
+        FrameAddress address = Seed((1, new(2, 3, 0, 10)), (2, new(1, 0, 0, 20)), (3, new(0, 0, 0, 30)));
+        StateModelSnapshot models = SharedReadModel.Models(
+            equality: static (in State left, in State right) => left.Value != 20 && left == right).Snapshot(_schemas);
+
+        var pair = GraphReader.ReadPair<Node, Node>(_store, _schemas, address, new(1), address, new(1), models);
+
+        Assert.NotSame(pair.First, pair.Second);
+        Assert.NotSame(pair.First.Next, pair.Second.Next);
+        Assert.Same(pair.First, pair.First.Next!.Next);
+        Assert.Same(pair.Second, pair.Second.Next!.Next);
+        Assert.Same(pair.First.Alias, pair.Second.Alias);
+    }
+
+    [Fact]
+    public void ComparisonFailurePropagatesWithoutEncodingAllocationOrRetry() {
+        FrameAddress address = Seed((1, new(2, 0, 0, 10)), (2, new(1, 0, 0, 20)));
+        int normalizations = 0, comparisons = 0, allocations = 0, hydrations = 0, preparations = 0;
+        NotSupportedException failure = new("A registered equality failed; this is not a missing capability.");
+        StateModelSnapshot models = SharedReadModel.Models(
+            normalize: row => { normalizations++; return row.GetState<State>(); },
+            equality: (in State _, in State _) => { comparisons++; throw failure; },
+            allocate: () => { allocations++; return new(); }, hydrate: _ => hydrations++,
+            prepareBase: (in State state) => { preparations++; return SharedReadModel.Base(state); })
+            .Snapshot(_schemas);
+        (Node First, Node Second)? delivered = null;
+
+        Assert.Same(failure, Assert.Throws<NotSupportedException>(() => delivered = GraphReader.ReadPair<Node, Node>(
+            _store, _schemas, address, new(1), address, new(1), models)));
+
+        Assert.Null(delivered);
+        Assert.Equal(4, normalizations);
+        Assert.Equal(1, comparisons);
+        Assert.Equal(0, preparations);
+        Assert.Equal(0, allocations);
+        Assert.Equal(0, hydrations);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
     public void StableCycleDecodesAllocatesAndHydratesOnlyOneCopyAcrossDifferentRevisionViews(bool reverse) {
         FrameAddress first = Seed((1, new(2, 2, 0, 10)), (2, new(1, 1, 0, 20)));
         FrameAddress second = Reuse(first, 1, 2);
@@ -303,10 +375,13 @@ internal static class SharedReadModel {
     }
 
     internal static StateModelRegistry Models(int currentVersion = 1, Func<ObjectStateRecord, State>? normalize = null,
-        Func<Node>? allocate = null, Action<Node>? hydrate = null) {
+        Func<Node>? allocate = null, Action<Node>? hydrate = null,
+        bool includeEquality = true, StateEquality<State>? equality = null,
+        StateBasePreparer<State>? prepareBase = null, StateDeltaPreparer<State>? prepareDelta = null) {
         DurableSchema current = currentVersion == 1 ? Schema : new(Schema.SchemaId, currentVersion, Schema.Fields.ToArray());
-        CapturedStatePreparation<State> preparation = new(current, Base,
-            static (in State prior, in State next) => new(prior != next, Base(next).Body));
+        CapturedStatePreparation<State> preparation = new(current, prepareBase ?? Base,
+            prepareDelta ?? (static (in State prior, in State next) => new(prior != next, Base(next).Body)),
+            includeEquality ? equality ?? (static (in State left, in State right) => left == right) : null);
         StateReaderBinding Reader(DurableSchema schema) => new StateReaderBinding<State>(schema, Read,
             static (ref BinaryPayloadReader input, in State prior) => Read(ref input), Visit);
         StateModelBinding<Node, State> model = new(preparation,

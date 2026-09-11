@@ -85,11 +85,18 @@ internal static class SharedReadProbe {
             CheckRoot(independentChanged.First, 10);
             CheckRoot(independentChanged.Second, 20);
             AddMetrics(metrics, "IndependentS0S1", independentChangedObservation);
+            // Independent browsing needs no writer to initialize view-local Transient state.
+            independentChanged.First.Stable.OwnerWorld = independentChanged.First;
+            independentChanged.Second.Stable.OwnerWorld = independentChanged.Second;
+            Require(independentChanged.First.Stable.OwnerWorld.Changing.Value == 10 &&
+                independentChanged.Second.Stable.OwnerWorld.Changing.Value == 20,
+                "Independent Transient initialization leaked between historical views.");
 
             var changed = Measure(() => repository.ReadPair<SharedRoot, SharedRoot>(frames[0], frames[2], models),
                 out var changedObservation);
             CheckRoot(changed.First, 10);
             CheckRoot(changed.Second, 20);
+            CheckExternalViews(changed.First, changed.Second);
             AddMetrics(metrics, "PairS0S1", changedObservation);
             metrics.Add($"PairS0S1.RootShared={ReferenceEquals(changed.First, changed.Second)}");
             metrics.Add($"PairS0S1.StableCycleShared={ReferenceEquals(changed.First.Stable, changed.Second.Stable)}");
@@ -147,6 +154,40 @@ internal static class SharedReadProbe {
         Require(s0.Count == s1.Count && s0.Count(row => s1[row.Key] != row.Value) == 1,
             "S1 must change exactly the child's head, leaving arrays, lists, dictionaries and owners unchanged.");
     }
+
+    private static void CheckExternalViews(SharedRoot earlierWorld, SharedRoot laterWorld) {
+        // SharedRoot is the World; its stable SharedNodes play the role of unchanged actors.
+        // Each view owns its index/context even if its actors happen to be shared by ReadPair.
+        WorldView earlier = new(earlierWorld);
+        WorldView later = new(laterWorld);
+        Require(earlier.ObserveActor(1) == new ActorObservation(10, 1) &&
+            later.ObserveActor(1) == new ActorObservation(20, 1) &&
+            earlier.ObserveActor(2) == new ActorObservation(10, 2) &&
+            later.ObserveActor(2) == new ActorObservation(20, 2),
+            "An external actor index used another historical view's world context.");
+        Require(earlierWorld.Stable.OwnerWorld is null && laterWorld.Stable.OwnerWorld is null,
+            "ReadPair browsing must not initialize Transient owner fields on graph nodes.");
+        // No cross-graph ReferenceEquals assertion: query correctness must not depend on sharing.
+    }
+
+    private sealed class WorldView {
+        public SharedRoot Snapshot { get; }
+        public IReadOnlyDictionary<int, SharedNode> ActorsById { get; }
+        public int QueryContext { get; }
+
+        public WorldView(SharedRoot snapshot) {
+            Snapshot = snapshot;
+            ActorsById = new Dictionary<int, SharedNode> {
+                [snapshot.Stable.Value] = snapshot.Stable,
+                [snapshot.Stable.Next!.Value] = snapshot.Stable.Next,
+            };
+            QueryContext = snapshot.Changing.Value;
+        }
+
+        public ActorObservation ObserveActor(int actorId) => new(QueryContext, ActorsById[actorId].Value);
+    }
+
+    private readonly record struct ActorObservation(int WorldValue, int ActorValue);
 
     private static void CheckSelection(GraphFrame frame, DurableBase root, int expectedValue) {
         switch (root) {

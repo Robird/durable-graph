@@ -63,3 +63,33 @@ strings; inline structs are not separate instances. Cross-view `ReferenceEquals`
 observations only, never acceptance assertions or public sharing guarantees. Each timing is a
 single synchronous sample including binding/JIT effects, not a benchmark; allocation is not peak
 memory, and neither metric measures physical read I/O. There are no performance thresholds.
+
+## Per-view Transient context
+
+The same packaged shared-read fixture also exercises the DB-066 view contract, through
+`SharedReadProbe.CheckExternalViews` and its small `WorldView` class. `SharedRoot` represents a World;
+its stable `SharedNode` cycle represents two unchanged actors. S0 and S1 have different world context
+values (10 and 20), while both actors retain their persisted values (1 and 2).
+
+Each `WorldView` keeps `Snapshot`, `ActorsById` and `QueryContext` outside the durable graph. Querying
+either actor returns that view's own world context together with the actor value. These assertions
+run on the actual restored pair, without requiring cross-graph `ReferenceEquals` or a sharing hit.
+For example, the caller uses the two independently constructed views:
+
+```csharp
+WorldView earlier = new(pair.First);
+WorldView later = new(pair.Second);
+ActorObservation before = earlier.ObserveActor(1); // WorldValue 10, ActorValue 1
+ActorObservation after = later.ObserveActor(1);   // WorldValue 20, ActorValue 1
+```
+
+Do not set each actor's `Transient.OwnerWorld` while visiting a ReadPair result: the second view could
+overwrite the first view's context on a shared actor. Transient means unpersisted, not unobservable.
+A global Actor-to-context table has the same ambiguity. The fixture verifies that its paired actor
+nodes retain uninitialized `OwnerWorld` fields while both external view queries work correctly.
+
+If an application must initialize Transient fields on the nodes themselves, use separate
+`ReadState`/`ReadEvent` calls. The probe also does this under `OpenReadOnlyExisting`, sets the two
+independent actors' `OwnerWorld` fields, and verifies that each retains its correct world context.
+No writer or Resume is required for that historical browsing. Persistent members remain snapshots;
+these reads do not install a saving baseline. Use Resume when continuing edits and commits.

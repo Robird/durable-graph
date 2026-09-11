@@ -1,4 +1,3 @@
-using Atelia.DurableGraph.StateStore.Serialization;
 using Atelia.DurableGraph.StateStore.Storage;
 
 namespace Atelia.DurableGraph.StateStore;
@@ -170,14 +169,11 @@ internal static class GraphReader {
         }
         ICapturedStatePreparation? firstPreparation = first.Current.Preparation;
         ICapturedStatePreparation? secondPreparation = second.Current.Preparation;
-        if (firstPreparation is null || secondPreparation is null) { return false; }
+        if (firstPreparation is null || !ReferenceEquals(firstPreparation, secondPreparation)) { return false; }
         // RequiresRewrite describes layouts only. A hand-written Normalize can change values
-        // without changing that flag. Complete prepared bodies also cover comparer metadata.
-        firstPreparation.Validate(first.Current);
-        secondPreparation.Validate(second.Current);
-        PreparedBaseBody firstBody = firstPreparation.PrepareBase(first.Current);
-        PreparedBaseBody secondBody = secondPreparation.PrepareBase(second.Current);
-        return firstBody.Body.SequenceEqual(secondBody.Body);
+        // without changing that flag. Missing comparison is not proof of equality; an actual
+        // comparison error propagates. Sharing must not depend on object body preparation.
+        return firstPreparation.ProvesSameState(first.Current, second.Current);
     }
 
     private static object Allocate(NormalizedObject row, Dictionary<object, ObjectId> allocations,

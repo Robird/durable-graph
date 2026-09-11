@@ -9,6 +9,8 @@ public sealed partial class SharedNode : DurableBase {
     [DurableField(1)] public int Value;
     [DurableField(2)] public SharedNode? Next;
     [DurableField(3)] public string Text = "";
+    // Application-only context, initialized only on independent reads in this probe.
+    [Transient] public SharedRoot? OwnerWorld;
 }
 
 [DurableType("SharedLinks", 1)]

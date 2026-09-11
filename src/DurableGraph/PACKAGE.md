@@ -407,7 +407,15 @@ Within one operation it reuses stored-exact decoding and may
 share domain instances whose complete current reference closure is safe to share. It makes no
 cross-graph sharing or separation guarantee: do not use cross-graph `ReferenceEquals` to infer
 business identity or version, or to choose program behavior. Both complete graphs must remain
-read-only; the library does not freeze ordinary CLR instances. Writable `Resume` can reuse frozen
+read-only, including observable Transient mutation on every reachable object; the library does not
+freeze ordinary CLR instances. Keep each view's owner/context/index/cache outside the paired graphs,
+not on potentially shared nodes. A global Actor-to-context table is insufficient when one Actor belongs
+to both views. See the executable [external view example](../../experiments/PackageConsumerProbe/EventHistoryConsumer/README.md#per-view-transient-context).
+For per-view in-place Transient initialization, use independent `ReadState`/`ReadEvent` calls. These work
+without a writer; persistent members remain historical snapshots and no saving baseline is installed.
+Use `Resume` to continue editing and committing. Sharing comparison uses persistent-state equality
+without preparing object Base/Delta payloads; ordinary read validation may still encode canonical
+Dictionary keys. Writable `Resume` can reuse frozen
 DTOs and strings but allocates separate mutable State/Event graphs. Upgrade and validation still
 run independently for each view. See [DB-064](../../docs/design-branches/0064-shared-revision-decoding-design.md)
 for the internal sharing boundary; there is no public cache configuration or new wire format.
@@ -420,7 +428,8 @@ in their issuing open repository, and their diagnostic addresses are not persist
 Graph materialization decodes the complete stored-exact directory, validates and upgrades its rows,
 then allocates all reachable objects before hydrating references. Durable classes use
 `RuntimeHelpers.GetUninitializedObject`; constructors, field initializers and Transient hooks do
-not run. User code rebuilds Transient state after delivery. For explicit stored-exact DTO inspection,
+not run. User code rebuilds Transient state after delivery on Resume or independent reads; paired
+views keep their context outside the graphs as described above. For explicit stored-exact DTO inspection,
 register retained readers/definitions with `StateReaderRegistry` and use `RevisionDecoder`.
 `LoadedWorld` and its prepare/load surface are internal mechanism helpers, not application APIs.
 

@@ -1,6 +1,6 @@
 # DurableGraph 产品开发工作集
 
-> 校准：2026-09-11；产品实现截至 [DB-065](../docs/design-branches/0065-event-history-consumer-contract-slice.md)，下一步优先下游真实模型接入与反馈。本文只维护当前能力、边界与续工入口。
+> 校准：2026-09-11；产品实现截至 [DB-066](../docs/design-branches/0066-readpair-comparison-and-transient-contract-slice.md)。后续优先下游真实模型接入与反馈。本文只维护当前能力、边界与续工入口。
 > 文档不是实现授权；事实以当前源码、测试和工具输出为准。
 
 ## 从这里继续
@@ -24,8 +24,11 @@
 [引用事件快照与恢复示例](../experiments/PackageConsumerProbe/EventHistoryRecoveryConsumer/README.md)，以及 README 原文执行验证。
 恢复示例与内部故障测试共用 Pending 判断；已发布 S 不重放，失败后重新取得 State/Event，不复用旧的可变图。
 现有提交/格式、DB-064 只读共享与可写隔离合同保持。
-第二轮 [ReadPair 反馈](../../drama-board/docs/feedback/durablegraph/002-readpair-sharing-contract.md) 已评估为
-[DB-066 推荐施工片](../docs/design-branches/0066-readpair-comparison-and-transient-contract-slice.md)：解除共享判断的额外编码依赖，并明确 Transient 的视图边界；尚未实施。
+第二轮 [ReadPair 反馈](../../drama-board/docs/feedback/durablegraph/002-readpair-sharing-contract.md) 已完成于
+[DB-066](../docs/design-branches/0066-readpair-comparison-and-transient-contract-slice.md)：共享判断改用可选完整状态比较，
+缺 proof 保守不共享，真实错误传播。普通/Family SG 自动登记，数组/List/Dictionary 复用静态槽比较；
+Dictionary 读取的 canonical key 验证保持。ReadPair 的视图专属 Transient 放在图外，独立读取允许各自初始化，续写仍用 Resume。
+完整测试、独立审阅和真实包验收已通过，证据集中在分片记录。
 下游可继续按公开入口接入真实模型，收集具体摩擦；
 跨重开书签、局部事件浏览与类型适配扩展按路线图的需求触发，不自动扩展本轮范围。
 自动跨库业务规则发现、ValueTuple、DateTime、程序集审视和 SchemaStore 自举不随本轮扩张。

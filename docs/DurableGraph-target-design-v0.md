@@ -380,6 +380,8 @@ Journal 的逻辑顺序为 S0→E1→S1→E2→S2；E1 与 S1 的 Revision Paren
 Journal ref 是外观的唯一发布前沿，图追加与 head 发布分开，由同一外观统一编排。
 历史读写使用当前 Repository 签发的 GraphFrame，不以裸地址证明来源。独立浏览不恢复另一份业务图；
 实验性 ReadPair 保持输入顺序、两边完整成功才交付，按只读快照使用且不承诺跨图实例共享。
+共享候选以完整当前持久状态比较作证明，不依赖对象 Base/Delta preparation；缺少比较能力时保守不共享，
+比较与验证错误仍传播。Dictionary 读取所需的 canonical key 验证不因此省略。
 冷 Resume 独立恢复可变 State/Event；热调用中用户创建的别名仍由用户管理。
 
 长期目标是让 Schema、State、Artifact 的共同引用有一个可裁决的发布点，而不是各自发布
@@ -415,6 +417,11 @@ MVP 库内加载采用以下阶段顺序；这是目标流程，不表示各阶�
 等 Transient 初始化也不会执行。交付后的 Transient 重建由用户代码负责，属于宿主阶段。MVP 不提供自动 Transient hook，
 也不承诺撤销用户重建期间的副作用或把其失败变成库的加载失败；用户负责在业务使用前完成初始化。
 这取代此前“库内调用 Transient hook 成功后才交付”的 MVP 设想，未来框架 hook 另按真实需求评估。
+
+ReadPair 的只读约束包含会影响观察结果的 Transient 写入；视图专属 owner、查询上下文和缓存须置于
+各自的图外 view/index，不写入可能共享的节点。需要原位重建 Transient 的历史浏览可分别调用
+ReadState/ReadEvent，取得独立领域图并初始化；无需 writer，但持久字段仍是历史快照，续写须使用 Resume。
+不承诺对 string 或应用自有全局对象进行通用深拷贝。使用示例与验收见 [DB-066](design-branches/0066-readpair-comparison-and-transient-contract-slice.md)。
 
 字典由框架分配并填入原实例，应用只提供需要的当前 comparer，不接管共享引用或事后替换字典。
 比较依赖必须在插入时就绪并保持稳定：key 自身已填好的值、完整 string 与引用身份可用，

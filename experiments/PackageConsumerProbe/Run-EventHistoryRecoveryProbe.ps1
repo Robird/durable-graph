@@ -45,6 +45,10 @@ function Test-PackageDocumentation {
         'M:Atelia.DurableGraph.StateStore.EventHistoryRepository.Resume``1(' = 1
         'M:Atelia.DurableGraph.StateStore.EventHistoryRepository.ReadFrames(' = 1
         'M:Atelia.DurableGraph.StateStore.EventHistoryRepository.ReadEvents(' = 1
+        'M:Atelia.DurableGraph.StateStore.EventHistoryRepository.ReadState``1(' = 1
+        'M:Atelia.DurableGraph.StateStore.EventHistoryRepository.ReadEvent``1(' = 1
+        'M:Atelia.DurableGraph.StateStore.EventHistoryRepository.ReadPair(' = 1
+        'M:Atelia.DurableGraph.StateStore.EventHistoryRepository.ReadPair``2(' = 1
         'P:Atelia.DurableGraph.StateStore.EventHistoryRepository.IsFaulted' = 1
         'M:Atelia.DurableGraph.StateStore.EventHistorySession`1.CommitDomainEvent(' = 1
         'M:Atelia.DurableGraph.StateStore.EventHistorySession`1.CommitDomainState(' = 2
@@ -62,6 +66,14 @@ function Test-PackageDocumentation {
         foreach ($member in $members) {
             if ([string]::IsNullOrWhiteSpace([string]$member.summary) -or [string]::IsNullOrWhiteSpace($member.remarks.InnerText ?? [string]$member.remarks)) {
                 throw "Missing summary/remarks for $($member.name)."
+            }
+            if ($member.name.StartsWith('M:Atelia.DurableGraph.StateStore.EventHistoryRepository.ReadPair', [StringComparison]::Ordinal)) {
+                $remarks = ($member.remarks.InnerText ?? [string]$member.remarks) -replace '\s+', ' '
+                foreach ($required in @('Transient mutation', 'outside the graphs', 'without a writer', 'Resume')) {
+                    if (-not $remarks.Contains($required, [StringComparison]::Ordinal)) {
+                        throw "Missing ReadPair Transient contract '$required': $($member.name)."
+                    }
+                }
             }
         }
     }
