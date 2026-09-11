@@ -116,8 +116,8 @@ public sealed partial class DurableSchemaGeneratorTests {
         GeneratorTestRun first = RunGenerator("""
             using Atelia.DurableGraph;
             [DurableType("Mode",1)] public enum OldMode:byte { Named=1 }
-            [DurableType("World",1)] public partial class World:DurableBase { [DurableField(1)] public OldMode Value; }
-            [DurableType("Optional",1)] public partial class Optional:DurableBase { [DurableField(1)] public OldMode? Value; }
+            [DurableType("World",1)] public partial class World:IDurableObject { [DurableField(1)] public OldMode Value; }
+            [DurableType("Optional",1)] public partial class Optional:IDurableObject { [DurableField(1)] public OldMode? Value; }
             """);
         AssertSchemaOnlyCompiles(first);
         new SchemaHistoryTool().Publish(history.WriteManifest(first), history.History);
@@ -133,8 +133,8 @@ public sealed partial class DurableSchemaGeneratorTests {
             using O=Atelia.DurableGraph.Generated.Family_4F7074696F6E616C;
             using M=Atelia.DurableGraph.Generated.Family_4D6F6465;
             [DurableType("Mode",2)] public enum CurrentMode:{{underlying}} { Renamed=101 }
-            [DurableType("World",2)] public partial class World:DurableBase { [DurableField(1)] public CurrentMode Value; }
-            [DurableType("Optional",2)] public partial class Optional:DurableBase { [DurableField(1)] public CurrentMode? Value; }
+            [DurableType("World",2)] public partial class World:IDurableObject { [DurableField(1)] public CurrentMode Value; }
+            [DurableType("Optional",2)] public partial class Optional:IDurableObject { [DurableField(1)] public CurrentMode? Value; }
             [ValueUpgradeRuleSet(AllowKeepExact=true,AllowNullableLifting=true)] public sealed class Rules;
             public static class Upgrades {
                 public static readonly System.Collections.Generic.List<string> Calls=new();

@@ -13,7 +13,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         namespace BinaryBodies;
 
         [DurableType("body.base", 1)]
-        public abstract partial class Base : DurableBase {
+        public abstract partial class Base : IDurableObject {
             [DurableField(9)] private int _number;
             [Transient] private int _cache = 73;
             [DurableField(2)] private bool _flag;
@@ -152,7 +152,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             using Atelia.DurableGraph.StateStore.Serialization;
             namespace BinaryBodies;
             [DurableType("body.boolean", 1)]
-            public sealed partial class Item : DurableBase {
+            public sealed partial class Item : IDurableObject {
                 [DurableField(2)] private bool _flag = true;
                 [DurableField(1)] private int _number = 73;
                 public bool Flag => _flag;
@@ -184,13 +184,13 @@ public sealed partial class DurableSchemaGeneratorTests {
         string source = ancestor ? $$"""
             using Atelia.DurableGraph;
             [DurableType("body.base", {{(missingHistory ? 2 : 1)}})]
-            public abstract partial class Base : DurableBase { [DurableField(1)] private long _base; }
+            public abstract partial class Base : IDurableObject { [DurableField(1)] private long _base; }
             [DurableType("body.leaf", 1)]
             public sealed partial class Leaf : Base { [DurableField(1)] private int _leaf; }
             """ : $$"""
             using Atelia.DurableGraph;
             [DurableType("body.base", {{(missingHistory ? 2 : 1)}})]
-            public sealed partial class Base : DurableBase { [DurableField(1)] private long _base; }
+            public sealed partial class Base : IDurableObject { [DurableField(1)] private long _base; }
             """;
         AdditionalText[] history = missingHistory ? [] : [SchemaHistory("old.dgschema", "body.base", 1, (1, 2))];
         GeneratorTestRun run = RunGenerator(source, history);
@@ -203,7 +203,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         GeneratorTestRun run = RunGenerator("""
             using Atelia.DurableGraph;
             [DurableType("body.base", 1)]
-            public abstract partial class Base : DurableBase { [DurableField(1)] private string _text = "base"; }
+            public abstract partial class Base : IDurableObject { [DurableField(1)] private string _text = "base"; }
             [DurableType("body.leaf", 1)]
             public sealed partial class Leaf : Base { [DurableField(1)] private int _leaf; }
             """);
@@ -230,7 +230,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         GeneratorTestRun run = RunGenerator("""
             using Atelia.DurableGraph;
             [DurableType("body.valid", 1)]
-            public sealed partial class Valid : DurableBase { [DurableField(1)] private int _value; }
+            public sealed partial class Valid : IDurableObject { [DurableField(1)] private int _value; }
             """, history);
         Assert.Contains(run.GeneratorDiagnostics, diagnostic => diagnostic.Id == diagnosticId);
         Assert.DoesNotContain(run.GeneratedSources, source => source.HintName == "DurableStates.g.cs");
@@ -246,7 +246,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             using Atelia.DurableGraph.StateStore.Serialization;
             namespace BinaryBodies;
             [DurableType("body.versioned", 2)]
-            public sealed partial class Versioned : DurableBase {
+            public sealed partial class Versioned : IDurableObject {
                 [DurableField(1)] private long _value = long.MinValue;
             }
             public static class Host {

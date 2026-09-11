@@ -9,7 +9,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         GeneratorTestRun run = RunGenerator(FusedDeltaPreamble + """
             using System.Linq;
             [DurableType("prepare.base", 1)]
-            public abstract partial class Base : DurableBase {
+            public abstract partial class Base : IDurableObject {
                 [DurableField(7)] private int _count = -17;
             }
             [DurableType("prepare.leaf", 1)]
@@ -20,7 +20,7 @@ public sealed partial class DurableSchemaGeneratorTests {
                 public void Change(uint score, string name) { _score = score; _name = name; }
             }
             [DurableType("prepare.label", 1)]
-            public sealed partial class Label : DurableBase {
+            public sealed partial class Label : IDurableObject {
                 [DurableField(1)] private string _name;
                 [DurableField(2)] private string _empty = string.Empty;
                 public Label(string name) { _name = name; }
@@ -116,7 +116,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             using Atelia.DurableGraph;
             namespace PreparationHistory;
             [DurableType("prepare.history", 1)]
-            public sealed partial class Item : DurableBase {
+            public sealed partial class Item : IDurableObject {
                 [DurableField(1)] private int _value = -17;
             }
             """;
@@ -129,7 +129,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             using Atelia.DurableGraph.StateStore.Serialization;
             namespace PreparationHistory;
             [DurableType("prepare.history", 2)]
-            public sealed partial class Item : DurableBase {
+            public sealed partial class Item : IDurableObject {
                 [DurableField(1)] private int _value = -17;
                 [DurableField(2)] private byte _added = 99;
                 public void Change() { _added = 100; }

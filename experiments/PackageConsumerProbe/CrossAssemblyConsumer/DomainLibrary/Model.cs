@@ -26,7 +26,7 @@ public partial struct CurrentPayload {
 #else
 [DurableType("Node", 2)]
 #endif
-public partial class Node : DurableBase {
+public partial class Node : IDurableObject {
     [DurableField(1)] private Payload _payload;
     [DurableField(2)] private Guid _token;
     [DurableField(3)] public Node? Next;

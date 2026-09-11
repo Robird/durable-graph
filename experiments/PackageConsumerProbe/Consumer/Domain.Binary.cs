@@ -5,7 +5,7 @@ using Atelia.DurableGraph.StateStore.Serialization;
 namespace PackageConsumerProbe;
 
 [DurableType("package.body-base", 1)]
-public abstract partial class BinaryBase : DurableBase {
+public abstract partial class BinaryBase : IDurableObject {
     [DurableField(7)] private readonly int _count;
     [DurableField(1)] private readonly bool _enabled;
     internal static int BaseConstructorCalls;
@@ -94,7 +94,7 @@ public sealed partial class Character : BinaryBase {
         var state = __DurableState.Normalize(graph.Objects.Single(row => row.Id == id));
         int constructors = _constructorCalls, baseConstructors = BaseConstructorCalls;
         Character restored = __DurableState.Allocate();
-        __DurableState.Hydrate(restored, in state, new ObjectReadTable(StringReadTable.Decode([]), new Dictionary<ObjectId, DurableBase>()));
+        __DurableState.Hydrate(restored, in state, new ObjectReadTable(StringReadTable.Decode([]), new Dictionary<ObjectId, IDurableObject>()));
         if (ReferenceEquals(source, restored) || !restored.HasExpectedBase || restored._total != 42 ||
             restored._sentinel != 0 || _constructorCalls != constructors || BaseConstructorCalls != baseConstructors) {
             throw new InvalidOperationException("Generated allocation/hydration ran constructors or lost private readonly base fields.");
@@ -115,7 +115,7 @@ public sealed partial class Character : BinaryBase {
 }
 
 [DurableType("package.scalar-values", 1)]
-public sealed partial class ScalarValues : DurableBase {
+public sealed partial class ScalarValues : IDurableObject {
     [DurableField(1)] private byte _byte = byte.MaxValue;
     [DurableField(2)] private sbyte _sbyte = sbyte.MinValue;
     [DurableField(3)] private short _short = -1;

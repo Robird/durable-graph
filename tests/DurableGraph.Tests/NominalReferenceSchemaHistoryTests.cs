@@ -41,7 +41,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         GeneratorTestRun run = RunGenerator("""
             using Atelia.DurableGraph;
             [DurableType("A", 2)]
-            public partial class A : DurableBase { [DurableField(1)] public int Value; }
+            public partial class A : IDurableObject { [DurableField(1)] public int Value; }
             """, new InMemoryAdditionalText("a.dgschema", NominalHistory));
         AssertSchemaOnlyCompiles(run);
         Type owner = EmitAndLoad(run.OutputCompilation).GetType("A")!;
@@ -105,11 +105,11 @@ public sealed partial class DurableSchemaGeneratorTests {
         using Atelia.DurableGraph;
         namespace Nominal;
         [DurableType("A", 1)]
-        public partial class A : DurableBase {
+        public partial class A : IDurableObject {
             [DurableField(1)] public B Next;
         }
         [DurableType("B", {{targetVersion}})]
-        public partial class B : DurableBase {
+        public partial class B : IDurableObject {
             [DurableField(1)] public A Back;
             [DurableField(2)] public B Self;
         }

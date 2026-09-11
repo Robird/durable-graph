@@ -16,7 +16,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         SchemaHistoryTool publisher = new();
         GeneratorTestRun initial = RunGenerator(FusedDeltaPreamble + """
             [DurableType("decoded.base", 1)]
-            public abstract partial class OldBase : DurableBase {
+            public abstract partial class OldBase : IDurableObject {
                 [DurableField(9)] private string? _name;
             }
             [DurableType("decoded.leaf", 1)]
@@ -133,7 +133,7 @@ public sealed partial class DurableSchemaGeneratorTests {
 
     private static readonly string DecodedRevisionCurrentSource = FusedDeltaPreamble + """
         [DurableType("decoded.base", 2)]
-        public abstract partial class NewBase : DurableBase {
+        public abstract partial class NewBase : IDurableObject {
             [DurableField(2)] private byte _small;
         }
         [DurableType("decoded.leaf", 2)]
@@ -142,7 +142,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             [DurableField(8)] private string? _alias;
         }
         [DurableType("decoded.other", 1)]
-        public sealed partial class Other : DurableBase {
+        public sealed partial class Other : IDurableObject {
             [DurableField(1)] private string? _name;
             [DurableField(2)] private int _number;
             [DurableField(3)] private string? _empty;

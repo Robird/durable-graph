@@ -371,7 +371,7 @@ public sealed class CompositeDictionaryRepositoryTests : IDisposable {
         Assert.Equal(0, calls);
     }
 
-    private sealed class World<K> : DurableBase where K : notnull {
+    private sealed class World<K> : IDurableObject where K : notnull {
         public Dictionary<K, int>? First;
         public Dictionary<K, int>? Second;
         public List<Dictionary<K, int>[]>? Containers;

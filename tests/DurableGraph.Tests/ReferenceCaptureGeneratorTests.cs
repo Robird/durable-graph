@@ -61,7 +61,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         GeneratorTestRun run = RunGenerator("""
             using Atelia.DurableGraph;
             [DurableType("body.string", 1)]
-            public sealed partial class Item : DurableBase {
+            public sealed partial class Item : IDurableObject {
                 [DurableField(1)] private string _text = string.Empty;
             }
             """);
@@ -88,7 +88,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             using Atelia.DurableGraph.StateStore.Serialization;
             namespace BinaryBodies;
             [DurableType("reference.mixed-base", 1)]
-            public abstract partial class Base : DurableBase { [DurableField(1)] {{baseField}} }
+            public abstract partial class Base : IDurableObject { [DurableField(1)] {{baseField}} }
             [DurableType("reference.mixed-leaf", 1)]
             public sealed partial class Leaf : Base { [DurableField(1)] {{leafField}} }
             public static class Host {
@@ -192,7 +192,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         using Atelia.DurableGraph.StateStore.Serialization;
         namespace ReferenceCaptureDomain;
         [DurableType("reference.base", 1)]
-        public abstract partial class Base : DurableBase {
+        public abstract partial class Base : IDurableObject {
             [DurableField(2)] private string? _optional;
             [DurableField(1)] private string _name;
             [Transient] private object _cache = new();
@@ -210,13 +210,13 @@ public sealed partial class DurableSchemaGeneratorTests {
             public void Mutate(string replacement) { ChangeBase(replacement); _alias = replacement; _other = replacement; _number = 99; }
         }
         [DurableType("reference.item", 1)]
-        public sealed partial class Item : DurableBase {
+        public sealed partial class Item : IDurableObject {
             [DurableField(1)] private string _text;
             public Item(string text) { _text = text; }
             public void Change(string text) { _text = text; }
         }
         [DurableType("reference.concrete", 1)]
-        public partial class Concrete : DurableBase { [DurableField(1)] private int _value = 7; }
+        public partial class Concrete : IDurableObject { [DurableField(1)] private int _value = 7; }
         [DurableType("reference.derived", 1)]
         public sealed partial class Derived : Concrete { [DurableField(1)] private bool _flag = true; }
         public static class Host {
@@ -342,7 +342,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         using Atelia.DurableGraph.StateStore.Serialization;
         namespace ReferenceHistory;
         [DurableType("reference-history.base", 1)]
-        public abstract partial class OldBase : DurableBase {
+        public abstract partial class OldBase : IDurableObject {
             [DurableField(1)] private string _name;
             protected OldBase(string name) { _name = name; }
         }
@@ -374,7 +374,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         using Atelia.DurableGraph.StateStore.Serialization;
         namespace ReferenceHistory;
         [DurableType("{{(replaceChain ? "reference-history.replacement" : "reference-history.base")}}", {{(replaceChain ? 1 : 2)}})]
-        public abstract partial class CurrentBase : DurableBase {
+        public abstract partial class CurrentBase : IDurableObject {
             [DurableField(1)] private int _number;
         }
         [DurableType("reference-history.leaf", 2)]

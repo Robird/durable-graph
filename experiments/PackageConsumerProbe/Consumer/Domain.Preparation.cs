@@ -73,7 +73,7 @@ public sealed partial class Character {
 }
 
 [DurableType("package.preparation-label", 1)]
-public sealed partial class PreparationLabel : DurableBase {
+public sealed partial class PreparationLabel : IDurableObject {
     [DurableField(1)] private string _name = new(new[] { 'A' });
     [DurableField(2)] private string _empty = string.Empty;
 

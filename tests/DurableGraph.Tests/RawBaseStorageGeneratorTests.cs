@@ -137,7 +137,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         namespace RawBaseWitness;
 
         [DurableType("raw-base.owner", 1)]
-        public sealed partial class Owner : DurableBase {
+        public sealed partial class Owner : IDurableObject {
             [DurableField(1)] private string? _name;
             [DurableField(2)] private string? _alias;
             [DurableField(3)] private string? _optional = null;

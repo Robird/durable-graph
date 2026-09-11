@@ -14,7 +14,7 @@ internal static class LoadedWorld {
         SchemaStore schemas,
         TWorld world,
         StateModelRegistry models,
-        ReadAmplificationBaseBudgetParameters parameters) where TWorld : DurableBase {
+        ReadAmplificationBaseBudgetParameters parameters) where TWorld : class, IDurableObject {
         WorldWorkspace<TWorld> workspace = WorldWorkspace<TWorld>.Create(store, schemas, world, models);
         using PreparedWorldSave<TWorld> pending = workspace.Stage(parameters);
         return new(pending.RootId, pending.Revision);
@@ -29,7 +29,7 @@ internal static class LoadedWorld {
         SchemaStore schemas,
         FrameAddress revisionAddress,
         ObjectId worldId,
-        StateModelRegistry models) where TWorld : DurableBase {
+        StateModelRegistry models) where TWorld : class, IDurableObject {
         return new(WorldWorkspace<TWorld>.Load(store, schemas, revisionAddress, worldId, models));
     }
 }
@@ -39,7 +39,7 @@ internal static class LoadedWorld {
 /// Single-threaded. Prepare never advances this baseline. The host appends its owned plan,
 /// then loads the returned address to obtain a new baseline. This is not Commit or publication.
 /// </remarks>
-internal sealed class LoadedWorld<TWorld> where TWorld : DurableBase {
+internal sealed class LoadedWorld<TWorld> where TWorld : class, IDurableObject {
     private readonly WorldWorkspace<TWorld> _workspace;
 
     internal LoadedWorld(WorldWorkspace<TWorld> workspace) => _workspace = workspace;

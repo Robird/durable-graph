@@ -43,9 +43,9 @@ public sealed partial class DurableSchemaGeneratorTests {
             using Atelia.DurableGraph;
             namespace StringValidation;
             [DurableType("validation.empty", 1)]
-            public sealed partial class Empty : DurableBase { }
+            public sealed partial class Empty : IDurableObject { }
             [DurableType("validation.scalar", 1)]
-            public sealed partial class Scalar : DurableBase {
+            public sealed partial class Scalar : IDurableObject {
                 [DurableField(1)] private uint _number = uint.MaxValue;
             }
             public static class Host {
@@ -124,7 +124,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         using Atelia.DurableGraph.StateStore.Serialization;
         namespace StringValidation;
         [DurableType("validation.base", 1)]
-        public abstract partial class Base : DurableBase {
+        public abstract partial class Base : IDurableObject {
             [DurableField(1)] private string? _name;
             protected Base(string? name) { _name = name; }
             public void Change(string value) { _name = value; }

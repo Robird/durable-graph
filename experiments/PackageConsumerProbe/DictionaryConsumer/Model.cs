@@ -31,20 +31,20 @@ public partial struct CurrentPoint {
 #endif
 
 [DurableType("Node", 1)]
-public partial class Node : DurableBase {
+public partial class Node : IDurableObject {
     [DurableField(1)] public World? Owner;
     [DurableField(2)] public Node? Self;
     [DurableField(3)] public int Score;
 }
 
 [DurableType("Box", 1)]
-public partial class Box<T> : DurableBase {
+public partial class Box<T> : IDurableObject {
     [DurableField(1)] public T Value = default!;
 }
 
 // Dictionary references preserve nominal constraints; their child upgrades do not advance World.
 [DurableType("World", 1)]
-public partial class World : DurableBase {
+public partial class World : IDurableObject {
     [DurableField(1)] public Dictionary<string, Point> Points = [];
     [DurableField(2)] public Dictionary<string, Point> Alias = [];
     [DurableField(3)] public Dictionary<Mode, Point> Modes = [];

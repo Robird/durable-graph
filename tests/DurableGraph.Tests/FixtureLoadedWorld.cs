@@ -18,7 +18,7 @@ public static class FixtureLoadedWorld {
         SchemaStore schemas,
         TWorld world,
         StateModelRegistry models,
-        ReadAmplificationBaseBudgetParameters parameters) where TWorld : DurableBase {
+        ReadAmplificationBaseBudgetParameters parameters) where TWorld : class, IDurableObject {
         WorldWorkspace<TWorld> workspace = WorldWorkspace<TWorld>.Create(store, schemas, world, models);
         using PreparedWorldSave<TWorld> pending = workspace.Stage(parameters);
         return new(pending.RootId, pending.Revision);
@@ -33,7 +33,7 @@ public static class FixtureLoadedWorld {
         SchemaStore schemas,
         FrameAddress revisionAddress,
         ObjectId worldId,
-        StateModelRegistry models) where TWorld : DurableBase {
+        StateModelRegistry models) where TWorld : class, IDurableObject {
         return new(WorldWorkspace<TWorld>.Load(store, schemas, revisionAddress, worldId, models));
     }
 }
@@ -43,7 +43,7 @@ public static class FixtureLoadedWorld {
 /// Single-threaded. Prepare never advances this baseline. The host appends its owned plan,
 /// then loads the returned address to obtain a new baseline. This is not Commit or publication.
 /// </remarks>
-public sealed class FixtureLoadedWorld<TWorld> where TWorld : DurableBase {
+public sealed class FixtureLoadedWorld<TWorld> where TWorld : class, IDurableObject {
     private readonly WorldWorkspace<TWorld> _workspace;
 
     internal FixtureLoadedWorld(WorldWorkspace<TWorld> workspace) => _workspace = workspace;

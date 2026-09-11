@@ -1,10 +1,10 @@
 # DB-068：record class 领域模型与统一引用资格
 
-> 状态：**Proposed / 待用户采纳，未实施**。
-> 已采纳修订：用户确认以 `IDurableObject` 完全替代并移除 `DurableBase`；不保留兼容壳，实施仍待后续授权。
+> 状态：**Implemented / G0–G3 已验收**。
+> 已采纳修订：以 `IDurableObject` 完全替代并移除 `DurableBase`；不保留兼容壳。
 > 日期：2026-09-12；调查基线：`8d89a35`（DB-067）。
 > 来源：[DramaBoard 真实模型接入反馈 003](../../../drama-board/docs/feedback/durablegraph/003-real-model-integration.md)，消费者固定包来自 `f68388f`。
-> 本轮仅调查和设计。当前能力以 [PROJECT-STATE](../../src/PROJECT-STATE.md) 和源码为准。
+> 当前能力以 [PROJECT-STATE](../../src/PROJECT-STATE.md) 和源码为准；实施与执行证据见 §10。
 
 ## 1. 问题、证据与最小交付
 
@@ -63,7 +63,7 @@
 
 ## 3. 建议的领域/API 形状
 
-以下代码是**拟实现接口**，当前包不能使用：
+以下为本片的领域/API 形状：
 
 ```csharp
 public interface IDurableObject { }
@@ -182,7 +182,7 @@ Windows .NET 构建和测试由主代理串行执行；不能让包测试/生成
 
 关键源码入口：
 
-- 当前待删除的 [DurableBase](../../src/DurableGraph/DurableBase.cs)（完成时将此导航更新为新接口）、[StateModelBinding](../../src/DurableGraph/StateModelBinding.cs)、
+- [IDurableObject](../../src/DurableGraph/IDurableObject.cs)、[StateModelBinding](../../src/DurableGraph/StateModelBinding.cs)、
   [StateDefinitionBinding](../../src/DurableGraph/StateDefinitionBinding.cs)、[StateBaseProjection](../../src/DurableGraph/StateBaseProjection.cs)。
 - [CaptureContext](../../src/DurableGraph/CaptureContext.cs)、[ObjectReadTable](../../src/DurableGraph/ObjectReadTable.cs)、
   [BuiltinStateValues](../../src/DurableGraph/BuiltinStateValues.cs)、[StateModelSnapshot](../../src/DurableGraph.StateStore/StateModelSnapshot.cs)。
@@ -228,5 +228,66 @@ Windows .NET 构建和测试由主代理串行执行；不能让包测试/生成
 
 本轮分别核对了下游源码/包钉扎和上游生成/运行边界，并由独立设计审阅比较 marker、双基类与 object 外观。
 共同意见：用 marker 消除 CLR class 专属假设合理；仍须完成整条生成、继承和包消费验证。
-随后用户确认主动移除旧基类，利用原型试用期统一 API；本稿已同步迁移范围、祖先终点和验收，未开始产品实施。
-本轮不声称 record class 已可用，不把下游单次性能样本升级为性能结论。
+随后用户确认主动移除旧基类，利用原型试用期统一 API；修订迁移范围、祖先终点和验收后授权实施。
+下游单次性能样本没有升级为性能结论；本片执行结果集中记录于下节。
+
+## 10. 实施与验收记录
+
+基线 `4dcb926`，根构建 0 警告/错误。此次 Runtime/StateStore 统一接口，删除旧基类，
+SG 在 source/metadata/nominal 参数入口核对真实 attribute/marker symbol；祖先终点统一为 object。
+没有修改 Storage/Schema wire 编码或增加 history 版本。活动模型、动态测试源码及包示例一并迁移。
+
+| 门 | 代码与验证入口 | 状态 |
+|---|---|---|
+| G0 接口与准入 | [IDurableObject](../../src/DurableGraph/IDurableObject.cs)、[Runtime 准入回归](../../tests/DurableGraph.StateStore.Tests/DurableObjectAdmissionTests.cs)、[SG 合同回归](../../tests/DurableGraph.Tests/DurableObjectContractGeneratorTests.cs) | 已实现；StateStore 721 项通过，新包实际不导出 DurableBase |
+| G1 声明与投影 | [record 声明矩阵](../../tests/DurableGraph.Tests/RecordClassGeneratorTests.cs)、[图/投影回归](../../tests/DurableGraph.Tests/RecordClassGraphTests.cs) | 已实现；构造/accessor 绕过、继承存储、身份与业务比较隔离已验证 |
+| G2 完整历史 | [history 回归](../../tests/DurableGraph.Tests/RecordClassHistoryTests.cs)、[真包跨库三代见证](../../experiments/PackageConsumerProbe/RecordClassConsumer/README.md) | 已通过同版转换、基类升版约束、两/三参隐式 Upgrade 与显式泛型 Upgrade |
+| G3 包交付 | [RecordClass runner](../../experiments/PackageConsumerProbe/Run-RecordClassProbe.ps1)、[真实旧包迁移](../../experiments/PackageConsumerProbe/Run-DurableBaseMigrationProbe.ps1) | 三代新包、旧包迁移、既有 EventHistory/恢复消费者、README 原文执行均通过 |
+
+实现中补齐了 `GenericUpgrades` 的另一处生成壳：隐式 owner Upgrade 适配器对 record 也须发出
+`partial record class`。既有方法名仍为 `UpgradeStateV1ToV2`，没有新增第二套隐式命名。
+测试调整包括旧准入诊断提前为 DG0001、普通 class history fixture 显式开启 Family、
+以及为 Delta 见证保留足够不变内容，使实际 Delta 小于 Base；没有通过改变策略绕过尺寸比较。
+
+新真包运行目录：`experiments/PackageConsumerProbe/obj/record-class-20260911192824-71544-8d3bce14`。
+九包版本 `0.0.0-record-class-e2e.20260911192824-71544-8d3bce14`；三代模型分别 pack 独立 ref/lib，
+每代 Publish/Clean/Verify 并核对完整历史字节。E1 后恢复、S1 后无重放、event-only、非泛型 pair、
+with 新身份及 v2 Base→Delta 冷读均通过。模型包的 SDK NU5131 与既有跨库见证相同，
+实际 PackageReference 的 ref/lib 资产已验证；不承诺 packages.config。
+
+最终源码回归：Runtime/Generator/Build-history 1,571 项、StateStore 721 项通过（共 2,292，零失败/跳过）。
+TRX 分别为两个测试项目 `TestResults/db068-runtime-final.trx` 和 `TestResults/db068-statestore.trx`；
+早期失败记录保留在忽略目录，用于追溯 fixture 修正，不混作最终结果。
+产品 Storage/Serialization/Build 源码未修改；实际旧 Base、新 Delta、目录与发布的贯通由真包和 StateStore 回归验证。
+
+复现入口（根目录串行执行；除首项自 pack 外，其余使用上述新 feed/version）：
+
+```powershell
+dotnet build DurableGraph.slnx -v:q
+dotnet test tests/DurableGraph.Tests/DurableGraph.Tests.csproj --no-restore -v:q
+dotnet test tests/DurableGraph.StateStore.Tests/DurableGraph.StateStore.Tests.csproj --no-restore -v:q
+./experiments/PackageConsumerProbe/Run-RecordClassProbe.ps1
+./experiments/PackageConsumerProbe/Run-DurableBaseMigrationProbe.ps1 -LegacyPackageSource <old-feed> -LegacyVersion <old-version> -PackageSource <feed> -Version <version>
+./experiments/PackageConsumerProbe/Run-EventHistoryRecoveryProbe.ps1 -PackageSource <feed> -Version <version>
+./experiments/PackageConsumerProbe/Run-ReadmeQuickStartProbe.ps1 -PackageSource <feed> -Version <version>
+./experiments/PackageConsumerProbe/Run-EventHistoryProbe.ps1 -PackageSource <feed> -Version <version>
+```
+
+旧输入使用 DramaBoard 固定 `f68388f88ba09354e9fa90420dc2cf22b146b6cf` 包，
+版本 `0.0.0-dramaboard.20260912.f68388f.1`；运行前逐一核对其来源 manifest 的九包 SHA256。
+两代分进程、独立编译/缓存：旧 DurableBase 写 S0/E1，新 marker 读 Pending 并写 S1 Delta，
+最后只读验证旧 S0/E1 和新 S1；唯一 World v1 history 完整字节保持。
+该见证运行目录 `obj/durable-base-migration-20260911193549-58968-b742c640`（相对 PackageConsumerProbe）。
+旧 Store 尚未实现 IDisposable，脚本只为旧输入发出普通局部变量，新输入仍按 using 释放缓存；未增加产品兼容壳。
+
+既有消费者也从同一 fresh feed、各自隔离缓存运行：
+
+- `obj/event-recovery-20260911193641-44912-aac0ce72`：包内/恢复后 XML、hot/cold、零次重放、事件快照和只读文件保持。
+- `obj/readme-20260911193752-64784-127056c3`：直接提取根 README 项目/模型/程序/升级/浏览代码，V1 两次保存、V2 Upgrade、Clean/Verify。
+- `obj/event-history-20260911193905-70440-06d6505e`：既有两代事件/状态模型、event-only、ReadPair、Pending、Base→Delta、根替换及只读共享。
+
+日志集中在忽略目录 `artifacts/db068-validation/`。独立审阅未发现阻断，
+接口资格、引用身份、实际字段归属、历史/格式和旧消费路径均已完成本片验收。
+最终根构建 0 警告/错误；10 份受影响 Markdown 的 652 个本地链接、55 个锚点检查通过，
+三个相关 PowerShell 脚本语法检查通过。旧执行输入中 128 个文件的差异严格等于符号/泛型约束迁移，
+另外四个既有测试文件仅调整 marker 防伪与合法/非法 record 的诊断边界；新增语义测试另经独立审阅。

@@ -2,7 +2,7 @@ namespace Atelia.DurableGraph;
 
 /// <summary>Fills an unpublished domain instance from a current frozen DTO.</summary>
 public delegate void StateHydrator<TDomain, TState>(TDomain domain, in TState state, ObjectReadTable objects)
-    where TDomain : DurableBase where TState : unmanaged;
+    where TDomain : class, IDurableObject where TState : unmanaged;
 
 /// <summary>Receives explicitly selected generated model families.</summary>
 public interface IStateModelRegistration : IStateDefinitionRegistration {
@@ -50,12 +50,12 @@ public abstract class StateModelBinding : ObjectBinding {
         }
     }
 
-    internal abstract DurableBase Allocate();
+    internal abstract IDurableObject Allocate();
     internal override object Allocate(ObjectStateRecord current) {
         if (!CurrentLayout.Equals(current.Layout)) { throw new InvalidDataException("Allocation requires the current exact object layout."); }
         return Allocate();
     }
-    internal abstract ObjectId AddRoot(CaptureContext context, DurableBase domain);
+    internal abstract ObjectId AddRoot(CaptureContext context, IDurableObject domain);
     internal abstract bool MatchesCapture(DurableSchema schema, Delegate capture, ICapturedStatePreparation? preparation);
 
     private sealed class ReaderList(StateReaderBinding[] readers) : IReadOnlyList<StateReaderBinding> {
@@ -68,7 +68,7 @@ public abstract class StateModelBinding : ObjectBinding {
 
 /// <summary>Strongly typed normalization, capture and restoration for one current model.</summary>
 public sealed class StateModelBinding<TDomain, TState> : StateModelBinding
-    where TDomain : DurableBase where TState : unmanaged {
+    where TDomain : class, IDurableObject where TState : unmanaged {
     private readonly CapturedStatePreparation<TState> _preparation;
     private readonly Func<ObjectStateRecord, TState> _normalize;
     private readonly Func<TDomain> _allocate;
@@ -121,7 +121,7 @@ public sealed class StateModelBinding<TDomain, TState> : StateModelBinding
         _visitReferences(in state, visitor);
     }
 
-    internal override DurableBase Allocate() {
+    internal override IDurableObject Allocate() {
         TDomain domain = _allocate();
         RequireDomain(domain);
         return domain;
@@ -135,7 +135,7 @@ public sealed class StateModelBinding<TDomain, TState> : StateModelBinding
         _hydrate((TDomain)domain, in state, objects);
     }
 
-    internal override ObjectId AddRoot(CaptureContext context, DurableBase domain) {
+    internal override ObjectId AddRoot(CaptureContext context, IDurableObject domain) {
         RequireDomain(domain);
         return context.AddRoot((TDomain)domain, CurrentSchema, _capture, _preparation);
     }

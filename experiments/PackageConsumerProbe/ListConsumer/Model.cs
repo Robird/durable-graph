@@ -28,13 +28,13 @@ public partial struct Pair<T, U> {
 }
 
 [DurableType("Box", 1)]
-public partial class Box<T> : DurableBase {
+public partial class Box<T> : IDurableObject {
     [DurableField(1)] public T Value = default!;
     [DurableField(2)] public List<T> Items = [];
 }
 
 [DurableType("World", 1)]
-public partial class World : DurableBase {
+public partial class World : IDurableObject {
     [DurableField(1)] public List<Point> Points = [];
     [DurableField(2)] public List<Point> Alias = [];
     [DurableField(3)] public List<List<int>> Nested = [];

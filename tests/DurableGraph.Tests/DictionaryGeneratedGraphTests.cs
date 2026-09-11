@@ -43,7 +43,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             using Atelia.DurableGraph.Generated;
             using Atelia.DurableGraph.StateStore;
             {{declaration}}
-            [DurableType("KeyWorld", 1)] public partial class KeyWorld<TKey> : DurableBase where TKey : notnull {
+            [DurableType("KeyWorld", 1)] public partial class KeyWorld<TKey> : IDurableObject where TKey : notnull {
                 [DurableField(1)] public Dictionary<TKey, string> Values = new();
             }
             public static class Host {
@@ -91,15 +91,15 @@ public sealed partial class DurableSchemaGeneratorTests {
                 [DurableField(1)] public int X;
                 [DurableField(2)] public Node? Link;
             }
-            [DurableType("Box", 1)] public partial class Box<T> : DurableBase {
+            [DurableType("Box", 1)] public partial class Box<T> : IDurableObject {
                 [DurableField(1)] public T Value = default!;
             }
-            [DurableType("Node", 1)] public partial class Node : DurableBase {
+            [DurableType("Node", 1)] public partial class Node : IDurableObject {
                 [DurableField(1)] public World? Owner;
                 public override bool Equals(object? other) => throw new InvalidOperationException("Domain equality must not run");
                 public override int GetHashCode() => throw new InvalidOperationException("Domain hash must not run");
             }
-            [DurableType("World", 1)] public partial class World : DurableBase {
+            [DurableType("World", 1)] public partial class World : IDurableObject {
                 [DurableField(1)] public Dictionary<string, Point?> Points = new(StringComparer.OrdinalIgnoreCase);
                 [DurableField(2)] public Dictionary<string, Point?>? Alias;
                 [DurableField(3)] public Dictionary<Node, World> Identities = new(ReferenceEqualityComparer.Instance);

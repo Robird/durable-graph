@@ -35,7 +35,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         MetadataReference reference = MetadataReference.CreateFromImage(ImmutableArray.CreateRange(stream.ToArray()));
         GeneratorTestRun app = RunCrossAssemblyGenerator("""
             using Atelia.DurableGraph;
-            [DurableType("World",1)] public partial class World:DurableBase {
+            [DurableType("World",1)] public partial class World:IDurableObject {
                 [DurableField(1)] public Remote.Point Position;
                 [DurableField(2)] public Remote.Shell Shell;
             }
@@ -67,7 +67,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             using Atelia.DurableGraph;
             [DurableType("LocalPoint",1)] public partial struct LocalPoint { [DurableField(1)] public int X; }
             [DurableType("LocalInline",1)] public partial struct LocalInline { [DurableField(1)] public Remote.Point Position; }
-            [DurableType("Base",1)] public partial class Base:DurableBase { [DurableField(1)] public Remote.Point Position; }
+            [DurableType("Base",1)] public partial class Base:IDurableObject { [DurableField(1)] public Remote.Point Position; }
             [DurableType("World",1)] public partial class World<T>:Base { [DurableField(1)] public {{fieldType}} Value; }
             """,[library.Reference]);
         AssertSchemaOnlyCompiles(app);
@@ -80,9 +80,9 @@ public sealed partial class DurableSchemaGeneratorTests {
     public void CrossAssemblyInlineOrdinaryLibraryReportsOptInAndNominalUseDoesNotRequestExports() {
         const string source="using Atelia.DurableGraph; [DurableType(\"Point\",1)] public partial struct Point { [DurableField(1)] public int X; }";
         var library=EmitCrossAssemblyReference(RunCrossAssemblyGenerator(source));
-        GeneratorTestRun fixedUse=RunCrossAssemblyGenerator("using Atelia.DurableGraph; [DurableType(\"World\",1)] public partial class World:DurableBase { [DurableField(1)] public Point Value; }",[library.Reference]);
+        GeneratorTestRun fixedUse=RunCrossAssemblyGenerator("using Atelia.DurableGraph; [DurableType(\"World\",1)] public partial class World:IDurableObject { [DurableField(1)] public Point Value; }",[library.Reference]);
         Assert.Contains(fixedUse.GeneratorDiagnostics,d=>d.Id=="DG0023"&&d.GetMessage().Contains("DurableGraphGenerateDefinitions=true"));
-        GeneratorTestRun nominal=RunCrossAssemblyGenerator("using Atelia.DurableGraph; [DurableType(\"World\",1)] public partial class World:DurableBase { [DurableField(1)] public Point[] Value=[]; }",[library.Reference]);
+        GeneratorTestRun nominal=RunCrossAssemblyGenerator("using Atelia.DurableGraph; [DurableType(\"World\",1)] public partial class World:IDurableObject { [DurableField(1)] public Point[] Value=[]; }",[library.Reference]);
         AssertSchemaOnlyCompiles(nominal);
         Assert.DoesNotContain("references-sha256",GeneratedSource(nominal,"DurableGraphSchemaHistoryCandidates.g.cs"));
     }
@@ -99,7 +99,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             [DurableType("Point",1)] public struct Point { public int X; }
             """;
         MetadataReference library=EmitCrossAssemblyRawReference(source);
-        GeneratorTestRun app=RunCrossAssemblyGenerator("using Atelia.DurableGraph; [DurableType(\"World\",1)] public partial class World:DurableBase { [DurableField(1)] public Point Value; }",[library]);
+        GeneratorTestRun app=RunCrossAssemblyGenerator("using Atelia.DurableGraph; [DurableType(\"World\",1)] public partial class World:IDurableObject { [DurableField(1)] public Point Value; }",[library]);
         Assert.Contains(app.GeneratorDiagnostics,d=>d.Id=="DG0023" && d.GetMessage().Contains(missingHelpers ? "helpers" : "execution contract"));
         Assert.DoesNotContain(app.GeneratorDiagnostics,d=>d.Id=="CS8785");
     }
@@ -108,9 +108,9 @@ public sealed partial class DurableSchemaGeneratorTests {
     public void CrossAssemblyInlineRejectsMultipleOwnersButIgnoresUnusedBadExports() {
         var good=EmitCrossAssemblyReference(RunCrossAssemblyGenerator(InlineLibrarySource,forceDefinitions:"true"));
         MetadataReference bad=EmitCrossAssemblyRawReference("[assembly:Atelia.DurableGraph.DurableSchemaExport(9,\"Point\",1,\"bad\")] public class Other {}");
-        GeneratorTestRun conflict=RunCrossAssemblyGenerator("using Atelia.DurableGraph; [DurableType(\"World\",1)] public partial class World:DurableBase { [DurableField(1)] public Remote.Point Value; }",[good.Reference,bad]);
+        GeneratorTestRun conflict=RunCrossAssemblyGenerator("using Atelia.DurableGraph; [DurableType(\"World\",1)] public partial class World:IDurableObject { [DurableField(1)] public Remote.Point Value; }",[good.Reference,bad]);
         Assert.Contains(conflict.GeneratorDiagnostics,d=>d.Id=="DG0023"&&d.GetMessage().Contains("owners"));
-        GeneratorTestRun unused=RunCrossAssemblyGenerator("using Atelia.DurableGraph; [DurableType(\"World\",1)] public partial class World:DurableBase { [DurableField(1)] public int Value; }",[good.Reference,bad]);
+        GeneratorTestRun unused=RunCrossAssemblyGenerator("using Atelia.DurableGraph; [DurableType(\"World\",1)] public partial class World:IDurableObject { [DurableField(1)] public int Value; }",[good.Reference,bad]);
         AssertSchemaOnlyCompiles(unused);
     }
 
@@ -121,7 +121,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         GeneratorTestRun app=RunCrossAssemblyGenerator("""
             using Atelia.DurableGraph;
             [DurableType("Hidden",1)] public partial struct LocalHidden { [DurableField(1)] public int X; }
-            [DurableType("World",1)] public partial class World:DurableBase { [DurableField(1)] public Remote.Shell Value; }
+            [DurableType("World",1)] public partial class World:IDurableObject { [DurableField(1)] public Remote.Shell Value; }
             """,[library.Reference]);
         Assert.Contains(app.GeneratorDiagnostics,d=>d.Id=="DG0023"&&d.GetMessage().Contains("owned locally"));
     }
@@ -135,7 +135,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         GeneratorTestRun libraryV1 = RunCrossAssemblyGenerator(libraryV1Source, forceDefinitions: "true");
         tool.Publish(libraryHistory.WriteManifest(libraryV1), libraryHistory.History);
         var referenceV1 = EmitCrossAssemblyReference(libraryV1).Reference;
-        const string appV1Source = "using Atelia.DurableGraph; [DurableType(\"World\",1)] public partial class World:DurableBase { [DurableField(1)] public Point Position; }";
+        const string appV1Source = "using Atelia.DurableGraph; [DurableType(\"World\",1)] public partial class World:IDurableObject { [DurableField(1)] public Point Position; }";
         GeneratorTestRun appV1 = RunCrossAssemblyGenerator(appV1Source, [referenceV1]);
         AssertSchemaOnlyCompiles(appV1);
         string referencePath = Path.Combine(appHistory.History, "../references.g.cs");
@@ -149,7 +149,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         GeneratorTestRun appV2 = RunCrossAssemblyGenerator("""
             using Atelia.DurableGraph;
             using W=Atelia.DurableGraph.Generated.Family_576F726C64;
-            [DurableType("World",2)] public partial class World:DurableBase {
+            [DurableType("World",2)] public partial class World:IDurableObject {
                 [DurableField(2)] public int Count;
                 public static void UpgradeV1ToV2(in W.V1 prior,out W.V2 next) => next=new(prior.Segment0Field1.Segment0Field1);
             }
@@ -247,7 +247,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         string source = attribute + (defect == "duplicate" ? attribute : "") +
             "[Atelia.DurableGraph.DurableType(\"Point\",1)] public struct Point { public int X; }";
         MetadataReference library = EmitCrossAssemblyRawReference(source);
-        GeneratorTestRun app = RunCrossAssemblyGenerator("using Atelia.DurableGraph; [DurableType(\"World\",1)] public partial class World:DurableBase { [DurableField(1)] public Point Value; }", [library]);
+        GeneratorTestRun app = RunCrossAssemblyGenerator("using Atelia.DurableGraph; [DurableType(\"World\",1)] public partial class World:IDurableObject { [DurableField(1)] public Point Value; }", [library]);
         Assert.Contains(app.GeneratorDiagnostics, d => d.Id == (defect == "cycle" ? "DG0019" : "DG0023"));
         Assert.DoesNotContain(app.GeneratorDiagnostics, d => d.Id == "CS8785");
     }

@@ -28,7 +28,7 @@ internal static class Program {
 }
 
 [DurableType("package.persisted-base", 1)]
-public abstract partial class NamedObject : DurableBase {
+public abstract partial class NamedObject : IDurableObject {
     [DurableField(1)] private string _name;
     protected NamedObject(string name) { _name = name; }
     protected string Name => _name;

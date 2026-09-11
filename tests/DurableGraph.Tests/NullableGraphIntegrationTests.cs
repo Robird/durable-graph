@@ -10,7 +10,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         Type host = EmitAndLoad(run.OutputCompilation).GetType("NullableGraph.Host")!;
         object[] fixture = (object[])host.GetMethod("Create")!.Invoke(null, null)!;
         var models = (StateModelRegistry)fixture[0];
-        DurableBase world = Assert.IsAssignableFrom<DurableBase>(fixture[1]);
+        IDurableObject world = Assert.IsAssignableFrom<IDurableObject>(fixture[1]);
         Action edit = (Action)fixture[2], clear = (Action)fixture[3], restore = (Action)fixture[4];
         StateModelSnapshot snapshot = models.Snapshot();
         Assert.True(snapshot.TryGetCurrentModel(world.GetType(), out StateModelBinding? binding));
@@ -62,7 +62,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         using Atelia.DurableGraph;
         using Atelia.DurableGraph.StateStore;
         namespace NullableGraph;
-        [DurableType("nullable.node", 1)] public partial class Node : DurableBase {
+        [DurableType("nullable.node", 1)] public partial class Node : IDurableObject {
             [DurableField(1)] public Node Self;
             [DurableField(2)] public int Value;
         }
@@ -74,13 +74,13 @@ public sealed partial class DurableSchemaGeneratorTests {
         [DurableType("nullable.envelope", 1)] public partial struct Envelope<T> {
             [DurableField(1)] public T Value;
         }
-        [DurableType("nullable.box", 1)] public partial class Box<T> : DurableBase {
+        [DurableType("nullable.box", 1)] public partial class Box<T> : IDurableObject {
             [DurableField(1)] public T Value;
         }
-        [DurableType("nullable.maybe", 1)] public partial class Maybe<T> : DurableBase where T:struct {
+        [DurableType("nullable.maybe", 1)] public partial class Maybe<T> : IDurableObject where T:struct {
             [DurableField(1)] public T? Value;
         }
-        [DurableType("nullable.world", 1)] public partial class World : DurableBase {
+        [DurableType("nullable.world", 1)] public partial class World : IDurableObject {
             [DurableField(1)] public Envelope<Point?>? Value;
             [DurableField(2)] public List<Point?> Items = new();
             [DurableField(3)] public Box<int?> Scalar = new();

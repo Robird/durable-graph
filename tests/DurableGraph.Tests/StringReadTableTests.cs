@@ -199,7 +199,7 @@ public sealed class StringReadTableTests {
         Assert.Equal("pending", candidate.Objects.Single(item => item.Kind == ObjectStateKind.String).StringContent);
     }
 
-    private sealed class Domain : DurableBase {
+    private sealed class Domain : IDurableObject {
         internal string? Text;
     }
 }

@@ -13,7 +13,7 @@ namespace InlineStructPackageConsumerProbe;
 #else
 [DurableType("package.inline-owner", 3)]
 #endif
-public abstract partial class Owner : DurableBase {
+public abstract partial class Owner : IDurableObject {
 #if HISTORY_V3
     [DurableField(1)] private readonly long _summary = -1;
     internal long Summary => _summary;

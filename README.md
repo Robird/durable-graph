@@ -50,14 +50,14 @@ using Atelia.DurableGraph;
 namespace QuickStart;
 
 [DurableType("Character", 1)]
-public partial class Character : DurableBase {
+public partial class Character : IDurableObject {
     [DurableField(1)] public string Name = "";
     [DurableField(2)] public int Hp;
     [DurableField(3)] public Character? Partner;
 }
 
 [DurableType("World", 1)]
-public partial class World : DurableBase {
+public partial class World : IDurableObject {
     [DurableField(1)] public Character Hero = null!;
     [DurableField(2)] public List<Character> Characters = [];
     [Transient] private Dictionary<string, Character> _byName = new();
@@ -70,12 +70,12 @@ public partial class World : DurableBase {
 }
 
 [DurableType("DamageEvent", 1)]
-public partial class DamageEvent : DurableBase {
+public partial class DamageEvent : IDurableObject {
     [DurableField(1)] public int Amount;
 }
 ```
 
-领域 class/struct 使用顶层 `partial` 声明。class 继承链最终到 `DurableBase`；每个参与持久化的声明显式标记
+领域 class/struct 使用顶层 `partial` 声明。class 实现 `IDurableObject`（可从自己的领域基类继承该接口）；每个参与持久化的声明显式标记
 `DurableType`。实例字段用 `DurableField` 或 `Transient` 明确分类；FieldId 是该声明内的稳定正整数，
 基类和派生类可以分别有自己的字段 1。方法不参与序列化，普通 class 自动属性目前不等价于受支持字段。
 
@@ -171,7 +171,7 @@ var pair = history.ReadPair(before, lastEvent, models);
 需要零写入浏览时使用示例中的 `OpenReadOnlyExisting`；可写打开下的枚举可能保存 Journal 派生缓存。
 
 `ReadPair` 是实验性只读快照 API：按输入顺序返回 First/Second，两边成功后才交付。
-默认返回两个 `DurableBase`，保留各自实际类型；通过输入 frame 的 `Kind` 判断 State/Event，通过模式匹配使用具体领域类型。
+默认返回两个 `IDurableObject`，保留各自实际类型；通过输入 frame 的 `Kind` 判断 State/Event，通过模式匹配使用具体领域类型。
 两个输入无需相邻，也不要求一份 State、一份 Event；已知类型时仍可使用 `ReadPair<TFirst,TSecond>` 进行返回类型校验。
 它在本次操作内复用相同 ObjectVersion 的解码结果，并可共享完整引用闭包都一致的领域实例。
 **两份结果及其可达对象都必须按只读快照使用，包括会影响观察结果的 Transient 写入**。
@@ -261,14 +261,23 @@ dotnet build QuickStart/QuickStart.csproj --no-restore -p:DurableGraphPackageVer
 
 ## 当前能放进模型的内容
 
+领域引用对象统一实现 `IDurableObject`；旧 `DurableBase` 已移除。升级旧模型时，将直接基类改成接口，
+将泛型约束改为 `where T : class, IDurableObject`，并一起重编译模型库和宿主。
+已有领域继承链保留，各祖先仍须参与 Durable Schema；删除原空基类本身不要求 Schema 升版。
+
+record class 的 positional/自动属性使用 `[field: DurableField(id)]` 分类真实 backing field；
+派生 positional 参数若复用基类属性，只在实际声明存储的基类标记。C# 的 `with` 和相等性保持原行为，
+不自动深复制引用成员或按内容比较容器。框架按引用身份保存，两个等值但不同实例的 record 不会合并。
+可运行的泛型 record 继承、事件恢复与两代升级见[真实包示例](experiments/PackageConsumerProbe/RecordClassConsumer/README.md)。
+
 | 内容 | 当前边界 |
 |---|---|
 | 标量 | bool、byte/sbyte、short/ushort、int/uint、long/ulong、char、Half/float/double、Guid、decimal、TimeSpan、DateOnly、TimeOnly、DateTimeOffset |
-| 领域类型 | 显式 Durable class、struct、record struct、enum；支持泛型、继承、private/readonly 字段及跨程序集组合 |
+| 领域类型 | 显式 Durable class、record class、struct、record struct、enum；支持泛型、继承、private/readonly 字段及跨程序集组合 |
 | 值组合 | inline struct 嵌套布局、Nullable；record 自动属性的存储使用 `[field: DurableField(...)]` / `[field: Transient]` |
 | 引用与数组 | string、已登记的实际派生实例、共享/循环；零下界 `T[]` 和 rank 2–4 多维数组、交错数组 |
 | 容器 | exact BCL `List<T>` 和实验性 `Dictionary<TKey,TValue>`；按内容保存。复合 Key 与当前 comparer 的边界见[真实字典示例](experiments/PackageConsumerProbe/CompositeDictionaryConsumer/README.md) |
-| 尚不支持 | ValueTuple、DateTime、record class、CLR 嵌套类型/ref struct、任意 object/interface 字段、boxed value 身份、数组协变、非零下界及非 SZ rank-1 数组、其他未适配 BCL 容器 |
+| 尚不支持 | ValueTuple、DateTime、任意外部基类、CLR 嵌套类型/ref struct、任意 object/interface 字段、boxed value 身份、数组协变、非零下界及非 SZ rank-1 数组、其他未适配 BCL 容器 |
 
 支持的类型可以在字段、泛型参数和容器元素中组合。仍需遵守各类型限制；例如 Dictionary 根 Nullable Key 不支持，
 容器子类/接口字段不自动当作 BCL 内容对象。string 保留非空实例的引用身份，空串统一为 `string.Empty`。

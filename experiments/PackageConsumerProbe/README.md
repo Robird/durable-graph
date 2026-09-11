@@ -135,6 +135,13 @@ assertions; product behavior has no dependency on that allocation behavior or pr
 
 ## EventHistory publication and retained StateStore regressions
 
+The [record class consumer](RecordClassConsumer/README.md) exercises DB-068 through three real
+package builds: an external generic ordinary-class hierarchy becomes a same-Schema record hierarchy,
+then explicitly upgrades a changed field. It covers pending Event recovery, event-only registration,
+record identity and `with`, retained immutable history, Base rewrite and subsequent Delta.
+Run `./experiments/PackageConsumerProbe/Run-RecordClassProbe.ps1`, optionally with a matching
+`-PackageSource <feed> -Version <version>`.
+
 For application onboarding, start with the [snapshot/recovery consumer](EventHistoryRecoveryConsumer/README.md):
 default policy calls, private readonly snapshot contents, event-only reading, and the same PendingEvent
 control function exercised by the internal failure regressions. Its runner also checks the packaged and

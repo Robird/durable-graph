@@ -14,7 +14,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         foreach (int count in new[] { 34, 48, 65 }) {
             object[] fixture = create(count);
             StateModelRegistry registry = (StateModelRegistry)fixture[0];
-            DurableBase world = Assert.IsAssignableFrom<DurableBase>(fixture[1]);
+            IDurableObject world = Assert.IsAssignableFrom<IDurableObject>(fixture[1]);
             StateModelSnapshot snapshot = registry.Snapshot();
             Assert.True(snapshot.TryGetCurrentModel(world.GetType(), out StateModelBinding? model));
             Assert.NotNull(model);
@@ -83,7 +83,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             [DurableField(9)] public long G;
             [DurableField(10)] public long H;
         }
-        [DurableType("adaptive.world",1)] public partial class World:DurableBase {
+        [DurableType("adaptive.world",1)] public partial class World:IDurableObject {
             [DurableField(1)] public List<Wide<Cell<int>>> Items = new();
         }
         public static class Host {

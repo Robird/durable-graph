@@ -240,7 +240,7 @@ public sealed class LoadedReferenceWorldTests : IDisposable {
         Assert.Equal(count, hydrations);
     }
 
-    private abstract class Domain : DurableBase {
+    private abstract class Domain : IDurableObject {
         internal Domain? Next;
         internal byte Value;
     }

@@ -14,7 +14,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             assemblyName ?? $"CrossAssembly_{Guid.NewGuid():N}",
             [CSharpSyntaxTree.ParseText(WithFixtureBridgeImport(source), ParseOptions)],
             PlatformReferences().Concat(new[] {
-                typeof(DurableBase).Assembly,
+                typeof(IDurableObject).Assembly,
                 typeof(StateStore.Serialization.BinaryPayloadReader).Assembly,
                 typeof(StateStore.SchemaStore).Assembly,
                 typeof(StateStore.Storage.ObjectVersionChain).Assembly,

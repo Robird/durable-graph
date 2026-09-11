@@ -12,7 +12,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         SchemaHistoryTool publisher = new();
         string initialSource = FusedDeltaPreamble + """
             [DurableType("fused.base", 1)]
-            public abstract partial class OldBase : DurableBase {
+            public abstract partial class OldBase : IDurableObject {
                 [DurableField(99)] private int _number;
             }
             [DurableType("fused.leaf", 1)]
@@ -28,7 +28,7 @@ public sealed partial class DurableSchemaGeneratorTests {
 
         string currentSource = FusedDeltaPreamble + """
             [DurableType("fused.base", 2)]
-            public abstract partial class NewBase : DurableBase {
+            public abstract partial class NewBase : IDurableObject {
                 [DurableField(2)] private byte _small;
             }
             [DurableType("fused.leaf", 2)]
@@ -108,7 +108,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         using Atelia.DurableGraph.StateStore.Serialization;
         namespace FusedCapture;
         [DurableType("fused.capture.base", 1)]
-        public abstract partial class Base : DurableBase {
+        public abstract partial class Base : IDurableObject {
             [DurableField(1)] private string? _name;
             protected Base(string name) { _name = name; }
             public void Rename(string name) { _name = name; }

@@ -3,7 +3,7 @@ using Atelia.DurableGraph;
 namespace HistoryCapabilityPackageConsumerProbe;
 
 [DurableType("package.history-legacy", 1)]
-public sealed partial class Legacy : DurableBase {
+public sealed partial class Legacy : IDurableObject {
     [DurableField(1)] private int _value;
     [DurableField(2)] private Legacy? _next;
     // A stable payload makes the score-only Delta smaller even after its prior locator.

@@ -53,7 +53,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         Type host = CompileRecordGraphHost();
         object[] fixture = host.GetMethod("BadKeys")!.CreateDelegate<Func<object[]>>()();
         StateModelSnapshot models = ((StateModelRegistry)fixture[0]).Snapshot();
-        DurableBase world = (DurableBase)fixture[1];
+        IDurableObject world = (IDurableObject)fixture[1];
         CaptureSession session = new();
         using CaptureContext context = session.BeginCapture(models);
         models.ResolveCurrentModel(world.GetType()).AddRoot(context, world);
@@ -129,11 +129,11 @@ public sealed partial class DurableSchemaGeneratorTests {
         }
         [DurableType("record.BadKey",1)] public readonly partial record struct BadKey(
             [field:DurableField(1)] int Number, [field:Transient] int Scratch);
-        [DurableType("record.BadWorld",1)] public partial class BadWorld:DurableBase {
+        [DurableType("record.BadWorld",1)] public partial class BadWorld:IDurableObject {
             [DurableField(1)] public Dictionary<BadKey,int> Keys=new();
         }
-        [DurableType("record.Box",1)] public partial class Box<T>:DurableBase { [DurableField(1)] public T Value=default!; }
-        [DurableType("record.World",1)] public partial class World:DurableBase {
+        [DurableType("record.Box",1)] public partial class Box<T>:IDurableObject { [DurableField(1)] public T Value=default!; }
+        [DurableType("record.World",1)] public partial class World:IDurableObject {
             [DurableField(1)] public Dictionary<Key<int>,Value<int>> Primary=new();
             [DurableField(2)] public Dictionary<Key<int>,Value<int>> Application=new(new KeyComparer());
             [DurableField(3)] public Dictionary<Key<Scope>,Value<int>> Complex=new();

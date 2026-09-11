@@ -101,7 +101,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             using P = Atelia.DurableGraph.Generated.Family_506F696E74;
             [ValueUpgradeRuleSet] public sealed class VersionMarker;
             [DurableType("Point",1)] public partial struct Point { [DurableField(1)] public int X; }
-            [DurableType("World",VERSION)] public partial class World:DurableBase {
+            [DurableType("World",VERSION)] public partial class World:IDurableObject {
                 [DurableField(1)] public Point First; [DurableField(2)] public Point Second;
             }
             """;
@@ -168,7 +168,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         GeneratorTestRun legacy = RunGenerator("""
             using Atelia.DurableGraph;
             [ValueUpgradeRuleSet] public sealed class Rules;
-            [DurableType("Box",2)] public partial class Box : DurableBase {
+            [DurableType("Box",2)] public partial class Box : IDurableObject {
                 [UpgradeDependency("Value", typeof(Rules), "Box", 1, "Box", 1)]
                 private static void UpgradeStateV1ToV2(in int prior, out int next) => next=prior;
             }
@@ -199,7 +199,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         using AncestryHistoryDirectory files = new();
         GeneratorTestRun first = RunGenerator("""
             using Atelia.DurableGraph;
-            [DurableType("Box",1)] public partial class Box<T>:DurableBase { [DurableField(1)] public T Value=default!; }
+            [DurableType("Box",1)] public partial class Box<T>:IDurableObject { [DurableField(1)] public T Value=default!; }
             """);
         AssertSchemaOnlyCompiles(first);
         new SchemaHistoryTool().Publish(files.WriteManifest(first), files.History);
@@ -242,7 +242,7 @@ public sealed partial class DurableSchemaGeneratorTests {
     private static string ValueUpgradeDiagnosticSource(string dependencies) => $$"""
         using Atelia.DurableGraph;
         using B = Atelia.DurableGraph.Generated.Family_426F78;
-        [DurableType("Box",2)] public partial class Box<T> : DurableBase { [DurableField(1)] public T Value=default!; }
+        [DurableType("Box",2)] public partial class Box<T> : IDurableObject { [DurableField(1)] public T Value=default!; }
         [ValueUpgradeRuleSet] public sealed class Rules;
         public static class Upgrades {
             [DurableUpgrade(typeof(Box<>),1)] {{dependencies}}
@@ -261,7 +261,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         using PairState = Atelia.DurableGraph.Generated.Family_50616972;
         [DurableType("Point",{{version}})] public partial struct Point { [DurableField(1)] public {{(version == 1 ? "int" : "long")}} X; }
         [DurableType("Pair",{{version}})] public partial struct Pair<T> { [DurableField(1)] public T Left; [DurableField(2)] public T Right; }
-        [DurableType("Box",{{version}})] public partial class Box<T> : DurableBase { [DurableField(1)] public T Value=default!; }
+        [DurableType("Box",{{version}})] public partial class Box<T> : IDurableObject { [DurableField(1)] public T Value=default!; }
         """ + (includeUpgrades ? """
         [ValueUpgradeRuleSet(AllowKeepExact=true)] public sealed class Coordinates;
         public static class Upgrades {

@@ -21,8 +21,6 @@ internal sealed class DurableGraphOperationsProbeGenerator : IIncrementalGenerat
         "Atelia.DurableGraph.DurableFieldAttribute";
     private const string TransientAttributeMetadataName =
         "Atelia.DurableGraph.TransientAttribute";
-    private const string DurableBaseMetadataName =
-        "Atelia.DurableGraph.DurableBase";
     private const string GeneratedGraphOperationsTypeName =
         "__DurableGraphOperations";
     private const string GeneratedHintName =
@@ -61,20 +59,20 @@ internal sealed class DurableGraphOperationsProbeGenerator : IIncrementalGenerat
                     (INamedTypeSymbol)attributeContext.TargetSymbol);
 
         context.RegisterSourceOutput(
-            durableTypes.Collect(),
+            durableTypes.Collect().Combine(context.CompilationProvider),
             static (productionContext, candidateTypes) =>
-                GenerateGraphOperations(productionContext, candidateTypes));
+                GenerateGraphOperations(productionContext, candidateTypes.Left, candidateTypes.Right));
     }
 
     private static void GenerateGraphOperations(
         SourceProductionContext context,
-        ImmutableArray<INamedTypeSymbol> candidateTypes) {
+        ImmutableArray<INamedTypeSymbol> candidateTypes, Compilation compilation) {
         List<INamedTypeSymbol> types = GetDistinctSortedTypes(candidateTypes);
         List<DurableGraphTypeModel> validTypes = new(types.Count);
 
         foreach (INamedTypeSymbol type in types) {
             context.CancellationToken.ThrowIfCancellationRequested();
-            DurableGraphTypeModel? model = CreateTypeModel(context, type);
+            DurableGraphTypeModel? model = CreateTypeModel(context, type, compilation);
 
             if (model.HasValue) {
                 validTypes.Add(model.Value);
@@ -119,10 +117,10 @@ internal sealed class DurableGraphOperationsProbeGenerator : IIncrementalGenerat
 
     private static DurableGraphTypeModel? CreateTypeModel(
         SourceProductionContext context,
-        INamedTypeSymbol type) {
+        INamedTypeSymbol type, Compilation compilation) {
         string typeName = type.ToDisplayString(QualifiedNameFormat);
 
-        if (!HasSupportedTypeShape(type, context.CancellationToken)) {
+        if (!HasSupportedTypeShape(type, context.CancellationToken) || !DurableSchemaGenerator.HasDurableContract(type, compilation)) {
             context.ReportDiagnostic(Diagnostic.Create(
                 DurableSchemaGenerator.InvalidTypeShape,
                 GetSourceLocation(type),
@@ -262,7 +260,7 @@ internal sealed class DurableGraphOperationsProbeGenerator : IIncrementalGenerat
             !type.IsSealed ||
             type.Arity != 0 ||
             type.ContainingType is not null ||
-            !HasMetadataName(type.BaseType, DurableBaseMetadataName)) {
+            type.BaseType?.SpecialType != SpecialType.System_Object) {
             return false;
         }
 

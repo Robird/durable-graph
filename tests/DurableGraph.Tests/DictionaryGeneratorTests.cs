@@ -17,12 +17,12 @@ public sealed partial class DurableSchemaGeneratorTests {
             [DurableType("Recursive",1)] public partial struct Recursive {
                 [DurableField(1)] public Dictionary<int,Recursive> Children;
             }
-            [DurableType("Box",1)] public partial class Box<T>:DurableBase { [DurableField(1)] public T Value; }
-            [DurableType("Map",1)] public partial class Map<K,V>:DurableBase where K:notnull {
+            [DurableType("Box",1)] public partial class Box<T>:IDurableObject { [DurableField(1)] public T Value; }
+            [DurableType("Map",1)] public partial class Map<K,V>:IDurableObject where K:notnull {
                 [DurableField(1)] public Dictionary<K,V> Items;
             }
             [DurableType("Derived",1)] public partial class Derived:Box<Dictionary<Key,Point?>> {}
-            [DurableType("World",1)] public partial class World:DurableBase {
+            [DurableType("World",1)] public partial class World:IDurableObject {
                 [DurableField(1)] public Dictionary<string,List<Dictionary<int,Point?>>> Nested;
                 [DurableField(2)] public List<Dictionary<Key,Point[,]>> Arrays;
                 [DurableField(3)] public Dictionary<int,World>[] Maps;
@@ -60,7 +60,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         GeneratorTestRun run = RunGenerator("using System.Collections.Generic; using Atelia.DurableGraph; " +
             "[DurableType(\"Point\",1)] public partial struct Point { [DurableField(1)] public int X; } " +
             "public enum Unmarked {A} public struct UnregisteredKey {public int X;} public class ChildDictionary:Dictionary<int,int> {} " +
-            "[DurableType(\"Bad\",1)] public partial class Bad:DurableBase { " +
+            "[DurableType(\"Bad\",1)] public partial class Bad:IDurableObject { " +
             "[DurableField(1)] public " + fieldType + " Value; }");
         Assert.Contains(run.GeneratorDiagnostics, diagnostic => diagnostic.Id == "DG0007");
     }
@@ -70,7 +70,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         GeneratorTestRun run = RunGenerator("""
             using Atelia.DurableGraph;
             namespace System.Collections.Generic { public class Dictionary<K,V> {} }
-            [DurableType("Bad",1)] public partial class Bad:DurableBase {
+            [DurableType("Bad",1)] public partial class Bad:IDurableObject {
                 [DurableField(1)] public System.Collections.Generic.Dictionary<int,int> Value;
             }
             """);
@@ -82,11 +82,11 @@ public sealed partial class DurableSchemaGeneratorTests {
         GeneratorTestRun run = RunGenerator("""
             using Atelia.DurableGraph;
             [DurableType("Point",1)] public partial struct Point { [DurableField(1)] public int X; }
-            [DurableType("UserMap",1)] public partial class Dictionary<K,V>:DurableBase {
+            [DurableType("UserMap",1)] public partial class Dictionary<K,V>:IDurableObject {
                 [DurableField(1)] public K Key;
                 [DurableField(2)] public V Value;
             }
-            [DurableType("World",1)] public partial class World:DurableBase {
+            [DurableType("World",1)] public partial class World:IDurableObject {
                 [DurableField(1)] public Dictionary<Point,int> User;
                 [DurableField(2)] public System.Collections.Generic.Dictionary<int,Point> Builtin;
             }
@@ -105,7 +105,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             using Atelia.DurableGraph;
             [DurableType("Key",1)] public enum Key : byte { A=1 }
             [DurableType("Point",1)] public partial struct Point { [DurableField(1)] public int X; }
-            [DurableType("World",1)] public partial class World:DurableBase {
+            [DurableType("World",1)] public partial class World:IDurableObject {
                 [DurableField(1)] public Dictionary<Key,Point> Items;
             }
             """;
@@ -124,7 +124,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         using AncestryHistoryDirectory history = new();
         GeneratorTestRun first = RunGenerator("""
             using Atelia.DurableGraph;
-            [DurableType("Box",1)] public partial class Box<T>:DurableBase { [DurableField(1)] public T Value; }
+            [DurableType("Box",1)] public partial class Box<T>:IDurableObject { [DurableField(1)] public T Value; }
             """);
         AssertSchemaOnlyCompiles(first);
         new SchemaHistoryTool().Publish(history.WriteManifest(first), history.History);
@@ -132,7 +132,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             using System.Collections.Generic;
             using Atelia.DurableGraph;
             using States=Atelia.DurableGraph.Generated.Family_426F78;
-            [DurableType("Box",2)] public partial class Box<T>:DurableBase {
+            [DurableType("Box",2)] public partial class Box<T>:IDurableObject {
                 [DurableField(1)] public T Value;
                 [DurableField(2)] public int Count;
             }

@@ -34,12 +34,12 @@ public sealed class RuntimeReferenceGraphTests {
     [Fact]
     public void ObjectReadTableCopiesDirectoryAndResolvesSharedTypedInstances() {
         Node first = new(), second = new();
-        Dictionary<ObjectId, DurableBase> source = new() { [new ObjectId(1)] = first, [new ObjectId(2)] = second };
+        Dictionary<ObjectId, IDurableObject> source = new() { [new ObjectId(1)] = first, [new ObjectId(2)] = second };
         string text = new(['x']);
         ObjectReadTable table = new(StringReadTable.FromDecoded([(new ObjectId(3), text)]), source);
         source.Clear();
         Assert.Same(first, table.ResolveDurable<Node>(new ObjectId(1)));
-        Assert.Same(first, table.ResolveDurable<DurableBase>(new ObjectId(1)));
+        Assert.Same(first, table.ResolveDurable<IDurableObject>(new ObjectId(1)));
         Assert.NotSame(table.ResolveDurable<Node>(new ObjectId(1)), table.ResolveDurable<Node>(new ObjectId(2)));
         Assert.Same(text, table.ResolveString(new ObjectId(3)));
         Assert.Null(table.ResolveDurable<Node>(new ObjectId(0)));
@@ -54,11 +54,11 @@ public sealed class RuntimeReferenceGraphTests {
         Node instance = new();
         StringReadTable strings = StringReadTable.FromDecoded([]);
         Assert.Throws<InvalidDataException>(() => new ObjectReadTable(strings,
-            new Dictionary<ObjectId, DurableBase> { [new ObjectId(1)] = instance, [new ObjectId(2)] = instance }));
+            new Dictionary<ObjectId, IDurableObject> { [new ObjectId(1)] = instance, [new ObjectId(2)] = instance }));
         Assert.Throws<InvalidDataException>(() => new ObjectReadTable(strings,
-            new Dictionary<ObjectId, DurableBase> { [new ObjectId(0)] = instance }));
+            new Dictionary<ObjectId, IDurableObject> { [new ObjectId(0)] = instance }));
         Assert.Throws<InvalidDataException>(() => new ObjectReadTable(strings,
-            new Dictionary<ObjectId, DurableBase> { [new ObjectId(1)] = null! }));
+            new Dictionary<ObjectId, IDurableObject> { [new ObjectId(1)] = null! }));
     }
 
     [Fact]
@@ -148,10 +148,10 @@ public sealed class RuntimeReferenceGraphTests {
         Assert.Single(context.Seal().Objects);
     }
 
-    private class Node : DurableBase {
+    private class Node : IDurableObject {
         internal byte Value;
-        internal DurableBase? Next;
-        internal DurableBase? Alias;
+        internal IDurableObject? Next;
+        internal IDurableObject? Alias;
     }
     private sealed class UnknownNode : Node { }
     private readonly record struct NodeState(byte Value, ObjectId Next, ObjectId Alias);

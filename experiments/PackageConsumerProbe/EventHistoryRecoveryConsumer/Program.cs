@@ -76,7 +76,7 @@ internal static class Program {
         }
     }
 
-    private static void Apply(World state, DurableBase pending) {
+    private static void Apply(World state, IDurableObject pending) {
         if (pending is not DamageEvent damage) { throw new InvalidOperationException("Unsupported pending event."); }
         Character actor = state.Find(damage.TargetSnapshot.ActorId);
         Require(actor.Hp == damage.TargetSnapshot.Hp, "Unexpected event basis.");

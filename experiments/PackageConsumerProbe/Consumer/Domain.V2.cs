@@ -3,7 +3,7 @@ using Atelia.DurableGraph;
 namespace PackageConsumerProbe;
 
 [DurableType("probe.package-character", 2)]
-internal sealed partial class Character : DurableBase {
+internal sealed partial class Character : IDurableObject {
     [DurableField(1)]
     private int _score;
 

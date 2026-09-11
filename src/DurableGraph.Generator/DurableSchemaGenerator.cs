@@ -20,8 +20,8 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
         "Atelia.DurableGraph.DurableFieldAttribute";
     private const string TransientAttributeMetadataName =
         "Atelia.DurableGraph.TransientAttribute";
-    private const string DurableBaseMetadataName =
-        "Atelia.DurableGraph.DurableBase";
+    private const string DurableObjectMetadataName =
+        "Atelia.DurableGraph.IDurableObject";
     private const string SchemaHistoryManifestHeader =
         "// durable-graph-schema-history-manifest:9";
     private const string SchemaHistoryHeader =
@@ -33,7 +33,7 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
     internal static readonly DiagnosticDescriptor InvalidTypeShape = new(
         id: "DG0001",
         title: "Invalid durable type shape",
-        messageFormat: "Type '{0}' must be a top-level enum, partial struct (including record struct), or non-record partial class with supported generic constraints in an attributed hierarchy ending at Atelia.DurableGraph.DurableBase",
+        messageFormat: "Type '{0}' must be a top-level enum, partial struct (including record struct), or partial class (including record class) implementing Atelia.DurableGraph.IDurableObject with supported generic constraints in an attributed hierarchy ending at object",
         category: "DurableGraph.Generator",
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true);
@@ -634,7 +634,7 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
         Compilation compilation) {
         string typeName = type.ToDisplayString(QualifiedNameFormat);
 
-        if (!HasSupportedTypeShape(type, context.CancellationToken)) {
+        if (!HasSupportedTypeShape(type, context.CancellationToken) || !HasDurableContract(type, compilation)) {
             context.ReportDiagnostic(Diagnostic.Create(
                 InvalidTypeShape,
                 GetSourceLocation(type),
@@ -644,7 +644,7 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
 
         bool hasErrors = false;
         if (type.TypeKind == TypeKind.Class && type.BaseType is not null && type.BaseType.Arity > 0 &&
-            !HasMetadataName(type.BaseType, DurableBaseMetadataName) &&
+            !IsObjectBase(type.BaseType) &&
             !TryGetTypePattern(type.BaseType, type, halfType, listType, dictionaryType, compilation, out _)) {
             context.ReportDiagnostic(Diagnostic.Create(InvalidTypeShape, GetSourceLocation(type), typeName));
             return null;
@@ -930,7 +930,7 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
         targetSchemaId = null;
         if (fieldType is not INamedTypeSymbol target || target.TypeKind != TypeKind.Class ||
             !(SymbolEqualityComparer.Default.Equals(target.ContainingAssembly, owner.ContainingAssembly)
-                ? HasDurableTypeShape(target, cancellationToken)
+                ? HasDurableTypeShape(target, cancellationToken) && HasDurableContract(target, compilation)
                 : HasExternalDurableNominalShape(target, compilation))) {
             return false;
         }
@@ -954,7 +954,7 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
         typeTag = null; typeTagValue = 0; fieldTypeName = null; inlineSchema = null;
         if (fieldType is not INamedTypeSymbol target || (target.TypeKind != TypeKind.Struct && target.TypeKind != TypeKind.Enum) ||
             (SymbolEqualityComparer.Default.Equals(target.ContainingAssembly, owner.ContainingAssembly)
-                ? !HasDurableTypeShape(target, cancellationToken)
+                ? !HasDurableTypeShape(target, cancellationToken) || !HasDurableContract(target, compilation)
                 : !HasExternalDurableNominalShape(target, compilation))) return false;
         AttributeData? attribute = GetAttribute(target.GetAttributes(), DurableTypeAttributeMetadataName);
         if (attribute is null || attribute.ConstructorArguments.Length != 2 ||

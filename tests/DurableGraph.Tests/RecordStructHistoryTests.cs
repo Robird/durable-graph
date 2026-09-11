@@ -23,7 +23,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             using Atelia.DurableGraph;
             // Keep both compilations on Family: the test concerns persistent layout, not old generated API names.
             [DurableType("FamilyTrigger",1)] public partial struct FamilyTrigger<T> { [DurableField(1)] public T Value; }
-            """ + definition + "[DurableType(\"World\",1)] public partial class World:DurableBase { " +
+            """ + definition + "[DurableType(\"World\",1)] public partial class World:IDurableObject { " +
             (isRecord ? "[DurableField(1)] public RecordPoint Value=new(123456789L,17);" :
                 "[DurableField(1)] public OrdinaryPoint Value=new(){X=17,Y=123456789L};") + " }";
         string before = Source(recordFirst ? record : ordinary, recordFirst);
@@ -58,7 +58,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             using Atelia.DurableGraph;
             [DurableType("Leaf",1)] public readonly partial record struct Leaf([field:DurableField(1)] int Number);
             [DurableType("Envelope",1)] public readonly partial record struct Envelope([field:DurableField(1)] Leaf Value);
-            [DurableType("World",1)] public partial class World:DurableBase { [DurableField(1)] public Envelope Value; }
+            [DurableType("World",1)] public partial class World:IDurableObject { [DurableField(1)] public Envelope Value; }
             """;
         using AncestryHistoryDirectory history = new();
         GeneratorTestRun first = RunGenerator(source);
@@ -81,14 +81,14 @@ public sealed partial class DurableSchemaGeneratorTests {
         GeneratorTestRun first = RunGenerator("""
             using Atelia.DurableGraph;
             [DurableType("Point",1)] public readonly partial record struct OldPoint([field:DurableField(1)] int Number);
-            [DurableType("World",1)] public partial class World:DurableBase { [DurableField(1)] public OldPoint Value=new(17); }
+            [DurableType("World",1)] public partial class World:IDurableObject { [DurableField(1)] public OldPoint Value=new(17); }
             """);
         AssertSchemaOnlyCompiles(first);
         ObjectStateRecord old = CaptureRecordHistoryWorld(first);
         new SchemaHistoryTool().Publish(history.WriteManifest(first), history.History);
         GeneratorTestRun next = RunGenerator("""
             using Atelia.DurableGraph;
-            [DurableType("World",2)] public partial class World:DurableBase { [DurableField(1)] public long Value; }
+            [DurableType("World",2)] public partial class World:IDurableObject { [DurableField(1)] public long Value; }
             """, history.ReadAdditionalTexts());
         AssertSchemaOnlyCompiles(next);
         var assembly = EmitAndLoad(next.OutputCompilation);
@@ -108,7 +108,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             using System.Collections.Generic;
             [DurableType("Key",1)] public readonly partial record struct Key([field:DurableField(1)] int KeyNumber);
             [DurableType("Value",1)] public readonly partial record struct Payload([field:DurableField(1)] int ValueNumber);
-            [DurableType("World",1)] public partial class World:DurableBase {
+            [DurableType("World",1)] public partial class World:IDurableObject {
                 [DurableField(1)] public Dictionary<Key,Payload> Map=new();
             }
             """;
@@ -117,7 +117,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         AssertSchemaOnlyCompiles(first);
         var firstAssembly = EmitAndLoad(first.OutputCompilation);
         StateModelSnapshot originalModels = EnumHistoryRegistry(firstAssembly).Snapshot();
-        DurableBase world = (DurableBase)Activator.CreateInstance(firstAssembly.GetType("World")!)!;
+        IDurableObject world = (IDurableObject)Activator.CreateInstance(firstAssembly.GetType("World")!)!;
         using CaptureContext capture = new CaptureSession().BeginCapture(originalModels);
         originalModels.ResolveCurrentModel(world.GetType()).AddRoot(capture, world);
         ObjectStateRecord stored = Assert.Single(capture.Seal().Objects, row => row.Kind == ObjectStateKind.Dictionary);
@@ -140,7 +140,7 @@ public sealed partial class DurableSchemaGeneratorTests {
     private static ObjectStateRecord CaptureRecordHistoryWorld(GeneratorTestRun run) {
         var assembly = EmitAndLoad(run.OutputCompilation);
         StateModelSnapshot snapshot = EnumHistoryRegistry(assembly).Snapshot();
-        DurableBase world = (DurableBase)Activator.CreateInstance(assembly.GetType("World")!)!;
+        IDurableObject world = (IDurableObject)Activator.CreateInstance(assembly.GetType("World")!)!;
         CaptureSession session = new();
         using CaptureContext capture = session.BeginCapture(snapshot);
         snapshot.ResolveCurrentModel(world.GetType()).AddRoot(capture, world);

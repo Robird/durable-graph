@@ -80,7 +80,7 @@ public sealed partial class DurableSchemaGenerator {
         string parameters = CurrentExecutionParameters(layout, fields);
         int offset = OwnFieldOffset(layout, fields);
         GenericBaseProjection? ancestor = layout.Shape.BaseSchema.HasValue ? new GenericBaseProjection(type, layout, available) : null;
-        output.Append(type.Symbol.IsRecord ? "partial record struct " : type.IsInline ? "partial struct " : "partial class ").Append(EscapeIdentifier(type.Symbol.Name))
+        output.Append(type.Symbol.IsRecord ? (type.IsInline ? "partial record struct " : "partial record class ") : type.IsInline ? "partial struct " : "partial class ").Append(EscapeIdentifier(type.Symbol.Name))
             .Append(DomainParameters(type.Symbol)).Append(DomainConstraints(type.Symbol)).AppendLine(" {");
         AppendGenericFieldAccessors(output, type);
         AppendGenericCurrentFactory(output, type, layout, fields, ancestor);
@@ -142,7 +142,7 @@ public sealed partial class DurableSchemaGenerator {
             output.Append("    internal static ref readonly ").Append(fieldType).Append(" __DurableRead_").Append(suffix).Append('(')
                 .Append(type.IsInline ? "in " : string.Empty).Append(domain).Append(" value) => ref ");
             if (backingStorage) output.Append("__DurableReadonly_").Append(suffix)
-                .Append("(ref global::System.Runtime.CompilerServices.Unsafe.AsRef(in value))");
+                .Append(type.IsInline ? "(ref global::System.Runtime.CompilerServices.Unsafe.AsRef(in value))" : "(value)");
             else output.Append("value.").Append(EscapeIdentifier(field.Symbol.Name));
             output.AppendLine(";");
             if (field.Symbol.IsReadOnly || backingStorage) {
@@ -208,7 +208,7 @@ public sealed partial class DurableSchemaGenerator {
         foreach (DurableFieldModel field in type.Fields) output.Append("            context.ResolveCurrentValue(typeof(").Append(field.Symbol.Type.ToDisplayString(GenericQualifiedNameFormat))
             .Append(")).WithFieldId(").Append(field.FieldId).AppendLine(").Slot,");
         output.Append("        }, ");
-        if (!type.IsInline && !HasMetadataName(type.Symbol.BaseType, DurableBaseMetadataName)) output.Append("context.ResolveCurrentModel(typeof(")
+        if (!type.IsInline && !IsObjectBase(type.Symbol.BaseType)) output.Append("context.ResolveCurrentModel(typeof(")
             .Append(type.Symbol.BaseType!.ToDisplayString(GenericQualifiedNameFormat)).Append(")).CurrentSchema");
         else output.Append("null");
         output.Append(", ").Append(RuntimeName).Append("SchemaKind.").Append(type.IsInline ? "InlineValue" : "ReferenceObject").AppendLine(");");

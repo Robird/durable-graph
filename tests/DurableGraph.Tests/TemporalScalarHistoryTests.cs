@@ -17,7 +17,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         File.WriteAllBytes(path, originalBytes);
         GeneratorTestRun run = RunGenerator("""
             using Atelia.DurableGraph;
-            [DurableType("World",1)] public partial class World:DurableBase { [DurableField(1)] public int Renamed; }
+            [DurableType("World",1)] public partial class World:IDurableObject { [DurableField(1)] public int Renamed; }
             """, history.ReadAdditionalTexts());
         AssertSchemaOnlyCompiles(run);
         Assert.Contains("manifest:9", GeneratedSource(run, "DurableGraphSchemaHistoryCandidates.g.cs"));
@@ -120,7 +120,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             using Atelia.DurableGraph;
             [DurableType("Schedule",1)] public readonly partial record struct OldSchedule(
                 [field:DurableField(1)] DateOnly Day, [field:DurableField(2)] TimeOnly Time, [field:DurableField(3)] DateTimeOffset Stamp);
-            [DurableType("World",1)] public partial class World:DurableBase {
+            [DurableType("World",1)] public partial class World:IDurableObject {
                 [DurableField(1)] public OldSchedule Value = new(new DateOnly(2024,2,29), TimeOnly.MaxValue,
                     new DateTimeOffset(2024,2,29,23,59,59,TimeSpan.FromHours(14)));
             }
@@ -131,7 +131,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         Assert.All(history.ReadContents().Values, text => Assert.StartsWith("// durable-graph-schema-history:9\n", text));
         GeneratorTestRun next = RunGenerator("""
             using Atelia.DurableGraph;
-            [DurableType("World",2)] public partial class World:DurableBase { [DurableField(1)] public long Value; }
+            [DurableType("World",2)] public partial class World:IDurableObject { [DurableField(1)] public long Value; }
             """, history.ReadAdditionalTexts());
         AssertSchemaOnlyCompiles(next);
         var assembly = EmitAndLoad(next.OutputCompilation);

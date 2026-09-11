@@ -239,7 +239,7 @@ public sealed class GenericBindingCatalogTests : IDisposable {
         static (ref BinaryPayloadReader reader, in int prior) => reader.ReadInt32(),
         static (in int state, IStateReferenceVisitor visitor) => { });
 
-    private static StateModelBinding<T, int> Model<T>(DurableSchema schema, StateReaderBinding reader) where T : DurableBase, new() => new(
+    private static StateModelBinding<T, int> Model<T>(DurableSchema schema, StateReaderBinding reader) where T : class, IDurableObject, new() => new(
         new CapturedStatePreparation<int>(schema, static (in int state) => new([]),
             static (in int prior, in int next) => new(false, [])), [reader],
         static row => row.GetState<int>(), static () => new T(),
@@ -247,8 +247,8 @@ public sealed class GenericBindingCatalogTests : IDisposable {
         static (T source, CaptureContext context) => 0,
         static (in int state, IStateReferenceVisitor visitor) => { });
 
-    private sealed class Box<T> : DurableBase { public Box() { } }
-    private sealed class Legacy : DurableBase { public Legacy() { } }
+    private sealed class Box<T> : IDurableObject { public Box() { } }
+    private sealed class Legacy : IDurableObject { public Legacy() { } }
 
     public void Dispose() {
         string resolved = Path.GetFullPath(_directory);

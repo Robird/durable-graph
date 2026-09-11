@@ -362,7 +362,7 @@ internal static class SharedReadModel {
         new DurableFieldInfo(3, TypeTag.String), new DurableFieldInfo(4, TypeTag.Byte),
         DurableFieldInfo.Reference(5, LinksType));
 
-    internal sealed class Node : DurableBase {
+    internal sealed class Node : IDurableObject {
         internal Node? Next;
         internal Node? Alias;
         internal string? Text;

@@ -122,7 +122,7 @@ public sealed class DictionaryKeyPolicyTests {
         public override bool Equals(object? obj) => throw new InvalidOperationException("Must not compare comparer instances through Equals.");
         public override int GetHashCode() => throw new InvalidOperationException("Must not hash custom comparer.");
     }
-    private sealed class KeyNode : DurableBase { }
+    private sealed class KeyNode : IDurableObject { }
     private readonly record struct OrdinaryStruct(int Value);
     private enum CurrentEnum { Zero }
 }

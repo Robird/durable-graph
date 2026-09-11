@@ -17,9 +17,11 @@
 第二轮 ReadPair 比较与 Transient 合同由 [DB-066](design-branches/0066-readpair-comparison-and-transient-contract-slice.md)
 承接，验收从该分片与 PROJECT-STATE 进入。后继仍与下游真实接入互相校准：
 
+第三轮真实模型反馈触发的 record class 与接口迁移已由 [DB-068](design-branches/0068-record-class-model-slice.md)
+完成，具体能力与证据从 PROJECT-STATE/分片进入；不再列为待施工。
+
 | 分片 | 要解决的增量 |
 |---|---|
-| [DB-068 record class 领域模型](design-branches/0068-record-class-model-slice.md)（Proposed） | [第三轮反馈](../../drama-board/docs/feedback/durablegraph/003-real-model-integration.md) 已报告真实世界/事件冷恢复；主要适配成本是 record 改普通 class。用户已确认 IDurableObject 完全替代并移除 DurableBase；其余 record/继承/history 与真包设计见分片，未实施。不扩大任意外部基类、不可变容器或引用 key 范围 |
 | DramaBoard 后续实测 | 继续玩法和较长轨迹，使用真实业务字段做两代升级见证。第三轮单次未预热 Debug 数据不证明缓存瓶颈或可变模型更优；纯 fold 的新实例 Base 与 map Remove 仍属增量保存，不触发跨实例内容配对 |
 | 读取优化的后继 | 已交付读缓存的机制与预算证据从 [DB-067](design-branches/0067-owned-revision-read-cache-design.md) 进入；默认容量调整、构建器替换、Normalize 复用和进一步共享比较优化均由真实工作负载触发，见 §4。不承诺跨图实例复用，不改变可写 Resume 隔离 |
 
@@ -81,6 +83,7 @@ List 高效 Diff/Patch 已完成；额外性能工作按 [§3.2](#32-list-差分
 | Schema 规范表示和持久引用 | 开放模板/参数与绑定模型的剩余问题见 §3.1；不再将已统一的闭合目录作为待办。未来 SchemaHash 与一般类型家族约束随消费者裁决，不用 GetHashCode 作持久身份 |
 | 跨程序集与一般类型形状 | 基类/固定 inline 不再是组合阻碍；跨程序集业务规则扫描、完全无当前声明空库的历史能力生成与独立闭合历史账本分别按具体需求裁决，不与只读模板导入混同。DateTime 的 Local/DST 合同、native int 等各自按需求选择；boxed value identity 已排除 MVP |
 | 多态与运行时注册扩展 | 已标记 class 基类到登记派生实例按 DB-034 合同；DB-043 统一框架 object 参数不授予 object/interface 通配字段。数组协变还需空数组的历史元素 ancestry 证据，和跨程序集发现分别后继；不能自动回退成声明基类的 codec |
+| 任意外部基类适配 | DB-068 已消除框架基类要求，用户可自建逐层参与 Durable Schema 的继承体系。未标记第三方基类仍拒绝；无当前需求，不推断可支持。真实消费者确需时须先证明祖先状态、构造/恢复不变量及版本演进可建模，再裁决是否扩展 |
 | 捕获 BCL 内容的所有权 | 数组使用 owned frozen 元素 buffer，inline struct 递归捕获成标量/ID；后续容器同样不能以浅复制代替冻结，须按其内容模型验证 |
 | 根与持久目录扩展 | 根替换、独立读取与 branch/Move 已实现，见 DB-063；每份 Revision 仍一个根，不扩为任意命名根目录。null/清空另行裁决 |
 

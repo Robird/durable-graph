@@ -118,7 +118,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         GeneratorTestRun run = RunGenerator($$"""
             using Atelia.DurableGraph;
             [DurableType("single", 1)]
-            public partial class Single : DurableBase {
+            public partial class Single : IDurableObject {
                 {{declaration}}
             }
             """);
@@ -130,7 +130,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         GeneratorTestRun run = RunGenerator("""
             using Atelia.DurableGraph;
             [DurableType("single", 1)]
-            public partial class Single : DurableBase {
+            public partial class Single : IDurableObject {
                 public static int Serializer => 1;
                 private class __DurableSerializer { }
                 private struct __DurableSnapshotV1 { }
@@ -140,7 +140,7 @@ public sealed partial class DurableSchemaGeneratorTests {
     }
 
     [Theory]
-    [InlineData("public partial class Base : DurableBase { }")]
+    [InlineData("public partial class Base : IDurableObject { }")]
     public void SchemaOnlyRejectsNonOptedInAncestors(string baseDeclaration) {
         GeneratorTestRun run = RunGenerator($$"""
             using Atelia.DurableGraph;
@@ -169,7 +169,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         GeneratorTestRun run = RunGenerator("""
             using Atelia.DurableGraph;
             [DurableType("single", 1)]
-            public partial class Single : DurableBase {
+            public partial class Single : IDurableObject {
                 [DurableField(1)] private int _first;
                 [DurableField(1)] private long _second;
             }
@@ -178,8 +178,8 @@ public sealed partial class DurableSchemaGeneratorTests {
     }
 
     [Theory]
-    [InlineData("public class Single : DurableBase { }")]
-    [InlineData("public partial record Single : DurableBase;")]
+    [InlineData("public class Single : IDurableObject { }")]
+    [InlineData("public record Single : IDurableObject;")]
     public void SchemaOnlyRetainsTheBoundedClrTypeShape(string declaration) {
         GeneratorTestRun run = RunGenerator($$"""
             using Atelia.DurableGraph;
@@ -191,13 +191,13 @@ public sealed partial class DurableSchemaGeneratorTests {
 
     [Theory]
     [InlineData("[DurableField(1)] private System.DateTime _unsupported;", "", "DG0007")]
-    [InlineData("", "[DurableType(\"base\", 1)] public partial class Other : DurableBase { }", "DG0017")]
+    [InlineData("", "[DurableType(\"base\", 1)] public partial class Other : IDurableObject { }", "DG0017")]
     public void SchemaOnlyRejectsDescendantsOfFilteredAncestorsWithoutGeneratorFailure(
         string baseFields, string otherDeclaration, string ancestorDiagnostic) {
         GeneratorTestRun run = RunGenerator($$"""
             using Atelia.DurableGraph;
             [DurableType("base", 1)]
-            public partial class Base : DurableBase { {{baseFields}} }
+            public partial class Base : IDurableObject { {{baseFields}} }
             [DurableType("child", 1)]
             public sealed partial class Child : Base { }
             {{otherDeclaration}}
@@ -221,7 +221,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         using Atelia.DurableGraph;
         namespace SchemaOnly;
         [DurableType("base", {{baseVersion}})]
-        public abstract partial class Base : DurableBase {
+        public abstract partial class Base : IDurableObject {
             [DurableField(1)] private {{(baseVersion == 1 ? "int" : "long")}} _base;
         }
         [DurableType("middle", {{middleVersion}})]

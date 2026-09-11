@@ -33,10 +33,12 @@ public sealed partial class DurableSchemaGenerator {
         public TypePattern Type { get; }
     }
 
+    private static bool IsObjectBase(INamedTypeSymbol? type) => type?.SpecialType == SpecialType.System_Object;
+
     private static bool HasDurableTypeShape(
         INamedTypeSymbol type,
         System.Threading.CancellationToken cancellationToken) {
-        if ((type.TypeKind != TypeKind.Class && type.TypeKind != TypeKind.Struct && type.TypeKind != TypeKind.Enum) || type.IsRefLikeType || (type.IsRecord && type.TypeKind != TypeKind.Struct) || type.Arity > 32 ||
+        if ((type.TypeKind != TypeKind.Class && type.TypeKind != TypeKind.Struct && type.TypeKind != TypeKind.Enum) || type.IsRefLikeType || type.Arity > 32 ||
             type.ContainingType is not null || type.DeclaringSyntaxReferences.Length == 0) {
             return false;
         }
@@ -88,7 +90,7 @@ public sealed partial class DurableSchemaGenerator {
                 context.ReportDiagnostic(Diagnostic.Create(
                     InvalidSchemaAncestry, GetSourceLocation(type.Symbol),
                     type.Symbol.ToDisplayString(QualifiedNameFormat),
-                    "base and inline dependencies must form a supported source-type DAG of depth at most 256; class ancestry must end at DurableBase"));
+                    "base and inline dependencies must form a supported source-type DAG of depth at most 256; class ancestry must consist of attributed IDurableObject types ending at object"));
             }
         }
 
@@ -104,7 +106,7 @@ public sealed partial class DurableSchemaGenerator {
             return depth + height <= 256;
         }
         height = 1;
-        if (!type.IsInline && !HasMetadataName(type.Symbol.BaseType, DurableBaseMetadataName)) {
+        if (!type.IsInline && !IsObjectBase(type.Symbol.BaseType)) {
             int index = types.FindIndex(candidate => SymbolEqualityComparer.Default.Equals(candidate.Symbol, type.Symbol.BaseType!.OriginalDefinition));
             if (index < 0) {
                 if (!HasExternalDurableNominalShape(type.Symbol.BaseType!.OriginalDefinition, compilation)) return false;
@@ -130,7 +132,7 @@ public sealed partial class DurableSchemaGenerator {
 
     private static SchemaReference? GetCurrentBaseReference(DurableTypeModel model) {
         INamedTypeSymbol type = model.Symbol;
-        if (model.IsInline || HasMetadataName(type.BaseType, DurableBaseMetadataName)) {
+        if (model.IsInline || IsObjectBase(type.BaseType)) {
             return null;
         }
 

@@ -37,7 +37,7 @@ public sealed partial class DurableSchemaGeneratorTests {
                 [DurableField(1)] public int X;
             }
             [DurableType("mutable.world", 1)]
-            public partial class World : DurableBase {
+            public partial class World : IDurableObject {
                 [DurableField(1)] public Value Value;
             }
             public static class Host {
@@ -76,7 +76,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         GeneratorTestRun run = RunGenerator("""
             using Atelia.DurableGraph;
             public struct Value { public int X; }
-            [DurableType("world",1)] public partial class World : DurableBase {
+            [DurableType("world",1)] public partial class World : IDurableObject {
                 [DurableField(1)] public Value Value;
             }
             """);
@@ -88,7 +88,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         GeneratorTestRun run = RunGenerator("""
             using Atelia.DurableGraph;
             [DurableType("value",2)] public partial struct Value { [DurableField(1)] public long X; }
-            [DurableType("world",1)] public partial class World : DurableBase { [DurableField(1)] public Value Value; }
+            [DurableType("world",1)] public partial class World : IDurableObject { [DurableField(1)] public Value Value; }
             """, InlineHistory("value",1,2,"1|2"), InlineHistory("world",1,1,"1|16|dmFsdWU=|1"));
         Assert.Contains(run.GeneratorDiagnostics, diagnostic => diagnostic.Id == "DG0015");
     }
@@ -98,7 +98,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         GeneratorTestRun run = RunGenerator("""
             using Atelia.DurableGraph;
             [DurableType("value",1)] public partial struct Value { [DurableField(1)] public int X; }
-            [DurableType("world",2)] public partial class World : DurableBase { }
+            [DurableType("world",2)] public partial class World : IDurableObject { }
             """, InlineHistory("world",1,1,"1|16|dmFsdWU=|1"));
         Assert.Contains(run.GeneratorDiagnostics, diagnostic => diagnostic.Id == "DG0019");
     }
@@ -108,7 +108,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         GeneratorTestRun run = RunGenerator("""
             using Atelia.DurableGraph;
             using States=Atelia.DurableGraph.Generated.Family_776F726C64;
-            [DurableType("world",3)] public partial class World : DurableBase {
+            [DurableType("world",3)] public partial class World : IDurableObject {
                 [DurableField(1)] public int X;
                 static void UpgradeStateV1ToV2(in States.V1 prior, out States.V2 next) => next = new(new(prior.Segment0Field1.Segment0Field1 + 1));
                 static void UpgradeStateV2ToV3(in States.V2 prior, out States.V3 next) => next = new(prior.Segment0Field1.Segment0Field1 + 1);

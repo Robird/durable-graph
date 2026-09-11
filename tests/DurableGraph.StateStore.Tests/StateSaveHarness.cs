@@ -27,26 +27,26 @@ internal sealed class StateSaveHarness : IDisposable {
     internal ObjectId? WorldId => _stateHead?.RootId;
     internal bool IsFaulted => _repository.IsFaulted;
     internal Action<CommitCheckpoint>? Checkpoint { get => _repository.Checkpoint; set => _repository.Checkpoint = value; }
-    internal StateSaveSession<T> Create<T>(T world, StateModelRegistry models) where T : DurableBase {
+    internal StateSaveSession<T> Create<T>(T world, StateModelRegistry models) where T : class, IDurableObject {
         models.Register(MarkerModel);
         return new(this, world, models, null);
     }
-    internal StateSaveSession<T> Load<T>(StateModelRegistry models) where T : DurableBase {
+    internal StateSaveSession<T> Load<T>(StateModelRegistry models) where T : class, IDurableObject {
         models.Register(MarkerModel);
         EventHistorySession<T> session = _repository.Resume<T>("main", models);
         return new(this, session.State, models, session);
     }
     internal EventHistorySession<T> Initialize<T>(T world, StateModelRegistry models,
-        ReadAmplificationBaseBudgetParameters parameters) where T : DurableBase {
+        ReadAmplificationBaseBudgetParameters parameters) where T : class, IDurableObject {
         EventHistorySession<T> session = _repository.CreateBranch("main", world, models, parameters);
         _stateHead = session.Head;
         return session;
     }
     internal void Installed(GraphFrame frame) => _stateHead = frame;
-    internal static DurableBase NewMarker() => new Marker();
+    internal static IDurableObject NewMarker() => new Marker();
     public void Dispose() => _repository.Dispose();
 
-    private sealed class Marker : DurableBase { }
+    private sealed class Marker : IDurableObject { }
     private static readonly DurableSchema MarkerSchema = new("StateSaveHarness.Marker", 1);
     private static readonly StateModelBinding MarkerModel = new StateModelBinding<Marker, byte>(
         new(MarkerSchema, static (in byte state) => new PreparedBaseBody([]),
@@ -60,7 +60,7 @@ internal sealed class StateSaveHarness : IDisposable {
 }
 
 internal sealed class StateSaveSession<T>(StateSaveHarness repository, T initial,
-    StateModelRegistry models, EventHistorySession<T>? session) : IDisposable where T : DurableBase {
+    StateModelRegistry models, EventHistorySession<T>? session) : IDisposable where T : class, IDurableObject {
     internal bool IsFaulted => repository.IsFaulted;
     internal T World => session is null ? initial : session.State;
     internal ObjectId? WorldId => session?.StateId;

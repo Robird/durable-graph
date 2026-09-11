@@ -28,7 +28,7 @@ public sealed class CaptureContext : IDisposable {
         TDomain? value,
         DurableSchema schema,
         Func<TDomain, CaptureContext, TState> capture)
-        where TDomain : DurableBase
+        where TDomain : class, IDurableObject
         where TState : unmanaged => AddRootCore(value, schema, capture, preparation: null);
 
     /// <summary>Registers an exact root together with stable frozen-state preparation operations.</summary>
@@ -37,7 +37,7 @@ public sealed class CaptureContext : IDisposable {
         DurableSchema schema,
         Func<TDomain, CaptureContext, TState> capture,
         CapturedStatePreparation<TState> preparation)
-        where TDomain : DurableBase
+        where TDomain : class, IDurableObject
         where TState : unmanaged {
         try {
             ArgumentNullException.ThrowIfNull(preparation);
@@ -54,7 +54,7 @@ public sealed class CaptureContext : IDisposable {
         DurableSchema schema,
         Func<TDomain, CaptureContext, TState> capture,
         CapturedStatePreparation<TState>? preparation)
-        where TDomain : DurableBase
+        where TDomain : class, IDurableObject
         where TState : unmanaged {
         try {
             RequirePhase(Phase.Registering);
@@ -99,13 +99,13 @@ public sealed class CaptureContext : IDisposable {
     }
 
     /// <summary>Registers a durable reference by reference identity, validates its nominal constraint, and queues its capture.</summary>
-    public ObjectId CaptureDurable(DurableBase? value, string nominalSchemaId) {
+    public ObjectId CaptureDurable(IDurableObject? value, string nominalSchemaId) {
         try { return CaptureDurable(value, TypeExpr.Named(nominalSchemaId)); }
         catch { AbortBuild(); throw; }
     }
 
     /// <summary>Captures a reference constrained by a complete constructed nominal type.</summary>
-    public ObjectId CaptureDurable(DurableBase? value, TypeExpr nominalType) => CaptureObject(value, nominalType);
+    public ObjectId CaptureDurable(IDurableObject? value, TypeExpr nominalType) => CaptureObject(value, nominalType);
 
     /// <summary>Validates every incoming reference and captures the actual supported CLR object by reference identity.</summary>
     public ObjectId CaptureObject(object? value, TypeExpr declaredType) {
@@ -235,7 +235,7 @@ public sealed class CaptureContext : IDisposable {
         ObjectId id, TDomain source, DurableSchema schema, Func<TDomain, CaptureContext, TState> capture,
         CapturedStatePreparation<TState>? preparation)
         : RootCapture(id)
-        where TDomain : DurableBase
+        where TDomain : class, IDurableObject
         where TState : unmanaged {
         public DurableSchema Schema { get; } = schema;
         public Func<TDomain, CaptureContext, TState> Capture { get; } = capture;

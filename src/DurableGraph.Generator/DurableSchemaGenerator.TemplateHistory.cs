@@ -107,7 +107,7 @@ public sealed partial class DurableSchemaGenerator {
             try { pattern = TypePattern.DictionaryOf(key!, value!); return true; }
             catch (ArgumentException) { return false; }
         }
-        if (type is not INamedTypeSymbol named || named.Arity > 32 || named.IsRefLikeType || named.ContainingType is not null ||
+        if (type is not INamedTypeSymbol named || !HasDurableContract(named, compilation) || named.Arity > 32 || named.IsRefLikeType || named.ContainingType is not null ||
             (!SymbolEqualityComparer.Default.Equals(named.ContainingAssembly, owner.ContainingAssembly) &&
                 !HasExternalDurableNominalShape(named, compilation))) return false;
         AttributeData? attribute = GetAttribute(named.GetAttributes(), DurableTypeAttributeMetadataName);

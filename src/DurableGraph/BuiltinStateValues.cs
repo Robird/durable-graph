@@ -132,7 +132,7 @@ public readonly struct StringValueProjection : IValueProjection<string?, ObjectI
 }
 
 /// <summary>Projects a durable reference without expanding the target object's body.</summary>
-public readonly struct DurableValueProjection<TDomain> : IValueProjection<TDomain?, ObjectId> where TDomain : DurableBase {
+public readonly struct DurableValueProjection<TDomain> : IValueProjection<TDomain?, ObjectId> where TDomain : class, IDurableObject {
     public static ObjectId Capture(in TDomain? value, CaptureContext context, DurableFieldInfo slot) => context.CaptureDurable(value, slot.TargetType!);
     public static void Hydrate(ref TDomain? target, in ObjectId state, ObjectReadTable objects, DurableFieldInfo slot) => target = objects.ResolveDurable<TDomain>(state);
 }

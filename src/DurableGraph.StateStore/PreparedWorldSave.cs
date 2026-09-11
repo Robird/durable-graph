@@ -3,7 +3,7 @@ using Atelia.DurableGraph.StateStore.Storage;
 namespace Atelia.DurableGraph.StateStore;
 
 /// <summary>One private, single-use save candidate retained until publication is resolved.</summary>
-internal sealed class PreparedWorldSave<TWorld> : IDisposable where TWorld : DurableBase {
+internal sealed class PreparedWorldSave<TWorld> : IDisposable where TWorld : class, IDurableObject {
     private WorldWorkspace<TWorld>? _owner;
     private readonly CaptureContext _context;
     private readonly CapturedGraph _candidate;

@@ -5,7 +5,7 @@ namespace EventHistoryPackageConsumerProbe;
 // These five schemas stay unchanged in both builds. The separate repository below
 // exercises same-layout sharing without changing the Alice/World Upgrade witness.
 [DurableType("SharedNode", 1)]
-public sealed partial class SharedNode : DurableBase {
+public sealed partial class SharedNode : IDurableObject {
     [DurableField(1)] public int Value;
     [DurableField(2)] public SharedNode? Next;
     [DurableField(3)] public string Text = "";
@@ -19,12 +19,12 @@ public partial struct SharedLinks {
 }
 
 [DurableType("SharedHolder", 1)]
-public sealed partial class SharedHolder<T> : DurableBase {
+public sealed partial class SharedHolder<T> : IDurableObject {
     [DurableField(1)] public T Value = default!;
 }
 
 [DurableType("SharedRoot", 1)]
-public sealed partial class SharedRoot : DurableBase {
+public sealed partial class SharedRoot : IDurableObject {
     [DurableField(1)] public SharedNode Stable = null!;
     [DurableField(2)] public SharedNode Changing = null!;
     [DurableField(3)] public SharedNode[] StableArray = [];
@@ -45,6 +45,6 @@ public sealed partial class SharedRoot : DurableBase {
 }
 
 [DurableType("SharedEvent", 1)]
-public sealed partial class SharedEvent : DurableBase {
+public sealed partial class SharedEvent : IDurableObject {
     [DurableField(1)] public SharedRoot View = null!;
 }

@@ -8,7 +8,7 @@ public sealed class ReferenceCaptureSessionTests {
         new DurableFieldInfo(1, TypeTag.Int32), new DurableFieldInfo(2, TypeTag.String),
         new DurableFieldInfo(3, TypeTag.String));
 
-    private class Domain : DurableBase {
+    private class Domain : IDurableObject {
         public int Value;
         public string? First;
         public string? Second;

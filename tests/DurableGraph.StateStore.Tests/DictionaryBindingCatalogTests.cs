@@ -126,7 +126,7 @@ public sealed class DictionaryBindingCatalogTests {
         Assert.Equal(valid, snapshot.ResolveObjectReader(valid).Layout);
     }
 
-    private sealed class Box<T> : DurableBase;
+    private sealed class Box<T> : IDurableObject;
     private sealed class DerivedDictionary : Dictionary<int, int>;
     private sealed class KeyRules;
     private sealed class ValueRules;

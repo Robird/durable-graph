@@ -27,7 +27,7 @@ public readonly partial record struct CurrentPoint(
 #endif
 
 [DurableType("Box", 1)]
-public partial class Box<T> : DurableBase {
+public partial class Box<T> : IDurableObject {
     [DurableField(1)] public T Value = default!;
 }
 
@@ -36,7 +36,7 @@ public partial class Box<T> : DurableBase {
 #else
 [DurableType("World", 2)]
 #endif
-public partial class World : DurableBase {
+public partial class World : IDurableObject {
     internal static readonly DateOnly SampleDate = new(2024, 2, 29);
     internal static DateTimeOffset Moment(int offsetHours) => new DateTimeOffset(2026, 9, 10, 0, 0, 0, TimeSpan.Zero).ToOffset(TimeSpan.FromHours(offsetHours));
     [DurableField(1)] public DateOnly Date = SampleDate;

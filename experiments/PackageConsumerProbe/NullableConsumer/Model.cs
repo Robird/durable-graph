@@ -25,7 +25,7 @@ public partial struct CurrentPoint {
 #endif
 
 [DurableType("Node", 1)]
-public partial class Node : DurableBase {
+public partial class Node : IDurableObject {
     [DurableField(1)] public World? Owner;
     [DurableField(2)] public Node? Self;
     [DurableField(3)] public string Label = "nullable node";
@@ -36,7 +36,7 @@ public partial class Node : DurableBase {
 #else
 [DurableType("World", 2)]
 #endif
-public partial class World : DurableBase {
+public partial class World : IDurableObject {
     [DurableField(1)] public Point? Optional;
     [DurableField(2)] public List<Point?> Points = [];
     [DurableField(3)] public List<Point?> Alias = [];

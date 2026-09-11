@@ -418,7 +418,7 @@ public sealed partial class EventHistoryRepositoryTests : IDisposable {
             Assert.Equal(0, bobHydrates);
             Assert.Equal((byte)2, read.Left!.Value);
             Assert.Same(read.Left, read.Right);
-            Assert.Equal((byte)8, repository.ReadEvent<DurableBase>(e, all) is Node n ? n.Value : 0);
+            Assert.Equal((byte)8, repository.ReadEvent<IDurableObject>(e, all) is Node n ? n.Value : 0);
             bool delivered = false;
             Assert.ThrowsAny<Exception>(() => {
                 _ = repository.ReadPair<Node, WholeWorld>(e, repository.GetPreviousState(e), Models());
@@ -429,7 +429,7 @@ public sealed partial class EventHistoryRepositoryTests : IDisposable {
         }
         AssertFiles(before);
     }
-    private sealed class WholeWorld : DurableBase { internal Node? Alice; internal Node? Bob; }
+    private sealed class WholeWorld : IDurableObject { internal Node? Alice; internal Node? Bob; }
 
     private static GraphFrame Save(EventHistorySession<Node> session) {
         session.CommitDomainEvent(new Node(), NoRebase);
@@ -445,7 +445,7 @@ public sealed partial class EventHistoryRepositoryTests : IDisposable {
         }
     }
 
-    private sealed class Node : DurableBase {
+    private sealed class Node : IDurableObject {
         internal Node? Left;
         internal Node? Right;
         internal string? Text;

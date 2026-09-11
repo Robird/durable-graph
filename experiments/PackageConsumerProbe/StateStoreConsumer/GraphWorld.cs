@@ -8,7 +8,7 @@ using SegmentStore = Atelia.RbfSegmentStore.RbfSegmentStore;
 namespace StateStorePackageConsumerProbe;
 
 [DurableType("package.graph-world", 1)]
-public sealed partial class GraphWorld : DurableBase {
+public sealed partial class GraphWorld : IDurableObject {
     [DurableField(1)] private GraphEntity? _primary;
     [DurableField(2)] private GraphEntity? _alias;
 
@@ -108,7 +108,7 @@ public sealed partial class GraphWorld : DurableBase {
 }
 
 [DurableType("package.graph-entity", 1)]
-public abstract partial class GraphEntity : DurableBase {
+public abstract partial class GraphEntity : IDurableObject {
     [DurableField(1)] private readonly string _name;
     protected GraphEntity(string name) { GraphConstruction.Count++; _name = name; }
     public string Name => _name;
@@ -131,7 +131,7 @@ public sealed partial class GraphCharacter : GraphEntity {
 }
 
 [DurableType("package.graph-item", 1)]
-public sealed partial class GraphItem : DurableBase {
+public sealed partial class GraphItem : IDurableObject {
     [DurableField(1)] private readonly GraphEntity _owner;
     [DurableField(2)] private readonly GraphItem _self;
     [DurableField(3)] private readonly string _label;

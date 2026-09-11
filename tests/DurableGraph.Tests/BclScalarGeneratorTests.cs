@@ -78,7 +78,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         GeneratorTestRun run = RunGenerator($$"""
             using Atelia.DurableGraph;
             namespace {{ns}} { public struct {{name}} { public int Data; } }
-            [DurableType("Fake",1)] public partial class Fake:DurableBase {
+            [DurableType("Fake",1)] public partial class Fake:IDurableObject {
                 [DurableField(1)] public {{ns}}.{{name}} Value;
             }
             """);
@@ -92,7 +92,7 @@ public sealed partial class DurableSchemaGeneratorTests {
     [InlineData("System.Guid", "decimal")]
     public void BclScalarRetypeRequiresExplicitOwnerVersion(string before, string after) {
         string Source(string type) => "using Atelia.DurableGraph; [DurableType(\"World\",1)] " +
-            "public partial class World:DurableBase { [DurableField(1)] public " + type + " Value; }";
+            "public partial class World:IDurableObject { [DurableField(1)] public " + type + " Value; }";
         using AncestryHistoryDirectory history = new();
         GeneratorTestRun first = RunGenerator(Source(before));
         AssertSchemaOnlyCompiles(first);
@@ -107,7 +107,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         using Atelia.DurableGraph.StateStore.Serialization;
         using Body = Atelia.DurableGraph.Generated.Family_4974656D.BodyV1;
         [DurableType("Trigger",1)] public partial struct Trigger<T> { [DurableField(1)] public T Value; }
-        [DurableType("Item",1)] public partial class Item:DurableBase {
+        [DurableType("Item",1)] public partial class Item:IDurableObject {
             [DurableField(1)] public Guid Id;
             [DurableField(2)] public decimal Amount;
             [DurableField(3)] public TimeSpan Duration;
@@ -144,8 +144,8 @@ public sealed partial class DurableSchemaGeneratorTests {
         [DurableType("Part",1)] public readonly partial record struct Part(
             [field:DurableField(1)] Guid Id,[field:DurableField(2)] decimal Amount,[field:DurableField(3)] TimeSpan Duration);
         [DurableType("Pair",1)] public partial struct Pair<T,U> { [DurableField(1)] public T First; [DurableField(2)] public U Second; }
-        [DurableType("Base",1)] public partial class Base<T>:DurableBase { [DurableField(1)] public T Value; }
-        [DurableType("Phantom",1)] public partial class Phantom<T>:DurableBase { [DurableField(1)] public int Number; }
+        [DurableType("Base",1)] public partial class Base<T>:IDurableObject { [DurableField(1)] public T Value; }
+        [DurableType("Phantom",1)] public partial class Phantom<T>:IDurableObject { [DurableField(1)] public int Number; }
         [DurableType("World",1)] public partial class World:Base<decimal> {
             [DurableField(1)] public readonly Guid Id;
             [DurableField(2)] public decimal? Optional;

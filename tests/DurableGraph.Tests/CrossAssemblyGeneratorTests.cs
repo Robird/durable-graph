@@ -106,8 +106,8 @@ public sealed partial class DurableSchemaGeneratorTests {
             [DurableType("LocalPoint",1)] public partial struct LocalPoint { [DurableField(1)] public int X; }
             [DurableType("LocalInline",1)] public partial struct LocalInline<T> { [DurableField(1)] public T Value; }
             [DurableType("Phantom",1)] public partial struct Phantom<T> { [DurableField(1)] public int Value; }
-            [DurableType("LocalBox",1)] public partial class LocalBox<T>:DurableBase { [DurableField(1)] public T Value; }
-            [DurableType("World",1)] public partial class World:DurableBase {
+            [DurableType("LocalBox",1)] public partial class LocalBox<T>:IDurableObject { [DurableField(1)] public T Value; }
+            [DurableType("World",1)] public partial class World:IDurableObject {
                 [DurableField(1)] public Remote.Node? Node;
                 [DurableField(2)] public Remote.Point[] Points=[];
                 [DurableField(3)] public List<Remote.Point?> Values=new();
@@ -153,7 +153,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         GeneratorTestRun run = RunCrossAssemblyGenerator("""
             using Atelia.DurableGraph;
             [DurableType("Inner",1)] public partial struct Inner { [DurableField(1)] public Remote.Point Point; }
-            [DurableType("World",1)] public partial class World:DurableBase { [DurableField(1)] public Inner Value; }
+            [DurableType("World",1)] public partial class World:IDurableObject { [DurableField(1)] public Inner Value; }
             """, [library.Reference]);
         AssertSchemaOnlyCompiles(run);
         Assert.DoesNotContain(run.GeneratorDiagnostics, error => error.Id == "CS8785");
@@ -161,7 +161,7 @@ public sealed partial class DurableSchemaGeneratorTests {
 
     [Theory]
     [InlineData("public class Bad {}")]
-    [InlineData("[DurableType(\"Bad\",0)] public class Bad:DurableBase {}")]
+    [InlineData("[DurableType(\"Bad\",0)] public class Bad:IDurableObject {}")]
     [InlineData("[DurableType(\" \",1)] public struct Bad {}")]
     [InlineData("[DurableType(\"Bad\",1)] public class Bad {}")]
     [InlineData("[DurableType(\"Bad\",1)] public record Bad;")]
@@ -170,7 +170,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         MetadataReference reference = EmitCrossAssemblyRawReference("using Atelia.DurableGraph; namespace Remote { " + declaration + " }");
         GeneratorTestRun run = RunCrossAssemblyGenerator("""
             using Atelia.DurableGraph;
-            [DurableType("World",1)] public partial class World:DurableBase { [DurableField(1)] public Remote.Bad[] Values=[]; }
+            [DurableType("World",1)] public partial class World:IDurableObject { [DurableField(1)] public Remote.Bad[] Values=[]; }
             """, [reference]);
         Assert.Contains(run.GeneratorDiagnostics, error => error.Id == "DG0007");
         Assert.DoesNotContain(run.GeneratorDiagnostics, error => error.Id == "CS8785");
@@ -179,12 +179,12 @@ public sealed partial class DurableSchemaGeneratorTests {
     [Theory]
     [InlineData("[DurableType(\"Bad\",1)] internal struct Bad {}", "Remote.Bad")]
     [InlineData("public class Outer { [DurableType(\"Bad\",1)] public struct Bad {} }", "Remote.Outer.Bad")]
-    [InlineData("[DurableType(\"Bad\",1)] public class Bad<T>:DurableBase where T:allows ref struct {}", "Remote.Bad<int>")]
+    [InlineData("[DurableType(\"Bad\",1)] public class Bad<T>:IDurableObject where T:allows ref struct {}", "Remote.Bad<int>")]
     public void CrossAssemblyMetadataRejectsAccessibilityNestingAndRefLikeParameters(string declaration, string fieldType) {
         MetadataReference reference = EmitCrossAssemblyRawReference("using Atelia.DurableGraph; namespace Remote { " + declaration + " }");
         GeneratorTestRun run = RunCrossAssemblyGenerator($$"""
             using Atelia.DurableGraph;
-            [DurableType("World",1)] public partial class World:DurableBase { [DurableField(1)] public {{fieldType}}[] Values=[]; }
+            [DurableType("World",1)] public partial class World:IDurableObject { [DurableField(1)] public {{fieldType}}[] Values=[]; }
             """, [reference]);
         Assert.Contains(run.GeneratorDiagnostics, error => error.Id == "DG0007");
         Assert.DoesNotContain(run.GeneratorDiagnostics, error => error.Id == "CS8785");
@@ -200,14 +200,14 @@ public sealed partial class DurableSchemaGeneratorTests {
             }
             namespace Remote { [Atelia.DurableGraph.DurableType("Bad",1)] public struct Bad {} }
             """ : """
-            namespace Atelia.DurableGraph { public class DurableBase {} }
-            namespace Remote { [Atelia.DurableGraph.DurableType("Bad",1)] public class Bad:Atelia.DurableGraph.DurableBase {} }
+            namespace Atelia.DurableGraph { public interface IDurableObject {} }
+            namespace Remote { [Atelia.DurableGraph.DurableType("Bad",1)] public class Bad:Atelia.DurableGraph.IDurableObject {} }
             """;
         MetadataReference reference = EmitCrossAssemblyRawReference(fake).WithAliases(ImmutableArray.Create("foreign"));
         GeneratorTestRun app = RunCrossAssemblyGenerator("""
             extern alias foreign;
             using Atelia.DurableGraph;
-            [DurableType("World",1)] public partial class World:DurableBase { [DurableField(1)] public foreign::Remote.Bad[] Values=[]; }
+            [DurableType("World",1)] public partial class World:IDurableObject { [DurableField(1)] public foreign::Remote.Bad[] Values=[]; }
             """, [reference]);
         Assert.Contains(app.GeneratorDiagnostics, error => error.Id == "DG0007");
         Assert.DoesNotContain(app.GeneratorDiagnostics, error => error.Id == "CS8785");
@@ -216,7 +216,7 @@ public sealed partial class DurableSchemaGeneratorTests {
     private static MetadataReference EmitCrossAssemblyRawReference(string source) {
         CSharpCompilation compilation = CSharpCompilation.Create("RawMetadata_" + Guid.NewGuid().ToString("N"),
             [CSharpSyntaxTree.ParseText(source, ParseOptions)],
-            PlatformReferences().Append(MetadataReference.CreateFromFile(typeof(DurableBase).Assembly.Location)),
+            PlatformReferences().Append(MetadataReference.CreateFromFile(typeof(IDurableObject).Assembly.Location)),
             new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
         using MemoryStream stream = new();
         var result = compilation.Emit(stream);
@@ -229,7 +229,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         using Atelia.DurableGraph;
         using Atelia.DurableGraph.StateStore.Serialization;
         [DurableType("Point",1)] public partial struct Point { [DurableField(1)] public int X; }
-        [DurableType("Item",1)] public partial class Item:DurableBase {
+        [DurableType("Item",1)] public partial class Item:IDurableObject {
             [DurableField(1)] public int Count;
             [DurableField(2)] public string? Text;
             [DurableField(3)] public Item? Other;
@@ -261,8 +261,8 @@ public sealed partial class DurableSchemaGeneratorTests {
         [DurableType("RemotePoint",1)] public partial struct Point { [DurableField(1)] public int X; }
         [DurableType("RemoteKey",1)] public readonly partial record struct Key([field:DurableField(1)] int X);
         [DurableType("RemoteChoice",1)] public enum Choice { A,B }
-        [DurableType("RemoteNode",1)] public partial class Node:DurableBase { [DurableField(1)] public int X; }
-        [DurableType("RemoteBox",1)] public partial class Box<T>:DurableBase { [DurableField(1)] public T Value; }
+        [DurableType("RemoteNode",1)] public partial class Node:IDurableObject { [DurableField(1)] public int X; }
+        [DurableType("RemoteBox",1)] public partial class Box<T>:IDurableObject { [DurableField(1)] public T Value; }
         [DurableType("RemoteInline",1)] public partial struct Inline<T> { [DurableField(1)] public T Value; }
         public static class Catalog { public static void Register(IStateModelRegistration models) => Atelia.DurableGraph.Generated.DurableDefinitions.Register(models); }
         """;

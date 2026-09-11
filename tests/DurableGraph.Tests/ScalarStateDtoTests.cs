@@ -128,7 +128,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             using Atelia.DurableGraph;
             namespace {{namespaceName}} { public struct Half { public int Value; } }
             [DurableType("fake-half", 1)]
-            public sealed partial class Item : DurableBase {
+            public sealed partial class Item : IDurableObject {
                 [DurableField(1)] private {{namespaceName}}.Half _value;
             }
             """);
@@ -149,7 +149,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             public enum Choice { First, Second }
             public struct Composite { public int Value; }
             [DurableType("unsupported-scalar", 1)]
-            public sealed partial class Item : DurableBase {
+            public sealed partial class Item : IDurableObject {
                 [DurableField(1)] private {{fieldType}} _value;
             }
             """);
@@ -165,7 +165,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         using Atelia.DurableGraph.StateStore.Serialization;
         namespace ScalarDtos;
         [DurableType("scalar.item", 1)]
-        public sealed partial class Item : DurableBase {
+        public sealed partial class Item : IDurableObject {
             [DurableField(1)] private bool _bool;
             [DurableField(2)] private byte _byte;
             [DurableField(3)] private sbyte _sbyte;
@@ -224,7 +224,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         using Atelia.DurableGraph.StateStore.Serialization;
         namespace ScalarDtos;
         [DurableType("scalar.item", 2)]
-        public partial class CurrentBase : DurableBase {
+        public partial class CurrentBase : IDurableObject {
             [DurableField(1)] private int _replacement = 42;
         }
         [DurableType("scalar.leaf", 2)]

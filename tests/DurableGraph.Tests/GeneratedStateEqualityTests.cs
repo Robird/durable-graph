@@ -52,7 +52,7 @@ public sealed partial class DurableSchemaGeneratorTests {
                 [DurableField(3)] public string Name;
             }
             [DurableType("Empty",1)] public partial struct Empty { }
-            [DurableType("Box",1)] public partial class Box<T>:DurableBase { [DurableField(1)] public T Value; }
+            [DurableType("Box",1)] public partial class Box<T>:IDurableObject { [DurableField(1)] public T Value; }
             """);
         AssertSchemaOnlyCompiles(first);
         new SchemaHistoryTool().Publish(history.WriteManifest(first), history.History);
@@ -65,7 +65,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             using PairState=Atelia.DurableGraph.Generated.Family_50616972;
             using EmptyState=Atelia.DurableGraph.Generated.Family_456D707479;
             using BoxState=Atelia.DurableGraph.Generated.Family_426F78;
-            [DurableType("Box",1)] public partial class Box<T>:DurableBase { [DurableField(1)] public T Value; }
+            [DurableType("Box",1)] public partial class Box<T>:IDurableObject { [DurableField(1)] public T Value; }
             public static class EqualityHost {
                 public static bool Probe() {
                     var schema=new DurableSchema(TypeExpr.Named("Pair",TypeExpr.Builtin(TypeTag.Single)),1,SchemaKind.InlineValue,

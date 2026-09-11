@@ -95,7 +95,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             public bool IsRestored => _leaf.IsRestored;
         }
         [DurableType("inline.item", 1)]
-        public sealed partial class Item : DurableBase {
+        public sealed partial class Item : IDurableObject {
             [DurableField(1)] public readonly Middle Value;
             [DurableField(2)] public readonly bool Tail;
         }
@@ -107,7 +107,7 @@ public sealed partial class DurableSchemaGeneratorTests {
                 var state = Item.__DurableState.ReadBaseBodyV1(ref reader);
                 reader.EnsureFullyConsumed();
                 var objects = new ObjectReadTable(StringReadTable.Decode(Array.Empty<(ObjectId, ReadOnlyMemory<byte>)>()),
-                    new System.Collections.Generic.Dictionary<ObjectId, DurableBase>());
+                    new System.Collections.Generic.Dictionary<ObjectId, IDurableObject>());
                 var item = Item.__DurableState.Allocate();
                 Item.__DurableState.Hydrate(item, in state, objects);
                 var array = new Middle[1];

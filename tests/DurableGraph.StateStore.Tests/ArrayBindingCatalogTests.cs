@@ -157,7 +157,7 @@ public sealed class ArrayBindingCatalogTests {
         return registry.Snapshot();
     }
 
-    private sealed class Box<T> : DurableBase;
+    private sealed class Box<T> : IDurableObject;
     private sealed class Rules;
     private sealed class OtherRules;
 }

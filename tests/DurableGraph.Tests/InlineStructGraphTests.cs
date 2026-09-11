@@ -236,7 +236,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             public int Cache => _cache;
         }
         [DurableType("inline.graph.world", 1)]
-        public sealed partial class World : DurableBase {
+        public sealed partial class World : IDurableObject {
             [DurableField(1)] public Envelope Value;
             [DurableField(2)] public string? Alias;
             [DurableField(3)] public readonly long Padding;
@@ -278,7 +278,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             }
         }
         [DurableType("inline.graph.child", 1)]
-        public partial class Child : DurableBase {
+        public partial class Child : IDurableObject {
             [DurableField(1)] public int Value;
             [DurableField(2)] public readonly World Owner;
             [DurableField(3)] public readonly Child Self;

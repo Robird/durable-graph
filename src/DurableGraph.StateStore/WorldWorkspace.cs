@@ -3,7 +3,7 @@ using Atelia.DurableGraph.StateStore.Storage;
 namespace Atelia.DurableGraph.StateStore;
 
 /// <summary>Owns one editable State baseline and serial candidates, independent of head publication.</summary>
-internal sealed class WorldWorkspace<TWorld> where TWorld : DurableBase {
+internal sealed class WorldWorkspace<TWorld> where TWorld : class, IDurableObject {
     private readonly StateRevisionStore _store;
     private readonly SchemaStore _schemas;
     private readonly StateModelBinding _model;
@@ -76,10 +76,10 @@ internal sealed class WorldWorkspace<TWorld> where TWorld : DurableBase {
     /// Captures a separate root against the committed State. Dispose the candidate after the outer
     /// publication resolves: successful snapshots never install their DTOs or bindings into State.
     /// </summary>
-    internal PreparedWorldSave<TWorld> StageSnapshot(DurableBase root, ReadAmplificationBaseBudgetParameters parameters) =>
+    internal PreparedWorldSave<TWorld> StageSnapshot(IDurableObject root, ReadAmplificationBaseBudgetParameters parameters) =>
         StageCore(root, parameters, independentSnapshot: true);
 
-    private PreparedWorldSave<TWorld> StageCore(DurableBase root, ReadAmplificationBaseBudgetParameters parameters,
+    private PreparedWorldSave<TWorld> StageCore(IDurableObject root, ReadAmplificationBaseBudgetParameters parameters,
         bool independentSnapshot) {
         if (_staging || _pending is not null) {
             throw new InvalidOperationException("Resolve the current graph save before preparing another.");

@@ -22,7 +22,7 @@ public sealed partial class DurableSchemaGeneratorTests {
     public void NullableScalarSlotsUseUnmanagedFamilyOperands(string scalar) {
         GeneratorTestRun run = RunGenerator($$"""
             using Atelia.DurableGraph;
-            [DurableType("World",1)] public partial class World:DurableBase {
+            [DurableType("World",1)] public partial class World:IDurableObject {
                 [DurableField(1)] private readonly {{scalar}}? _value;
             }
             """);
@@ -49,8 +49,8 @@ public sealed partial class DurableSchemaGeneratorTests {
             [DurableType("Cell",1)] public partial struct Cell<T> where T:struct {
                 [DurableField(1)] public T? Optional;
             }
-            [DurableType("Box",1)] public partial class Box<T>:DurableBase { [DurableField(1)] public T Value; }
-            [DurableType("World",1)] public partial class World:DurableBase {
+            [DurableType("Box",1)] public partial class Box<T>:IDurableObject { [DurableField(1)] public T Value; }
+            [DurableType("World",1)] public partial class World:IDurableObject {
                 [DurableField(1)] public Point? Point;
                 [DurableField(2)] public Cell<Point>? Cell;
                 [DurableField(3)] public Box<Point?> Box;
@@ -81,7 +81,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             using Atelia.DurableGraph;
             public enum Choice { A, B }
             public struct Plain { public int X; }
-            [DurableType("Bad",1)] public partial class Bad:DurableBase {
+            [DurableType("Bad",1)] public partial class Bad:IDurableObject {
                 [DurableField(1)] public {{valueType}} Value;
             }
             """);
@@ -94,12 +94,12 @@ public sealed partial class DurableSchemaGeneratorTests {
         using AncestryHistoryDirectory history = new();
         const string source = """
             using Atelia.DurableGraph;
-            [DurableType("Node",1)] public partial class Node:DurableBase { [DurableField(1)] public int X; }
+            [DurableType("Node",1)] public partial class Node:IDurableObject { [DurableField(1)] public int X; }
             [DurableType("Point",1)] public partial struct Point {
                 [DurableField(1)] public int X;
                 [DurableField(2)] public Node Node;
             }
-            [DurableType("World",1)] public partial class World:DurableBase { [DurableField(1)] public Point? Point; }
+            [DurableType("World",1)] public partial class World:IDurableObject { [DurableField(1)] public Point? Point; }
             """;
         GeneratorTestRun first = RunGenerator(source);
         AssertSchemaOnlyCompiles(first);
@@ -115,7 +115,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         using AncestryHistoryDirectory history = new();
         GeneratorTestRun first = RunGenerator("""
             using Atelia.DurableGraph;
-            [DurableType("World",1)] public partial class World:DurableBase { [DurableField(1)] public int Value; }
+            [DurableType("World",1)] public partial class World:IDurableObject { [DurableField(1)] public int Value; }
             """);
         AssertSchemaOnlyCompiles(first);
         Assert.Contains(first.GeneratedSources, source => source.HintName == "DurableStates.g.cs");
@@ -123,7 +123,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         GeneratorTestRun next = RunGenerator("""
             using Atelia.DurableGraph;
             using States=Atelia.DurableGraph.Generated.Family_576F726C64;
-            [DurableType("World",2)] public partial class World:DurableBase { [DurableField(1)] public int? Value; }
+            [DurableType("World",2)] public partial class World:IDurableObject { [DurableField(1)] public int? Value; }
             public static class Changes {
                 [DurableUpgrade(typeof(World),1)]
                 public static void Upgrade(in States.V1 prior,out States.V2<NullableState<int>> next,UpgradeContext context) =>
@@ -149,13 +149,13 @@ public sealed partial class DurableSchemaGeneratorTests {
         GeneratorTestRun first = RunGenerator("""
             using Atelia.DurableGraph;
             [DurableType("Point",1)] public partial struct Point { [DurableField(1)] public int X; }
-            [DurableType("World",1)] public partial class World:DurableBase { [DurableField(1)] public Point? Value; }
+            [DurableType("World",1)] public partial class World:IDurableObject { [DurableField(1)] public Point? Value; }
             """);
         AssertSchemaOnlyCompiles(first);
         new SchemaHistoryTool().Publish(history.WriteManifest(first), history.History);
         GeneratorTestRun next = RunGenerator("""
             using Atelia.DurableGraph;
-            [DurableType("World",2)] public partial class World:DurableBase { [DurableField(1)] public int? Value; }
+            [DurableType("World",2)] public partial class World:IDurableObject { [DurableField(1)] public int? Value; }
             """, history.ReadAdditionalTexts());
         AssertSchemaOnlyCompiles(next);
         Assembly assembly = EmitAndLoad(next.OutputCompilation);
@@ -216,8 +216,8 @@ public sealed partial class DurableSchemaGeneratorTests {
                 public Point(int x,World back) { X=x; Back=back; }
             }
             [DurableType("Cell",1)] public partial struct Cell<T> where T:struct { [DurableField(1)] public T? Value; }
-            [DurableType("Box",1)] public partial class Box<T>:DurableBase { [DurableField(1)] public T Value; }
-            [DurableType("World",1)] public partial class World:DurableBase {
+            [DurableType("Box",1)] public partial class Box<T>:IDurableObject { [DurableField(1)] public T Value; }
+            [DurableType("World",1)] public partial class World:IDurableObject {
                 [DurableField(1)] public Point? Point;
                 [DurableField(2)] public Cell<Point>? Cell;
                 [DurableField(3)] public Box<Point?> Box;

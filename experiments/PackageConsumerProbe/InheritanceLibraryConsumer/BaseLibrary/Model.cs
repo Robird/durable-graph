@@ -13,7 +13,7 @@ namespace InheritanceLibrary.Base;
 [DurableType("HPoint", 1)] internal partial struct InternalPoint {
     [DurableField(1)] public int Value;
 }
-[DurableType("HBase", 1)] public abstract partial class LegacyBase<T> : DurableBase where T : struct {
+[DurableType("HBase", 1)] public abstract partial class LegacyBase<T> : IDurableObject where T : struct {
     [DurableField(1)] private readonly InternalPair<T> _pair;
     [DurableField(2)] private readonly InternalPoint? _optional;
     [DurableField(4)] public LegacyBase<T>? Link;
@@ -28,7 +28,7 @@ namespace InheritanceLibrary.Base;
 [DurableType("HPoint", 2)] internal partial struct CurrentPoint {
     [DurableField(1)] public long Value;
 }
-[DurableType("HBase", 2)] public abstract partial class CurrentBase<T> : DurableBase where T : struct {
+[DurableType("HBase", 2)] public abstract partial class CurrentBase<T> : IDurableObject where T : struct {
     [DurableField(1)] private readonly CurrentPair<T> _pair;
     [DurableField(2)] private readonly CurrentPoint? _optional;
     [DurableField(4)] public CurrentBase<T>? Link;

@@ -106,7 +106,7 @@ public sealed class StateDefinitionBinding {
         if (domainTypeDefinition is not null && (domainTypeDefinition.IsByRefLike ||
             BuiltinStateValues.TryBindCurrent(domainTypeDefinition, out _) ||
             (kind == SchemaKind.InlineValue ? !domainTypeDefinition.IsValueType :
-                !typeof(DurableBase).IsAssignableFrom(domainTypeDefinition)))) {
+                (!domainTypeDefinition.IsClass || !typeof(IDurableObject).IsAssignableFrom(domainTypeDefinition))))) {
             throw new ArgumentException("The CLR declaration must match the supported durable class, inline struct or enum kind.", nameof(domainTypeDefinition));
         }
         DefinitionId = definitionId;

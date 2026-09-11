@@ -8,7 +8,7 @@ public sealed class CapturedGraphPreparationTests {
         new DurableFieldInfo(1, TypeTag.Int32), new DurableFieldInfo(2, TypeTag.String));
     private static readonly CapturedStatePreparation<State> Binding = new(Schema, Base, Delta);
 
-    private sealed class Domain : DurableBase {
+    private sealed class Domain : IDurableObject {
         public int Value;
         public string? Text;
     }

@@ -151,7 +151,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         SchemaHistoryTool publisher = new();
         GeneratorTestRun initial = RunGenerator(FusedDeltaPreamble + """
             [DurableType("persisted.base", 1)]
-            public abstract partial class OldBase : DurableBase { [DurableField(99)] private int _number; }
+            public abstract partial class OldBase : IDurableObject { [DurableField(99)] private int _number; }
             [DurableType("persisted.leaf", 1)]
             public sealed partial class Leaf : OldBase { [DurableField(99)] private bool _flag; }
             """);
@@ -159,7 +159,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         publisher.Publish(files.WriteManifest(initial), files.History);
         string source = FusedDeltaPreamble + """
             [DurableType("persisted.base", 2)]
-            public abstract partial class NewBase : DurableBase { [DurableField(2)] private byte _small; }
+            public abstract partial class NewBase : IDurableObject { [DurableField(2)] private byte _small; }
             [DurableType("persisted.leaf", 2)]
             public sealed partial class Leaf : NewBase { [DurableField(1)] private uint _number; }
             public static class Host {
@@ -258,7 +258,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         using Atelia.DurableGraph.StateStore.Serialization;
         namespace PersistedCapture;
         [DurableType("persisted.capture.base", 1)]
-        public abstract partial class Base : DurableBase {
+        public abstract partial class Base : IDurableObject {
             [DurableField(1)] private string _name;
             protected Base(string name) { _name = name; }
             public void Rename(string name) { _name = name; }

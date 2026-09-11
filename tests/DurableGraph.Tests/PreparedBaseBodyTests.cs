@@ -13,7 +13,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         string fields = string.Join("\n", types.Select((type, index) => $"[DurableField({index + 1})] private {type} _field{index};"));
         string source = FusedDeltaPreamble + """
             [DurableType("prepared.item", 1)]
-            public sealed partial class Item : DurableBase {
+            public sealed partial class Item : IDurableObject {
             """ + fields + "\n}\npublic static class Host {\n" + PreparedBaseHostMethod("Item", 1) + "\n}";
         GeneratorTestRun run = RunGenerator(source);
         AssertSchemaOnlyCompiles(run);
@@ -47,7 +47,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         SchemaHistoryTool publisher = new();
         string initialSource = FusedDeltaPreamble + """
             [DurableType("prepared.base", 1)]
-            public abstract partial class OldBase : DurableBase {
+            public abstract partial class OldBase : IDurableObject {
                 [DurableField(99)] private int _number;
             }
             [DurableType("prepared.leaf", 1)]
@@ -61,7 +61,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         publisher.Publish(files.WriteManifest(initial), files.History);
         string source = FusedDeltaPreamble + """
             [DurableType("prepared.base", 2)]
-            public abstract partial class NewBase : DurableBase {
+            public abstract partial class NewBase : IDurableObject {
                 [DurableField(2)] private byte _small;
             }
             [DurableType("prepared.leaf", 2)]
@@ -93,7 +93,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         string source = FusedDeltaPreamble + """
             using System.Linq;
             [DurableType("prepared.capture.base", 1)]
-            public abstract partial class Base : DurableBase {
+            public abstract partial class Base : IDurableObject {
                 [DurableField(7)] private int _count = -17;
                 protected void ChangeBase() { _count = 500; }
             }

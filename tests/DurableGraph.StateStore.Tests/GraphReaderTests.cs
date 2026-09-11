@@ -113,7 +113,7 @@ public sealed class GraphReaderTests : IDisposable {
         Assert.Equal(1, hydrations);
     }
 
-    private abstract class Node : DurableBase {
+    private abstract class Node : IDurableObject {
         internal Node? Next;
         internal Node? Alias;
         internal byte Value;

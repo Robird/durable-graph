@@ -216,7 +216,7 @@ public sealed class CrossAssemblyNominalBindingTests {
         static (ref BinaryPayloadReader reader, in T prior) => throw new InvalidOperationException("Body reads are outside nominal binding."),
         static (in T state, IStateReferenceVisitor visitor) => { });
 
-    private static StateModelBinding RemoteModel<TDomain>(TypeExpr nominal) where TDomain : DurableBase {
+    private static StateModelBinding RemoteModel<TDomain>(TypeExpr nominal) where TDomain : class, IDurableObject {
         // Deliberately newer, with a field unrelated to the owner's ObjectId slot.
         DurableSchema schema = new(nominal, 2, new DurableFieldInfo(1, TypeTag.Int32));
         CapturedStatePreparation<int> preparation = new(schema,
@@ -235,8 +235,8 @@ public sealed class CrossAssemblyNominalBindingTests {
     private static void FirstGeneric<T>(in Owner1 prior, out Owner2<T> next, UpgradeContext context) where T : unmanaged => next = new(default);
     private static void FirstClosed(in Owner1 prior, out Owner2<ObjectId> next, UpgradeContext context) => next = new(default);
     private static void Second<T>(in Owner2<T> prior, out Owner3<T> next, UpgradeContext context) where T : unmanaged => next = new(prior.Value, 2);
-    private sealed class Remote : DurableBase;
-    private sealed class RemoteGeneric<T> : DurableBase;
+    private sealed class Remote : IDurableObject;
+    private sealed class RemoteGeneric<T> : IDurableObject;
     private readonly record struct Owner1;
     private readonly record struct Owner2<T>(T Value) where T : unmanaged;
     private readonly record struct Owner3<T>(T Value, int Generation) where T : unmanaged;

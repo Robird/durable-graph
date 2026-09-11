@@ -129,7 +129,7 @@ public sealed partial class DurableSchemaGeneratorTests {
     [InlineData("[DurableType(\"record.value\", 1)] public ref partial struct Value { }")]
     [InlineData("public class Outer { [DurableType(\"record.value\", 1)] public partial record struct Value; }")]
     [InlineData("[DurableType(\"record.value\", 1)] file partial record struct Value;")]
-    public void RecordStructEnrollmentDoesNotWidenUnsupportedTypeShapes(string declaration) {
+    public void RecordStructEnrollmentDoesNotWidenUnsupportedOrUnqualifiedTypeShapes(string declaration) {
         GeneratorTestRun run = RunGenerator("using Atelia.DurableGraph; " + declaration);
         Assert.Contains(run.GeneratorDiagnostics, diagnostic => diagnostic.Id == "DG0001");
     }
@@ -139,7 +139,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         GeneratorTestRun run = RunGenerator("""
             using Atelia.DurableGraph;
             public partial record struct Value(int X);
-            [DurableType("record.world", 1)] public partial class World : DurableBase {
+            [DurableType("record.world", 1)] public partial class World : IDurableObject {
                 [DurableField(1)] public Value Value;
             }
             """);

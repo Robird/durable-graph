@@ -3,7 +3,7 @@ using Atelia.DurableGraph.StateStore.Serialization;
 namespace Atelia.DurableGraph.Tests;
 
 public sealed class LoadedCaptureIdentityTests {
-    private sealed class World : DurableBase {
+    private sealed class World : IDurableObject {
         internal string? Text;
     }
 

@@ -99,11 +99,11 @@ public sealed partial class DurableSchemaGeneratorTests {
                 [DurableField(2)] public U Second;
                 [DurableField(3)] public T[] Nested;
             }
-            [DurableType("Box",1)] public partial class Box<T>:DurableBase {
+            [DurableType("Box",1)] public partial class Box<T>:IDurableObject {
                 [DurableField(1)] public T Value;
                 [DurableField(2)] public T[] Items;
             }
-            [DurableType("World",1)] public partial class World:DurableBase {
+            [DurableType("World",1)] public partial class World:IDurableObject {
                 [DurableField(1)] public Pair<int,string>[] Pairs;
                 [DurableField(2)] public int[][] Jagged;
                 [DurableField(3)] public Pair<int,string>[][,] Mixed;
@@ -131,7 +131,7 @@ public sealed partial class DurableSchemaGeneratorTests {
     [InlineData("int[,,,,]")]
     [InlineData("object[]")]
     public void UnsupportedArrayElementsAndRanksRemainPreciseGeneratorErrors(string type) {
-        GeneratorTestRun run = RunGenerator("using Atelia.DurableGraph; [DurableType(\"Bad\",1)] public partial class Bad:DurableBase { [DurableField(1)] public " + type + " Value; }");
+        GeneratorTestRun run = RunGenerator("using Atelia.DurableGraph; [DurableType(\"Bad\",1)] public partial class Bad:IDurableObject { [DurableField(1)] public " + type + " Value; }");
         Assert.Contains(run.GeneratorDiagnostics, diagnostic => diagnostic.Id == "DG0007");
     }
 }

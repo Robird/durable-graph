@@ -71,5 +71,5 @@ public sealed class InlineSchemaContractTests {
     private static void Visit(in int value, IStateReferenceVisitor visitor) { }
     private static PreparedBaseBody PrepareBase(in int value) => new([]);
     private static PreparedDeltaBody PrepareDelta(in int prior, in int current) => new(false, []);
-    private sealed class Domain : DurableBase { }
+    private sealed class Domain : IDurableObject { }
 }

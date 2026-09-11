@@ -7,7 +7,7 @@ namespace EventHistoryPackageConsumerProbe;
 #else
 [DurableType("Alice", 2)]
 #endif
-public sealed partial class Alice : DurableBase {
+public sealed partial class Alice : IDurableObject {
 #if HISTORY_V1
     [DurableField(1)] public int Score;
 #else
@@ -20,12 +20,12 @@ public sealed partial class Alice : DurableBase {
 }
 
 [DurableType("Bob", 1)]
-public sealed partial class Bob : DurableBase {
+public sealed partial class Bob : IDurableObject {
     [DurableField(1)] public int Score;
 }
 
 [DurableType("Observed", 1)]
-public sealed partial class Observed : DurableBase {
+public sealed partial class Observed : IDurableObject {
     [DurableField(1)] public Alice Target = null!;
     [DurableField(2)] public Alice Alias = null!;
     public Observed(Alice target) { Target = Alias = target; }
@@ -36,7 +36,7 @@ public sealed partial class Observed : DurableBase {
 #else
 [DurableType("World", 2)]
 #endif
-public sealed partial class World : DurableBase {
+public sealed partial class World : IDurableObject {
     [DurableField(1)] public Alice Alice = null!;
     [DurableField(2)] public Bob Bob = null!;
 #if HISTORY_V2

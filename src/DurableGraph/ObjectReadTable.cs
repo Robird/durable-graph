@@ -5,7 +5,7 @@ namespace Atelia.DurableGraph;
 public sealed class ObjectReadTable {
     private readonly Dictionary<ObjectId, object> _objects;
 
-    public ObjectReadTable(StringReadTable strings, IReadOnlyDictionary<ObjectId, DurableBase> objects)
+    public ObjectReadTable(StringReadTable strings, IReadOnlyDictionary<ObjectId, IDurableObject> objects)
         : this(Merge(strings, objects)) { }
 
     /// <summary>Copies one unified directory. Only empty strings may share an instance across distinct IDs.</summary>
@@ -27,7 +27,7 @@ public sealed class ObjectReadTable {
     public string? ResolveString(ObjectId id) => ResolveObject<string>(id);
 
     /// <summary>Resolves null or an already allocated instance compatible with the declared CLR type.</summary>
-    public TDomain? ResolveDurable<TDomain>(ObjectId id) where TDomain : DurableBase => ResolveObject<TDomain>(id);
+    public TDomain? ResolveDurable<TDomain>(ObjectId id) where TDomain : class, IDurableObject => ResolveObject<TDomain>(id);
 
     /// <summary>Resolves a reference from the common allocated-object directory.</summary>
     public T? ResolveObject<T>(ObjectId id) where T : class {
@@ -42,12 +42,12 @@ public sealed class ObjectReadTable {
             : throw new InvalidDataException($"Object ID {id} is not an allocated {typeof(T)} in this loading view.");
     }
 
-    private static Dictionary<ObjectId, object> Merge(StringReadTable strings, IReadOnlyDictionary<ObjectId, DurableBase> objects) {
+    private static Dictionary<ObjectId, object> Merge(StringReadTable strings, IReadOnlyDictionary<ObjectId, IDurableObject> objects) {
         ArgumentNullException.ThrowIfNull(strings);
         ArgumentNullException.ThrowIfNull(objects);
         Dictionary<ObjectId, object> merged = [];
         foreach ((ObjectId id, string value) in strings.Entries) { merged.Add(id, value); }
-        foreach ((ObjectId id, DurableBase value) in objects) {
+        foreach ((ObjectId id, IDurableObject value) in objects) {
             if (!merged.TryAdd(id, value)) { throw new InvalidDataException("String and durable directories contain the same object ID."); }
         }
         return merged;

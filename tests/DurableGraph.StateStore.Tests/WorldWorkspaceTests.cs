@@ -236,7 +236,7 @@ public sealed class WorldWorkspaceTests : IDisposable {
         Assert.Equal(new ObjectId(2), changedState.NextId);
     }
 
-    private sealed class Node : DurableBase {
+    private sealed class Node : IDurableObject {
         internal Node? Next;
         internal byte Value;
     }
@@ -262,7 +262,7 @@ public sealed class WorldWorkspaceTests : IDisposable {
     private State Read(FrameAddress address, ObjectId id, StateModelRegistry models) =>
         RevisionDecoder.ReadSnapshot(_store, _schemas, address, models.Snapshot().Readers).GetRequired(id).GetState<State>();
 
-    private class World : DurableBase {
+    private class World : IDurableObject {
         internal byte Value;
         internal string? Text;
         internal string? Alias;

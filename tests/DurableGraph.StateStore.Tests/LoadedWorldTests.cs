@@ -305,7 +305,7 @@ public sealed class LoadedWorldTests : IDisposable {
         Assert.NotEqual(address, _store.Append(retry.Revision));
     }
 
-    private class World : DurableBase {
+    private class World : IDurableObject {
         internal byte Value;
         internal string? Text;
         internal string? Alias;

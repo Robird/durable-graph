@@ -7,7 +7,7 @@ namespace HistoryCapabilityPackageConsumerProbe;
 #else
 [DurableType("package.history-world", 2)]
 #endif
-public sealed partial class World : DurableBase {
+public sealed partial class World : IDurableObject {
     [DurableField(1)] private int _score;
 #if HISTORY_V1
     [DurableField(2)] private Legacy? _legacy;

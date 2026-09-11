@@ -214,7 +214,7 @@ public sealed class CompositeDictionaryBodyTests {
     }
 
     private readonly record struct KeyState(int Tenant, int Timestamp);
-    private sealed class DictionaryRoot(Dictionary<string, int> items) : DurableBase {
+    private sealed class DictionaryRoot(Dictionary<string, int> items) : IDurableObject {
         internal Dictionary<string, int> Items { get; } = items;
     }
     private sealed class SingleDictionaryResolver(DictionaryObjectBinding dictionary) : IStateModelResolver {

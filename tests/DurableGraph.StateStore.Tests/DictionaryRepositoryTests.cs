@@ -214,7 +214,7 @@ public sealed class DictionaryRepositoryTests : IDisposable {
                 binder: null, args: arguments, culture: null)!;
     }
 
-    private sealed class World : DurableBase {
+    private sealed class World : IDurableObject {
         public Dictionary<string, int>? Values;
         public Dictionary<string, int>? Alias;
         public Dictionary<World, World>? Links;

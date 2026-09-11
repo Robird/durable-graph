@@ -79,10 +79,10 @@ public sealed partial class DurableSchemaGeneratorTests {
             [field:DurableField(1)] Guid Id,
             [field:DurableField(2)] T Amount,
             [field:DurableField(3)] TimeSpan Duration);
-        [DurableType("bcl.Box",1)] public partial class Box<T>:DurableBase {
+        [DurableType("bcl.Box",1)] public partial class Box<T>:IDurableObject {
             [DurableField(1)] public T Value=default!;
         }
-        [DurableType("bcl.World",1)] public partial class World:DurableBase {
+        [DurableType("bcl.World",1)] public partial class World:IDurableObject {
             [DurableField(1)] public Guid Id;
             [DurableField(2)] public decimal Amount;
             [DurableField(3)] public TimeSpan Duration;

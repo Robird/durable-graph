@@ -117,15 +117,15 @@ public sealed partial class DurableSchemaGeneratorTests {
         [DurableType("list.graph.recursive",1)] public partial struct Recursive {
             [DurableField(1)] public List<Recursive>? Children;
         }
-        [DurableType("list.graph.box",1)] public partial class Box<T> : DurableBase {
+        [DurableType("list.graph.box",1)] public partial class Box<T> : IDurableObject {
             [DurableField(1)] public T Value = default!;
         }
-        [DurableType("list.graph.node",1)] public partial class Node : DurableBase {
+        [DurableType("list.graph.node",1)] public partial class Node : IDurableObject {
             [DurableField(1)] public int Value;
             [DurableField(2)] public List<Node>? Back;
         }
         [DurableType("list.graph.derived",1)] public partial class Derived : Node { }
-        [DurableType("list.graph.world",1)] public partial class World : DurableBase {
+        [DurableType("list.graph.world",1)] public partial class World : IDurableObject {
             [DurableField(1)] public List<int> Numbers = Enumerable.Range(0,128).ToList();
             [DurableField(2)] public List<List<int>> Nested = new();
             [DurableField(3)] public List<Point> Points = new();

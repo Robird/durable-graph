@@ -8,7 +8,7 @@ using SegmentStore = Atelia.RbfSegmentStore.RbfSegmentStore;
 namespace StateStorePackageConsumerProbe;
 
 [DurableType("package.restore-world", 2)]
-public sealed partial class World : DurableBase {
+public sealed partial class World : IDurableObject {
     [DurableField(1)] private int _score;
     [DurableField(2)] private readonly string _name;
     [DurableField(3)] private readonly int _generation;

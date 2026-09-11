@@ -189,7 +189,7 @@ internal static class SharedReadProbe {
 
     private readonly record struct ActorObservation(int WorldValue, int ActorValue);
 
-    private static void CheckSelection(GraphFrame frame, DurableBase root, int expectedValue) {
+    private static void CheckSelection(GraphFrame frame, IDurableObject root, int expectedValue) {
         switch (root) {
             case SharedRoot state when frame.Kind == GraphFrameKind.State:
                 CheckRoot(state, expectedValue);
@@ -230,7 +230,7 @@ internal static class SharedReadProbe {
     }
 
     private static (TFirst First, TSecond Second) Measure<TFirst, TSecond>(Func<(TFirst First, TSecond Second)> read,
-        out Observation observation) where TFirst : DurableBase where TSecond : DurableBase {
+        out Observation observation) where TFirst : class, IDurableObject where TSecond : class, IDurableObject {
         long allocatedBefore = GC.GetAllocatedBytesForCurrentThread();
         long started = Stopwatch.GetTimestamp();
         var pair = read();

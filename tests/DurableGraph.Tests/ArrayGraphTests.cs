@@ -244,23 +244,23 @@ public sealed partial class DurableSchemaGeneratorTests {
             [DurableField(2)] public TRight Right;
         }
         [DurableType("array.graph.holder", 1)]
-        public partial class Holder<T> : DurableBase {
+        public partial class Holder<T> : IDurableObject {
             [DurableField(1)] public T[]? Items;
             [DurableField(2)] public T Value = default!;
         }
         [DurableType("array.graph.box", 1)]
-        public partial class Box<T> : DurableBase { [DurableField(1)] public T Value = default!; }
+        public partial class Box<T> : IDurableObject { [DurableField(1)] public T Value = default!; }
         [DurableType("array.graph.link", 1)]
         public partial struct Link { [DurableField(1)] public Node[]? Back; }
         [DurableType("array.graph.node", 1)]
-        public partial class Node : DurableBase {
+        public partial class Node : IDurableObject {
             [DurableField(1)] public int Value;
             [DurableField(2)] public Link Link;
         }
         [DurableType("array.graph.derived", 1)]
         public partial class Derived : Node { }
         [DurableType("array.graph.world", 1)]
-        public partial class World : DurableBase {
+        public partial class World : IDurableObject {
             [DurableField(1)] public int[] Numbers = new int[128];
             [DurableField(2)] public int[,] Matrix = new int[2,3];
             [DurableField(3)] public double[,,] Cube = new double[2,1,2];

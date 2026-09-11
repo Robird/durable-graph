@@ -80,7 +80,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         GeneratorTestRun run = RunGenerator($$"""
             using Atelia.DurableGraph;
             namespace {{ns}} { public struct {{name}} { public int Data; } }
-            [DurableType("Fake",1)] public partial class Fake:DurableBase {
+            [DurableType("Fake",1)] public partial class Fake:IDurableObject {
                 [DurableField(1)] public {{ns}}.{{name}} Value;
             }
             """);
@@ -94,7 +94,7 @@ public sealed partial class DurableSchemaGeneratorTests {
     [InlineData("System.TimeSpan", "System.DateTimeOffset")]
     public void TemporalScalarRetypeRequiresExplicitOwnerVersion(string before, string after) {
         string Source(string type) => "using Atelia.DurableGraph; [DurableType(\"World\",1)] " +
-            "public partial class World:DurableBase { [DurableField(1)] public " + type + " Value; }";
+            "public partial class World:IDurableObject { [DurableField(1)] public " + type + " Value; }";
         using AncestryHistoryDirectory history = new();
         GeneratorTestRun first = RunGenerator(Source(before));
         AssertSchemaOnlyCompiles(first);
@@ -111,7 +111,7 @@ public sealed partial class DurableSchemaGeneratorTests {
     public void TemporalSupportDoesNotAdmitDeferredValueOrBoxedOrNullableRootKey(string type) {
         GeneratorTestRun run = RunGenerator($$"""
             using Atelia.DurableGraph;
-            [DurableType("World",1)] public partial class World:DurableBase {
+            [DurableType("World",1)] public partial class World:IDurableObject {
                 [DurableField(1)] public {{type}} Value;
             }
             """);
@@ -125,7 +125,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         using Atelia.DurableGraph.StateStore.Serialization;
         using Body = Atelia.DurableGraph.Generated.Family_4974656D.BodyV1;
         [DurableType("Trigger",1)] public partial struct Trigger<T> { [DurableField(1)] public T Value; }
-        [DurableType("Item",1)] public partial class Item:DurableBase {
+        [DurableType("Item",1)] public partial class Item:IDurableObject {
             [DurableField(1)] public DateOnly Date;
             [DurableField(2)] public TimeOnly Time;
             [DurableField(3)] public DateTimeOffset Timestamp;
@@ -162,8 +162,8 @@ public sealed partial class DurableSchemaGeneratorTests {
         [DurableType("Part",1)] public readonly partial record struct Part(
             [field:DurableField(1)] DateOnly Date,[field:DurableField(2)] DateTimeOffset Timestamp,[field:DurableField(3)] TimeOnly Time);
         [DurableType("Pair",1)] public partial struct Pair<T,U> { [DurableField(1)] public T First; [DurableField(2)] public U Second; }
-        [DurableType("Base",1)] public partial class Base<T>:DurableBase { [DurableField(1)] public T Value; }
-        [DurableType("Phantom",1)] public partial class Phantom<T>:DurableBase { [DurableField(1)] public int Number; }
+        [DurableType("Base",1)] public partial class Base<T>:IDurableObject { [DurableField(1)] public T Value; }
+        [DurableType("Phantom",1)] public partial class Phantom<T>:IDurableObject { [DurableField(1)] public int Number; }
         [DurableType("World",1)] public partial class World:Base<DateTimeOffset> {
             [DurableField(1)] public readonly DateOnly Date;
             [DurableField(2)] public DateTimeOffset? Optional;

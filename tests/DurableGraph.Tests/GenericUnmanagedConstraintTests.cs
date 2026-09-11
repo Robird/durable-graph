@@ -11,15 +11,15 @@ public sealed partial class DurableSchemaGeneratorTests {
             [DurableType("Managed",1)] public partial struct Managed {
                 [DurableField(1)] public string? Text;
             }
-            [DurableType("Box",1)] public partial class Box<T> : DurableBase where T:unmanaged {
+            [DurableType("Box",1)] public partial class Box<T> : IDurableObject where T:unmanaged {
                 [DurableField(1)] public T Value;
             }
             [DurableType("Inline",1)] public partial struct Inline<T> where T:unmanaged {
                 [DurableField(1)] public T Value;
             }
-            [DurableType("ClassOnly",1)] public partial class ClassOnly<T> : DurableBase where T:class { }
-            [DurableType("NeedsCtor",1)] public partial class NeedsCtor<T> : DurableBase where T:new() { }
-            [DurableType("Related",1)] public partial class Related<T,U> : DurableBase where U:T { }
+            [DurableType("ClassOnly",1)] public partial class ClassOnly<T> : IDurableObject where T:class { }
+            [DurableType("NeedsCtor",1)] public partial class NeedsCtor<T> : IDurableObject where T:new() { }
+            [DurableType("Related",1)] public partial class Related<T,U> : IDurableObject where U:T { }
             """);
         AssertSchemaOnlyCompiles(run);
         Assembly assembly = EmitAndLoad(run.OutputCompilation);

@@ -8,13 +8,13 @@ namespace Atelia.DurableGraph.StateStore;
 /// An Event is a snapshot: application code must not mutate its reachable content while processing it.
 /// Cold Resume restores Event and State independently; hot caller-created aliases remain caller-owned.
 /// </remarks>
-public sealed class EventHistorySession<TState> : IDisposable where TState : DurableBase {
+public sealed class EventHistorySession<TState> : IDisposable where TState : class, IDurableObject {
     private readonly EventHistoryRepository _repository;
     internal WorldWorkspace<TState> Workspace { get; }
     private bool _disposed;
 
     internal EventHistorySession(EventHistoryRepository repository, string branchName,
-        WorldWorkspace<TState> workspace, GraphFrame? head, DurableBase? pendingEvent) {
+        WorldWorkspace<TState> workspace, GraphFrame? head, IDurableObject? pendingEvent) {
         _repository = repository;
         BranchName = branchName;
         Workspace = workspace;
@@ -34,7 +34,7 @@ public sealed class EventHistorySession<TState> : IDisposable where TState : Dur
     /// mutable State and Event graphs independently. After a failed commit, use a reopened session
     /// to determine the published head; this property's old value is not recovery evidence.
     /// </remarks>
-    public DurableBase? PendingEvent { get; internal set; }
+    public IDurableObject? PendingEvent { get; internal set; }
     /// <summary>Whether the owning repository has faulted and must be disposed and reopened.</summary>
     /// <remarks>
     /// This is independent of <see cref="GraphCommitException.Outcome"/>: NotPublished can still be faulted.
@@ -42,7 +42,7 @@ public sealed class EventHistorySession<TState> : IDisposable where TState : Dur
     /// </remarks>
     public bool IsFaulted => _repository.IsFaulted;
 
-    public TEvent GetPendingEvent<TEvent>() where TEvent : DurableBase {
+    public TEvent GetPendingEvent<TEvent>() where TEvent : class, IDurableObject {
         ObjectDisposedException.ThrowIf(_disposed, this);
         return PendingEvent as TEvent ?? throw new InvalidOperationException("No pending Event of the requested type.");
     }
@@ -62,7 +62,7 @@ public sealed class EventHistorySession<TState> : IDisposable where TState : Dur
     /// <exception cref="ArgumentNullException">domainEvent is null.</exception>
     /// <exception cref="InvalidOperationException">The session cannot commit, including when its head is already an Event.</exception>
     /// <exception cref="GraphCommitException">An append/publication attempt failed; its Outcome describes publication, not session health.</exception>
-    public GraphFrame CommitDomainEvent(DurableBase domainEvent, ReadAmplificationBaseBudgetParameters? parameters = null) {
+    public GraphFrame CommitDomainEvent(IDurableObject domainEvent, ReadAmplificationBaseBudgetParameters? parameters = null) {
         ObjectDisposedException.ThrowIf(_disposed, this);
         ArgumentNullException.ThrowIfNull(domainEvent);
         return _repository.Commit(this, domainEvent, null, parameters);

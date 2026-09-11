@@ -16,7 +16,7 @@ namespace InlineLibrary.App;
 #else
 [DurableType("IWorld", 2)]
 #endif
-public partial class World : DurableBase {
+public partial class World : IDurableObject {
     [DurableField(1)] public Coordinate Position;
     [DurableField(2)] public Point? Optional;
     [DurableField(3)] public Pair<int> Tag;

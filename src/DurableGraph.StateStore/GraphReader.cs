@@ -6,7 +6,7 @@ namespace Atelia.DurableGraph.StateStore;
 internal static class GraphReader {
     internal static MaterializedGraph<T> Read<T>(StateRevisionStore store, SchemaStore schemas,
         FrameAddress revisionAddress, ObjectId rootId, StateModelSnapshot models,
-        bool requireExactRootType = false) where T : DurableBase {
+        bool requireExactRootType = false) where T : class, IDurableObject {
         ArgumentNullException.ThrowIfNull(store);
         ArgumentNullException.ThrowIfNull(schemas);
         ArgumentNullException.ThrowIfNull(models);
@@ -15,7 +15,7 @@ internal static class GraphReader {
 
     /// <summary>Reuses stored decoding while retaining an independently allocated editable import.</summary>
     internal static MaterializedGraph<T> Read<T>(RevisionReadSession session,
-        FrameAddress revisionAddress, ObjectId rootId, bool requireExactRootType = false) where T : DurableBase {
+        FrameAddress revisionAddress, ObjectId rootId, bool requireExactRootType = false) where T : class, IDurableObject {
         ArgumentNullException.ThrowIfNull(session);
         ReadSelection selection = Prepare<T>(session, revisionAddress, rootId, requireExactRootType);
         NormalizedRevision normalized = selection.Normalized;
@@ -54,7 +54,7 @@ internal static class GraphReader {
         FrameAddress firstRevisionAddress, ObjectId firstRootId,
         FrameAddress secondRevisionAddress, ObjectId secondRootId,
         StateModelSnapshot models, GraphReadStatistics? statistics = null)
-        where TFirst : DurableBase where TSecond : DurableBase {
+        where TFirst : class, IDurableObject where TSecond : class, IDurableObject {
         RevisionReadSession session = new(store, schemas, models, statistics);
         statistics = session.Statistics;
         ReadSelection first = Prepare<TFirst>(session, firstRevisionAddress, firstRootId);
@@ -98,7 +98,7 @@ internal static class GraphReader {
     }
 
     private static ReadSelection Prepare<T>(RevisionReadSession session, FrameAddress revisionAddress,
-        ObjectId rootId, bool requireExactRootType = false) where T : DurableBase {
+        ObjectId rootId, bool requireExactRootType = false) where T : class, IDurableObject {
         ArgumentOutOfRangeException.ThrowIfZero(rootId.Value, nameof(rootId));
         DecodedRevision decoded = session.Read(revisionAddress);
         // Current values and business Upgrade callbacks remain independent for each view,
@@ -222,7 +222,7 @@ internal static class GraphReader {
 }
 
 /// <summary>One independently restored graph and its complete source baseline for controlled editable import.</summary>
-internal sealed class MaterializedGraph<T> where T : DurableBase {
+internal sealed class MaterializedGraph<T> where T : class, IDurableObject {
     private readonly ulong _nextId;
     private readonly IReadOnlyDictionary<object, ObjectId> _bindings;
 

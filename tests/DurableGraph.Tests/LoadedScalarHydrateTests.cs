@@ -8,7 +8,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             using Atelia.DurableGraph;
             namespace ScalarRestore;
             [DurableType("restore.scalars", 1)]
-            public sealed partial class World : DurableBase {
+            public sealed partial class World : IDurableObject {
                 [DurableField(1)] private readonly bool _bool = true;
                 [DurableField(2)] private readonly byte _byte = byte.MaxValue;
                 [DurableField(3)] private readonly sbyte _sbyte = sbyte.MinValue;
@@ -36,8 +36,8 @@ public sealed partial class DurableSchemaGeneratorTests {
         StateModelBinding model = (StateModelBinding)type.GetProperty("Binding")!.GetValue(null)!;
         CapturedGraph seed = type.GetMethod("Seed")!.CreateDelegate<Func<CapturedGraph>>()();
         ObjectStateRecord expected = Assert.Single(seed.Objects);
-        DurableBase instance = model.Allocate();
-        model.Hydrate(instance, model.Normalize(expected), new ObjectReadTable(StringReadTable.FromDecoded([]), new Dictionary<ObjectId, DurableBase>()));
+        IDurableObject instance = model.Allocate();
+        model.Hydrate(instance, model.Normalize(expected), new ObjectReadTable(StringReadTable.FromDecoded([]), new Dictionary<ObjectId, IDurableObject>()));
         CaptureSession session = new();
         using CaptureContext context = session.BeginCapture();
         model.AddRoot(context, instance);

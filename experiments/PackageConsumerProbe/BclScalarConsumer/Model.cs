@@ -27,7 +27,7 @@ public readonly partial record struct CurrentPoint(
 #endif
 
 [DurableType("Box", 1)]
-public partial class Box<T> : DurableBase {
+public partial class Box<T> : IDurableObject {
     [DurableField(1)] public T Value = default!;
 }
 
@@ -36,7 +36,7 @@ public partial class Box<T> : DurableBase {
 #else
 [DurableType("World", 2)]
 #endif
-public partial class World : DurableBase {
+public partial class World : IDurableObject {
     internal static readonly Guid SampleId = new("00112233-4455-6677-8899-aabbccddeeff");
     [DurableField(1)] public Guid Id = SampleId;
     [DurableField(2)] public decimal Amount = 1.0m;

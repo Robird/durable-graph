@@ -255,7 +255,7 @@ public sealed class IndependentGraphWorkspaceTests : IDisposable {
         Assert.Empty(unchanged.Revision.LocalObjects);
     }
 
-    private abstract class Domain : DurableBase {
+    private abstract class Domain : IDurableObject {
         internal Domain? Left;
         internal Domain? Right;
         internal string? Text;

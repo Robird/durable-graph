@@ -105,7 +105,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             using Atelia.DurableGraph;
             namespace StateModels;
             [DurableType("state.base", 1)]
-            public abstract partial class OldBase : DurableBase { [DurableField(4)] private int _old; }
+            public abstract partial class OldBase : IDurableObject { [DurableField(4)] private int _old; }
             [DurableType("state.leaf", 1)]
             public sealed partial class Leaf : OldBase { [DurableField(1)] private string? _name; }
             """);
@@ -115,7 +115,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             using Atelia.DurableGraph;
             namespace StateModels;
             [DurableType("state.base", 2)]
-            public abstract partial class NewBase : DurableBase {
+            public abstract partial class NewBase : IDurableObject {
                 [DurableField(9)] private readonly byte _small;
                 private static void UpgradeStateV1ToV2(in __DurableState.V1 prior, out __DurableState.V2 next)
                     => throw new System.Exception("Must not independently upgrade ancestor");
@@ -140,9 +140,9 @@ public sealed partial class DurableSchemaGeneratorTests {
         ObjectStateRecord current = model.Normalize(new(new(1), model.Readers[0].Schema, old));
         Assert.Equal((byte)8, StateModelField(current, "Segment0Field9"));
         Assert.Equal(new ObjectId(99), StateModelField(current, "Segment1Field1"));
-        DurableBase domain = model.Allocate();
+        IDurableObject domain = model.Allocate();
         string name = new(new[] { 'N' });
-        model.Hydrate(domain, current, new ObjectReadTable(StringReadTable.FromDecoded([(new ObjectId(99), name)]), new Dictionary<ObjectId, DurableBase>()));
+        model.Hydrate(domain, current, new ObjectReadTable(StringReadTable.FromDecoded([(new ObjectId(99), name)]), new Dictionary<ObjectId, IDurableObject>()));
         Assert.Equal((byte)8, domain.GetType().BaseType!.GetField("_small", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(domain));
         Assert.Same(name, domain.GetType().GetField("_name", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(domain));
     }
@@ -153,7 +153,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             using Atelia.DurableGraph;
             namespace StateModels;
             [DurableType("readonly.base", 1)]
-            public abstract partial class Base : DurableBase {
+            public abstract partial class Base : IDurableObject {
                 [DurableField(1)] private readonly int _number = 123;
                 [DurableField(2)] private readonly string _name;
                 [Transient] public int Cache = 456;
@@ -180,7 +180,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         Type host = assembly.GetType("StateModels.Host")!;
         StateModelBinding model = host.GetMethod("Model")!.CreateDelegate<Func<StateModelBinding>>()();
         ObjectStateRecord current = model.Normalize(new(new(1), model.CurrentSchema, host.GetMethod("State")!.CreateDelegate<Func<object>>()()));
-        DurableBase domain = model.Allocate();
+        IDurableObject domain = model.Allocate();
         Type leaf = domain.GetType(), parent = leaf.BaseType!;
         const BindingFlags fields = BindingFlags.Instance | BindingFlags.NonPublic;
         Assert.Equal(0, parent.GetField("_number", fields)!.GetValue(domain));
@@ -191,7 +191,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             new StateReferenceValidator(new Dictionary<ObjectId, ObjectStateRecord>())));
         Assert.Equal(0, parent.GetField("_number", fields)!.GetValue(domain));
         string first = new(new[] { 'S' }), second = new(new[] { 'S' });
-        model.Hydrate(domain, current, new ObjectReadTable(StringReadTable.FromDecoded([(new ObjectId(7), first), (new ObjectId(8), second), (new ObjectId(9), ""), (new ObjectId(10), "")]), new Dictionary<ObjectId, DurableBase>()));
+        model.Hydrate(domain, current, new ObjectReadTable(StringReadTable.FromDecoded([(new ObjectId(7), first), (new ObjectId(8), second), (new ObjectId(9), ""), (new ObjectId(10), "")]), new Dictionary<ObjectId, IDurableObject>()));
         Assert.Equal(0, parent.GetField("Calls")!.GetValue(null));
         Assert.Equal(17, parent.GetField("_number", fields)!.GetValue(domain));
         Assert.Equal(91, leaf.GetField("_mutable", fields)!.GetValue(domain));
@@ -292,7 +292,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         using Atelia.DurableGraph;
         namespace StateModels;
         """ + $"\n[DurableType(\"state.model\", {version})]\n" +
-        "public sealed partial class Item : DurableBase { [DurableField(1)] private int _number; " +
+        "public sealed partial class Item : IDurableObject { [DurableField(1)] private int _number; " +
         (version >= 2 ? "[DurableField(2)] private byte _small; " : "") +
         (version >= 3 ? "[DurableField(3)] private bool _flag; " : "") + "}\n";
 

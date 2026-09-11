@@ -12,7 +12,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             using Atelia.DurableGraph;
             namespace ReaderHistory;
             [DurableType("reader.base", 1)]
-            public abstract partial class RemovedBase : DurableBase {
+            public abstract partial class RemovedBase : IDurableObject {
                 [DurableField(9)] private int _old;
             }
             [DurableType("reader.leaf", 1)]
@@ -27,7 +27,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             using Atelia.DurableGraph.StateStore.Serialization;
             namespace ReaderHistory;
             [DurableType("reader.base", 2)]
-            public abstract partial class CurrentBase : DurableBase {
+            public abstract partial class CurrentBase : IDurableObject {
                 [DurableField(2)] private byte _new;
             }
             [DurableType("reader.leaf", 2)]
@@ -90,7 +90,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         GeneratorTestRun run = RunGenerator("""
             using Atelia.DurableGraph;
             [DurableType("reader.static", 1)]
-            public sealed partial class Model : DurableBase {
+            public sealed partial class Model : IDurableObject {
                 [DurableField(1)] private int _number;
                 [DurableField(2)] private string? _name;
             }
@@ -113,7 +113,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         GeneratorTestRun run = RunGenerator("""
             using Atelia.DurableGraph;
             [DurableType("reader.invalid", 1)]
-            public sealed partial class Invalid : DurableBase { private static class __DurableState { } }
+            public sealed partial class Invalid : IDurableObject { private static class __DurableState { } }
             """);
         Assert.Contains(run.GeneratorDiagnostics, diagnostic => diagnostic.Id == "DG0020");
         string generated = GeneratedStateText(run);

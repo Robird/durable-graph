@@ -14,7 +14,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         Type host = EmitAndLoad(run.OutputCompilation).GetType("TemporalScalarGraph.Host")!;
         StateModelRegistry models = host.GetMethod("Models")!.CreateDelegate<Func<StateModelRegistry>>()();
         object[] fixture = host.GetMethod("FreezeFixture")!.CreateDelegate<Func<object[]>>()();
-        var world = (DurableBase)fixture[0];
+        var world = (IDurableObject)fixture[0];
         StateModelSnapshot captureModels = models.Snapshot();
         CaptureSession captureSession = new();
         CapturedGraph Capture() {
@@ -119,10 +119,10 @@ public sealed partial class DurableSchemaGeneratorTests {
         [DurableType("temporal.Key",1)] public readonly partial record struct Key(
             [field:DurableField(1)] int Number,
             [field:DurableField(2)] DateTimeOffset Timestamp);
-        [DurableType("temporal.Box",1)] public partial class Box<T>:DurableBase {
+        [DurableType("temporal.Box",1)] public partial class Box<T>:IDurableObject {
             [DurableField(1)] public T Value=default!;
         }
-        [DurableType("temporal.World",1)] public partial class World:DurableBase {
+        [DurableType("temporal.World",1)] public partial class World:IDurableObject {
             [DurableField(1)] public DateOnly Date;
             [DurableField(2)] public DateTimeOffset Timestamp;
             [DurableField(3)] public TimeOnly Time;

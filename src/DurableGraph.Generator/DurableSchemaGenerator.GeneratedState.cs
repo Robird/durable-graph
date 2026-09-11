@@ -108,7 +108,7 @@ public sealed partial class DurableSchemaGenerator {
 
             INamedTypeSymbol? ancestor = type.Symbol.BaseType;
             bool valid = true;
-            while (!type.IsInline && !HasMetadataName(ancestor, DurableBaseMetadataName)) {
+            while (!type.IsInline && !IsObjectBase(ancestor)) {
                 if (ancestor is null || !eligible.Contains(ancestor)) {
                     ReportInvalidGeneratedState(context, type.Symbol,
                         "every domain ancestor must pass metadata, history and generated-state validation");

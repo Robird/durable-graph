@@ -5,7 +5,7 @@ using Atelia.DurableGraph.StateStore.Serialization;
 namespace PackageConsumerProbe;
 
 [DurableType("package.capture-base", 1)]
-public abstract partial class CaptureBase : DurableBase {
+public abstract partial class CaptureBase : IDurableObject {
     [DurableField(1)] private string _name;
 
     protected CaptureBase(string name) { _name = name; }
@@ -21,7 +21,7 @@ public sealed partial class CaptureHero : CaptureBase {
 }
 
 [DurableType("package.capture-item", 1)]
-public sealed partial class CaptureItem : DurableBase {
+public sealed partial class CaptureItem : IDurableObject {
     [DurableField(1)] private string _shared;
     [DurableField(2)] private string _equalButDistinct;
     [DurableField(3)] private string? _optional = null;

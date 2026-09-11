@@ -12,7 +12,7 @@ namespace InlineStructPackageConsumerProbe;
 #else
 [DurableType("package.inline-node", 3)]
 #endif
-public sealed partial class Node : DurableBase {
+public sealed partial class Node : IDurableObject {
 #if CHILD_V1
     [DurableField(1)] private readonly int _value;
 #else

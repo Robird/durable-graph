@@ -21,9 +21,9 @@ public sealed partial class DurableSchemaGeneratorTests {
             .CreateDelegate<Func<bool, StateModelRegistry>>()(reverseRegistration);
 
         // Frozen state owns the entire inline copy, including a library-private child.
-        var seed = host.GetMethod("Seed")!.CreateDelegate<Func<DurableBase>>();
-        var mutate = host.GetMethod("MutateValue")!.CreateDelegate<Action<DurableBase>>();
-        DurableBase world = seed();
+        var seed = host.GetMethod("Seed")!.CreateDelegate<Func<IDurableObject>>();
+        var mutate = host.GetMethod("MutateValue")!.CreateDelegate<Action<IDurableObject>>();
+        IDurableObject world = seed();
         var snapshot = registry.Snapshot();
         var binding = snapshot.ResolveCurrentModel(world.GetType());
         CaptureSession capture = new();
@@ -90,7 +90,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             [DurableField(1)] public T Value;
             [DurableField(2)] public Point Origin;
         }
-        [DurableType("inline.Node",1)] public partial class Node:DurableBase {
+        [DurableType("inline.Node",1)] public partial class Node:IDurableObject {
             [DurableField(1)] public int Value=10000;
             [DurableField(2)] public int Padding1=20000;
             [DurableField(3)] public int Padding2=30000;
@@ -123,7 +123,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             [DurableField(1)] public Pair<T> Pair;
             [DurableField(2)] public Point Fixed;
         }
-        [DurableType("inline.Base",1)] public abstract partial class Base:DurableBase {
+        [DurableType("inline.Base",1)] public abstract partial class Base:IDurableObject {
             [DurableField(1)] private readonly Point _basePoint;
             protected Base(Point point) { _basePoint=point; }
             public Point BasePoint=>_basePoint;
@@ -147,7 +147,7 @@ public sealed partial class DurableSchemaGeneratorTests {
                 else { Catalog.Register(models);Atelia.DurableGraph.Generated.DurableDefinitions.Register(models); }
                 return models;
             }
-            public static DurableBase Seed() {
+            public static IDurableObject Seed() {
                 var point=new Point(12345,54321);var node=new Node();node.Next=node;
                 var text=new string(new[]{'s','h','a','r','e','d'});
                 var pair=new Pair<Local>{Value=new(){Value=67890},Origin=point};
@@ -155,7 +155,7 @@ public sealed partial class DurableSchemaGeneratorTests {
                     Optional=point,Mode=(Mode)65000,Pair=pair,Wrapper=new(){Pair=pair,Fixed=point},
                     Map=new(){[new(new(9),7)]=node},Alias=text };
             }
-            public static void MutateValue(DurableBase value) { ((World)value).Payload.Position.X++; }
+            public static void MutateValue(IDurableObject value) { ((World)value).Payload.Position.X++; }
             static void Require(bool condition,string why) { if(!condition)throw new InvalidOperationException(why); }
             static void Check(World w) {
                 Require(w.Payload.Position.X==12346 && w.Payload.Position.Y==54321 && w.Payload.Position.HiddenValue==31415,"private nested implementation");

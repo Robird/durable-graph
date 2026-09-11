@@ -177,7 +177,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         using P=Atelia.DurableGraph.Generated.Family_52656D6F7465506F696E74;
         namespace CrossHistoryApp;
         [DurableType("LocalInline",{{{{version}}}})] public partial struct Inline<T> { [DurableField(1)] public T Value; }
-        [DurableType("CrossWorld",{{{{version}}}})] public partial class World<T>:DurableBase {
+        [DurableType("CrossWorld",{{{{version}}}})] public partial class World<T>:IDurableObject {
             [DurableField(1)] public T Value;
             [DurableField(2)] public List<Point> Points=new();
         }

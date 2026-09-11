@@ -18,7 +18,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         GeneratorTestRun run = RunGenerator("using System; using System.Collections.Generic; using Atelia.DurableGraph; " +
             "[DurableType(\"Point\",1)] public partial struct Point { [DurableField(1)] public int X; } " +
             "[DurableType(\"Key\",1)] public partial struct Key<T> { [DurableField(1)] public T Part; } " +
-            "[DurableType(\"World\",1)] public partial class World:DurableBase { [DurableField(1)] public " + fieldType + " Value; }");
+            "[DurableType(\"World\",1)] public partial class World:IDurableObject { [DurableField(1)] public " + fieldType + " Value; }");
         AssertSchemaOnlyCompiles(run);
         string generated = GeneratedSource(run, "DurableGenericStates.g.cs");
         Assert.Contains("TypeExpr.Dictionary(", generated);
@@ -35,7 +35,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         GeneratorTestRun run = RunGenerator("using System.Collections.Generic; using Atelia.DurableGraph; " +
             "[DurableType(\"Point\",1)] public partial struct Point { [DurableField(1)] public int X; } " +
             "public struct UnregisteredKey {public int X;} " +
-            "[DurableType(\"World\",1)] public partial class World:DurableBase { [DurableField(1)] public " + fieldType + " Value; }");
+            "[DurableType(\"World\",1)] public partial class World:IDurableObject { [DurableField(1)] public " + fieldType + " Value; }");
         Assert.Contains(run.GeneratorDiagnostics, diagnostic => diagnostic.Id == "DG0007");
     }
 
@@ -44,7 +44,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         Type host = CompileCompositeDictionaryHost();
         object[] fixture = host.GetMethod("Fixture")!.CreateDelegate<Func<object[]>>()();
         StateModelSnapshot models = ((StateModelRegistry)fixture[0]).Snapshot();
-        DurableBase world = (DurableBase)fixture[1];
+        IDurableObject world = (IDurableObject)fixture[1];
         StateModelBinding model = models.ResolveCurrentModel(world.GetType());
         var calls = (Func<int>)fixture[6];
         CaptureSession session = new();
@@ -238,8 +238,8 @@ public sealed partial class DurableSchemaGeneratorTests {
             [DurableField(1)] public int Amount;
             [DurableField(2)] public World? Owner;
         }
-        [DurableType("Box",1)] public partial class Box<T>:DurableBase { [DurableField(1)] public T Value=default!; }
-        [DurableType("World",1)] public partial class World:DurableBase {
+        [DurableType("Box",1)] public partial class Box<T>:IDurableObject { [DurableField(1)] public T Value=default!; }
+        [DurableType("World",1)] public partial class World:IDurableObject {
             [DurableField(1)] public Dictionary<Key<int>,int> Primary=new();
             [DurableField(2)] public Dictionary<PlainKey,int> Plain=new();
             [DurableField(3)] public Dictionary<Key<Scope>,Payload> Complex=new();

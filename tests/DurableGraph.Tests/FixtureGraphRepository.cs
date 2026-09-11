@@ -21,22 +21,22 @@ public sealed class FixtureGraphRepository : IDisposable {
         new(EventHistoryRepository.OpenExisting(path, options), true);
     public FrameAddress? HeadRevisionAddress => _stateAddress;
     public bool IsFaulted => _repository.IsFaulted;
-    public FixtureGraphSession<T> Create<T>(T state, StateModelRegistry models) where T : DurableBase {
+    public FixtureGraphSession<T> Create<T>(T state, StateModelRegistry models) where T : class, IDurableObject {
         FixtureMarker.Register(models);
         return new(this, state, models);
     }
-    public FixtureGraphSession<T> Load<T>(StateModelRegistry models) where T : DurableBase {
+    public FixtureGraphSession<T> Load<T>(StateModelRegistry models) where T : class, IDurableObject {
         FixtureMarker.Register(models);
         return new(this, _repository.Resume<T>("main", models));
     }
     internal EventHistorySession<T> Initialize<T>(T state, StateModelRegistry models,
-        ReadAmplificationBaseBudgetParameters parameters) where T : DurableBase =>
+        ReadAmplificationBaseBudgetParameters parameters) where T : class, IDurableObject =>
         _repository.CreateBranch("main", state, models, parameters);
     internal void Accept(FrameAddress address) => _stateAddress = address;
     public void Dispose() => _repository.Dispose();
 }
 
-public sealed class FixtureGraphSession<T> : IDisposable where T : DurableBase {
+public sealed class FixtureGraphSession<T> : IDisposable where T : class, IDurableObject {
     private readonly FixtureGraphRepository _repository;
     private readonly T _initial;
     private readonly StateModelRegistry? _models;
@@ -64,7 +64,7 @@ public sealed class FixtureGraphSession<T> : IDisposable where T : DurableBase {
     public void Dispose() => _session?.Dispose();
 }
 
-internal sealed class FixtureMarker : DurableBase {
+internal sealed class FixtureMarker : IDurableObject {
     private static readonly DurableSchema Schema = new("DurableGraph.Tests.FixtureMarker", 1,
         new DurableFieldInfo(1, TypeTag.Byte));
     private static readonly StateModelBinding Model = new StateModelBinding<FixtureMarker, byte>(

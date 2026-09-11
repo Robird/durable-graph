@@ -81,7 +81,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             public HiddenPoint(int value) { _value=value; }
             public int Value=>_value;
         }
-        [DurableType("inherit.Base",1)] public abstract partial class Base<T>:DurableBase {
+        [DurableType("inherit.Base",1)] public abstract partial class Base<T>:IDurableObject {
             [DurableField(1)] private readonly HiddenPair<T> _pair;
             [DurableField(2)] private readonly HiddenPoint? _optional;
             [DurableField(3)] public Base<T>? Peer;

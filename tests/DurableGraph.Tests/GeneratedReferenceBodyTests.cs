@@ -12,7 +12,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         const string source = """
             using Atelia.DurableGraph;
             [DurableType("object-id.holder", 1)]
-            public partial class Holder : DurableBase {
+            public partial class Holder : IDurableObject {
                 [DurableField(1)] private string? _text;
                 [DurableField(2)] private uint _number;
             }
@@ -35,7 +35,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             using Atelia.DurableGraph.StateStore.Serialization;
             namespace ReferenceBodies;
             [DurableType("node", 1)]
-            public partial class Node : DurableBase {
+            public partial class Node : IDurableObject {
                 [DurableField(1)] private Node? _next;
                 [DurableField(2)] private string? _name;
                 [DurableField(3)] private Node? _other;
@@ -85,7 +85,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             using Atelia.DurableGraph;
             namespace ReferenceBodies;
             [DurableType("base", 1)]
-            public abstract partial class Base : DurableBase {
+            public abstract partial class Base : IDurableObject {
                 [DurableField(7)] private readonly Base? _parent;
                 public Base? Parent => _parent;
                 protected Base(Base? parent) { _parent = parent; }
@@ -107,16 +107,16 @@ public sealed partial class DurableSchemaGeneratorTests {
             }
             public static class Host {
                 public static StateModelBinding[] Models() => [Node.__DurableState.Model, Base.__DurableState.Model];
-                public static DurableBase New() => new Node();
-                public static ObjectId AddRoot(CaptureContext context, DurableBase root) => Node.__DurableState.AddRoot(context, (Node)root);
+                public static IDurableObject New() => new Node();
+                public static ObjectId AddRoot(CaptureContext context, IDurableObject root) => Node.__DurableState.AddRoot(context, (Node)root);
             }
             """);
         AssertSchemaOnlyCompiles(run);
         Assembly assembly = EmitAndLoad(run.OutputCompilation);
         Type host = assembly.GetType("ReferenceBodies.Host")!;
         StateModelBinding[] models = host.GetMethod("Models")!.CreateDelegate<Func<StateModelBinding[]>>()();
-        DurableBase root = host.GetMethod("New")!.CreateDelegate<Func<DurableBase>>()();
-        var addRoot = host.GetMethod("AddRoot")!.CreateDelegate<Func<CaptureContext, DurableBase, ObjectId>>();
+        IDurableObject root = host.GetMethod("New")!.CreateDelegate<Func<IDurableObject>>()();
+        var addRoot = host.GetMethod("AddRoot")!.CreateDelegate<Func<CaptureContext, IDurableObject, ObjectId>>();
         CaptureSession session = new();
         using CaptureContext capture = session.BeginCapture(models);
         ObjectId rootId = addRoot(capture, root);
@@ -126,11 +126,11 @@ public sealed partial class DurableSchemaGeneratorTests {
         ObjectStateRecord[] durable = graph.Objects.Where(item => item.Schema is not null).ToArray();
         Assert.Equal(2, durable.Length);
         StateModelBinding node = models[0];
-        Dictionary<ObjectId, DurableBase> instances = durable.ToDictionary(item => item.Id, _ => node.Allocate());
+        Dictionary<ObjectId, IDurableObject> instances = durable.ToDictionary(item => item.Id, _ => node.Allocate());
         ObjectReadTable objects = new(StringReadTable.FromDecoded(graph.Objects
             .Where(item => item.Schema is null).Select(item => (item.Id, item.StringContent))), instances);
         foreach (ObjectStateRecord item in durable) node.Hydrate(instances[item.Id], item, objects);
-        DurableBase restored = instances[rootId];
+        IDurableObject restored = instances[rootId];
         Type type = restored.GetType();
         object child = type.GetProperty("Child")!.GetValue(restored)!;
         Assert.Same(restored, type.GetProperty("Self")!.GetValue(restored));
@@ -151,9 +151,9 @@ public sealed partial class DurableSchemaGeneratorTests {
             using Atelia.DurableGraph;
             namespace ReferenceBodies;
             [DurableType("retired", 1)]
-            public partial class Retired : DurableBase { }
+            public partial class Retired : IDurableObject { }
             [DurableType("owner", 1)]
-            public partial class Owner : DurableBase { [DurableField(8)] private Retired? _reference; }
+            public partial class Owner : IDurableObject { [DurableField(8)] private Retired? _reference; }
             """);
         AssertSchemaOnlyCompiles(initial);
         publisher.Publish(files.WriteManifest(initial), files.History);
@@ -161,7 +161,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             using Atelia.DurableGraph;
             namespace ReferenceBodies;
             [DurableType("owner", 2)]
-            public partial class Owner : DurableBase {
+            public partial class Owner : IDurableObject {
                 private static void UpgradeStateV1ToV2(in __DurableState.V1 prior, out __DurableState.V2 next) => next = default;
             }
             public static class Host {

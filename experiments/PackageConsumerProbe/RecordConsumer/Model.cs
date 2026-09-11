@@ -58,7 +58,7 @@ public sealed class CustomCaseComparer : IEqualityComparer<string> {
 }
 
 [DurableType("World", 1)]
-public partial class World : DurableBase {
+public partial class World : IDurableObject {
     [DurableField(1)] public Dictionary<Key, Value> Rows = new();
     [DurableField(2)] public Dictionary<Key, Value> Alias = new();
     [DurableField(3)] public Dictionary<Key, Value> Application = new(new ForwardComparer<Key>());

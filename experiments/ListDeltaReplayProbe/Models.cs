@@ -3,14 +3,14 @@ using Atelia.DurableGraph;
 namespace Atelia.ListDeltaReplayProbe;
 
 [DurableType("replay.world", 1)]
-public partial class World<T> : DurableBase {
+public partial class World<T> : IDurableObject {
     [DurableField(1)] public List<T> Items = [];
     [DurableField(2)] public List<T> Alias = [];
     [DurableField(3)] public Node[] Pool = [];
 }
 
 [DurableType("replay.node", 1)]
-public partial class Node : DurableBase {
+public partial class Node : IDurableObject {
     [DurableField(1)] public int TestId;
     [DurableField(2)] public int Value;
     [DurableField(3)] public Node? Next;
@@ -39,6 +39,6 @@ public partial struct Wide<T> {
 // A minimal independent event makes the replay use the public E/S publication contract.
 // It deliberately never points at World, so event capture does not rerun List diff.
 [DurableType("replay.event", 1)]
-public partial class ReplayEvent : DurableBase {
+public partial class ReplayEvent : IDurableObject {
     [DurableField(1)] public byte Marker;
 }

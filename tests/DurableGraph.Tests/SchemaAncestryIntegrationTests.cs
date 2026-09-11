@@ -72,7 +72,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             using Atelia.DurableGraph;
             namespace Ancestry;
             [DurableType("ancestry.replacement", 1)]
-            public abstract partial class Replacement : DurableBase {
+            public abstract partial class Replacement : IDurableObject {
                 [DurableField(1)] public long ReplacementValue;
             }
             [DurableType("ancestry.leaf", 2)]
@@ -115,7 +115,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             [DurableField(1)] public long MiddleValue;
         }
         [DurableType("ancestry.base", {{baseVersion}})]
-        public abstract partial class Base : DurableBase {
+        public abstract partial class Base : IDurableObject {
             [DurableField(1)] public {{(baseVersion == 1 ? "int" : "long")}} BaseValue;
         }
         """;

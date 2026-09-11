@@ -93,7 +93,7 @@ public sealed partial class DurableSchemaGeneratorTests {
                 public Key() : this(default!) { Constructors++; throw new Exception("No default construction"); }
                 public int Raw => Extra - 100;
             }
-            [DurableType("World",1)] public partial class World : DurableBase {
+            [DurableType("World",1)] public partial class World : IDurableObject {
                 [DurableField(1)] public Key<int> Number;
                 [DurableField(2)] public Key<string> Text;
                 [DurableField(3)] public string Alias;

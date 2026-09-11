@@ -256,7 +256,7 @@ public sealed partial class DurableSchemaGeneratorTests {
 
     [Theory]
     [InlineData("array", "Node[]", "_unsupported")]
-    [InlineData("base", "DurableBase?", "_unsupported")]
+    [InlineData("base", "IDurableObject?", "_unsupported")]
     [InlineData("cross-type", "Other?", "_unsupported")]
     public void ProbeRejectsUnsupportedReferenceShapes(
         string caseName,
@@ -344,7 +344,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             assemblyName: $"GraphProbeTests_{Guid.NewGuid():N}",
             syntaxTrees: [syntaxTree],
             references: PlatformReferences().Append(
-                MetadataReference.CreateFromFile(typeof(DurableBase).Assembly.Location)),
+                MetadataReference.CreateFromFile(typeof(IDurableObject).Assembly.Location)),
             options: new CSharpCompilationOptions(
                 OutputKind.DynamicallyLinkedLibrary,
                 nullableContextOptions: NullableContextOptions.Enable));
@@ -658,7 +658,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             namespace Samples;
 
             [DurableType("samples.graph-probe", 1)]
-            public sealed partial class Node : DurableBase {
+            public sealed partial class Node : IDurableObject {
             {{fields}}
 
                 public Node(
@@ -705,10 +705,10 @@ public sealed partial class DurableSchemaGeneratorTests {
 
             namespace Samples;
 
-            public sealed class Other : DurableBase { }
+            public sealed class Other : IDurableObject { }
 
             [DurableType("samples.unsupported-{{caseName}}", 1)]
-            public sealed partial class Node : DurableBase {
+            public sealed partial class Node : IDurableObject {
                 [Transient] private long _identity;
                 [DurableField(1)] private {{fieldType}} {{fieldName}}{{initializer}}
             }
@@ -722,7 +722,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             namespace Samples;
 
             [DurableType("samples.product-rejection", 1)]
-            public sealed partial class Node : DurableBase {
+            public sealed partial class Node : IDurableObject {
                 [DurableField(1)] private Node? _next;
             }
             """;

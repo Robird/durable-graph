@@ -221,7 +221,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         using Atelia.DurableGraph.StateStore.Serialization;
         namespace PreparedRevisionWitness;
         [DurableType("prepared-revision.owner", 1)]
-        public sealed partial class Owner : DurableBase {
+        public sealed partial class Owner : IDurableObject {
             [DurableField(1)] private string _name;
             [DurableField(2)] private string _alias;
             [DurableField(3)] private string _empty = string.Empty;
@@ -238,7 +238,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             public void Change(string name, string alias, uint score) { _name = name; _alias = alias; _score = score; }
         }
         [DurableType("prepared-revision.tag-base", 1)]
-        public abstract partial class TagBase : DurableBase {
+        public abstract partial class TagBase : IDurableObject {
             [DurableField(1)] private string _label;
             protected TagBase(string value) { _label = value; }
             protected void ChangeLabel(string value) { _label = value; }

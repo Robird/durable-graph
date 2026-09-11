@@ -162,7 +162,7 @@ public sealed class ListBindingCatalogTests {
         Assert.Equal(valid, snapshot.ResolveObjectReader(valid).Layout);
     }
 
-    private sealed class Box<T> : DurableBase;
+    private sealed class Box<T> : IDurableObject;
     private sealed class DerivedList : List<int>;
     private sealed class ListRules;
     private sealed class ArrayRules;

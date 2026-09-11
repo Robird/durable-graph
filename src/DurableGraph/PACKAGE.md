@@ -14,8 +14,8 @@ and legacy `.dgsnapshot` files are rejected rather than silently ignored or cons
 
 ## Generated Schema and state
 
-Annotate each durable partial class or struct with `[DurableType("example.character", 1)]`; the root of a
-durable class inheritance chain derives from `DurableBase`, while structs have no object identity.
+Annotate each durable partial class or struct with `[DurableType("example.character", 1)]`; a
+durable class implements `IDurableObject`, directly or through its domain base, while structs have no object identity.
 Top-level generic classes and structs are supported, including readonly structs, generic base
 classes, and private/readonly fields. The Generator emits exact Schema/history,
 readonly versioned state DTOs, raw Base/Delta body operations,
@@ -35,10 +35,22 @@ Supported scalars include bool, byte/sbyte, short/ushort, int/uint, long/ulong, 
 double, Guid, decimal, TimeSpan, DateOnly, TimeOnly and DateTimeOffset. Supported compositions include
 string and durable class references, inline durable structs/record structs/enums, Nullable values,
 zero-based SZ/rank 2–4 arrays, exact BCL List and Dictionary content objects. DateTime, ValueTuple,
-boxed identity, CLR nested types, record classes, ref structs, array covariance and NativeAOT
+boxed identity, CLR nested types, arbitrary external bases, ref structs, array covariance and NativeAOT
 guarantees remain outside the supported contract. CLR generic constraints
 are retained and enforced; `allows ref struct` is rejected, and a constraint does not make an
 otherwise unsupported closed value serializable.
+
+Record classes support positional and body fields, generic declarations and durable record inheritance.
+Use `[field: DurableField(id)]` or `[field: Transient]` on actual property backing storage; inherited
+positional properties are stored by their declaring base only. Hydration bypasses constructors,
+initializers and accessors. C# equality and `with` retain their normal behavior; neither supplies
+deep immutability or collection-content equality. Persistence continues to distinguish reference identity.
+
+`DurableBase` has been removed. When upgrading, change direct model bases to `IDurableObject`,
+change `where T : DurableBase` to `where T : class, IDurableObject`, and update erased API variables
+and callbacks. Recompile affected model libraries and hosts together. The marker adds no Schema
+or data; removing the old empty base alone requires no Schema version bump. Every domain ancestor
+still needs its durable declaration/history; arbitrary third-party bases are not admitted.
 
 ### Definition registration and generic state hosts
 
@@ -292,8 +304,8 @@ declarations first, then each declaration's fields in FieldId order. Schema meta
 segmented. Historical DTOs do not depend on old CLR base definitions remaining in source.
 
 Inline structs are explicitly marked with their own `[DurableType("example.position", 1)]` on a
-top-level `partial struct` (including `readonly partial struct`). They do not derive
-from DurableBase. Each has Schema/history even if no class currently uses it, and every instance
+top-level `partial struct` (including `readonly partial struct`). They do not need
+IDurableObject; implementing that marker does not grant them object identity. Each has Schema/history even if no class currently uses it, and every instance
 field remains explicitly durable or transient. Supported scalar, string, durable-reference and
 nested struct fields are recursively projected into unmanaged readonly DTOs; references become IDs.
 The struct has no separate ObjectId, object row, root registration or StateModelBinding.
@@ -400,7 +412,7 @@ failed attempts do not undo caller mutations. The example abandons old reference
 `Resume<TState>` restores a branch's State and, at an Event head, its `PendingEvent`; it does not
 replay business handlers. `ReadState<T>` and `ReadEvent<T>` independently materialize a selected
 repository-issued `GraphFrame`. Experimental `ReadPair(first, second, models)` returns two
-`DurableBase` roots with their actual types preserved, in input order after both reads succeed.
+`IDurableObject` roots with their actual types preserved, in input order after both reads succeed.
 Selections may have either State/Event kind and need not be adjacent. Use each input frame's `Kind`
 for its role and pattern matching for its domain type; `ReadPair<A,B>` remains available for known root types.
 Within one operation it reuses stored-exact decoding and may

@@ -34,7 +34,7 @@ public partial struct Cell<T> where T : unmanaged, Enum {
 #else
 [DurableType("Box", 2)]
 #endif
-public partial class Box<T> : DurableBase where T : struct, Enum {
+public partial class Box<T> : IDurableObject where T : struct, Enum {
     [DurableField(1)] public T? Value;
 }
 
@@ -43,7 +43,7 @@ public partial class Box<T> : DurableBase where T : struct, Enum {
 #else
 [DurableType("World", 2)]
 #endif
-public partial class World : DurableBase {
+public partial class World : IDurableObject {
     [DurableField(1)] public Mode Mode;
     [DurableField(2)] public Mode? Optional;
     [DurableField(3)] public List<Mode> Modes = [];

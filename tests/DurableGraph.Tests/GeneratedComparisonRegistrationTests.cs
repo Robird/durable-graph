@@ -12,8 +12,8 @@ public sealed partial class DurableSchemaGeneratorTests {
         Assert.Equal(family, run.GeneratedSources.Any(source => source.HintName == "DurableGenericStates.g.cs"));
         Type host = EmitAndLoad(run.OutputCompilation).GetType("EqualityFixture.Host")!;
         StateModelRegistry registry = host.GetMethod("Models")!.CreateDelegate<Func<StateModelRegistry>>()();
-        DurableBase world = host.GetMethod("Create")!.CreateDelegate<Func<DurableBase>>()();
-        var set = host.GetMethod("Set")!.CreateDelegate<Action<DurableBase, int>>();
+        IDurableObject world = host.GetMethod("Create")!.CreateDelegate<Func<IDurableObject>>()();
+        var set = host.GetMethod("Set")!.CreateDelegate<Action<IDurableObject, int>>();
         StateModelSnapshot models = registry.Snapshot();
         CaptureSession session = new();
         ObjectStateRecord Capture() {
@@ -49,12 +49,12 @@ public sealed partial class DurableSchemaGeneratorTests {
         AssertSchemaOnlyCompiles(run);
         Type host = EmitAndLoad(run.OutputCompilation).GetType("EqualityFixture.Host")!;
         StateModelRegistry models = host.GetMethod("Models")!.CreateDelegate<Func<StateModelRegistry>>()();
-        DurableBase world = host.GetMethod("Create")!.CreateDelegate<Func<DurableBase>>()();
+        IDurableObject world = host.GetMethod("Create")!.CreateDelegate<Func<IDurableObject>>()();
         using RawBaseDirectory directory = new();
-        host.GetMethod("Save")!.CreateDelegate<Action<string, DurableBase, StateModelRegistry>>()(directory.Path, world, models);
+        host.GetMethod("Save")!.CreateDelegate<Action<string, IDurableObject, StateModelRegistry>>()(directory.Path, world, models);
         using (var repository = EventHistoryRepository.OpenReadOnlyExisting(directory.Path)) {
             GraphFrame frame = Assert.Single(repository.ReadFrames("main"));
-            (DurableBase first, DurableBase second) = repository.ReadPair(frame, frame, models);
+            (IDurableObject first, IDurableObject second) = repository.ReadPair(frame, frame, models);
             // White-box optimization witness: public consumers must not depend on this identity.
             Assert.Same(first, second);
             Assert.NotSame(world, first);
@@ -68,7 +68,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         using Atelia.DurableGraph.StateStore;
         namespace EqualityFixture;
         [DurableType("equality.ancestor", 1)]
-        public partial class Ancestor : DurableBase {
+        public partial class Ancestor : IDurableObject {
             [DurableField(1)] public int Inherited;
         }
         [DurableType("equality.part", 1)]
@@ -95,16 +95,16 @@ public sealed partial class DurableSchemaGeneratorTests {
                 {{(family ? "Atelia.DurableGraph.Generated.DurableDefinitions.Register(models);" : "Ancestor.__DurableState.RegisterModel(models); World.__DurableState.RegisterModel(models);")}}
                 return models;
             }
-            public static DurableBase Create() {
+            public static IDurableObject Create() {
                 var world = new World{{(family ? "<string>" : "")}}();
                 Set(world, 0);
                 return world;
             }
-            public static void Save(string path, DurableBase world, StateModelRegistry models) {
+            public static void Save(string path, IDurableObject world, StateModelRegistry models) {
                 using var repository = EventHistoryRepository.CreateNew(path);
                 using var session = repository.CreateBranch("main", (World{{(family ? "<string>" : "")}})world, models);
             }
-            public static void Set(DurableBase instance, int mutation) {
+            public static void Set(IDurableObject instance, int mutation) {
                 var world = (World{{(family ? "<string>" : "")}})instance;
                 world.Inherited = mutation == 1 ? 8 : 7;
                 world.Part = new() { Number = mutation == 2 ? 10 : 9,

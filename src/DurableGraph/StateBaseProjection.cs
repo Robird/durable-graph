@@ -7,7 +7,7 @@ namespace Atelia.DurableGraph;
 /// Hydration is intended only for unpublished instances during graph restoration.
 /// </remarks>
 public sealed class StateBaseProjection<TBase, TState>
-    where TBase : DurableBase where TState : unmanaged {
+    where TBase : class, IDurableObject where TState : unmanaged {
     private readonly Func<TBase, CaptureContext, TState> _capture;
     private readonly StateHydrator<TBase, TState> _hydrate;
 
@@ -32,7 +32,7 @@ public sealed class StateBaseProjection<TBase, TState>
 public abstract partial class StateBindingContext {
     /// <summary>Binds explicitly supported current base projection after validating its complete exact layout.</summary>
     public StateBaseProjection<TBase, TState> BindBaseProjection<TBase, TState>(DurableSchema expectedBaseSchema)
-        where TBase : DurableBase where TState : unmanaged {
+        where TBase : class, IDurableObject where TState : unmanaged {
         ArgumentNullException.ThrowIfNull(expectedBaseSchema);
         StateModelBinding model = ResolveCurrentModel(typeof(TBase));
         if (model is not StateModelBinding<TBase, TState> typed || !model.CurrentSchema.Equals(expectedBaseSchema)) {

@@ -117,7 +117,7 @@ public sealed class StateBaseProjectionTests {
             supportsBaseProjection: supportsBaseProjection);
     }
 
-    private class Base : DurableBase { internal int Value; }
+    private class Base : IDurableObject { internal int Value; }
     private sealed class Derived : Base { internal int Extra; }
 
     private sealed class TestContext : StateBindingContext {

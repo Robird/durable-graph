@@ -5,7 +5,7 @@ using WorldStates = Atelia.DurableGraph.Generated.Family_576F726C64;
 namespace CrossAssembly.App;
 
 [DurableType("World", 1)]
-public partial class World : DurableBase {
+public partial class World : IDurableObject {
     [DurableField(1)] public Node Node = null!;
     [DurableField(2)] public Node Alias = null!;
     public static World Create() {

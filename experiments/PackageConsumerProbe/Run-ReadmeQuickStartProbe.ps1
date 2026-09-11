@@ -52,7 +52,7 @@ try {
 
     # Apply only the two model edits described in README, then compile its exact Upgrade block.
     $model = $model.Replace('[DurableType("World", 1)]', '[DurableType("World", 2)]')
-    $model = $model.Replace('public partial class World : DurableBase {', "public partial class World : DurableBase {`n    [DurableField(3)] public int Day;")
+    $model = $model.Replace('public partial class World : IDurableObject {', "public partial class World : IDurableObject {`n    [DurableField(3)] public int Day;")
     [IO.File]::WriteAllText((Join-Path $projectRoot "Models.cs"), $model, $utf8)
     [IO.File]::WriteAllText((Join-Path $projectRoot "Upgrades.cs"), (Get-Example "csharp" 'public static class WorldUpgrades'), $utf8)
     $checkedProgram = $program.Replace('world.RebuildTransient();', 'if (world.Day != 1) { throw new InvalidOperationException("Upgrade did not initialize Day."); }' + "`nworld.RebuildTransient();")

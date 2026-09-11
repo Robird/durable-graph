@@ -79,7 +79,7 @@ public sealed partial class DurableSchemaGeneratorTests {
     private const string CrossAssemblyOrdinaryLibrary = """
         using Atelia.DurableGraph;
         namespace CrossOrdinary;
-        [DurableType("cross.Node",1)] public partial class Node:DurableBase {
+        [DurableType("cross.Node",1)] public partial class Node:IDurableObject {
             [DurableField(1)] public int Value=10000;
             [DurableField(2)] public int A=20000;
             [DurableField(3)] public int B=30000;
@@ -106,7 +106,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         [DurableType("cross.Key",1)] public readonly partial record struct Key([field:DurableField(1)] int X);
         [DurableType("cross.Record",1)] public readonly partial record struct Record<T>([field:DurableField(1)] T Value);
         [DurableType("cross.Mode",1)] public enum Mode:byte { First=1, Second=2 }
-        [DurableType("cross.RemoteBox",1)] public partial class Box<T>:DurableBase {
+        [DurableType("cross.RemoteBox",1)] public partial class Box<T>:IDurableObject {
             [DurableField(1)] public T Value;
         }
         public static class Catalog {
@@ -125,14 +125,14 @@ public sealed partial class DurableSchemaGeneratorTests {
         using CrossValues;
         namespace CrossApp;
         [DurableType("cross.LocalPoint",1)] public partial struct LocalPoint { [DurableField(1)] public int X; }
-        [DurableType("cross.LocalBox",1)] public partial class LocalBox<T>:DurableBase { [DurableField(1)] public T Value; }
+        [DurableType("cross.LocalBox",1)] public partial class LocalBox<T>:IDurableObject { [DurableField(1)] public T Value; }
         [DurableType("cross.Inline",1)] public partial struct Inline<T> { [DurableField(1)] public T Value; }
         [DurableType("cross.Phantom",1)] public partial struct Phantom<T> { [DurableField(1)] public int Number; }
         [DurableType("cross.ArrayInline",1)] public partial struct ArrayInline<T> { [DurableField(1)] public T[] Values; }
-        [DurableType("cross.LocalNode",1)] public partial class LocalNode:DurableBase {
+        [DurableType("cross.LocalNode",1)] public partial class LocalNode:IDurableObject {
             [DurableField(1)] public Box<LocalNode> Back;
         }
-        [DurableType("cross.World",1)] public partial class World:DurableBase {
+        [DurableType("cross.World",1)] public partial class World:IDurableObject {
             [DurableField(1)] public Node Child;
             [DurableField(2)] public readonly Node Alias;
             [DurableField(3)] public Node Dropped;

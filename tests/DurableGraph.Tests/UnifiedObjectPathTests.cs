@@ -79,5 +79,5 @@ public sealed class UnifiedObjectPathTests {
         Assert.Throws<InvalidDataException>(() => table.ResolveObject<object[]>(new(1)));
     }
 
-    private sealed class Root : DurableBase { }
+    private sealed class Root : IDurableObject { }
 }

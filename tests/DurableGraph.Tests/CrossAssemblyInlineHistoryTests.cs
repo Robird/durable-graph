@@ -172,7 +172,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         using W=Atelia.DurableGraph.Generated.Family_457874576F726C64;
         using Point=InlineHistoryValues.{{{{(version==1 && !currentLibrary ? "LegacyPoint" : "Point")}}}};
         namespace InlineHistoryApp;
-        [DurableType("ExtWorld",{{{{version}}}})] public partial class World:DurableBase {
+        [DurableType("ExtWorld",{{{{version}}}})] public partial class World:IDurableObject {
             [DurableField(1)] public Point Position;
             [DurableField(2)] public Point? Optional;
             [DurableField(3)] public List<Point> Items=new();

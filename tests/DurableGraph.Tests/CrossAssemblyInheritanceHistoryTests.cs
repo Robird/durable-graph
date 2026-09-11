@@ -124,7 +124,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             public {{(version==1 ? "LegacyHidden" : "CurrentHidden")}}(int number) { _number=number; }
             public long Number=>_number;
         }
-        [DurableType("HB",{{version}})] public abstract partial class {{(version==1 ? "LegacyBase" : "CurrentBase")}}:DurableBase {
+        [DurableType("HB",{{version}})] public abstract partial class {{(version==1 ? "LegacyBase" : "CurrentBase")}}:IDurableObject {
             [DurableField(1)] private readonly {{(version==1 ? "LegacyHidden" : "CurrentHidden")}} _hidden;
             [DurableField(2)] public {{(version==1 ? "LegacyBase" : "CurrentBase")}}? Self;
             [DurableField(3)] private readonly Guid _padding;

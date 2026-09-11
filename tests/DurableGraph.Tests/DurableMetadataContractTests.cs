@@ -74,7 +74,7 @@ public sealed class DurableMetadataContractTests {
     }
 
     [DurableType("tests.example", version: 3)]
-    private sealed class ExampleDurable : DurableBase {
+    private sealed class ExampleDurable : IDurableObject {
         [DurableField(17)]
         public string DisplayName = string.Empty;
 

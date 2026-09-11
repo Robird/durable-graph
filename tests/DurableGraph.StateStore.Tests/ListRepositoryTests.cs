@@ -263,7 +263,7 @@ public sealed class ListRepositoryTests : IDisposable {
         Assert.Equal(expected, loaded.World.Values);
     }
 
-    private sealed class World : DurableBase {
+    private sealed class World : IDurableObject {
         public List<int>? Values;
         public List<int>? Alias;
         public List<World>? Links;

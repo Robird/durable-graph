@@ -135,7 +135,7 @@ public sealed partial class DurableSchemaGenerator {
             foreach (UsingDirectiveSyntax directive in declaration.Usings) output.AppendLine(directive.ToString());
         }
         string hostName = implicitMethod ? EscapeIdentifier(owner.Symbol.Name) : "__DurableUpgrade_" + FamilyName(owner.SchemaId) + "_" + Number(index);
-        output.Append(implicitMethod ? "partial class " : "internal static class ").Append(hostName).AppendLine(" {");
+        output.Append(implicitMethod ? (owner.Symbol.IsRecord ? "partial record class " : "partial class ") : "internal static class ").Append(hostName).AppendLine(" {");
         string adapterName = implicitMethod ? "__DurableUpgradeAdapter" + Number(fromVersion) : "Invoke";
         output.Append("    internal static void ").Append(adapterName).Append(syntax.TypeParameterList?.ToString()).Append("(in ")
             .Append(syntax.ParameterList.Parameters[0].Type!.ToString()).Append(" prior, out ")

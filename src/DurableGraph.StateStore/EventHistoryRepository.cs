@@ -75,7 +75,7 @@ public sealed class EventHistoryRepository : IDisposable {
     /// <exception cref="InvalidOperationException">A session is already active, the branch already exists, or the repository cannot perform the operation.</exception>
     /// <exception cref="GraphCommitException">An append/publication attempt failed; the branch may already have been published.</exception>
     public EventHistorySession<TState> CreateBranch<TState>(string branchName, TState initialState,
-        StateModelRegistry models, ReadAmplificationBaseBudgetParameters? parameters = null) where TState : DurableBase {
+        StateModelRegistry models, ReadAmplificationBaseBudgetParameters? parameters = null) where TState : class, IDurableObject {
         RequireFreeWriter();
         ValidateNewName(branchName);
         _busy = true;
@@ -104,7 +104,7 @@ public sealed class EventHistoryRepository : IDisposable {
     /// </remarks>
     /// <exception cref="ArgumentNullException">models is null.</exception>
     /// <exception cref="InvalidOperationException">A session is already active or the repository cannot perform the operation.</exception>
-    public EventHistorySession<TState> Resume<TState>(string branchName, StateModelRegistry models) where TState : DurableBase {
+    public EventHistorySession<TState> Resume<TState>(string branchName, StateModelRegistry models) where TState : class, IDurableObject {
         RequireFreeWriter();
         ArgumentNullException.ThrowIfNull(models);
         _busy = true;
@@ -114,8 +114,8 @@ public sealed class EventHistoryRepository : IDisposable {
             StateModelSnapshot snapshot = models.Snapshot(_resources.Schemas);
             RevisionReadSession reads = new(_resources.States, _resources.Schemas, snapshot);
             var workspace = WorldWorkspace<TState>.LoadSnapshot(reads, state.RevisionAddress, state.RootId);
-            DurableBase? pending = head.Kind == GraphFrameKind.Event
-                ? GraphReader.Read<DurableBase>(reads, head.RevisionAddress, head.RootId).Root : null;
+            IDurableObject? pending = head.Kind == GraphFrameKind.Event
+                ? GraphReader.Read<IDurableObject>(reads, head.RevisionAddress, head.RootId).Root : null;
             var session = new EventHistorySession<TState>(this, branchName, workspace, head, pending);
             _activeSession = session;
             return session;
@@ -166,7 +166,7 @@ public sealed class EventHistoryRepository : IDisposable {
     /// use Resume to continue editing and committing. Strings and application-owned global objects do
     /// not acquire a general deep-copy guarantee.
     /// </remarks>
-    public TEvent ReadEvent<TEvent>(GraphFrame frame, StateModelRegistry models) where TEvent : DurableBase => Read<TEvent>(frame, models, GraphFrameKind.Event);
+    public TEvent ReadEvent<TEvent>(GraphFrame frame, StateModelRegistry models) where TEvent : class, IDurableObject => Read<TEvent>(frame, models, GraphFrameKind.Event);
     /// <summary>Independently restores a State snapshot with a caller-specified root type check.</summary>
     /// <remarks>
     /// Each call restores its own mutable domain instances. Application code may initialize their
@@ -175,9 +175,9 @@ public sealed class EventHistoryRepository : IDisposable {
     /// use Resume to continue editing and committing. Strings and application-owned global objects do
     /// not acquire a general deep-copy guarantee.
     /// </remarks>
-    public TState ReadState<TState>(GraphFrame frame, StateModelRegistry models) where TState : DurableBase => Read<TState>(frame, models, GraphFrameKind.State);
+    public TState ReadState<TState>(GraphFrame frame, StateModelRegistry models) where TState : class, IDurableObject => Read<TState>(frame, models, GraphFrameKind.State);
 
-    private T Read<T>(GraphFrame frame, StateModelRegistry models, GraphFrameKind kind) where T : DurableBase {
+    private T Read<T>(GraphFrame frame, StateModelRegistry models, GraphFrameKind kind) where T : class, IDurableObject {
         RequireAvailable();
         CheckFrame(frame, kind);
         ArgumentNullException.ThrowIfNull(models);
@@ -200,8 +200,8 @@ public sealed class EventHistoryRepository : IDisposable {
     /// Base/Delta payloads; ordinary read validation can still encode canonical Dictionary keys.
     /// Application callback side effects are not rolled back.
     /// </remarks>
-    public (DurableBase First, DurableBase Second) ReadPair(GraphFrame first, GraphFrame second,
-        StateModelRegistry models) => ReadPair<DurableBase, DurableBase>(first, second, models);
+    public (IDurableObject First, IDurableObject Second) ReadPair(GraphFrame first, GraphFrame second,
+        StateModelRegistry models) => ReadPair<IDurableObject, IDurableObject>(first, second, models);
 
     /// <summary>Experimental pair of read-only snapshots with caller-specified root type checks.</summary>
     /// <remarks>
@@ -215,7 +215,7 @@ public sealed class EventHistoryRepository : IDisposable {
     /// keys. Application callback side effects are not rolled back.
     /// </remarks>
     public (TFirst First, TSecond Second) ReadPair<TFirst, TSecond>(GraphFrame first, GraphFrame second,
-        StateModelRegistry models) where TFirst : DurableBase where TSecond : DurableBase {
+        StateModelRegistry models) where TFirst : class, IDurableObject where TSecond : class, IDurableObject {
         RequireAvailable();
         CheckFrame(first);
         CheckFrame(second);
@@ -264,8 +264,8 @@ public sealed class EventHistoryRepository : IDisposable {
         } finally { _busy = false; }
     }
 
-    internal GraphFrame Commit<TState>(EventHistorySession<TState> session, DurableBase? domainEvent,
-        TState? nextState, ReadAmplificationBaseBudgetParameters? parameters) where TState : DurableBase {
+    internal GraphFrame Commit<TState>(EventHistorySession<TState> session, IDurableObject? domainEvent,
+        TState? nextState, ReadAmplificationBaseBudgetParameters? parameters) where TState : class, IDurableObject {
         RequireAvailable();
         _resources.RequireWritable();
         if (!ReferenceEquals(_activeSession, session) || HeadCore(session.BranchName).Address != session.Head.Address) {
@@ -280,8 +280,8 @@ public sealed class EventHistoryRepository : IDisposable {
         finally { _busy = false; }
     }
 
-    private GraphFrame Publish<TState>(EventHistorySession<TState> session, DurableBase? domainEvent,
-        TState? nextState, ReadAmplificationBaseBudgetParameters parameters, bool initial) where TState : DurableBase {
+    private GraphFrame Publish<TState>(EventHistorySession<TState> session, IDurableObject? domainEvent,
+        TState? nextState, ReadAmplificationBaseBudgetParameters parameters, bool initial) where TState : class, IDurableObject {
         FrameAddress? address = null;
         bool writeAttempted = false;
         bool refAttempted = false;

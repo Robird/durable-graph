@@ -181,7 +181,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         using AncestryHistoryDirectory history = new();
         GeneratorTestRun initial = RunGenerator(FusedDeltaPreamble + """
             [DurableType("loaded.base", 1)]
-            public abstract partial class OldBase : DurableBase { [DurableField(9)] private string? _retired; }
+            public abstract partial class OldBase : IDurableObject { [DurableField(9)] private string? _retired; }
             [DurableType("loaded.leaf", 1)]
             public sealed partial class Leaf : OldBase {
                 [DurableField(1)] private int _number;
@@ -219,7 +219,7 @@ public sealed partial class DurableSchemaGeneratorTests {
 
     private static readonly string LoadedWorldCurrentSource = FusedDeltaPreamble + """
         [DurableType("loaded.base", 2)]
-        public abstract partial class NewBase : DurableBase {
+        public abstract partial class NewBase : IDurableObject {
             public static int ConstructorCalls;
             [DurableField(2)] private readonly byte _marker;
             [DurableField(9)] private readonly string? _baseName;

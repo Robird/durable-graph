@@ -271,7 +271,7 @@ public sealed partial class DurableSchemaGeneratorTests {
 
     private static readonly string ReferenceGraphSource = FusedDeltaPreamble + """
         [DurableType("reference.world", 1)]
-        public sealed partial class World : DurableBase {
+        public sealed partial class World : IDurableObject {
             public static int ConstructorCalls;
             [DurableField(1)] private Entity? _child;
             [DurableField(2)] private Entity? _alias;
@@ -291,7 +291,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             }
         }
         [DurableType("reference.entity", 1)]
-        public abstract partial class Entity : DurableBase {
+        public abstract partial class Entity : IDurableObject {
             [DurableField(1)] private readonly World _world;
             protected Entity(World world) { World.ConstructorCalls++; _world = world; }
             public World Owner => _world;
@@ -315,7 +315,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             }
         }
         [DurableType("reference.item", 1)]
-        public sealed partial class Item : DurableBase {
+        public sealed partial class Item : IDurableObject {
             [DurableField(1)] private readonly Character _owner;
             [DurableField(2)] private readonly string _name;
             public Item(Character owner, string name) { World.ConstructorCalls++; _owner = owner; _name = name; }
@@ -340,7 +340,7 @@ public sealed partial class DurableSchemaGeneratorTests {
 
     private static string ReferenceHistorySource(int version) => FusedDeltaPreamble + """
         [DurableType("reference.history.world", 1)]
-        public sealed partial class World : DurableBase {
+        public sealed partial class World : IDurableObject {
             public static int ConstructorCalls;
             [DurableField(1)] private Node? _child;
             [DurableField(2)] private readonly Node _alias;
@@ -354,7 +354,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         }
         """ + $$"""
         [DurableType("reference.history.node", {{version}})]
-        public sealed partial class Node : DurableBase {
+        public sealed partial class Node : IDurableObject {
             public static int Upgrades;
             [DurableField(1)] private int _number;
             [DurableField(2)] private readonly World _world;

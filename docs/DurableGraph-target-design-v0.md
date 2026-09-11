@@ -56,7 +56,12 @@ Source Generator 负责可在编译期确定的类型知识与机械代码，框
   positional/body 与泛型。位置参数、自动属性及 field-backed 属性的真实存储须以 field-target DurableField/Transient 分类，
   不调用 getter/setter/构造器/初始化器。持久 Schema 不包含 record 关键字、backing 名或合成方法；同 FieldId/完整槽的外观变化不伪升版。
   record 合成 Equals 不识别 Transient 标注，框架不替用户改写业务比较；Key 仍须满足当前恢复阶段的比较边界。
-  生成入口及误标诊断见 [DB-056](design-branches/0056-record-struct-state-slice.md)，不据此开放 record class 或一般 property 序列化。
+  值类型生成入口及误标诊断见 [DB-056](design-branches/0056-record-struct-state-slice.md)，不据此开放普通 class 的一般 property 序列化。
+- 领域引用对象统一实现 IDurableObject，不要求继承框架基类；普通 class 与 record class 共用对象身份和 Schema 管线。
+  祖先链除 object 外每层均须显式参与 Durable Schema/history，任意第三方基类适配不在当前目标内。
+  record class 支持 positional/body、泛型与已标记继承，按实际声明字段归属分类/投影；不保存 record 外观或合成行为。
+  引用相等决定对象身份，业务值相等不合并对象；with 新实例不继承原 ID，也不提供深复制或深不可变。
+  共同接口不授予任意 object/interface 持久槽或 boxed value 身份。具体迁移与验收见 [DB-068](design-branches/0068-record-class-model-slice.md)。
 - 支持 CLR `Nullable<T>`，T 为受支持标量、Durable inline struct 或显式登记 enum，包括泛型 struct；可作为字段、
   泛型实参和数组/List 元素。DTO 使用 unmanaged `NullableState<TState>`，absent 不访问内部状态或产生引用边。
   Nullable 无独立对象身份或业务版本，内部 exact 布局变化沿原 inline 规则传播到 owner；

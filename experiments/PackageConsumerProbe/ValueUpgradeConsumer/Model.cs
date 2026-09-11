@@ -9,7 +9,7 @@ namespace ValueUpgradePackageConsumerProbe;
 #else
 [DurableType("Box", 3)]
 #endif
-public sealed partial class Box<T> : DurableBase {
+public sealed partial class Box<T> : IDurableObject {
     [DurableField(1)] private T _value;
     [DurableField(4)] private readonly ulong _createdAtTicks;
     internal ulong CreatedAtTicks => _createdAtTicks;
@@ -64,7 +64,7 @@ public readonly partial struct Pair<T> {
 #else
 [DurableType("World", 3)]
 #endif
-public sealed partial class World : DurableBase {
+public sealed partial class World : IDurableObject {
     [DurableField(1)] private readonly Box<int> _first;
     [DurableField(2)] private readonly Box<int> _second;
     [DurableField(3)] private readonly Box<Pair<Point>> _nested;

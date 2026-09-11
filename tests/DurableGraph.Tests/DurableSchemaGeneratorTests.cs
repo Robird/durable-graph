@@ -34,12 +34,12 @@ public sealed partial class DurableSchemaGeneratorTests {
 
             namespace Samples {
                 [DurableType("samples.second", 1)]
-                public sealed partial class Second : DurableBase {
+                public sealed partial class Second : IDurableObject {
                     [DurableField(1)] private long _value;
                 }
 
                 [DurableType("samples.first", 1)]
-                public sealed partial class First : DurableBase {
+                public sealed partial class First : IDurableObject {
                     [DurableField(1)] private bool _value;
                 }
             }
@@ -49,12 +49,12 @@ public sealed partial class DurableSchemaGeneratorTests {
 
             namespace Samples {
                 [DurableType("samples.first", 1)]
-                public sealed partial class First : DurableBase {
+                public sealed partial class First : IDurableObject {
                     [DurableField(1)] private bool _value;
                 }
 
                 [DurableType("samples.second", 1)]
-                public sealed partial class Second : DurableBase {
+                public sealed partial class Second : IDurableObject {
                     [DurableField(1)] private long _value;
                 }
             }
@@ -221,23 +221,23 @@ public sealed partial class DurableSchemaGeneratorTests {
                 "DG0001",
                 DurableTypeSource(
                     "[Transient] private int _value;",
-                    typeDeclaration: "public sealed class Example : DurableBase")
+                    typeDeclaration: "public sealed class Example : IDurableObject")
             },
             {
-                "DG0019",
+                "DG0001",
                 """
                 using Atelia.DurableGraph;
 
                 namespace Atelia.DurableGraph {
                     public static class Lookalikes {
-                        public abstract class DurableBase { }
+                        public interface IDurableObject { }
                     }
                 }
 
                 namespace Samples {
                     [DurableType("samples.example", 1)]
                     public sealed partial class Example
-                        : Atelia.DurableGraph.Lookalikes.DurableBase {
+                        : Atelia.DurableGraph.Lookalikes.IDurableObject {
                         [Transient] private int _value;
                     }
                 }
@@ -276,7 +276,7 @@ public sealed partial class DurableSchemaGeneratorTests {
 
                 namespace Samples {
                     [DurableType("samples.example", 1)]
-                    public sealed partial class Example : DurableBase {
+                    public sealed partial class Example : IDurableObject {
                         [Atelia.DurableGraph.Lookalikes.DurableField(1)]
                         private int _value;
                     }
@@ -315,7 +315,7 @@ public sealed partial class DurableSchemaGeneratorTests {
                 namespace Samples;
 
                 [DurableType("samples.schema", 1)]
-                public sealed partial class Schema : DurableBase {
+                public sealed partial class Schema : IDurableObject {
                     [Transient] private int _value;
                 }
                 """
@@ -330,7 +330,7 @@ public sealed partial class DurableSchemaGeneratorTests {
     private static string DurableTypeSource(
         string members,
         string durableTypeArguments = "\"samples.example\", 1",
-        string typeDeclaration = "public sealed partial class Example : DurableBase") {
+        string typeDeclaration = "public sealed partial class Example : IDurableObject") {
         return $$"""
             using Atelia.DurableGraph;
 
@@ -367,7 +367,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             assemblyName: $"GeneratorTests_{Guid.NewGuid():N}",
             syntaxTrees: [syntaxTree],
             references: PlatformReferences().Concat(FixtureBridgeReferences(source)).Append(
-                MetadataReference.CreateFromFile(typeof(DurableBase).Assembly.Location)).Append(
+                MetadataReference.CreateFromFile(typeof(IDurableObject).Assembly.Location)).Append(
                 MetadataReference.CreateFromFile(typeof(Atelia.DurableGraph.StateStore.Serialization.BinaryPayloadReader).Assembly.Location)).Append(
                 MetadataReference.CreateFromFile(typeof(Atelia.DurableGraph.StateStore.SchemaStore).Assembly.Location)).Append(
                 MetadataReference.CreateFromFile(typeof(Atelia.DurableGraph.StateStore.Storage.ObjectVersionChain).Assembly.Location)),
