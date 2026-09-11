@@ -1,6 +1,6 @@
 # DB-062：独立图读取与可由外层发布的工作区
 
-> 状态：Chosen / 待实施，2026-09-11；用户已采纳保存拓扑与外观收敛方向，本轮仅修订文档，实施由后续回合调度。
+> 状态：已实施，2026-09-11；内部核心已交付，公开 EventHistory 外观与 Journal 发布由 DB-063 接续。施工与验证见 §7。
 > 消费者来源：[DramaBoard 需求稿](../../../drama-board/docs/research/event-journal-state-store-draft.md)。该稿中的其他路径按 DramaBoard 仓库解释。
 > 后继：[DB-063 EventHistory 外观](0063-event-history-journal-slice.md)、[DB-064 合并读取](0064-shared-revision-decoding-design.md)。
 
@@ -15,7 +15,7 @@ E1 不推进或破坏 S0 比较基线，S1 正确产生相对 S0 的 Delta；E1 
 保留现有测试证明的身份、Upgrade、数据先持久化及发布失败语义；旧 API/固定根限制不作为兼容目标。
 本片同时提供实验性双图读取的内部入口，允许顺序独立还原两图；公开外观随 DB-063 首版交付，不等待 DB-064 优化。
 
-## 2. 当前实现证据
+## 2. 实施前接缝证据
 
 | 代码 | 事实及需要改变的接缝 |
 |---|---|
@@ -27,7 +27,7 @@ E1 不推进或破坏 S0 比较基线，S1 正确产生相对 S0 的 Delta；E1 
 | [RevisionDecoder](../../src/DurableGraph.StateStore/RevisionDecoder.cs) | 解码指定 Revision 全部 live 行；只要 E 的 membership 本身独立，既有路径即可避免解码无关 State 行 |
 | [GraphRepository](../../src/DurableGraph.StateStore/GraphRepository.cs) / [PreparedWorldSave](../../src/DurableGraph.StateStore/PreparedWorldSave.cs) | 已有数据屏障、单次候选、发布后安装的核心顺序；专用 publication Parent 必须等于 Revision Parent 的校验仅适用旧外观 |
 
-上述结论来自当前源码与测试阅读，不是本片已通过的执行结果。
+上述表格记录实施前的代码接缝；实施后的职责与执行结果见 §7。
 
 ## 3. 已选保存拓扑：事件快照从活动 State 分出
 
@@ -143,3 +143,31 @@ E 成功不得清除 S 的 RequiresRewrite。测试 E 捕获错误、未知根�
 | 每次 E 全新无 Parent 图 | 实现最少，但全部重新分配/写 Base，放弃现成 State 版本复用；可作对照测试，不作为主方案 |
 | PairRoot 或永久把全部 Event 塞进 World | 违背独立读取和有限可达闭包的消费者目标，不作为默认模型 |
 | 新的公共事务/任意多 root 框架 | 目标只有 Journal 发布外观；内部核心即可，避免把 provisional 接缝过早变成下游维护义务 |
+
+## 7. 实施与验收记录（2026-09-11）
+
+本片只交付 StateStore 内部接缝；不增加 Journal/公开 publisher 接口、不改变 Schema/State wire 格式。
+GraphRepository/GraphSession/LoadedWorld 暂留为活动示例和有效回归的宿主，未给旧 API 新增根替换/快照入口；
+DB-063 接入新外观时移除旧 publication 路径，不再维护两套公开保存体系。
+
+| 验收职责 | 实现与证据 |
+|---|---|
+| G0 资源和恢复提取 | [GraphResources](../../src/DurableGraph.StateStore/GraphResources.cs) 拥有 Schema/State；[GraphReader](../../src/DurableGraph.StateStore/GraphReader.cs) 共用 Decode/Normalize/可达分配/填充；旧发布宿主委托资源；[资源测试](../../tests/DurableGraph.StateStore.Tests/GraphResourcesTests.cs) 验证零写入和坏尾拒绝 |
+| G1 原候选安装与根替换 | [WorldWorkspace](../../src/DurableGraph.StateStore/WorldWorkspace.cs) 的 Stage(nextState) 固定 exact 类型、保留复用 child 身份；PreparedWorldSave 只在 PrepareInstall 后 Install；[原工作区回归](../../tests/DurableGraph.StateStore.Tests/WorldWorkspaceTests.cs) 和[独立图集成](../../tests/DurableGraph.StateStore.Tests/IndependentGraphWorkspaceTests.cs) 验证冻结候选、失败与安装顺序 |
+| G2 快照目录与 baseline | StageSnapshot 按 actual 根绑定，要求已有 State；无 next baseline，拒绝 PrepareInstall，发布成功或放弃都 Dispose；[快照规划测试](../../tests/DurableGraph.StateStore.Tests/IndependentSnapshotPlannerTests.cs) 覆盖 external head/local Delta/NoChange 主动 Base；集成验证 E 不推进 S、不清除 Upgrade rewrite |
+| G3 独立与双图读取 | Read 可请求根基类，工作区 Load 要求 exact；ReadPair 使用同一冻结目录，返回有序 roots，不能导入编辑会话；[读取测试](../../tests/DurableGraph.StateStore.Tests/GraphReaderTests.cs) 验证失败不交付与图内共享/环；冷开 E-only 集成拒绝触发无关 World/Bob 能力 |
+
+文件资源不拥有业务 head；外层负责串行操作和不确定追加后的 fault 标记。
+工作区持有同一冻结模型目录，读取工作区从完整 source 导入字符串身份和 max+1 cursor。
+初版双图不缓存或共享领域实例；公开有仓库来源约束的 handle/ReadPair 及 Journal durability 见 DB-063。
+独立快照的成功见证在真实 Schema/State 文件上执行 AppendDurably，测试宿主只模拟最终发布确认，不能等同已实现 Journal 发布。
+
+执行验证：
+
+- 实施前 `dotnet build DurableGraph.slnx --no-restore -v:q`：0 warning / 0 error。
+- 最终同一根 build：0 warning / 0 error；未改变程序集依赖、包入口或持久格式。
+- `dotnet test tests/DurableGraph.StateStore.Tests/DurableGraph.StateStore.Tests.csproj --no-build --no-restore -v:q`：661 passed，0 failed/skipped，含 31 项新增测试。
+- `dotnet test tests/DurableGraph.Tests/DurableGraph.Tests.csproj --no-restore -v:q`：1519 passed，0 failed/skipped；覆盖生成模型、历史恢复与已有 Load 路径。
+- 独立审阅：无剩余阻塞项；根替换的发布由受控宿主模拟，旧 GraphRepository 的有效失败/重开测试仍执行。
+- 文档检查：6 份 Markdown 的 476 个本地链接、39 个片段通过；`git diff --check` 通过。
+- 未重跑真实 PackageReference 发布实验：本片仅改变内部核心，现有公开接入示例与包配置未变；新 EventHistory 公开外观的两进程/历史包验收归 DB-063。

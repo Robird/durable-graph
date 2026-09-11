@@ -164,7 +164,7 @@ public sealed class WorldWorkspaceTests : IDisposable {
         Assert.Throws<InvalidOperationException>(() => workspace.Stage(NoRebase));
         recurse = false;
         using PreparedWorldSave<World> retry = workspace.Stage(NoRebase);
-        Assert.True(retry.WorldId.Value > 1);
+        Assert.True(retry.RootId.Value > 1);
         Install(retry);
     }
 

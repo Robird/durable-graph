@@ -1,6 +1,6 @@
 # DurableGraph 产品开发工作集
 
-> 校准：2026-09-11；产品实现截至 [DB-061](../docs/design-branches/0061-cross-assembly-inheritance-slice.md)，EventHistory 后继处于设计阶段。本文只维护当前能力、边界与续工入口。
+> 校准：2026-09-11；产品实现截至 [DB-062](../docs/design-branches/0062-independent-graph-workspace-slice.md)，EventHistory 公开外观仍待接入。本文只维护当前能力、边界与续工入口。
 > 文档不是实现授权；事实以当前源码、测试和工具输出为准。
 
 ## 从这里继续
@@ -23,7 +23,8 @@
 已采纳依次实施 [DB-062 独立图工作区](../docs/design-branches/0062-independent-graph-workspace-slice.md)、
 [DB-063 EventHistory 外观](../docs/design-branches/0063-event-history-journal-slice.md)，
 实验性双图读取首版可用两次独立还原；[DB-064](../docs/design-branches/0064-shared-revision-decoding-design.md) 的实际共享优化低优先级后置。
-目前仅完成设计与用户裁决，下一回合调度 DB-062 实施；现有能力与文件格式未变。
+DB-062 已拆出内部资源/读取/工作区：同类型 State 根替换、独立快照和顺序双图读取核心已实现，文件格式未变。
+下一片为 DB-063：接入 Journal、公开有来源约束的图 handle/ReadPair、交错提交与 Resume。
 E 和后继 S 都相对前 S 保存，E 不安装为 State 基线；Journal ref 为目标外观唯一发布前沿。
 旧仓库/会话 API 没有下游兼容负担，DB-063 接管时移除旧 publication.rbf 发布器，并迁移有效测试与包示例。
 同 ObjectVersion 可复用 stored DTO，但普通 CLR 实例还受传递引用版本与后续可变性约束；
@@ -36,7 +37,7 @@ ReadPair 按只读快照使用，不承诺跨图实例复用；可写 Resume 保
 |---|---|---|
 | [DurableGraph](DurableGraph/DurableGraph.csproj) | immutable Schema/exact DAG；统一 ObjectBinding、ObjectLayout、Capture/refs/恢复目录；SZ/rank 2–4 数组、List 与 Dictionary owned 状态；静态 StateEquals、数组稀疏/列表区间/字典键寻址 Delta、默认 Adaptive 与三种显式 List writer；独立 historical reader | 其他 BCL、数组协变；持久发布由 StateStore 拥有 |
 | [Generator](DurableGraph.Generator/DurableGraph.Generator.csproj) / [Build](DurableGraph.Build/DurableGraph.Build.csproj) | class/struct（含 record struct）开放模板、显式 enum、readonly DTO/静态 body、Capture/Hydrate、泛型继承与递归 Nullable/数组/List/Dictionary 组合；跨程序集 nominal/动态参数、固定 base/inline 与只读模板导出；history v9；三参 Upgrade/旧二参适配、值规则/局部依赖 adapter | 其他 CLR 值类型、其他 BCL；跨程序集业务规则发现 |
-| [StateStore](DurableGraph.StateStore/DurableGraph.StateStore.csproj) | 统一闭合 Schema/数组/List/Dictionary 目录与整数依赖、单批次登记、Base v4 ID 头；完整 stored/current 引用验证、可达图两阶段恢复；公开 PrepareNew/fixed-Parent Prepare；GraphRepository 单 head/持久 WorldId 与 GraphSession 同实例 Commit；升级 Base/Remove | 无 branch/Reset/根替换或联合 Store 视图 |
+| [StateStore](DurableGraph.StateStore/DurableGraph.StateStore.csproj) | 统一闭合 Schema/数组/List/Dictionary 目录与整数依赖、单批次登记、Base v4 ID 头；完整 stored/current 引用验证、可达图两阶段恢复；公开 PrepareNew/fixed-Parent Prepare；GraphRepository 临时单 head 宿主与 GraphSession 同实例 Commit；独立资源/读图核心、工作区根替换、快照 map Base 和顺序双图读取；升级 Base/Remove | 独立图新能力尚为内部接缝；公开 EventHistory/branch/Move 待 DB-063；联合 Store 视图另行排期 |
 | [Storage](DurableGraph.StateStore.Storage/DurableGraph.StateStore.Storage.csproj) | AppendDurably 原 lease 屏障；local Base/Delta records、wire v3、exact Revision live map、Parent/prior 校验、object-first 原始重建链及实际 payload H；Base 精确/Delta 上界计量；真实 Segment/RBF 冷重开 | 不解码 typed body；不拥有持久 roots、类型目录或发布 head；重复读取暂未缓存 |
 | [Serialization](DurableGraph.StateStore.Serialization/DurableGraph.StateStore.Serialization.csproj) | 字节原语、string 内容 codec、拥有 raw bytes 的 PreparedBaseBody/PreparedDeltaBody、显式 body 的 typed slot、早期元素 ref 循环 | 完整数组/List 对象操作位于 Runtime；其他 BCL 内容 codec 尚无 |
 
@@ -123,7 +124,7 @@ ReadPair 按只读快照使用，不承诺跨图实例复用；可写 Resume 保
   先分配 ID/登记再排队；Seal 用增长队列捕获可达对象，子对象不加入根列表。未知实际派生类型明确拒绝。
   Accept/Discard 只是内存候选协议。ID 单调分配、失败可烧号；退役实例映射清理不回收数字。
   空串 Capture/读取两端统一 Empty，非空 string 保留引用身份。
-  现有多根 Capture 是内部能力/机制见证；LoadedWorld 外层入口限定一个固定 World。
+  现有多根 Capture 是内部能力/机制见证；每份产品图仍选一个非空 durable 根。旧外层入口仍为固定 World；内部工作区允许同 exact 类型根替换及异构快照根。
 - CaptureSession.Prepare 自动使用 Current，完整预检 exact Schema/DTO/稳定 binding 后编码；全部 live Base 提前生成，
   existing class/array/List/Dictionary 调用融合 Delta、existing string 为 unchanged。结果只标识内存 Previous/Candidate，不带磁盘地址。
   重复准备与失败不安装或放弃候选、不烧号；临时 guard 拒绝会话重入。capture-only 登记仍有效，缺 binding 仅 Prepare 拒绝。
@@ -139,11 +140,14 @@ ReadPair 按只读快照使用，不承诺跨图实例复用；可写 Resume 保
 - StateModelRegistry 显式登记稳定 SG Model，在操作开始快照 family、exact CLR Type 与 reader 三份索引；
   同 exact CLR Type 的其他模型原子拒绝。传统非泛型入口的可选普通静态 UpgradeStateVnToVnPlus1
   按相邻版本转换完整 leaf DTO，不重复升级祖先。已声明边逐一强类型检查；缺边仅阻止需要该边的 current Load。
-  LoadedWorld.Load 先完整 exact 解码、再升级全部 source 行，按 current Schema 重新校验全部引用；
-  从所选 exact World 迭代求可达闭包，全部可达 class/array/List/Dictionary 实例分配并登记 string 后才 Hydrate。分配必须 exact、非空、彼此不同，Empty 例外。
+  GraphReader 为独立读取与 LoadedWorld/工作区恢复共用管线：先完整 exact 解码、再升级全部 source 行，按 current Schema 重新校验全部引用；
+  从所选 durable 根迭代求可达闭包，全部可达 class/array/List/Dictionary 实例分配并登记 string 后才 Hydrate。分配必须 exact、非空、彼此不同，Empty 例外。
   内部仅保留 current 冻结状态比较基线及 source ObjectLayout/完整 membership，升级仍 live 必须 Base。
   不可达 source 仍须解码/归一化/验证，但不要求其 current 类型可以 Allocate；历史 ancestry 不能用 current CLR 反推。
-- GraphRepository 独占 publication.rbf、schemas.rbf 和 state/，单 head、单活动 GraphSession；Create 只允许无已发布 head。
+- GraphResources 独立拥有 schemas.rbf/state/，严格只读打开不写盘、不修尾，不拥有业务 head。GraphReader.ReadPair 在同一冻结目录下顺序独立还原，第二边失败不交付 pair；无跨图实例身份承诺。
+  WorldWorkspace.Stage(nextState) 发布后才安装原候选/新根；StageSnapshot 使用已提交 State 的 DTO/身份和 cursor，完成后 Discard，不清除 State 的升级重写义务。
+  快照 map Base 只列候选，保留实际 local Base/Delta 与 exact Parent external heads；后继 State 仍相对前 State；快照不为闭包外 State 成员编码 Removes。
+- GraphRepository 是 DB-063 前的临时 publication 宿主，委托 GraphResources 管 schemas.rbf/state/；仍独占 publication.rbf，单 head、单活动 GraphSession；Create 只允许无已发布 head。
   Commit 完成冻结、Schema/表示登记、State AppendDurably、publication Append/flush 后安装原候选；保留 World/child 实例与原分配 cursor。
   下一基线 membership 等于成功候选，升级重写义务清除；移除对象以后重接获新 ID/Base。
   GraphCommitException 区分 NotPublished / Unknown / Published，确定未发布也须检查资源是否 faulted；
@@ -263,6 +267,7 @@ DurableGraph runtime 也引用 Serialization，单一 runtime PackageReference �
 | 可组合值 Upgrade / 规则集 / Context 子作用域 | [DB-039](../docs/design-branches/0039-composable-value-upgrade-design.md)、[值绑定](DurableGraph/StateBindingContext.ValueUpgrade.cs)、[SG 属性](DurableGraph.Generator/DurableSchemaGenerator.ValueUpgrades.cs)、[历史包](../experiments/PackageConsumerProbe/ValueUpgradeConsumer/README.md) |
 | 泛型/历史绑定/UpgradeContext | [DB-038](../docs/design-branches/0038-generic-schema-state-and-binding-design.md)、[绑定上下文](DurableGraph/StateBindingContext.cs)、[生成模板](DurableGraph.Generator/DurableSchemaGenerator.GenericState.cs)、[三代历史包](../experiments/PackageConsumerProbe/GenericConsumer/README.md) |
 | inline struct/嵌套 DTO/Schema DAG | [DB-037](../docs/design-branches/0037-inline-struct-state-slice.md)、[生成值 helper](DurableGraph.Generator/DurableSchemaGenerator.InlineState.cs)、[真实生成图](../tests/DurableGraph.Tests/InlineStructGraphTests.cs)、[历史包](../experiments/PackageConsumerProbe/InlineStructConsumer) |
+| 独立图工作区、资源与读取 | [DB-062](../docs/design-branches/0062-independent-graph-workspace-slice.md)、[工作区](DurableGraph.StateStore/WorldWorkspace.cs)、[资源](DurableGraph.StateStore/GraphResources.cs)、[读取](DurableGraph.StateStore/GraphReader.cs) |
 | 工作会话/发布/历史能力 | [DB-036](../docs/design-branches/0036-working-session-and-history-capabilities.md)、[Repository](DurableGraph.StateStore/GraphRepository.cs)、[集成测试](../tests/DurableGraph.StateStore.Tests/GraphRepositoryTests.cs) |
 | 领域引用图/首次准备 | [DB-034](../docs/design-branches/0034-durable-reference-graph-batch.md)、[真实生成图冷读](../tests/DurableGraph.Tests/PersistedReferenceGraphTests.cs)、[双视图与失败测试](../tests/DurableGraph.StateStore.Tests/LoadedReferenceWorldTests.cs) |
 | Schema、DTO、静态 body | [Generator tests](../tests/DurableGraph.Tests)、[DB-019](../docs/design-branches/0019-schema-ancestry-implementation-slice.md)、[DB-022](../docs/design-branches/0022-versioned-state-dto-capture.md)、[DB-023](../docs/design-branches/0023-scalar-schema-dto-slice.md) |

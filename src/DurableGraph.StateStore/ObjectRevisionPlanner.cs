@@ -11,9 +11,13 @@ internal static class ObjectRevisionPlanner {
         StateRevisionStore store,
         FrameAddress? parentRevisionAddress,
         IEnumerable<PreparedObject> objects,
-        ReadAmplificationBaseBudgetParameters parameters) {
+        ReadAmplificationBaseBudgetParameters parameters,
+        bool independentSnapshot = false) {
         ArgumentNullException.ThrowIfNull(store);
         ArgumentNullException.ThrowIfNull(objects);
+        if (independentSnapshot && parentRevisionAddress is null) {
+            throw new ArgumentException("An independent snapshot requires a State baseline.", nameof(parentRevisionAddress));
+        }
         PreparedObject[] rows = objects.ToArray();
         Dictionary<ObjectId, PreparedObject> byId = [];
         foreach (PreparedObject row in rows) {
@@ -66,9 +70,19 @@ internal static class ObjectRevisionPlanner {
                 : ObjectVersionRecord.CreateDelta(row.ObjectId.Value, row.PriorAddress!.Value, row.DeltaBody!.Body));
         }
 
-        StateRevision revision = parentRevisionAddress is { } exactParent
-            ? StateRevision.CreateObjectHeadMapDelta(exactParent, records, parentHeads.Keys.Where(id => !byId.ContainsKey(id)).Select(static id => id.Value))
-            : StateRevision.CreateObjectHeadMapBase(null, records, []);
+        StateRevision revision;
+        if (independentSnapshot) {
+            // Membership is the candidate closure, while each actual policy-selected write
+            // remains local (including an optional Base for an unchanged object).
+            HashSet<uint> localIds = records.Select(static record => record.ObjectId).ToHashSet();
+            revision = StateRevision.CreateObjectHeadMapBase(parentRevisionAddress, records,
+                rows.Where(row => !localIds.Contains(row.ObjectId.Value))
+                    .Select(row => new KeyValuePair<uint, FrameAddress>(row.ObjectId.Value, parentHeads[row.ObjectId])));
+        } else {
+            revision = parentRevisionAddress is { } exactParent
+                ? StateRevision.CreateObjectHeadMapDelta(exactParent, records, parentHeads.Keys.Where(id => !byId.ContainsKey(id)).Select(static id => id.Value))
+                : StateRevision.CreateObjectHeadMapBase(null, records, []);
+        }
         return new(revision, estimates, plan);
     }
 }

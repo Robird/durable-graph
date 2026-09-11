@@ -140,14 +140,17 @@ Base 记录的 `body` 已含类型头；Delta 记录的 `body` 没有该头。�
 | <a id="prepare-append-commit"></a>**World 保存准备、追加与提交发布（Prepare / Append / Commit）** | `LoadedWorld.Prepare/PrepareNew` 编排 Capture/Seal、内容准备和修订规划；可持久注册 Schema，不追加 State 或推进基线。Append 写入 Revision Frame 并返回地址。GraphSession.Commit 绑定 Schema/State 屏障、publication 发布及原候选基线安装；AppendDurably 只确认 State 文件屏障。 | [LoadedWorld / PreparedWorldRevision](../src/DurableGraph.StateStore/LoadedWorld.cs)、[StateRevisionStore.Append](../src/DurableGraph.StateStore.Storage/StateRevisionStore.cs)；[GraphRepository](../src/DurableGraph.StateStore/GraphRepository.cs) |
 
 规划输入是**完整 post-live 集合**，策略 `Writes` 只列实际选写对象：未变对象可能不写，也可能因读放大而写 Base。
-Remove 来自 Parent 完整成员集合减去候选成员集合；[ObjectRevisionPlanner](../src/DurableGraph.StateStore/ObjectRevisionPlanner.cs)
+推进 State 时，Remove 来自 Parent 完整成员集合减去候选成员集合；独立快照使用 map Base，仅列候选的 local records 与 exact Parent external heads；[ObjectRevisionPlanner](../src/DurableGraph.StateStore/ObjectRevisionPlanner.cs)
 负责生成这份存储计划，Storage 消费明确结果，不自行从领域图推导可达性。
 
 ## Repository 与工作会话
 
 | 项目内术语／代码符号 | 释义与示意 | 关键代码 |
 |---|---|---|
-| <a id="graph-repository"></a>**图仓库**／`GraphRepository` | 独占匹配的 State/Schema 文件和一个发布 head，最多一个活动会话；CreateNew/OpenExisting 管资源，Create/Load 交付可编辑 World。单调 Schema 尚非联合版本视图。 | [GraphRepository](../src/DurableGraph.StateStore/GraphRepository.cs) |
+| <a id="graph-repository"></a>**图仓库**／`GraphRepository` | 独占匹配的 State/Schema 文件和一个发布 head，最多一个活动会话；CreateNew/OpenExisting 委托内部 GraphResources 管资源，Create/Load 交付可编辑 World。它是 DB-063 前的临时 publication 宿主。单调 Schema 尚非联合版本视图。 | [GraphRepository](../src/DurableGraph.StateStore/GraphRepository.cs) |
+| **图资源**／`GraphResources` | 匹配 Schema/State 文件的内部所有者；严格只读/可写打开、释放和故障状态，不选择业务 head、不运行模型回调。 | [GraphResources](../src/DurableGraph.StateStore/GraphResources.cs) |
+| **独立图读取**／`GraphReader` | 显式 Revision + RootId 的 exact 解码、升级与两阶段恢复；可请求实际 durable 根的基类。内部 ReadPair 在同一模型快照下顺序还原两图，仅完整成功才返回；结果按只读快照使用，无跨图实例身份承诺。 | [GraphReader](../src/DurableGraph.StateStore/GraphReader.cs) |
+| **State 工作区与独立快照**／`WorldWorkspace` | 拥有一份 State 的冻结 DTO、根、实例-ID 绑定和串行 cursor。推进候选可替换同类型根，发布后安装；独立快照借用 State 基线，完成后释放候选，不安装到 State。 | [WorldWorkspace](../src/DurableGraph.StateStore/WorldWorkspace.cs)、[PreparedWorldSave](../src/DurableGraph.StateStore/PreparedWorldSave.cs) |
 | <a id="graph-session"></a>**图工作会话**／`GraphSession<TWorld>` | 同时拥有领域 World、已发布 Parent 对应比较基线和实例-ID 绑定；Commit 成功后安装原候选并保持领域实例，Dispose 不自动保存。首次成功前 Parent/WorldId 可空。 | [GraphSession](../src/DurableGraph.StateStore/GraphSession.cs)、[WorldWorkspace](../src/DurableGraph.StateStore/WorldWorkspace.cs) |
 | <a id="publication-head"></a>**发布 head／发布日志** | 当前权威的 RevisionAddress + WorldId；专用 RBF 日志还记录 exact 前驱。数据先 flush，发布记录再 flush；完整严格重放并验证引用，坏尾不猜测旧 head。 | [PublicationLog](../src/DurableGraph.StateStore/PublicationLog.cs) |
 | <a id="commit-outcome"></a>**提交结果**／`GraphCommitOutcome` | NotPublished、Unknown、Published 描述持久发布结果，不描述领域修改是否撤销；Unknown 或发布后安装失败须使会话停止续写，dispose/reopen 裁决。NotPublished 也需检查资源是否 faulted。 | [GraphCommitException](../src/DurableGraph.StateStore/GraphCommitException.cs) |

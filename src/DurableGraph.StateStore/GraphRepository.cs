@@ -1,7 +1,6 @@
 using Atelia.Rbf;
 using Atelia.RbfSegmentStore;
 using Atelia.DurableGraph.StateStore.Storage;
-using SegmentStore = Atelia.RbfSegmentStore.RbfSegmentStore;
 
 namespace Atelia.DurableGraph.StateStore;
 
@@ -11,24 +10,21 @@ namespace Atelia.DurableGraph.StateStore;
 /// Commits flush Schema and State before publishing, then retain the existing domain instances.
 /// Reopen strictly rejects malformed files, including incomplete uncommitted tails; no automatic
 /// repair, branching or OS/power-loss guarantee is provided. Schema registrations are monotonic.
+/// This is the temporary publication host until DB-063 replaces it with EventHistory.
 /// </remarks>
 public sealed class GraphRepository : IDisposable {
     private readonly IRbfFile _publicationFile;
-    private readonly IRbfFile _schemaFile;
-    private readonly SegmentStore _segments;
-    private readonly SchemaStore _schemas;
-    private readonly StateRevisionStore _states;
+    private readonly GraphResources _resources;
+    private SchemaStore Schemas => _resources.Schemas;
+    private StateRevisionStore States => _resources.States;
     private readonly PublicationLog _publication;
     private object? _activeSession;
     private bool _busy;
     private bool _disposed;
 
-    private GraphRepository(IRbfFile publicationFile, IRbfFile schemaFile, SegmentStore segments, SchemaStore schemas) {
+    private GraphRepository(IRbfFile publicationFile, GraphResources resources) {
         _publicationFile = publicationFile;
-        _schemaFile = schemaFile;
-        _segments = segments;
-        _schemas = schemas;
-        _states = new(segments);
+        _resources = resources;
         _publication = new(publicationFile, ValidatePublishedRevision);
         _publication.AfterAppend = () => Checkpoint?.Invoke(CommitCheckpoint.AfterPublicationAppend);
         // Schema and then State files were confirmed before this constructor. Confirm the
@@ -36,7 +32,7 @@ public sealed class GraphRepository : IDisposable {
         publicationFile.DurableFlush();
     }
 
-    public bool IsFaulted { get; private set; }
+    public bool IsFaulted => _resources.IsFaulted;
     public FrameAddress? HeadRevisionAddress { get { RequireAvailable(); return _publication.Head?.RevisionAddress; } }
     public ObjectId? WorldId { get { RequireAvailable(); return _publication.Head?.WorldId; } }
     internal Action<CommitCheckpoint>? Checkpoint { get; set; }
@@ -57,75 +53,30 @@ public sealed class GraphRepository : IDisposable {
             throw new DirectoryNotFoundException(root);
         }
         IRbfFile? publication = null;
-        IRbfFile? schemas = null;
-        SegmentStore? segments = null;
+        GraphResources? resources = null;
         try {
             // This exclusive file handle also serializes repository opens, before other resources.
             string publicationPath = Path.Combine(root, "publication.rbf");
             publication = create ? RbfFile.CreateNew(publicationPath) : RbfFile.OpenExisting(publicationPath);
-            string schemaPath = Path.Combine(root, "schemas.rbf");
-            schemas = create ? RbfFile.CreateNew(schemaPath) : RbfFile.OpenExisting(schemaPath);
-            SchemaStore schemaStore = new(schemas);
-            // Confirm a possibly empty header too. With only built-in container registrations,
-            // this can repeat SchemaStore's recovery flush because Count counts user Schemas.
-            if (schemaStore.Count == 0) { schemas.DurableFlush(); }
-            string statePath = Path.Combine(root, "state");
-            RbfSegmentStoreOptions strict = StrictOptions(options);
-            if (create) {
-                segments = SegmentStore.CreateNew(statePath, strict);
-                using RbfSegmentWriterLease writer = segments.OpenActiveWriter();
-                writer.File.DurableFlush();
-            } else {
-                // Do this before SegmentStore owns/caches historical read handles. Confirm complete
-                // files after uncertain prior outcomes; never select a recoverable prefix or truncate.
-                if (!Directory.Exists(statePath)) { throw new DirectoryNotFoundException(statePath); }
-                foreach (string filePath in Directory.EnumerateFiles(statePath, "*.rbf", SearchOption.AllDirectories)) {
-                    using IRbfFile file = RbfFile.OpenExisting(filePath);
-                    ValidatePhysicalFile(file);
-                    file.DurableFlush();
-                }
-                segments = SegmentStore.OpenExisting(statePath, strict);
-            }
-            return new(publication, schemas, segments, schemaStore);
+            resources = create ? GraphResources.CreateInExistingDirectory(root, options) : GraphResources.OpenExisting(root, options);
+            return new(publication, resources);
         } catch {
-            segments?.Dispose();
-            schemas?.Dispose();
-            publication?.Dispose();
+            try { resources?.Dispose(); } finally { publication?.Dispose(); }
             // A failed first creation leaves its partial directory for inspection, not automatic deletion.
             throw;
         }
     }
 
-    private static RbfSegmentStoreOptions StrictOptions(RbfSegmentStoreOptions? supplied) {
-        supplied ??= new();
-        return new() {
-            NewStoreLayout = supplied.NewStoreLayout,
-            SegmentSizeThresholdBytes = supplied.SegmentSizeThresholdBytes,
-            HistoricalReaderPoolCapacity = supplied.HistoricalReaderPoolCapacity,
-            CacheMode = supplied.CacheMode,
-            RecoverActiveTailOnOpen = false,
-        };
-    }
-
-    private static void ValidatePhysicalFile(IRbfFile file) {
-        var frames = file.ScanForward(showTombstone: true).GetEnumerator();
-        while (frames.MoveNext()) {
-            using RbfPooledFrame frame = file.ReadPooledFrame(frames.Current.Ticket).Unwrap();
-            if (frame.IsTombstone) { throw new InvalidDataException("Repository State files cannot contain tombstones."); }
-        }
-        if (frames.TerminationError is { } error) { throw new InvalidDataException($"Invalid State tail: {error.Message}"); }
-    }
-
     private void ValidatePublishedRevision(FrameAddress? parent, PublicationHead head) {
-        StateRevision revision = _states.Read(head.RevisionAddress);
+        StateRevision revision = States.Read(head.RevisionAddress);
         if (revision.ParentRevisionAddress != parent) { throw new InvalidDataException("Publication disagrees with the State Revision Parent."); }
-        var objects = _states.ReadLiveObjectHeadMap(head.RevisionAddress);
+        var objects = States.ReadLiveObjectHeadMap(head.RevisionAddress);
         if (!objects.ContainsKey(head.WorldId.Value)) { throw new InvalidDataException("Published World is absent from the selected Revision."); }
         // Check the complete reconstruction closure and exact Schema references without model callbacks.
         // TODO: Measure startup cost before caching repeated historical map/chain validation.
         foreach (uint id in objects.Keys) {
-            ObjectVersionChain chain = _states.ReadObjectVersionChain(head.RevisionAddress, id);
-            DecodedBaseObjectBody body = BaseObjectBodyCodec.Decode(chain.Records[0].Record.Body, _schemas);
+            ObjectVersionChain chain = States.ReadObjectVersionChain(head.RevisionAddress, id);
+            DecodedBaseObjectBody body = BaseObjectBodyCodec.Decode(chain.Records[0].Record.Body, Schemas);
             if (body.Kind == ObjectStateKind.Durable) {
                 if (body.Layout.Schema!.Kind != SchemaKind.ReferenceObject) {
                     throw new InvalidDataException("An object Base cannot refer to an inline Schema.");
@@ -142,7 +93,7 @@ public sealed class GraphRepository : IDisposable {
         if (_publication.Head is not null) { throw new InvalidOperationException("An existing repository head must be loaded, not replaced by Create."); }
         _busy = true;
         try {
-            var session = new GraphSession<TWorld>(this, WorldWorkspace<TWorld>.Create(_states, _schemas, world, models));
+            var session = new GraphSession<TWorld>(this, WorldWorkspace<TWorld>.Create(States, Schemas, world, models));
             _activeSession = session;
             return session;
         } finally { _busy = false; }
@@ -155,7 +106,7 @@ public sealed class GraphRepository : IDisposable {
         _busy = true;
         try {
             var session = new GraphSession<TWorld>(this,
-                WorldWorkspace<TWorld>.Load(_states, _schemas, head.RevisionAddress, head.WorldId, models));
+                WorldWorkspace<TWorld>.Load(States, Schemas, head.RevisionAddress, head.WorldId, models));
             _activeSession = session;
             return session;
         } finally { _busy = false; }
@@ -177,11 +128,11 @@ public sealed class GraphRepository : IDisposable {
             Checkpoint?.Invoke(CommitCheckpoint.AfterPrepare);
             stateWriting = true;
             Checkpoint?.Invoke(CommitCheckpoint.BeforeStateAppend);
-            address = _states.AppendDurably(pending.Revision);
+            address = States.AppendDurably(pending.Revision);
             stateWriting = false;
             Checkpoint?.Invoke(CommitCheckpoint.AfterStateDurable);
             pending.PrepareInstall(address.Value);
-            PublicationHead next = new(address.Value, pending.WorldId);
+            PublicationHead next = new(address.Value, pending.RootId);
             Checkpoint?.Invoke(CommitCheckpoint.BeforePublication);
             publicationStarted = true;
             _publication.Publish(workspace.ParentRevisionAddress, next);
@@ -190,7 +141,7 @@ public sealed class GraphRepository : IDisposable {
             pending.Install();
             return address.Value;
         } catch (Exception error) {
-            if (stateWriting || publicationStarted || _schemas.IsFaulted) { IsFaulted = true; }
+            if (stateWriting || publicationStarted || Schemas.IsFaulted) { _resources.MarkFaulted(); }
             if (!stateWriting && !publicationStarted && address is null) { throw; }
             throw new GraphCommitException(published ? GraphCommitOutcome.Published :
                 publicationStarted ? GraphCommitOutcome.Unknown : GraphCommitOutcome.NotPublished, address, error);
@@ -218,7 +169,6 @@ public sealed class GraphRepository : IDisposable {
         if (_busy) { throw new InvalidOperationException("Cannot dispose a busy repository."); }
         _disposed = true;
         _activeSession = null;
-        try { _segments.Dispose(); }
-        finally { try { _schemaFile.Dispose(); } finally { _publicationFile.Dispose(); } }
+        try { _resources.Dispose(); } finally { _publicationFile.Dispose(); }
     }
 }

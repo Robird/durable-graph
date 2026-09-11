@@ -10,11 +10,10 @@
 当前能力与已完成分片的验收从 PROJECT-STATE/其账本进入；这里仅保留后续增量。
 
 2026-09-11 的真实消费者 [DramaBoard Event/State 草稿](../../drama-board/docs/research/event-journal-state-store-draft.md)
-触发独立历史图、外部发布和分支需求。用户已采纳以下方向；目前未实施，DB-062 由下一回合调度：
+触发独立历史图、外部发布和分支需求。[DB-062](design-branches/0062-independent-graph-workspace-slice.md) 已完成内部接缝；下一片接入公开 EventHistory：
 
 | 分片 | 要解决的增量 |
 |---|---|
-| [DB-062 独立图工作区](design-branches/0062-independent-graph-workspace-slice.md) | State 根替换、独立快照与只读图；E 和后继 S 共用前 S baseline；增加首版顺序独立还原的双图读取核心 |
 | [DB-063 EventHistory](design-branches/0063-event-history-journal-slice.md) | 独立浏览、交错提交、Resume、fork/Move、实验性 ReadPair；Journal 唯一发布，移除旧 public 外观/发布器并迁移示例；初版同程序集 |
 | [DB-064 共享优化](design-branches/0064-shared-revision-decoding-design.md) | API 合同先随 DB-062/063 交付；DTO/string 去重及只读闭包共享按测量后置，不承诺跨图实例复用，不改变可写 Resume 隔离 |
 
@@ -40,7 +39,7 @@ Transient 由用户在交付后处理，约束维护在[目标设计](DurableGra
 数组形状、升级、单根、Transient hook、boxed value，以及无需无参构造器/readonly 字段的支持选择见
 [MVP 功能边界](DurableGraph-target-design-v0.md#mvp-功能边界)，不再作为开放范围反复讨论。
 GraphSession 的正常同实例 Commit 与严格重开从 PROJECT-STATE/DB-036 查证；不再列为未完成能力。
-当前只支持单活动会话、固定非空 World，发布故障范围为正常关闭/进程中止和明确的 I/O 异常。
+当前公开宿主仍限定单活动会话、固定非空 World；内部工作区已允许根替换与独立快照，发布故障范围为正常关闭/进程中止和明确的 I/O 异常。
 DB-038 的泛型 Schema/history、开放生成、保存恢复与通用/闭合 owner Upgrade 从 PROJECT-STATE/施工记录查证，不再列为未实现机制。
 可组合值 Upgrade 的验收与实际范围见 [DB-039](design-branches/0039-composable-value-upgrade-design.md#8-产品施工合同与验收映射)。
 [DB-043 可组合数组与统一引用对象路径](design-branches/0043-vector-array-object-slice.md) 已通过整体验收；

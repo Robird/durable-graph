@@ -17,7 +17,7 @@ public static class LoadedWorld {
         ReadAmplificationBaseBudgetParameters parameters) where TWorld : DurableBase {
         WorldWorkspace<TWorld> workspace = WorldWorkspace<TWorld>.Create(store, schemas, world, models);
         using PreparedWorldSave<TWorld> pending = workspace.Stage(parameters);
-        return new(pending.WorldId, pending.Revision);
+        return new(pending.RootId, pending.Revision);
     }
 
     /// <summary>

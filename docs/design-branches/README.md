@@ -23,7 +23,7 @@ DB-045 持久表示 ID、DB-046 统一闭合目录、DB-047 List 基础能力和
 
 | 文档 | 状态 | 实施范围 |
 |---|---|---|
-| [DB-062 独立图读取与可由外层发布的工作区](0062-independent-graph-workspace-slice.md) | Chosen / 待实施 | 独立快照、根替换与首版双图读取核心；E/S 共享前 S baseline；旧外观无兼容义务 |
+| [DB-062 独立图读取与可由外层发布的工作区](0062-independent-graph-workspace-slice.md) | 已实施 | 内部独立资源、快照、根替换与顺序双图读取；E/S 共享前 S baseline；公开 Journal 外观后继 DB-063 |
 | [DB-063 EventJournal 驱动的 EventHistory](0063-event-history-journal-slice.md) | Chosen / 依赖 DB-062 | 独立读写、实验性 ReadPair、Journal 唯一 ref、Resume 与分支；移除旧发布器，迁移包示例；覆盖事件/快照 Artifact 职责 |
 | [DB-064 两份 Revision 共享读取](0064-shared-revision-decoding-design.md) | API 方向已选 / 优化后置 | 阶段 0 纳入 DB-062/063；后继 A/B 是 DTO/string 去重与只读闭包共享，不以实例复用承诺限制实验性 API |
 | [DB-061 跨程序集继承与基类状态投影](0061-cross-assembly-inheritance-slice.md) | 已实施 / G0–G3 | typed base projection、Family own + immediate base、class 只读历史与严格 helper 合同；隐藏泛型/Nullable、参数合流/重排、旧 CLR 删除及 leaf-only Upgrade 经测试和两代真实包验证；展开 DTO/body 与 State 格式不变 |

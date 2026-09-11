@@ -2,7 +2,7 @@ using Atelia.DurableGraph.StateStore.Storage;
 
 namespace Atelia.DurableGraph.StateStore;
 
-/// <summary>Private single-World capture and comparison owner shared by both outer APIs.</summary>
+/// <summary>Owns one editable State baseline and serial candidates, independent of head publication.</summary>
 internal sealed class WorldWorkspace<TWorld> where TWorld : DurableBase {
     private readonly StateRevisionStore _store;
     private readonly SchemaStore _schemas;
@@ -25,7 +25,7 @@ internal sealed class WorldWorkspace<TWorld> where TWorld : DurableBase {
         _capture = capture;
     }
 
-    internal TWorld World { get; }
+    internal TWorld World { get; private set; }
     internal ObjectId WorldId { get; private set; }
     internal FrameAddress? ParentRevisionAddress => _baseline?.RevisionAddress;
 
@@ -49,67 +49,56 @@ internal sealed class WorldWorkspace<TWorld> where TWorld : DurableBase {
         ArgumentNullException.ThrowIfNull(models);
         ArgumentOutOfRangeException.ThrowIfZero(worldId.Value, nameof(worldId));
         StateModelSnapshot snapshot = models.Snapshot(schemas);
-        DecodedRevision decoded = RevisionDecoder.ReadSnapshot(store, schemas, revisionAddress, snapshot);
-        NormalizedRevision normalized = NormalizedRevision.Create(decoded, snapshot);
-        if (!normalized.Objects.TryGetValue(worldId, out NormalizedObject? root) ||
-            root.Model is not StateModelBinding model || model.DomainType != typeof(TWorld) || typeof(TWorld).IsAbstract) {
-            throw new InvalidDataException("World ID must select a durable object of the requested exact current domain type.");
-        }
-        IReadOnlyList<ObjectId> reachable = FindReachable(normalized, worldId);
-        Dictionary<ObjectId, object> instances = [];
-        Dictionary<object, ObjectId> bindings = new(ReferenceEqualityComparer.Instance);
-        // Allocate the complete reachable object set before any field assignment. This
-        // preserves forward/shared/cyclic references without recursive materialization.
-        foreach (ObjectId id in reachable) {
-            NormalizedObject row = normalized.Objects[id];
-            ObjectBinding actualModel = row.Model;
-            object allocated = actualModel.Allocate(row.Current);
-            bool canonicalEmpty = row.Current.Kind == ObjectStateKind.String && row.Current.StringContent.Length == 0;
-            if (allocated is null || allocated.GetType() != actualModel.DomainType ||
-                (!canonicalEmpty && !bindings.TryAdd(allocated, id))) {
-                throw new InvalidDataException("Each nonempty object ID must allocate a distinct instance of its exact current type.");
-            }
-            instances.Add(id, allocated);
-        }
-        ObjectReadTable table = new(instances);
-        foreach ((ObjectId id, object instance) in instances) {
-            NormalizedObject row = normalized.Objects[id];
-            row.Model!.Hydrate(instance, row.Current, table);
-        }
-        TWorld world = (TWorld)instances[worldId];
-
-        // Retain lookup entries for source strings already owned by the normalized baseline.
-        // Capture still emits only reachable strings; this map is not post-save membership.
-        foreach (NormalizedObject row in normalized.Objects.Values.OrderBy(static row => row.Current.Id)) {
-            if (row.Current.Kind == ObjectStateKind.String) {
-                // Distinct Empty IDs have one CLR instance. Choose the smallest ID, but never
-                // rewrite the baseline DTO's original ID slots; Capture must observe the change.
-                bindings.TryAdd(row.Current.StringContent, row.Current.Id);
-            }
-        }
-        ulong nextId = (ulong)normalized.Objects.Keys.Max().Value + 1;
-        return new(store, schemas, world, worldId, model, snapshot, normalized, new(nextId, bindings));
+        MaterializedGraph<TWorld> loaded = GraphReader.Read<TWorld>(store, schemas, revisionAddress, worldId,
+            snapshot, requireExactRootType: true);
+        return new(store, schemas, loaded.Root, worldId, loaded.RootModel, snapshot,
+            loaded.Baseline, loaded.CreateCaptureSession());
     }
 
-    internal PreparedWorldSave<TWorld> Stage(ReadAmplificationBaseBudgetParameters parameters) {
+    internal PreparedWorldSave<TWorld> Stage(ReadAmplificationBaseBudgetParameters parameters) => Stage(World, parameters);
+
+    /// <summary>Captures a same-exact-type replacement; the workspace root changes only after publication.</summary>
+    internal PreparedWorldSave<TWorld> Stage(TWorld nextState, ReadAmplificationBaseBudgetParameters parameters) =>
+        StageCore(nextState, parameters, independentSnapshot: false);
+
+    /// <summary>
+    /// Captures a separate root against the committed State. Dispose the candidate after the outer
+    /// publication resolves: successful snapshots never install their DTOs or bindings into State.
+    /// </summary>
+    internal PreparedWorldSave<TWorld> StageSnapshot(DurableBase root, ReadAmplificationBaseBudgetParameters parameters) =>
+        StageCore(root, parameters, independentSnapshot: true);
+
+    private PreparedWorldSave<TWorld> StageCore(DurableBase root, ReadAmplificationBaseBudgetParameters parameters,
+        bool independentSnapshot) {
         if (_staging || _pending is not null) {
-            throw new InvalidOperationException("Resolve the current World save before preparing another.");
+            throw new InvalidOperationException("Resolve the current graph save before preparing another.");
+        }
+        ArgumentNullException.ThrowIfNull(root);
+        if (independentSnapshot && _baseline is null) {
+            throw new InvalidOperationException("An independent snapshot requires a committed State baseline.");
+        }
+        if (!independentSnapshot && root.GetType() != typeof(TWorld)) {
+            throw new ArgumentException("Replacement State must have the workspace's exact domain type.", nameof(root));
         }
         _staging = true;
         CaptureContext? context = null;
         try {
-            context = _capture.BeginCapture(_models);
-            ObjectId worldId = _model.AddRoot(context, World);
-            if (!WorldId.IsNull && worldId != WorldId) {
-                throw new InvalidOperationException("Capture did not preserve the World ID.");
+            StateModelBinding? model = _model;
+            if (independentSnapshot && !_models.TryGetCurrentModel(root.GetType(), out model)) {
+                throw new ArgumentException("Snapshot root must have its actual domain type registered.", nameof(root));
             }
+            context = _capture.BeginCapture(_models);
+            ObjectId rootId = model!.AddRoot(context, root);
             CapturedGraph candidate = context.Seal();
             PreparedObjectRevision prepared = _baseline is null
                 ? CapturedRevisionPlanner.PrepareRevision(_store, _schemas, null, _capture.Prepare(candidate), parameters)
                 : LoadedRevisionPlanner.Prepare(_store, _schemas, _baseline,
-                    _capture.PrepareAgainst(candidate, _baseline.CurrentDtos), parameters);
-            NormalizedRevision next = NormalizedRevision.FromCandidate(candidate, _models);
-            _pending = new(this, context, candidate, worldId, prepared.Revision, next);
+                    _capture.PrepareAgainst(candidate, _baseline.CurrentDtos), parameters, independentSnapshot);
+            // Snapshot completion deliberately retains the old State baseline and its rewrite
+            // obligations. Only an advancing candidate prepares a replacement baseline.
+            NormalizedRevision? next = independentSnapshot ? null : NormalizedRevision.FromCandidate(candidate, _models);
+            _pending = new(this, context, candidate, rootId, prepared.Revision, next,
+                independentSnapshot ? null : (TWorld)root);
             return _pending;
         } catch {
             context?.Dispose();
@@ -119,13 +108,15 @@ internal sealed class WorldWorkspace<TWorld> where TWorld : DurableBase {
         }
     }
 
-    internal void Install(PreparedWorldSave<TWorld> pending, CapturedGraph candidate, NormalizedRevision baseline) {
+    internal void Install(PreparedWorldSave<TWorld> pending, CapturedGraph candidate,
+        NormalizedRevision baseline, TWorld nextState) {
         RequirePending(pending);
-        // Accept transfers the already prepared live dictionary. Current is only a shared-row
-        // projection: all subsequent comparisons use this baseline's full current DTO directory.
+        // Accept transfers the actual frozen candidate's live identity dictionary. Neither
+        // recapture nor user callbacks may occur after publication.
         _capture.Accept(candidate);
         _baseline = baseline;
-        WorldId = pending.WorldId;
+        World = nextState;
+        WorldId = pending.RootId;
         _pending = null;
     }
 
@@ -139,31 +130,5 @@ internal sealed class WorldWorkspace<TWorld> where TWorld : DurableBase {
         if (!ReferenceEquals(_pending, pending)) {
             throw new InvalidOperationException("The pending save does not belong to this workspace.");
         }
-    }
-
-    private static IReadOnlyList<ObjectId> FindReachable(NormalizedRevision normalized, ObjectId worldId) {
-        ReachableVisitor visitor = new();
-        visitor.Add(worldId);
-        for (int index = 0; index < visitor.Ids.Count; index++) {
-            NormalizedObject row = normalized.Objects[visitor.Ids[index]];
-            row.Model?.VisitReferences(row.Current, visitor);
-        }
-        return visitor.Ids;
-    }
-
-    // All references were already checked against the complete current directory.
-    // This visitor only computes membership; it owns no second field/type description.
-    private sealed class ReachableVisitor : IStateReferenceVisitor {
-        private readonly HashSet<ObjectId> _seen = [];
-        internal List<ObjectId> Ids { get; } = [];
-        internal void Add(ObjectId id) {
-            if (!id.IsNull && _seen.Add(id)) {
-                Ids.Add(id);
-            }
-        }
-        public void VisitString(ObjectId objectId) => Add(objectId);
-        public void VisitDurable(ObjectId objectId, string nominalSchemaId) => Add(objectId);
-        public void VisitDurable(ObjectId objectId, TypeExpr nominalType) => Add(objectId);
-        public void VisitObject(ObjectId objectId, TypeExpr declaredType) => Add(objectId);
     }
 }

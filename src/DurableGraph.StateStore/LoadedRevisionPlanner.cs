@@ -6,7 +6,7 @@ namespace Atelia.DurableGraph.StateStore;
 internal static class LoadedRevisionPlanner {
     internal static PreparedObjectRevision Prepare(StateRevisionStore store, SchemaStore schemas,
         NormalizedRevision source, IReadOnlyList<PreparedCapturedObject> contents,
-        ReadAmplificationBaseBudgetParameters parameters) {
+        ReadAmplificationBaseBudgetParameters parameters, bool independentSnapshot = false) {
         IReadOnlyDictionary<ObjectId, FrameAddress> heads = store.ReadLiveObjectHeadMap(source.RevisionAddress).ToDictionary(static pair => new ObjectId(pair.Key), static pair => pair.Value);
         if (heads.Count != source.Objects.Count || source.Objects.Keys.Any(id => !heads.ContainsKey(id))) {
             throw new InvalidDataException("Loaded source membership no longer matches the exact Parent.");
@@ -58,7 +58,6 @@ internal static class LoadedRevisionPlanner {
                     : PreparedObject.Compared(row.Current.Id, heads[row.Current.Id], encodedBaseBody, row.DeltaBody));
             }
         }
-        // Existing planner derives Removes from complete Parent membership minus these live rows.
-        return ObjectRevisionPlanner.PrepareRevision(store, source.RevisionAddress, rows, parameters);
+        return ObjectRevisionPlanner.PrepareRevision(store, source.RevisionAddress, rows, parameters, independentSnapshot);
     }
 }
