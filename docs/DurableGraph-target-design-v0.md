@@ -320,6 +320,8 @@ reader/Delta applier/引用遍历，当前 World 恢复还需要全部 source �
 因此同一 ObjectVersion 的 DTO 可以在不同 Revision 中复用，但其引用目标仍由各自 Revision 选择。
 “自身版本相同”不单独证明两份已连接引用的领域实例可以合并；子对象的不同版本可能要求 owner 也分别实例化。
 这一既有语义对合并读取的约束及候选算法见 [DB-064](design-branches/0064-shared-revision-decoding-design.md)。
+合并读取可先提供实验性 API，以两次独立还原实现；只承诺各图快照语义，不承诺跨图一定复用或一定不复用实例。
+只读合同自首版建立，优化逐步加入；可写恢复仍保证可变对象隔离，不以未来共享机会改变该行为。
 
 比较忽略 transient，引用按身份比较，Artifact 引用按 exact address 比较；值和集合的 durable
 equality 必须明确，不能仅凭非密码学 hash 判相等。同版 DTO 的 Half/float/double 持久状态比较采用按位相等：
@@ -338,8 +340,8 @@ Artifact 面向 HistoryLog、LLM 消息、附件与历史输入输出等内容�
 Artifact 引用不把完整内容并入 State 对象可达闭包，恢复时不允许模糊 latest fallback。
 地址采用内容 hash、append 地址或其他组合，属于待裁决机制。
 
-真实事件/快照消费者已提出由 EventJournal 引用独立 StateRevision 的
-[EventHistory 候选路线](design-branches/0063-event-history-journal-slice.md)。
+真实事件/快照消费者已选择由 EventJournal 引用独立 StateRevision 的
+[EventHistory 路线](design-branches/0063-event-history-journal-slice.md)。
 它可以覆盖上述部分历史内容职责，先屏蔽独立 ArtifactStore 的建设；四类逻辑职责不要求四个独立存储实现。
 这不是对附件分块/外部大对象能力的完成声明，也不改变尚待实现的联合 Schema 视图边界。
 
@@ -363,7 +365,13 @@ Capture/Prepare/Accept 是会话内部组件；其单独可调用不意味着完
 无历史的新分支建立空会话；重置到历史 Revision 则从目标重建对应状态，推荐使旧会话失效并返回
 新会话。若提供清空操作，它表示沿原 Parent 清空新视图，不等于创建无历史分支；
 单 World API 是否接受 null 以及如何表达清空，留待该分片确定。
-当前单 head 产品入口使用 GraphRepository / GraphSession；更广的 branch/Reset 和联合视图接口由消费分片冻结。
+EventHistory 收敛仓库/会话外观，用户无需分别维护 Parent、DTO baseline 或实例-ID 绑定。
+旧 GraphRepository/GraphSession 等早期外观没有下游兼容负担；可重设计、收窄或删除，
+不增加旧 publication.rbf 格式兼容、迁移或双发布机制。施工交接和示例迁移由 DB-062/063 维护。
+
+Journal 的逻辑顺序为 S0→E1→S1→E2→S2；E1 与 S1 的 Revision Parent 均为 S0，后续同理。
+事件只保存自身可达闭包，发布后不安装为 State 比较基线；State 发布后才推进对应工作区。
+Journal ref 是目标外观的唯一发布前沿，图追加与 head 发布分开，由同一外观统一编排。
 
 长期目标是让 Schema、State、Artifact 的共同引用有一个可裁决的发布点，而不是各自发布
 无法协调的 head；Derived 不充当权威提交的参与者。CommitManifest 是候选表达形状，

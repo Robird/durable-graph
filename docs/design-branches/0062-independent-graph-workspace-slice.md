@@ -1,6 +1,6 @@
 # DB-062：独立图读取与可由外层发布的工作区
 
-> 状态：Proposed，2026-09-11；本轮仅源码调查与设计，未实施。
+> 状态：Chosen / 待实施，2026-09-11；用户已采纳保存拓扑与外观收敛方向，本轮仅修订文档，实施由后续回合调度。
 > 消费者来源：[DramaBoard 需求稿](../../../drama-board/docs/research/event-journal-state-store-draft.md)。该稿中的其他路径按 DramaBoard 仓库解释。
 > 后继：[DB-063 EventHistory 外观](0063-event-history-journal-slice.md)、[DB-064 合并读取](0064-shared-revision-decoding-design.md)。
 
@@ -12,7 +12,8 @@
 本片先解耦“准备/追加图”和“发布某个 head”，不引入事件业务协议。
 最小见证：从 S0 的同一活动工作区保存一个独立快照 E1，再保存 S1；
 E1 不推进或破坏 S0 比较基线，S1 正确产生相对 S0 的 Delta；E1 独立读取不 typed 解码无关的 World/Bob。
-原 GraphRepository/GraphSession 的固定根外观与发布失败合同继续通过回归。
+保留现有测试证明的身份、Upgrade、数据先持久化及发布失败语义；旧 API/固定根限制不作为兼容目标。
+本片同时提供实验性双图读取的内部入口，允许顺序独立还原两图；公开外观随 DB-063 首版交付，不等待 DB-064 优化。
 
 ## 2. 当前实现证据
 
@@ -28,7 +29,7 @@ E1 不推进或破坏 S0 比较基线，S1 正确产生相对 S0 的 Delta；E1 
 
 上述结论来自当前源码与测试阅读，不是本片已通过的执行结果。
 
-## 3. 推荐保存拓扑：事件快照从活动 State 分出
+## 3. 已选保存拓扑：事件快照从活动 State 分出
 
 Journal 的顺序由 DB-063 定义；这里仅决定比较基线：
 
@@ -83,12 +84,22 @@ State 保存继续使用 map Delta。两种目录只改变 membership 的表达�
   可返回只供读取的领域图，也可把同一结果交给受控编辑工作区。只读加载不创建持久 publication 或 Capture 候选。
 - 工作区：一份 State 根与对应 baseline、冻结模型目录、实例绑定、分配 cursor。只容许一个未决候选。
 - 保存候选：区分“推进工作区”和“独立快照”。持有真实冻结图、准备内容及安装数据；追加成功尚不授权安装。
-- 发布编排：旧 GraphRepository 使用 PublicationLog；DB-063 使用 EventJournal ref。二者分别拥有自己的外观，
-  同一物理仓库不得同时打开这两个发布器。
+- 发布编排：目标外观仅由 EventJournal ref 发布；DB-062 拆出核心，DB-063 接入 Journal 后移除旧 publication 路径。
+  不为独立发布提前保留两种长期 publisher 或创建兼容适配层。
 
 内部可以重构 WorldWorkspace/PreparedWorldSave 的泛型所有权，不必保留偶然类形状。
-旧 public GraphSession 的固定 World 约束仍由旧外观检查；新外观才能显式提交替换根。
+GraphRepository/GraphSession/LoadedWorld 等早期 public API 可以重命名、收窄可见性或删除，
+不为旧签名、旧 publication.rbf 仓库增加兼容或迁移机制。
 不添加公开 `Accept(address)` 或允许调用方拼装“Parent + DTO + ID map”来冒充合法基线。
+
+### 分片交接与旧入口退出
+
+DB-062 不因移除旧入口而提前实现整个 EventJournal 发布器。为让根 solution 与活动 package probes 在中间提交可运行，
+可暂留调用新核心的旧入口，但须标明仅为 DB-063 接管前的临时宿主，不为维持兼容增加分支或新代码。
+能在本片直接迁移到新核心的测试同步迁移；测试原来依赖的历史语义继续验证，类型名/调用形状断言按新合同调整。
+DB-063 完成时清除旧公开保存外观、PublicationLog/旧 publication codec 及专用文件发布路径，
+把仍有效的失败/重开见证迁到 Journal；过时的旧格式专用测试随实现删除。
+现有 README 与包示例按各片实际可用入口更新，不提前把未实现 EventHistory 写成可用，也不永久维护两套接入指南。
 
 根替换先 Stage(nextState)，成功后更新工作区根；保留子实例继续沿用 ID，旧根不可达则退出新成员集。
 同样的新根字段不意味着同一根身份。未知 actual runtime 类型拒绝，不退回静态基类 codec。
@@ -99,19 +110,28 @@ State 根是否必须 exact TState 由新外观统一限定；首片建议固定
 只读是 API 的使用合同，不是把普通 CLR 图自动变成不可变对象。
 独立读取默认分别分配可变对象；跨图共享见 DB-064，不让只读入口自动加入可写工作区的实例表。
 
+### 实验性双图读取的首版实现
+
+本片读取核心接收两份显式 `(RevisionAddress, RootId)` 及同一冻结模型目录，按输入顺序独立完成两次还原，
+返回有明确 First/Second 对应关系的结果。只有两边都成功才交付；不承诺撤销已执行的用户回调副作用。
+不增加缓存/共享判定，不断言同版本一定共用实例，也不把首版未共享当成长期独立实例保证。
+结果按只读快照使用；可写恢复从 State 的独立结果组装受控工作区，不能把只读共享结果导入编辑基线。
+DB-063 用有仓库来源约束的 frame handle 包装它，避免为了提前提供 API 向应用开放裸 Parent/DTO/Accept 协议。
+详细实验性合同及阶段 0 验收集中在 [DB-064](0064-shared-revision-decoding-design.md#阶段-0先交付实验性双图-api)。
+
 ## 5. G0–G3 施工与验收
 
 | 阶段 | 内容 | 必须可观察的结果 |
 |---|---|---|
-| G0 | 提取资源/读取/工作区职责，先保持旧外观 | 原保存同实例、RootId、Upgrade Base、失败/重开测试无退化；无第二份 DTO 编码实现 |
+| G0 | 提取资源/读取/工作区职责，允许重塑旧 API | 原同实例保存、ID、Upgrade Base、失败/重开语义迁移到新核心；旧外观只可为跨片运行暂留，不作为兼容验收 |
 | G1 | 新根 Stage 与推进式安装 | 同类型新根+复用 child；只在发布后切换根；准备/追加/发布失败均保留旧已提交基线 |
 | G2 | 从 State 工作区保存独立快照及 map Base | E membership 不含 World/Bob；unchanged child/string 真实 external head；changed child 可对 S 写 Delta；NoChange 主动 Base 不重复出现在 external |
-| G3 | 独立读取和可写恢复组装 | 冷开后仅 Read(E) 时 World/Bob typed reader/Upgrade/Allocate/Hydrate 计数均为 0；图内共享/环正确；S1 Parent=S0 且 Bob 不丢 |
+| G3 | 独立读取、实验性双图读取核心和可写恢复组装 | 冷开后仅 Read(E) 时 World/Bob typed callbacks 为 0；双图首版独立还原、顺序正确、第二边失败不交付 pair；图内共享/环正确；S1 Parent=S0 且 Bob 不丢 |
 
 补充反例：先加载历史 S 并 Upgrade，再保存 E、S；升级且仍存活的对象两次都保持各自的强制 Base 义务，
 E 成功不得清除 S 的 RequiresRewrite。测试 E 捕获错误、未知根、后续 State 捕获错误与候选重入。
 
-实现后运行根 build、有关 StateStore/Runtime tests，并复跑 GraphRepository/LoadedWorld/发布故障回归。
+实现后运行根 build、有关 StateStore/Runtime tests，并验证从 GraphRepository/LoadedWorld/发布故障测试迁移的有效语义。
 新增外观跨包验证集中在 DB-063；G0 可由受控测试发布器见证内部接缝，不把假发布当真实 durability。
 
 ## 6. 备选与选择理由
@@ -122,4 +142,4 @@ E 成功不得清除 S 的 RequiresRewrite。测试 E 捕获错误、未知根�
 | S→S、E→E 两条独立 lane | 正确且可做，State 增量很自然；但相同 CLR 只读内容首次在两 lane 各写 Base，常见 E/S 合并加载几乎无同 head 可共享。推荐直接采用从 State 分出的快照 |
 | 每次 E 全新无 Parent 图 | 实现最少，但全部重新分配/写 Base，放弃现成 State 版本复用；可作对照测试，不作为主方案 |
 | PairRoot 或永久把全部 Event 塞进 World | 违背独立读取和有限可达闭包的消费者目标，不作为默认模型 |
-| 新的公共事务/任意多 root 框架 | 当前两种发布外观尚不需要；内部共用核心即可，避免把 provisional 接缝过早变成下游维护义务 |
+| 新的公共事务/任意多 root 框架 | 目标只有 Journal 发布外观；内部核心即可，避免把 provisional 接缝过早变成下游维护义务 |

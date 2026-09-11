@@ -9,6 +9,9 @@ DurableGraph 捕获独立的版本化状态 DTO，比较上次提交状态，以
 目前是快速演进的 **.NET 10 原型**，API 和格式尚未冻结。本文面向首次接入的应用开发者和 Coding Agent，
 只介绍当前可用入口；详细能力边界见 [产品工作集](src/PROJECT-STATE.md)。
 
+已选后继 [EventHistory 外观](docs/design-branches/0063-event-history-journal-slice.md) 将统一事件/状态读写与 Journal 发布，
+替换下文的早期仓库/会话 API；目前尚未实施。即将接入的示范应用可据此协调时点，当前示例仍反映现有可运行版本。
+
 ## 最短接入路径
 
 需要 .NET 10 SDK 和一份匹配当前源码的本地 NuGet feed。首次准备 feed 见文末

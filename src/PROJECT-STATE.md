@@ -20,13 +20,14 @@
 ## 当前焦点
 
 基于 [DramaBoard Event/State 需求稿](../../drama-board/docs/research/event-journal-state-store-draft.md)，
-推荐依次实施 [DB-062 独立图工作区](../docs/design-branches/0062-independent-graph-workspace-slice.md)、
+已采纳依次实施 [DB-062 独立图工作区](../docs/design-branches/0062-independent-graph-workspace-slice.md)、
 [DB-063 EventHistory 外观](../docs/design-branches/0063-event-history-journal-slice.md)，
-再加入 [DB-064 两份 Revision 的共享读取](../docs/design-branches/0064-shared-revision-decoding-design.md)。
-目前仅完成源码调查与分片设计，等待方案采纳和实施授权；现有能力与文件格式未变。
-推荐 E 和后继 S 都相对前 S 保存，E 不安装为 State 基线；Journal ref 为新外观唯一发布前沿。
+实验性双图读取首版可用两次独立还原；[DB-064](../docs/design-branches/0064-shared-revision-decoding-design.md) 的实际共享优化低优先级后置。
+目前仅完成设计与用户裁决，下一回合调度 DB-062 实施；现有能力与文件格式未变。
+E 和后继 S 都相对前 S 保存，E 不安装为 State 基线；Journal ref 为目标外观唯一发布前沿。
+旧仓库/会话 API 没有下游兼容负担，DB-063 接管时移除旧 publication.rbf 发布器，并迁移有效测试与包示例。
 同 ObjectVersion 可复用 stored DTO，但普通 CLR 实例还受传递引用版本与后续可变性约束；
-可写 Resume 默认不共享可变 Event/State 实例。完整合同与反例只维护在上述分片。
+ReadPair 按只读快照使用，不承诺跨图实例复用；可写 Resume 保持可变 Event/State 实例隔离。完整合同与反例只维护在上述分片。
 自动跨库业务规则发现、ValueTuple、DateTime、程序集审视和 SchemaStore 自举不随本轮扩张。
 
 ## 当前能力与实际边界

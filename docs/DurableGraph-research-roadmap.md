@@ -10,15 +10,15 @@
 当前能力与已完成分片的验收从 PROJECT-STATE/其账本进入；这里仅保留后续增量。
 
 2026-09-11 的真实消费者 [DramaBoard Event/State 草稿](../../drama-board/docs/research/event-journal-state-store-draft.md)
-触发独立历史图、外部发布和分支需求。推荐施工顺序（均为 Proposed，尚未实施/授权）：
+触发独立历史图、外部发布和分支需求。用户已采纳以下方向；目前未实施，DB-062 由下一回合调度：
 
 | 分片 | 要解决的增量 |
 |---|---|
-| [DB-062 独立图工作区](design-branches/0062-independent-graph-workspace-slice.md) | State 根替换、独立快照与只读图；E 和后继 S 共用前 S baseline，E map Base 只含自身闭包，E 发布不推进 State 基线 |
-| [DB-063 EventHistory](design-branches/0063-event-history-journal-slice.md) | 复用 EventJournal opaque payload/ref；独立浏览、交错提交、冷 Resume、fork/Move 与唯一发布权威；初版同 StateStore 程序集 |
-| [DB-064 共享读取](design-branches/0064-shared-revision-decoding-design.md) | 操作内 exact DTO/string 去重；普通实例共享还须闭包相容与只读使用合同，不作为可写 Resume 的默认行为 |
+| [DB-062 独立图工作区](design-branches/0062-independent-graph-workspace-slice.md) | State 根替换、独立快照与只读图；E 和后继 S 共用前 S baseline；增加首版顺序独立还原的双图读取核心 |
+| [DB-063 EventHistory](design-branches/0063-event-history-journal-slice.md) | 独立浏览、交错提交、Resume、fork/Move、实验性 ReadPair；Journal 唯一发布，移除旧 public 外观/发布器并迁移示例；初版同程序集 |
+| [DB-064 共享优化](design-branches/0064-shared-revision-decoding-design.md) | API 合同先随 DB-062/063 交付；DTO/string 去重及只读闭包共享按测量后置，不承诺跨图实例复用，不改变可写 Resume 隔离 |
 
-ArtifactStore 在该候选路线中先由 EventHistory 覆盖事件/快照职责，不另建内容 Store；
+ArtifactStore 在该路线中先由 EventHistory 覆盖事件/快照职责，不另建内容 Store；
 大附件/chunk、联合 Schema 视图与 Derived 仍未随之解决。以上方案不要求先实现 ValueTuple 或重排全部程序集。
 
 [DB-046 统一闭合 Schema 目录](design-branches/0046-unified-schema-catalog-slice.md) 已合并持久记录、批次和 exact 依赖引用。
@@ -145,7 +145,7 @@ DB-051 之外的性能工作以实际轨迹或测量问题触发，不自动扩�
 | SchemaStore 后续能力 | MVP 单调注册已实现；联合 Commit/Ref 及复用 StateStore 的演进候选见下节，Dictionary 与内建类型 codec 完整后重访。多 writer、压缩/GC 另待真实需求 |
 | Schema/表示日志自动修复与分段 | 遇到真实坏尾恢复或容量需求时；无额外确认水位不能自动区分未完成尾部和已确认末帧损坏，当前严格拒绝。重访时先冻结故障模型，不绕过完整注册一致性 |
 | 发布恢复保证扩展 | DB-036 已闭合同实例 Commit、expected Parent、数据/发布屏障及严格重开；遇到真实可用性要求时再设计坏尾自动修复、OS crash/power loss 与目录持久性，不能默默回退旧 head |
-| ArtifactStore | 事件/快照消费者已出现，优先评审 DB-063 EventHistory，暂不另建 ArtifactStore；大附件/chunk/外部地址尚无本轮证据，按实际需要重访，不强迫 State 常驻完整历史 |
+| ArtifactStore | 事件/快照消费者已选 DB-063 EventHistory，暂不另建 ArtifactStore；大附件/chunk/外部地址尚无本轮证据，按实际需要重访，不强迫 State 常驻完整历史 |
 | DerivedStore | 真实昂贵派生消费者出现；定义 exact 输入围栏、recipe/builder/model 身份、stale/missing 及可删重建 |
 | 框架 Transient hook | MVP 明确不做，用户在完整图交付后自行重建；MVP 后若多个宿主确有重复的重建协调需求，再比较 hook/依赖调度及失败边界 |
 | 多根产品 API | DB-062/063 以各自单根 Revision 满足 Event/State 独立读写；同 Revision 任意根列表、命名根与按根过滤解码仍延后 |
@@ -154,7 +154,7 @@ DB-051 之外的性能工作以实际轨迹或测量问题触发，不自动扩�
 | TwoLeg / incremental cleaner | 多历史 Segment 无法满足实际有界 dependency file count、在线退休、backup/rescue 或 compaction SLO 时重访，见其 [技术储备（归档）](../experiments/ARCHIVE.md#two-leg "原路径：experiments/TwoLegRotationProbe/PROJECT-STATE.md") |
 | 性能优化 | MVP 后有具体测量再优化全量 Base 准备、缓冲复制、cache、typed buckets 或指纹；DB-061 的逐层基类委托/DTO 前缀复制在深继承实际成为热点后再优化，不恢复两套投影路径。DB-042 的 Upgrade requirement set 仍逐次复核，批量历史对象测出热点后可用 SchemaStore catalog generation 做透明快速路径；DB-028 先 object-first 直读 RBF，Frame cache 只减少重复 I/O/解码，重复完整 map 物化需另评估 map cache/单 ID 查询，必要时再按 Frame 合并批量读取 |
 | 加载内存预算 | 大数组/容器或不可信输入的资源控制成为实际需求时，设计独立的总分配/元素数预算；DB-043 先要求合法 shape、checked 计算及适用时的 payload 下界预检。零字节元素可产生大内存对象，单帧 256MB 不等于 CLR 内存上限 |
-| 并发、分支与跨 Repository | DB-063 评审命名 branch/fork/Move 与串行单活动写会话；DB-064 区分版本内容和加载实例身份。concurrent Capture、多 writer、merge、跨仓库身份仍延期 |
+| 并发、分支与跨 Repository | DB-063 建设命名 branch/fork/Move 与串行单活动写会话；DB-064 API 先行、共享优化后置。concurrent Capture、多 writer、merge、跨仓库身份仍延期 |
 | 跨对象升级与外部副作用 | MVP 仅单对象字段转换；读取其他对象、拆分/合并及创建持久新对象均延后。MVP 后有真实迁移案例时，再讨论图访问、新 ID 与失败隔离；不借普通升级默认授权 |
 | 无 CLR 迁移壳的 current Normalize | Family 路径可以保留 state-only exact reader，但 editable Load 仍需要 source 对象族的 current/migration CLR 模型。应用需要删除这层模型而继续加载旧 Revision 时，再设计独立 Normalize/退休协议；不能借 World 删除引用跳过 source 行 |
 | 历史工具/升级调用优化 | 有 package/history 或升级调用的真实限制后，再重访 DB-003 的 Try/result/ABI 和 DB-004 的多 writer/多 TFM 与批次原子性，不顺带做兼容框架 |

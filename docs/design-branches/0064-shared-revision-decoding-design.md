@@ -1,8 +1,35 @@
 # DB-064：两份 Revision 合并读取与安全共享边界
 
-> 状态：Proposed，2026-09-11；本轮为设计审阅，未实施。
-> 与 [DB-062](0062-independent-graph-workspace-slice.md) 共用读取核心，可与 [DB-063](0063-event-history-journal-slice.md) 独立排期。
-> 第一阶段缓存 DTO/string；普通领域对象的只读共享为可单独验收的第二阶段，不是 EventHistory 首次可用的前置条件。
+> 状态：实验性 API 方向已采纳，2026-09-11；算法为低优先级后继，均未实施。
+> 阶段 0 的内部入口纳入 [DB-062](0062-independent-graph-workspace-slice.md)，公开 API 纳入 [DB-063](0063-event-history-journal-slice.md) 首版。
+> 本文集中维护 API 的共享边界；阶段 A/B 的 DTO 缓存与普通只读对象共享另行排期，不阻塞下游试用。
+
+## 阶段 0：先交付实验性双图 API
+
+用户已选择 API 先行、算法后置。目标是与 DramaBoard 早期磨合调用方式，首版允许两次独立还原，
+不以缓存命中率、共享实例数或加速比例作为交付条件。
+
+候选语义：`ReadPair<TFirst,TSecond>(firstSelection, secondSelection, models)` 返回有明确 First/Second 的结果。
+DB-062 内部 selection 是同资源所有者下的 `(RevisionAddress, RootId)`；
+DB-063 公开 selection 使用该仓库的 frame handle，应用不自己维护 DTO、ID map 或发布状态。
+两个输入均显式指定，不自动解析为“最新”；保持一次操作的同一冻结模型目录、资源范围和稳定读取条件，
+但初版两条 Decode/Normalize/Allocate/Hydrate 路径各自独立执行。
+
+从首版起固定以下行为：
+
+- 每份图自身的值、actual 类型、共享/循环与 Revision 解释正确；不同版本不能为了省内存混为一个，Empty 沿既有例外。
+- 两份输出均按只读快照使用；库不冻结 CLR 对象，使用者不得通过其中一份修改可能被另一份共享的内容。
+- 不承诺跨图 ReferenceEquals 为 true，也不承诺它为 false；跨图引用相等性不能作为业务身份、版本或程序控制条件。
+- 同一输入传两次仍返回两个有明确位置的结果，不规定是否为两个实例；两边读取均成功后才交付 pair。
+  第二边失败不交付半个结果，但不承诺回滚已经执行的用户回调副作用。
+- 不发布、不更新 ref、不安装可写基线；独立 ReadEvent/ReadState 保持独立入口。
+- 可写 Resume 可以复用双图编排，但使用隔离可变对象的内部恢复路径；将来的只读共享结果不能直接安装为 State 工作区。
+- 实例共享只是允许的优化，首版不开放具体 matcher/cache/共享算法枚举，不引入通用多视图平台。
+
+阶段 0 验收：输入与返回位置对应、异构根类型校验、不同版本保留各自值、图内共享/环、
+第二图损坏不交付 pair、只读操作零写入、相同输入两次合法、错误仓库 handle 拒绝。
+消费者测试不断言跨图 ReferenceEquals；阶段 A/B 后续可用内部观测单独证明优化生效，不能反向把它变成 API 保证。
+实际 public 签名可随示范应用反馈调整，无旧 API 兼容负担；这里先明确行为约束。
 
 ## 1. 要修正的判据
 
@@ -23,12 +50,12 @@ A 自己的字段没变，两个 Revision 复用 a1 完全正确；但已 Hydrat
 [LoadedReferenceWorldTests](../../tests/DurableGraph.StateStore.Tests/LoadedReferenceWorldTests.cs)
 检验未变 owner 的引用仍按当前 Revision 验证。
 
-因此推荐的合同为：
+后续算法必须遵守的安全边界为：
 
 - 同 exact ObjectVersion 可以共用 stored DTO 解码结果。
 - 不同 ObjectVersion 不因内容相等而合并实例。
 - 同 ObjectVersion 的普通 CLR 实例只有在完整引用闭包也可共享时才合并。
-- 一侧可编辑时，不因初始值相同就共享会被修改的对象；默认只共享 DTO 和 string。
+- 一侧可编辑时，不因初始值相同就共享会被修改的对象；后续最多机会性共享 DTO 和 string，不承诺命中。
 - Empty 继续沿全库既有 string.Empty 例外；不同 ID 的等值非空 string 不做值 intern。
 
 ## 2. 阶段 A：操作内共享 stored DTO 与 string
@@ -63,10 +90,10 @@ string DTO 自身即不可变 string；保留同 key 首次解码实例即可获
 
 ## 3. 阶段 B：显式只读双图的闭包共享
 
-这一阶段有清晰可行的线性算法，不需要解决一般图同构；但必须另选公开的只读共享合同。
+这一阶段有清晰可行的线性图算法，不需要解决一般图同构；使用阶段 0 已建立的公开只读合同。
 不自动用于会继续修改的 State，也不由 readonly 字段、record 或 IReadOnlyList 推断深不可变。
 
-建议一次性 `ReadPair(..., sharing: ReadOnlyClosure)`（名称示意），调用方将两图全部视为只读。
+在同一实验性 ReadPair 入口内部逐步加入闭包共享，调用方继续将两图全部视为只读。
 框架不自动冻结普通 CLR 对象；修改已共享对象会在另一视图可见，不能再将其声明为隔离编辑图。
 该调用结果不暴露接受为 GraphSession 的入口；未来深不可变类型白名单若有需求另定。
 
@@ -99,7 +126,9 @@ string 单独按阶段 A 的同 key/同实例条件处理；不能取得完整�
 暂不对一对多视图做一般分区细化，不进行内容 hash 合并，不为提高命中率追加任意自定义“immutable”回调。
 对于 source/current 相同但布局刚升级的对象，允许漏掉共享机会，不能牺牲正确性。
 
-## 4. 可观测验收
+## 4. 阶段 A/B 的优化验收
+
+下表用于特定算法的内部测试，不是阶段 0 的交付门槛，也不构成下游可依赖的实例复用保证。
 
 | 场景 | 必须结果 |
 |---|---|
@@ -120,12 +149,13 @@ string 单独按阶段 A 的同 key/同实例条件处理；不能取得完整�
 独立 Event 读取的验收仍由 DB-063 保持；不为利用缓存先加载无关 State。
 真实包用从 DB-062 快照复用的真实 heads 验证 E/S，另用相邻 StateRevision 验证 changed-child 反例。
 
-## 5. 推荐排期与尚待选择
+## 5. 已选排期与后继
 
-1. 先完成 DB-062/063 的独立外观，满足消费者正确性和可用性；按其候选保存方案，可共享磁盘中真实未变的 ObjectVersion。
-2. 阶段 A 可紧接并入 Resume 的内部 paired read，低风险地减少 DTO/string 重复读取和内存。
-3. 阶段 B 算法可施工，但只读共享 API 是否应立刻交付，取决于用户是否需要同时浏览大量不可变子图；
-   不能把其性能价值与可写会话隔离混成一个默认模式。
+1. DB-062 实现内部双图读取，DB-063 随 EventHistory 首版提供实验性 API；内部两次独立读取即可验收。
+2. DramaBoard 先试用 ReadPair 与 Resume，反馈输入/返回形状、错误边界和实际读取需求。
+3. 阶段 A/B 按读取/内存测量另行调度，允许始终无命中；未来优化不改变只读合同或可写会话隔离。
+
+DB-062/063 的已选保存拓扑仍可复用磁盘中真实未变的 ObjectVersion，独立于内存共享优化是否已经实现。
 
 本片不要求更换引用 wire、生成每个对象的传递版本、历史新 ID 分配器或通用冻结框架。
 从 `(ObjectId,head)` 到“完整引用环境”的区别属于现有语义本身；不能通过改名 ObjectVersion 消除。

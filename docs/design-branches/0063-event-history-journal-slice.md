@@ -1,8 +1,8 @@
 # DB-063：EventJournal 驱动的 EventHistory 外观
 
-> 状态：Proposed，2026-09-11；依赖 [DB-062](0062-independent-graph-workspace-slice.md)，未实施。
+> 状态：Chosen / 待实施，2026-09-11；用户已采纳外观方向，依赖 [DB-062](0062-independent-graph-workspace-slice.md)，实施另行调度。
 > 消费者合同：[DramaBoard 草稿](../../../drama-board/docs/research/event-journal-state-store-draft.md)。
-> 合并读取是可独立排期的 [DB-064](0064-shared-revision-decoding-design.md)，不阻止独立 Event/State 外观交付。
+> 实验性合并读取 API 随本片首版交付；[DB-064](0064-shared-revision-decoding-design.md) 的实际去重/共享算法低优先级后置。
 
 ## 1. 目标与范围
 
@@ -17,6 +17,11 @@ StateStore 继续负责图、Schema/Upgrade 和 Base/Delta；EventJournal 负责
 先在 StateStore 程序集中新增这组外观并直接引用 EventJournal，复用 DB-062 私有核心；不让下游管理两套存储资源。
 这样暂时使该包携带 EventJournal 依赖，但避免为分程序集新增公开内部阶段 API 或友元边界。
 未来程序集审视可以移动外观，不影响下面的持久和会话语义；不在本片批量整理 namespace。
+
+用户已明确旧 API 没有下游兼容负担。本片重新收敛公开入口，不保留 GraphRepository/GraphSession 的旧调用形状、
+旧 publication.rbf 的读写/迁移路径或第二种发布器。保留已有可验证的持久语义，测试和包示例改接新外观。
+本轮收敛范围是仓库/会话/读写外观；模型声明、SG 生成 DTO、Schema history 和 Upgrade 能力继续支撑长期演化，
+不因封闭外观顺带隐藏跨程序集模型组合实际需要的公开能力。
 
 ## 2. 可直接复用的 EventJournal 能力
 
@@ -101,6 +106,13 @@ Resume(S) 只加载 S；Resume(E) 加载该 E 和其直接前 S。
 升级后的 E 不写回历史，也不成为 State 的比较基线。
 CommitDomainState() 可保存原 State 实例；带 nextState 的形式支持 immutable replacement 根，发布后才切换 session.State。
 
+首版另交付实验性 `ReadPair<TFirst,TSecond>(firstFrame, secondFrame, models)`（命名示意）：
+返回按输入对应的 First/Second 只读快照，复用 DB-062 的双图读取核心，初始实现就是顺序独立还原两次。
+每个 handle 明确仓库、Revision 和根；调用不改变 ref、不创建编辑会话，不强迫独立 ReadEvent 先加载 State。
+API 不承诺跨图一定复用或一定不复用 CLR 实例；引用共享不是程序判断业务身份或版本的依据。
+将来仅在不改变快照内容和既有身份约束的情况下逐步共享，算法不作为首版公开选项。
+两份只读图的合同与内部可写 Resume 分开，后者继续保证 State 修改不会通过框架创建的可变别名改变 Event。
+
 Branch 是持久 ref，会话是内存编辑所有者。只允许一个活动写会话；fork/Move/切换要求先关闭旧会话，
 并从目标创建新会话。不存在沿旧 DTO baseline 继续写新 head 的操作。
 只读图默认由调用方作为快照使用，不允许把它的内部实例表直接安装为编辑基线。
@@ -113,13 +125,13 @@ Event 表示记录时的观察/领域快照；后续处理读取它并更新 Sta
 热路径如果把 Event 和活动 State 的可变对象互相别名，仍由领域建模隔离未来会修改的部分；
 持久的 E 保持旧值，不能据此保证调用方手中被直接修改的 event 变量也不变。
 
-默认冷 Resume 的独立可变实例避免框架自行制造这种别名。DB-064 可共享 DTO/string；
+默认冷 Resume 的独立可变实例避免框架自行制造这种别名。DB-064 后续可机会性共享 DTO/string；
 普通引用对象的共享只进入明确的只读双图操作，不默认用于可写 Resume。
 
 ## 5. 唯一发布与失败判定
 
 新仓库布局拥有 `schemas.rbf`、`state/` 与一个 EventJournal 目录；**不创建或推进 publication.rbf**。
-旧 GraphRepository 的文件布局与 API 继续是独立外观；不同时打开同一个 State 文件集合。
+本片接管后删除旧 GraphRepository/PublicationLog 发布路径；不提供同时维护 publication.rbf 与 Journal 的配置或双写模式。
 需要仓库级独占资源锁，覆盖写会话与 ref 修改；EventJournal 内部的单 lease 合同不能自动替代跨文件所有权。
 
 提交顺序：
@@ -162,9 +174,9 @@ I/O 失败不推断“肯定没写入”；尝试 ref 写后无法裁决的结�
 |---|---|---|
 | G0 | envelope、严格资源打开、typed frame handle、元数据遍历 | golden/截断/未知 kind/错地址；readonly 零写入；同仓库原始闭包可核对，无 World typed callbacks |
 | G1 | S0→E1→S1 热路径及唯一 ref | E/S 两种 Parent 正确；无 publication.rbf；same-State 连续 Commit 保留实例，nextState 替换仅发布后生效 |
-| G2 | ReadEvent/ReadState/Resume | 从打开到 E 浏览，World/Bob typed Decode/Upgrade/Allocate/Hydrate 计数为 0；异构事件、共享字符串、快照旧值、图内循环；S1 不自动加载 E1 |
+| G2 | ReadEvent/ReadState/Resume 与实验性 ReadPair | 从打开到 E 浏览，World/Bob typed callbacks 为 0；单独 ReadState 不加载前 E；异构事件、图内共享/循环、旧值；pair 首版两次还原，错误来源/类型/第二图失败拒绝；跨图是否共享不作为断言 |
 | G3 | fork/Move 与故障阶段 | 从旧 S 与 E 分支分别续写；旧会话不得继续；仅按所选逻辑 Parent 配对；三处发布中断、CAS 失败、发布后安装失败、初始 Create/Init/BindName 失败、坏尾不修复 |
-| G4 | 真实 PackageReference 消费者 | S0/Event/State 跨进程；两代模型 history+Upgrade、后续强制 Base；E-only reader 注册场景；记录浏览读取量、保存字节，不只验证 DTO roundtrip |
+| G4 | 真实 PackageReference 消费者与旧外观退出 | S0/Event/State 跨进程、ReadPair 与可写 Resume；两代 history+Upgrade、强制 Base；E-only reader；迁移 README/活动包 probe，清除旧发布器及过时专用测试；记录读取量与保存字节 |
 
 用 `World(Alice, Bob) + Event(AliceSnapshot)`，快照不回指 World/Bob；加入列表/只读定义共享和根替换。
 不能用“只查看已经打开且提前解码过 World 的仓库”通过独立事件浏览测试。
