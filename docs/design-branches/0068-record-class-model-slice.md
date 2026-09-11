@@ -1,6 +1,7 @@
 # DB-068：record class 领域模型与统一引用资格
 
 > 状态：**Proposed / 待用户采纳，未实施**。
+> 已采纳修订：用户确认以 `IDurableObject` 完全替代并移除 `DurableBase`；不保留兼容壳，实施仍待后续授权。
 > 日期：2026-09-12；调查基线：`8d89a35`（DB-067）。
 > 来源：[DramaBoard 真实模型接入反馈 003](../../../drama-board/docs/feedback/durablegraph/003-real-model-integration.md)，消费者固定包来自 `f68388f`。
 > 本轮仅调查和设计。当前能力以 [PROJECT-STATE](../../src/PROJECT-STATE.md) 和源码为准。
@@ -45,7 +46,8 @@
 
 | 方案 | 收益与成本 | 推荐 |
 |---|---|---|
-| 共同 `IDurableObject` 标记；保留 `DurableBase` 实现它 | class/record 共用泛型和非泛型入口；需要系统迁移 CLR 约束，但保留编译期领域对象资格 | **采用此方案作为施工提案** |
+| 共同 `IDurableObject` 标记；移除 `DurableBase` | class/record 共用泛型和非泛型入口；统一资格与祖先终点，不保留冗余基类 | **用户已采纳此修订** |
+| 共同 marker，但保留 `DurableBase` 便利壳 | 可少改现有声明；没有独占能力，却长期保留两种入口认知和一个特殊祖先终点 | 原提案；按用户反馈取代，不保留兼容壳 |
 | 再加 `DurableRecordBase` | record 仍受人为祖先约束；两种根最终仍需要共同接口或 object | 不增加第二个框架基类 |
 | 全部改 `where T : class` / object | 已有 object 内核可用，最终登记仍可校验；但公共入口失去领域对象意图，误传只能更晚发现 | 不作为公开外观；内核继续用 object |
 | 仅文档/不可变 class 范式 | 能指导快照所有权，无法消除 `with`、positional 和继承 equality 的改写 | 作为交付附件，不替代功能 |
@@ -54,13 +56,17 @@
 共同 marker 不是序列化能力本身：生成声明仍需 DurableType/字段分类；执行仍需显式绑定、
 完整 Schema 和 exact CLR 检查。手工绑定沿现有显式登记合同，不变成程序集扫描或自动 POCO 序列化。
 
+移除空基类不会显著增加本片的机制复杂度：原方案已要求迁移 Runtime/StateStore 的约束、擦除入口和 SG 准入；
+额外工作主要是现有模型声明、测试中的源码字符串、示例与活动文档的成批迁移。
+收益是只剩一种资格合同，SG 不再保留框架基类终点特例。删除类型后，普通源码中的漏改能由编译器发现；
+反射名称、SG metadata-name 字符串和动态编译测试仍须搜索和实际执行，不能仅凭根 build 宣称改全。
+
 ## 3. 建议的领域/API 形状
 
 以下代码是**拟实现接口**，当前包不能使用：
 
 ```csharp
 public interface IDurableObject { }
-public abstract class DurableBase : IDurableObject { }
 
 [DurableType("Fact", 1)]
 public abstract partial record Fact(
@@ -72,7 +78,7 @@ public sealed partial record Damage(
     [field: DurableField(1)] int Amount) : Fact(Actor);
 
 [DurableType("World", 1)]
-public partial class World : DurableBase {
+public partial class World : IDurableObject {
     [DurableField(1)] public Fact? LastFact;
 }
 ```
@@ -82,12 +88,13 @@ public partial class World : DurableBase {
 `Damage` 的 Actor 参数不重复标 `[field: DurableField]`，不能把没有实际字段的参数误收为数据。
 
 - `IDurableObject` 是用户定义引用对象的资格标记，无成员，不进 DTO/Schema；不覆盖内建 string/数组/容器。
-- `DurableBase` 继续是无状态的可选便利壳。声明根可直接继承 object 并实现 marker；这同样允许普通 partial class 使用 marker。
+- 删除 `DurableBase` 类型，不保留 obsolete 壳、类型别名或替代框架基类。声明根直接继承 object 并实现 marker；
+  用户可构建自己的已标记领域基类体系，派生类型从领域祖先继承 marker，不要求逐层重复声明接口。
   普通 class 的字段发现政策保持，不随本片开放一般自动属性序列化。
 - 顶层 public/internal partial record class，支持 positional/body、abstract/sealed、开放泛型；
   跨程序集依赖沿 DB-059–061 的 public 导出/显式登记规则。派生类沿 C# 规则只能继承 record。
-- 任何真正的领域中间祖先仍须有 DurableType 和完整 history；只有框架 DurableBase 与 object 不进祖先 Schema。
-  不能借 marker 跳过一个有未知状态的未标记基类。
+- 任何真正的领域中间祖先仍须有 DurableType 和完整 history；引用类型祖先链最终止于 object，object 不进祖先 Schema。
+  不能借 marker 跳过一个有未知状态的未标记基类；任意第三方基类的保存恢复不在本片目标内。
 - 字段/元素复用现有槽闭包。record 是 ReferenceObject，占 ObjectId；不是 inline record struct。
   不开放 object/接口通配持久字段、boxed struct、未登记派生类型或 string/容器产品根。
 - 所有强类型领域引用 API 统一 `where T : class, IDurableObject`。
@@ -96,8 +103,11 @@ public partial class World : DurableBase {
   Create/Resume 的 State exact 类型和根替换规则保持。
 - 实现接口的 struct 不得因装箱混入图。Runtime 的 ReferenceObject 定义必须检查实际 CLR class、marker 和既有 kind/arity；
   不把接口本身登记为对象模型。marker 不表达任意接口槽的 nominal Schema。
-- 现有 `: DurableBase` 模型继续可用；显式依赖 PendingEvent/ReadPair 返回 DurableBase 的调用点需按共同接口重编译，
-  不承诺旧二进制 ABI，也不新增两套发布/恢复外观。真实消费者和包内 XML 必须同步迁移。
+- 现有直接 `: DurableBase` 模型改为 `: IDurableObject`，已有领域继承链保留；泛型约束从
+  `where T : DurableBase` 改为 `where T : class, IDurableObject`，不能遗漏引用类型约束。
+  PendingEvent/ReadPair 等显式变量类型、委托及手工绑定同步修改并重编译。
+  这是有意的源码/二进制 API 破坏，不提供旧 API 兼容，也不新增两套发布/恢复外观。
+  仓库内活动模型、测试、消费者、生成模板和包内 XML 必须迁移；下游升级包时按迁移说明调整自己的代码。
 
 ## 4. 生成与恢复规则
 
@@ -143,6 +153,12 @@ record/class 外观、marker、backing field 名、C# equality/copy 方法均不
 相同定义 ID、版本、祖先、FieldId 和槽应生成相同 Schema/history；不新增 TypeTag、SchemaKind、
 RepresentationId 类别、wire 版本或 record 专用 codec。
 
+删除旧空基类本身不改变 Schema：它原本就没有祖先 Schema 或持久字段。
+先验证普通 class 从 `DurableBase` 改为 `IDurableObject` 后持久布局/history 不变，再验证 record 外观转换。
+源码清理覆盖活动 `src/tests/experiments` 的编译输入（包括动态源码、脚本内嵌样例、metadata-name 字符串），
+根 README/PACKAGE/XML 和当前术语/能力文档；已归档设计和明确的旧包输入见证保留历史含义，不机械改写全部旧文档。
+旧版产物仅作为隔离的读取/迁移见证输入，不要求它们使用新包重新编译而保留旧基类。
+
 需要真实见证：V1 普通 class 的手写字段 → 同版 record 的对应 backing 字段，在整个继承链合法转换且
 持久布局相同的情况下，读旧数据并继续保存，不虚构业务 Upgrade。涉及继承的模型库和宿主一起重编译，
 不要求旧 CLR 普通 class 基库与新 record 派生库二进制混用。
@@ -154,18 +170,19 @@ RepresentationId 类别、wire 版本或 record 专用 codec。
 
 | 门 | 工作 | 最小出口 |
 |---|---|---|
-| G0 共同资格 | 冻结 marker 名称/根判定/公共签名，迁移 Runtime 和 StateStore 泛型及擦除入口 | 普通模型回归通过；class+marker 可显式绑定；boxed/interface/错误根/未登记模型拒绝，exact/发布/故障检查保留 |
+| G0 共同资格 | 新建 marker、删除 DurableBase；统一 object 祖先终点，迁移 Runtime/StateStore、SG 普通 class 准入及现有声明/测试输入 | 迁移后的普通模型回归通过；新包不再导出 DurableBase；class+marker 可显式绑定；boxed/interface/错误根/未登记模型拒绝，exact/发布/故障检查保留 |
 | G1 SG 声明与投影 | record class 接纳、actual backing 分类、receiver 修正、同库继承/泛型，外部 nominal/export 准入 | positional record 真正 Capture/Hydrate；构造器/getter/init 零调用；继承字段一次且仅一次；DB-056 struct 回归保持 |
 | G2 图与历史 | shared/distinct identity、完整状态比较、容器组合、两代升级与跨程序集 record 基类 | 真实冷恢复、记录等值不合并、历史 Schema 不变量、explicit Upgrade/漏升诊断可观察 |
 | G3 消费者交付 | 新独立 PackageReference record 示例、旧恢复 helper/README/XML 的共同类型迁移 | E/S 热冷、Pending、只登记事实读取、with 后保存、两代包/history Publish/Verify 均执行；更新当前能力及剩余路线 |
 
-G0→G1 依赖顺序由主代理控制。签名冻结后，可分别委派 Runtime/外观、SG、历史与跨库测试、真实包示例；
+G0→G1 依赖顺序由主代理控制；删除基类与 SG 普通 class 准入必须协同，不能期待尚未迁移的生成器先通过 G0。
+签名冻结后，可分别委派 Runtime/外观、SG、历史与跨库测试、真实包示例；
 同一文件有唯一编辑者。独立审阅重点为 marker 伪造/放宽准入、引用身份、隐式存储丢失与旧 history。
 Windows .NET 构建和测试由主代理串行执行；不能让包测试/生成测试并行争用 DLL。
 
 关键源码入口：
 
-- [DurableBase](../../src/DurableGraph/DurableBase.cs)、[StateModelBinding](../../src/DurableGraph/StateModelBinding.cs)、
+- 当前待删除的 [DurableBase](../../src/DurableGraph/DurableBase.cs)（完成时将此导航更新为新接口）、[StateModelBinding](../../src/DurableGraph/StateModelBinding.cs)、
   [StateDefinitionBinding](../../src/DurableGraph/StateDefinitionBinding.cs)、[StateBaseProjection](../../src/DurableGraph/StateBaseProjection.cs)。
 - [CaptureContext](../../src/DurableGraph/CaptureContext.cs)、[ObjectReadTable](../../src/DurableGraph/ObjectReadTable.cs)、
   [BuiltinStateValues](../../src/DurableGraph/BuiltinStateValues.cs)、[StateModelSnapshot](../../src/DurableGraph.StateStore/StateModelSnapshot.cs)。
@@ -194,6 +211,9 @@ Windows .NET 构建和测试由主代理串行执行；不能让包测试/生成
 - 真包 S0/E1/S1 与独立进程重开；Pending 完成后第二次恢复不重放；event-only 登记不依赖 State 根模型；
   公共非泛型返回可 pattern match record 与普通 class。
 - 同布局 class→record 的历史复用，以及 V1→V2 字段升级/强制 Base/后续 Delta；Publish/Verify，已有普通模型包消费者保持可重编译运行。
+- 删除旧基类后的普通 class 自建继承链、直接 marker 根和继承取得 marker 的派生均通过；
+  泛型约束保留 class，新包不含 DurableBase，活动可执行输入不依赖旧名。
+  根 build、动态生成测试和真包构建共同发现漏改；历史说明与隔离旧版输入不计为残留依赖。
 
 产品变更后运行 `dotnet build DurableGraph.slnx`、Runtime/Generator、StateStore、相关 Build/history tests 与真实包消费者；
 按变更影响选择 Storage 回归，不把设计时只读调查写成已通过产品验收。
@@ -201,10 +221,12 @@ Windows .NET 构建和测试由主代理串行执行；不能让包测试/生成
 
 不做：自动深复制/深不可变集合、业务 comparer 合成或历史保存、引用 record Dictionary key 扩张、
 跨实例业务 ID 合并、持久 hash、ValueTuple、通配 object/interface 字段、任意 POCO、普通 class 一般属性支持、
-程序集重排、新缓存/新 diff/新发布器。下游没有被要求马上迁回 record；它可继续使用当前已工作模型。
+程序集重排、新缓存/新 diff/新发布器、任意外部基类适配。下游可继续固定旧包；升级新包需迁移接口，
+但不要求同时把普通 class 改成 record。
 
 ## 9. 设计审阅状态
 
 本轮分别核对了下游源码/包钉扎和上游生成/运行边界，并由独立设计审阅比较 marker、双基类与 object 外观。
 共同意见：用 marker 消除 CLR class 专属假设合理；仍须完成整条生成、继承和包消费验证。
+随后用户确认主动移除旧基类，利用原型试用期统一 API；本稿已同步迁移范围、祖先终点和验收，未开始产品实施。
 本轮不声称 record class 已可用，不把下游单次性能样本升级为性能结论。

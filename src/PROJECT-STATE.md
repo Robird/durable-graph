@@ -22,7 +22,8 @@
 下一片建议为 [DB-068：record class 领域模型](../docs/design-branches/0068-record-class-model-slice.md)（Proposed，未实施）。
 [第三轮真实接入反馈](../../drama-board/docs/feedback/durablegraph/003-real-model-integration.md) 已报告完整世界/事件冷恢复，
 本轮核对 adapter、测试源码与固定包来源；主要摩擦是把 record 改普通 class 后手写 copy/equality。
-建议以共同 IDurableObject 资格贯通普通 class/record、SG backing storage 与继承，保留当前引用身份和 Schema/格式；
+用户已确认以共同 IDurableObject 完全替代并移除 DurableBase，不保留兼容壳；
+贯通普通 class/record、SG backing storage 与用户自建继承链，保留当前引用身份和 Schema/格式；
 不自动提供深不可变/集合内容相等。范围、替代方案与真包验收集中在 DB-068，等待采纳后施工。
 
 [读缓存 DB-067](../docs/design-branches/0067-owned-revision-read-cache-design.md) 已实施并验收：
