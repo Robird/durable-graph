@@ -64,7 +64,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         using (SegmentStore segments = SegmentStore.CreateNew(directory.Path, options)) {
             SchemaStore schemas = new(schemaFile);
             schemas.RegisterBatch([oldSchema, currentSchema, otherSchema]);
-            StateRevisionStore store = new(segments);
+            using StateRevisionStore store = new(segments);
             first = store.Append(StateRevision.CreateObjectHeadMapBase(null, [
                 Durable(schemas, 1, oldSchema, original),
                 Durable(schemas, 2, currentSchema, [7, 8, 12]),
@@ -98,7 +98,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         using (var reopenedSchemaFile = RbfFile.OpenReadOnlyExisting(schemaPath))
         using (SegmentStore reopened = SegmentStore.OpenReadOnlyExisting(directory.Path, options)) {
             SchemaStore schemas = new(reopenedSchemaFile, readOnly: true);
-            StateRevisionStore store = new(reopened);
+            using StateRevisionStore store = new(reopened);
             StateReaderRegistry readers = register(true);
             retained = new[] { first, second, third, newBase }
                 .Select(address => RevisionDecoder.Read(store, schemas, address, readers)).ToArray();

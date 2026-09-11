@@ -45,7 +45,7 @@ public sealed partial class EventHistoryRepositoryTests : IDisposable {
             Assert.Equal(2, repository.ReadEvents("main").Count());
         }
         using (SegmentStore segments = OpenState()) {
-            StateRevisionStore store = new(segments);
+            using StateRevisionStore store = new(segments);
             Assert.Null(store.Read(first).ParentRevisionAddress);
             Assert.Equal(first, store.Read(eventAddress).ParentRevisionAddress);
             Assert.Equal(first, store.Read(second).ParentRevisionAddress);
@@ -134,7 +134,7 @@ public sealed partial class EventHistoryRepositoryTests : IDisposable {
             Assert.Same(child, session.State.Left);
         }
         using SegmentStore segments = OpenState();
-        StateRevisionStore store = new(segments);
+        using StateRevisionStore store = new(segments);
         Assert.Empty(store.Read(unchanged).LocalObjects);
         Assert.Empty(store.Read(unchanged).RemovedObjectIds);
         uint oldId = Assert.Single(store.ReadLiveObjectHeadMap(first).Keys, id => id != rootId.Value);
@@ -331,7 +331,7 @@ public sealed partial class EventHistoryRepositoryTests : IDisposable {
             Assert.Same(same, session.State);
         }
         using SegmentStore segments = OpenState();
-        StateRevisionStore store = new(segments);
+        using StateRevisionStore store = new(segments);
         Assert.Equal(original, store.Read(upgraded).ParentRevisionAddress);
         Assert.Equal(ObjectVersionKind.Base, Assert.Single(store.Read(upgraded).LocalObjects).Kind);
         Assert.Empty(store.Read(unchanged).LocalObjects);
@@ -353,7 +353,7 @@ public sealed partial class EventHistoryRepositoryTests : IDisposable {
         }
         FrameAddress invalid;
         using (SegmentStore segments = OpenState()) {
-            StateRevisionStore states = new(segments);
+            using StateRevisionStore states = new(segments);
             StateRevision revision = damage switch {
                 "wrong-revision-parent" => StateRevision.CreateObjectHeadMapBase(null, states.Read(initial).LocalObjects, []),
                 "missing-root" => StateRevision.CreateObjectHeadMapBase(initial, [], []),

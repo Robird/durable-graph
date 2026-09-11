@@ -120,6 +120,7 @@ internal sealed class GraphResources : IDisposable {
     public void Dispose() {
         if (_disposed) { return; }
         _disposed = true;
+        States.Dispose();
         try { _segments.Dispose(); } finally { _schemaFile.Dispose(); }
     }
 }

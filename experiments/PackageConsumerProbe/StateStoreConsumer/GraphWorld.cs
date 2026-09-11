@@ -69,7 +69,7 @@ public sealed partial class GraphWorld : DurableBase {
         using var schemaFile = RbfFile.OpenReadOnlyExisting(Path.Combine(directory, "schemas.rbf"));
         SchemaStore schemas = new(schemaFile, readOnly: true);
         using SegmentStore segments = SegmentStore.OpenReadOnlyExisting(Path.Combine(directory, "state"), options);
-        StateRevisionStore store = new(segments);
+        using StateRevisionStore store = new(segments);
         StateRevision initial = store.Read(initialRevision);
         Require(initial.ParentRevisionAddress is null && initial.LocalObjects.Count == 4 &&
             initial.LocalObjects.All(record => record.Kind == ObjectVersionKind.Base) && schemas.Count == 4,

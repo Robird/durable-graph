@@ -34,7 +34,7 @@ public sealed partial class World : DurableBase {
             revision = session.CommitDomainState(policy).RevisionAddress;
         }
         using SegmentStore segments = SegmentStore.OpenReadOnlyExisting(Path.Combine(directory, "state"), options);
-        StateRevisionStore store = new(segments);
+        using StateRevisionStore store = new(segments);
         Require(store.ReadObjectVersionChain(revision, worldId.Value).Records.Count == 3,
             "The V1 process did not persist its Base plus two Delta records.");
     }

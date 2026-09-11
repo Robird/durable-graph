@@ -22,7 +22,7 @@ public sealed class ObjectVersionChainStoreTests : IDisposable {
         FrameAddress secondDelta;
         ObjectVersionChain retained;
         using (SegmentStore segments = SegmentStore.CreateNew(path, options)) {
-            StateRevisionStore store = new(segments);
+            using StateRevisionStore store = new(segments);
             byte[] source = [10, 11];
             original = store.Append(StateRevision.CreateObjectHeadMapBase(null, [B(1, source), B(2, [20])], []));
             source.AsSpan().Fill(99);
@@ -35,7 +35,8 @@ public sealed class ObjectVersionChainStoreTests : IDisposable {
         }
 
         using (SegmentStore reopened = SegmentStore.OpenReadOnlyExisting(path, options)) {
-            _ = Verify(new(reopened));
+            using StateRevisionStore coldStore = new(reopened);
+            _ = Verify(coldStore);
         }
 
         Assert.Equal(new byte[] { 10, 11 }, retained.Records[0].Record.Body.ToArray());
@@ -69,7 +70,7 @@ public sealed class ObjectVersionChainStoreTests : IDisposable {
     [Fact]
     public void Append_rejects_stale_other_branch_and_wrong_ticket_priors_before_writing() {
         using SegmentStore segments = SegmentStore.CreateNew(NewStorePath());
-        StateRevisionStore store = new(segments);
+        using StateRevisionStore store = new(segments);
         FrameAddress original = store.Append(StateRevision.CreateObjectHeadMapBase(null, [B(1, [1])], []));
         FrameAddress updated = store.Append(StateRevision.CreateObjectHeadMapDelta(original, [D(1, original, [2])], []));
         FrameAddress otherBranch = store.Append(StateRevision.CreateObjectHeadMapDelta(original, [B(1, [3])], []));
@@ -84,7 +85,7 @@ public sealed class ObjectVersionChainStoreTests : IDisposable {
     [Fact]
     public void Failed_multi_object_preflight_does_not_even_trigger_pending_rollover() {
         using SegmentStore segments = SegmentStore.CreateNew(NewStorePath(), Options(true));
-        StateRevisionStore store = new(segments);
+        using StateRevisionStore store = new(segments);
         FrameAddress original = store.Append(StateRevision.CreateObjectHeadMapBase(null, [B(1, [1]), B(2, [2])], []));
         FrameAddress updated = store.Append(StateRevision.CreateObjectHeadMapDelta(original, [B(2, [20])], []));
         uint activeBefore = segments.ActiveSegmentNumber;
@@ -102,7 +103,7 @@ public sealed class ObjectVersionChainStoreTests : IDisposable {
     [InlineData(true)]
     public void Read_checks_edges_even_for_frames_that_bypass_Append(bool wrongBranch) {
         using SegmentStore segments = SegmentStore.CreateNew(NewStorePath());
-        StateRevisionStore store = new(segments);
+        using StateRevisionStore store = new(segments);
         FrameAddress original = store.Append(StateRevision.CreateObjectHeadMapBase(null, [B(1, [1])], []));
         FrameAddress updated = store.Append(StateRevision.CreateObjectHeadMapDelta(original, [D(1, original, [2])], []));
         FrameAddress otherBranch = store.Append(StateRevision.CreateObjectHeadMapDelta(original, [B(1, [3])], []));
@@ -118,7 +119,7 @@ public sealed class ObjectVersionChainStoreTests : IDisposable {
     [Fact]
     public void Prior_must_have_a_local_record_and_cannot_fall_back_to_its_parent() {
         using SegmentStore segments = SegmentStore.CreateNew(NewStorePath());
-        StateRevisionStore store = new(segments);
+        using StateRevisionStore store = new(segments);
         FrameAddress original = store.Append(StateRevision.CreateObjectHeadMapBase(null, [B(1, [1])], []));
         FrameAddress unchanged = store.Append(StateRevision.CreateObjectHeadMapDelta(original, [], []));
         FrameAddress invalidMap = store.Append(StateRevision.CreateObjectHeadMapBase(unchanged, [], [new(1, unchanged)]));
@@ -137,7 +138,7 @@ public sealed class ObjectVersionChainStoreTests : IDisposable {
     [InlineData(true, true)]
     public void Read_rejects_self_and_forward_parent_or_prior(bool badParent, bool forward) {
         using SegmentStore segments = SegmentStore.CreateNew(NewStorePath());
-        StateRevisionStore store = new(segments);
+        using StateRevisionStore store = new(segments);
         FrameAddress original = store.Append(StateRevision.CreateObjectHeadMapBase(null, [B(1, [1])], []));
         FrameAddress corrupt;
         using (RbfSegmentWriterLease writer = segments.OpenActiveWriter()) {
@@ -153,7 +154,7 @@ public sealed class ObjectVersionChainStoreTests : IDisposable {
     [Fact]
     public void Removed_id_requires_new_Base_and_later_Delta_cannot_rejoin_old_occupant() {
         using SegmentStore segments = SegmentStore.CreateNew(NewStorePath());
-        StateRevisionStore store = new(segments);
+        using StateRevisionStore store = new(segments);
         FrameAddress old = store.Append(StateRevision.CreateObjectHeadMapBase(null, [B(1, [1])], []));
         FrameAddress removed = store.Append(StateRevision.CreateObjectHeadMapDelta(old, [], [1]));
         StateRevision invalidInsert = StateRevision.CreateObjectHeadMapDelta(removed, [D(1, old, [2])], []);
@@ -170,7 +171,7 @@ public sealed class ObjectVersionChainStoreTests : IDisposable {
     [Fact]
     public void Complete_map_can_reselect_old_head_as_a_shallow_declaration() {
         using SegmentStore segments = SegmentStore.CreateNew(NewStorePath());
-        StateRevisionStore store = new(segments);
+        using StateRevisionStore store = new(segments);
         FrameAddress old = store.Append(StateRevision.CreateObjectHeadMapBase(null, [B(1, [1])], []));
         FrameAddress removed = store.Append(StateRevision.CreateObjectHeadMapDelta(old, [], [1]));
         FrameAddress fresh = store.Append(StateRevision.CreateObjectHeadMapDelta(removed, [B(1, [90])], []));
@@ -184,7 +185,7 @@ public sealed class ObjectVersionChainStoreTests : IDisposable {
     [Fact]
     public void New_Base_stops_content_validation_and_resets_H_even_if_older_Delta_edge_is_invalid() {
         using SegmentStore segments = SegmentStore.CreateNew(NewStorePath());
-        StateRevisionStore store = new(segments);
+        using StateRevisionStore store = new(segments);
         FrameAddress original = store.Append(StateRevision.CreateObjectHeadMapBase(null, [B(1, new byte[128])], []));
         FrameAddress validDelta = store.Append(StateRevision.CreateObjectHeadMapDelta(original, [D(1, original, [1])], []));
         FrameAddress corrupt = RawAppend(segments, StateRevision.CreateObjectHeadMapDelta(validDelta, [D(1, original, [2])], []));
@@ -208,7 +209,7 @@ public sealed class ObjectVersionChainStoreTests : IDisposable {
         FrameAddress firstDelta;
         FrameAddress latest;
         using (SegmentStore segments = SegmentStore.CreateNew(path, options)) {
-            StateRevisionStore store = new(segments);
+            using StateRevisionStore store = new(segments);
             original = store.Append(StateRevision.CreateObjectHeadMapBase(null, [B(128, new byte[127])], []));
             firstDelta = store.Append(StateRevision.CreateObjectHeadMapDelta(original, [D(128, original, new byte[128])], []));
             FrameAddress parent = firstDelta;
@@ -219,7 +220,7 @@ public sealed class ObjectVersionChainStoreTests : IDisposable {
             Assert.Equal(128u, latest.FileNumber - firstDelta.FileNumber);
         }
         using SegmentStore reopened = SegmentStore.OpenReadOnlyExisting(path, options);
-        StateRevisionStore coldStore = new(reopened);
+        using StateRevisionStore coldStore = new(reopened);
         ObjectVersionChain chain = coldStore.ReadObjectVersionChain(latest, 128);
         Assert.Equal(new[] { original, firstDelta, latest }, chain.Records.Select(x => x.ContainingRevisionAddress));
         Assert.Equal(129, chain.Records[0].ObjectVersionPayloadBytes); // kind + one-byte length + 127 bytes.
@@ -233,7 +234,7 @@ public sealed class ObjectVersionChainStoreTests : IDisposable {
     [Fact]
     public void Chain_read_rejects_invalid_requests_and_distinguishes_empty_Base_from_missing_id() {
         using SegmentStore segments = SegmentStore.CreateNew(NewStorePath());
-        StateRevisionStore store = new(segments);
+        using StateRevisionStore store = new(segments);
         FrameAddress original = store.Append(StateRevision.CreateObjectHeadMapBase(null, [B(uint.MaxValue, [])], []));
         Assert.Empty(Assert.Single(store.ReadObjectVersionChain(original, uint.MaxValue).Records).Record.Body.ToArray());
         Assert.Throws<InvalidDataException>(() => store.ReadObjectVersionChain(original, 1));

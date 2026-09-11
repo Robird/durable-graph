@@ -375,6 +375,7 @@ public sealed class IndependentGraphWorkspaceTests : IDisposable {
         Assert.Single(Decode(address, models).Objects, row => row.Kind == ObjectStateKind.Durable && row.GetState<State>().Value == value).Id;
 
     private void ReopenReadOnly() {
+        _store.Dispose();
         _file.Dispose();
         _segments.Dispose();
         _file = RbfFile.OpenReadOnlyExisting(Path.Combine(_root, "schemas.rbf"));
@@ -392,6 +393,7 @@ public sealed class IndependentGraphWorkspaceTests : IDisposable {
     }
 
     public void Dispose() {
+        _store.Dispose();
         _file.Dispose();
         _segments.Dispose();
         string resolved = Path.GetFullPath(_root);

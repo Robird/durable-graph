@@ -36,7 +36,7 @@ public sealed partial class DurableSchemaGeneratorTests {
 
         using (SegmentStore segments = SegmentStore.OpenExisting(Path.Combine(directory.Path, "state")))
         using (IRbfFile schemaFile = RbfFile.OpenExisting(Path.Combine(directory.Path, "schemas.rbf"))) {
-            StateRevisionStore states = new(segments);
+            using StateRevisionStore states = new(segments);
             SchemaStore schemas = new(schemaFile);
             StateRevision initial = states.Read(first);
             Assert.All(initial.LocalObjects, row => Assert.Equal(ObjectVersionKind.Base, row.Kind));
@@ -85,7 +85,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             Assert.Same(world, fixture.World(session));
         }
         using (SegmentStore segments = SegmentStore.OpenExisting(Path.Combine(directory.Path, "state"))) {
-            StateRevisionStore states = new(segments);
+            using StateRevisionStore states = new(segments);
             Assert.Equal(removed, states.Read(reopened).ParentRevisionAddress);
             Assert.Empty(states.Read(reopened).LocalObjects);
             Assert.Empty(states.Read(reopened).RemovedObjectIds);
@@ -113,7 +113,7 @@ public sealed partial class DurableSchemaGeneratorTests {
 
         using SegmentStore segments = SegmentStore.OpenExisting(Path.Combine(directory.Path, "state"));
         using IRbfFile schemaFile = RbfFile.OpenExisting(Path.Combine(directory.Path, "schemas.rbf"));
-        StateRevisionStore states = new(segments);
+        using StateRevisionStore states = new(segments);
         SchemaStore schemas = new(schemaFile);
         ObjectVersionRecord delta = Assert.Single(states.Read(sparse).LocalObjects);
         ObjectVersionRecord replacementBase = Assert.Single(states.Read(dense).LocalObjects);
@@ -149,7 +149,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         ObjectId worldId;
         using (SegmentStore segments = SegmentStore.CreateNew(directory.Path))
         using (IRbfFile schemaFile = RbfFile.CreateNew(schemaPath)) {
-            StateRevisionStore states = new(segments);
+            using StateRevisionStore states = new(segments);
             SchemaStore schemas = new(schemaFile);
             object world = fixture.NewWorld();
             FixturePreparedWorldRevision prepared = fixture.PrepareNew(states, schemas, world);
@@ -162,7 +162,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         }
         using (SegmentStore segments = SegmentStore.OpenExisting(directory.Path))
         using (IRbfFile schemaFile = RbfFile.OpenExisting(schemaPath)) {
-            StateRevisionStore states = new(segments);
+            using StateRevisionStore states = new(segments);
             SchemaStore schemas = new(schemaFile);
             fixture.Check(fixture.LoadOld(states, schemas, first, worldId), 0, false, false);
         }
@@ -188,7 +188,8 @@ public sealed partial class DurableSchemaGeneratorTests {
             fixture.Check(world, 0, false, false);
         }
         using SegmentStore segments = SegmentStore.OpenExisting(Path.Combine(directory.Path, "state"));
-        StateRevision revision = new StateRevisionStore(segments).Read(recovered);
+        using StateRevisionStore states = new(segments);
+        StateRevision revision = states.Read(recovered);
         Assert.Equal(first, revision.ParentRevisionAddress);
         Assert.Empty(revision.LocalObjects);
         Assert.Empty(revision.RemovedObjectIds);

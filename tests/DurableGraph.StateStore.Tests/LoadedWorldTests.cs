@@ -402,6 +402,7 @@ public sealed class LoadedWorldTests : IDisposable {
         return writer.File.TailOffset;
     }
     public void Dispose() {
+        _store.Dispose();
         _file.Dispose();
         _segments.Dispose();
         string resolved = Path.GetFullPath(_root);

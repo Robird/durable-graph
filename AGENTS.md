@@ -16,6 +16,13 @@
 - Refactor freely when later evidence reveals a better boundary; do not preserve an accidental prototype shape by default.
 - When a choice would materially change the experiment or commit the project to a durable format/API, surface the alternatives and a recommendation before proceeding.
 
+## Persistent data discipline
+
+- Normal State, Schema, and Journal frame storage is **append-only**. Existing complete frames keep their contents and addresses for the lifetime of an open Store; normal reads, writes, opens, and failure handling must not truncate, rewrite, replace, or remove them, or silently repair a tail.
+- File-tail truncation belongs only to explicit **offline data rescue**. Close the affected Repository/Stores/file resources and discard all associated caches first; rescue tools operate without those caches. After rescue, reopen fresh resources and Stores. Never resume an old cache after temporarily disabling it for rescue.
+- A borrowed backing store must outlive its Store facade. Serialize operations, do not overlap Store operations with an externally held backing writer lease, and stop using the Store after its owner faults or its backing resources close. Retain existing publication, fault, and reentry checks; append-only is not permission to skip data validation.
+- This rule governs persisted frame data. Publication refs, lock files, and rebuildable derived files continue to follow their own protocols. The read-cache design and implementation status are tracked in [DB-067](docs/design-branches/0067-owned-revision-read-cache-design.md).
+
 ## Evidence and validation
 
 - Before a non-trivial experiment, identify the question and the smallest observable success/failure criterion.

@@ -38,7 +38,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         FrameAddress missingString;
         FrameAddress wrongKind;
         using (SegmentStore segments = SegmentStore.CreateNew(directory.Path, options)) {
-            StateRevisionStore store = new(segments);
+            using StateRevisionStore store = new(segments);
             first = store.Append(StateRevision.CreateObjectHeadMapBase(null,
                 input.First.Reverse().Select(record => ObjectVersionRecord.CreateBase(record.Id, record.Body)), []));
             second = store.Append(StateRevision.CreateObjectHeadMapDelta(first,
@@ -64,7 +64,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             Array.Clear(record.Body);
         }
         using SegmentStore reopened = SegmentStore.OpenReadOnlyExisting(directory.Path, options);
-        StateRevisionStore cold = new(reopened);
+        using StateRevisionStore cold = new(reopened);
         Dictionary<uint, byte[]> ReadBodies(FrameAddress revision) => cold.ReadLiveObjectHeadMap(revision)
             .Keys.Reverse().ToDictionary(id => id, id => cold.ReadObjectBaseBody(revision, id));
 

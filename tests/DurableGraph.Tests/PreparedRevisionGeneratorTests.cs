@@ -32,7 +32,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         using (var schemaFile = RbfFile.CreateNew(schemaPath))
         using (SegmentStore segments = SegmentStore.CreateNew(directory.Path, options)) {
             SchemaStore schemas = new(schemaFile);
-            StateRevisionStore store = new(segments);
+            using StateRevisionStore store = new(segments);
             for (int stage = 0; stage < revisions.Length; stage++) {
                 CapturedGraph? accepted = session.Current;
                 CapturedGraph graph = capture(stage);
@@ -179,7 +179,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         using var reopenedSchemaFile = RbfFile.OpenReadOnlyExisting(schemaPath);
         SchemaStore coldSchemas = new(reopenedSchemaFile, readOnly: true);
         using SegmentStore reopened = SegmentStore.OpenReadOnlyExisting(directory.Path, options);
-        StateRevisionStore cold = new(reopened);
+        using StateRevisionStore cold = new(reopened);
         for (int stage = 0; stage < revisions.Length; stage++) {
             var heads = cold.ReadLiveObjectHeadMap(revisions[stage]);
             ObjectVersionChain chain = cold.ReadObjectVersionChain(revisions[stage], ownerId);

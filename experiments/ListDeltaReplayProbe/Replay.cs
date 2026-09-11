@@ -77,7 +77,7 @@ internal static class Replay {
         using (IRbfFile schemaFile = RbfFile.OpenReadOnlyExisting(Path.Combine(directory, "schemas.rbf")))
         using (SegmentStore segments = SegmentStore.OpenReadOnlyExisting(Path.Combine(directory, "state"), StoreOptions)) {
             SchemaStore schemas = new(schemaFile, readOnly: true);
-            StateRevisionStore states = new(segments);
+            using StateRevisionStore states = new(segments);
             StateModelSnapshot snapshot = models.Snapshot(schemas);
             if (!snapshot.TryGetCurrentObjectBinding(typeof(List<T>), out ObjectBinding? binding)) {
                 throw new InvalidOperationException("No current List binding.");

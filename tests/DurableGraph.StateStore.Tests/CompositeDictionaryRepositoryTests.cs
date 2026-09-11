@@ -52,7 +52,7 @@ public sealed class CompositeDictionaryRepositoryTests : IDisposable {
         }
         using SegmentStore segments = OpenState();
         using IRbfFile file = OpenSchemas();
-        StateRevisionStore states = new(segments);
+        using StateRevisionStore states = new(segments);
         SchemaStore schemas = new(file, readOnly: true);
         StateModelSnapshot readers = Models<string>().Snapshot(schemas);
         foreach (FrameAddress address in new[] { seed, unchanged, changed, final }) {
@@ -88,7 +88,7 @@ public sealed class CompositeDictionaryRepositoryTests : IDisposable {
         }
         using SegmentStore segments = OpenState();
         using IRbfFile file = OpenSchemas();
-        StateRevisionStore states = new(segments);
+        using StateRevisionStore states = new(segments);
         SchemaStore schemas = new(file, readOnly: true);
         foreach (FrameAddress address in new[] { seed, replaced, unchanged }) {
             ObjectStateRecord map = Assert.Single(RevisionDecoder.ReadSnapshot(states, schemas, address, Models<Key>().Snapshot(schemas)).Objects,
@@ -240,7 +240,7 @@ public sealed class CompositeDictionaryRepositoryTests : IDisposable {
         }
         using SegmentStore segments = OpenState();
         using IRbfFile file = OpenSchemas();
-        StateRevisionStore states = new(segments);
+        using StateRevisionStore states = new(segments);
         SchemaStore schemas = new(file, readOnly: true);
         StateModelRegistry noRecipe = Models<string>();
         DecodedRevision exact = RevisionDecoder.ReadSnapshot(states, schemas, seed, noRecipe.Snapshot(schemas));
@@ -266,7 +266,7 @@ public sealed class CompositeDictionaryRepositoryTests : IDisposable {
         }
         using SegmentStore segments = OpenState();
         using IRbfFile file = OpenSchemas();
-        StateRevisionStore states = new(segments);
+        using StateRevisionStore states = new(segments);
         SchemaStore schemas = new(file, readOnly: true);
         DecodedRevision exact = RevisionDecoder.ReadSnapshot(states, schemas, seed, Models<string>().Snapshot(schemas));
         Assert.Equal(2, Assert.Single(exact.Objects, row => row.Kind == ObjectStateKind.Dictionary).GetDictionaryState<ObjectId, int>().Count);
@@ -348,7 +348,7 @@ public sealed class CompositeDictionaryRepositoryTests : IDisposable {
         }
         using SegmentStore segments = OpenState();
         using IRbfFile file = OpenSchemas();
-        StateRevisionStore states = new(segments);
+        using StateRevisionStore states = new(segments);
         SchemaStore schemas = new(file, readOnly: true);
         DecodedRevision initial = RevisionDecoder.ReadSnapshot(states, schemas, seed, Models<string>().Snapshot(schemas));
         ObjectStateRecord root = initial.GetRequired(worldId);

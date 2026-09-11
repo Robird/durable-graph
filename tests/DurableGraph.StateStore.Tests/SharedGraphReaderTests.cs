@@ -347,6 +347,7 @@ public sealed class SharedGraphReaderTests : IDisposable {
     }
 
     public void Dispose() {
+        _store.Dispose();
         _schemaFile.Dispose();
         _segments.Dispose();
         SharedReadModel.DeleteFixture(_root, "durable-shared-reader-");

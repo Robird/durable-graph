@@ -1,5 +1,3 @@
-using System.Collections.ObjectModel;
-
 namespace Atelia.DurableGraph.StateStore.Storage;
 
 /// <summary>
@@ -7,7 +5,7 @@ namespace Atelia.DurableGraph.StateStore.Storage;
 /// address.
 /// </summary>
 internal static class LiveObjectHeadMapMaterializer {
-    internal static IReadOnlyDictionary<uint, FrameAddress> Materialize(
+    internal static FrozenSortedDictionary<uint, FrameAddress> Materialize(
         FrameAddress head,
         Func<FrameAddress, StateRevision> readRevision) {
         ArgumentNullException.ThrowIfNull(readRevision);
@@ -72,6 +70,6 @@ internal static class LiveObjectHeadMapMaterializer {
             }
         }
 
-        return new ReadOnlyDictionary<uint, FrameAddress>(heads);
+        return new FrozenSortedDictionary<uint, FrameAddress>(heads);
     }
 }

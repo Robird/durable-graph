@@ -26,7 +26,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         using (var schemaFile = RbfFile.CreateNew(schemaPath))
         using (SegmentStore segments = SegmentStore.CreateNew(directory.Path, options)) {
             SchemaStore schemas = new(schemaFile);
-            StateRevisionStore store = new(segments);
+            using StateRevisionStore store = new(segments);
             object world = fixture.Create();
             FixturePreparedWorldRevision initial = fixture.PrepareNew(store, schemas, world);
             Assert.Null(initial.Revision.ParentRevisionAddress);
@@ -42,7 +42,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         using (var schemaFile = RbfFile.OpenExisting(schemaPath))
         using (SegmentStore segments = SegmentStore.OpenExisting(directory.Path, options)) {
             SchemaStore schemas = new(schemaFile);
-            StateRevisionStore store = new(segments);
+            using StateRevisionStore store = new(segments);
             object loaded = fixture.Load(store, schemas, first, worldId);
             fixture.Check(loaded, 7);
             Assert.Empty(fixture.Prepare(loaded).Revision.LocalObjects);
@@ -62,7 +62,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         using (var schemaFile = RbfFile.OpenExisting(schemaPath))
         using (SegmentStore segments = SegmentStore.OpenExisting(directory.Path, options)) {
             SchemaStore schemas = new(schemaFile);
-            StateRevisionStore store = new(segments);
+            using StateRevisionStore store = new(segments);
             object loaded = fixture.Load(store, schemas, changed, worldId);
             fixture.Check(loaded, 8);
             fixture.Detach(loaded);
@@ -78,7 +78,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         using (var schemaFile = RbfFile.OpenExisting(schemaPath))
         using (SegmentStore segments = SegmentStore.OpenExisting(directory.Path, options)) {
             SchemaStore schemas = new(schemaFile);
-            StateRevisionStore store = new(segments);
+            using StateRevisionStore store = new(segments);
             fixture.Check(fixture.Load(store, schemas, detached, worldId), -1);
             fixture.Check(fixture.Load(store, schemas, first, worldId), 7);
             fixture.Check(fixture.Load(store, schemas, changed, worldId), 8);
@@ -105,7 +105,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         using var schemaFile = RbfFile.CreateNew(Path.Combine(schemaDirectory.Path, "schemas.rbf"));
         using SegmentStore segments = SegmentStore.CreateNew(directory.Path);
         SchemaStore schemas = new(schemaFile);
-        StateRevisionStore store = new(segments);
+        using StateRevisionStore store = new(segments);
         FixturePreparedWorldRevision initial = fixture.PrepareNew(store, schemas, fixture.Create());
         FrameAddress first = store.Append(initial.Revision);
         object loaded = fixture.Load(store, schemas, first, initial.WorldId);
@@ -133,7 +133,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         using var schemaFile = RbfFile.CreateNew(Path.Combine(schemaDirectory.Path, "schemas.rbf"));
         using SegmentStore segments = SegmentStore.CreateNew(directory.Path);
         SchemaStore schemas = new(schemaFile);
-        StateRevisionStore store = new(segments);
+        using StateRevisionStore store = new(segments);
         FixturePreparedWorldRevision initial = fixture.PrepareNew(store, schemas, fixture.Create());
         uint previousCharacter = FindGraphObject(schemas, initial.Revision, "reference.character");
         uint previousItem = FindGraphObject(schemas, initial.Revision, "reference.item");
@@ -182,7 +182,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         using (var schemaFile = RbfFile.CreateNew(schemaPath))
         using (SegmentStore segments = SegmentStore.CreateNew(directory.Path)) {
             SchemaStore schemas = new(schemaFile);
-            StateRevisionStore store = new(segments);
+            using StateRevisionStore store = new(segments);
             FixturePreparedWorldRevision initial = old.PrepareNew(store, schemas, old.Create());
             worldId = initial.WorldId;
             nodeId = FindGraphObject(schemas, initial.Revision, "reference.history.node");
@@ -202,7 +202,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         using (var schemaFile = RbfFile.OpenExisting(schemaPath))
         using (SegmentStore segments = SegmentStore.OpenExisting(directory.Path)) {
             SchemaStore schemas = new(schemaFile);
-            StateRevisionStore store = new(segments);
+            using StateRevisionStore store = new(segments);
             Assert.Equal(3, store.ReadObjectVersionChain(third, nodeId).Records.Count);
             object loaded = current.Load(store, schemas, third, worldId);
             current.Check(loaded, 9);
@@ -221,7 +221,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         using (var schemaFile = RbfFile.OpenExisting(schemaPath))
         using (SegmentStore segments = SegmentStore.OpenExisting(directory.Path)) {
             SchemaStore schemas = new(schemaFile);
-            StateRevisionStore store = new(segments);
+            using StateRevisionStore store = new(segments);
             int previousUpgrades = upgradeCalls();
             object loaded = current.Load(store, schemas, rewritten, worldId);
             current.Check(loaded, 9);

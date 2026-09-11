@@ -121,6 +121,31 @@ public sealed class GraphResourcesTests : IDisposable {
         reopened.RequireWritable();
     }
 
+    [Fact]
+    public void DisposeEndsRetainedWarmedStateStoreWhileOwnedResultsRemainReadable() {
+        using GraphResources resources = GraphResources.CreateNew(_root);
+        StateRevisionStore retained = resources.States;
+        FrameAddress address = retained.AppendDurably(StateRevision.CreateObjectHeadMapBase(null,
+            [ObjectVersionRecord.CreateBase(7, [10, 20])], []));
+        StateRevision revision = retained.Read(address);
+        IReadOnlyDictionary<uint, FrameAddress> heads = retained.ReadLiveObjectHeadMap(address);
+        Assert.Same(revision, retained.Read(address));
+        Assert.Same(heads, retained.ReadLiveObjectHeadMap(address));
+
+        resources.Dispose();
+        resources.Dispose();
+
+        Assert.Throws<ObjectDisposedException>(() => retained.Read(address));
+        Assert.Throws<ObjectDisposedException>(() => retained.ReadLiveObjectHeadMap(address));
+        Assert.Throws<ObjectDisposedException>(() => retained.AppendDurably(EmptyRevision()));
+        Assert.Equal(address, heads[7]);
+        Assert.Equal(new byte[] { 10, 20 }, Assert.Single(revision.LocalObjects).Body.ToArray());
+
+        using GraphResources reopened = GraphResources.OpenReadOnlyExisting(_root);
+        Assert.NotSame(revision, reopened.States.Read(address));
+        Assert.Equal(address, reopened.States.ReadLiveObjectHeadMap(address)[7]);
+    }
+
     private static StateRevision EmptyRevision() => StateRevision.CreateObjectHeadMapBase(null, [], []);
 
     private Dictionary<string, (byte[] Bytes, DateTime WriteTime)> Snapshot() =>

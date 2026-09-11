@@ -139,7 +139,7 @@ public sealed class CrossAssemblyNominalBindingTests {
             using SegmentStore segments = SegmentStore.CreateNew(Path.Combine(root, "state"),
                 new() { NewStoreLayout = RbfSegmentStoreLayout.Flat });
             SchemaStore schemas = new(file);
-            StateRevisionStore store = new(segments);
+            using StateRevisionStore store = new(segments);
             DurableSchema owner = OwnerSchema(RemoteType, 2);
             DurableSchema remote = new(RemoteType, 1, new DurableFieldInfo(1, TypeTag.Byte));
             RepresentationId[] ids = schemas.RegisterRepresentations([ObjectLayout.ForDurable(owner), ObjectLayout.ForDurable(remote)]);

@@ -45,7 +45,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         }
         using (SegmentStore segments = SegmentStore.OpenExisting(Path.Combine(directory.Path, "state")))
         using (IRbfFile file = RbfFile.OpenExisting(Path.Combine(directory.Path, "schemas.rbf"))) {
-            StateRevisionStore states = new(segments);
+            using StateRevisionStore states = new(segments);
             SchemaStore schemas = new(file);
             Assert.Empty(states.Read(unchanged).LocalObjects);
             ObjectVersionRecord resize = Assert.Single(states.Read(appended).LocalObjects);
@@ -71,7 +71,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             resumed = commit(session);
         }
         using (SegmentStore segments = SegmentStore.OpenExisting(Path.Combine(directory.Path, "state"))) {
-            StateRevisionStore states = new(segments);
+            using StateRevisionStore states = new(segments);
             Assert.Empty(states.Read(resumed).LocalObjects);
             Assert.Empty(states.Read(resumed).RemovedObjectIds);
         }
@@ -86,7 +86,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         Directory.CreateDirectory(directory.Path);
         using SegmentStore segments = SegmentStore.CreateNew(Path.Combine(directory.Path, "state"));
         using IRbfFile file = RbfFile.CreateNew(Path.Combine(directory.Path, "schemas.rbf"));
-        StateRevisionStore states = new(segments);
+        using StateRevisionStore states = new(segments);
         SchemaStore schemas = new(file);
         var freeze = (Func<StateRevisionStore, SchemaStore, FixturePreparedWorldRevision>)host.GetMethod("PrepareAndMutate")!.CreateDelegate(
             typeof(Func<StateRevisionStore, SchemaStore, FixturePreparedWorldRevision>));

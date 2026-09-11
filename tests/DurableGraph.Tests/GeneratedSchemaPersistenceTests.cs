@@ -26,7 +26,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         using (SegmentStore segments = SegmentStore.OpenReadOnlyExisting(directory.Path))
         using (var schemaFile = RbfFile.CreateNew(schemaPath)) {
             SchemaStore schemas = new(schemaFile);
-            StateRevisionStore store = new(segments);
+            using StateRevisionStore store = new(segments);
             var stateTail = ReadActiveTail(segments);
             long emptySchemaTail = schemaFile.TailOffset;
             var plan = CapturedRevisionPlanner.PrepareRevision(store, schemas, null, input, new(100, 100));
@@ -71,7 +71,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         long schemaTail = schemaFile.TailOffset;
         int registered = schemas.Count;
         using SegmentStore segments = SegmentStore.CreateNew(directory.Path);
-        StateRevisionStore store = new(segments);
+        using StateRevisionStore store = new(segments);
         var before = ReadActiveTail(segments);
 
         Assert.Throws<SchemaConflictException>(() => {
@@ -112,7 +112,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         using var schemaFile = RbfFile.CreateNew(Path.Combine(schemaDirectory.Path, "schemas.rbf"));
         SchemaStore schemas = new(schemaFile);
         using SegmentStore segments = SegmentStore.CreateNew(directory.Path);
-        StateRevisionStore store = new(segments);
+        using StateRevisionStore store = new(segments);
         var firstPlan = CapturedRevisionPlanner.PrepareRevision(store, schemas, null, initial, new(100, 100));
         FrameAddress parent = store.Append(firstPlan.Revision);
         session.Accept(first);

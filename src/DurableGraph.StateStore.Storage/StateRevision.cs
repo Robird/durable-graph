@@ -6,7 +6,7 @@ namespace Atelia.DurableGraph.StateStore.Storage;
 public sealed class StateRevision {
     private readonly FrozenList<ObjectVersionRecord> _localObjects;
     private readonly FrozenList<uint> _localObjectIds;
-    private readonly FrozenDictionary<uint, FrameAddress> _externalObjectHeads;
+    private readonly FrozenSortedDictionary<uint, FrameAddress> _externalObjectHeads;
     private readonly FrozenList<uint> _removedObjectIds;
 
     private StateRevision(
@@ -153,30 +153,6 @@ public sealed class StateRevision {
         public int Count => items.Length;
         public T this[int index] => items[index];
         public IEnumerator<T> GetEnumerator() => ((IEnumerable<T>)items).GetEnumerator();
-        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
-    }
-
-    private sealed class FrozenDictionary<TKey, TValue>(SortedDictionary<TKey, TValue> items)
-        : IReadOnlyDictionary<TKey, TValue> where TKey : notnull {
-        public int Count => items.Count;
-        public TValue this[TKey key] => items[key];
-        public IEnumerable<TKey> Keys {
-            get {
-                foreach (TKey key in items.Keys) {
-                    yield return key;
-                }
-            }
-        }
-        public IEnumerable<TValue> Values {
-            get {
-                foreach (TValue value in items.Values) {
-                    yield return value;
-                }
-            }
-        }
-        public bool ContainsKey(TKey key) => items.ContainsKey(key);
-        public bool TryGetValue(TKey key, out TValue value) => items.TryGetValue(key, out value!);
-        public IEnumerator<KeyValuePair<TKey, TValue>> GetEnumerator() => items.GetEnumerator();
         System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
     }
 }

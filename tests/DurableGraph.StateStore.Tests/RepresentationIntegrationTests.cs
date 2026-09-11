@@ -22,7 +22,7 @@ public sealed class RepresentationIntegrationTests : IDisposable {
         using (SegmentStore segments = OpenState()) {
             SchemaStore schemas = new(schemaFile);
             representation = Assert.Single(schemas.RegisterRepresentations([ObjectLayout.ForDurable(WorldSchema)]));
-            StateRevisionStore states = new(segments);
+            using StateRevisionStore states = new(segments);
             // Independent v4 header: representation 2, followed by StringId 2 and Value 7.
             byte[] initial = Convert.FromHexString("04020207");
             var text = BaseObjectBodyCodec.EncodeString(StringPayloadCodec.PrepareBase("old"));
@@ -41,7 +41,7 @@ public sealed class RepresentationIntegrationTests : IDisposable {
         using (IRbfFile schemaFile = RbfFile.OpenReadOnlyExisting(Path.Combine(_root, "schemas.rbf")))
         using (SegmentStore segments = SegmentStore.OpenReadOnlyExisting(Path.Combine(_root, "state"), Options)) {
             SchemaStore schemas = new(schemaFile, readOnly: true);
-            StateRevisionStore states = new(segments);
+            using StateRevisionStore states = new(segments);
             long schemaTail = schemaFile.TailOffset;
             StateReaderRegistry readers = WorldReaders();
             Assert.Equal((byte)7, RevisionDecoder.Read(states, schemas, first, readers).GetRequired(new(1)).GetState<WorldState>().Value);
@@ -74,7 +74,7 @@ public sealed class RepresentationIntegrationTests : IDisposable {
         using (IRbfFile schemaFile = OpenSchemas())
         using (SegmentStore segments = OpenState()) {
             new SchemaStore(schemaFile).RegisterRepresentations([ObjectLayout.ForDurable(WorldSchema)]);
-            StateRevisionStore states = new(segments);
+            using StateRevisionStore states = new(segments);
             published = states.AppendDurably(StateRevision.CreateObjectHeadMapBase(null,
                 [ObjectVersionRecord.CreateBase(1, Convert.FromHexString(hex)),
                  ObjectVersionRecord.CreateBase(2, BaseObjectBodyCodec.EncodeString(StringPayloadCodec.PrepareBase("old")).Body)], []));
@@ -109,7 +109,7 @@ public sealed class RepresentationIntegrationTests : IDisposable {
             ObjectVersionRecord[] objects = unknownWorld
                 ? [ObjectVersionRecord.CreateBase(1, unknown)]
                 : [ObjectVersionRecord.CreateBase(1, good.Body), ObjectVersionRecord.CreateBase(2, unknown)];
-            StateRevisionStore states = new(segments);
+            using StateRevisionStore states = new(segments);
             published = states.AppendDurably(StateRevision.CreateObjectHeadMapBase(null, objects, []));
             Assert.Equal(objects.Length, states.Read(published).LocalObjects.Count);
         }
@@ -144,14 +144,15 @@ public sealed class RepresentationIntegrationTests : IDisposable {
             writer.WriteInt32(3);
             writer.WriteInt32(7);
             var body = BaseObjectBodyCodec.Encode(representation, new PreparedBaseBody(buffer.WrittenSpan));
-            revision = new StateRevisionStore(segments).AppendDurably(StateRevision.CreateObjectHeadMapBase(null,
+            using StateRevisionStore initialStates = new(segments);
+            revision = initialStates.AppendDurably(StateRevision.CreateObjectHeadMapBase(null,
                 [ObjectVersionRecord.CreateBase(12, body.Body)], []));
         }
         using IRbfFile reopened = RbfFile.OpenReadOnlyExisting(Path.Combine(_root, "schemas.rbf"));
         using SegmentStore stateFiles = SegmentStore.OpenReadOnlyExisting(Path.Combine(_root, "state"), Options);
         SchemaStore recovered = new(reopened, readOnly: true);
         long tail = reopened.TailOffset;
-        StateRevisionStore states = new(stateFiles);
+        using StateRevisionStore states = new(stateFiles);
         StateReaderRegistry retained = RetiredPointReaders(includeCode: true);
         StateModelSnapshot snapshot = retained.Snapshot(recovered);
         ObjectReaderBinding reader = recovered.ResolveReader(representation, snapshot);
@@ -210,7 +211,7 @@ public sealed class RepresentationIntegrationTests : IDisposable {
         // snapshot between each pair of State saves, without decoding domain objects.
         FrameAddress eventRevision;
         using (SegmentStore segments = OpenState()) {
-            StateRevisionStore states = new(segments);
+            using StateRevisionStore states = new(segments);
             var heads = states.ReadLiveObjectHeadMap(prior.Value);
             eventRevision = states.AppendDurably(StateRevision.CreateObjectHeadMapBase(prior,
                 [], heads));

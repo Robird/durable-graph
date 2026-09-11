@@ -162,10 +162,17 @@ public sealed class LiveObjectHeadMapMaterializerTests {
                     : throw new KeyNotFoundException());
 
         Assert.Equal([1u, 2u, 3u], heads.Keys);
-        IDictionary<uint, FrameAddress> mutableView =
-            Assert.IsAssignableFrom<IDictionary<uint, FrameAddress>>(heads);
-        Assert.Throws<NotSupportedException>(() =>
-            mutableView.Add(4, head));
+        Assert.Equal([head, head, head], heads.Values);
+        Assert.False(heads is IDictionary<uint, FrameAddress>);
+        Assert.False(heads.Keys is ICollection<uint>);
+        Assert.False(heads.Values is ICollection<FrameAddress>);
+        foreach (object projection in new object[] { heads, heads.Keys, heads.Values }) {
+            Assert.False(projection is System.Collections.ICollection);
+        }
+
+        KeyValuePair<uint, FrameAddress>[] copy = heads.ToArray();
+        copy[0] = new(99, default);
+        AssertHeads(heads, (1, head), (2, head), (3, head));
     }
 
     [Fact]

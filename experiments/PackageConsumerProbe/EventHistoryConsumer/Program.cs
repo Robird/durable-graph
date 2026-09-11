@@ -89,7 +89,7 @@ internal static class Program {
         }
         using (var file = RbfFile.OpenReadOnlyExisting(Path.Combine(directory, "schemas.rbf")))
         using (SegmentStore segments = SegmentStore.OpenReadOnlyExisting(Path.Combine(directory, "state"), Options)) {
-            StateRevisionStore store = new(segments);
+            using StateRevisionStore store = new(segments);
             StateRevision rewrite = store.Read(rewritten);
             Require(rewrite.LocalObjects.Count == 2 && rewrite.LocalObjects.All(row => row.Kind == ObjectVersionKind.Base),
                 "Upgraded World and Alice require Base even after pending Event restoration.");

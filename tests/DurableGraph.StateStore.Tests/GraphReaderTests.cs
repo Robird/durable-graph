@@ -176,6 +176,7 @@ public sealed class GraphReaderTests : IDisposable {
     }
 
     public void Dispose() {
+        _store.Dispose();
         _file.Dispose();
         _segments.Dispose();
         string resolved = Path.GetFullPath(_root);

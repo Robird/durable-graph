@@ -182,7 +182,7 @@ public sealed class InlineSchemaStoreTests : IDisposable {
         SchemaStore schemas = new(file);
         schemas.Register(owner);
         using SegmentStore segments = SegmentStore.CreateNew(NextPath(), new() { NewStoreLayout = RbfSegmentStoreLayout.Flat });
-        StateRevisionStore states = new(segments);
+        using StateRevisionStore states = new(segments);
         FrameAddress address = states.Append(StateRevision.CreateObjectHeadMapBase(null,
             [ObjectVersionRecord.CreateBase(1, BaseObjectBodyCodec.Encode(schemas.RegisterRepresentations([ObjectLayout.ForDurable(owner)])[0], new([1])).Body)], []));
         ObjectVersionChain chain = states.ReadObjectVersionChain(address, 1);
@@ -202,7 +202,7 @@ public sealed class InlineSchemaStoreTests : IDisposable {
         }
         FrameAddress address;
         using (SegmentStore segments = SegmentStore.OpenExisting(Path.Combine(repositoryPath, "state"))) {
-            StateRevisionStore states = new(segments);
+            using StateRevisionStore states = new(segments);
             // Valid current Base envelope syntax, but its catalog ID identifies an inline value.
             address = states.AppendDurably(StateRevision.CreateObjectHeadMapBase(null,
                 [ObjectVersionRecord.CreateBase(1, new byte[] { 4, 2 })], []));

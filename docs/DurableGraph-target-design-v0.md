@@ -357,6 +357,11 @@ State/Artifact/Schema 输入及 recipe/builder 版本；围栏不匹配应为 mi
 
 ### 单一发布权威与明确故障结果
 
+正常持久帧遵循 [append-only 与离线救援纪律](../AGENTS.md#persistent-data-discipline)：正常打开和失败处理不截断修尾；
+专门离线救援先关闭相关资源并丢弃缓存，结束后新开 Store。该约束不改变下述逻辑 ref 发布和分支协议。
+raw Revision 与完整 head map 可按完整帧地址复用，但仍为派生读缓存，不成为发布或 typed 图有效性的权威；
+缓存由借用底层的 Store 自己释放，底层寿命更长，已交付的 owned 值保持可读。具体实现与验收见 [DB-067](design-branches/0067-owned-revision-read-cache-design.md)。
+
 上层 API 采用由 EventHistoryRepository 创建/恢复的 EventHistorySession，对外提供
 创建分支/Resume、访问 State 根及交错提交 Event/State。它同时拥有所选持久 Revision Parent、对应的冻结当前版本 DTO 比较基线、
 领域实例到 ObjectId 的绑定及分配状态；普通调用方不分别传入或设置这几份状态。

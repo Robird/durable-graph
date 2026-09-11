@@ -70,7 +70,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         FrameAddress[] addresses = currentHost.GetMethod("UpgradeAndSave")!
             .CreateDelegate<Func<string, bool, FrameAddress[]>>()(directory.Path, empty);
         using (SegmentStore segments = SegmentStore.OpenReadOnlyExisting(Path.Combine(directory.Path, "state"))) {
-            StateRevisionStore states = new(segments);
+            using StateRevisionStore states = new(segments);
             Assert.Equal(2, states.Read(addresses[0]).LocalObjects.Count);
             Assert.All(states.Read(addresses[0]).LocalObjects, row => Assert.Equal(ObjectVersionKind.Base, row.Kind));
             foreach (int index in new[] { 1, 3 }) {

@@ -36,7 +36,7 @@ public sealed class ListRepositoryTests : IDisposable {
         }
         registered = File.ReadAllBytes(Path.Combine(_root, "schemas.rbf"));
         using (SegmentStore segments = OpenState()) {
-            StateRevisionStore store = new(segments);
+            using StateRevisionStore store = new(segments);
             ObjectVersionRecord delta = Assert.Single(store.Read(adaptive).LocalObjects);
             listId = new(delta.ObjectId);
             // Inserting 33 items exceeds Local's lookahead, and changing the tail
@@ -72,7 +72,7 @@ public sealed class ListRepositoryTests : IDisposable {
         }
         Assert.Equal(registered, File.ReadAllBytes(Path.Combine(_root, "schemas.rbf")));
         using (SegmentStore segments = OpenState()) {
-            StateRevisionStore store = new(segments);
+            using StateRevisionStore store = new(segments);
             Assert.Equal(seed, store.Read(adaptive).ParentRevisionAddress);
             Assert.Equal(adaptive, store.Read(myers).ParentRevisionAddress);
             Assert.Equal(myers, store.Read(local).ParentRevisionAddress);
@@ -127,7 +127,7 @@ public sealed class ListRepositoryTests : IDisposable {
             unchanged = session.Commit(NoRebase);
         }
         using (SegmentStore segments = OpenState()) {
-            StateRevisionStore store = new(segments);
+            using StateRevisionStore store = new(segments);
             ObjectVersionRecord listChange = Assert.Single(store.Read(resize).LocalObjects);
             Assert.Equal(ObjectVersionKind.Delta, listChange.Kind);
             Assert.Contains(listChange.ObjectId, store.ReadLiveObjectHeadMap(seed).Keys);
@@ -185,7 +185,7 @@ public sealed class ListRepositoryTests : IDisposable {
             retry = session.Commit(NoRebase);
         }
         using (SegmentStore segments = OpenState()) {
-            StateRevisionStore store = new(segments);
+            using StateRevisionStore store = new(segments);
             Assert.Equal(seed, store.Read(frozen).ParentRevisionAddress);
             Assert.Equal(frozen, store.Read(failedCandidate).ParentRevisionAddress);
             Assert.Equal(frozen, store.Read(retry).ParentRevisionAddress);
@@ -221,7 +221,7 @@ public sealed class ListRepositoryTests : IDisposable {
             changed = session.Commit(NoRebase);
         }
         using SegmentStore segments = OpenState();
-        StateRevisionStore store = new(segments);
+        using StateRevisionStore store = new(segments);
         StateRevision revision = store.Read(changed);
         Assert.Equal(4, revision.RemovedObjectIds.Count);
         IReadOnlyDictionary<uint, FrameAddress> priorHeads = store.ReadLiveObjectHeadMap(seed);

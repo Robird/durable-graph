@@ -15,7 +15,7 @@ public sealed class ObjectRevisionPlannerTests : IDisposable {
     [Fact]
     public void Initial_rows_produce_owned_canonical_Base_and_can_be_appended_after_disposal_of_inputs() {
         using SegmentStore segments = NewStore();
-        StateRevisionStore store = new(segments);
+        using StateRevisionStore store = new(segments);
         byte[] bytes = [10, 20];
         List<PreparedObject> rows = [PreparedObject.New(new ObjectId(2), new(bytes)), PreparedObject.New(new ObjectId(1), new([]))];
         PreparedObjectRevision result = Plan(store, null, rows);
@@ -37,7 +37,7 @@ public sealed class ObjectRevisionPlannerTests : IDisposable {
     [Fact]
     public void Compared_classifies_by_HasChanges_even_when_unchanged_payload_is_nonempty() {
         using SegmentStore segments = NewStore();
-        StateRevisionStore store = new(segments);
+        using StateRevisionStore store = new(segments);
         FrameAddress parent = store.Append(StateRevision.CreateObjectHeadMapBase(null, [B(1, new byte[100]), B(2, [7])], []));
         PreparedObjectRevision result = Plan(store, parent, [
             PreparedObject.Compared(new ObjectId(1), parent, Base(100), new(false, [0, 0])),
@@ -58,7 +58,7 @@ public sealed class ObjectRevisionPlannerTests : IDisposable {
     [Fact]
     public void Mixed_rows_use_real_H_and_complete_membership_difference() {
         using SegmentStore segments = NewStore();
-        StateRevisionStore store = new(segments);
+        using StateRevisionStore store = new(segments);
         FrameAddress first = store.Append(StateRevision.CreateObjectHeadMapBase(null, [B(1, new byte[100]), B(2, [2]), B(3, [3])], []));
         FrameAddress parent = store.Append(StateRevision.CreateObjectHeadMapDelta(first, [D(1, first, [4])], []));
         byte[] deltaBytes = [5];
@@ -85,7 +85,7 @@ public sealed class ObjectRevisionPlannerTests : IDisposable {
     [Fact]
     public void Empty_complete_set_removes_every_parent_object_and_initial_empty_is_valid() {
         using SegmentStore segments = NewStore();
-        StateRevisionStore store = new(segments);
+        using StateRevisionStore store = new(segments);
         Assert.Empty(Plan(store, null, []).Revision.LocalObjects);
         FrameAddress parent = store.Append(StateRevision.CreateObjectHeadMapBase(null, [B(1, [1]), B(2, [2])], []));
         PreparedObjectRevision result = Plan(store, parent, []);
@@ -100,7 +100,7 @@ public sealed class ObjectRevisionPlannerTests : IDisposable {
     [Fact]
     public void Both_parameters_control_optional_Base_and_input_order_does_not_affect_results() {
         using SegmentStore segments = NewStore();
-        StateRevisionStore store = new(segments);
+        using StateRevisionStore store = new(segments);
         FrameAddress first = store.Append(StateRevision.CreateObjectHeadMapBase(null, [B(1, new byte[20]), B(2, new byte[20])], []));
         FrameAddress parent = store.Append(StateRevision.CreateObjectHeadMapDelta(first, [D(1, first, new byte[30]), D(2, first, new byte[30])], []));
         PreparedObject[] rows = [PreparedObject.Unchanged(new ObjectId(1), parent, Base(20)), PreparedObject.Unchanged(new ObjectId(2), parent, Base(20))];
@@ -118,7 +118,7 @@ public sealed class ObjectRevisionPlannerTests : IDisposable {
     [Fact]
     public void Removed_objects_do_not_inflate_optional_Base_budget() {
         using SegmentStore segments = NewStore();
-        StateRevisionStore store = new(segments);
+        using StateRevisionStore store = new(segments);
         FrameAddress first = store.Append(StateRevision.CreateObjectHeadMapBase(null,
             [B(1, new byte[20]), B(2, new byte[20]), B(3, new byte[1000])], []));
         FrameAddress parent = store.Append(StateRevision.CreateObjectHeadMapDelta(first, [D(1, first, new byte[30]), D(2, first, new byte[30])], []));
@@ -133,7 +133,7 @@ public sealed class ObjectRevisionPlannerTests : IDisposable {
     [Fact]
     public void Conservative_D_can_select_required_Base_when_actual_D_is_smaller() {
         using SegmentStore segments = NewStore();
-        StateRevisionStore store = new(segments);
+        using StateRevisionStore store = new(segments);
         FrameAddress original = store.Append(StateRevision.CreateObjectHeadMapBase(null, [B(1, [1])], []));
         FrameAddress actualDelta = store.Append(StateRevision.CreateObjectHeadMapDelta(original, [D(1, original, [2])], []));
         int actual = store.ReadObjectVersionChain(actualDelta, 1).Records[1].ObjectVersionPayloadBytes;
@@ -149,7 +149,7 @@ public sealed class ObjectRevisionPlannerTests : IDisposable {
     [Fact]
     public void Wrong_prior_branch_and_full_ticket_are_rejected_before_append_or_pending_rollover() {
         using SegmentStore segments = NewStore(rollover: true);
-        StateRevisionStore store = new(segments);
+        using StateRevisionStore store = new(segments);
         FrameAddress first = store.Append(StateRevision.CreateObjectHeadMapBase(null, [B(1, [1])], []));
         FrameAddress parent = store.Append(StateRevision.CreateObjectHeadMapDelta(first, [B(1, [2])], []));
         FrameAddress other = store.Append(StateRevision.CreateObjectHeadMapDelta(first, [B(1, [3])], []));
@@ -169,7 +169,7 @@ public sealed class ObjectRevisionPlannerTests : IDisposable {
     [Fact]
     public void Invalid_complete_rows_are_rejected_without_changing_the_file() {
         using SegmentStore segments = NewStore();
-        StateRevisionStore store = new(segments);
+        using StateRevisionStore store = new(segments);
         FrameAddress parent = store.Append(StateRevision.CreateObjectHeadMapBase(null, [B(1, [1])], []));
         PreparedObject[][] invalid = [
             [PreparedObject.New(new ObjectId(1), new([1]))],
@@ -193,7 +193,7 @@ public sealed class ObjectRevisionPlannerTests : IDisposable {
     [Fact]
     public void Base_only_can_cut_a_bad_old_Delta_chain_while_other_existing_shapes_must_validate_H() {
         using SegmentStore segments = NewStore();
-        StateRevisionStore store = new(segments);
+        using StateRevisionStore store = new(segments);
         FrameAddress first = store.Append(StateRevision.CreateObjectHeadMapBase(null, [B(1, [1])], []));
         FrameAddress latest = store.Append(StateRevision.CreateObjectHeadMapDelta(first, [B(1, [2])], []));
         FrameAddress corrupt = AppendWrongPrior(segments, latest, first);
@@ -214,7 +214,7 @@ public sealed class ObjectRevisionPlannerTests : IDisposable {
     [Fact]
     public void Candidate_stays_bound_to_its_explicit_parent_when_another_branch_is_appended() {
         using SegmentStore segments = NewStore();
-        StateRevisionStore store = new(segments);
+        using StateRevisionStore store = new(segments);
         FrameAddress parent = store.Append(StateRevision.CreateObjectHeadMapBase(null, [B(1, new byte[100])], []));
         PreparedObjectRevision result = Plan(store, parent, [PreparedObject.Compared(new ObjectId(1), parent, Base(100), new(true, [2]))]);
         FrameAddress other = store.Append(StateRevision.CreateObjectHeadMapDelta(parent, [B(1, [9])], []));

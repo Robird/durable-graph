@@ -63,7 +63,7 @@ public sealed partial class World : DurableBase {
                 "Original historical revision was not preserved.");
         }
         using SegmentStore segments = SegmentStore.OpenReadOnlyExisting(Path.Combine(directory, "state"), options);
-        StateRevisionStore store = new(segments);
+        using StateRevisionStore store = new(segments);
         Require(store.ReadObjectVersionChain(oldRevision, worldId.Value).Records.Count == 3, "Old Delta chain missing.");
         StateRevision upgraded = store.Read(upgradedRevision);
         Require(upgraded.ParentRevisionAddress == oldRevision && upgraded.LocalObjects.Count == 1 &&

@@ -10,7 +10,7 @@ public sealed class IndependentSnapshotPlannerTests : IDisposable {
     [Fact]
     public void Snapshot_keeps_exact_reused_heads_and_local_Delta_without_State_Removes() {
         using SegmentStore segments = NewStore();
-        StateRevisionStore store = new(segments);
+        using StateRevisionStore store = new(segments);
         FrameAddress first = store.Append(StateRevision.CreateObjectHeadMapBase(null, [
             ObjectVersionRecord.CreateBase(1, new byte[100]),
             ObjectVersionRecord.CreateBase(2, [2]),
@@ -51,7 +51,7 @@ public sealed class IndependentSnapshotPlannerTests : IDisposable {
     [Fact]
     public void NoChange_optional_Base_is_local_and_only_unwritten_candidates_are_external() {
         using SegmentStore segments = NewStore();
-        StateRevisionStore store = new(segments);
+        using StateRevisionStore store = new(segments);
         FrameAddress first = store.Append(StateRevision.CreateObjectHeadMapBase(null, [
             ObjectVersionRecord.CreateBase(1, new byte[20]),
             ObjectVersionRecord.CreateBase(2, new byte[20]),
@@ -83,7 +83,7 @@ public sealed class IndependentSnapshotPlannerTests : IDisposable {
     [Fact]
     public void Empty_snapshot_has_empty_membership_and_preserves_its_parent() {
         using SegmentStore segments = NewStore();
-        StateRevisionStore store = new(segments);
+        using StateRevisionStore store = new(segments);
         FrameAddress state = store.Append(StateRevision.CreateObjectHeadMapBase(null,
             [ObjectVersionRecord.CreateBase(1, [1])], []));
         PreparedObjectRevision snapshot = ObjectRevisionPlanner.PrepareRevision(store, state, [], new(10, 25), independentSnapshot: true);
@@ -98,7 +98,7 @@ public sealed class IndependentSnapshotPlannerTests : IDisposable {
     [Fact]
     public void Snapshot_requires_State_baseline_and_validates_exact_prior_for_reused_objects() {
         using SegmentStore segments = NewStore();
-        StateRevisionStore store = new(segments);
+        using StateRevisionStore store = new(segments);
         Assert.Throws<ArgumentException>(() => ObjectRevisionPlanner.PrepareRevision(store, null,
             [PreparedObject.New(new(1), new([1]))], new(10, 25), independentSnapshot: true));
         FrameAddress first = store.Append(StateRevision.CreateObjectHeadMapBase(null,

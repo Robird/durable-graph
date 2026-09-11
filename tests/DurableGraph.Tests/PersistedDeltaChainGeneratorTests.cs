@@ -41,7 +41,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         using (var schemaFile = RbfFile.CreateNew(schemaPath))
         using (SegmentStore segments = SegmentStore.CreateNew(directory.Path, options)) {
             SchemaStore schemas = new(schemaFile);
-            StateRevisionStore store = new(segments);
+            using StateRevisionStore store = new(segments);
             schemas.RegisterBatch([schema]);
             first = store.Append(StateRevision.CreateObjectHeadMapBase(null,
                 input.Strings.Where(item => item.Id.Value != aliasId).Select(item => ObjectVersionRecord.CreateBase(item.Id.Value, BaseObjectBodyCodec.EncodeString(new(item.Body)).Body))
@@ -72,7 +72,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         using var reopenedSchemaFile = RbfFile.OpenReadOnlyExisting(schemaPath);
         SchemaStore coldSchemas = new(reopenedSchemaFile, readOnly: true);
         using SegmentStore reopened = SegmentStore.OpenReadOnlyExisting(directory.Path, options);
-        StateRevisionStore cold = new(reopened);
+        using StateRevisionStore cold = new(reopened);
         byte[] Load(FrameAddress revision, SchemaStore? registry = null, DurableSchema? expectedSchema = null) {
             ObjectVersionChain chain = cold.ReadObjectVersionChain(revision, ownerId);
             Dictionary<uint, byte[]> strings = [];
@@ -119,14 +119,15 @@ public sealed partial class DurableSchemaGeneratorTests {
             SchemaStore alternate = new(alternateFile);
             DurableSchema differentSchema = new(schema.SchemaId, schema.Version, schema.Fields.ToArray(), differentAncestor);
             RepresentationId alternateId = alternate.RegisterRepresentations([ObjectLayout.ForDurable(differentSchema)])[0];
-            StateRevisionStore alternateStates = new(alternateSegments);
+            using StateRevisionStore alternateStates = new(alternateSegments);
             alternateRevision = alternateStates.Append(StateRevision.CreateObjectHeadMapBase(null,
                 [ObjectVersionRecord.CreateBase(ownerId, BaseObjectBodyCodec.Encode(alternateId, new(expected[0])).Body)], []));
         }
         using (var alternateFile = RbfFile.OpenReadOnlyExisting(alternatePath))
         using (SegmentStore alternateSegments = SegmentStore.OpenReadOnlyExisting(alternateStatePath)) {
             SchemaStore alternate = new(alternateFile, readOnly: true);
-            ObjectVersionChain alternateChain = new StateRevisionStore(alternateSegments).ReadObjectVersionChain(alternateRevision, ownerId);
+            using StateRevisionStore alternateStates = new(alternateSegments);
+            ObjectVersionChain alternateChain = alternateStates.ReadObjectVersionChain(alternateRevision, ownerId);
             int calls = (int)host.GetField("DecodeCalls")!.GetValue(null)!;
             Assert.Throws<InvalidDataException>(() => decode(alternateChain, alternate, schema, []));
             Assert.Equal(calls, (int)host.GetField("DecodeCalls")!.GetValue(null)!);
@@ -202,7 +203,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         using (var schemaFile = RbfFile.CreateNew(schemaPath))
         using (SegmentStore segments = SegmentStore.CreateNew(directory.Path, options)) {
             SchemaStore schemas = new(schemaFile);
-            StateRevisionStore store = new(segments);
+            using StateRevisionStore store = new(segments);
             schemas.RegisterBatch([oldSchema, newSchema]);
             first = store.Append(StateRevision.CreateObjectHeadMapBase(null, [ObjectVersionRecord.CreateBase(1,
                 BaseObjectBodyCodec.Encode(schemas.RegisterRepresentations([ObjectLayout.ForDurable(oldSchema)])[0], new(baseBytes)).Body)], []));
@@ -216,7 +217,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         using var reopenedSchemaFile = RbfFile.OpenReadOnlyExisting(schemaPath);
         SchemaStore coldSchemas = new(reopenedSchemaFile, readOnly: true);
         using SegmentStore reopened = SegmentStore.OpenReadOnlyExisting(directory.Path, options);
-        StateRevisionStore cold = new(reopened);
+        using StateRevisionStore cold = new(reopened);
         byte[] Load(FrameAddress revision) {
             ObjectVersionChain chain = cold.ReadObjectVersionChain(revision, 1);
             return decode(chain, coldSchemas, oldSchema);

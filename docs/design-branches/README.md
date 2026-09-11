@@ -23,6 +23,7 @@ DB-045 持久表示 ID、DB-046 统一闭合目录、DB-047 List 基础能力和
 
 | 文档 | 状态 | 实施范围 |
 |---|---|---|
+| [DB-067 append-only Store 的修订读缓存](0067-owned-revision-read-cache-design.md) | Implemented / 已验收 | 普通 Store 统一有界 frame/map LRU、双数组二分字典与 local-record 二分；自身 Dispose 与直接消费者迁移；预算/失败/离线救援、新表示测量、产品回归与真实包通过 |
 | [DB-066 ReadPair 比较能力与 Transient 使用合同](0066-readpair-comparison-and-transient-contract-slice.md) | Implemented / G0–G3 已验收 | 可选完整比较替换共享判断的 Base 编码、缺 proof 保守退出；普通/Family 自动接线与三容器适配，Transient 外部 view 与包内合同；完整测试和真实包通过 |
 | [DB-065 EventHistory 消费者上手与恢复合同](0065-event-history-consumer-contract-slice.md) | 已实施 / G0–G3 | 默认调用、包内 XML、引用事件快照、同源恢复故障测试和 README 原文/真实包验收；产品行为和格式保持，locator/分页按需求后继 |
 | [DB-062 独立图读取与可由外层发布的工作区](0062-independent-graph-workspace-slice.md) | 已实施 | 内部独立资源、快照、根替换与顺序双图读取；E/S 共享前 S baseline；公开 Journal 外观后继 DB-063 |

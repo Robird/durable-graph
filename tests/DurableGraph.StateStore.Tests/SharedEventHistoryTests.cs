@@ -55,7 +55,7 @@ public sealed class SharedEventHistoryTests : IDisposable {
         }
 
         using (SegmentStore segments = SegmentStore.OpenExisting(Path.Combine(_root, "state"))) {
-            StateRevisionStore store = new(segments);
+            using StateRevisionStore store = new(segments);
             StateRevision next = store.Read(saved);
             Assert.Equal(initial, next.ParentRevisionAddress);
             Assert.Equal(initial, store.Read(eventRevision).ParentRevisionAddress);

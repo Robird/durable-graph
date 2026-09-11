@@ -50,7 +50,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         using SegmentStore segments = SegmentStore.OpenReadOnlyExisting(Path.Combine(directory.Path, "state"));
         using var schemaFile = RbfFile.OpenReadOnlyExisting(Path.Combine(directory.Path, "schemas.rbf"));
         SchemaStore schemas = new(schemaFile, readOnly: true);
-        StateRevisionStore states = new(segments);
+        using StateRevisionStore states = new(segments);
         var initial = RevisionDecoder.ReadSnapshot(states, schemas, addresses[0], registry.Snapshot(schemas));
         ObjectStateRecord root = Assert.Single(initial.Objects, row => row.Schema?.SchemaId == "inline.World");
         ObjectStateRecord node = Assert.Single(initial.Objects, row => row.Schema?.SchemaId == "inline.Node");

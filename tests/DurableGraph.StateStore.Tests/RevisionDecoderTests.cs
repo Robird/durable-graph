@@ -23,7 +23,7 @@ public sealed class RevisionDecoderTests : IDisposable {
         using (SegmentStore segments = NewSegments()) {
             SchemaStore schemas = new(file);
             schemas.Register(NodeSchema);
-            StateRevisionStore store = new(segments);
+            using StateRevisionStore store = new(segments);
             FrameAddress original = store.Append(StateRevision.CreateObjectHeadMapBase(null,
                 [Node(schemas, 1, 4, 3), Node(schemas, 2, 5, 3), Text(3, "same"), Text(4, "same"), Text(5, ""), Text(6, "")], []));
             latest = store.Append(StateRevision.CreateObjectHeadMapDelta(original,
@@ -61,7 +61,7 @@ public sealed class RevisionDecoderTests : IDisposable {
         using IRbfFile file = RbfFile.CreateNew(NextPath());
         using SegmentStore segments = NewSegments();
         SchemaStore schemas = new(file);
-        StateRevisionStore store = new(segments);
+        using StateRevisionStore store = new(segments);
         FrameAddress address = store.Append(StateRevision.CreateObjectHeadMapBase(null, [], []));
         DecodedRevision result = RevisionDecoder.Read(store, schemas, address, new());
         Assert.Empty(result.Objects);
@@ -77,7 +77,7 @@ public sealed class RevisionDecoderTests : IDisposable {
         using SegmentStore segments = NewSegments();
         SchemaStore schemas = new(file);
         schemas.RegisterBatch([NodeSchema, ByteSchema]);
-        StateRevisionStore store = new(segments);
+        using StateRevisionStore store = new(segments);
         FrameAddress original = store.Append(StateRevision.CreateObjectHeadMapBase(null, [Node(schemas, 1, 4, 2), Text(2, "value")], []));
         StateReaderRegistry readers = NodeReaders();
         readers.Register(ByteBinding(ByteSchema));
@@ -105,7 +105,7 @@ public sealed class RevisionDecoderTests : IDisposable {
         SchemaStore schemas = new(file);
         DurableSchema stored = missing == 2 ? new("Number", 2, new DurableFieldInfo(1, TypeTag.Byte)) : ByteSchema;
         if (missing != 0) { schemas.Register(stored); }
-        StateRevisionStore store = new(segments);
+        using StateRevisionStore store = new(segments);
         // A legacy v1 literal intentionally names a missing Schema without registering it.
         ObjectVersionRecord record = missing == 0
             ? ObjectVersionRecord.CreateBase(1, Convert.FromHexString("01020D4E756D6265720107"))
@@ -130,7 +130,7 @@ public sealed class RevisionDecoderTests : IDisposable {
             : new("Leaf", 1, [new(1, TypeTag.SByte)], new("Ancestor", 1));
         SchemaStore schemas = new(file);
         schemas.Register(stored);
-        StateRevisionStore store = new(segments);
+        using StateRevisionStore store = new(segments);
         FrameAddress address = store.Append(StateRevision.CreateObjectHeadMapBase(null, [Durable(schemas, 1, stored, [7])], []));
         StateReaderRegistry readers = new();
         int calls = 0;
@@ -146,7 +146,7 @@ public sealed class RevisionDecoderTests : IDisposable {
         DurableSchema second = new("Other", 1, new DurableFieldInfo(1, TypeTag.Byte));
         SchemaStore schemas = new(file);
         schemas.RegisterBatch([ByteSchema, second]);
-        StateRevisionStore store = new(segments);
+        using StateRevisionStore store = new(segments);
         FrameAddress address = store.Append(StateRevision.CreateObjectHeadMapBase(null,
             [Durable(schemas, 1, ByteSchema, [7]), Durable(schemas, 2, second, [8])], []));
         StateReaderRegistry readers = new();
@@ -171,7 +171,7 @@ public sealed class RevisionDecoderTests : IDisposable {
         using SegmentStore segments = NewSegments();
         SchemaStore schemas = new(file);
         schemas.Register(NodeSchema);
-        StateRevisionStore store = new(segments);
+        using StateRevisionStore store = new(segments);
         FrameAddress original = store.Append(StateRevision.CreateObjectHeadMapBase(null,
             [Node(schemas, 1, 4, 0), malformed == 3 ? Text(2, "text") : Node(schemas, 2, 5, 0)], []));
         ObjectVersionRecord bad = malformed switch {
@@ -195,7 +195,7 @@ public sealed class RevisionDecoderTests : IDisposable {
         using IRbfFile file = RbfFile.CreateNew(NextPath());
         using SegmentStore segments = NewSegments();
         SchemaStore schemas = new(file);
-        StateRevisionStore store = new(segments);
+        using StateRevisionStore store = new(segments);
         FrameAddress original = store.Append(StateRevision.CreateObjectHeadMapBase(null, [Text(1, "text")], []));
         FrameAddress unchanged = store.Append(StateRevision.CreateObjectHeadMapDelta(original, [], []));
         FrameAddress corrupt = store.Append(StateRevision.CreateObjectHeadMapBase(unchanged, [], [new(1, unchanged)]));

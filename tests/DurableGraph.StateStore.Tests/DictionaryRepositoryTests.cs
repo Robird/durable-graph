@@ -49,7 +49,7 @@ public sealed class DictionaryRepositoryTests : IDisposable {
         }
         using (SegmentStore segments = OpenState())
         using (IRbfFile file = RbfFile.OpenExisting(Path.Combine(_root, "schemas.rbf"))) {
-            StateRevisionStore states = new(segments);
+            using StateRevisionStore states = new(segments);
             SchemaStore schemas = new(file, readOnly: true);
             Assert.Empty(states.Read(reordered).LocalObjects);
             Assert.Empty(states.Read(reordered).RemovedObjectIds);
@@ -77,7 +77,8 @@ public sealed class DictionaryRepositoryTests : IDisposable {
             unchanged = session.Commit(NoRebase);
         }
         using (SegmentStore segments = OpenState()) {
-            Assert.Empty(new StateRevisionStore(segments).Read(unchanged).LocalObjects);
+            using StateRevisionStore states = new(segments);
+            Assert.Empty(states.Read(unchanged).LocalObjects);
         }
     }
 
@@ -110,7 +111,7 @@ public sealed class DictionaryRepositoryTests : IDisposable {
             removed = session.Commit(NoRebase);
         }
         using SegmentStore segments = OpenState();
-        StateRevisionStore states = new(segments);
+        using StateRevisionStore states = new(segments);
         Assert.Single(states.Read(childOnly).LocalObjects);
         Assert.Equal(2, states.Read(removed).RemovedObjectIds.Count);
     }
@@ -164,7 +165,7 @@ public sealed class DictionaryRepositoryTests : IDisposable {
         Directory.CreateDirectory(_root);
         using SegmentStore segments = SegmentStore.CreateNew(Path.Combine(_root, "state"));
         using IRbfFile file = RbfFile.CreateNew(Path.Combine(_root, "schemas.rbf"));
-        StateRevisionStore states = new(segments);
+        using StateRevisionStore states = new(segments);
         SchemaStore schemas = new(file);
         DictionaryLayout layout = new(new(1, TypeTag.String), new(2, TypeTag.Int32));
         RepresentationId mapRepresentation = schemas.RegisterRepresentations([ObjectLayout.ForDictionary(layout)])[0];

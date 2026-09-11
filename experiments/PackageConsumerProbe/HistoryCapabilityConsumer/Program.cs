@@ -63,7 +63,7 @@ internal static class Program {
                 "V1 self-cycle was not restored.");
         }
         using SegmentStore segments = SegmentStore.OpenReadOnlyExisting(Path.Combine(directory, "state"), Options);
-        StateRevisionStore store = new(segments);
+        using StateRevisionStore store = new(segments);
         StateRevision changed = store.Read(historical);
         ObjectVersionRecord delta = changed.LocalObjects.Single();
         Require(delta.ObjectId != worldId.Value && delta.Kind == ObjectVersionKind.Delta &&
@@ -77,7 +77,7 @@ internal static class Program {
         using var file = RbfFile.OpenReadOnlyExisting(Path.Combine(directory, "schemas.rbf"));
         using SegmentStore segments = SegmentStore.OpenReadOnlyExisting(Path.Combine(directory, "state"), Options);
         SchemaStore schemas = new(file, readOnly: true);
-        StateRevisionStore store = new(segments);
+        using StateRevisionStore store = new(segments);
         DecodedRevision decoded = RevisionDecoder.Read(store, schemas, historical.RevisionAddress, Readers());
         ObjectId legacyId = decoded.Objects.Single(row => row.Id != historical.RootId).Id;
         Require(decoded.Objects.Count == 2 &&
@@ -122,7 +122,7 @@ internal static class Program {
         using var fileAfter = RbfFile.OpenReadOnlyExisting(Path.Combine(directory, "schemas.rbf"));
         using SegmentStore segmentsAfter = SegmentStore.OpenReadOnlyExisting(Path.Combine(directory, "state"), Options);
         SchemaStore schemas = new(fileAfter, readOnly: true);
-        StateRevisionStore store = new(segmentsAfter);
+        using StateRevisionStore store = new(segmentsAfter);
         StateRevision changed = store.Read(migrated);
         Require(changed.RemovedObjectIds.SequenceEqual(new[] { legacyId.Value }) &&
             changed.LocalObjects.Count == 1 && changed.LocalObjects[0].ObjectId == worldId.Value &&
@@ -144,7 +144,7 @@ internal static class Program {
         using var file = RbfFile.OpenReadOnlyExisting(Path.Combine(directory, "schemas.rbf"));
         using SegmentStore segments = SegmentStore.OpenReadOnlyExisting(Path.Combine(directory, "state"), Options);
         SchemaStore schemas = new(file, readOnly: true);
-        StateRevisionStore store = new(segments);
+        using StateRevisionStore store = new(segments);
         Require(schemas.GetRequired("package.history-legacy", 1).Version == 1,
             "Legacy metadata must exist independently of its absent executable reader.");
         World loaded = repository.ReadState<World>(migrated, Models());

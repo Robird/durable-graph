@@ -27,7 +27,7 @@ public sealed class RevisionReadSessionTests : IDisposable {
         using (IRbfFile file = RbfFile.CreateNew(NextPath()))
         using (SegmentStore segments = NewSegments()) {
             SchemaStore schemas = new(file);
-            StateRevisionStore store = new(segments);
+            using StateRevisionStore store = new(segments);
             original = store.Append(StateRevision.CreateObjectHeadMapBase(null,
                 [Node(schemas, 1, 4, 3), Node(schemas, 2, 5, 3), Text(3, "equal"), Text(4, "equal")], []));
             changed = store.Append(StateRevision.CreateObjectHeadMapDelta(original,
@@ -76,7 +76,7 @@ public sealed class RevisionReadSessionTests : IDisposable {
         using IRbfFile file = RbfFile.CreateNew(NextPath());
         using SegmentStore segments = NewSegments();
         SchemaStore schemas = new(file);
-        StateRevisionStore store = new(segments);
+        using StateRevisionStore store = new(segments);
         FrameAddress original = store.Append(StateRevision.CreateObjectHeadMapBase(null,
             [Node(schemas, 1, 4, 2), Text(2, "value")], []));
         FrameAddress invalid = store.Append(StateRevision.CreateObjectHeadMapDelta(original,
@@ -98,7 +98,7 @@ public sealed class RevisionReadSessionTests : IDisposable {
         using IRbfFile file = RbfFile.CreateNew(NextPath());
         using SegmentStore segments = NewSegments();
         SchemaStore schemas = new(file);
-        StateRevisionStore store = new(segments);
+        using StateRevisionStore store = new(segments);
         FrameAddress original = store.Append(StateRevision.CreateObjectHeadMapBase(null,
             [Durable(schemas, 1, OwnerSchema, [2]), Durable(schemas, 2, TargetSchema, [7])], []));
         FrameAddress invalid = store.Append(StateRevision.CreateObjectHeadMapDelta(original,
@@ -125,7 +125,7 @@ public sealed class RevisionReadSessionTests : IDisposable {
         using IRbfFile file = RbfFile.CreateNew(NextPath());
         using SegmentStore segments = NewSegments();
         SchemaStore schemas = new(file);
-        StateRevisionStore store = new(segments);
+        using StateRevisionStore store = new(segments);
         DictionaryLayout layout = new(new(1, TypeTag.String), new(2, TypeTag.Int32));
         RepresentationId representation = schemas.RegisterRepresentations([ObjectLayout.ForDictionary(layout)])[0];
         ArrayBufferWriter<byte> bytes = new();
@@ -150,7 +150,7 @@ public sealed class RevisionReadSessionTests : IDisposable {
         using IRbfFile file = RbfFile.CreateNew(NextPath());
         using SegmentStore segments = NewSegments();
         SchemaStore schemas = new(file);
-        StateRevisionStore store = new(segments);
+        using StateRevisionStore store = new(segments);
         FrameAddress original = store.Append(StateRevision.CreateObjectHeadMapBase(null, [Text(1, "text")], []));
         FrameAddress inherited = store.Append(StateRevision.CreateObjectHeadMapDelta(original, [], []));
         FrameAddress corrupt = store.Append(StateRevision.CreateObjectHeadMapBase(inherited, [], [new(1, inherited)]));
@@ -166,7 +166,7 @@ public sealed class RevisionReadSessionTests : IDisposable {
         using IRbfFile file = RbfFile.CreateNew(NextPath());
         using SegmentStore segments = NewSegments();
         SchemaStore schemas = new(file);
-        StateRevisionStore store = new(segments);
+        using StateRevisionStore store = new(segments);
         FrameAddress corrupt = store.Append(StateRevision.CreateObjectHeadMapBase(null,
             [Durable(schemas, 1, NodeSchema, [4, 0, 99])], []));
         int reads = 0;
@@ -183,7 +183,7 @@ public sealed class RevisionReadSessionTests : IDisposable {
         using IRbfFile file = RbfFile.CreateNew(NextPath());
         using SegmentStore segments = NewSegments();
         SchemaStore schemas = new(file);
-        StateRevisionStore store = new(segments);
+        using StateRevisionStore store = new(segments);
         FrameAddress address = store.Append(StateRevision.CreateObjectHeadMapBase(null, [Text(1, "text")], []));
         StateModelSnapshot models = new StateModelRegistry().Snapshot(schemas);
         RevisionReadSession first = new(store, schemas, models), second = new(store, schemas, models);

@@ -143,7 +143,7 @@ internal static class SharedReadProbe {
 
     private static void CheckActualHeads(string directory, GraphFrame[] frames) {
         using SegmentStore segments = SegmentStore.OpenReadOnlyExisting(Path.Combine(directory, "state"), Options);
-        StateRevisionStore store = new(segments);
+        using StateRevisionStore store = new(segments);
         var s0 = store.ReadLiveObjectHeadMap(frames[0].RevisionAddress);
         var e1 = store.ReadLiveObjectHeadMap(frames[1].RevisionAddress);
         var s1 = store.ReadLiveObjectHeadMap(frames[2].RevisionAddress);

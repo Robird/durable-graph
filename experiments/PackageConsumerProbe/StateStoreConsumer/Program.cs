@@ -90,7 +90,7 @@ public sealed partial class Character : NamedObject {
         using var coldSchemaFile = RbfFile.OpenReadOnlyExisting(schemaPath);
         SchemaStore coldSchemas = new(coldSchemaFile, readOnly: true);
         using SegmentStore coldSegments = SegmentStore.OpenReadOnlyExisting(statePath, options);
-        StateRevisionStore cold = new(coldSegments);
+        using StateRevisionStore cold = new(coldSegments);
         StateRevision first = cold.Read(firstRevision);
         stringId = new ObjectId(first.LocalObjectIds.Single(id => id != characterId.Value));
         Require(first.ParentRevisionAddress is null && first.LocalObjects.Count == 2 &&

@@ -257,7 +257,8 @@ internal static class Program {
     private static void Inspect(string directory, Action<StateRevisionStore, SchemaStore> action) {
         using var file = RbfFile.OpenReadOnlyExisting(Path.Combine(directory, "schemas.rbf"));
         using SegmentStore segments = SegmentStore.OpenReadOnlyExisting(Path.Combine(directory, "state"), Options);
-        action(new StateRevisionStore(segments), new SchemaStore(file, readOnly: true));
+        using StateRevisionStore states = new(segments);
+        action(states, new SchemaStore(file, readOnly: true));
     }
 
     private static void WriteAddress(string directory, string name, FrameAddress revision, ObjectId worldId) =>
