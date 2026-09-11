@@ -23,7 +23,10 @@
 [DB-065](../docs/design-branches/0065-event-history-consumer-contract-slice.md) 完成：默认调用、包内 XML 文档、
 [引用事件快照与恢复示例](../experiments/PackageConsumerProbe/EventHistoryRecoveryConsumer/README.md)，以及 README 原文执行验证。
 恢复示例与内部故障测试共用 Pending 判断；已发布 S 不重放，失败后重新取得 State/Event，不复用旧的可变图。
-现有提交/格式、DB-064 只读共享与可写隔离合同保持。下一步让下游按公开入口接入真实模型，收集具体摩擦；
+现有提交/格式、DB-064 只读共享与可写隔离合同保持。
+第二轮 [ReadPair 反馈](../../drama-board/docs/feedback/durablegraph/002-readpair-sharing-contract.md) 已评估为
+[DB-066 推荐施工片](../docs/design-branches/0066-readpair-comparison-and-transient-contract-slice.md)：解除共享判断的额外编码依赖，并明确 Transient 的视图边界；尚未实施。
+下游可继续按公开入口接入真实模型，收集具体摩擦；
 跨重开书签、局部事件浏览与类型适配扩展按路线图的需求触发，不自动扩展本轮范围。
 自动跨库业务规则发现、ValueTuple、DateTime、程序集审视和 SchemaStore 自举不随本轮扩张。
 
