@@ -19,10 +19,16 @@
 
 ## 当前焦点
 
+下一片建议为 [DB-068：record class 领域模型](../docs/design-branches/0068-record-class-model-slice.md)（Proposed，未实施）。
+[第三轮真实接入反馈](../../drama-board/docs/feedback/durablegraph/003-real-model-integration.md) 已报告完整世界/事件冷恢复，
+本轮核对 adapter、测试源码与固定包来源；主要摩擦是把 record 改普通 class 后手写 copy/equality。
+建议以共同 IDurableObject 资格贯通普通 class/record、SG backing storage 与继承，保留当前引用身份和 Schema/格式；
+不自动提供深不可变/集合内容相等。范围、替代方案与真包验收集中在 DB-068，等待采纳后施工。
+
 [读缓存 DB-067](../docs/design-branches/0067-owned-revision-read-cache-design.md) 已实施并验收：
 正常 Store 统一有界缓存 owned frame / 完整 map，地址字典采用 keys/values 双数组二分，已有 local records 直接二分定位。
 日常 append-only、仅离线救援截断且随后新开 Store 的执行纪律见 [AGENTS](../AGENTS.md#persistent-data-discipline)。
-生命周期接线、产品回归、真实包验证及新表示测量已完成；证据集中在 DB-067，下一步回到下游真实模型接入与反馈。
+生命周期接线、产品回归、真实包验证及新表示测量已完成；证据集中在 DB-067，后续优化由真实工作负载触发。
 
 [DramaBoard 首轮 API 反馈](../../drama-board/docs/feedback/durablegraph/001-eventhistory-api.md) 的近期改进已由
 [DB-065](../docs/design-branches/0065-event-history-consumer-contract-slice.md) 完成：默认调用、包内 XML 文档、
@@ -34,7 +40,7 @@
 缺 proof 保守不共享，真实错误传播。普通/Family SG 自动登记，数组/List/Dictionary 复用静态槽比较；
 Dictionary 读取的 canonical key 验证保持。ReadPair 的视图专属 Transient 放在图外，独立读取允许各自初始化，续写仍用 Resume。
 完整测试、独立审阅和真实包验收已通过，证据集中在分片记录。
-下游可继续按公开入口接入真实模型，收集具体摩擦；
+下游已按公开入口接入真实模型，可继续玩法扩展并收集具体摩擦；
 跨重开书签、局部事件浏览与类型适配扩展按路线图的需求触发，不自动扩展本轮范围。
 自动跨库业务规则发现、ValueTuple、DateTime、程序集审视和 SchemaStore 自举不随本轮扩张。
 

@@ -19,7 +19,8 @@
 
 | 分片 | 要解决的增量 |
 |---|---|
-| DramaBoard 实际接入 | 按公开入口保存、浏览、恢复并续写真实模型，继续收集适配/注册/升级成本；尚未发生的需求不由首轮评审替代验证 |
+| [DB-068 record class 领域模型](design-branches/0068-record-class-model-slice.md)（Proposed） | [第三轮反馈](../../drama-board/docs/feedback/durablegraph/003-real-model-integration.md) 已报告真实世界/事件冷恢复；主要适配成本是 record 改普通 class。建议共同引用资格、positional/generic record、继承与现有历史管线，附真包使用范式；等待采纳，不自动扩大不可变容器或引用 key 范围 |
+| DramaBoard 后续实测 | 继续玩法和较长轨迹，使用真实业务字段做两代升级见证。第三轮单次未预热 Debug 数据不证明缓存瓶颈或可变模型更优；纯 fold 的新实例 Base 与 map Remove 仍属增量保存，不触发跨实例内容配对 |
 | 读取优化的后继 | 已交付读缓存的机制与预算证据从 [DB-067](design-branches/0067-owned-revision-read-cache-design.md) 进入；默认容量调整、构建器替换、Normalize 复用和进一步共享比较优化均由真实工作负载触发，见 §4。不承诺跨图实例复用，不改变可写 Resume 隔离 |
 
 ArtifactStore 在该路线中先由 EventHistory 覆盖事件/快照职责，不另建内容 Store；
