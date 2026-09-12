@@ -1,5 +1,7 @@
 # DurableGraph
 
+[MIT License](LICENSE)
+
 **带 Schema 版本历史的 C# 对象图增量序列化库。**
 
 直接修改普通领域对象，然后 Commit；不需要代理、setter hook 或手工 MarkDirty。
