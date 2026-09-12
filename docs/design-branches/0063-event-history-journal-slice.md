@@ -96,7 +96,8 @@ foreach (var frame in history.ReadEvents("main")) {
 新库另提供 CreateNew/CreateBranch(initialState) 路径：初始 S0 也经过一次完整发布，见下节初始化顺序。
 `CreateBranch<TState>(name, initialState, models, policy)` 返回已经发布 S0 的 `EventHistorySession<TState>`，
 保留传入的 CLR 实例；`session.Head` 取得初始 `GraphFrame`。这避免初次写入后再 Resume 丢弃调用方实例。
-策略参数可省略，默认 `(3, 5)`；CommitDomainState 的无根参数形式使用 session.State。
+策略参数可省略，本片记录时默认 `(3, 5)`；后继默认值选择见 [DB-070](0070-read-amplification-default.md)。
+CommitDomainState 的无根参数形式使用 session.State。
 不要求调用方传 roots list、Parent、ObjectId 或 DTO baseline；需要明确查看世界时调用 ReadState，
 需要处理基态时从 EventFrame 查询其直接前 S。读取可以返回请求基类的异构事件子类。
 注册方式沿 README/现有模型 facade；不引入事件专用 Schema 注册体系。

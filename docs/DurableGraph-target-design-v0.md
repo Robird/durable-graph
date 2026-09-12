@@ -260,6 +260,8 @@ Source Generator 负责可在编译期确定的类型知识与机械代码，框
   精确比较、预算和强制/可选分类以 [DB-015](design-branches/0015-statestore-object-representation-policy.md)
   与对应代码为准，后续执行层不能自行改变策略语义。没有合法 Delta 的更新显式强制 Base，
   不伪造 Delta 估算；它与 Insert 一样属于必需写入，不消耗可选 Base 预算。
+  默认选择采用可解释的稳态摊销容忍度，不假定存在无工作负载依赖的天然最优阈值；
+  当前参数与调优指导见[根 README](../README.md#调整保存策略)，分析依据见 [DB-070](design-branches/0070-read-amplification-default.md)。
 - 策略消费完整 post-live 对象集合的估算，产生稀疏表示计划。真实 Revision Parent、对象变化分类、
   reachability 和 Removes 由保存调用方提供，策略不能证明这些输入完整。
 - Storage 使用多历史 Segment 地址与 BackwardFileDistance；rollover 是 soft threshold，

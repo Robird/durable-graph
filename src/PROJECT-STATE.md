@@ -1,6 +1,6 @@
 # DurableGraph 产品开发工作集
 
-> 校准：2026-09-12；产品实现截至 [DB-069](../docs/design-branches/0069-incremental-save-baseline.md)。后续优先真实业务长轨迹与保存成本反馈。本文只维护当前能力、边界与续工入口。
+> 校准：2026-09-12；产品实现截至 [DB-070](../docs/design-branches/0070-read-amplification-default.md)。后续优先真实业务长轨迹与保存成本反馈。本文只维护当前能力、边界与续工入口。
 > 文档不是实现授权；事实以当前源码、测试和工具输出为准。
 
 ## 从这里继续
@@ -19,9 +19,13 @@
 
 ## 当前焦点
 
+[DB-070：读取放大阈值默认选择](../docs/design-branches/0070-read-amplification-default.md) 将 EventHistory 生效默认改为 `{5,5}`。
+选取依据是稳定小 Delta 模型中约 25% 的额外 Base 摊销开销；不是实测最优值或空间/读取上限。
+用户的 `{3,5}` 冷读方向与 `{11,5}` 存储方向配置见[根 README](../README.md#调整保存策略)；测试基准独立保持 `{3,5}`。
+
 [DB-069：热保存基线增量计量](../docs/design-branches/0069-incremental-save-baseline.md) 已实施：
 已验证的 head/H 随 DTO 基线增量推进，受控热保存免除旧对象链重复读取；精确 payload、Event/State 与失败边界保持。
-独立审阅、前后测量、源码回归与真实包验证已通过。默认策略保持 `{3,5}`。
+独立审阅、前后测量、源码回归与真实包验证已通过。
 下一步按真实长轨迹反馈评估 map 回溯与全量 Base 准备，重访条件见路线图，测量证据仅保留在本片。
 
 [DB-068：record class 领域模型](../docs/design-branches/0068-record-class-model-slice.md) 已贯通：

@@ -142,11 +142,8 @@ Dispose **不自动保存，也不撤销领域修改**。`CommitDomainState(next
 这段程序每次运行会完成一条已有或新建的事件；处理失败后的恢复应采用下文的[仅完成 PendingEvent 入口](#事件快照与失败恢复)，
 不要把再次运行“创建新事件”的程序当作透明重试。
 
-省略策略参数即可使用库的默认保存策略。需要调优时，在某次 CreateBranch 或 Commit 的 `parameters` 参数传入
-`new ReadAmplificationBaseBudgetParameters(3, 5)`；两个整数分别表示对象级读取放大倍率阈值与可选 Base 预算百分比。
-当前默认值也是 `(3, 5)`，可能随原型演进调整。覆盖只对该次调用生效，后续省略参数不会继承上次的覆盖值。
-这是性能策略，不是事务大小上限；新增/升级等必要 Base 不受该可选预算限制。
-无需自己估算尺寸、挑 Base/Delta 或调用 DTO 的二进制 body。
+省略策略参数即可使用默认 `(5, 5)`：对象级读取放大动机阈值为 5，可选 Base 软预算为 5%。
+无需自己估算尺寸、挑 Base/Delta 或调用 DTO 的二进制 body；有需要再按下文[调整保存策略](#调整保存策略)。
 
 ### 3. 独立浏览与分支
 
@@ -190,6 +187,45 @@ var pair = history.ReadPair(before, lastEvent, models);
 `MoveBranch("main", expectedHead, targetFrame)`；随后从目标分支 Resume。
 handle 从 `GetHead`、`ReadFrames` 或提交结果取得，只能用于签发它的这一次打开实例；不要跨库或跨重开复用。
 历史链是 `S0 → E1 → S1`，E1 与 S1 的 Revision Parent 都是 S0，Event 不成为 State 的增量比较基线。
+
+## 调整保存策略
+
+`ReadAmplificationThreshold` 控制何时产生可选 Base 动机：小值倾向缩短冷恢复的对象链，大值倾向少写重复 Base、节省历史存储。
+它不是读取放大的硬上限；获得动机后还要经过 `BaseBudgetPercent` 的软预算筛选。
+新增、升级或 Base 不大于 Delta 估算值等必要 Base 不受这项可选预算限制；预算也不限制事务大小或总写入字节。
+
+以下为**稳定小 Delta 的长期模型估算**：单对象 Base 大小 `B` 大致不变，Delta 小而稳定，预算不推迟 Base，
+并在周期内均匀取样冷重建。以持续写 Delta 的 payload 为 `1×`，令阈值为 `L`，
+则长期写入 payload 约为 `1 + 1/(L−1)` 倍，平均重建 payload 约为 `(L+1)B/2`。
+
+| 调整方向 | 参数 `(L, 预算%)` | 长期写入 payload / 全 Delta | 相对默认的写入变化 | 平均重建 payload | 相对默认的重建量变化 |
+|---|---|---:|---:|---:|---:|
+| 偏向冷读 | `(3, 5)` | `1.5×` | +20% | `2B` | −33.3% |
+| 默认 | `(5, 5)` | `1.25×` | — | `3B` | — |
+| 偏向存储 | `(11, 5)` | `1.1×` | −12% | `6B` | +100% |
+
+若取 `L=10`，对应约 `1.111×` 写入与 `5.5B` 平均重建；上表用 `11` 表达额外写入约 10% 的典型选择。
+这些比例不包含共享 frame、map、Journal 等开销，也不计有限历史与离散选择的偏差；
+**重建 payload 减少 33.3% 不等于读取快 33.3%**，写入比例也不是整个仓库的磁盘空间保证。
+当前正常存储为 append-only；调参影响后续写入，不回收既有历史或改变已保存旧版本的重建链。
+
+在 CreateBranch、CommitDomainEvent 或 CommitDomainState 的 `parameters` 参数传入配置即可。
+例如，对上面已无 PendingEvent 的 session，再完成一次偏向存储的事件/状态保存：
+
+```csharp
+var savePolicy = new ReadAmplificationBaseBudgetParameters(
+    ReadAmplificationThreshold: 11,
+    BaseBudgetPercent: 5);
+session.CommitDomainEvent(new DamageEvent { Amount = 1 }, parameters: savePolicy);
+world.Hero.Hp -= session.GetPendingEvent<DamageEvent>().Amount;
+session.CommitDomainState(parameters: savePolicy);
+```
+
+需要偏向冷读时将 `11` 改为 `3`。**覆盖只对该次调用生效**，包括 CreateBranch；后续省略参数或传 `null`
+都会重新使用库默认值，不继承上次覆盖。应用若要固定自己的策略，应共享一个参数值并在每次保存时显式传入。
+当前默认可能随原型演进调整；它选择了模型中约 25% 的额外 Base 摊销开销，尚非实测最优值。
+公式、选择依据和适用边界见 [DB-070](docs/design-branches/0070-read-amplification-default.md)，
+也可打开[交互函数图](docs/research/read-amplification-tradeoff/index.html)比较。
 
 ## 事件快照与失败恢复
 

@@ -1,0 +1,282 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Base 开销与重建成本 · DurableGraph</title>
+  <style>
+    :root { color-scheme: light; --paper: #f6f5f0; --ink: #1c302e; --muted: #5d6f6b; --line: #dbe3dc; --green: #087f72; --orange: #c26030; --blue: #3b65af; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--paper); color: var(--ink); font: 16px/1.7 system-ui, "Segoe UI", "Microsoft YaHei", sans-serif; }
+    main { max-width: 1200px; margin: auto; padding: 48px 28px; }
+    header { margin-bottom: 26px; }
+    .eyebrow { color: var(--green); font-size: 12px; font-weight: 700; letter-spacing: .15em; }
+    h1 { font-size: clamp(25px, 3.8vw, 40px); line-height: 1.3; letter-spacing: -.04em; margin: 12px 0; }
+    h2 { font-size: 19px; margin: 0 0 6px; }
+    p { margin: 8px 0; }
+    .muted, .caption { color: var(--muted); }
+    .caption { font-size: 13px; }
+    .card { background: #fff; border: 1px solid var(--line); border-radius: 16px; padding: 24px; }
+    .controls { display: grid; grid-template-columns: 1.3fr 1fr; gap: 30px; align-items: center; }
+    .input-row { display: flex; align-items: center; gap: 14px; }
+    input[type="range"] { width: 100%; accent-color: var(--green); cursor: pointer; }
+    input[type="number"] { width: 86px; flex-shrink: 0; border: 1px solid #a7bcb3; padding: 8px; border-radius: 8px; color: var(--ink); font: inherit; }
+    button { border: 1px solid #bccdc4; border-radius: 8px; background: #fff; color: var(--ink); padding: 7px 12px; cursor: pointer; font: inherit; font-size: 13px; }
+    button:hover { background: #edf5ee; }
+    button[aria-pressed="true"] { color: #fff; background: var(--green); border-color: var(--green); }
+    button:focus-visible, input:focus-visible, summary:focus-visible { outline: 3px solid #80b9f0; outline-offset: 3px; }
+    .presets { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+    .formula { font: 20px/1.6 ui-monospace, Consolas, monospace; }
+    .metrics { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin: 16px 0 24px; }
+    .metric { padding: 18px 22px; }
+    .metric strong { display: block; font-size: 31px; font-weight: 650; line-height: 1.5; font-variant-numeric: tabular-nums; }
+    .green { color: var(--green); } .orange { color: var(--orange); } .blue { color: var(--blue); }
+    .chart-head { display: flex; align-items: start; justify-content: space-between; gap: 20px; }
+    .chart-scroll { overflow-x: auto; }
+    svg { display: block; width: 100%; height: auto; min-width: 540px; font-family: inherit; }
+    .small-chart svg { min-width: 380px; }
+    .chart { margin-bottom: 20px; }
+    .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin: 20px 0; }
+    .insight { padding: 15px 19px; background: #ecf4ed; border-left: 3px solid var(--green); border-radius: 0 8px 8px 0; }
+    .grid-line { stroke: #e7ede7; stroke-width: 1; }
+    .axis-line { stroke: #8b9e95; stroke-width: 1; }
+    .tick-label { fill: #5d6f6b; font-size: 13px; }
+    .axis-label { fill: #354f46; font-size: 14px; }
+    .curve { fill: none; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+    .guide { stroke: #6d8578; stroke-dasharray: 4 5; stroke-width: 1.2; }
+    .point-label { fill: #354f46; font-size: 13px; paint-order: stroke; stroke: #fff; stroke-width: 5px; stroke-linejoin: round; }
+    table { width: 100%; border-collapse: collapse; margin: 14px 0; font-size: 14px; font-variant-numeric: tabular-nums; }
+    th, td { padding: 10px 12px; text-align: right; border-bottom: 1px solid var(--line); white-space: nowrap; }
+    th:first-child, td:first-child { text-align: left; }
+    th { color: var(--muted); font-weight: 500; }
+    tr.selected { background: #ecf4ed; }
+    details { margin-top: 22px; }
+    summary { cursor: pointer; font-weight: 600; }
+    li { margin: 6px 0; }
+    code { font-family: ui-monospace, Consolas, monospace; }
+    a { color: var(--green); text-underline-offset: 3px; }
+    footer { margin-top: 24px; font-size: 12px; color: var(--muted); }
+    noscript { display: block; padding: 18px; background: #fff1d9; }
+    @media (max-width: 780px) {
+      main { padding: 24px 14px; } .card { padding: 18px; }
+      .controls, .pair { grid-template-columns: 1fr; gap: 18px; }
+      .metrics { gap: 8px; } .metric { padding: 13px 10px; }
+      .metric strong { font-size: 24px; } .metric .caption { font-size: 11px; }
+      .chart-head { flex-direction: column; gap: 6px; }
+    }
+    @media print {
+      body { background: white; } main { padding: 0; }
+      .controls, button, footer { display: none; }
+      .card { break-inside: avoid; } .chart-scroll { overflow: visible; }
+      svg { min-width: 0 !important; } .pair { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <div class="eyebrow">DURABLEGRAPH / POLICY EXPLORER</div>
+    <h1>为少写多少 Base，愿意多读多少？</h1>
+    <p class="muted">额外 payload 容忍度与平均重建 payload 的关系。理想稳态模型 · 非实测数据。</p>
+  </header>
+
+  <noscript>请启用 JavaScript 查看曲线。模型：ε = 1/(L−1)，R = (L+1)/2。例如 L=5 时，ε=25%，R=3，即平均重建 payload 为 3B。</noscript>
+
+  <section class="card controls" aria-label="模型参数">
+    <div>
+      <label for="threshold"><strong>移动阈值 L，联动查看三张图</strong></label>
+      <div class="input-row">
+        <input id="threshold" type="range" min="2" max="21" step="0.1" value="5">
+        <input id="threshold-number" type="number" aria-label="阈值 L 数值" min="2" max="21" step="0.1" value="5">
+      </div>
+      <div class="presets" aria-label="常用阈值">
+        <button type="button" data-l="3" aria-pressed="false">L = 3</button>
+        <button type="button" data-l="5" aria-pressed="true">L = 5</button>
+        <button type="button" data-l="6" aria-pressed="false">L = 6</button>
+        <button type="button" data-l="10" aria-pressed="false">L = 10</button>
+        <button type="button" data-l="11" aria-pressed="false">L = 11</button>
+      </div>
+      <p class="caption">连续模型可取小数；产品参数只接受整数。初始显示 L=5，对应当前库默认阈值。</p>
+    </div>
+    <div>
+      <div class="formula">ε = 1 / (L − 1)</div>
+      <div class="formula">R = 1 + 1 / (2ε)</div>
+      <p class="caption">B = 当前完整 Base payload；R = 平均重建 payload / B。<br>ε 以小数代入：25% = 0.25。按刚好用满容忍度的边界取值。</p>
+    </div>
+  </section>
+
+  <div class="metrics" aria-live="polite" aria-atomic="true">
+    <div class="card metric"><span class="caption">额外 payload 容忍度 ε</span><strong class="green" id="epsilon-value">25%</strong><span class="caption">相对持续写 Delta</span></div>
+    <div class="card metric"><span class="caption">平均重建 payload</span><strong class="orange" id="read-value">3 B</strong><span class="caption">B 表示一个完整 Base 的字节数</span></div>
+    <div class="card metric"><span class="caption">长期写入 payload 倍率</span><strong class="blue" id="write-value">1.25×</strong><span class="caption">持续写 Delta 的 1 + ε 倍</span></div>
+  </div>
+
+  <section class="card chart">
+    <div class="chart-head">
+      <div><h2>容忍度与重建：一条双曲线</h2><p class="caption">横轴 ε 越往左，额外写入越少；相应的平均重建 payload 越大。</p></div>
+      <button type="button" id="download">下载此图 SVG</button>
+    </div>
+    <div class="chart-scroll"><svg id="tradeoff" viewBox="0 0 960 430" role="img" aria-labelledby="tradeoff-title tradeoff-desc"></svg></div>
+    <p class="insight" id="point-summary">L = 5：容忍额外 25% payload，对应平均重建 3B。</p>
+  </section>
+
+  <div class="pair">
+    <section class="card small-chart">
+      <h2 class="green">随 L 增大，开销递减</h2>
+      <p class="caption">ε = 1/(L−1)，导数为 −1/(L−1)²。</p>
+      <div class="chart-scroll"><svg id="overhead" viewBox="0 0 500 300" role="img" aria-labelledby="overhead-title overhead-desc"></svg></div>
+    </section>
+    <section class="card small-chart">
+      <h2 class="orange">随 L 增大，重建线性增长</h2>
+      <p class="caption">R = (L+1)/2，L 每加 1，平均重建增加 0.5B。</p>
+      <div class="chart-scroll"><svg id="reconstruction" viewBox="0 0 500 300" role="img" aria-labelledby="reconstruction-title reconstruction-desc"></svg></div>
+    </section>
+  </div>
+  <p class="insight">你的直觉对应下面这对图：<strong>以阈值 L 为横轴</strong>，节省额外写入的边际收益递减，而平均重建成本线性增长。上图直接比较 ε 与 R，两者互为反比（R 先减去 1）。</p>
+
+  <section class="card" style="margin-top:24px">
+    <h2>几个可比较的位置</h2>
+    <p class="caption">点击阈值定位。L=10 对应约 11.1%；如果目标是 10%，对应的是 L=11。</p>
+    <div class="chart-scroll">
+      <table>
+        <thead><tr><th>阈值 L</th><th>额外 payload ε</th><th>平均重建 payload</th><th>长期写入 / 持续 Delta</th></tr></thead>
+        <tbody id="comparison"></tbody>
+      </table>
+    </div>
+    <details open>
+      <summary>模型的前提与读图边界</summary>
+      <ul class="caption">
+        <li>单个对象的 Base 大小 B 大致稳定；每次更新的 Delta d 较小且大致稳定；连续运行足够长。</li>
+        <li>周期内均匀取样重建；预算不推迟可选 Base。两次 Base 之间约积累 (L−1)B 的 Delta。</li>
+        <li>忽略初始 Base 的有限历史影响、Base 替代当次小 Delta 的修正，以及离散更新、严格大于和 D 上界造成的偏差。</li>
+        <li>只讨论对象 payload；不计共享 frame、map、Journal 等开销。曲线不表示实际磁盘 I/O、读取耗时或整个仓库的空间倍率。</li>
+        <li>这里的 ε 是长期摊销模型量，与产品单次选择的 BaseBudgetPercent 不是同一预算。模型中的 L 也不构成实际冷读放大的硬上限。</li>
+        <li>L=1 对应的该小 Delta 渐近公式发散，不能用它描述有限 d 下每次写 Base 的实际开销。本页展示 L∈[2,21]，ε∈[5%,100%]。</li>
+      </ul>
+    </details>
+  </section>
+  <footer>2026-09-12 · <a href="README.md">公式与使用说明</a> · <a href="../../design-branches/0070-read-amplification-default.md">DB-070：默认值选择</a> · <a href="../../design-branches/0069-incremental-save-baseline.md">DB-069：增量基线背景</a> · 单文件 HTML，无外部依赖，可离线打开。</footer>
+</main>
+<script>
+(() => {
+  "use strict";
+  const ns = "http://www.w3.org/2000/svg";
+  const green = "#087f72", orange = "#c26030";
+  const presets = [3, 5, 6, 10, 11];
+  const number = new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 2 });
+  const fmt = value => number.format(value);
+  const model = l => ({ l, epsilon: 1 / (l - 1), read: (l + 1) / 2 });
+  const element = (tag, attrs = {}, content) => {
+    const el = document.createElementNS(ns, tag);
+    for (const [key, value] of Object.entries(attrs)) el.setAttribute(key, String(value));
+    if (content !== undefined) el.textContent = content;
+    return el;
+  };
+  function chart(id, width, height, xDomain, yDomain, xTicks, yTicks, xLabel, yLabel, title, description) {
+    const svg = document.getElementById(id);
+    const box = { left: 62, right: width - 24, top: 42, bottom: height - 54 };
+    const x = v => box.left + (v - xDomain[0]) / (xDomain[1] - xDomain[0]) * (box.right - box.left);
+    const y = v => box.bottom - (v - yDomain[0]) / (yDomain[1] - yDomain[0]) * (box.bottom - box.top);
+    svg.append(element("title", { id: id + "-title" }, title), element("desc", { id: id + "-desc" }, description));
+    svg.append(element("rect", { width, height, fill: "#ffffff" }));
+    for (const value of yTicks) {
+      svg.append(element("line", { x1: box.left, x2: box.right, y1: y(value), y2: y(value), class: "grid-line" }));
+      svg.append(element("text", { x: box.left - 12, y: y(value) + 5, "text-anchor": "end", class: "tick-label" }, fmt(value)));
+    }
+    for (const value of xTicks) {
+      svg.append(element("line", { x1: x(value), x2: x(value), y1: box.top, y2: box.bottom, class: "grid-line" }));
+      svg.append(element("text", { x: x(value), y: box.bottom + 24, "text-anchor": "middle", class: "tick-label" }, fmt(value)));
+    }
+    svg.append(element("path", { d: `M${box.left},${box.top}V${box.bottom}H${box.right}`, class: "axis-line", fill: "none" }));
+    svg.append(element("text", { x: box.left, y: 22, class: "axis-label" }, yLabel));
+    svg.append(element("text", { x: (box.left + box.right) / 2, y: height - 8, "text-anchor": "middle", class: "axis-label" }, xLabel));
+    return { svg, x, y, box };
+  }
+  const main = chart("tradeoff", 960, 430, [0, 100], [1, 11], [0, 5, 10, 25, 50, 75, 100], [1, 2, 3, 4, 6, 8, 10, 11],
+    "额外 payload 容忍度 ε（%）", "平均重建 payload / B", "容忍度与平均重建 payload 的双曲线", "R=1+1/(2ε)。ε 从 5% 增至 100% 时，R 从 11 降至 1.5。ε=0 不在模型的有限定义域内。");
+  const overhead = chart("overhead", 500, 300, [2, 21], [0, 100], [2, 5, 10, 15, 21], [0, 25, 50, 75, 100],
+    "阈值 L", "额外 payload（%）", "阈值与额外 payload", "ε=1/(L−1)，随阈值增加而递减。");
+  const reconstruction = chart("reconstruction", 500, 300, [2, 21], [1, 11], [2, 5, 10, 15, 21], [1, 3, 5, 7, 9, 11],
+    "阈值 L", "平均重建 payload / B", "阈值与平均重建 payload", "R=(L+1)/2，随阈值增加而线性增长。");
+  function curve(plot, points, color) {
+    const d = points.map(([a, b], i) => `${i ? "L" : "M"}${plot.x(a).toFixed(3)},${plot.y(b).toFixed(3)}`).join(" ");
+    plot.svg.append(element("path", { d, class: "curve", stroke: color }));
+  }
+  const samples = Array.from({ length: 601 }, (_, i) => model(2 + 19 * i / 600));
+  curve(main, samples.map(m => [100 * m.epsilon, m.read]), green);
+  curve(overhead, samples.map(m => [m.l, 100 * m.epsilon]), green);
+  curve(reconstruction, samples.map(m => [m.l, m.read]), orange);
+  // Offset neighboring labels so L=10 and L=11 remain separately readable.
+  const offsets = new Map([[3, [12, -12]], [5, [12, -12]], [6, [12, -12]], [10, [18, 18]], [11, [12, -12]]]);
+  for (const l of presets) {
+    const m = model(l), px = main.x(100 * m.epsilon), py = main.y(m.read);
+    const [dx, dy] = offsets.get(l);
+    main.svg.append(element("circle", { cx: px, cy: py, r: 4, fill: "#ffffff", stroke: green, "stroke-width": 2 }));
+    main.svg.append(element("text", { x: px + dx, y: py + dy, class: "point-label" }, `L=${l}`));
+  }
+  function cursor(plot, color) {
+    const group = element("g");
+    const horizontal = element("line", { class: "guide" });
+    const vertical = element("line", { class: "guide" });
+    const dot = element("circle", { r: 6, fill: color, stroke: "#ffffff", "stroke-width": 2 });
+    group.append(horizontal, vertical, dot);
+    plot.svg.append(group);
+    return (a, b) => {
+      const px = plot.x(a), py = plot.y(b);
+      for (const [key, value] of Object.entries({ x1: plot.box.left, x2: px, y1: py, y2: py })) horizontal.setAttribute(key, value);
+      for (const [key, value] of Object.entries({ x1: px, x2: px, y1: py, y2: plot.box.bottom })) vertical.setAttribute(key, value);
+      dot.setAttribute("cx", px); dot.setAttribute("cy", py);
+    };
+  }
+  const cursors = [cursor(main, orange), cursor(overhead, green), cursor(reconstruction, orange)];
+  const table = document.getElementById("comparison");
+  for (const l of presets) {
+    const m = model(l), tr = document.createElement("tr");
+    tr.dataset.l = l;
+    tr.innerHTML = `<td><button type="button" data-l="${l}" aria-pressed="false">L = ${l}</button></td><td>${fmt(100 * m.epsilon)}%</td><td>${fmt(m.read)}B</td><td>${fmt(1 + m.epsilon)}×</td>`;
+    table.append(tr);
+  }
+  const slider = document.getElementById("threshold"), numeric = document.getElementById("threshold-number");
+  let selected = 5;
+  function select(value) {
+    if (!Number.isFinite(value)) return;
+    selected = Math.round(Math.max(2, Math.min(21, value)) * 10) / 10;
+    const m = model(selected);
+    slider.value = numeric.value = selected;
+    slider.setAttribute("aria-valuetext", `L=${fmt(selected)}，额外 ${fmt(100 * m.epsilon)}%，平均重建 ${fmt(m.read)}B`);
+    document.getElementById("epsilon-value").textContent = fmt(100 * m.epsilon) + "%";
+    document.getElementById("read-value").textContent = fmt(m.read) + " B";
+    document.getElementById("write-value").textContent = fmt(1 + m.epsilon) + "×";
+    document.getElementById("point-summary").textContent = `L = ${fmt(selected)}：容忍额外 ${fmt(100 * m.epsilon)}% payload，对应平均重建 ${fmt(m.read)}B。`;
+    cursors[0](100 * m.epsilon, m.read);
+    cursors[1](selected, 100 * m.epsilon);
+    cursors[2](selected, m.read);
+    document.querySelectorAll("button[data-l]").forEach(button => button.setAttribute("aria-pressed", Number(button.dataset.l) === selected));
+    table.querySelectorAll("tr").forEach(tr => tr.classList.toggle("selected", Number(tr.dataset.l) === selected));
+  }
+  slider.addEventListener("input", () => select(slider.valueAsNumber));
+  numeric.addEventListener("input", () => { if (numeric.validity.valid) select(numeric.valueAsNumber); });
+  numeric.addEventListener("change", () => select(Number.isFinite(numeric.valueAsNumber) ? numeric.valueAsNumber : selected));
+  document.querySelectorAll("button[data-l]").forEach(button => button.addEventListener("click", () => select(Number(button.dataset.l))));
+  document.getElementById("download").addEventListener("click", () => {
+    const copy = main.svg.cloneNode(true);
+    copy.setAttribute("xmlns", ns);
+    copy.setAttribute("width", "960"); copy.setAttribute("height", "430");
+    // Inline the applied SVG styles so the downloaded artifact needs no HTML stylesheet.
+    const originals = main.svg.querySelectorAll("*");
+    copy.querySelectorAll("*").forEach((node, i) => {
+      const css = getComputedStyle(originals[i]);
+      for (const key of ["fill", "stroke", "stroke-width", "stroke-dasharray", "stroke-linecap", "stroke-linejoin", "font-size", "font-family", "paint-order"])
+        node.style.setProperty(key, css.getPropertyValue(key));
+    });
+    const url = URL.createObjectURL(new Blob([new XMLSerializer().serializeToString(copy)], { type: "image/svg+xml;charset=utf-8" }));
+    const link = document.createElement("a");
+    link.href = url; link.download = `read-amplification-L${selected}.svg`;
+    document.body.append(link); link.click(); link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  });
+  select(5);
+})();
+</script>
+</body>
+</html>

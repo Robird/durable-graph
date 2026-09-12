@@ -23,7 +23,8 @@
 | 001-D 跨重开定位 | 成立，现有 GraphFrame 是一次打开内的受检 handle，无持久 locator→handle 入口 | 保留候选，具体书签/引用需求出现再设计；本片只说明现有边界 |
 | 001-E 最近 N 条 | 成立，ReadEvents 先全链物化再筛选；尚无长历史测量 | 采纳顺序/物化/成本文档；局部浏览 API 与测量另行触发 |
 
-当前 [Repository](../../src/DurableGraph.StateStore/EventHistoryRepository.cs) 的 DefaultPolicy 为 `(3, 5)`。
+本片实施时 [Repository](../../src/DurableGraph.StateStore/EventHistoryRepository.cs) 的 DefaultPolicy 为 `(3, 5)`；
+后继默认值选择见 [DB-070](0070-read-amplification-default.md)。
 每次 CreateBranch/Commit 独立使用该次参数或默认值；CreateBranch 的覆盖值不会变成后续 Commit 的会话默认值。
 默认数值是当前实现选择，不是业务语义或永久格式保证。
 

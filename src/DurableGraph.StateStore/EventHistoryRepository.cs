@@ -21,7 +21,7 @@ public sealed class EventHistoryRepository : IDisposable {
     private object? _activeSession;
     private bool _busy;
     private bool _disposed;
-    private static readonly ReadAmplificationBaseBudgetParameters DefaultPolicy = new(3, 5);
+    private static readonly ReadAmplificationBaseBudgetParameters DefaultPolicy = new(5, 5);
     internal Action<CommitCheckpoint>? Checkpoint { get; set; }
 
     private EventHistoryRepository(HistoryJournal history, GraphResources resources) {

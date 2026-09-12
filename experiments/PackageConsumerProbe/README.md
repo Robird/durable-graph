@@ -152,8 +152,9 @@ restored StateStore XML documentation. The root README itself has a separate ext
 ./experiments/PackageConsumerProbe/Run-ReadmeQuickStartProbe.ps1 -PackageSource <matching-feed> -Version <version>
 ```
 
-The README witness extracts the actual project, models, program, browsing and Upgrade blocks. It runs
-two V1 processes, then the documented V2 edits, checks retained history and builds again in Verify mode.
+The README witness extracts the actual project, models, program, browsing, Upgrade and policy-override blocks.
+It runs two V1 processes, then the documented V2 edits, checks retained history, executes the explicit
+save-policy example against the resumed world, and builds again in Verify mode.
 Use the matching nine-package feed printed by the recovery runner, or another fresh feed from the same source.
 
 ```powershell
