@@ -142,3 +142,22 @@ dotnet test tests/DurableGraph.StateStore.Tests -c Release --filter FullyQualifi
   [Run-EventHistoryProbe.ps1](../../experiments/PackageConsumerProbe/Run-EventHistoryProbe.ps1) 均通过。
   后两条复用首条生成的同版九包 feed，覆盖冷读/升级/连续提交、Pending 恢复与重复恢复不重放、ReadPair、
   根替换、只读浏览不写入和历史图保留。未修改上游、持久格式、默认参数或发布协议。
+
+## 7. 协作落款与回访入口
+
+落款日期：2026-09-12。
+
+| 项目 | 记录 |
+|---|---|
+| 协作来源 | Codex 会话 `01a093d8-8f37-74b0-89dc-8ef3f822db42`（主协调线程；当次环境的 thread ID 与 session ID 相同） |
+| 参与范围 | DB-069 的方案收敛、分工实施协调、集成验收与文档维护；实现、测量、测试及独立审阅由本次协作中的多个 subagent 共同完成 |
+| 对应实现 | Git 提交 `5fa7b21f80594ec0acf5ea9cb4df7d78d416e1f4` |
+| 讨论回顾 | [用户提供的 Codex 会话分享快照](https://chatgpt.com/s/cx_6aa4ee32aad08191a33c26c3b3f916fd) |
+| 本地记录定位 | `~/.codex/sessions/2026/09/12/rollout-2026-09-12T12-20-38-01a093d8-8f37-74b0-89dc-8ef3f822db42.jsonl`（落款时已确认本机存在；原始记录未纳入本仓库） |
+
+可回访的问题包括：为什么只保存 head/H、为什么保留精确 payload、安装与 Event 隔离如何证明，以及为什么把 map 回溯留作独立后继。
+历史判断以对应提交及本文证据定位；讨论后续修改时，先对照当前源码与 [PROJECT-STATE](../../src/PROJECT-STATE.md)。
+
+分享快照是辅助回顾入口。按落款时核对的 [OpenAI 官方说明](https://learn.chatgpt.com/docs/use-chatgpt#share-a-read-only-snapshot-of-a-codex-thread)，
+它仅捕获分享时支持的内容，不随后续消息更新，不含原始工具调用、Shell 命令及工具输入输出，也不能直接 fork 原线程。
+长期保留期限未确认；落款提供回访线索，不将分享链接视为完整会话归档或可恢复性保证。
