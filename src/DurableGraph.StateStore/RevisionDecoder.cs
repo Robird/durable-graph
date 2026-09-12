@@ -43,9 +43,9 @@ public static class RevisionDecoder {
     private static DecodedRevision ReadCore(
         StateRevisionStore store, SchemaStore schemas, FrameAddress revisionAddress,
         Func<DecodedBaseObjectBody, ObjectReaderBinding> resolveReader) =>
-        ReadCore(store, revisionAddress, (id, _) => ReadObject(store, schemas, revisionAddress, id, resolveReader));
+        ReadCore(store, schemas, revisionAddress, (id, _) => ReadObject(store, schemas, revisionAddress, id, resolveReader));
 
-    internal static (ObjectStateRecord Row, ObjectReaderBinding Binding) ReadObject(
+    internal static (ObjectStateRecord Row, ObjectReaderBinding Binding, ObjectStorageInfo Storage) ReadObject(
         StateRevisionStore store, SchemaStore schemas, FrameAddress revisionAddress, ObjectId id,
         Func<DecodedBaseObjectBody, ObjectReaderBinding> resolveReader) {
         ObjectVersionChain chain = store.ReadObjectVersionChain(revisionAddress, id.Value);
@@ -56,21 +56,26 @@ public static class RevisionDecoder {
         }
         // Readers return owned DTOs and consume the complete Base/Delta body chain.
         ObjectStateRecord row = binding.Read(id, TypedObjectVersionReader.CreateBodySource(chain, body));
-        return (row, binding);
+        return (row, binding, new(chain.ObjectHeadAddress, chain.ReconstructionPayloadBytes));
     }
 
-    internal static DecodedRevision ReadCore(StateRevisionStore store, FrameAddress revisionAddress,
-        Func<ObjectId, FrameAddress, (ObjectStateRecord Row, ObjectReaderBinding Binding)> readObject) {
+    internal static DecodedRevision ReadCore(StateRevisionStore store, SchemaStore schemas, FrameAddress revisionAddress,
+        Func<ObjectId, FrameAddress, (ObjectStateRecord Row, ObjectReaderBinding Binding, ObjectStorageInfo Storage)> readObject) {
         // Membership and references are properties of this view, never of a cached row.
         IReadOnlyDictionary<ObjectId, FrameAddress> heads = store.ReadLiveObjectHeadMap(revisionAddress)
             .ToDictionary(static pair => new ObjectId(pair.Key), static pair => pair.Value);
         List<ObjectStateRecord> objects = [];
         List<(ObjectStateRecord Row, ObjectReaderBinding Binding)> boundRows = [];
         List<(ObjectId Id, string Value)> strings = [];
+        Dictionary<ObjectId, ObjectStorageInfo> storage = [];
 
         // Object-first reconstruction: only one raw chain is retained at a time.
         foreach (ObjectId id in heads.Keys.Order()) {
-            (ObjectStateRecord row, ObjectReaderBinding binding) = readObject(id, heads[id]);
+            (ObjectStateRecord row, ObjectReaderBinding binding, ObjectStorageInfo info) = readObject(id, heads[id]);
+            if (info.Head != heads[id]) {
+                throw new InvalidDataException("Decoded object storage does not match this Revision's exact head.");
+            }
+            storage.Add(id, info);
             objects.Add(row);
             boundRows.Add((row, binding));
             if (row.Kind == ObjectStateKind.String) { strings.Add((id, row.StringContent)); }
@@ -90,6 +95,6 @@ public static class RevisionDecoder {
                     ? target : throw new InvalidDataException($"Dictionary key object {id.Value} is not live."));
             }
         }
-        return new DecodedRevision(revisionAddress, objects, table, heads);
+        return new DecodedRevision(revisionAddress, objects, table, heads, store, schemas, storage);
     }
 }

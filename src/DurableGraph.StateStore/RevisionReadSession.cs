@@ -11,7 +11,7 @@ namespace Atelia.DurableGraph.StateStore;
 /// </remarks>
 internal sealed class RevisionReadSession {
     private readonly Dictionary<(ObjectId Id, FrameAddress Head),
-        (ObjectStateRecord Row, ObjectReaderBinding Binding)> _objects = [];
+        (ObjectStateRecord Row, ObjectReaderBinding Binding, ObjectStorageInfo Storage)> _objects = [];
     private readonly HashSet<object> _mutableInstances = new(ReferenceEqualityComparer.Instance);
 
     internal RevisionReadSession(StateRevisionStore store, SchemaStore schemas, StateModelSnapshot models,
@@ -39,7 +39,7 @@ internal sealed class RevisionReadSession {
     }
 
     internal DecodedRevision Read(FrameAddress revisionAddress) =>
-        RevisionDecoder.ReadCore(Store, revisionAddress, (id, head) => {
+        RevisionDecoder.ReadCore(Store, Schemas, revisionAddress, (id, head) => {
             if (_objects.TryGetValue((id, head), out var cached)) {
                 Statistics.CacheHits++;
                 return cached;

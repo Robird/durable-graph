@@ -12,7 +12,23 @@ internal static class ObjectRevisionPlanner {
         FrameAddress? parentRevisionAddress,
         IEnumerable<PreparedObject> objects,
         ReadAmplificationBaseBudgetParameters parameters,
-        bool independentSnapshot = false) {
+        bool independentSnapshot = false) =>
+        PrepareCore(store, parentRevisionAddress, objects, parameters, independentSnapshot, null);
+
+    // Only a controlled baseline may supply historical accounting. Standalone prepared
+    // object callers continue to establish it by reading the actual reconstruction chain.
+    internal static PreparedObjectRevision PrepareLoadedRevision(
+        StateRevisionStore store, NormalizedRevision source, IEnumerable<PreparedObject> objects,
+        ReadAmplificationBaseBudgetParameters parameters, bool independentSnapshot = false) {
+        if (!ReferenceEquals(source.SourceStore, store)) {
+            throw new InvalidDataException("The normalized baseline belongs to another State Store lifetime.");
+        }
+        return PrepareCore(store, source.RevisionAddress, objects, parameters, independentSnapshot, source);
+    }
+
+    private static PreparedObjectRevision PrepareCore(
+        StateRevisionStore store, FrameAddress? parentRevisionAddress, IEnumerable<PreparedObject> objects,
+        ReadAmplificationBaseBudgetParameters parameters, bool independentSnapshot, NormalizedRevision? source) {
         ArgumentNullException.ThrowIfNull(store);
         ArgumentNullException.ThrowIfNull(objects);
         if (independentSnapshot && parentRevisionAddress is null) {
@@ -53,9 +69,10 @@ internal static class ObjectRevisionPlanner {
             long? deltaBytes = row.ChangeKind == ObjectSaveChangeKind.Update
                 ? ObjectVersionPayloadSize.EstimateDeltaPayloadBytesUpperBound(row.DeltaBody!.Body.Length, row.PriorAddress!.Value)
                 : null;
-            // TODO(DB-029): Measure repeated object-chain reads before adding batch/cache support.
             long? reconstructionBytes = row.ChangeKind is ObjectSaveChangeKind.Update or ObjectSaveChangeKind.NoChange
-                ? store.ReadObjectVersionChain(parentRevisionAddress!.Value, row.ObjectId.Value).ReconstructionPayloadBytes
+                ? source is null
+                    ? store.ReadObjectVersionChain(parentRevisionAddress!.Value, row.ObjectId.Value).ReconstructionPayloadBytes
+                    : GetReconstructionPayloadBytes(source, row)
                 : null;
             estimates[index] = new(row.ObjectId, row.ChangeKind,
                 ObjectVersionPayloadSize.GetBasePayloadBytes(row.EncodedBaseBody.Body.Length), deltaBytes, reconstructionBytes);
@@ -84,5 +101,13 @@ internal static class ObjectRevisionPlanner {
                 : StateRevision.CreateObjectHeadMapBase(null, records, []);
         }
         return new(revision, estimates, plan);
+    }
+
+    private static long GetReconstructionPayloadBytes(NormalizedRevision source, PreparedObject row) {
+        if (!source.Objects.TryGetValue(row.ObjectId, out NormalizedObject? prior) ||
+            prior.Storage is not { } storage || storage.Head != row.PriorAddress) {
+            throw new InvalidDataException("Prepared object storage must match the controlled baseline head.");
+        }
+        return storage.ReconstructionPayloadBytes;
     }
 }

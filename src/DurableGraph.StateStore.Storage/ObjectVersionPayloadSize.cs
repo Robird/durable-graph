@@ -9,6 +9,20 @@ public static class ObjectVersionPayloadSize {
         return checked(1L + GetVarUIntBytes((uint)bodyLength) + bodyLength);
     }
 
+    /// <summary>Returns the exact Delta payload byte count in its containing file scope.</summary>
+    /// <remarks>
+    /// Includes kind, prior address, body-length prefix and body, excluding ObjectId and shared Frame/map bytes.
+    /// This does not check whether a complete Frame will fit or whether the prior precedes the containing Frame.
+    /// </remarks>
+    public static long GetDeltaPayloadBytes(int bodyLength, FrameAddress prior, FileScope scope) {
+        ArgumentOutOfRangeException.ThrowIfNegative(bodyLength);
+        FrameAddressValidator.ValidateRequired(prior, nameof(prior));
+        scope.ValidateRequired(nameof(scope));
+        uint distance = scope.ToBackwardFileDistance(prior.FileNumber);
+        return checked(1L + GetVarUIntBytes(distance) + GetVarUIntBytes(prior.FrameTicket.Serialize())
+            + GetVarUIntBytes((uint)bodyLength) + bodyLength);
+    }
+
     /// <summary>Returns a scope-independent upper bound for a Delta payload.</summary>
     /// <remarks>
     /// Includes kind, prior address, body-length prefix and body. Only the prior's

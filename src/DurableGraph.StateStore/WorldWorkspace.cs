@@ -107,7 +107,8 @@ internal sealed class WorldWorkspace<TWorld> where TWorld : class, IDurableObjec
                     _capture.PrepareAgainst(candidate, _baseline.CurrentDtos), parameters, independentSnapshot);
             // Snapshot completion deliberately retains the old State baseline and its rewrite
             // obligations. Only an advancing candidate prepares a replacement baseline.
-            NormalizedRevision? next = independentSnapshot ? null : NormalizedRevision.FromCandidate(candidate, _models);
+            NormalizedRevision? next = independentSnapshot ? null :
+                NormalizedRevision.FromCandidate(candidate, _models, _store, _schemas, _baseline);
             _pending = new(this, context, candidate, rootId, prepared.Revision, next,
                 independentSnapshot ? null : (TWorld)root);
             return _pending;

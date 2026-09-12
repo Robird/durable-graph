@@ -270,7 +270,10 @@ Source Generator 负责可在编译期确定的类型知识与机械代码，框
   exact Parent Revision 中该 ObjectId 的对象 head 对照。
   新 Base 截断对象内容重建链；这不等于截断 membership 读取、历史查询或允许删除旧文件。
 - B/D/H 采用统一对象 payload 口径，包含对象独有 kind/prior/length/body 及 Base 的类型引用；
-  排除 ObjectId key、共享 membership/Frame/对齐。H 从原 Frame 实编码累计，是成本代理而非总物理 I/O。
+  排除 ObjectId key、共享 membership/Frame/对齐。H 与原 Frame 实编码累计一致，是成本代理而非总物理 I/O。
+  冷恢复完整验证后，可随同 Store 生命周期的已提交 DTO 基线保留对象 head/H；热保存按本次实际文件范围与 payload 增量推进。
+  元数据仅在确认发布后随 State 基线安装，Event 快照不推进 State；独立 raw 输入仍须验证历史链。
+  具体边界与证据见 [DB-069](design-branches/0069-incremental-save-baseline.md)。
 
 地址方向来源：[DB-014](design-branches/0014-multi-segment-backward-file-distance.md)；
 内容边界来源：[DB-026](design-branches/0026-raw-base-object-content-slice.md)、

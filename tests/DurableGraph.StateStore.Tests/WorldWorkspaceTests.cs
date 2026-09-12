@@ -8,7 +8,7 @@ using SegmentStore = Atelia.RbfSegmentStore.RbfSegmentStore;
 
 namespace Atelia.DurableGraph.StateStore.Tests;
 
-public sealed class WorldWorkspaceTests : IDisposable {
+public sealed partial class WorldWorkspaceTests : IDisposable {
     private readonly string _root = Path.Combine(Path.GetTempPath(), $"durable-graph-workspace-{Guid.NewGuid():N}");
     private readonly IRbfFile _file;
     private readonly SegmentStore _segments;

@@ -26,7 +26,7 @@ internal sealed class PreparedWorldSave<TWorld> : IDisposable where TWorld : cla
     internal bool IsIndependentSnapshot => _nextState is null;
     internal StateRevision Revision { get; }
 
-    /// <summary>Completes the last address-dependent allocation before publishing the head.</summary>
+    /// <summary>Completes storage accounting and allocation at the actual address before publishing the head.</summary>
     internal void PrepareInstall(FrameAddress address) {
         RequireOwner();
         if (IsIndependentSnapshot) {
@@ -38,7 +38,7 @@ internal sealed class PreparedWorldSave<TWorld> : IDisposable where TWorld : cla
         if (address.FileNumber == 0 || address.FrameTicket.Length == 0) {
             throw new ArgumentException("Installation requires the appended Revision address.", nameof(address));
         }
-        _installation = _next!.WithAddress(address);
+        _installation = _next!.WithAddress(address, Revision);
     }
 
     /// <summary>Called only after confirmed publication; no field capture, callbacks or allocation.</summary>

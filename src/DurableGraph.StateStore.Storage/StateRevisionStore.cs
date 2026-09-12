@@ -23,6 +23,7 @@ public sealed class StateRevisionStore : IDisposable {
     private bool _disposed;
     private long _revisionHits, _revisionMisses, _revisionDecodes;
     private long _mapHits, _mapMisses, _mapMaterializations;
+    private long _objectChainReads, _objectChainEntries, _mapReplayFrames;
 
     /// <summary>Creates a facade over an existing append-only Segment Store.</summary>
     /// <param name="segmentStore">Borrowed storage, which must outlive this facade.</param>
@@ -42,6 +43,9 @@ public sealed class StateRevisionStore : IDisposable {
         _readCache?.Evictions ?? 0, _readCache?.AdmissionBypasses ?? 0,
         _readCache?.ResidentChargeBytes ?? 0, _readCache?.PeakResidentChargeBytes ?? 0,
         _readCache?.EntryCount ?? 0);
+
+    internal StateRevisionTraversalStatistics TraversalStatistics => new(
+        _objectChainReads, _objectChainEntries, _mapReplayFrames);
 
     public FrameAddress Append(StateRevision revision) => AppendCore(revision, durable: false);
 
@@ -68,7 +72,8 @@ public sealed class StateRevisionStore : IDisposable {
         SizedPtr ticket = builder.EndAppend(
             StateRevisionWireFormat.RbfTag).Unwrap();
         if (durable) { writer.File.DurableFlush(); }
-        // Do not seed from the input: only a wire read measures each record's actual encoded H.
+        // Do not seed the read cache from unencoded input. A saving baseline can account
+        // for local payloads using this actual file scope; raw cache admission still reads wire.
         return new FrameAddress(writer.SegmentNumber, ticket);
     }
 
@@ -129,10 +134,15 @@ public sealed class StateRevisionStore : IDisposable {
             return cached;
         }
         _mapMisses++;
-        var heads = LiveObjectHeadMapMaterializer.Materialize(revisionAddress, Read);
+        var heads = LiveObjectHeadMapMaterializer.Materialize(revisionAddress, ReadForMapReplay);
         _mapMaterializations++;
         _readCache?.AdmitHeads(revisionAddress, heads);
         return heads;
+    }
+
+    private StateRevision ReadForMapReplay(FrameAddress address) {
+        _mapReplayFrames++;
+        return Read(address);
     }
 
     /// <summary>
@@ -172,6 +182,8 @@ public sealed class StateRevisionStore : IDisposable {
         FrameAddress revisionAddress,
         uint objectId) {
         ObjectDisposedException.ThrowIf(_disposed, this);
+        ValidateObjectHeadArguments(revisionAddress, objectId);
+        _objectChainReads++;
         FrameAddress head = ResolveObjectHead(revisionAddress, objectId);
         FrameAddress address = head;
         StateRevision revision = Read(address);
@@ -179,6 +191,7 @@ public sealed class StateRevisionStore : IDisposable {
         List<ObjectVersionChainEntry> records = [];
         while (true) {
             records.Add(new ObjectVersionChainEntry(address, record));
+            _objectChainEntries++;
             if (record.Kind == ObjectVersionKind.Base) {
                 break;
             }
@@ -221,11 +234,7 @@ public sealed class StateRevisionStore : IDisposable {
     }
 
     private FrameAddress ResolveObjectHead(FrameAddress revisionAddress, uint objectId) {
-        FrameAddressValidator.ValidateRequired(revisionAddress, nameof(revisionAddress));
-        if (objectId == 0) {
-            throw new ArgumentOutOfRangeException(
-                nameof(objectId), objectId, "ObjectId must be nonzero.");
-        }
+        ValidateObjectHeadArguments(revisionAddress, objectId);
 
         if (!ReadLiveObjectHeadMap(revisionAddress).TryGetValue(objectId, out FrameAddress head)) {
             throw new InvalidDataException(
@@ -233,6 +242,14 @@ public sealed class StateRevisionStore : IDisposable {
         }
 
         return head;
+    }
+
+    private static void ValidateObjectHeadArguments(FrameAddress revisionAddress, uint objectId) {
+        FrameAddressValidator.ValidateRequired(revisionAddress, nameof(revisionAddress));
+        if (objectId == 0) {
+            throw new ArgumentOutOfRangeException(
+                nameof(objectId), objectId, "ObjectId must be nonzero.");
+        }
     }
 
     private static void RequireParentHead(

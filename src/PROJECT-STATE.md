@@ -1,6 +1,6 @@
 # DurableGraph 产品开发工作集
 
-> 校准：2026-09-12；产品实现截至 [DB-068](../docs/design-branches/0068-record-class-model-slice.md)。后续优先下游真实模型接入与反馈。本文只维护当前能力、边界与续工入口。
+> 校准：2026-09-12；产品实现截至 [DB-069](../docs/design-branches/0069-incremental-save-baseline.md)。后续优先真实业务长轨迹与保存成本反馈。本文只维护当前能力、边界与续工入口。
 > 文档不是实现授权；事实以当前源码、测试和工具输出为准。
 
 ## 从这里继续
@@ -18,6 +18,11 @@
 [归档恢复索引](../experiments/ARCHIVE.md)，不要把旧项目整体恢复为续工上下文。
 
 ## 当前焦点
+
+[DB-069：热保存基线增量计量](../docs/design-branches/0069-incremental-save-baseline.md) 已实施：
+已验证的 head/H 随 DTO 基线增量推进，受控热保存免除旧对象链重复读取；精确 payload、Event/State 与失败边界保持。
+独立审阅、前后测量、源码回归与真实包验证已通过。默认策略保持 `{3,5}`。
+下一步按真实长轨迹反馈评估 map 回溯与全量 Base 准备，重访条件见路线图，测量证据仅保留在本片。
 
 [DB-068：record class 领域模型](../docs/design-branches/0068-record-class-model-slice.md) 已贯通：
 IDurableObject 完全替代并移除 DurableBase，普通 class/record 共用资格和用户自建继承链；
@@ -52,7 +57,7 @@ Dictionary 读取的 canonical key 验证保持。ReadPair 的视图专属 Trans
 |---|---|---|
 | [DurableGraph](DurableGraph/DurableGraph.csproj) | immutable Schema/exact DAG；统一 ObjectBinding、ObjectLayout、Capture/refs/恢复目录；SZ/rank 2–4 数组、List 与 Dictionary owned 状态；静态 StateEquals、数组稀疏/列表区间/字典键寻址 Delta、默认 Adaptive 与三种显式 List writer；独立 historical reader | 其他 BCL、数组协变；持久发布由 StateStore 拥有 |
 | [Generator](DurableGraph.Generator/DurableGraph.Generator.csproj) / [Build](DurableGraph.Build/DurableGraph.Build.csproj) | class/struct（均含 record）开放模板、显式 enum、readonly DTO/静态 body、Capture/Hydrate、泛型继承与递归 Nullable/数组/List/Dictionary 组合；跨程序集 nominal/动态参数、固定 base/inline 与只读模板导出；history v9；三参 Upgrade/旧二参适配、值规则/局部依赖 adapter | 其他 CLR 值类型、其他 BCL；跨程序集业务规则发现 |
-| [StateStore](DurableGraph.StateStore/DurableGraph.StateStore.csproj) | 统一闭合目录与 Base v4 ID 头；完整 stored/current 引用验证、两阶段恢复；EventHistory 交错提交、同实例 State、分支/Move/Resume 与严格只读浏览；操作内 exact 解码缓存、实验性 ReadPair 引用闭包共享、冷 Resume 可变隔离；升级 Base/Remove | 联合 Store 视图、更强恢复保证与有测量依据的读取优化另行排期 |
+| [StateStore](DurableGraph.StateStore/DurableGraph.StateStore.csproj) | 统一闭合目录与 Base v4 ID 头；完整 stored/current 引用验证、两阶段恢复；EventHistory 交错提交、同实例 State、分支/Move/Resume 与严格只读浏览；操作内 exact 解码缓存、实验性 ReadPair 引用闭包共享、冷 Resume 可变隔离；升级 Base/Remove、已提交基线 head/H 增量维护 | 联合 Store 视图、更强恢复保证与有测量依据的读取优化另行排期 |
 | [Storage](DurableGraph.StateStore.Storage/DurableGraph.StateStore.Storage.csproj) | AppendDurably 原 lease 屏障；local Base/Delta records、wire v3、exact Revision live map、Parent/prior 校验、object-first 原始重建链及实际 payload H；Base 精确/Delta 上界计量；真实 Segment/RBF 冷重开；有界 owned frame/map LRU、双数组只读地址字典与 local-record 二分 | 不解码 typed body；不拥有持久 roots、类型目录或发布 head；缓存预算约束估算驻留量，不约束总堆或操作峰值 |
 | [Serialization](DurableGraph.StateStore.Serialization/DurableGraph.StateStore.Serialization.csproj) | 字节原语、string 内容 codec、拥有 raw bytes 的 PreparedBaseBody/PreparedDeltaBody、显式 body 的 typed slot、早期元素 ref 循环 | 完整数组/List 对象操作位于 Runtime；其他 BCL 内容 codec 尚无 |
 
@@ -227,15 +232,19 @@ Dictionary 读取的 canonical key 验证保持。ReadPair 的视图专属 Trans
 - CapturedRevisionPlanner 先核对 Previous/Parent、完整 prior ID 集合及所有 survivor 的完整 Base 布局，
   包括 NoChange；再批量登记全部 current 表示、包装 Base 并调用原 planner。Schema/表示登记可持久生效，
   但该方法不追加 State/发布/Accept，也不证明 DTO 内容与 Parent 一致；合法迁移由受控 LoadedRevisionPlanner 路径产生 BaseOnlyUpdate。
-- ObjectRevisionPlanner 只读 exact Parent，校验完整 post-live rows 的新旧分类/prior；对 NoChange/Delta Update
-  读取链 H，BaseOnlyUpdate 不读取旧内容链。输出 map Base（无 Parent）或 map Delta（有 Parent）及 Removes。
+- ObjectRevisionPlanner 只读 exact Parent，校验完整 post-live rows 的新旧分类/prior；独立入口对 NoChange/Delta Update
+  读取链 H，受控 Loaded 入口复用同 Store/SchemaStore 的已验证来源及精确 H，仍核对全部 source head，含待删除行。
+  BaseOnlyUpdate 不读取旧内容链。输出 map Base（无 Parent）或 map Delta（有 Parent）及 Removes。
   typed producer 负责内容/Schema/基线对应；planner 不调用 Append/Accept，结果可作为显式 Parent 的分支追加。
+  冷解码与 ReadSession 缓存同时携带 head/H；PrepareInstall 在实际地址确定后按本次 payload 完成私有下一基线，
+  发布后才安装。Event/Discard 不推进 State，synthetic DTO 视图没有热保存来源资格，详见 DB-069。
 - Storage 的 ObjectHeadMap 与对象内容的 Base/Delta 独立组合。ReadObjectVersionChain 逐条核对
   prior 等于该记录 exact Parent Revision 选定的对象 head，要求 direct local record；Base 截断内容链，H 随之重置。
   Append 只预检直接 edge；完整 map 的 external heads 仍是浅声明，不认证全局实体历史。
   ReadObjectBaseBody 仍只接受 Base head，不回退 parent 补内容；wire v3 拒绝 v1/v2。
   H 含 kind/prior/length/body，不含 ObjectId/membership/共享 Frame；不是总冷读 I/O。
-  普通 Store 默认以 8 MiB 统一预算复用 owned Revision/完整 map，0 禁用驻留；Append 不 seed，真实 H 仍来自 wire 读回。
+  普通 Store 默认以 8 MiB 统一预算复用 owned Revision/完整 map，0 禁用驻留；Append 不 seed 读缓存。
+  冷链 H 来自 wire 读回；已提交基线可按实际文件范围精确增量计量，独立 chain/map 遍历统计用于保存成本归因。
   Store.Dispose 释放缓存但不关闭借用底层，已交付值仍可读；使用纪律与验收见 [DB-067](../docs/design-branches/0067-owned-revision-read-cache-design.md)。
 - 数组对象支持 SZ/rank 2–4 与完整已有槽闭包：标量、string/class ID、inline/generic struct、递归数组。
   FrozenArrayState 拥有 shape 与元素 buffer；当前投影用静态 ref 循环，historical reader 不要求旧领域 struct CLR 类型。
@@ -281,6 +290,7 @@ DurableGraph runtime 也引用 Serialization，单一 runtime PackageReference �
 
 | 准备修改 | 先查源码/测试，再按需读合同 |
 |---|---|
+| 热保存基线、head/H 与增量安装 | [DB-069](../docs/design-branches/0069-incremental-save-baseline.md)、[NormalizedRevision](DurableGraph.StateStore/NormalizedRevision.cs)、[基线回归](../tests/DurableGraph.StateStore.Tests/WorldWorkspaceStorageBaselineTests.cs)、[前后测量](../tests/DurableGraph.StateStore.Tests/HotSaveMeasurementTests.cs) |
 | IDurableObject、record class 与旧基类迁移 | [DB-068](../docs/design-branches/0068-record-class-model-slice.md)、[准入](DurableGraph/IDurableObject.cs)、[record 图回归](../tests/DurableGraph.Tests/RecordClassGraphTests.cs)、[真包三代/旧包迁移](../experiments/PackageConsumerProbe/RecordClassConsumer/README.md) |
 | Revision/map 读缓存、双数组字典与 Store 寿命 | [DB-067](../docs/design-branches/0067-owned-revision-read-cache-design.md)、[缓存](DurableGraph.StateStore.Storage/StateRevisionReadCache.cs)、[预算与失败测试](../tests/DurableGraph.StateStore.Storage.Tests/StateRevisionReadCacheTests.cs) |
 | 默认保存、事件快照和失败恢复用法 | [DB-065](../docs/design-branches/0065-event-history-consumer-contract-slice.md)、[包示例](../experiments/PackageConsumerProbe/EventHistoryRecoveryConsumer/README.md)、[同源恢复测试](../tests/DurableGraph.StateStore.Tests/EventHistoryConsumerRecoveryTests.cs)、[README 原文验证](../experiments/PackageConsumerProbe/Run-ReadmeQuickStartProbe.ps1) |

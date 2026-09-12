@@ -16,13 +16,18 @@ public sealed class DecodedRevision {
         : this(revisionAddress, objects, strings, new Dictionary<ObjectId, FrameAddress>()) { }
 
     internal DecodedRevision(FrameAddress revisionAddress, IEnumerable<ObjectStateRecord> objects, StringReadTable strings,
-        IReadOnlyDictionary<ObjectId, FrameAddress> objectHeads) {
+        IReadOnlyDictionary<ObjectId, FrameAddress> objectHeads, StateRevisionStore? sourceStore = null,
+        SchemaStore? sourceSchemas = null, IReadOnlyDictionary<ObjectId, ObjectStorageInfo>? objectStorage = null) {
         RevisionAddress = revisionAddress;
         Objects = new FrozenList<ObjectStateRecord>(objects.OrderBy(static row => row.Id));
         _objects = Objects.ToDictionary(static row => row.Id);
         Strings = strings;
         ObjectHeads = new System.Collections.ObjectModel.ReadOnlyDictionary<ObjectId, FrameAddress>(
             objectHeads.ToDictionary(static pair => pair.Key, static pair => pair.Value));
+        SourceStore = sourceStore;
+        SourceSchemas = sourceSchemas;
+        ObjectStorage = new System.Collections.ObjectModel.ReadOnlyDictionary<ObjectId, ObjectStorageInfo>(
+            objectStorage?.ToDictionary(static pair => pair.Key, static pair => pair.Value) ?? []);
     }
 
     public FrameAddress RevisionAddress { get; }
@@ -30,6 +35,11 @@ public sealed class DecodedRevision {
     public StringReadTable Strings { get; }
     // Actual per-view locators, not a guess from the queried Revision's address.
     internal IReadOnlyDictionary<ObjectId, FrameAddress> ObjectHeads { get; }
+    // These facts can seed an editable baseline only in the same stores' lifetimes.
+    // Synthetic DTO views have no storage authority; their content remains usable.
+    internal StateRevisionStore? SourceStore { get; }
+    internal SchemaStore? SourceSchemas { get; }
+    internal IReadOnlyDictionary<ObjectId, ObjectStorageInfo> ObjectStorage { get; }
 
     /// <summary>Returns the exact content for a live ID; zero and absent IDs are invalid.</summary>
     public ObjectStateRecord GetRequired(ObjectId objectId) => _objects.TryGetValue(objectId, out ObjectStateRecord? row)

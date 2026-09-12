@@ -162,7 +162,7 @@ DB-051 之外的性能工作以实际轨迹或测量问题触发，不自动扩�
 | boxed value 持久身份 | MVP 拒绝领域图中的装箱值对象；实际模型需要通过引用槽保留装箱值身份时，再增加局部 codec/身份支持；不影响框架内部 DTO 装箱 |
 | 物理 GC、compaction、历史保留 | 出现真实空间或 recovery-closure 问题后；与 CLR 映射清理和数字 ID 回收分开裁决 |
 | TwoLeg / incremental cleaner | 多历史 Segment 无法满足实际有界 dependency file count、在线退休、backup/rescue 或 compaction SLO 时重访，见其 [技术储备（归档）](../experiments/ARCHIVE.md#two-leg "原路径：experiments/TwoLegRotationProbe/PROJECT-STATE.md") |
-| 性能优化 | [DB-067](design-branches/0067-owned-revision-read-cache-design.md) 已交付读缓存与紧凑索引；默认 8 MiB 并非最优容量结论。真实驻留/构建/点查测出瓶颈后再评估容量与构建器，membership 早退、known-head 仍需独立证明验证语义。其他全量 Base 准备、缓冲复制、typed buckets 或指纹由具体测量触发；DB-061 的逐层基类委托/DTO 前缀复制在深继承实际成为热点后再优化，不恢复两套投影路径。DB-042 的 Upgrade requirement set 仍逐次复核，批量历史对象测出热点后可评估 SchemaStore catalog generation |
+| 性能优化 | frame/map 缓存与热保存 head/H 基线从 [DB-067](design-branches/0067-owned-revision-read-cache-design.md)、[DB-069](design-branches/0069-incremental-save-baseline.md) 查证。DB-069 同场景测量已分离出剩余 map 历史回溯；真实业务长轨迹中它成为主要保存成本时，比较祖先 map 复用或增量 head map，并独立证明完整 membership/prior 验证。默认 8 MiB、`{3,5}` 均非已测最优值；在优化后的保存路径上按真实读写频率校准。全量 Base 准备、缓冲复制、typed buckets 或指纹由具体测量触发；DB-061 的逐层基类委托/DTO 前缀复制在深继承实际成为热点后再优化，不恢复两套投影路径。DB-042 的 Upgrade requirement set 仍逐次复核，批量历史对象测出热点后可评估 SchemaStore catalog generation |
 | 双图读取的后继优化 | 操作内 DTO/string 缓存、保守引用闭包和完整状态比较的现状从 PROJECT-STATE/DB-064/066 进入。比较、Normalize 或内存驻留成为实际热点后，再研究明确 Upgrade 纯度/调用合同后的复用或受限跨操作缓存；多视图分区、深不可变白名单和内容 intern 需各自新需求。Frame/map 缓存另见性能项，不能把 body 解码计数下降写成物理 I/O 或峰值内存收益 |
 | 加载内存预算 | 大数组/容器或不可信输入的资源控制成为实际需求时，设计独立的总分配/元素数预算；DB-043 先要求合法 shape、checked 计算及适用时的 payload 下界预检。零字节元素可产生大内存对象，单帧 256MB 不等于 CLR 内存上限 |
 | 并发、分支与跨 Repository | 命名 branch/fork/Move 与串行单活动写会话从 PROJECT-STATE 查证；concurrent Capture、多 writer、merge、跨仓库身份仍延期。操作内解码或只读实例共享不改变这些并发和来源边界 |

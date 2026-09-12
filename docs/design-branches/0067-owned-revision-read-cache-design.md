@@ -5,6 +5,7 @@
 > 初始材料：[read-cache.md](../research/read-cache.md)。早期缓存机制证据见 [Probe](../research/read-cache-probe/README.md)。
 > Probe 源码基线为 f68388f88ba09354e9fa90420dc2cf22b146b6cf，Atelia 为 539088414686f51a210798b35ee56d02de8c845c。
 > 沿用用户已完成的 FrozenSortedDictionary 重命名，现提取为 Storage 共享内部双数组实现。
+> 后继：[DB-069](0069-incremental-save-baseline.md) 实施已提交保存基线的 head/H 增量维护；本片的历史测量与原范围保持。
 
 ## 1. 选择与最小判据
 
