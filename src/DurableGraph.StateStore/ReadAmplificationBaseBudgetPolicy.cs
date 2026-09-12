@@ -9,9 +9,9 @@ internal static class ReadAmplificationBaseBudgetPolicy {
         IReadOnlyList<ObjectSaveEstimate> objects,
         ReadAmplificationBaseBudgetParameters parameters) {
         ArgumentNullException.ThrowIfNull(objects);
-        if (parameters.ReadAmplificationLimit < 1) {
+        if (parameters.ReadAmplificationThreshold < 1) {
             throw new ArgumentOutOfRangeException(
-                nameof(parameters), parameters, "Read amplification limit must be at least one.");
+                nameof(parameters), parameters, "Read amplification threshold must be at least one.");
         }
 
         if (parameters.BaseBudgetPercent is < 1 or > 100) {
@@ -50,7 +50,7 @@ internal static class ReadAmplificationBaseBudgetPolicy {
 
             // At a zero denominator, 0/0 has no motive and positive/0 always has one.
             if (prospectiveReconstructionPayloadBytes >
-                (Int128)estimate.BasePayloadBytes * parameters.ReadAmplificationLimit) {
+                (Int128)estimate.BasePayloadBytes * parameters.ReadAmplificationThreshold) {
                 candidates.Add(new(
                     estimate.ObjectId, estimate.BasePayloadBytes, prospectiveReconstructionPayloadBytes, writeIndex));
             }

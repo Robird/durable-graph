@@ -59,7 +59,7 @@ internal readonly record struct ObjectSaveEstimate(
     long? ReconstructionPayloadBytes);
 
 internal readonly record struct ReadAmplificationBaseBudgetParameters(
-    int ReadAmplificationLimit,
+    int ReadAmplificationThreshold,
     int BaseBudgetPercent);
 
 internal enum ObjectRepresentationMode {
@@ -127,7 +127,7 @@ DTO/plan 不携带 FrameAddress、SnapshotId、PlanId 或对象实例。同步�
 ### 3.3 数值和失败
 
 - B/D/H 使用非负 `long`；这不承诺能够存储该大小，也不引入 RBF admission 检查。
-- `ReadAmplificationLimit` 为 int 且至少 1；`BaseBudgetPercent` 为 int 且在 1–100 之间（含端点）。
+- `ReadAmplificationThreshold` 为 int 且至少 1；`BaseBudgetPercent` 为 int 且在 1–100 之间（含端点）。
   例如 `(3, 5)` 表示 3 倍、5%；本轮不设产品默认值。
 - `G=ΣB`、每个 Update 的 `N=H+D` 必须可表示为非负 long，使用 checked；溢出拒绝，不截断或饱和。
   所有行先验证，包括稍后会直接选择 Base 的 Update。
@@ -156,7 +156,7 @@ Removes 和 ObjectHeadMap 模式仍由外层处理。不能仅用 Writes 生成�
 
 ## 5. 固定策略规则
 
-令 `α=ReadAmplificationLimit`、`p=BaseBudgetPercent`、`Q=floor(G*p/100)`。
+令 `α=ReadAmplificationThreshold`、`p=BaseBudgetPercent`、`Q=floor(G*p/100)`。
 
 1. 所有 Insert 选择 Base。所有 `B<=D` 的 Update 选择 Base；这一判断使用估算口径，表示 Base
    预计不比 Delta 更大，不是对真实编码结果的保证。两类 Base 均不消耗 Q。
