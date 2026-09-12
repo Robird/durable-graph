@@ -1,5 +1,6 @@
-using Atelia.DurableGraph.StateStore;
-using Atelia.DurableGraph.StateStore.Storage;
+using Atelia.DurableGraph.Schema;
+using Atelia.DurableGraph.Persistence;
+using Atelia.DurableGraph.Storage;
 using Atelia.Rbf;
 using SegmentStore = Atelia.RbfSegmentStore.RbfSegmentStore;
 
@@ -102,8 +103,10 @@ public sealed partial class DurableSchemaGeneratorTests {
         using System.Collections.Generic;
         using System.Linq;
         using Atelia.DurableGraph;
-        using Atelia.DurableGraph.StateStore;
-        using Atelia.DurableGraph.StateStore.Storage;
+        using Atelia.DurableGraph.Schema;
+        using Atelia.DurableGraph.Runtime;
+        using Atelia.DurableGraph.Persistence;
+        using Atelia.DurableGraph.Storage;
         namespace ListGraph;
         [DurableType("list.graph.point",1)] public partial struct Point {
             [DurableField(1)] public int X;

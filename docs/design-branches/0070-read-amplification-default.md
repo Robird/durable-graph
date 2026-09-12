@@ -20,7 +20,7 @@
 Update 在 `H+D > LB` 时产生可选 Base 动机，NoChange 在 `H > LB` 时产生动机，等号没有动机。
 之后还要经过可选预算筛选，因此 L 不限制实际冷读放大的最大值。
 Insert、必须重写，以及 `B <= D` 的 Update 独立选择 Base。
-实现权威见 [ReadAmplificationBaseBudgetPolicy](../../src/DurableGraph.StateStore/ReadAmplificationBaseBudgetPolicy.cs)。
+实现权威见 [ReadAmplificationBaseBudgetPolicy](../../src/DurableGraph.Persistence/ReadAmplificationBaseBudgetPolicy.cs)。
 
 以下是解释选择的近似模型，不是实验测量。假设单对象 B 大致稳定，每次更新的实际 Delta d 小且稳定，
 连续运行足够长，预算不推迟 Base，冷重建在周期内均匀取样。
@@ -95,10 +95,10 @@ DB-069 后热保存不再逐链读取，但全量 Base 准备仍在，因此少�
 
 ## 5. 实施与验证证据
 
-- 默认入口：[EventHistoryRepository.DefaultPolicy](../../src/DurableGraph.StateStore/EventHistoryRepository.cs)；
-  参数含义及默认调用合同写入[包内 XML 文档](../../src/DurableGraph.StateStore/ReadAmplificationBaseBudgetParameters.cs)。
+- 默认入口：[EventHistoryRepository.DefaultPolicy](../../src/DurableGraph.Persistence/EventHistoryRepository.cs)；
+  参数含义及默认调用合同写入[包内 XML 文档](../../src/DurableGraph.Persistence/ReadAmplificationBaseBudgetParameters.cs)。
 - 测试共享 [TestSavePolicies.Baseline](../../tests/Shared/TestSavePolicies.cs) 保持 `{3,5}`；
-  [默认/覆盖集成轨迹](../../tests/DurableGraph.StateStore.Tests/EventHistorySavePolicyTests.cs) 继续动态读取默认权威，
+  [默认/覆盖集成轨迹](../../tests/DurableGraph.Persistence.Tests/EventHistorySavePolicyTests.cs) 继续动态读取默认权威，
   对照显式/省略调用的真实 Base/Delta/NoChange 选择，并冷重开验证状态。
 - [README 包探针](../../experiments/PackageConsumerProbe/Run-ReadmeQuickStartProbe.ps1) 增加对配置代码块的原文执行。
 - `dotnet build DurableGraph.slnx` 通过，0 warning/error；串行完整回归 StateStore 732/732、

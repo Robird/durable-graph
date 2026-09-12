@@ -99,7 +99,7 @@ Push-Location $repositoryRoot
 
 try {
     Invoke-DotNet @(
-        "pack", "src/DurableGraph.StateStore.Serialization/DurableGraph.StateStore.Serialization.csproj",
+        "pack", "src/DurableGraph.Serialization/DurableGraph.Serialization.csproj",
         "--configuration", "Release",
         "--output", $feed,
         "-p:PackageVersion=$packageVersion"
@@ -244,7 +244,7 @@ try {
         Where-Object Name -eq "DurableGraphSchemaHistoryCandidates.g.cs")
 
     if ($emptyManifests.Count -ne 1 -or
-        (Get-Content -LiteralPath $emptyManifests[0].FullName -Raw) -ne "// durable-graph-schema-history-manifest:7`n") {
+        (Get-Content -LiteralPath $emptyManifests[0].FullName -Raw) -ne "// durable-graph-schema-history-manifest:9`n") {
         throw "Removing all durable types without cleaning did not replace the old candidate with an empty manifest."
     }
 

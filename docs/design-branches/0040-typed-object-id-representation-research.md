@@ -107,8 +107,8 @@ public readonly struct BDto {
 
 ## 4. 目标 DTO 版本的三种解释
 
-当前 [引用字段](../../src/DurableGraph/DurableFieldInfo.cs) 保存 nominal TargetType，没有目标版本。
-[引用验证](../../src/DurableGraph/StateReferenceVisitor.cs) 比较选定 DTO 视图中的 nominal 祖先；
+当前 [引用字段](../../src/DurableGraph/Schema/DurableFieldInfo.cs) 保存 nominal TargetType，没有目标版本。
+[引用验证](../../src/DurableGraph/Runtime/Binding/StateReferenceVisitor.cs) 比较选定 DTO 视图中的 nominal 祖先；
 [目标独立升版测试](../../tests/DurableGraph.Tests/NominalReferenceSchemaHistoryTests.cs) 与
 [实际保存/恢复测试](../../tests/DurableGraph.Tests/PersistedReferenceGraphTests.cs) 保证仅目标升版时 owner 无须变化。
 
@@ -148,12 +148,12 @@ Phantom<string>  → PhantomStates.V1
 
 两者 nominal family 不同，但 `ObjectId<PhantomStates.V1>` 相同。
 要完整保留目标 nominal 身份，还需让 DTO 或独立标记携带全部 nominal 实参。
-因此 [InferSchemaFromState](../../src/DurableGraph/StateBindingContext.Upgrade.cs) 的 owner nominal/history 输入仍有职责，
+因此 [InferSchemaFromState](../../src/DurableGraph/Runtime/Binding/StateBindingContext.Upgrade.cs) 的 owner nominal/history 输入仍有职责，
 DB-039 的完整槽比较及引用目录验证也不能被包装取代。
 
 ## 6. 框架接口不必全部泛型化
 
-[IStateOps/IValueProjection](../../src/DurableGraph/StateValueBinding.cs) 已按 TState 泛型化。
+[IStateOps/IValueProjection](../../src/DurableGraph/Runtime/Binding/StateValueBinding.cs) 已按 TState 泛型化。
 typed 引用可以留在 DTO 用户接口与静态 helper，在异构边界提取 `.Value`：
 
 ```csharp
@@ -161,12 +161,12 @@ writer.WriteUInt32(id.Value);
 visitor.VisitDurable(id.Value, slot.TargetType!);
 ```
 
-[CaptureContext](../../src/DurableGraph/CaptureContext.cs)、[ObjectReadTable](../../src/DurableGraph/ObjectReadTable.cs)、
-[引用 visitor](../../src/DurableGraph/StateReferenceVisitor.cs) 和 Storage 目录仍可用统一 uint/非泛型 ObjectId。
+[CaptureContext](../../src/DurableGraph/Runtime/Capture/CaptureContext.cs)、[ObjectReadTable](../../src/DurableGraph/Runtime/Capture/ObjectReadTable.cs)、
+[引用 visitor](../../src/DurableGraph/Runtime/Binding/StateReferenceVisitor.cs) 和 Storage 目录仍可用统一 uint/非泛型 ObjectId。
 不需要逐字段 Type 查找、DynamicInvoke 或新程序集。typed→raw 的桥接已由独立见证执行。
 
 实际改造面主要在 SG 引用字段/属性/构造器、引用 projection/ops、
-[snapshot 状态表示选择](../../src/DurableGraph.StateStore/StateModelSnapshot.cs)、DTO 参数反推与用户 Upgrade 代码。
+[snapshot 状态表示选择](../../src/DurableGraph.Persistence/StateModelSnapshot.cs)、DTO 参数反推与用户 Upgrade 代码。
 选择目标 DTO 不能简单调用 ResolveReader 递归展开引用 body；当前特意截断此依赖，
 已有 `Node<T> → Node<Node<T>>` 产品用例依赖按实际有限对象/类型闭合。
 

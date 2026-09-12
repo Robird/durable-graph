@@ -19,13 +19,13 @@ E1 不推进或破坏 S0 比较基线，S1 正确产生相对 S0 的 Delta；E1 
 
 | 代码 | 事实及需要改变的接缝 |
 |---|---|
-| [WorldWorkspace](../../src/DurableGraph.StateStore/WorldWorkspace.cs) | 拥有固定 World、模型快照、Capture 与 NormalizedRevision；Load 把解码、升级、实例化和可写基线组装放在一起；Stage 校验固定根 ID |
-| [CaptureSession](../../src/DurableGraph/CaptureSession.cs) | Accept 替换整个实例绑定集合；Discard 保留已消耗的 cursor，却不推进 Current。不能把 E Accept 到 State 的捕获会话 |
-| [LoadedRevisionPlanner](../../src/DurableGraph.StateStore/LoadedRevisionPlanner.cs) | 支持 candidate 是 source 的不同可达子集，并保留完整 source provenance、Upgrade 强制 Base 义务 |
-| [ObjectRevisionPlanner](../../src/DurableGraph.StateStore/ObjectRevisionPlanner.cs) | 有 Parent 时固定输出 map Delta 及完整差集 Removes；需要另一种目录输出方式，正文策略不用替换 |
-| [StateRevision](../../src/DurableGraph.StateStore.Storage/StateRevision.cs) | 已允许有 Parent 的 map Base、local Delta 与 external heads；这种组合无需新 Storage 格式 |
-| [RevisionDecoder](../../src/DurableGraph.StateStore/RevisionDecoder.cs) | 解码指定 Revision 全部 live 行；只要 E 的 membership 本身独立，既有路径即可避免解码无关 State 行 |
-| 旧 GraphRepository（后由 [DB-063](0063-event-history-journal-slice.md) 替代） / [PreparedWorldSave](../../src/DurableGraph.StateStore/PreparedWorldSave.cs) | 已有数据屏障、单次候选、发布后安装的核心顺序；专用 publication Parent 必须等于 Revision Parent 的校验仅适用旧外观 |
+| [WorldWorkspace](../../src/DurableGraph.Persistence/WorldWorkspace.cs) | 拥有固定 World、模型快照、Capture 与 NormalizedRevision；Load 把解码、升级、实例化和可写基线组装放在一起；Stage 校验固定根 ID |
+| [CaptureSession](../../src/DurableGraph/Runtime/Capture/CaptureSession.cs) | Accept 替换整个实例绑定集合；Discard 保留已消耗的 cursor，却不推进 Current。不能把 E Accept 到 State 的捕获会话 |
+| [LoadedRevisionPlanner](../../src/DurableGraph.Persistence/LoadedRevisionPlanner.cs) | 支持 candidate 是 source 的不同可达子集，并保留完整 source provenance、Upgrade 强制 Base 义务 |
+| [ObjectRevisionPlanner](../../src/DurableGraph.Persistence/ObjectRevisionPlanner.cs) | 有 Parent 时固定输出 map Delta 及完整差集 Removes；需要另一种目录输出方式，正文策略不用替换 |
+| [StateRevision](../../src/DurableGraph.Storage/StateRevision.cs) | 已允许有 Parent 的 map Base、local Delta 与 external heads；这种组合无需新 Storage 格式 |
+| [RevisionDecoder](../../src/DurableGraph.Persistence/RevisionDecoder.cs) | 解码指定 Revision 全部 live 行；只要 E 的 membership 本身独立，既有路径即可避免解码无关 State 行 |
+| 旧 GraphRepository（后由 [DB-063](0063-event-history-journal-slice.md) 替代） / [PreparedWorldSave](../../src/DurableGraph.Persistence/PreparedWorldSave.cs) | 已有数据屏障、单次候选、发布后安装的核心顺序；专用 publication Parent 必须等于 Revision Parent 的校验仅适用旧外观 |
 
 上述表格记录实施前的代码接缝；实施后的职责与执行结果见 §7。
 
@@ -152,10 +152,10 @@ DB-063 接入新外观时移除旧 publication 路径，不再维护两套公开
 
 | 验收职责 | 实现与证据 |
 |---|---|
-| G0 资源和恢复提取 | [GraphResources](../../src/DurableGraph.StateStore/GraphResources.cs) 拥有 Schema/State；[GraphReader](../../src/DurableGraph.StateStore/GraphReader.cs) 共用 Decode/Normalize/可达分配/填充；旧发布宿主委托资源；[资源测试](../../tests/DurableGraph.StateStore.Tests/GraphResourcesTests.cs) 验证零写入和坏尾拒绝 |
-| G1 原候选安装与根替换 | [WorldWorkspace](../../src/DurableGraph.StateStore/WorldWorkspace.cs) 的 Stage(nextState) 固定 exact 类型、保留复用 child 身份；PreparedWorldSave 只在 PrepareInstall 后 Install；[原工作区回归](../../tests/DurableGraph.StateStore.Tests/WorldWorkspaceTests.cs) 和[独立图集成](../../tests/DurableGraph.StateStore.Tests/IndependentGraphWorkspaceTests.cs) 验证冻结候选、失败与安装顺序 |
-| G2 快照目录与 baseline | StageSnapshot 按 actual 根绑定，要求已有 State；无 next baseline，拒绝 PrepareInstall，发布成功或放弃都 Dispose；[快照规划测试](../../tests/DurableGraph.StateStore.Tests/IndependentSnapshotPlannerTests.cs) 覆盖 external head/local Delta/NoChange 主动 Base；集成验证 E 不推进 S、不清除 Upgrade rewrite |
-| G3 独立与双图读取 | Read 可请求根基类，工作区 Load 要求 exact；ReadPair 使用同一冻结目录，返回有序 roots，不能导入编辑会话；[读取测试](../../tests/DurableGraph.StateStore.Tests/GraphReaderTests.cs) 验证失败不交付与图内共享/环；冷开 E-only 集成拒绝触发无关 World/Bob 能力 |
+| G0 资源和恢复提取 | [GraphResources](../../src/DurableGraph.Persistence/GraphResources.cs) 拥有 Schema/State；[GraphReader](../../src/DurableGraph.Persistence/GraphReader.cs) 共用 Decode/Normalize/可达分配/填充；旧发布宿主委托资源；[资源测试](../../tests/DurableGraph.Persistence.Tests/GraphResourcesTests.cs) 验证零写入和坏尾拒绝 |
+| G1 原候选安装与根替换 | [WorldWorkspace](../../src/DurableGraph.Persistence/WorldWorkspace.cs) 的 Stage(nextState) 固定 exact 类型、保留复用 child 身份；PreparedWorldSave 只在 PrepareInstall 后 Install；[原工作区回归](../../tests/DurableGraph.Persistence.Tests/WorldWorkspaceTests.cs) 和[独立图集成](../../tests/DurableGraph.Persistence.Tests/IndependentGraphWorkspaceTests.cs) 验证冻结候选、失败与安装顺序 |
+| G2 快照目录与 baseline | StageSnapshot 按 actual 根绑定，要求已有 State；无 next baseline，拒绝 PrepareInstall，发布成功或放弃都 Dispose；[快照规划测试](../../tests/DurableGraph.Persistence.Tests/IndependentSnapshotPlannerTests.cs) 覆盖 external head/local Delta/NoChange 主动 Base；集成验证 E 不推进 S、不清除 Upgrade rewrite |
+| G3 独立与双图读取 | Read 可请求根基类，工作区 Load 要求 exact；ReadPair 使用同一冻结目录，返回有序 roots，不能导入编辑会话；[读取测试](../../tests/DurableGraph.Persistence.Tests/GraphReaderTests.cs) 验证失败不交付与图内共享/环；冷开 E-only 集成拒绝触发无关 World/Bob 能力 |
 
 文件资源不拥有业务 head；外层负责串行操作和不确定追加后的 fault 标记。
 工作区持有同一冻结模型目录，读取工作区从完整 source 导入字符串身份和 max+1 cursor。

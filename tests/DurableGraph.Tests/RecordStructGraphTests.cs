@@ -1,6 +1,8 @@
-using Atelia.DurableGraph.StateStore;
-using Atelia.DurableGraph.StateStore.Serialization;
-using Atelia.DurableGraph.StateStore.Storage;
+using Atelia.DurableGraph.Runtime;
+using Atelia.DurableGraph.Schema;
+using Atelia.DurableGraph.Persistence;
+using Atelia.DurableGraph.Serialization;
+using Atelia.DurableGraph.Storage;
 using Atelia.Rbf;
 using SegmentStore = Atelia.RbfSegmentStore.RbfSegmentStore;
 
@@ -104,9 +106,11 @@ public sealed partial class DurableSchemaGeneratorTests {
         using System.Linq;
         using System.Runtime.CompilerServices;
         using Atelia.DurableGraph;
+        using Atelia.DurableGraph.Schema;
+        using Atelia.DurableGraph.Runtime;
         using Atelia.DurableGraph.Generated;
-        using Atelia.DurableGraph.StateStore;
-        using Atelia.DurableGraph.StateStore.Storage;
+        using Atelia.DurableGraph.Persistence;
+        using Atelia.DurableGraph.Storage;
         namespace RecordGraph;
         [DurableType("record.Key",1)] public readonly partial record struct Key<T>(
             [field:DurableField(1)] T Part,

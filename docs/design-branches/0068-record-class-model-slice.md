@@ -182,15 +182,15 @@ Windows .NET 构建和测试由主代理串行执行；不能让包测试/生成
 
 关键源码入口：
 
-- [IDurableObject](../../src/DurableGraph/IDurableObject.cs)、[StateModelBinding](../../src/DurableGraph/StateModelBinding.cs)、
-  [StateDefinitionBinding](../../src/DurableGraph/StateDefinitionBinding.cs)、[StateBaseProjection](../../src/DurableGraph/StateBaseProjection.cs)。
-- [CaptureContext](../../src/DurableGraph/CaptureContext.cs)、[ObjectReadTable](../../src/DurableGraph/ObjectReadTable.cs)、
-  [BuiltinStateValues](../../src/DurableGraph/BuiltinStateValues.cs)、[StateModelSnapshot](../../src/DurableGraph.StateStore/StateModelSnapshot.cs)。
+- [IDurableObject](../../src/DurableGraph/IDurableObject.cs)、[StateModelBinding](../../src/DurableGraph/Runtime/Binding/StateModelBinding.cs)、
+  [StateDefinitionBinding](../../src/DurableGraph/Runtime/Binding/StateDefinitionBinding.cs)、[StateBaseProjection](../../src/DurableGraph/Runtime/Binding/StateBaseProjection.cs)。
+- [CaptureContext](../../src/DurableGraph/Runtime/Capture/CaptureContext.cs)、[ObjectReadTable](../../src/DurableGraph/Runtime/Capture/ObjectReadTable.cs)、
+  [BuiltinStateValues](../../src/DurableGraph/Runtime/State/BuiltinStateValues.cs)、[StateModelSnapshot](../../src/DurableGraph.Persistence/StateModelSnapshot.cs)。
 - [Ancestry](../../src/DurableGraph.Generator/DurableSchemaGenerator.Ancestry.cs)、[CrossAssembly](../../src/DurableGraph.Generator/DurableSchemaGenerator.CrossAssembly.cs)、
   [Records](../../src/DurableGraph.Generator/DurableSchemaGenerator.Records.cs)、[GenericProjection](../../src/DurableGraph.Generator/DurableSchemaGenerator.GenericProjection.cs)、
   [GeneratedState](../../src/DurableGraph.Generator/DurableSchemaGenerator.GeneratedState.cs)。祖先终点须统一，不能只改诊断入口。
-- [EventHistoryRepository](../../src/DurableGraph.StateStore/EventHistoryRepository.cs)、[EventHistorySession](../../src/DurableGraph.StateStore/EventHistorySession.cs)、
-  [GraphReader](../../src/DurableGraph.StateStore/GraphReader.cs)、[WorldWorkspace](../../src/DurableGraph.StateStore/WorldWorkspace.cs)。
+- [EventHistoryRepository](../../src/DurableGraph.Persistence/EventHistoryRepository.cs)、[EventHistorySession](../../src/DurableGraph.Persistence/EventHistorySession.cs)、
+  [GraphReader](../../src/DurableGraph.Persistence/GraphReader.cs)、[WorldWorkspace](../../src/DurableGraph.Persistence/WorldWorkspace.cs)。
 - [RecordStructGeneratorTests](../../tests/DurableGraph.Tests/RecordStructGeneratorTests.cs)、
   [RecordStateProjectionTests](../../tests/DurableGraph.Tests/RecordStateProjectionTests.cs)、
   [PackageConsumerProbe](../../experiments/PackageConsumerProbe/README.md)。旧 record-class 拒绝测试应按新的合法/非法边界改写，不能整组删除。
@@ -239,7 +239,7 @@ SG 在 source/metadata/nominal 参数入口核对真实 attribute/marker symbol�
 
 | 门 | 代码与验证入口 | 状态 |
 |---|---|---|
-| G0 接口与准入 | [IDurableObject](../../src/DurableGraph/IDurableObject.cs)、[Runtime 准入回归](../../tests/DurableGraph.StateStore.Tests/DurableObjectAdmissionTests.cs)、[SG 合同回归](../../tests/DurableGraph.Tests/DurableObjectContractGeneratorTests.cs) | 已实现；StateStore 721 项通过，新包实际不导出 DurableBase |
+| G0 接口与准入 | [IDurableObject](../../src/DurableGraph/IDurableObject.cs)、[Runtime 准入回归](../../tests/DurableGraph.Persistence.Tests/DurableObjectAdmissionTests.cs)、[SG 合同回归](../../tests/DurableGraph.Tests/DurableObjectContractGeneratorTests.cs) | 已实现；StateStore 721 项通过，新包实际不导出 DurableBase |
 | G1 声明与投影 | [record 声明矩阵](../../tests/DurableGraph.Tests/RecordClassGeneratorTests.cs)、[图/投影回归](../../tests/DurableGraph.Tests/RecordClassGraphTests.cs) | 已实现；构造/accessor 绕过、继承存储、身份与业务比较隔离已验证 |
 | G2 完整历史 | [history 回归](../../tests/DurableGraph.Tests/RecordClassHistoryTests.cs)、[真包跨库三代见证](../../experiments/PackageConsumerProbe/RecordClassConsumer/README.md) | 已通过同版转换、基类升版约束、两/三参隐式 Upgrade 与显式泛型 Upgrade |
 | G3 包交付 | [RecordClass runner](../../experiments/PackageConsumerProbe/Run-RecordClassProbe.ps1)、[真实旧包迁移](../../experiments/PackageConsumerProbe/Run-DurableBaseMigrationProbe.ps1) | 三代新包、旧包迁移、既有 EventHistory/恢复消费者、README 原文执行均通过 |

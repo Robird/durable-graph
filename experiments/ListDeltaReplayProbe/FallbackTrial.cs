@@ -5,7 +5,9 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Atelia.DurableGraph;
-using Atelia.DurableGraph.StateStore.Serialization;
+using Atelia.DurableGraph.Runtime;
+using Atelia.DurableGraph.Schema;
+using Atelia.DurableGraph.Serialization;
 
 namespace Atelia.ListDeltaReplayProbe;
 

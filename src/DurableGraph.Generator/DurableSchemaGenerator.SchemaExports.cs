@@ -195,7 +195,7 @@ public sealed partial class DurableSchemaGenerator {
                     ? target.ContainingAssembly.GetTypeByMetadataName("Atelia.DurableGraph.Generated.EnumProjection_" + FamilyName(inline.SchemaId))?.GetTypeMembers("Projection").SingleOrDefault()
                     : target.GetTypeMembers("__DurableProjection", layout.DynamicFields.Count * 3).SingleOrDefault();
                 if (projection?.DeclaredAccessibility != Accessibility.Public || !projection.AllInterfaces.Any(item =>
-                    SymbolEqualityComparer.Default.Equals(item.OriginalDefinition, compilation.GetTypeByMetadataName("Atelia.DurableGraph.IValueProjection`2")) &&
+                    SymbolEqualityComparer.Default.Equals(item.OriginalDefinition, compilation.GetTypeByMetadataName("Atelia.DurableGraph.Runtime.IValueProjection`2")) &&
                     item.TypeArguments[0] is INamedTypeSymbol domain && SymbolEqualityComparer.Default.Equals(domain.OriginalDefinition, target.OriginalDefinition)))
                     Error("missing or incompatible public current value projection for '" + inline.SchemaId + "'");
             }

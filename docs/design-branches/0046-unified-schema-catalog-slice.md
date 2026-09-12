@@ -107,17 +107,17 @@ RegisterRepresentations 返回顺序仍对应输入；依赖导致节点编号�
 
 ### 5.1 实现与回归定位
 
-- [SchemaCatalogEntry](../../src/DurableGraph.StateStore/SchemaCatalogEntry.cs) 与
-  [SchemaCatalogWireCodec](../../src/DurableGraph.StateStore/SchemaCatalogWireCodec.cs) 是唯一节点格式，
+- [SchemaCatalogEntry](../../src/DurableGraph.Persistence/SchemaCatalogEntry.cs) 与
+  [SchemaCatalogWireCodec](../../src/DurableGraph.Persistence/SchemaCatalogWireCodec.cs) 是唯一节点格式，
   读写共享连续 ID、唯一性、名义声明及 exact 依赖校验。四个旧 codec 已删除。
-- [SchemaStore](../../src/DurableGraph.StateStore/SchemaStore.cs) 用同一 Prepare/CommitRegistration 处理两种公开登记入口；
+- [SchemaStore](../../src/DurableGraph.Persistence/SchemaStore.cs) 用同一 Prepare/CommitRegistration 处理两种公开登记入口；
   `_nodes` 是登记事实，Schema 查询和对象表示反向索引由同一 Install 建立。
-- [格式测试](../../tests/DurableGraph.StateStore.Tests/SchemaCatalogWireCodecTests.cs)、
-  [重放测试](../../tests/DurableGraph.StateStore.Tests/SchemaCatalogReplayTests.cs)、
-  [登记/故障测试](../../tests/DurableGraph.StateStore.Tests/RepresentationStoreTests.cs) 保留独立 golden、坏字节与顺序/故障见证。
-- [数组格式测试](../../tests/DurableGraph.StateStore.Tests/ArrayWireFormatTests.cs) 证明 256 层 inline Schema 作为元素时不额外计数组外壳；
-  [对象读取测试](../../tests/DurableGraph.StateStore.Tests/TypedObjectVersionReaderTests.cs) 与
-  [Repository 集成测试](../../tests/DurableGraph.StateStore.Tests/RepresentationIntegrationTests.cs) 证明 inline ID 不能冒充对象 Base，且在 body callback 前拒绝。
+- [格式测试](../../tests/DurableGraph.Persistence.Tests/SchemaCatalogWireCodecTests.cs)、
+  [重放测试](../../tests/DurableGraph.Persistence.Tests/SchemaCatalogReplayTests.cs)、
+  [登记/故障测试](../../tests/DurableGraph.Persistence.Tests/RepresentationStoreTests.cs) 保留独立 golden、坏字节与顺序/故障见证。
+- [数组格式测试](../../tests/DurableGraph.Persistence.Tests/ArrayWireFormatTests.cs) 证明 256 层 inline Schema 作为元素时不额外计数组外壳；
+  [对象读取测试](../../tests/DurableGraph.Persistence.Tests/TypedObjectVersionReaderTests.cs) 与
+  [Repository 集成测试](../../tests/DurableGraph.Persistence.Tests/RepresentationIntegrationTests.cs) 证明 inline ID 不能冒充对象 Base，且在 body callback 前拒绝。
 
 ### 5.2 验证证据
 

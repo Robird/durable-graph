@@ -50,12 +50,12 @@ readonly 字段的类型也限于本批已支持类型；手写 readonly 循环�
 
 | 源码/测试 | 当前事实与本批要接的地方 |
 |---|---|
-| [StateReaderBinding](../../src/DurableGraph/StateReaderBinding.cs)、[RevisionDecoder](../../src/DurableGraph.StateStore/RevisionDecoder.cs) | 只得到 stored-exact DTO；扩展版本归一化与 current 模型能力，不抹掉历史 exact 验证 |
+| [StateReaderBinding](../../src/DurableGraph/Runtime/Binding/StateReaderBinding.cs)、[RevisionDecoder](../../src/DurableGraph.Persistence/RevisionDecoder.cs) | 只得到 stored-exact DTO；扩展版本归一化与 current 模型能力，不抹掉历史 exact 验证 |
 | [SG BinaryBody](../../src/DurableGraph.Generator/DurableSchemaGenerator.BinaryBody.cs) | 有各版 DTO/body、稳定 ReaderVn 与 current Preparation；新 Upgrade/Allocate/Hydrate/加载后 Capture 应复用这些知识 |
 | [SG 主体](../../src/DurableGraph.Generator/DurableSchemaGenerator.cs) | 旧 UpgradeVnToVm 属于 legacy Snapshot；readonly 诊断同时服务旧路径，不能全局删除后让旧反序列化赋值无法编译 |
-| [CaptureSession](../../src/DurableGraph/CaptureSession.cs)、[CaptureContext](../../src/DurableGraph/CaptureContext.cs) | Current 是内存来源；Prepare 要求稳定 preparation/Schema；无持久导入，不接受把 DecodedRevision 直接装成 Current |
-| [CapturedRevisionPlanner](../../src/DurableGraph.StateStore/CapturedRevisionPlanner.cs) | 要求 previous 完整覆盖 Parent，并拒绝 survivor 跨 Schema；要新增受控迁移分支，不能整体移除校验 |
-| [PreparedObject](../../src/DurableGraph.StateStore/PreparedObject.cs) | 已有 BaseOnlyUpdate，可消费合法迁移，不必重写策略 |
+| [CaptureSession](../../src/DurableGraph/Runtime/Capture/CaptureSession.cs)、[CaptureContext](../../src/DurableGraph/Runtime/Capture/CaptureContext.cs) | Current 是内存来源；Prepare 要求稳定 preparation/Schema；无持久导入，不接受把 DecodedRevision 直接装成 Current |
+| [CapturedRevisionPlanner](../../src/DurableGraph.Persistence/CapturedRevisionPlanner.cs) | 要求 previous 完整覆盖 Parent，并拒绝 survivor 跨 Schema；要新增受控迁移分支，不能整体移除校验 |
+| [PreparedObject](../../src/DurableGraph.Persistence/PreparedObject.cs) | 已有 BaseOnlyUpdate，可消费合法迁移，不必重写策略 |
 | [NormalizedGraphMaterializationProbe](../../tests/DurableGraph.Tests/NormalizedGraphMaterializationProbe.cs) | 可复用先分配后填充的思想；不是新 DTO 产品入口 |
 | [生成冷读集成](../../tests/DurableGraph.Tests/DecodedRevisionGeneratorTests.cs) | 现成真实 RBF/history 测试基础，可扩成升级续写闭环 |
 
@@ -271,10 +271,10 @@ LoadedWorld 只导入 CaptureSession 的实例身份和 ulong 游标，不伪造
 |---|---|---|---|
 | G0 基线、跨层契约及创作协议 | verified | 主代理 Runtime / SG / StateStore 接缝审议 | 上述基线及接口清单 |
 | G1 相邻强类型升级、缺路径及历史继承 | verified | [SG StateModel](../../src/DurableGraph.Generator/DurableSchemaGenerator.StateModel.cs) | [GeneratedStateModelTests](../../tests/DurableGraph.Tests/GeneratedStateModelTests.cs)：V1→V2→V3、current 快路、每声明边签名/缺边/异常、旧祖先删除及 leaf 独占升级 |
-| G2 完整归一化、source/current 边界 | verified | [NormalizedRevision](../../src/DurableGraph.StateStore/NormalizedRevision.cs) | [LoadedWorldTests](../../tests/DurableGraph.StateStore.Tests/LoadedWorldTests.cs)：完整多 Delta 后升级、混合 current/history、不可达 source 失败、错误引用及零写入 |
-| G3 readonly / 无构造器 Hydrate | verified | SG StateModel + [Runtime binding](../../src/DurableGraph/StateModelBinding.cs) | GeneratedStateModelTests、[全部 13 标量位模式](../../tests/DurableGraph.Tests/LoadedScalarHydrateTests.cs)：private 基类/叶类、初始值不执行、string 共享/独立/Empty/null、再次 Capture/Base/Delta/Read |
-| G4 Loaded owner 与身份导入 | verified | [LoadedWorld](../../src/DurableGraph.StateStore/LoadedWorld.cs)、[CaptureSession](../../src/DurableGraph/CaptureSession.cs) | LoadedWorldTests + [LoadedCaptureIdentityTests](../../tests/DurableGraph.Tests/LoadedCaptureIdentityTests.cs)：保留原 Empty 槽、完整 source max+1、耗尽已有对象可保存、错误根/类型、无伪造 Current |
-| G5 固定 Parent Prepare 与强制 Base | verified | [LoadedRevisionPlanner](../../src/DurableGraph.StateStore/LoadedRevisionPlanner.cs) | LoadedWorldTests：强制 Base、真实 Remove、冻结/repeat、编码/重入/Schema 冲突、确定 Append 失败不推进基线；原 Capture/策略回归保持 |
+| G2 完整归一化、source/current 边界 | verified | [NormalizedRevision](../../src/DurableGraph.Persistence/NormalizedRevision.cs) | [LoadedWorldTests](../../tests/DurableGraph.Persistence.Tests/LoadedWorldTests.cs)：完整多 Delta 后升级、混合 current/history、不可达 source 失败、错误引用及零写入 |
+| G3 readonly / 无构造器 Hydrate | verified | SG StateModel + [Runtime binding](../../src/DurableGraph/Runtime/Binding/StateModelBinding.cs) | GeneratedStateModelTests、[全部 13 标量位模式](../../tests/DurableGraph.Tests/LoadedScalarHydrateTests.cs)：private 基类/叶类、初始值不执行、string 共享/独立/Empty/null、再次 Capture/Base/Delta/Read |
+| G4 Loaded owner 与身份导入 | verified | [LoadedWorld](../../src/DurableGraph.Persistence/LoadedWorld.cs)、[CaptureSession](../../src/DurableGraph/Runtime/Capture/CaptureSession.cs) | LoadedWorldTests + [LoadedCaptureIdentityTests](../../tests/DurableGraph.Tests/LoadedCaptureIdentityTests.cs)：保留原 Empty 槽、完整 source max+1、耗尽已有对象可保存、错误根/类型、无伪造 Current |
+| G5 固定 Parent Prepare 与强制 Base | verified | [LoadedRevisionPlanner](../../src/DurableGraph.Persistence/LoadedRevisionPlanner.cs) | LoadedWorldTests：强制 Base、真实 Remove、冻结/repeat、编码/重入/Schema 冲突、确定 Append 失败不推进基线；原 Capture/策略回归保持 |
 | G6 冷重开、包交付、独立审查 | verified | 主代理集成与独立 reviewer | [LoadedWorldGeneratorTests](../../tests/DurableGraph.Tests/LoadedWorldGeneratorTests.cs) 两项真实历史/RBF/Segment 冷重开；两个 [PackageConsumerProbe](../../experiments/PackageConsumerProbe/README.md)；独立复审无未解决阻塞项 |
 
 ### 实际 API 与所有权

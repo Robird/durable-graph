@@ -1,3 +1,5 @@
+using Atelia.DurableGraph.Runtime;
+using Atelia.DurableGraph.Schema;
 using System.Reflection;
 
 namespace Atelia.DurableGraph.Tests;
@@ -9,7 +11,9 @@ public sealed partial class DurableSchemaGeneratorTests {
             using System;
             using System.Collections.Generic;
             using Atelia.DurableGraph;
-            using Atelia.DurableGraph.StateStore.Serialization;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
+            using Atelia.DurableGraph.Serialization;
             using States = Atelia.DurableGraph.Generated.Family_526563;
             [DurableType("Rec", 1)]
             public partial record struct Rec([field:DurableField(1)] int Number) {
@@ -79,7 +83,9 @@ public sealed partial class DurableSchemaGeneratorTests {
         GeneratorTestRun run = RunGenerator("""
             using System;
             using Atelia.DurableGraph;
-            using Atelia.DurableGraph.StateStore;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
+            using Atelia.DurableGraph.Persistence;
             using Atelia.DurableGraph.Generated;
             [DurableType("Key",1)]
             public readonly partial record struct Key<T>([field:DurableField(1)] T Part) {

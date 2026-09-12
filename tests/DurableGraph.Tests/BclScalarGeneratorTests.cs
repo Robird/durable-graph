@@ -1,5 +1,6 @@
+using Atelia.DurableGraph.Schema;
 using Atelia.DurableGraph.Build;
-using Atelia.DurableGraph.StateStore.Serialization;
+using Atelia.DurableGraph.Serialization;
 
 namespace Atelia.DurableGraph.Tests;
 
@@ -77,6 +78,8 @@ public sealed partial class DurableSchemaGeneratorTests {
     public void BclScalarRecognitionRejectsSourceDefinedLookalikes(string name, string ns) {
         GeneratorTestRun run = RunGenerator($$"""
             using Atelia.DurableGraph;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
             namespace {{ns}} { public struct {{name}} { public int Data; } }
             [DurableType("Fake",1)] public partial class Fake:IDurableObject {
                 [DurableField(1)] public {{ns}}.{{name}} Value;
@@ -104,7 +107,9 @@ public sealed partial class DurableSchemaGeneratorTests {
     private const string BclScalarFamilyBodySource = """
         using System;
         using Atelia.DurableGraph;
-        using Atelia.DurableGraph.StateStore.Serialization;
+        using Atelia.DurableGraph.Schema;
+        using Atelia.DurableGraph.Runtime;
+        using Atelia.DurableGraph.Serialization;
         using Body = Atelia.DurableGraph.Generated.Family_4974656D.BodyV1;
         [DurableType("Trigger",1)] public partial struct Trigger<T> { [DurableField(1)] public T Value; }
         [DurableType("Item",1)] public partial class Item:IDurableObject {
@@ -139,7 +144,9 @@ public sealed partial class DurableSchemaGeneratorTests {
         using System;
         using System.Collections.Generic;
         using Atelia.DurableGraph;
-        using Atelia.DurableGraph.StateStore;
+        using Atelia.DurableGraph.Schema;
+        using Atelia.DurableGraph.Runtime;
+        using Atelia.DurableGraph.Persistence;
         using Atelia.DurableGraph.Generated;
         [DurableType("Part",1)] public readonly partial record struct Part(
             [field:DurableField(1)] Guid Id,[field:DurableField(2)] decimal Amount,[field:DurableField(3)] TimeSpan Duration);

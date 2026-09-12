@@ -1,4 +1,5 @@
-using Atelia.DurableGraph.StateStore;
+using Atelia.DurableGraph.Runtime;
+using Atelia.DurableGraph.Persistence;
 
 namespace Atelia.DurableGraph.Tests;
 
@@ -60,7 +61,9 @@ public sealed partial class DurableSchemaGeneratorTests {
         using System;
         using System.Collections.Generic;
         using Atelia.DurableGraph;
-        using Atelia.DurableGraph.StateStore;
+        using Atelia.DurableGraph.Schema;
+        using Atelia.DurableGraph.Runtime;
+        using Atelia.DurableGraph.Persistence;
         namespace NullableGraph;
         [DurableType("nullable.node", 1)] public partial class Node : IDurableObject {
             [DurableField(1)] public Node Self;

@@ -1,5 +1,6 @@
-using Atelia.DurableGraph.StateStore;
-using Atelia.DurableGraph.StateStore.Storage;
+using Atelia.DurableGraph.Schema;
+using Atelia.DurableGraph.Persistence;
+using Atelia.DurableGraph.Storage;
 using Atelia.Rbf;
 using SegmentStore = Atelia.RbfSegmentStore.RbfSegmentStore;
 
@@ -228,8 +229,10 @@ public sealed partial class DurableSchemaGeneratorTests {
     private const string ArrayGraphSource = """
         using System;
         using Atelia.DurableGraph;
-        using Atelia.DurableGraph.StateStore;
-        using Atelia.DurableGraph.StateStore.Storage;
+        using Atelia.DurableGraph.Schema;
+        using Atelia.DurableGraph.Runtime;
+        using Atelia.DurableGraph.Persistence;
+        using Atelia.DurableGraph.Storage;
         namespace ArrayGraph;
 
         [DurableType("array.graph.point", 1)]

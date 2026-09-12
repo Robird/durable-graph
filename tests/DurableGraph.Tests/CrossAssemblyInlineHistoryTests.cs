@@ -1,7 +1,9 @@
+using Atelia.DurableGraph.Runtime;
+using Atelia.DurableGraph.Schema;
 using System.Text;
 using Atelia.DurableGraph.Build;
-using Atelia.DurableGraph.StateStore;
-using Atelia.DurableGraph.StateStore.Storage;
+using Atelia.DurableGraph.Persistence;
+using Atelia.DurableGraph.Storage;
 using Atelia.Rbf;
 using SegmentStore = Atelia.RbfSegmentStore.RbfSegmentStore;
 
@@ -150,6 +152,8 @@ public sealed partial class DurableSchemaGeneratorTests {
     private static string CrossInlineHistoryLibrary(int version) => $$"""
         using System;
         using Atelia.DurableGraph;
+        using Atelia.DurableGraph.Schema;
+        using Atelia.DurableGraph.Runtime;
         namespace InlineHistoryValues;
         [DurableType("ExtValue",{{version}})] public partial struct {{(version==1 ? "LegacyPoint" : "Point")}} {
             [DurableField(1)] public {{(version==1 ? "int" : "long")}} X;
@@ -166,8 +170,10 @@ public sealed partial class DurableSchemaGeneratorTests {
         using System.IO;
         using System.Linq;
         using Atelia.DurableGraph;
-        using Atelia.DurableGraph.StateStore;
-        using Atelia.DurableGraph.StateStore.Storage;
+        using Atelia.DurableGraph.Schema;
+        using Atelia.DurableGraph.Runtime;
+        using Atelia.DurableGraph.Persistence;
+        using Atelia.DurableGraph.Storage;
         using P=Atelia.DurableGraph.Generated.Family_45787456616C7565;
         using W=Atelia.DurableGraph.Generated.Family_457874576F726C64;
         using Point=InlineHistoryValues.{{{{(version==1 && !currentLibrary ? "LegacyPoint" : "Point")}}}};

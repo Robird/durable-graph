@@ -1,4 +1,5 @@
 using Atelia.DurableGraph;
+using Atelia.DurableGraph.Schema;
 using BoxStates = Atelia.DurableGraph.Generated.Family_47656E65726963426F78;
 using WorldStates = Atelia.DurableGraph.Generated.Family_47656E65726963576F726C64;
 using PointStates = Atelia.DurableGraph.Generated.Family_47656E65726963506F696E74;

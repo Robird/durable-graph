@@ -1,5 +1,5 @@
 using Atelia.DurableGraph;
-using Atelia.DurableGraph.StateStore;
+using Atelia.DurableGraph.Persistence;
 
 namespace EventHistoryRecovery;
 

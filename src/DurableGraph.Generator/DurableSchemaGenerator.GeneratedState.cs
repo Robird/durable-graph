@@ -10,7 +10,7 @@ namespace Atelia.DurableGraph.Generator;
 
 public sealed partial class DurableSchemaGenerator {
     private const string GeneratedStateTypeName = "__DurableState";
-    private const string PayloadNamespace = "global::Atelia.DurableGraph.StateStore.Serialization.";
+    private const string PayloadNamespace = "global::Atelia.DurableGraph.Serialization.";
 
     private static readonly DiagnosticDescriptor InvalidGeneratedState = new(
         id: "DG0020",
@@ -143,7 +143,7 @@ public sealed partial class DurableSchemaGenerator {
 
     private static string BinarySlotRead(int typeTagValue) {
         string read = "reader.Read" + GetTypeTagName(GetBinarySlotTypeTag(typeTagValue)) + "()";
-        return IsBinaryReference(typeTagValue) ? "new " + RuntimeName + "ObjectId(" + read + ")" : read;
+        return IsBinaryReference(typeTagValue) ? "new " + RootName + "ObjectId(" + read + ")" : read;
     }
 
     private static string BinarySlotWireValue(int typeTagValue, string expression) =>
@@ -200,7 +200,7 @@ public sealed partial class DurableSchemaGenerator {
     private static void AppendBinaryReaderRegistration(
         StringBuilder source, List<BinaryVersionModel> versions, string indent) {
         foreach (BinaryVersionModel version in versions) {
-            source.Append(indent).Append("private static readonly global::Atelia.DurableGraph.StateReaderBinding<")
+            source.Append(indent).Append("private static readonly global::Atelia.DurableGraph.Runtime.StateReaderBinding<")
                 .Append(version.Name).Append("> Reader").Append(version.Name).Append(" = new(")
                 .Append(version.Name).Append(".Schema, ReadBaseBody").Append(version.Name).Append(", ApplyDeltaBody")
                 .Append(version.Name).AppendLine(", VisitReferences);");
@@ -222,7 +222,7 @@ public sealed partial class DurableSchemaGenerator {
             .Append(type.IsInline ? "in " : string.Empty)
             .Append(type.Symbol.ToDisplayString(FullyQualifiedNameFormat)).Append(" value");
         if (needsContext) {
-            source.Append(", global::Atelia.DurableGraph.CaptureContext context");
+            source.Append(", global::Atelia.DurableGraph.Runtime.CaptureContext context");
         }
 
         source.AppendLine(") {");
@@ -289,7 +289,7 @@ public sealed partial class DurableSchemaGenerator {
     private static void AppendBinaryAddRoot(
         StringBuilder source, DurableTypeModel type, BinaryVersionModel version, string indent) {
         string domainType = type.Symbol.ToDisplayString(FullyQualifiedNameFormat);
-        source.Append(indent).Append("internal static global::Atelia.DurableGraph.ObjectId AddRoot(global::Atelia.DurableGraph.CaptureContext context, ")
+        source.Append(indent).Append("internal static global::Atelia.DurableGraph.ObjectId AddRoot(global::Atelia.DurableGraph.Runtime.CaptureContext context, ")
             .Append(domainType).AppendLine("? value) {");
         source.Append(indent).AppendLine("    global::System.ArgumentNullException.ThrowIfNull(context);");
         source.Append(indent).Append("    return context.AddRoot<").Append(domainType).Append(", ")
@@ -329,7 +329,7 @@ public sealed partial class DurableSchemaGenerator {
             source.Append(indent).AppendLine("    }");
         }
 
-        source.Append(indent).Append("    internal static global::Atelia.DurableGraph.DurableSchema Schema => ")
+        source.Append(indent).Append("    internal static global::Atelia.DurableGraph.Schema.DurableSchema Schema => ")
             .Append(type is null ? "ExactSchema" : type.Value.Symbol.ToDisplayString(FullyQualifiedNameFormat) + ".GetSchema(" + version.Version.ToString(CultureInfo.InvariantCulture) + ")").AppendLine(";");
         source.Append(indent).AppendLine("}");
     }
@@ -555,7 +555,7 @@ public sealed partial class DurableSchemaGenerator {
     private static void AppendBinarySlotEquality(
         StringBuilder source, BinaryFieldModel field, string left, string right) {
         if (field.TypeTagValue == 20) {
-            source.Append("global::Atelia.DurableGraph.StateStore.Serialization.ScalarStateEquality.DecimalEquals(in ")
+            source.Append("global::Atelia.DurableGraph.Serialization.ScalarStateEquality.DecimalEquals(in ")
                 .Append(left).Append(", in ").Append(right).Append(')');
             return;
         }
@@ -581,7 +581,7 @@ public sealed partial class DurableSchemaGenerator {
     private static void AppendBinaryStringReferenceValidation(
         StringBuilder source, BinaryVersionModel version, string indent) {
         source.Append(indent).Append("internal static void ValidateStringReferences(in ").Append(version.Name)
-            .AppendLine(" state, global::Atelia.DurableGraph.StringReadTable table) {");
+            .AppendLine(" state, global::Atelia.DurableGraph.Runtime.StringReadTable table) {");
         source.Append(indent).AppendLine("    global::System.ArgumentNullException.ThrowIfNull(table);");
         foreach (BinaryFieldModel field in version.Fields) {
             if (field.InlineSchema.HasValue) {
@@ -598,7 +598,7 @@ public sealed partial class DurableSchemaGenerator {
     private static void AppendBinaryReferenceTraversal(
         StringBuilder source, BinaryVersionModel version, string indent) {
         source.Append(indent).Append("internal static void VisitReferences(in ").Append(version.Name)
-            .AppendLine(" state, global::Atelia.DurableGraph.IStateReferenceVisitor visitor) {");
+            .AppendLine(" state, global::Atelia.DurableGraph.Runtime.IStateReferenceVisitor visitor) {");
         source.Append(indent).AppendLine("    global::System.ArgumentNullException.ThrowIfNull(visitor);");
         foreach (BinaryFieldModel field in version.Fields) {
             if (field.InlineSchema.HasValue) {

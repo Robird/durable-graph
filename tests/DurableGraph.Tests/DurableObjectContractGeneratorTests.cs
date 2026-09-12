@@ -21,6 +21,8 @@ public sealed partial class DurableSchemaGeneratorTests {
     public void UnqualifiedSourceClassCannotEnterNominalOrGenericSlots(string fieldType) {
         GeneratorTestRun run = RunGenerator($$"""
             using Atelia.DurableGraph;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
             [DurableType("Bad",1)] public partial class Bad { [DurableField(1)] public int Value; }
             [DurableType("Box",1)] public partial class Box<T> : IDurableObject { [DurableField(1)] public T Value; }
             [DurableType("Root",1)] public partial class Root : IDurableObject { [DurableField(1)] public {{fieldType}} Value; }

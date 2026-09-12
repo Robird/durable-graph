@@ -1,4 +1,5 @@
 using Atelia.DurableGraph;
+using Atelia.DurableGraph.Runtime;
 #if HISTORY_V1
 using Mode = EnumPackageConsumerProbe.LegacyMode;
 #else

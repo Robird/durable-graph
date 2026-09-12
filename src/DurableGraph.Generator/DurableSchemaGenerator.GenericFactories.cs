@@ -43,7 +43,7 @@ public sealed partial class DurableSchemaGenerator {
             output.AppendLine("}");
         }
         output.AppendLine("internal static class DurableDefinitions {");
-        output.Append("    public static void Register(").Append(RuntimeName).AppendLine("IStateDefinitionRegistration definitions) {");
+        output.Append("    public static void Register(").Append(RootName).AppendLine("IStateDefinitionRegistration definitions) {");
         output.AppendLine("        global::System.ArgumentNullException.ThrowIfNull(definitions);");
         foreach (string id in families.Keys) output.Append("        definitions.Register(").Append(FamilyName(id)).AppendLine(".Definition);");
         foreach (INamedTypeSymbol rules in GetValueRuleSets(compilation)) {
@@ -63,7 +63,7 @@ public sealed partial class DurableSchemaGenerator {
     private static void AppendGenericHistoricalFactory(StringBuilder output, GenericLayout layout) {
         string resultType = RuntimeName + (layout.Shape.Kind == 2 ? "StateValueBinding" : "StateReaderBinding");
         string name = "CreateHistorical" + layout.Name;
-        output.Append("    private static ").Append(resultType).Append(' ').Append(name).Append('(').Append(RuntimeName)
+        output.Append("    private static ").Append(resultType).Append(' ').Append(name).Append('(').Append(SchemaName)
             .Append("DurableSchema schema, ").Append(RuntimeName).AppendLine("StateBindingContext context) {");
         output.AppendLine("        var binding = context.BindSchema(schema);");
         for (int index = 0; index < layout.DynamicFields.Count; index++) {
@@ -78,17 +78,17 @@ public sealed partial class DurableSchemaGenerator {
             output.Append("        var method = typeof(").Append(FamilyName(layout.Shape.SchemaId)).Append(").GetMethod(")
                 .Append(Literal(name + "Typed")).Append(", global::System.Reflection.BindingFlags.Static | global::System.Reflection.BindingFlags.NonPublic)!")
                 .Append(".MakeGenericMethod(").Append(string.Join(", ", Enumerable.Range(0, layout.DynamicFields.Count).SelectMany(index => new[] { "value" + Number(index) + ".StateType", "value" + Number(index) + ".StateOpsType" }))).AppendLine(");");
-            output.Append("        return method.CreateDelegate<global::System.Func<").Append(RuntimeName).Append("DurableSchema, ").Append(RuntimeName)
+            output.Append("        return method.CreateDelegate<global::System.Func<").Append(SchemaName).Append("DurableSchema, ").Append(RuntimeName)
                 .Append("StateBindingContext, ").Append(resultType).AppendLine(">>()(schema, context);");
         }
         output.AppendLine("    }");
         output.Append("    private static ").Append(resultType).Append(' ').Append(name).Append("Typed").Append(layout.OperationParameters)
-            .Append('(').Append(RuntimeName).Append("DurableSchema schema, ").Append(RuntimeName).Append("StateBindingContext context)");
+            .Append('(').Append(SchemaName).Append("DurableSchema schema, ").Append(RuntimeName).Append("StateBindingContext context)");
         AppendGenericConstraints(output, layout, true);
         output.AppendLine(" {");
         if (layout.Shape.Kind == 2) {
-            output.Append("        return new ").Append(RuntimeName).Append("StateValueBinding(new ").Append(RuntimeName)
-                .Append("DurableFieldInfo(1, ").Append(RuntimeName).Append("TypeTag.InlineValue, inlineSchema: schema), typeof(").Append(layout.Dto)
+            output.Append("        return new ").Append(RuntimeName).Append("StateValueBinding(new ").Append(SchemaName)
+                .Append("DurableFieldInfo(1, ").Append(SchemaName).Append("TypeTag.InlineValue, inlineSchema: schema), typeof(").Append(layout.Dto)
                 .Append("), typeof(").Append(layout.Body).AppendLine("));");
         } else {
             output.Append("        return new ").Append(RuntimeName).Append("StateReaderBinding<").Append(layout.Dto).AppendLine(">(schema,");
@@ -108,12 +108,12 @@ public sealed partial class DurableSchemaGenerator {
         SchemaHistoryModel latest = versions[versions.Count - 1].Shape;
         string kind = latest.Kind == 2 ? "InlineValue" : "ReferenceObject";
         output.Append("    public static readonly ").Append(RuntimeName).Append("StateDefinitionBinding Definition = new(")
-            .Append(Literal(id)).Append(", ").Append(RuntimeName).Append("SchemaKind.").Append(kind).Append(", ").Append(latest.Arity).Append(", ")
+            .Append(Literal(id)).Append(", ").Append(SchemaName).Append("SchemaKind.").Append(kind).Append(", ").Append(latest.Arity).Append(", ")
             .Append(domain.HasValue ? "typeof(" + UnboundDomainType(domain.Value.Symbol) + ")" : "null")
             .Append(", new ").Append(RuntimeName).AppendLine("StateSchemaTemplate[] {");
         foreach (GenericLayout version in versions) {
             SchemaHistoryModel shape = version.Shape;
-            output.Append("        new(").Append(Literal(id)).Append(", ").Append(shape.Version).Append(", ").Append(RuntimeName).Append("SchemaKind.").Append(kind)
+            output.Append("        new(").Append(Literal(id)).Append(", ").Append(shape.Version).Append(", ").Append(SchemaName).Append("SchemaKind.").Append(kind)
                 .Append(", ").Append(shape.Arity).Append(", new ").Append(RuntimeName).AppendLine("StateFieldTemplate[] {");
             foreach (SchemaHistoryFieldModel field in shape.Fields) {
                 output.Append("            new(").Append(field.FieldId).Append(", ");

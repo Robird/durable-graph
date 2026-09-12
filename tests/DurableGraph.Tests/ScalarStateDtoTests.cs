@@ -1,3 +1,4 @@
+using Atelia.DurableGraph.Schema;
 using System.Reflection;
 using Atelia.DurableGraph.Build;
 
@@ -126,6 +127,8 @@ public sealed partial class DurableSchemaGeneratorTests {
     public void ScalarTypeRecognitionRejectsUserDefinedHalf(string namespaceName) {
         GeneratorTestRun run = RunGenerator($$"""
             using Atelia.DurableGraph;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
             namespace {{namespaceName}} { public struct Half { public int Value; } }
             [DurableType("fake-half", 1)]
             public sealed partial class Item : IDurableObject {
@@ -146,6 +149,8 @@ public sealed partial class DurableSchemaGeneratorTests {
     public void ScalarTypeRecognitionKeepsUnsupportedValueKindsOutsideTheSlice(string fieldType) {
         GeneratorTestRun run = RunGenerator($$"""
             using Atelia.DurableGraph;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
             public enum Choice { First, Second }
             public struct Composite { public int Value; }
             [DurableType("unsupported-scalar", 1)]
@@ -162,7 +167,9 @@ public sealed partial class DurableSchemaGeneratorTests {
         using System;
         using System.Buffers;
         using Atelia.DurableGraph;
-        using Atelia.DurableGraph.StateStore.Serialization;
+        using Atelia.DurableGraph.Schema;
+        using Atelia.DurableGraph.Runtime;
+        using Atelia.DurableGraph.Serialization;
         namespace ScalarDtos;
         [DurableType("scalar.item", 1)]
         public sealed partial class Item : IDurableObject {
@@ -221,7 +228,9 @@ public sealed partial class DurableSchemaGeneratorTests {
         using System;
         using System.Buffers;
         using Atelia.DurableGraph;
-        using Atelia.DurableGraph.StateStore.Serialization;
+        using Atelia.DurableGraph.Schema;
+        using Atelia.DurableGraph.Runtime;
+        using Atelia.DurableGraph.Serialization;
         namespace ScalarDtos;
         [DurableType("scalar.item", 2)]
         public partial class CurrentBase : IDurableObject {

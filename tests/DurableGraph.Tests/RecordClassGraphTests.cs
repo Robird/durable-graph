@@ -1,5 +1,7 @@
-using Atelia.DurableGraph.StateStore;
-using Atelia.DurableGraph.StateStore.Storage;
+using Atelia.DurableGraph.Runtime;
+using Atelia.DurableGraph.Schema;
+using Atelia.DurableGraph.Persistence;
+using Atelia.DurableGraph.Storage;
 using Atelia.Rbf;
 using SegmentStore = Atelia.RbfSegmentStore.RbfSegmentStore;
 
@@ -43,8 +45,10 @@ public sealed partial class DurableSchemaGeneratorTests {
         GeneratorTestRun run = RunGenerator("""
             using System;
             using Atelia.DurableGraph;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
             using Atelia.DurableGraph.Generated;
-            using Atelia.DurableGraph.StateStore;
+            using Atelia.DurableGraph.Persistence;
             [DurableType("Guard",1)] public sealed partial record Guard : IDurableObject {
                 public static int Constructors,Initializers,Getters,Inits,Copies;
                 public static bool ForbidConstruction;
@@ -94,9 +98,11 @@ public sealed partial class DurableSchemaGeneratorTests {
         using System.Collections.Generic;
         using System.Linq;
         using Atelia.DurableGraph;
+        using Atelia.DurableGraph.Schema;
+        using Atelia.DurableGraph.Runtime;
         using Atelia.DurableGraph.Generated;
-        using Atelia.DurableGraph.StateStore;
-        using Atelia.DurableGraph.StateStore.Storage;
+        using Atelia.DurableGraph.Persistence;
+        using Atelia.DurableGraph.Storage;
         namespace RecordClasses;
         [DurableType("Fact",1)] public abstract partial record Fact([field:DurableField(1)] string Actor) : IDurableObject;
         [DurableType("Damage",1)] public sealed partial record Damage(string Actor,[field:DurableField(1)] int Amount) : Fact(Actor);

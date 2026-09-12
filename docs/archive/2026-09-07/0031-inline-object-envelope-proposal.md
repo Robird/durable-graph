@@ -63,14 +63,14 @@ string 使用短类型编码，不带自定义 Schema。
 
 ## 3. 当前源码接缝
 
-- [CaptureSession.Prepare](../../../src/DurableGraph/CaptureSession.cs) 集中取得 current kind/Schema
+- [CaptureSession.Prepare](../../../src/DurableGraph/Runtime/Capture/CaptureSession.cs) 集中取得 current kind/Schema
   与裸 PreparedBase/PreparedDelta，适合在对象边界统一包头。
-- [DurableSchema](../../../src/DurableGraph/DurableSchema.cs) 已定义完整结构相等、exact BaseSchema
+- [DurableSchema](../../../src/DurableGraph/Schema/DurableSchema.cs) 已定义完整结构相等、exact BaseSchema
   及声明段内字段排序；[InMemorySchemaStore](../../../src/DurableGraph/InMemorySchemaStore.cs)
   已检查同 key 不同 shape 和祖先冲突。
-- [ObjectRevisionPlanner](../../../src/DurableGraph.StateStore/ObjectRevisionPlanner.cs) 按输入 payload
-  长度调用 [ObjectVersionPayloadSize](../../../src/DurableGraph.StateStore.Storage/ObjectVersionPayloadSize.cs)；
-  [Storage 链读取](../../../src/DurableGraph.StateStore.Storage/StateRevisionStore.cs) 的 H 来自实编码长度。
+- [ObjectRevisionPlanner](../../../src/DurableGraph.Persistence/ObjectRevisionPlanner.cs) 按输入 payload
+  长度调用 [ObjectVersionPayloadSize](../../../src/DurableGraph.Storage/ObjectVersionPayloadSize.cs)；
+  [Storage 链读取](../../../src/DurableGraph.Storage/StateRevisionStore.cs) 的 H 来自实编码长度。
   因而先包头、后规划即可把新开销纳入现有 B/D/H，不另改策略公式。
 - [统一保存集成](../../../tests/DurableGraph.Tests/PreparedRevisionGeneratorTests.cs) 与
   [持久 Delta 见证](../../../tests/DurableGraph.Tests/PersistedDeltaChainGeneratorTests.cs) 仍手持

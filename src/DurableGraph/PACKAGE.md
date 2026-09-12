@@ -12,6 +12,13 @@ control. `Off` disables Publish/Verify but does not make legacy history valid. T
 `DurableGraphSnapshotHistoryDirectory` property, the old default `DurableGraphSnapshots/` directory,
 and legacy `.dgsnapshot` files are rejected rather than silently ignored or consumed.
 
+Domain attributes, `IDurableObject`, `ObjectId`, upgrade context and registration interfaces stay in
+`Atelia.DurableGraph`. Schema/layout descriptors use `Atelia.DurableGraph.Schema`; bindings, capture,
+state operations and container readers use `Atelia.DurableGraph.Runtime`, in the same assembly.
+Persistence sessions come from `Atelia.DurableGraph.Persistence`; shared bytes and raw revisions use
+`Atelia.DurableGraph.Serialization` and `Atelia.DurableGraph.Storage`. Recompile the dependency closure
+when migrating the former StateStore package names. Keep model IDs, versions and accepted history.
+
 ## Generated Schema and state
 
 Annotate each durable partial class or struct with `[DurableType("example.character", 1)]`; a
@@ -72,7 +79,7 @@ using var session = repository.CreateBranch(
 var initialStateFrame = session.Head; // S0 is already published; world retains its identity.
 ```
 
-These storage APIs require `Atelia.DurableGraph.StateStore` in addition to the runtime package.
+These storage APIs require `Atelia.DurableGraph.Persistence` in addition to the runtime package.
 The [repository quickstart](../../README.md) provides the complete Event/State commit, reopen and
 pending-Event example. Event and succeeding State both compare against the preceding State;
 committing an Event does not advance the State baseline.
@@ -346,7 +353,7 @@ reader.EnsureFullyConsumed();
 for reuse. `PrepareDeltaBody(in prior, in current)` owns its change decision and raw Delta body;
 `ApplyDeltaBodyVn` applies it to the exact same-version prior DTO. The public containers are
 `PreparedBaseBody` and `PreparedDeltaBody`, and expose immutable bytes as `Body`. They contain
-neither the StateStore Base type header nor the Storage ObjectVersion envelope.
+neither the Persistence Base type header nor the Storage ObjectVersion envelope.
 
 The Serialization library is a transitive dependency. Its Reader/Writer constructors, scalar
 operations, non-null string content codec, and boundary checks are public for generated-code
@@ -392,7 +399,7 @@ distinct identity.
 append, Commit, or publication. Discard, failure, and disposing an unresolved context preserve the
 accepted graph, although allocated numeric IDs can remain consumed.
 
-## Typed StateStore path
+## Typed persistence path
 
 Register generated models or definition factories with `StateModelRegistry`, then use
 `EventHistoryRepository` for product persistence. `CreateBranch(name, initialState, models)` commits
@@ -403,7 +410,7 @@ type, while Event roots may have different registered durable types. The session
 State's Revision, DTO baseline and instance-ID bindings; callers do not pass these separately.
 
 All these save calls have an optional policy; an override applies to that call only, not to later
-session defaults. The StateStore package includes XML documentation for the EventHistory facade.
+session defaults. The Persistence package includes XML documentation for the EventHistory facade.
 The [snapshot/recovery example](../../experiments/PackageConsumerProbe/EventHistoryRecoveryConsumer/README.md)
 separates new commands from completing an existing PendingEvent after reopening. A recovery with no
 PendingEvent does not create replacement work. Publication outcome and IsFaulted are independent;
@@ -451,7 +458,7 @@ Read-only opening does not create, flush or repair files. Reopening is strict, w
 recovery or transparent retries after uncertain publication. See the
 [quickstart and failure boundaries](../../README.md) for runnable calls and operational limits.
 
-The Base type-header codec is internal to StateStore. Public generated bodies are raw;
+The Base type-header codec is internal to Persistence. Public generated bodies are raw;
 `EncodedBaseObjectBody` brands the internal `[type header | raw Base body]` result so the typed
 planner cannot omit or apply that header twice. Storage continues to accept opaque body bytes and
 does not interpret this brand. Neither raw body access nor `StateRevisionStore.Append` constitutes

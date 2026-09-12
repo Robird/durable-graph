@@ -21,9 +21,9 @@
 | 当前源码事实 | 对排期的影响 |
 |---|---|
 | [BinaryBody 生成器](../../src/DurableGraph.Generator/DurableSchemaGenerator.BinaryBody.cs) 的 `BinaryVersionModel.Fields` 已按 base-first、段内 FieldId 顺序给出各版完整布局 | 可在同一布局上生成静态 comparer 与 Delta body，无需反射或新 registry |
-| [CapturedObject](../../src/DurableGraph/CapturedObject.cs) 以 `GetState<TState>()` 返回 readonly DTO 的副本；[CaptureSession](../../src/DurableGraph/CaptureSession.cs) 的 Current/Accept 是内存候选协议 | 可使用真实 Capture 提供 prior/current，但它不证明持久提交或 exact parent 来源 |
-| [Storage](../../src/DurableGraph.StateStore.Storage/StateRevisionStore.cs) 已能按 exact Revision 重开读取 local Base body | 后续可以将已验证的 Delta codec 接到真实 prior 链；当前仍缺差异内容本身 |
-| [ObjectSaveEstimate](../../src/DurableGraph.StateStore/ObjectSaveEstimate.cs) 只接收 B/D/H，[策略](../../src/DurableGraph.StateStore/ReadAmplificationBaseBudgetPolicy.cs) 无 codec 依赖 | 本片提供真实 B/D 的取得方法，不为了演示策略而伪造 D 或 H |
+| [CapturedObject](../../src/DurableGraph/CapturedObject.cs) 以 `GetState<TState>()` 返回 readonly DTO 的副本；[CaptureSession](../../src/DurableGraph/Runtime/Capture/CaptureSession.cs) 的 Current/Accept 是内存候选协议 | 可使用真实 Capture 提供 prior/current，但它不证明持久提交或 exact parent 来源 |
+| [Storage](../../src/DurableGraph.Storage/StateRevisionStore.cs) 已能按 exact Revision 重开读取 local Base body | 后续可以将已验证的 Delta codec 接到真实 prior 链；当前仍缺差异内容本身 |
+| [ObjectSaveEstimate](../../src/DurableGraph.Persistence/ObjectSaveEstimate.cs) 只接收 B/D/H，[策略](../../src/DurableGraph.Persistence/ReadAmplificationBaseBudgetPolicy.cs) 无 codec 依赖 | 本片提供真实 B/D 的取得方法，不为了演示策略而伪造 D 或 H |
 | [标量 DTO tests](../../tests/DurableGraph.Tests/ScalarStateDtoTests.cs) 验证浮点位保留；新路径没有相等合同 | 位编码事实不能冒充比较决策，需在本片明确提案 |
 
 候选排序经过独立评估与交叉讨论：

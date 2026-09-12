@@ -22,7 +22,7 @@ public sealed partial class DurableSchemaGenerator {
 
     private static string BinaryFieldTypeName(BinaryFieldModel field) {
         if (field.InlineSchema.HasValue) return InlineDtoTypeName(field.InlineSchema.Value);
-        if (IsBinaryReference(field.TypeTagValue)) return RuntimeName + "ObjectId";
+        if (IsBinaryReference(field.TypeTagValue)) return RootName + "ObjectId";
         TryGetFieldTypeName(GetBinarySlotTypeTag(field.TypeTagValue), out string? name);
         return name!;
     }
@@ -92,7 +92,7 @@ public sealed partial class DurableSchemaGenerator {
             AppendBinaryFields(shape, available, fields, 0);
             BinaryVersionModel version = new(shape.Version, fields);
             source.Append("    internal static class ").Append(pair.Key.Substring(pair.Key.LastIndexOf('.') + 1)).AppendLine(" {");
-            source.Append("        private static readonly global::Atelia.DurableGraph.DurableSchema ExactSchema = ");
+            source.Append("        private static readonly global::Atelia.DurableGraph.Schema.DurableSchema ExactSchema = ");
             AppendSchemaExpression(source, shape, available);
             source.AppendLine(";");
             AppendBinaryDto(source, null, version, "        ");

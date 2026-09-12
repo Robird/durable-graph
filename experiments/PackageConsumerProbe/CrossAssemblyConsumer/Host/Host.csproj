@@ -8,6 +8,6 @@
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Atelia.AppModel" Version="$(AppModelPackageVersion)" />
-    <PackageReference Include="Atelia.DurableGraph.StateStore" Version="$(DurableGraphPackageVersion)" />
+    <PackageReference Include="Atelia.DurableGraph.Persistence" Version="$(DurableGraphPackageVersion)" />
   </ItemGroup>
 </Project>

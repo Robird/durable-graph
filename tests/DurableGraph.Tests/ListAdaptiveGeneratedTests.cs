@@ -1,6 +1,8 @@
+using Atelia.DurableGraph.Runtime;
+using Atelia.DurableGraph.Schema;
 using System.Reflection;
-using Atelia.DurableGraph.StateStore;
-using Atelia.DurableGraph.StateStore.Serialization;
+using Atelia.DurableGraph.Persistence;
+using Atelia.DurableGraph.Serialization;
 
 namespace Atelia.DurableGraph.Tests;
 
@@ -65,7 +67,9 @@ public sealed partial class DurableSchemaGeneratorTests {
         using System.Collections.Generic;
         using System.Linq;
         using Atelia.DurableGraph;
-        using Atelia.DurableGraph.StateStore;
+        using Atelia.DurableGraph.Schema;
+        using Atelia.DurableGraph.Runtime;
+        using Atelia.DurableGraph.Persistence;
         namespace AdaptiveWide;
         [DurableType("adaptive.cell",1)] public partial struct Cell<T> {
             [DurableField(1)] public int TestId;

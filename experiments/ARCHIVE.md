@@ -39,8 +39,8 @@
 **MultiSegmentStateStoreProbe**（原目录 `experiments/MultiSegmentStateStoreProbe`，97 文件）
 
 - 已吸纳：多 Segment 地址、soft rollover、对象链/存活目录分离、读放大 Base 预算与提交顺序。
-  产品入口：[Storage](../src/DurableGraph.StateStore.Storage/StateRevisionStore.cs)、
-  [策略](../src/DurableGraph.StateStore/ReadAmplificationBaseBudgetPolicy.cs)、
+  产品入口：[Storage](../src/DurableGraph.Storage/StateRevisionStore.cs)、
+  [策略](../src/DurableGraph.Persistence/ReadAmplificationBaseBudgetPolicy.cs)、
   [Repository](../src/DurableGraph.StateStore/GraphRepository.cs)。
 - 未迁入：合成 workload/corpus、评估器、共享 Frame 冷读去重计量及 provisional envelope。
   它们是内存模型，不是产品 wire、性能或恢复保证。需要具体测量/策略研究时才恢复。

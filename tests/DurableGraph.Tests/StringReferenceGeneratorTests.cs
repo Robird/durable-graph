@@ -1,3 +1,5 @@
+using Atelia.DurableGraph.Runtime;
+using Atelia.DurableGraph.Schema;
 using System.Reflection;
 using Atelia.DurableGraph.Build;
 
@@ -41,6 +43,8 @@ public sealed partial class DurableSchemaGeneratorTests {
         GeneratorTestRun run = RunGenerator("""
             using System;
             using Atelia.DurableGraph;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
             namespace StringValidation;
             [DurableType("validation.empty", 1)]
             public sealed partial class Empty : IDurableObject { }
@@ -121,7 +125,9 @@ public sealed partial class DurableSchemaGeneratorTests {
         using System.IO;
         using System.Linq;
         using Atelia.DurableGraph;
-        using Atelia.DurableGraph.StateStore.Serialization;
+        using Atelia.DurableGraph.Schema;
+        using Atelia.DurableGraph.Runtime;
+        using Atelia.DurableGraph.Serialization;
         namespace StringValidation;
         [DurableType("validation.base", 1)]
         public abstract partial class Base : IDurableObject {

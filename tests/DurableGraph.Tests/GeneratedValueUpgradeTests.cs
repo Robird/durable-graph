@@ -1,7 +1,9 @@
+using Atelia.DurableGraph.Runtime;
+using Atelia.DurableGraph.Schema;
 using System.Reflection;
 using Atelia.DurableGraph.Build;
 using Atelia.DurableGraph.Generator;
-using Atelia.DurableGraph.StateStore;
+using Atelia.DurableGraph.Persistence;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 
@@ -19,7 +21,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         string generated = GeneratedSource(run, "DurableGenericStates.g.cs");
         Assert.Contains("public static class UpgradeSlots_5570677261646573_426F78", generated);
         Assert.Contains("public const string Value = \"Value\";", generated);
-        Assert.Contains("TypeExpr.Named(\"Pair\", global::Atelia.DurableGraph.TypeExpr.Parameter(0))", generated);
+        Assert.Contains("TypeExpr.Named(\"Pair\", global::Atelia.DurableGraph.Schema.TypeExpr.Parameter(0))", generated);
         Assert.Contains("allowKeepExact: true", generated);
         Assert.DoesNotContain("DynamicInvoke", generated);
         Assembly assembly = EmitAndLoad(run.OutputCompilation);
@@ -59,6 +61,8 @@ public sealed partial class DurableSchemaGeneratorTests {
         new SchemaHistoryTool().Publish(files.WriteManifest(previous), files.History);
         GeneratorTestRun run = RunGenerator("""
             using Atelia.DurableGraph;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
             using P = Atelia.DurableGraph.Generated.Family_506F696E74;
             [ValueUpgradeRuleSet] public sealed class Rules;
             public static class Upgrades {
@@ -97,6 +101,8 @@ public sealed partial class DurableSchemaGeneratorTests {
         using AncestryHistoryDirectory files = new();
         const string declarations = """
             using Atelia.DurableGraph;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
             using W = Atelia.DurableGraph.Generated.Family_576F726C64;
             using P = Atelia.DurableGraph.Generated.Family_506F696E74;
             [ValueUpgradeRuleSet] public sealed class VersionMarker;
@@ -167,6 +173,8 @@ public sealed partial class DurableSchemaGeneratorTests {
         Assert.Contains(orphan.GeneratorDiagnostics, diagnostic => diagnostic.Id == "DG0020");
         GeneratorTestRun legacy = RunGenerator("""
             using Atelia.DurableGraph;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
             [ValueUpgradeRuleSet] public sealed class Rules;
             [DurableType("Box",2)] public partial class Box : IDurableObject {
                 [UpgradeDependency("Value", typeof(Rules), "Box", 1, "Box", 1)]
@@ -183,6 +191,8 @@ public sealed partial class DurableSchemaGeneratorTests {
     public void GeneratorRejectsInvalidValueProviderSignatures(string parameters) {
         GeneratorTestRun run = RunGenerator($$"""
             using Atelia.DurableGraph;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
             using P = Atelia.DurableGraph.Generated.Family_506F696E74;
             [DurableType("Point",1)] public partial struct Point { [DurableField(1)] public int X; }
             [ValueUpgradeRuleSet] public sealed class Rules;
@@ -199,6 +209,8 @@ public sealed partial class DurableSchemaGeneratorTests {
         using AncestryHistoryDirectory files = new();
         GeneratorTestRun first = RunGenerator("""
             using Atelia.DurableGraph;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
             [DurableType("Box",1)] public partial class Box<T>:IDurableObject { [DurableField(1)] public T Value=default!; }
             """);
         AssertSchemaOnlyCompiles(first);
@@ -224,6 +236,8 @@ public sealed partial class DurableSchemaGeneratorTests {
             ? ValueUpgradeDiagnosticSource("[UpgradeDependency(\"Value\", typeof(ExternalRules), \"Box\", 1, \"Box\", 1)]")
             : """
                 using Atelia.DurableGraph;
+                using Atelia.DurableGraph.Schema;
+                using Atelia.DurableGraph.Runtime;
                 using P = Atelia.DurableGraph.Generated.Family_506F696E74;
                 [DurableType("Point",1)] public partial struct Point { [DurableField(1)] public int X; }
                 public static class Upgrades {
@@ -241,6 +255,8 @@ public sealed partial class DurableSchemaGeneratorTests {
 
     private static string ValueUpgradeDiagnosticSource(string dependencies) => $$"""
         using Atelia.DurableGraph;
+        using Atelia.DurableGraph.Schema;
+        using Atelia.DurableGraph.Runtime;
         using B = Atelia.DurableGraph.Generated.Family_426F78;
         [DurableType("Box",2)] public partial class Box<T> : IDurableObject { [DurableField(1)] public T Value=default!; }
         [ValueUpgradeRuleSet] public sealed class Rules;
@@ -257,6 +273,8 @@ public sealed partial class DurableSchemaGeneratorTests {
     private static string ValueUpgradeModelSource(int version, bool includeUpgrades = false) => $$"""
         global using P = Atelia.DurableGraph.Generated.Family_506F696E74;
         using Atelia.DurableGraph;
+        using Atelia.DurableGraph.Schema;
+        using Atelia.DurableGraph.Runtime;
         using B = Atelia.DurableGraph.Generated.Family_426F78;
         using PairState = Atelia.DurableGraph.Generated.Family_50616972;
         [DurableType("Point",{{version}})] public partial struct Point { [DurableField(1)] public {{(version == 1 ? "int" : "long")}} X; }

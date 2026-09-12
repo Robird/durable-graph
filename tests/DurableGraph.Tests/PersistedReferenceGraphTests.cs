@@ -1,7 +1,7 @@
 using System.Reflection;
 using Atelia.DurableGraph.Build;
-using Atelia.DurableGraph.StateStore;
-using Atelia.DurableGraph.StateStore.Storage;
+using Atelia.DurableGraph.Persistence;
+using Atelia.DurableGraph.Storage;
 using Atelia.Rbf;
 using Atelia.RbfSegmentStore;
 using SegmentStore = Atelia.RbfSegmentStore.RbfSegmentStore;
@@ -253,11 +253,11 @@ public sealed partial class DurableSchemaGeneratorTests {
     private const string ReferenceGraphHost = """
         public static object Create() => new World();
         public static Atelia.DurableGraph.Tests.FixturePreparedWorldRevision PrepareNew(
-            Atelia.DurableGraph.StateStore.Storage.StateRevisionStore store,
-            Atelia.DurableGraph.StateStore.SchemaStore schemas, object world) =>
+            Atelia.DurableGraph.Storage.StateRevisionStore store,
+            Atelia.DurableGraph.Persistence.SchemaStore schemas, object world) =>
             Atelia.DurableGraph.Tests.FixtureLoadedWorld.PrepareNew(store, schemas, (World)world, Models(), new(1000000, 1));
-        public static object Load(Atelia.DurableGraph.StateStore.Storage.StateRevisionStore store,
-            Atelia.DurableGraph.StateStore.SchemaStore schemas, Atelia.DurableGraph.StateStore.Storage.FrameAddress address, ObjectId worldId) {
+        public static object Load(Atelia.DurableGraph.Storage.StateRevisionStore store,
+            Atelia.DurableGraph.Persistence.SchemaStore schemas, Atelia.DurableGraph.Storage.FrameAddress address, ObjectId worldId) {
             World.ConstructorCalls = 0;
             return Atelia.DurableGraph.Tests.FixtureLoadedWorld.Load<World>(store, schemas, address, worldId, Models());
         }
@@ -324,8 +324,8 @@ public sealed partial class DurableSchemaGeneratorTests {
         }
         public sealed class Unknown : Entity { public Unknown(World world) : base(world) { } }
         public static class Host {
-            private static Atelia.DurableGraph.StateStore.StateModelRegistry Models() {
-                var models = new Atelia.DurableGraph.StateStore.StateModelRegistry();
+            private static Atelia.DurableGraph.Persistence.StateModelRegistry Models() {
+                var models = new Atelia.DurableGraph.Persistence.StateModelRegistry();
                 World.__DurableState.RegisterModel(models); Entity.__DurableState.RegisterModel(models);
                 Character.__DurableState.RegisterModel(models); Item.__DurableState.RegisterModel(models);
                 return models;
@@ -376,8 +376,8 @@ public sealed partial class DurableSchemaGeneratorTests {
         }
         public static class Host {
             public static int UpgradeCalls() => Node.Upgrades;
-            private static Atelia.DurableGraph.StateStore.StateModelRegistry Models() {
-                var models = new Atelia.DurableGraph.StateStore.StateModelRegistry();
+            private static Atelia.DurableGraph.Persistence.StateModelRegistry Models() {
+                var models = new Atelia.DurableGraph.Persistence.StateModelRegistry();
                 World.__DurableState.RegisterModel(models); Node.__DurableState.RegisterModel(models);
                 return models;
             }

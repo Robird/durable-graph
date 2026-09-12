@@ -1,5 +1,7 @@
 using System.Reflection;
 using Atelia.DurableGraph;
+using Atelia.DurableGraph.Schema;
+using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Generator;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
@@ -31,6 +33,8 @@ public sealed partial class DurableSchemaGeneratorTests {
     public void GeneratedOutputIsIndependentOfTypeDeclarationOrder() {
         const string firstOrder = """
             using Atelia.DurableGraph;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
 
             namespace Samples {
                 [DurableType("samples.second", 1)]
@@ -46,6 +50,8 @@ public sealed partial class DurableSchemaGeneratorTests {
             """;
         const string secondOrder = """
             using Atelia.DurableGraph;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
 
             namespace Samples {
                 [DurableType("samples.first", 1)]
@@ -227,6 +233,8 @@ public sealed partial class DurableSchemaGeneratorTests {
                 "DG0001",
                 """
                 using Atelia.DurableGraph;
+                using Atelia.DurableGraph.Schema;
+                using Atelia.DurableGraph.Runtime;
 
                 namespace Atelia.DurableGraph {
                     public static class Lookalikes {
@@ -264,6 +272,8 @@ public sealed partial class DurableSchemaGeneratorTests {
                 """
                 using System;
                 using Atelia.DurableGraph;
+                using Atelia.DurableGraph.Schema;
+                using Atelia.DurableGraph.Runtime;
 
                 namespace Atelia.DurableGraph {
                     public static class Lookalikes {
@@ -311,6 +321,8 @@ public sealed partial class DurableSchemaGeneratorTests {
                 "DG0008",
                 """
                 using Atelia.DurableGraph;
+                using Atelia.DurableGraph.Schema;
+                using Atelia.DurableGraph.Runtime;
 
                 namespace Samples;
 
@@ -333,6 +345,8 @@ public sealed partial class DurableSchemaGeneratorTests {
         string typeDeclaration = "public sealed partial class Example : IDurableObject") {
         return $$"""
             using Atelia.DurableGraph;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
 
             namespace Samples;
 
@@ -368,9 +382,9 @@ public sealed partial class DurableSchemaGeneratorTests {
             syntaxTrees: [syntaxTree],
             references: PlatformReferences().Concat(FixtureBridgeReferences(source)).Append(
                 MetadataReference.CreateFromFile(typeof(IDurableObject).Assembly.Location)).Append(
-                MetadataReference.CreateFromFile(typeof(Atelia.DurableGraph.StateStore.Serialization.BinaryPayloadReader).Assembly.Location)).Append(
-                MetadataReference.CreateFromFile(typeof(Atelia.DurableGraph.StateStore.SchemaStore).Assembly.Location)).Append(
-                MetadataReference.CreateFromFile(typeof(Atelia.DurableGraph.StateStore.Storage.ObjectVersionChain).Assembly.Location)),
+                MetadataReference.CreateFromFile(typeof(Atelia.DurableGraph.Serialization.BinaryPayloadReader).Assembly.Location)).Append(
+                MetadataReference.CreateFromFile(typeof(Atelia.DurableGraph.Persistence.SchemaStore).Assembly.Location)).Append(
+                MetadataReference.CreateFromFile(typeof(Atelia.DurableGraph.Storage.ObjectVersionChain).Assembly.Location)),
             options: new CSharpCompilationOptions(
                 OutputKind.DynamicallyLinkedLibrary,
                 nullableContextOptions: NullableContextOptions.Enable));

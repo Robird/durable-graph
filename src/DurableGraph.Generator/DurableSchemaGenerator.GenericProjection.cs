@@ -86,7 +86,7 @@ public sealed partial class DurableSchemaGenerator {
         AppendGenericCurrentFactory(output, type, layout, fields, ancestor);
         output.Append("    private static ").Append(dto).Append(" __DurableCapture").Append(parameters).Append('(')
             .Append(type.IsInline ? "in " : string.Empty).Append(domain).Append(" value, ").Append(RuntimeName).Append("CaptureContext context, ")
-            .Append(RuntimeName).Append("DurableSchema schema");
+            .Append(SchemaName).Append("DurableSchema schema");
         if (ancestor is not null) output.Append(", ").Append(ancestor.Type).Append(" baseProjection");
         output.Append(')');
         AppendCurrentExecutionConstraints(output, layout, fields);
@@ -121,9 +121,9 @@ public sealed partial class DurableSchemaGenerator {
             AppendCurrentExecutionConstraints(output, layout, fields);
             output.AppendLine(" {");
             output.Append("        public static ").Append(dto).Append(" Capture(in ").Append(domain).Append(" value, ").Append(RuntimeName)
-                .Append("CaptureContext context, ").Append(RuntimeName).Append("DurableFieldInfo slot) => __DurableCapture").Append(parameters).AppendLine("(in value, context, slot.InlineSchema!);");
+                .Append("CaptureContext context, ").Append(SchemaName).Append("DurableFieldInfo slot) => __DurableCapture").Append(parameters).AppendLine("(in value, context, slot.InlineSchema!);");
             output.Append("        public static void Hydrate(ref ").Append(domain).Append(" target, in ").Append(dto).Append(" state, ").Append(RuntimeName)
-                .Append("ObjectReadTable objects, ").Append(RuntimeName).Append("DurableFieldInfo slot) => __DurableHydrate").Append(parameters)
+                .Append("ObjectReadTable objects, ").Append(SchemaName).Append("DurableFieldInfo slot) => __DurableHydrate").Append(parameters)
                 .AppendLine("(ref target, in state, objects, slot.InlineSchema!);");
             output.AppendLine("    }");
         }
@@ -165,7 +165,7 @@ public sealed partial class DurableSchemaGenerator {
         int offset = OwnFieldOffset(layout, fields);
         output.Append("    private static void __DurableHydrate").Append(CurrentExecutionParameters(layout, fields)).Append('(')
             .Append(type.IsInline ? "ref " : string.Empty).Append(domain).Append(" target, in ").Append(dto).Append(" state, ")
-            .Append(RuntimeName).Append("ObjectReadTable objects, ").Append(RuntimeName).Append("DurableSchema schema");
+            .Append(RuntimeName).Append("ObjectReadTable objects, ").Append(SchemaName).Append("DurableSchema schema");
         if (ancestor is not null) output.Append(", ").Append(ancestor.Type).Append(" baseProjection");
         output.Append(')');
         AppendCurrentExecutionConstraints(output, layout, fields);
@@ -203,15 +203,15 @@ public sealed partial class DurableSchemaGenerator {
         string parameters = CurrentExecutionParameters(layout, fields);
         string result = RuntimeName + (type.IsInline ? "StateValueBinding" : "StateModelBinding");
         output.Append("    private static ").Append(result).Append(" __DurableCreateCurrent(").Append(RuntimeName).AppendLine("StateBindingContext context) {");
-        output.Append("        var schema = new ").Append(RuntimeName).Append("DurableSchema(context.GetTypeExpr(typeof(").Append(domain).Append(")), ")
-            .Append(type.Version).Append(", new ").Append(RuntimeName).AppendLine("DurableFieldInfo[] {");
+        output.Append("        var schema = new ").Append(SchemaName).Append("DurableSchema(context.GetTypeExpr(typeof(").Append(domain).Append(")), ")
+            .Append(type.Version).Append(", new ").Append(SchemaName).AppendLine("DurableFieldInfo[] {");
         foreach (DurableFieldModel field in type.Fields) output.Append("            context.ResolveCurrentValue(typeof(").Append(field.Symbol.Type.ToDisplayString(GenericQualifiedNameFormat))
             .Append(")).WithFieldId(").Append(field.FieldId).AppendLine(").Slot,");
         output.Append("        }, ");
         if (!type.IsInline && !IsObjectBase(type.Symbol.BaseType)) output.Append("context.ResolveCurrentModel(typeof(")
             .Append(type.Symbol.BaseType!.ToDisplayString(GenericQualifiedNameFormat)).Append(")).CurrentSchema");
         else output.Append("null");
-        output.Append(", ").Append(RuntimeName).Append("SchemaKind.").Append(type.IsInline ? "InlineValue" : "ReferenceObject").AppendLine(");");
+        output.Append(", ").Append(SchemaName).Append("SchemaKind.").Append(type.IsInline ? "InlineValue" : "ReferenceObject").AppendLine(");");
         output.AppendLine("        var binding = context.BindSchema(schema);");
         for (int index = 0; index < layout.DynamicFields.Count; index++) {
             GenericField stateField = layout.DynamicFields[index];
@@ -230,17 +230,17 @@ public sealed partial class DurableSchemaGenerator {
                     OwnProjectionField(layout, fields, index) >= 0
                     ? new[] { "value" + Number(index) + ".StateType", "value" + Number(index) + ".StateOpsType", "projection" + Number(index) }
                     : new[] { "value" + Number(index) + ".StateType", "value" + Number(index) + ".StateOpsType" }))).AppendLine(");");
-            output.Append("        return method.CreateDelegate<global::System.Func<").Append(RuntimeName).Append("DurableSchema, ").Append(RuntimeName)
+            output.Append("        return method.CreateDelegate<global::System.Func<").Append(SchemaName).Append("DurableSchema, ").Append(RuntimeName)
                 .Append("StateBindingContext, ").Append(result).AppendLine(">>()(schema, context);");
         }
         output.AppendLine("    }");
         output.Append("    private static ").Append(result).Append(" __DurableCreateTyped").Append(parameters).Append('(')
-            .Append(RuntimeName).Append("DurableSchema schema, ").Append(RuntimeName).Append("StateBindingContext context)");
+            .Append(SchemaName).Append("DurableSchema schema, ").Append(RuntimeName).Append("StateBindingContext context)");
         AppendCurrentExecutionConstraints(output, layout, fields);
         output.AppendLine(" {");
         if (type.IsInline) {
-            output.Append("        return new ").Append(RuntimeName).Append("StateValueBinding(new ").Append(RuntimeName).Append("DurableFieldInfo(1, ")
-                .Append(RuntimeName).Append("TypeTag.InlineValue, inlineSchema: schema), typeof(").Append(dto).Append("), typeof(").Append(body)
+            output.Append("        return new ").Append(RuntimeName).Append("StateValueBinding(new ").Append(SchemaName).Append("DurableFieldInfo(1, ")
+                .Append(SchemaName).Append("TypeTag.InlineValue, inlineSchema: schema), typeof(").Append(dto).Append("), typeof(").Append(body)
                 .Append("), typeof(").Append(domain).Append("), typeof(__DurableProjection").Append(parameters).AppendLine("));");
         } else {
             if (ancestor is not null) {

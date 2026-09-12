@@ -1,7 +1,8 @@
 using Atelia.Data;
 using Atelia.DurableGraph;
-using Atelia.DurableGraph.StateStore;
-using Atelia.DurableGraph.StateStore.Storage;
+using Atelia.DurableGraph.Schema;
+using Atelia.DurableGraph.Persistence;
+using Atelia.DurableGraph.Storage;
 using Atelia.Rbf;
 using Atelia.RbfSegmentStore;
 using BoxStates = Atelia.DurableGraph.Generated.Family_426F78;

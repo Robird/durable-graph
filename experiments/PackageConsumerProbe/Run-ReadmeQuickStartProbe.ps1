@@ -68,7 +68,7 @@ try {
     Write-Host "ReadmeQuickStart:Hp=97:UpgradeDay=1:HistoryPreserved"
 
     # Compile the browsing snippet unchanged, with only its surrounding program context supplied.
-    $browse = "using Atelia.DurableGraph.StateStore;`nusing QuickStart;`n" +
+    $browse = "using Atelia.DurableGraph.Persistence;`nusing QuickStart;`n" +
         "string path = args[0];`nvar models = new StateModelRegistry();`n" +
         "Atelia.DurableGraph.Generated.DurableDefinitions.Register(models);`n" +
         (Get-Example "csharp" 'using var history = EventHistoryRepository.OpenReadOnlyExisting(path);') +
@@ -77,7 +77,7 @@ try {
     Invoke-DotNet (@("run", "--project", $project, "--no-restore") + $properties + @("--", $database))
 
     # Execute the exact policy-override snippet against the same freshly packaged API.
-    $configured = "using Atelia.DurableGraph.StateStore;`nusing QuickStart;`n" +
+    $configured = "using Atelia.DurableGraph.Persistence;`nusing QuickStart;`n" +
         "string path = args[0];`nvar models = new StateModelRegistry();`n" +
         "Atelia.DurableGraph.Generated.DurableDefinitions.Register(models);`n" +
         "using var repository = EventHistoryRepository.OpenExisting(path);`n" +

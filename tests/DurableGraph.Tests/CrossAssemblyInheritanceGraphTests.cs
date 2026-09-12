@@ -1,5 +1,5 @@
-using Atelia.DurableGraph.StateStore;
-using Atelia.DurableGraph.StateStore.Storage;
+using Atelia.DurableGraph.Persistence;
+using Atelia.DurableGraph.Storage;
 using Atelia.Rbf;
 using SegmentStore = Atelia.RbfSegmentStore.RbfSegmentStore;
 
@@ -64,6 +64,8 @@ public sealed partial class DurableSchemaGeneratorTests {
         using System;
         using System.Collections.Generic;
         using Atelia.DurableGraph;
+        using Atelia.DurableGraph.Schema;
+        using Atelia.DurableGraph.Runtime;
         namespace InheritanceBases;
         public static class Trace {
             public static int Constructors,Initializers;
@@ -104,6 +106,8 @@ public sealed partial class DurableSchemaGeneratorTests {
 
     private const string InheritanceGraphMiddleSource = """
         using Atelia.DurableGraph;
+        using Atelia.DurableGraph.Schema;
+        using Atelia.DurableGraph.Runtime;
         using InheritanceBases;
         namespace InheritanceMiddle;
         [DurableType("inherit.Middle",1)] public abstract partial class Middle<T>:Base<T> {
@@ -124,8 +128,10 @@ public sealed partial class DurableSchemaGeneratorTests {
         using System;
         using System.Collections.Generic;
         using Atelia.DurableGraph;
-        using Atelia.DurableGraph.StateStore;
-        using Atelia.DurableGraph.StateStore.Storage;
+        using Atelia.DurableGraph.Schema;
+        using Atelia.DurableGraph.Runtime;
+        using Atelia.DurableGraph.Persistence;
+        using Atelia.DurableGraph.Storage;
         using InheritanceBases;
         using InheritanceMiddle;
         namespace InheritanceApp;

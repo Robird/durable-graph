@@ -180,8 +180,8 @@ struct 的嵌套 DTO 与 inline exact Schema 传播继续保留为独立分片�
 
 | 要求 | 负责人/位置 | 状态与验证入口 |
 |---|---|---|
-| 空串规范化 | [CaptureContext](../../src/DurableGraph/CaptureContext.cs)、[Capture 测试](../../tests/DurableGraph.Tests/ReferenceCaptureSessionTests.cs) | 已验证：不同空串来源归一化、null 区分、live ID 稳定、退役后普通新 ID |
-| 内容 API、只读表、失败隔离 | [StringReadTable](../../src/DurableGraph/StringReadTable.cs)、[表测试](../../tests/DurableGraph.Tests/StringReadTableTests.cs) | 已验证：26 个展开用例，canonical/golden、输入拒绝、非空身份、空串别名、视图隔离 |
+| 空串规范化 | [CaptureContext](../../src/DurableGraph/Runtime/Capture/CaptureContext.cs)、[Capture 测试](../../tests/DurableGraph.Tests/ReferenceCaptureSessionTests.cs) | 已验证：不同空串来源归一化、null 区分、live ID 稳定、退役后普通新 ID |
+| 内容 API、只读表、失败隔离 | [StringReadTable](../../src/DurableGraph/Runtime/Capture/StringReadTable.cs)、[表测试](../../tests/DurableGraph.Tests/StringReadTableTests.cs) | 已验证：26 个展开用例，canonical/golden、输入拒绝、非空身份、空串别名、视图隔离 |
 | exact 各版 string 槽校验 | [BinaryBody partial](../../src/DurableGraph.Generator/DurableSchemaGenerator.BinaryBody.cs)、[SG 测试](../../tests/DurableGraph.Tests/StringReferenceGeneratorTests.cs) | 已验证：5 个展开用例，真实编译执行、发布历史、旧祖先消失、String→UInt32 |
 | typed 字节整合与单包边界 | [PackageConsumerProbe](../../experiments/PackageConsumerProbe/README.md) | 已验证：冻结状态→独立 bytes→引用关系；完整目录/exact Schema/roots 外层预检；第二 owner 失败不返回结果 |
 | 集成审查/根构建/测试 | 主代理及独立只读审查 | build 零警告/错误，聚焦 70/70，全套 536/536，包消费者通过；独立源码审查无剩余阻断 |

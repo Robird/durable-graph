@@ -29,17 +29,17 @@ Restore 技术上可做：当前 Generator 的 DG0011 仍拒绝 readonly durable
 
 ## 2. 实施前已核验的接缝（`171581e`）
 
-- [StateRevision](../../src/DurableGraph.StateStore.Storage/StateRevision.cs) 只持有 membership。
+- [StateRevision](../../src/DurableGraph.Storage/StateRevision.cs) 只持有 membership。
   `BaseObjectIds`/`DeltaObjectIds` 声明的是 **同 Frame** 的对象版本，目前均无内容。
-- [StateRevisionStore](../../src/DurableGraph.StateStore.Storage/StateRevisionStore.cs) 已有真实 RBF
+- [StateRevisionStore](../../src/DurableGraph.Storage/StateRevisionStore.cs) 已有真实 RBF
   append/read；`ReadLiveObjectHeads` 将 local ID 映射到 containing Revision Frame。
   它明确只返回 shallow 声明，不核验对象内容是否存在。
-- [WireWriter](../../src/DurableGraph.StateStore.Storage/StateRevisionWireWriter.cs) 和
-  [WireReader](../../src/DurableGraph.StateStore.Storage/StateRevisionWireReader.cs) 目前是 provisional v1，
+- [WireWriter](../../src/DurableGraph.Storage/StateRevisionWireWriter.cs) 和
+  [WireReader](../../src/DurableGraph.Storage/StateRevisionWireReader.cs) 目前是 provisional v1，
   DGSR tag，membership 后即结束，TailMeta 必须为空。
-- [Materializer](../../src/DurableGraph.StateStore.Storage/LiveObjectHeadMapMaterializer.cs)
+- [Materializer](../../src/DurableGraph.Storage/LiveObjectHeadMapMaterializer.cs)
   通过 `LocalObjectIds` 合并 Base/Delta 声明，对二者执行相同的 head 更新。
-- [真实文件测试](../../tests/DurableGraph.StateStore.Storage.Tests/StateRevisionStoreTests.cs)
+- [真实文件测试](../../tests/DurableGraph.Storage.Tests/StateRevisionStoreTests.cs)
   已提供关闭重开、跨 Segment、错误 tag/TailMeta、编码失败及 writer lease 释放的支架。
 - [DB-025 typed 消费者](../../experiments/PackageConsumerProbe/Consumer/Domain.StringDecoding.cs)
   已能由冻结候选产生独立 owner/string bytes，再验证 exact Schema 与引用关系；仍无持久类型头。
@@ -210,8 +210,8 @@ append 仍只返回 candidate address，调用方持有 authority；不因文件
 
 | 要求 | 代码/负责人 | 状态与验证 |
 |---|---|---|
-| immutable records、派生 IDs、TODO、v2 framing | BaseObjectRecord（后由 DB-028 的 [ObjectVersionRecord](../../src/DurableGraph.StateStore.Storage/ObjectVersionRecord.cs) 取代）、[StateRevision](../../src/DurableGraph.StateStore.Storage/StateRevision.cs)、wire Reader/Writer；model/wire agent | 已实现；模型/record/wire 测试已通过 |
-| exact-head raw 读取、membership 迁移、真实文件失败/重开 | [StateRevisionStore](../../src/DurableGraph.StateStore.Storage/StateRevisionStore.cs)、Store/Materializer tests；storage agent | 已实现；Storage 95/95，包括 body 缓冲后失败的普通/轮转两种用例 |
+| immutable records、派生 IDs、TODO、v2 framing | BaseObjectRecord（后由 DB-028 的 [ObjectVersionRecord](../../src/DurableGraph.Storage/ObjectVersionRecord.cs) 取代）、[StateRevision](../../src/DurableGraph.Storage/StateRevision.cs)、wire Reader/Writer；model/wire agent | 已实现；模型/record/wire 测试已通过 |
+| exact-head raw 读取、membership 迁移、真实文件失败/重开 | [StateRevisionStore](../../src/DurableGraph.Storage/StateRevisionStore.cs)、Store/Materializer tests；storage agent | 已实现；Storage 95/95，包括 body 缓冲后失败的普通/轮转两种用例 |
 | SG DTO/string → 实际 Storage → typed decode | [RawBaseStorageGeneratorTests](../../tests/DurableGraph.Tests/RawBaseStorageGeneratorTests.cs)；integration agent | 已通过独立聚焦测试；仅测试项目加 Storage 引用 |
 | substrate 上限核验、集成审查、build/tests、文档/提交 | 主代理 + 只读事实/独立审查 agent | 根 build 零警告/错误，全套 559/559；独立最终代码审查无阻断 |
 

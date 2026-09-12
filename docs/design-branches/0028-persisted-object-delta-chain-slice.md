@@ -24,14 +24,14 @@
 - [生成器](../../src/DurableGraph.Generator/DurableSchemaGenerator.BinaryBody.cs)已有各历史 Vn 的
   PrepareDelta/ApplyDelta；[PreparedDelta](../../src/DurableGraph.StateStore.Serialization/Serialization/PreparedDelta.cs)
   拥有可重复使用的 bytes，但不证明 prior 身份。
-- [StateRevision](../../src/DurableGraph.StateStore.Storage/StateRevision.cs) 的 local 内容只有 Base；
+- [StateRevision](../../src/DurableGraph.Storage/StateRevision.cs) 的 local 内容只有 Base；
   ObjectHeadMap Base/Delta 已独立成立，真实对象 Delta 仍留有 TODO。
-- [StateRevisionStore](../../src/DurableGraph.StateStore.Storage/StateRevisionStore.cs) 已能按 exact Revision
+- [StateRevisionStore](../../src/DurableGraph.Storage/StateRevisionStore.cs) 已能按 exact Revision
   找到指定 ID 的 containing Frame，并要求该 Frame 有真正的 local record，不从其 parent 补内容。
-- [materializer](../../src/DurableGraph.StateStore.Storage/LiveObjectHeadMapMaterializer.cs) 校验地址严格向前，
+- [materializer](../../src/DurableGraph.Storage/LiveObjectHeadMapMaterializer.cs) 校验地址严格向前，
   但完整 head map 的 external heads 仍是浅声明，不验证整段身份历史。
-- [策略输入](../../src/DurableGraph.StateStore/ObjectSaveEstimate.cs)需要 H；
-  [策略](../../src/DurableGraph.StateStore/ReadAmplificationBaseBudgetPolicy.cs)尚不读取内容或执行计划。
+- [策略输入](../../src/DurableGraph.Persistence/ObjectSaveEstimate.cs)需要 H；
+  [策略](../../src/DurableGraph.Persistence/ReadAmplificationBaseBudgetPolicy.cs)尚不读取内容或执行计划。
 
 | 候选 | 收益和代价 | 建议 |
 |---|---|---|
@@ -224,9 +224,9 @@ entry 暴露 Address、Record、PayloadBytes。结果由完整链检查后构造
 
 | 要求 | 负责人/路径 | 验收入口 | 状态 |
 |---|---|---|---|
-| owned record、local model、wire v3/实编码计数 | 子任务 A / [ObjectVersionRecord](../../src/DurableGraph.StateStore.Storage/ObjectVersionRecord.cs)、model/wire | 模型、wire golden/恶意字节、原有 membership tests | 已验证 |
-| Append 直接预检、object-first 链读取、缓存 TODO | 子任务 B / [StateRevisionStore](../../src/DurableGraph.StateStore.Storage/StateRevisionStore.cs) | [文件链测试](../../tests/DurableGraph.StateStore.Storage.Tests/ObjectVersionChainStoreTests.cs) | 已验证 |
-| 不可变链结果、checked H 汇总 | 主代理 / [ObjectVersionChain](../../src/DurableGraph.StateStore.Storage/ObjectVersionChain.cs)、Entry | 自有结果、原 scope 成本与 H 独立字节期望 | 已验证 |
+| owned record、local model、wire v3/实编码计数 | 子任务 A / [ObjectVersionRecord](../../src/DurableGraph.Storage/ObjectVersionRecord.cs)、model/wire | 模型、wire golden/恶意字节、原有 membership tests | 已验证 |
+| Append 直接预检、object-first 链读取、缓存 TODO | 子任务 B / [StateRevisionStore](../../src/DurableGraph.Storage/StateRevisionStore.cs) | [文件链测试](../../tests/DurableGraph.Storage.Tests/ObjectVersionChainStoreTests.cs) | 已验证 |
+| 不可变链结果、checked H 汇总 | 主代理 / [ObjectVersionChain](../../src/DurableGraph.Storage/ObjectVersionChain.cs)、Entry | 自有结果、原 scope 成本与 H 独立字节期望 | 已验证 |
 | 真实 SG DTO/历史/引用 typed 冷重开 | 子任务 C / [typed 文件见证](../../tests/DurableGraph.Tests/PersistedDeltaChainGeneratorTests.cs) | 两个真实 SG 执行案例、旧 raw Base 回归 | 已验证 |
 | 整合、独立审查、文档与提交 | 主代理 + 独立 reviewer | 根 build/tests 与 actual diff | 已验证 |
 

@@ -1,6 +1,7 @@
+using Atelia.DurableGraph.Runtime;
 using System.Reflection;
 using Atelia.DurableGraph.Build;
-using Atelia.DurableGraph.StateStore.Serialization;
+using Atelia.DurableGraph.Serialization;
 
 namespace Atelia.DurableGraph.Tests;
 
@@ -11,6 +12,8 @@ public sealed partial class DurableSchemaGeneratorTests {
     public void GeneratedReferenceSlotsCannotBeInterchangedWithNumericUInt32(string invalidConstruction) {
         const string source = """
             using Atelia.DurableGraph;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
             [DurableType("object-id.holder", 1)]
             public partial class Holder : IDurableObject {
                 [DurableField(1)] private string? _text;
@@ -32,7 +35,9 @@ public sealed partial class DurableSchemaGeneratorTests {
     public void GeneratedReferenceBodiesUseUInt32IdentityAndVisitEveryConstraint() {
         GeneratorTestRun run = RunGenerator("""
             using Atelia.DurableGraph;
-            using Atelia.DurableGraph.StateStore.Serialization;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
+            using Atelia.DurableGraph.Serialization;
             namespace ReferenceBodies;
             [DurableType("node", 1)]
             public partial class Node : IDurableObject {
@@ -83,6 +88,8 @@ public sealed partial class DurableSchemaGeneratorTests {
     public void GeneratedReadonlyInheritedReferencesCaptureAndRestoreSharedMutualGraph() {
         GeneratorTestRun run = RunGenerator("""
             using Atelia.DurableGraph;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
             namespace ReferenceBodies;
             [DurableType("base", 1)]
             public abstract partial class Base : IDurableObject {
@@ -149,6 +156,8 @@ public sealed partial class DurableSchemaGeneratorTests {
         SchemaHistoryTool publisher = new();
         GeneratorTestRun initial = RunGenerator("""
             using Atelia.DurableGraph;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
             namespace ReferenceBodies;
             [DurableType("retired", 1)]
             public partial class Retired : IDurableObject { }
@@ -159,6 +168,8 @@ public sealed partial class DurableSchemaGeneratorTests {
         publisher.Publish(files.WriteManifest(initial), files.History);
         GeneratorTestRun current = RunGenerator("""
             using Atelia.DurableGraph;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
             namespace ReferenceBodies;
             [DurableType("owner", 2)]
             public partial class Owner : IDurableObject {

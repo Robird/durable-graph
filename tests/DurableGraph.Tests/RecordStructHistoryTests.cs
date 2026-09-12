@@ -1,5 +1,7 @@
+using Atelia.DurableGraph.Runtime;
+using Atelia.DurableGraph.Schema;
 using Atelia.DurableGraph.Build;
-using Atelia.DurableGraph.StateStore;
+using Atelia.DurableGraph.Persistence;
 
 namespace Atelia.DurableGraph.Tests;
 
@@ -21,6 +23,8 @@ public sealed partial class DurableSchemaGeneratorTests {
             """;
         static string Source(string definition, bool isRecord) => """
             using Atelia.DurableGraph;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
             // Keep both compilations on Family: the test concerns persistent layout, not old generated API names.
             [DurableType("FamilyTrigger",1)] public partial struct FamilyTrigger<T> { [DurableField(1)] public T Value; }
             """ + definition + "[DurableType(\"World\",1)] public partial class World:IDurableObject { " +
@@ -56,6 +60,8 @@ public sealed partial class DurableSchemaGeneratorTests {
     public void RecordStructInlineVersionChangeRequiresEveryInlineOwnerToAdvance() {
         const string source = """
             using Atelia.DurableGraph;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
             [DurableType("Leaf",1)] public readonly partial record struct Leaf([field:DurableField(1)] int Number);
             [DurableType("Envelope",1)] public readonly partial record struct Envelope([field:DurableField(1)] Leaf Value);
             [DurableType("World",1)] public partial class World:IDurableObject { [DurableField(1)] public Envelope Value; }
@@ -80,6 +86,8 @@ public sealed partial class DurableSchemaGeneratorTests {
         using AncestryHistoryDirectory history = new();
         GeneratorTestRun first = RunGenerator("""
             using Atelia.DurableGraph;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
             [DurableType("Point",1)] public readonly partial record struct OldPoint([field:DurableField(1)] int Number);
             [DurableType("World",1)] public partial class World:IDurableObject { [DurableField(1)] public OldPoint Value=new(17); }
             """);
@@ -88,6 +96,8 @@ public sealed partial class DurableSchemaGeneratorTests {
         new SchemaHistoryTool().Publish(history.WriteManifest(first), history.History);
         GeneratorTestRun next = RunGenerator("""
             using Atelia.DurableGraph;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
             [DurableType("World",2)] public partial class World:IDurableObject { [DurableField(1)] public long Value; }
             """, history.ReadAdditionalTexts());
         AssertSchemaOnlyCompiles(next);
@@ -105,6 +115,8 @@ public sealed partial class DurableSchemaGeneratorTests {
     public void EmptyRecordDictionaryRequiresExplicitCapabilityForEitherChangedSlot(bool keyChanges) {
         const string source = """
             using Atelia.DurableGraph;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
             using System.Collections.Generic;
             [DurableType("Key",1)] public readonly partial record struct Key([field:DurableField(1)] int KeyNumber);
             [DurableType("Value",1)] public readonly partial record struct Payload([field:DurableField(1)] int ValueNumber);

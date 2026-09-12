@@ -1,4 +1,5 @@
-using Atelia.DurableGraph.StateStore;
+using Atelia.DurableGraph.Runtime;
+using Atelia.DurableGraph.Persistence;
 using Atelia.DurableGraph.Testing;
 
 namespace Atelia.DurableGraph.Tests;
@@ -67,7 +68,9 @@ public sealed partial class DurableSchemaGeneratorTests {
     private static string GeneratedEqualitySource(bool family) => $$"""
         using System;
         using Atelia.DurableGraph;
-        using Atelia.DurableGraph.StateStore;
+        using Atelia.DurableGraph.Schema;
+        using Atelia.DurableGraph.Runtime;
+        using Atelia.DurableGraph.Persistence;
         namespace EqualityFixture;
         [DurableType("equality.ancestor", 1)]
         public partial class Ancestor : IDurableObject {

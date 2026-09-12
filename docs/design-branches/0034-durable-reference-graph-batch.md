@@ -217,10 +217,10 @@ G0 已选接缝：
 | Gate / 不变量 | 状态 | 实现归属 | 直接验收证据 |
 |---|---|---|---|
 | G0 基线及合同 | 已验收 | 主代理 / 本节 | 根 build 零警告/错误；新跑基线 835/835、零跳过；独立 tag15 golden；旧 golden/历史继续通过 |
-| G1 nominal 元数据与严格格式 | 已验收 | Runtime、SG history、Build、SchemaBatch | [history tests](../../tests/DurableGraph.Tests/NominalReferenceSchemaHistoryTests.cs) 14 项、[wire/Store tests](../../tests/DurableGraph.StateStore.Tests/NominalReferenceSchemaWireTests.cs) 9 项：独立 golden、冲突、损坏/截断、nominal 无 exact 环、目标升版不传播 |
+| G1 nominal 元数据与严格格式 | 已验收 | Runtime、SG history、Build、SchemaBatch | [history tests](../../tests/DurableGraph.Tests/NominalReferenceSchemaHistoryTests.cs) 14 项、[wire/Store tests](../../tests/DurableGraph.Persistence.Tests/NominalReferenceSchemaWireTests.cs) 9 项：独立 golden、冲突、损坏/截断、nominal 无 exact 环、目标升版不传播 |
 | G2 强类型生成与历史引用槽 | 已验收 | SG BinaryBody / StateModel | [generated body tests](../../tests/DurableGraph.Tests/GeneratedReferenceBodyTests.cs) 3 项：UInt32 Base/Delta golden、refs-only 遍历、private/readonly 继承循环、历史 CLR 删除；原静态绑定 guards 通过 |
 | G3 目录/队列/首次准备 | 已验收 | CaptureSession / CaptureContext / LoadedWorld | [runtime tests](../../tests/DurableGraph.Tests/RuntimeReferenceGraphTests.cs) 8 项及 [文件 tests](../../tests/DurableGraph.Tests/PersistedReferenceGraphTests.cs)：12,000 节点队列、共享/循环、逐边约束、目录冻结/冲突、公开 new 图准备与冻结 |
-| G4 完整双视图校验/可达分配 | 已验收 | RevisionDecoder / NormalizedRevision / LoadedWorld | [加载 tests](../../tests/DurableGraph.StateStore.Tests/LoadedReferenceWorldTests.cs) 15 项：双时态 ancestry、坏/abstract orphan、错误目标、exact/unique 分配、late failure；3,000 节点链统一分配后填充 |
+| G4 完整双视图校验/可达分配 | 已验收 | RevisionDecoder / NormalizedRevision / LoadedWorld | [加载 tests](../../tests/DurableGraph.Persistence.Tests/LoadedReferenceWorldTests.cs) 15 项：双时态 ancestry、坏/abstract orphan、错误目标、exact/unique 分配、late failure；3,000 节点链统一分配后填充 |
 | G5 固定 Parent 增量保存 | 已验收 | 原 LoadedRevisionPlanner / 恢复身份导入 | [文件 tests](../../tests/DurableGraph.Tests/PersistedReferenceGraphTests.cs) 4 项：child-only Delta、引用替换新 Base、循环岛 Remove、两次历史 Delta 后 Upgrade 仅目标强制 Base；原 Empty、耗尽、重入、Append 失败、重复 Prepare 回归通过 |
 | G6 冷重开/包/独立审查 | 已验收 | 文件 tests / 包消费者 / 主代理与独立 reviewer | 完整 889/889、两实际包脚本、无阻塞独立审查；实际首次入口不依赖 raw seed |
 

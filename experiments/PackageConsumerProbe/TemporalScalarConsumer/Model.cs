@@ -1,4 +1,5 @@
 using Atelia.DurableGraph;
+using Atelia.DurableGraph.Schema;
 #if HISTORY_V1
 using Point = TemporalScalarPackageConsumerProbe.LegacyPoint;
 #else

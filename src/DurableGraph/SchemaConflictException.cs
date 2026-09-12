@@ -1,3 +1,5 @@
+using Atelia.DurableGraph.Schema;
+
 namespace Atelia.DurableGraph;
 
 /// <summary>

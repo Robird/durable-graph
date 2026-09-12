@@ -1,3 +1,4 @@
+using Atelia.DurableGraph.Schema;
 using System.Text;
 using Atelia.DurableGraph.Build;
 
@@ -94,6 +95,8 @@ public sealed partial class DurableSchemaGeneratorTests {
     public void GeneratedArrayFieldsShareReferenceBodyAndPreserveOpenHistoryPatterns() {
         GeneratorTestRun run = RunGenerator("""
             using Atelia.DurableGraph;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
             [DurableType("Pair",1)] public partial struct Pair<T,U> {
                 [DurableField(1)] public T First;
                 [DurableField(2)] public U Second;

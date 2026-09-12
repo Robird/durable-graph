@@ -108,7 +108,7 @@ Position 在两个坏例子中分别产生与失效算法相同的 raw Delta 和
 
 **共同的大头是失配后的 payload 准备。** matcher 本身仅分配 104 B 或 41 KB，
 但按位置配对把大量仍存在的值当成变化，随后逐元素 PrepareDelta 并合并 patch，
-完整 Diff 分配达到约 6.6 MB。[body 实现](../../src/DurableGraph/ListStateReader.cs)与计量一致。
+完整 Diff 分配达到约 6.6 MB。[body 实现](../../src/DurableGraph/Runtime/Containers/ListStateReader.cs)与计量一致。
 Base 策略兜住的是最终写入，不会撤销已完成的搜索、元素编码和临时分配。
 
 在本轮所选的两个坏例子里，Local 的最坏完整 Diff 更慢，Myers 的搜索阶段分配更多；
@@ -135,5 +135,5 @@ Local 为 24.715 ms（23.834–104.565），Myers 为 15.476 ms（15.399–32.30
 两者都属于可替换的 matcher 策略，不需要改变 wire-format。**当前仍保持 LocalResync 默认和 Myers 可选**，
 不凭刻意构造的两例估计发生率或自动切换默认；后续若研究回退，应把这两组和原普通轨迹一起作为对照。
 
-可执行入口：[Whitebox.cs](Whitebox.cs)；算法权威：[ListDeltaMatcher.cs](../../src/DurableGraph/ListDeltaMatcher.cs)；
+可执行入口：[Whitebox.cs](Whitebox.cs)；算法权威：[ListDeltaMatcher.cs](../../src/DurableGraph/Runtime/Containers/ListDeltaMatcher.cs)；
 上一轮普通轨迹：[RESULTS.md](RESULTS.md)。

@@ -315,9 +315,9 @@ SG adapter/运行时预绑定 → 调用作用域 → 真实包跨版恢复。�
 
 | 要求 | 实施责任/接缝 | 集成验收 | 状态 |
 |---|---|---|---|
-| G0 用户属性、局部 key、typed adapter、旧二参工具诊断 | [SG](../../src/DurableGraph.Generator/DurableSchemaGenerator.ValueUpgrades.cs) / [metadata](../../src/DurableGraph/StateValueUpgradeProvider.cs) | [真实 SG 编译与调用](../../tests/DurableGraph.Tests/GeneratedValueUpgradeTests.cs)、错误签名/孤立依赖/别名/外部 marker；纯历史与纯规则登记 | 已验证 |
-| G1 候选与完整槽匹配、递归依赖、KeepExact | [值绑定](../../src/DurableGraph/StateBindingContext.ValueUpgrade.cs)；StateStore 冻结目录 | [值绑定反例](../../tests/DurableGraph.Tests/ValueUpgradeBindingTests.cs)、[snapshot 隔离](../../tests/DurableGraph.StateStore.Tests/ValueUpgradeCatalogTests.cs) | 已验证 |
-| G2 子作用域与整链预绑定 | [Context](../../src/DurableGraph/UpgradeContext.cs) / [owner 计划](../../src/DurableGraph/StateBindingContext.Upgrade.cs) | 嵌套 Box→Pair→Point、两个对象/多跳、未知 key/类型、抛错不回退、28 层共享依赖 DAG | 已验证 |
+| G0 用户属性、局部 key、typed adapter、旧二参工具诊断 | [SG](../../src/DurableGraph.Generator/DurableSchemaGenerator.ValueUpgrades.cs) / [metadata](../../src/DurableGraph/Runtime/Binding/StateValueUpgradeProvider.cs) | [真实 SG 编译与调用](../../tests/DurableGraph.Tests/GeneratedValueUpgradeTests.cs)、错误签名/孤立依赖/别名/外部 marker；纯历史与纯规则登记 | 已验证 |
+| G1 候选与完整槽匹配、递归依赖、KeepExact | [值绑定](../../src/DurableGraph/Runtime/Binding/StateBindingContext.ValueUpgrade.cs)；StateStore 冻结目录 | [值绑定反例](../../tests/DurableGraph.Tests/ValueUpgradeBindingTests.cs)、[snapshot 隔离](../../tests/DurableGraph.Persistence.Tests/ValueUpgradeCatalogTests.cs) | 已验证 |
+| G2 子作用域与整链预绑定 | [Context](../../src/DurableGraph/UpgradeContext.cs) / [owner 计划](../../src/DurableGraph/Runtime/Binding/StateBindingContext.Upgrade.cs) | 嵌套 Box→Pair→Point、两个对象/多跳、未知 key/类型、抛错不回退、28 层共享依赖 DAG | 已验证 |
 | G3 历史包闭环 | [真实包消费者](../../experiments/PackageConsumerProbe/ValueUpgradeConsumer/README.md) | 三代历史/四次构建、删除旧 inline 领域类型、强制 Base 与稳定续写 | 已验证 |
 | 不变合同与独立审阅 | 主代理集成 / 独立审阅代理 | 根 build/full tests、六项真实包回归、格式未变、文档检查；独立审阅无剩余阻断 | 已验证 |
 

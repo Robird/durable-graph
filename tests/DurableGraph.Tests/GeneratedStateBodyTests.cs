@@ -1,3 +1,4 @@
+using Atelia.DurableGraph.Schema;
 using System.Reflection;
 using Microsoft.CodeAnalysis;
 
@@ -9,7 +10,9 @@ public sealed partial class DurableSchemaGeneratorTests {
         using System.Buffers;
         using System.IO;
         using Atelia.DurableGraph;
-        using Atelia.DurableGraph.StateStore.Serialization;
+        using Atelia.DurableGraph.Schema;
+        using Atelia.DurableGraph.Runtime;
+        using Atelia.DurableGraph.Serialization;
         namespace BinaryBodies;
 
         [DurableType("body.base", 1)]
@@ -149,7 +152,9 @@ public sealed partial class DurableSchemaGeneratorTests {
             using System;
             using System.IO;
             using Atelia.DurableGraph;
-            using Atelia.DurableGraph.StateStore.Serialization;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
+            using Atelia.DurableGraph.Serialization;
             namespace BinaryBodies;
             [DurableType("body.boolean", 1)]
             public sealed partial class Item : IDurableObject {
@@ -183,12 +188,16 @@ public sealed partial class DurableSchemaGeneratorTests {
     public void GeneratedStateRequiresSuccessfulOwnAndAncestorHistory(bool ancestor, bool missingHistory) {
         string source = ancestor ? $$"""
             using Atelia.DurableGraph;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
             [DurableType("body.base", {{(missingHistory ? 2 : 1)}})]
             public abstract partial class Base : IDurableObject { [DurableField(1)] private long _base; }
             [DurableType("body.leaf", 1)]
             public sealed partial class Leaf : Base { [DurableField(1)] private int _leaf; }
             """ : $$"""
             using Atelia.DurableGraph;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
             [DurableType("body.base", {{(missingHistory ? 2 : 1)}})]
             public sealed partial class Base : IDurableObject { [DurableField(1)] private long _base; }
             """;
@@ -202,6 +211,8 @@ public sealed partial class DurableSchemaGeneratorTests {
     public void ReferenceCaptureGeneratedStateSupportsPrimitiveLeafWhenAncestorContainsString() {
         GeneratorTestRun run = RunGenerator("""
             using Atelia.DurableGraph;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
             [DurableType("body.base", 1)]
             public abstract partial class Base : IDurableObject { [DurableField(1)] private string _text = "base"; }
             [DurableType("body.leaf", 1)]
@@ -229,6 +240,8 @@ public sealed partial class DurableSchemaGeneratorTests {
         ];
         GeneratorTestRun run = RunGenerator("""
             using Atelia.DurableGraph;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
             [DurableType("body.valid", 1)]
             public sealed partial class Valid : IDurableObject { [DurableField(1)] private int _value; }
             """, history);
@@ -243,7 +256,9 @@ public sealed partial class DurableSchemaGeneratorTests {
             using System;
             using System.Buffers;
             using Atelia.DurableGraph;
-            using Atelia.DurableGraph.StateStore.Serialization;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
+            using Atelia.DurableGraph.Serialization;
             namespace BinaryBodies;
             [DurableType("body.versioned", 2)]
             public sealed partial class Versioned : IDurableObject {

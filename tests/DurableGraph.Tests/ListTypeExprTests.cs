@@ -1,3 +1,5 @@
+using Atelia.DurableGraph.Runtime;
+using Atelia.DurableGraph.Schema;
 namespace Atelia.DurableGraph.Tests;
 
 public sealed class ListTypeExprTests {

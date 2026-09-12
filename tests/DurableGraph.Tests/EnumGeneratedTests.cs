@@ -1,6 +1,8 @@
+using Atelia.DurableGraph.Runtime;
+using Atelia.DurableGraph.Schema;
 using System.Reflection;
 using Atelia.DurableGraph.Build;
-using Atelia.DurableGraph.StateStore;
+using Atelia.DurableGraph.Persistence;
 
 namespace Atelia.DurableGraph.Tests;
 
@@ -11,7 +13,9 @@ public sealed partial class DurableSchemaGeneratorTests {
     public void EnumUsesExternalProjectionAndPrivateReadonlyOwnerField(string accessibility) {
         GeneratorTestRun run = RunGenerator($$"""
             using Atelia.DurableGraph;
-            using Atelia.DurableGraph.StateStore;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
+            using Atelia.DurableGraph.Persistence;
             using Atelia.DurableGraph.Generated;
             [DurableType("Mode",1)] {{accessibility}} enum Mode:byte { Idle=0, Moving=1 }
             [DurableType("World",1)] public partial class World:IDurableObject {
@@ -46,6 +50,8 @@ public sealed partial class DurableSchemaGeneratorTests {
     public void DeletedEnumHistorySelectsFamilyWithoutChangingUnrelatedOrdinaryGeneration() {
         GeneratorTestRun ordinary = RunGenerator("""
             using Atelia.DurableGraph;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
             [DurableType("World",1)] public partial class World:IDurableObject { [DurableField(1)] public byte Value; }
             """);
         AssertSchemaOnlyCompiles(ordinary);
@@ -53,6 +59,8 @@ public sealed partial class DurableSchemaGeneratorTests {
         using AncestryHistoryDirectory history = new();
         GeneratorTestRun first = RunGenerator("""
             using Atelia.DurableGraph;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
             [DurableType("Mode",1)] public enum Mode:byte { Idle }
             [DurableType("World",1)] public partial class World:IDurableObject { [DurableField(1)] public Mode Value; }
             """);
@@ -60,6 +68,8 @@ public sealed partial class DurableSchemaGeneratorTests {
         new SchemaHistoryTool().Publish(history.WriteManifest(first), history.History);
         GeneratorTestRun next = RunGenerator("""
             using Atelia.DurableGraph;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
             [DurableType("World",2)] public partial class World:IDurableObject { [DurableField(1)] public byte Value; }
             """, history.ReadAdditionalTexts());
         AssertSchemaOnlyCompiles(next);
@@ -74,6 +84,8 @@ public sealed partial class DurableSchemaGeneratorTests {
         Assert.Equal((byte)253,value.GetType().GetField("Segment0Field1")!.GetValue(value));
         GeneratorTestRun pure = RunGenerator("""
             using Atelia.DurableGraph;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
             [ValueUpgradeRuleSet(AllowKeepExact=true)] public static class Rules { }
             """, history.ReadAdditionalTexts());
         AssertSchemaOnlyCompiles(pure);
@@ -84,6 +96,8 @@ public sealed partial class DurableSchemaGeneratorTests {
     public void EnumKeepsDistinctNominalIdentityAndPermitsOrdinaryConstantNames() {
         GeneratorTestRun run = RunGenerator("""
             using Atelia.DurableGraph;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
             [DurableType("Mode",1)] public enum Mode:byte { Schema=0, GetSchema=1, __DurableSchemaHistory=2, __DurableProjection=3 }
             [DurableType("Other",1)] public enum Other:byte { Zero=0 }
             [DurableType("Box",1)] public partial class Box<T>:IDurableObject { [DurableField(1)] public T Value; }
@@ -119,7 +133,9 @@ public sealed partial class DurableSchemaGeneratorTests {
             using System;
             using System.Collections.Generic;
             using Atelia.DurableGraph;
-            using Atelia.DurableGraph.StateStore;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
+            using Atelia.DurableGraph.Persistence;
             using Atelia.DurableGraph.Generated;
             [Flags,DurableType("Mode",1)] public enum Mode:{{scalar}} { Low={{minimum}}, Alias={{minimum}}, High={{maximum}} }
             [DurableType("Other",1)] public enum Other:{{scalar}} { Zero=0 }
@@ -189,6 +205,8 @@ public sealed partial class DurableSchemaGeneratorTests {
         using AncestryHistoryDirectory history = new();
         const string source="""
             using Atelia.DurableGraph;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
             [DurableType("Mode",1)] public enum Mode:byte { A=0 }
             [DurableType("World",1)] public partial class World:IDurableObject { [DurableField(1)] public Mode Value; }
             """;

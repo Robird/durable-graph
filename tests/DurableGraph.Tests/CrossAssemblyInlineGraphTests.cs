@@ -1,5 +1,6 @@
-using Atelia.DurableGraph.StateStore;
-using Atelia.DurableGraph.StateStore.Storage;
+using Atelia.DurableGraph.Runtime;
+using Atelia.DurableGraph.Persistence;
+using Atelia.DurableGraph.Storage;
 using Atelia.Rbf;
 using SegmentStore = Atelia.RbfSegmentStore.RbfSegmentStore;
 
@@ -71,6 +72,8 @@ public sealed partial class DurableSchemaGeneratorTests {
     private const string CrossInlineValues = """
         using System.Collections.Generic;
         using Atelia.DurableGraph;
+        using Atelia.DurableGraph.Schema;
+        using Atelia.DurableGraph.Runtime;
         namespace InlineValues;
         [DurableType("inline.Hidden",1)] internal readonly partial struct Hidden {
             [DurableField(1)] private readonly int _value;
@@ -112,8 +115,10 @@ public sealed partial class DurableSchemaGeneratorTests {
         using System;
         using System.Collections.Generic;
         using Atelia.DurableGraph;
-        using Atelia.DurableGraph.StateStore;
-        using Atelia.DurableGraph.StateStore.Storage;
+        using Atelia.DurableGraph.Schema;
+        using Atelia.DurableGraph.Runtime;
+        using Atelia.DurableGraph.Persistence;
+        using Atelia.DurableGraph.Storage;
         using InlineValues;
         namespace InlineApp;
         [DurableType("inline.Local",1)] public partial struct Local { [DurableField(1)] public int Value; }

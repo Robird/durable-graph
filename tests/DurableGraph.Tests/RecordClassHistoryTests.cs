@@ -1,6 +1,7 @@
+using Atelia.DurableGraph.Schema;
 using Atelia.DurableGraph.Build;
-using Atelia.DurableGraph.StateStore;
-using Atelia.DurableGraph.StateStore.Storage;
+using Atelia.DurableGraph.Persistence;
+using Atelia.DurableGraph.Storage;
 using SegmentStore = Atelia.RbfSegmentStore.RbfSegmentStore;
 
 namespace Atelia.DurableGraph.Tests;
@@ -96,9 +97,11 @@ public sealed partial class DurableSchemaGeneratorTests {
     private static string RecordClassHistorySource(bool record) => """
         using System;
         using Atelia.DurableGraph;
+        using Atelia.DurableGraph.Schema;
+        using Atelia.DurableGraph.Runtime;
         using Atelia.DurableGraph.Generated;
-        using Atelia.DurableGraph.StateStore;
-        using Atelia.DurableGraph.StateStore.Storage;
+        using Atelia.DurableGraph.Persistence;
+        using Atelia.DurableGraph.Storage;
         """ + (record ? """
         [DurableType("Base",1)] public abstract partial record Base([field:DurableField(1)] int Number) : IDurableObject;
         [DurableType("Leaf",1)] public sealed partial record Leaf(int Number) : Base(Number) {
@@ -141,9 +144,11 @@ public sealed partial class DurableSchemaGeneratorTests {
     private static string RecordClassImplicitUpgradeSource(int version, bool withContext) => $$"""
         using System;
         using Atelia.DurableGraph;
+        using Atelia.DurableGraph.Schema;
+        using Atelia.DurableGraph.Runtime;
         using Atelia.DurableGraph.Generated;
-        using Atelia.DurableGraph.StateStore;
-        using Atelia.DurableGraph.StateStore.Storage;
+        using Atelia.DurableGraph.Persistence;
+        using Atelia.DurableGraph.Storage;
         using F=Atelia.DurableGraph.Generated.Family_52;
         [DurableType("R",{{version}})] public sealed partial record R([field:DurableField(1)] {{(version == 1 ? "int" : "long")}} Amount) : IDurableObject {
             public static int Upgrades;

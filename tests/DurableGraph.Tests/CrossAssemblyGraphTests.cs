@@ -1,7 +1,8 @@
+using Atelia.DurableGraph.Runtime;
 using System.Reflection;
 using System.Runtime.Loader;
-using Atelia.DurableGraph.StateStore;
-using Atelia.DurableGraph.StateStore.Storage;
+using Atelia.DurableGraph.Persistence;
+using Atelia.DurableGraph.Storage;
 using Atelia.Rbf;
 using SegmentStore = Atelia.RbfSegmentStore.RbfSegmentStore;
 
@@ -78,6 +79,8 @@ public sealed partial class DurableSchemaGeneratorTests {
 
     private const string CrossAssemblyOrdinaryLibrary = """
         using Atelia.DurableGraph;
+        using Atelia.DurableGraph.Schema;
+        using Atelia.DurableGraph.Runtime;
         namespace CrossOrdinary;
         [DurableType("cross.Node",1)] public partial class Node:IDurableObject {
             [DurableField(1)] public int Value=10000;
@@ -98,6 +101,8 @@ public sealed partial class DurableSchemaGeneratorTests {
 
     private const string CrossAssemblyValueLibrary = """
         using Atelia.DurableGraph;
+        using Atelia.DurableGraph.Schema;
+        using Atelia.DurableGraph.Runtime;
         namespace CrossValues;
         [DurableType("cross.Point",1)] public partial struct Point {
             [DurableField(1)] public int X;
@@ -119,8 +124,10 @@ public sealed partial class DurableSchemaGeneratorTests {
         using System.Collections.Generic;
         using System.Linq;
         using Atelia.DurableGraph;
-        using Atelia.DurableGraph.StateStore;
-        using Atelia.DurableGraph.StateStore.Storage;
+        using Atelia.DurableGraph.Schema;
+        using Atelia.DurableGraph.Runtime;
+        using Atelia.DurableGraph.Persistence;
+        using Atelia.DurableGraph.Storage;
         using CrossOrdinary;
         using CrossValues;
         namespace CrossApp;

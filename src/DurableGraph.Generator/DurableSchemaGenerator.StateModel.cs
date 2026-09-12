@@ -39,11 +39,11 @@ public sealed partial class DurableSchemaGenerator {
         string indent, bool hasDomainBase) {
         BinaryVersionModel current = versions[versions.Count - 1];
         string domain = type.Symbol.ToDisplayString(FullyQualifiedNameFormat);
-        source.Append(indent).Append("private static readonly global::Atelia.DurableGraph.CapturedStatePreparation<")
+        source.Append(indent).Append("private static readonly global::Atelia.DurableGraph.Runtime.CapturedStatePreparation<")
             .Append(current.Name).Append("> Preparation = new(").Append(current.Name)
             .AppendLine(".Schema, PrepareBaseBody, PrepareDeltaBody, StateEquals);");
         source.Append(indent).Append("private static readonly global::System.Func<").Append(domain)
-            .Append(", global::Atelia.DurableGraph.CaptureContext, ").Append(current.Name)
+            .Append(", global::Atelia.DurableGraph.Runtime.CaptureContext, ").Append(current.Name)
             .Append("> CaptureDelegate = static (value, context) => Capture(value");
         if (current.HasReferences) source.Append(", context");
         source.AppendLine(");");
@@ -59,9 +59,9 @@ public sealed partial class DurableSchemaGenerator {
                 .Append(domain).AppendLine("));");
         }
         source.Append(indent).AppendLine("}");
-        source.Append(indent).Append("internal static readonly global::Atelia.DurableGraph.StateModelBinding<")
+        source.Append(indent).Append("internal static readonly global::Atelia.DurableGraph.Runtime.StateModelBinding<")
             .Append(domain).Append(", ").Append(current.Name).AppendLine("> Model = new(");
-        source.Append(indent).Append("    Preparation, new global::Atelia.DurableGraph.StateReaderBinding[] { ");
+        source.Append(indent).Append("    Preparation, new global::Atelia.DurableGraph.Runtime.StateReaderBinding[] { ");
         for (int index = 0; index < versions.Count; index++) {
             if (index != 0) source.Append(", ");
             source.Append("Reader").Append(versions[index].Name);
@@ -97,7 +97,7 @@ public sealed partial class DurableSchemaGenerator {
         StringBuilder source, DurableTypeModel type, List<BinaryVersionModel> versions, string indent) {
         BinaryVersionModel current = versions[versions.Count - 1];
         source.Append(indent).Append("internal static ").Append(current.Name)
-            .AppendLine(" Normalize(global::Atelia.DurableGraph.ObjectStateRecord item) {");
+            .AppendLine(" Normalize(global::Atelia.DurableGraph.Runtime.ObjectStateRecord item) {");
         source.Append(indent).AppendLine("    global::System.ArgumentNullException.ThrowIfNull(item);");
         foreach (BinaryVersionModel version in versions) {
             source.Append(indent).Append("    if (").Append(version.Name).AppendLine(".Schema.Equals(item.Schema)) {");
@@ -144,7 +144,7 @@ public sealed partial class DurableSchemaGenerator {
         }
         source.Append(indent).Append("internal static void Hydrate(").Append(type.IsInline ? "ref " : string.Empty).Append(domain).Append(type.IsInline ? " target, in " : " value, in ")
             .Append(type.IsInline ? InlineDtoTypeName(new SchemaReference(type.SchemaId, type.Version)) : current.Name)
-            .AppendLine(" state, global::Atelia.DurableGraph.ObjectReadTable objects) {");
+            .AppendLine(" state, global::Atelia.DurableGraph.Runtime.ObjectReadTable objects) {");
         if (type.IsInline) source.Append(indent).Append("    ").Append(domain).AppendLine(" value = default;");
         else source.Append(indent).AppendLine("    global::System.ArgumentNullException.ThrowIfNull(value);");
         source.Append(indent).AppendLine("    global::System.ArgumentNullException.ThrowIfNull(objects);");

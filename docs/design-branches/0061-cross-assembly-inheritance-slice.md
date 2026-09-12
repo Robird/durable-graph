@@ -36,9 +36,9 @@
 - [FlattenGenericFields / MakeGenericLayout](../../src/DurableGraph.Generator/DurableSchemaGenerator.GenericState.cs)
   已依据 exact history 进行 base-first 展开、类型参数替换和状态参数去重。
   每段独立 FieldId、完整 leaf DTO、静态 Base/Delta body 可以继续使用。
-- [StateModelBinding<TDomain,TState>](../../src/DurableGraph/StateModelBinding.cs)
+- [StateModelBinding<TDomain,TState>](../../src/DurableGraph/Runtime/Binding/StateModelBinding.cs)
   已保存强类型 Capture/Hydrate 委托，但对象入口要求 exact CLR 类型。
-  [StateBindingContext](../../src/DurableGraph/StateBindingContext.cs) 已能解析基类 current model，
+  [StateBindingContext](../../src/DurableGraph/Runtime/Binding/StateBindingContext.cs) 已能解析基类 current model，
   `BindSchema(...).GetValue(...)` 能从完整槽取得 state/ops，无需领域字段 CLR Type。
 - [DB-060 导入导出](../../src/DurableGraph.Generator/DurableSchemaGenerator.SchemaExports.cs)
   当前仅接受 InlineValue 模板；导入根及递归边未覆盖 BaseSchema。
@@ -263,7 +263,7 @@ model 构造器末尾 `supportsBaseProjection=false`、Family 显式启用；整
 
 | 要求 | 实施所有者/位置 | 验收 | 状态 |
 |---|---|---|---|
-| typed projection 与显式能力 | [StateBaseProjection](../../src/DurableGraph/StateBaseProjection.cs)、StateModelBinding | [8 项 Runtime 测试](../../tests/DurableGraph.Tests/StateBaseProjectionTests.cs)：未授予、错类型/Schema、null、晚登记冲突、整对象 exact | 已验证 |
+| typed projection 与显式能力 | [StateBaseProjection](../../src/DurableGraph/Runtime/Binding/StateBaseProjection.cs)、StateModelBinding | [8 项 Runtime 测试](../../tests/DurableGraph.Tests/StateBaseProjectionTests.cs)：未授予、错类型/Schema、null、晚登记冲突、整对象 exact | 已验证 |
 | Family own + immediate base、泛型映射 | [GenericProjection](../../src/DurableGraph.Generator/DurableSchemaGenerator.GenericProjection.cs) | [Generator 专项](../../tests/DurableGraph.Tests/CrossAssemblyInheritanceGeneratorTests.cs)：metadata/ref hidden inline/Nullable、参数合流/重排/具体化/双 ObjectId；local/split golden | 已验证 |
 | class 导出与 base 只读依赖 | [SchemaExports](../../src/DurableGraph.Generator/DurableSchemaGenerator.SchemaExports.cs)、[helper 核验](../../src/DurableGraph.Generator/DurableSchemaGenerator.SchemaExportHelpers.cs) | 同上专项：真实类型/构造器/ref 签名、额外约束、ref-like 拒绝、historical-only | 已验证 |
 | reference 合同与自有 history 发布 | Shared protocol、SchemaHistoryTool | [31 项 Build 测试](../../tests/DurableGraph.Tests/CrossAssemblyInheritanceBuildTests.cs)：contract2、accepted 先验闭包、零候选、归属/版本/kind/arity/深度拒绝 | 已验证 |

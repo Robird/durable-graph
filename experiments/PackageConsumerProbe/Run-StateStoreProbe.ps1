@@ -38,10 +38,10 @@ try {
         "../atelia/src/Rbf/Rbf.csproj",
         "../atelia/src/RbfSegmentStore/RbfSegmentStore.csproj",
         "../atelia/src/EventJournal/EventJournal.csproj",
-        "src/DurableGraph.StateStore.Serialization/DurableGraph.StateStore.Serialization.csproj",
+        "src/DurableGraph.Serialization/DurableGraph.Serialization.csproj",
         "src/DurableGraph/DurableGraph.csproj",
-        "src/DurableGraph.StateStore.Storage/DurableGraph.StateStore.Storage.csproj",
-        "src/DurableGraph.StateStore/DurableGraph.StateStore.csproj"
+        "src/DurableGraph.Storage/DurableGraph.Storage.csproj",
+        "src/DurableGraph.Persistence/DurableGraph.Persistence.csproj"
     )) {
         Invoke-DotNet @("pack", $project, "--configuration", "Release", "--output", $feed, "-p:PackageVersion=$packageVersion")
     }

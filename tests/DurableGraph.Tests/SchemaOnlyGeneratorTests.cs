@@ -1,6 +1,8 @@
 using System.Reflection;
 using System.Text;
 using Atelia.DurableGraph;
+using Atelia.DurableGraph.Schema;
+using Atelia.DurableGraph.Runtime;
 using Microsoft.CodeAnalysis;
 
 namespace Atelia.DurableGraph.Tests;
@@ -117,6 +119,8 @@ public sealed partial class DurableSchemaGeneratorTests {
     public void SchemaOnlyRejectsGeneratedMemberCollisions(string memberName, string declaration) {
         GeneratorTestRun run = RunGenerator($$"""
             using Atelia.DurableGraph;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
             [DurableType("single", 1)]
             public partial class Single : IDurableObject {
                 {{declaration}}
@@ -129,6 +133,8 @@ public sealed partial class DurableSchemaGeneratorTests {
     public void SchemaOnlyDoesNotReserveSerializerOrPayloadSnapshotNames() {
         GeneratorTestRun run = RunGenerator("""
             using Atelia.DurableGraph;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
             [DurableType("single", 1)]
             public partial class Single : IDurableObject {
                 public static int Serializer => 1;
@@ -144,6 +150,8 @@ public sealed partial class DurableSchemaGeneratorTests {
     public void SchemaOnlyRejectsNonOptedInAncestors(string baseDeclaration) {
         GeneratorTestRun run = RunGenerator($$"""
             using Atelia.DurableGraph;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
             {{baseDeclaration}}
             [DurableType("child", 1)]
             public partial class Child : Base { }
@@ -168,6 +176,8 @@ public sealed partial class DurableSchemaGeneratorTests {
     public void SchemaOnlyStillRejectsDuplicateFieldIdsWithinOneDeclaration() {
         GeneratorTestRun run = RunGenerator("""
             using Atelia.DurableGraph;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
             [DurableType("single", 1)]
             public partial class Single : IDurableObject {
                 [DurableField(1)] private int _first;
@@ -183,6 +193,8 @@ public sealed partial class DurableSchemaGeneratorTests {
     public void SchemaOnlyRetainsTheBoundedClrTypeShape(string declaration) {
         GeneratorTestRun run = RunGenerator($$"""
             using Atelia.DurableGraph;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
             [DurableType("single", 1)]
             {{declaration}}
             """);
@@ -196,6 +208,8 @@ public sealed partial class DurableSchemaGeneratorTests {
         string baseFields, string otherDeclaration, string ancestorDiagnostic) {
         GeneratorTestRun run = RunGenerator($$"""
             using Atelia.DurableGraph;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
             [DurableType("base", 1)]
             public partial class Base : IDurableObject { {{baseFields}} }
             [DurableType("child", 1)]
@@ -219,6 +233,8 @@ public sealed partial class DurableSchemaGeneratorTests {
 
     private static string SchemaOnlyChain(int baseVersion, int middleVersion, int leafVersion) => $$"""
         using Atelia.DurableGraph;
+        using Atelia.DurableGraph.Schema;
+        using Atelia.DurableGraph.Runtime;
         namespace SchemaOnly;
         [DurableType("base", {{baseVersion}})]
         public abstract partial class Base : IDurableObject {

@@ -1,8 +1,9 @@
+using Atelia.DurableGraph.Schema;
 using System.Reflection;
 using Atelia.DurableGraph.Build;
-using Atelia.DurableGraph.StateStore;
-using Atelia.DurableGraph.StateStore.Serialization;
-using Atelia.DurableGraph.StateStore.Storage;
+using Atelia.DurableGraph.Persistence;
+using Atelia.DurableGraph.Serialization;
+using Atelia.DurableGraph.Storage;
 using Atelia.Rbf;
 using Atelia.RbfSegmentStore;
 using SegmentStore = Atelia.RbfSegmentStore.RbfSegmentStore;
@@ -149,14 +150,14 @@ public sealed partial class DurableSchemaGeneratorTests {
         }
         public static class Host {
         """ + FusedDeltaHostMethods("Leaf", 1) + """
-            public static Atelia.DurableGraph.StateStore.StateReaderRegistry Register(bool includeOther) {
-                var readers = new Atelia.DurableGraph.StateStore.StateReaderRegistry();
+            public static Atelia.DurableGraph.Persistence.StateReaderRegistry Register(bool includeOther) {
+                var readers = new Atelia.DurableGraph.Persistence.StateReaderRegistry();
                 Leaf.__DurableState.RegisterReaders(readers);
                 Leaf.__DurableState.RegisterReaders(readers); // Stable generated bindings are idempotent.
                 if (includeOther) Other.__DurableState.RegisterReaders(readers);
                 return readers;
             }
-            public static void Check(Atelia.DurableGraph.StateStore.DecodedRevision view, int stage) {
+            public static void Check(Atelia.DurableGraph.Persistence.DecodedRevision view, int stage) {
                 var old = view.GetRequired(new ObjectId(1)).GetState<Leaf.__DurableState.V1>();
                 var current = view.GetRequired(new ObjectId(2)).GetState<Leaf.__DurableState.V2>();
                 var other = view.GetRequired(new ObjectId(99)).GetState<Other.__DurableState.V1>();

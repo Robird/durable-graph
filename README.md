@@ -30,13 +30,13 @@ Journal 的命名 branch ref 是唯一发布点；恢复读取已保存的结果
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Atelia.DurableGraph" Version="$(DurableGraphPackageVersion)" />
-    <PackageReference Include="Atelia.DurableGraph.StateStore" Version="$(DurableGraphPackageVersion)" />
+    <PackageReference Include="Atelia.DurableGraph.Persistence" Version="$(DurableGraphPackageVersion)" />
   </ItemGroup>
 </Project>
 ```
 
 示例通过命令行传入 `DurableGraphPackageVersion`；正式接入时可将实际版本固定在项目属性或统一包版本文件中。
-`Atelia.DurableGraph` 包同时携带 Runtime、Source Generator 和 history 构建集成；StateStore 包提供持久化会话。
+`Atelia.DurableGraph` 包同时携带 Runtime、Source Generator 和 history 构建集成；Persistence 包提供持久化会话。
 声明模型的每个项目都应**直接引用 Runtime 包**。无需手工添加 Analyzer、AdditionalFiles 或 Import，
 也不要仅以 Runtime 项目的 ProjectReference 代替完整包接入。
 
@@ -84,7 +84,7 @@ public partial class DamageEvent : IDurableObject {
 保存为 `Program.cs`，替换控制台模板的内容：
 
 ```csharp
-using Atelia.DurableGraph.StateStore;
+using Atelia.DurableGraph.Persistence;
 using QuickStart;
 
 if (args.Length != 1) {
@@ -341,6 +341,12 @@ Transient 只表示不参与持久化，并不表示修改没有可见影响。�
 
 ## 从源码打包
 
+当前包组织为 `Atelia.DurableGraph`、`.Persistence`、`.Storage` 和 `.Serialization`。
+从旧 StateStore 系列升级时，同步修改 PackageReference/using 并重编译模型库与宿主。
+领域属性、`IDurableObject`、`ObjectId`、登记接口和 Generated/Family 名保持；高级布局类型使用
+`Atelia.DurableGraph.Schema`，绑定与状态操作使用 `Atelia.DurableGraph.Runtime`，两者仍在主程序集内。
+仅组织迁移不需要提高业务 Schema 版本，保留 accepted history；不提供旧 DLL 的直接二进制兼容。
+
 本仓库需要相邻的兄弟仓库 `../atelia`（Data、Primitives、RBF 等依赖）。从 DurableGraph 根目录执行；
 每批使用新版本号，避免 NuGet 缓存复用同版本旧代码：
 
@@ -352,10 +358,10 @@ foreach ($project in @(
     "../atelia/src/Data/Data.csproj", "../atelia/src/Primitives/Primitives.csproj",
     "../atelia/src/Rbf/Rbf.csproj", "../atelia/src/RbfSegmentStore/RbfSegmentStore.csproj",
     "../atelia/src/EventJournal/EventJournal.csproj",
-    "src/DurableGraph.StateStore.Serialization/DurableGraph.StateStore.Serialization.csproj",
+    "src/DurableGraph.Serialization/DurableGraph.Serialization.csproj",
     "src/DurableGraph/DurableGraph.csproj",
-    "src/DurableGraph.StateStore.Storage/DurableGraph.StateStore.Storage.csproj",
-    "src/DurableGraph.StateStore/DurableGraph.StateStore.csproj"
+    "src/DurableGraph.Storage/DurableGraph.Storage.csproj",
+    "src/DurableGraph.Persistence/DurableGraph.Persistence.csproj"
 )) {
     dotnet pack $project --configuration Release --output $feed -p:PackageVersion=$version
     if ($LASTEXITCODE -ne 0) { throw "Pack failed: $project" }

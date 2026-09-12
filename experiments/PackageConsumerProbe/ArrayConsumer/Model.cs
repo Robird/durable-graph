@@ -1,4 +1,5 @@
 using Atelia.DurableGraph;
+using Atelia.DurableGraph.Schema;
 #if HISTORY_V2
 using PointStates = Atelia.DurableGraph.Generated.Family_506F696E74;
 #endif

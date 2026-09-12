@@ -1,4 +1,6 @@
 using Atelia.DurableGraph;
+using Atelia.DurableGraph.Runtime;
+using Atelia.DurableGraph.Schema;
 
 namespace PackageConsumerProbe;
 

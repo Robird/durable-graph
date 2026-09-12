@@ -37,8 +37,8 @@ Delta 不重复声明类型：整个 Base→Delta 内容链只能使用 Base 所
   或持久发布故障已经完成的证据。
 - 用户提到的 [SnapshotUpgradeShapeProbe（归档）](../../experiments/ARCHIVE.md#snapshot-upgrade-shape "原路径：experiments/SnapshotUpgradeShapeProbe/README.md")
   主要是升级函数 `in/out` 等 C# 语言形状见证。
-- 产品 [PreparedObject.BaseOnlyUpdate](../../src/DurableGraph.StateStore/PreparedObject.cs) 与
-  [ObjectRevisionPlanner](../../src/DurableGraph.StateStore/ObjectRevisionPlanner.cs) 已接受
+- 产品 [PreparedObject.BaseOnlyUpdate](../../src/DurableGraph.Persistence/PreparedObject.cs) 与
+  [ObjectRevisionPlanner](../../src/DurableGraph.Persistence/ObjectRevisionPlanner.cs) 已接受
   “旧对象无合法 Delta，必须 Base”；无需 D/H，不消耗可选 Base 预算。
   新 DTO 的升级、加载基线导入及重写义务传递尚未接通，当前 CaptureSession 跨 Schema 仍拒绝。
 
@@ -283,13 +283,13 @@ SchemaStore 自托管、Dictionary/内建复合类型以及 ID/物理回收只�
 
 实际入口：
 
-- [SchemaStore](../../src/DurableGraph.StateStore/SchemaStore.cs)、[SchemaKey](../../src/DurableGraph.StateStore/SchemaKey.cs)、
+- [SchemaStore](../../src/DurableGraph.Persistence/SchemaStore.cs)、[SchemaKey](../../src/DurableGraph.Persistence/SchemaKey.cs)、
   [SchemaBatchWireCodec（其后由 DB-046 替换）](0046-unified-schema-catalog-slice.md) 实现借用文件、批次预检/规范编码、
   严格恢复、可写重开确认及 faulted 状态；tail 检查拒绝过期 facade 或回调期间的外部追加。
-- `BaseObjectPayloadCodec`（后继为 [BaseObjectBodyCodec](../../src/DurableGraph.StateStore/BaseObjectBodyCodec.cs)）与
-  [TypedObjectVersionReader](../../src/DurableGraph.StateStore/TypedObjectVersionReader.cs) 实现 Base-only 类型头、
+- `BaseObjectPayloadCodec`（后继为 [BaseObjectBodyCodec](../../src/DurableGraph.Persistence/BaseObjectBodyCodec.cs)）与
+  [TypedObjectVersionReader](../../src/DurableGraph.Persistence/TypedObjectVersionReader.cs) 实现 Base-only 类型头、
   owned raw body、callback 前完整 Schema 匹配，以及每段 body 全消费；string 无 Schema 查询且拒绝 Delta。
-- [CapturedRevisionPlanner](../../src/DurableGraph.StateStore/CapturedRevisionPlanner.cs) 统一完成保存适配，
+- [CapturedRevisionPlanner](../../src/DurableGraph.Persistence/CapturedRevisionPlanner.cs) 统一完成保存适配，
   同版/Parent/完整 prior membership 校验先于任何注册写入。Schema 注册持久成功不等于 State 发布。
 - [真实 SG 保存集成](../../tests/DurableGraph.Tests/PreparedRevisionGeneratorTests.cs) 保留五轮异构根和
   string 共享，删除 per-record 类型字典；独立 H golden 从旧 70 更新为 97（68 raw + 27 type header + 2 envelope），

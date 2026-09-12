@@ -1,3 +1,5 @@
+using Atelia.DurableGraph.Runtime;
+using Atelia.DurableGraph.Schema;
 using System.Reflection;
 using Atelia.DurableGraph.Build;
 
@@ -114,6 +116,8 @@ public sealed partial class DurableSchemaGeneratorTests {
         SchemaHistoryTool publisher = new();
         const string initialSource = """
             using Atelia.DurableGraph;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
             namespace PreparationHistory;
             [DurableType("prepare.history", 1)]
             public sealed partial class Item : IDurableObject {
@@ -126,7 +130,9 @@ public sealed partial class DurableSchemaGeneratorTests {
         GeneratorTestRun current = RunGenerator("""
             using System;
             using Atelia.DurableGraph;
-            using Atelia.DurableGraph.StateStore.Serialization;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
+            using Atelia.DurableGraph.Serialization;
             namespace PreparationHistory;
             [DurableType("prepare.history", 2)]
             public sealed partial class Item : IDurableObject {

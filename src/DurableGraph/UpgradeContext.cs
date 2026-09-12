@@ -1,3 +1,6 @@
+using Atelia.DurableGraph.Schema;
+using Atelia.DurableGraph.Runtime;
+
 namespace Atelia.DurableGraph;
 
 /// <summary>A prebound synchronous value conversion in the current owner invocation.</summary>

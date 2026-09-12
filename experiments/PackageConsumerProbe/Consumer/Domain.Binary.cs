@@ -1,6 +1,7 @@
 using System.Buffers;
 using Atelia.DurableGraph;
-using Atelia.DurableGraph.StateStore.Serialization;
+using Atelia.DurableGraph.Runtime;
+using Atelia.DurableGraph.Serialization;
 
 namespace PackageConsumerProbe;
 
@@ -107,7 +108,7 @@ public sealed partial class Character : BinaryBase {
         public void Register(StateModelBinding model) => Models.Add(model);
     }
 
-    // This sink needs only the Runtime package. StateStore owns registry policy and persistence.
+    // This sink needs only the Runtime package. Persistence owns registry policy and persistence.
     private sealed class ReaderSink : IStateReaderRegistration {
         internal List<StateReaderBinding> Readers { get; } = [];
         public void Register(StateReaderBinding reader) => Readers.Add(reader);

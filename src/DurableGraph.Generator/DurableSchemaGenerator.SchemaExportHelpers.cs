@@ -32,7 +32,7 @@ public sealed partial class DurableSchemaGenerator {
                     .GetTypeMembers("V" + Number(inline.Version), 0).SingleOrDefault();
             }
             int tag = GenericFieldTag(field);
-            return IsBinaryReference(tag) ? Runtime("ObjectId") : compilation.GetTypeByMetadataName("System." + GetTypeTagName(GetBinarySlotTypeTag(tag)));
+            return IsBinaryReference(tag) ? compilation.GetTypeByMetadataName("Atelia.DurableGraph.ObjectId") : compilation.GetTypeByMetadataName("System." + GetTypeTagName(GetBinarySlotTypeTag(tag)));
         }
         ITypeSymbol?[] fieldTypes = layout.Fields.Select(FieldType).ToArray();
         if (fieldTypes.Any(type => type is null)) return false;
@@ -46,9 +46,9 @@ public sealed partial class DurableSchemaGenerator {
 
         INamedTypeSymbol bodyDto = dto.Arity == 0 ? dto : dto.Construct(body.TypeParameters.Where((_, index) => index % 2 == 0).Cast<ITypeSymbol>().ToArray());
         if (layout.Shape.Kind == 2 && !body.AllInterfaces.Any(item => Same(item.OriginalDefinition, stateOps) && Same(item.TypeArguments[0], bodyDto))) return false;
-        INamedTypeSymbol? schema = Runtime("DurableSchema");
-        INamedTypeSymbol? writer = compilation.GetTypeByMetadataName("Atelia.DurableGraph.StateStore.Serialization.BinaryPayloadWriter");
-        INamedTypeSymbol? reader = compilation.GetTypeByMetadataName("Atelia.DurableGraph.StateStore.Serialization.BinaryPayloadReader");
+        INamedTypeSymbol? schema = compilation.GetTypeByMetadataName("Atelia.DurableGraph.Schema.DurableSchema");
+        INamedTypeSymbol? writer = compilation.GetTypeByMetadataName("Atelia.DurableGraph.Serialization.BinaryPayloadWriter");
+        INamedTypeSymbol? reader = compilation.GetTypeByMetadataName("Atelia.DurableGraph.Serialization.BinaryPayloadReader");
         ITypeSymbol boolean = compilation.GetSpecialType(SpecialType.System_Boolean);
         bool Method(string name, ITypeSymbol? result, params (ITypeSymbol? Type, RefKind Ref)[] parameters) =>
             body.GetMembers(name).OfType<IMethodSymbol>().Any(method => method.IsStatic && method.Arity == 0 &&
@@ -60,11 +60,11 @@ public sealed partial class DurableSchemaGenerator {
             Method("Read", bodyDto, (reader, RefKind.Ref), (schema, RefKind.None)) &&
             Method("Apply", bodyDto, (reader, RefKind.Ref), (bodyDto, RefKind.In), (schema, RefKind.None), (boolean, RefKind.None)) &&
             Method("Visit", compilation.GetSpecialType(SpecialType.System_Void), (bodyDto, RefKind.In), (Runtime("IStateReferenceVisitor"), RefKind.None), (schema, RefKind.None)) &&
-            Method("PrepareBase", compilation.GetTypeByMetadataName("Atelia.DurableGraph.StateStore.Serialization.PreparedBaseBody"), (bodyDto, RefKind.In), (schema, RefKind.None)) &&
-            Method("PrepareDelta", compilation.GetTypeByMetadataName("Atelia.DurableGraph.StateStore.Serialization.PreparedDeltaBody"), (bodyDto, RefKind.In), (bodyDto, RefKind.In), (schema, RefKind.None)) &&
+            Method("PrepareBase", compilation.GetTypeByMetadataName("Atelia.DurableGraph.Serialization.PreparedBaseBody"), (bodyDto, RefKind.In), (schema, RefKind.None)) &&
+            Method("PrepareDelta", compilation.GetTypeByMetadataName("Atelia.DurableGraph.Serialization.PreparedDeltaBody"), (bodyDto, RefKind.In), (bodyDto, RefKind.In), (schema, RefKind.None)) &&
             Method("StateEquals", boolean, (bodyDto, RefKind.In), (bodyDto, RefKind.In), (schema, RefKind.None));
 
-        INamedTypeSymbol? Runtime(string name) => compilation.GetTypeByMetadataName("Atelia.DurableGraph." + name);
+        INamedTypeSymbol? Runtime(string name) => compilation.GetTypeByMetadataName("Atelia.DurableGraph.Runtime." + name);
         bool Same(ITypeSymbol? left, ITypeSymbol? right) => left is not null && right is not null && SymbolEqualityComparer.Default.Equals(left, right);
         bool IsStateParameter(ITypeParameterSymbol parameter) => parameter.HasUnmanagedTypeConstraint &&
             !parameter.HasReferenceTypeConstraint && !parameter.HasNotNullConstraint &&

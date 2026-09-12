@@ -29,11 +29,11 @@ Apply(Adaptive.Body, prior) == current
 
 ## 2. 施工起点
 
-- [ListDeltaMatcher](../../src/DurableGraph/ListDeltaMatcher.cs)已有可暂停 Local、明确 WindowMiss/BudgetExhausted、
+- [ListDeltaMatcher](../../src/DurableGraph/Runtime/Containers/ListDeltaMatcher.cs)已有可暂停 Local、明确 WindowMiss/BudgetExhausted、
   失败不改结果的 Myers kernel，以及独立 old/new offset。
-- [ListStateBody](../../src/DurableGraph/ListStateReader.cs)负责 NoChange、按计划写 codec 2；
+- [ListStateBody](../../src/DurableGraph/Runtime/Containers/ListStateReader.cs)负责 NoChange、按计划写 codec 2；
   施工前 CopyAndPatch 先写整段临时 buffer，末尾才复制到外层。
-- [PreparedDeltaBody](../../src/DurableGraph.StateStore.Serialization/Serialization/PreparedDeltaBody.cs)
+- [PreparedDeltaBody](../../src/DurableGraph.Serialization/PreparedDeltaBody.cs)
   复制传入 bytes，拥有私有数组。原图冻结和候选生命周期无需改变。
 - DB-050 的两个组合策略在 Probe，采用一份共享预算和半预算救援；**本片不直接提升这些实验协调器**。
 - 施工前默认是 LocalResync；下面保留本片的 Adaptive、限长编码和默认切换合同。
@@ -203,11 +203,11 @@ incumbent 是原有 owned PreparedDeltaBody。竞争者仅使用局部 scratch�
 
 | 顺序 | 改动与文件入口 | 退出条件 |
 |---|---|---|
-| G0 | [ListStateReader](../../src/DurableGraph/ListStateReader.cs) 流式 patch +公共 encoder；ListBody/ListRangeDelta tests | 三种显式旧算法字节等价，无默认变化 |
-| G1 | [ListDeltaMatcher](../../src/DurableGraph/ListDeltaMatcher.cs) 完整 Local 观察、明确 Myers 完成状态；kernel/协调 tests | 基准完全等价，停滞信号不扰动搜索 |
+| G0 | [ListStateReader](../../src/DurableGraph/Runtime/Containers/ListStateReader.cs) 流式 patch +公共 encoder；ListBody/ListRangeDelta tests | 三种显式旧算法字节等价，无默认变化 |
+| G1 | [ListDeltaMatcher](../../src/DurableGraph/Runtime/Containers/ListDeltaMatcher.cs) 完整 Local 观察、明确 Myers 完成状态；kernel/协调 tests | 基准完全等价，停滞信号不扰动搜索 |
 | G2 | 公共 encoder 的严格长度上限；新增有界编码 tests | false/null、相等截断、子调用边界和异常合同通过 |
 | G3 | Runtime Adaptive 协调；enum、body/binding 默认与分派 | 不大于 Local 的性质与全部坏例子通过 |
-| G4 | [StateModelRegistry](../../src/DurableGraph.StateStore/StateModelRegistry.cs)、[StateModelSnapshot](../../src/DurableGraph.StateStore/StateModelSnapshot.cs) 默认；StateStore tests、Probe 及真实包 | 默认/冻结/同格式落盘闭环 |
+| G4 | [StateModelRegistry](../../src/DurableGraph.Persistence/StateModelRegistry.cs)、[StateModelSnapshot](../../src/DurableGraph.Persistence/StateModelSnapshot.cs) 默认；StateStore tests、Probe 及真实包 | 默认/冻结/同格式落盘闭环 |
 | G5 | 根集成、独立审查、文档收口与提交 | 必需验证通过，无未处理缺陷或把计划写成实现 |
 
 G1 与 G0/G2 可独立委派，但 ListStateReader 只由一个 Runtime owner 编辑；G3 在两边合同稳定后集成。
@@ -245,8 +245,8 @@ dotnet test DurableGraph.slnx --no-build
 |---|---|
 | G0 / G2 | ListStateBody 的共享 TryEncodePlan 流式输出，按实际 WrittenCount 进行严格上限判断；[encoder tests](../../tests/DurableGraph.Tests/ListBoundedEncoderTests.cs)覆盖独立 golden、全部截止点、相等/超额、异常、反序/重复源、varint 与空 struct |
 | G1 | PlanLocal 暂停/消费已检查 pair/恢复，TryPlanMyers 区分完成与位置回退；[observation tests](../../tests/DurableGraph.Tests/ListDeltaObservationTests.cs)固定旧坐标、比较顺序/次数和 33/34、预算边界，并比较随机路径 |
-| G3 | [ListDeltaCompetition](../../src/DurableGraph/ListDeltaCompetition.cs)提供完整基准、独立预算及真实长度竞争；[协调 tests](../../tests/DurableGraph.Tests/ListAdaptiveDeltaTests.cs)覆盖 NoChange、override、失败、同计划、严格更短、不同计划等长及随机/ID/浮点；[真实 SG Marker](../../tests/DurableGraph.Tests/ListAdaptiveGeneratedTests.cs)覆盖嵌套 struct 反例 |
-| G4 | 四处默认均为 Adaptive，枚举旧值保留；[binding tests](../../tests/DurableGraph.StateStore.Tests/ListBindingCatalogTests.cs)与[Repository tests](../../tests/DurableGraph.StateStore.Tests/ListRepositoryTests.cs)验证冻结、真实救援、切换旧 writer、相同表示、循环及冷重开；Probe 区分四种 writer 与三种纯 matcher |
+| G3 | [ListDeltaCompetition](../../src/DurableGraph/Runtime/Containers/ListDeltaCompetition.cs)提供完整基准、独立预算及真实长度竞争；[协调 tests](../../tests/DurableGraph.Tests/ListAdaptiveDeltaTests.cs)覆盖 NoChange、override、失败、同计划、严格更短、不同计划等长及随机/ID/浮点；[真实 SG Marker](../../tests/DurableGraph.Tests/ListAdaptiveGeneratedTests.cs)覆盖嵌套 struct 反例 |
+| G4 | 四处默认均为 Adaptive，枚举旧值保留；[binding tests](../../tests/DurableGraph.Persistence.Tests/ListBindingCatalogTests.cs)与[Repository tests](../../tests/DurableGraph.Persistence.Tests/ListRepositoryTests.cs)验证冻结、真实救援、切换旧 writer、相同表示、循环及冷重开；Probe 区分四种 writer 与三种纯 matcher |
 | G5 | 根 build 零警告/错误；全量 **1612 tests**（Runtime 854、StateStore 500、Serialization 103、Storage 155）通过；独立核心/集成审查无未决问题 |
 
 - 基线为 1545 tests；新增和扩展测试已通过。实施中发现新生成测试夹具错误调用 internal Snapshot，已把

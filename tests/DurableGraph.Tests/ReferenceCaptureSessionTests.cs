@@ -1,3 +1,5 @@
+using Atelia.DurableGraph.Runtime;
+using Atelia.DurableGraph.Schema;
 using System.Collections;
 using System.Runtime.CompilerServices;
 

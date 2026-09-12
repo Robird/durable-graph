@@ -26,6 +26,15 @@ Source Generator 负责可在编译期确定的类型知识与机械代码，框
 
 本节汇总已由用户选择、并持续约束产品切片的方向；具体支持范围只查产品工作集。
 
+### 程序集与命名空间边界
+
+[DB-071](design-branches/0071-assembly-namespace-organization-review.md) 保留七项目的职责与依赖图：
+Persistence 组合 Runtime、Storage 与 EventJournal；Runtime 和 Storage 共用 Serialization。
+主 DurableGraph 程序集的根 namespace 保留领域/登记契约，Schema 放布局描述，Runtime 放执行绑定与状态操作。
+这些 namespace 不增加程序集边界，不要求 Schema 与 Runtime 在同程序集内形成单向依赖。
+组织迁移要求依赖闭包重编译，保留类型访问级别、Generated/Family/DTO、模型 ID/版本与持久格式；不引入旧包兼容壳。
+只有真实消费者要求独立发布或替换时，才重新评估拆程序集。
+
 ### MVP 功能边界
 
 以下为用户已选定的支持与裁剪范围；这是支持合同，不表示相关 codec 或加载流程已经实现：

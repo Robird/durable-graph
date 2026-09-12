@@ -1,3 +1,4 @@
+using Atelia.DurableGraph.Schema;
 using System.Reflection;
 using System.Text;
 using Atelia.DurableGraph.Build;
@@ -70,6 +71,8 @@ public sealed partial class DurableSchemaGeneratorTests {
         publisher.Publish(files.WriteManifest(initial), files.History);
         const string changedBaseSource = """
             using Atelia.DurableGraph;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
             namespace Ancestry;
             [DurableType("ancestry.replacement", 1)]
             public abstract partial class Replacement : IDurableObject {
@@ -105,6 +108,8 @@ public sealed partial class DurableSchemaGeneratorTests {
 
     private static string AncestrySource(int baseVersion, int middleVersion, int leafVersion) => $$"""
         using Atelia.DurableGraph;
+        using Atelia.DurableGraph.Schema;
+        using Atelia.DurableGraph.Runtime;
         namespace Ancestry;
         [DurableType("ancestry.leaf", {{leafVersion}})]
         public sealed partial class Leaf : Middle {

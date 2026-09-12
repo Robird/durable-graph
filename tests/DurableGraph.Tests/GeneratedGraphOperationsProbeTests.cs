@@ -1,6 +1,8 @@
 using System.Linq.Expressions;
 using System.Reflection;
 using Atelia.DurableGraph;
+using Atelia.DurableGraph.Schema;
+using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Generator;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
@@ -654,6 +656,8 @@ public sealed partial class DurableSchemaGeneratorTests {
 
         return $$"""
             using Atelia.DurableGraph;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
 
             namespace Samples;
 
@@ -702,6 +706,8 @@ public sealed partial class DurableSchemaGeneratorTests {
             : ";";
         return $$"""
             using Atelia.DurableGraph;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
 
             namespace Samples;
 
@@ -718,6 +724,8 @@ public sealed partial class DurableSchemaGeneratorTests {
     private static string SingleReferenceNodeSource() {
         return """
             using Atelia.DurableGraph;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
 
             namespace Samples;
 

@@ -70,16 +70,16 @@ Event snapshot 使用前 State 的来源及 H，但不安装到 State；E1 与 S
 
 ### 6.1 实施落点
 
-- [ObjectStorageInfo](../../src/DurableGraph.StateStore/ObjectStorageInfo.cs) 是每对象的 head/H 值；
-  [DecodedRevision](../../src/DurableGraph.StateStore/DecodedRevision.cs) 和
-  [NormalizedRevision](../../src/DurableGraph.StateStore/NormalizedRevision.cs) 绑定来源 Store/SchemaStore，
-  [ReadSession](../../src/DurableGraph.StateStore/RevisionReadSession.cs) 的 owned DTO 缓存同时携带计量。
-- [Loaded planner](../../src/DurableGraph.StateStore/LoadedRevisionPlanner.cs) 完整核对 source head，
-  调用 [Object planner](../../src/DurableGraph.StateStore/ObjectRevisionPlanner.cs) 的受控基线入口；独立入口继续读链。
-- [PrepareInstall](../../src/DurableGraph.StateStore/PreparedWorldSave.cs) 在发布前复制候选行目录，
+- [ObjectStorageInfo](../../src/DurableGraph.Persistence/ObjectStorageInfo.cs) 是每对象的 head/H 值；
+  [DecodedRevision](../../src/DurableGraph.Persistence/DecodedRevision.cs) 和
+  [NormalizedRevision](../../src/DurableGraph.Persistence/NormalizedRevision.cs) 绑定来源 Store/SchemaStore，
+  [ReadSession](../../src/DurableGraph.Persistence/RevisionReadSession.cs) 的 owned DTO 缓存同时携带计量。
+- [Loaded planner](../../src/DurableGraph.Persistence/LoadedRevisionPlanner.cs) 完整核对 source head，
+  调用 [Object planner](../../src/DurableGraph.Persistence/ObjectRevisionPlanner.cs) 的受控基线入口；独立入口继续读链。
+- [PrepareInstall](../../src/DurableGraph.Persistence/PreparedWorldSave.cs) 在发布前复制候选行目录，
   仅替换本次写入行的不可变 metadata；旧基线和原候选均不修改。实际文件范围下的
-  [Delta 计量](../../src/DurableGraph.StateStore.Storage/ObjectVersionPayloadSize.cs) 与 wire 对照。
-- [遍历统计](../../src/DurableGraph.StateStore.Storage/StateRevisionTraversalStatistics.cs) 为内部累积快照：
+  [Delta 计量](../../src/DurableGraph.Storage/ObjectVersionPayloadSize.cs) 与 wire 对照。
+- [遍历统计](../../src/DurableGraph.Storage/StateRevisionTraversalStatistics.cs) 为内部累积快照：
   ObjectChainReads 计有效参数发起的调用，ObjectChainEntries 计实际加入的链项，MapReplayFrames 计 materializer 每次访问历史帧，
   包括 raw cache hit。完整 map hit 不计 replay，失败前已经进行的工作仍计数；不改变缓存预算与异常行为。
 
@@ -87,7 +87,7 @@ Event snapshot 使用前 State 的来源及 H，但不安装到 State；E1 与 S
 
 完整 24 个样本和源码 SHA256 见 [incremental-save-baseline-results.json](../research/incremental-save-baseline-results.json)。
 Baseline 是 `3f889ef84dea8c3bb3341d11d716f033671acb87` 的原保存路径加无行为改变的遍历计数；
-先取得 12 个样本才修改核心实现。前后 [HotSaveMeasurementTests](../../tests/DurableGraph.StateStore.Tests/HotSaveMeasurementTests.cs)
+先取得 12 个样本才修改核心实现。前后 [HotSaveMeasurementTests](../../tests/DurableGraph.Persistence.Tests/HotSaveMeasurementTests.cs)
 的源码 hash 相同，所有对应样本的 checksum、链长度、Base/累计 Delta/末次 Delta 的实际 payload 一致。
 
 Windows，SDK 10.0.201/runtime 10.0.5，Release，关闭 tiered compilation。每格丢弃一轮，再保留三轮；
@@ -127,9 +127,9 @@ dotnet test tests/DurableGraph.StateStore.Tests -c Release --filter FullyQualifi
 
 ### 6.3 回归与独立审阅
 
-- [Storage 计量与统计测试](../../tests/DurableGraph.StateStore.Storage.Tests/Db069StorageAccountingTests.cs)：
+- [Storage 计量与统计测试](../../tests/DurableGraph.Storage.Tests/Db069StorageAccountingTests.cs)：
   15 项通过，包括实际 wire 的文件距离/ticket/body varint 边界、禁缓存及 raw/map 命中计数。
-- [保存基线测试](../../tests/DurableGraph.StateStore.Tests/WorldWorkspaceStorageBaselineTests.cs)：
+- [保存基线测试](../../tests/DurableGraph.Persistence.Tests/WorldWorkspaceStorageBaselineTests.cs)：
   新增 5 项，覆盖热 State/NoChange/Remove、每次安装 head/H 与独立 wire 重读一致、Delta/升级 Base 候选丢弃、
   Event 可选 Base 不推进 State、DTO cache hit 的可编辑加载、synthetic/foreign/缺失或错误的待删除行来源拒绝。
 - 首轮相关集成 51 项通过；现有 publication/recovery checkpoint 测试复用，不新增故障框架。

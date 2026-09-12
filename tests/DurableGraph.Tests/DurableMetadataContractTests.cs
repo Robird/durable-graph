@@ -1,5 +1,7 @@
 using System.Reflection;
 using Atelia.DurableGraph;
+using Atelia.DurableGraph.Schema;
+using Atelia.DurableGraph.Runtime;
 
 namespace Atelia.DurableGraph.Tests;
 

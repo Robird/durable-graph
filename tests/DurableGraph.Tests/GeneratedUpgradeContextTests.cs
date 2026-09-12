@@ -1,3 +1,4 @@
+using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Build;
 
 namespace Atelia.DurableGraph.Tests;

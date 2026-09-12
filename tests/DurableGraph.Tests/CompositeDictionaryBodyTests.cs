@@ -1,4 +1,6 @@
-using Atelia.DurableGraph.StateStore.Serialization;
+using Atelia.DurableGraph.Runtime;
+using Atelia.DurableGraph.Schema;
+using Atelia.DurableGraph.Serialization;
 
 namespace Atelia.DurableGraph.Tests;
 

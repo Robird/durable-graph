@@ -38,22 +38,22 @@ public sealed partial class DurableSchemaGenerator {
             .Append(" static class EnumProjection_").Append(FamilyName(type.SchemaId)).AppendLine(" {");
         output.Append("    internal static ").Append(RuntimeName).Append("StateValueBinding CreateCurrent(")
             .Append(RuntimeName).AppendLine("StateBindingContext context) {");
-        output.Append("        var schema = new ").Append(RuntimeName).Append("DurableSchema(context.GetTypeExpr(typeof(").Append(domain)
-            .Append(")), ").Append(type.Version).Append(", new ").Append(RuntimeName).Append("DurableFieldInfo[] { new(1, ")
-            .Append(RuntimeName).Append("TypeTag.").Append(type.Fields[0].TypeTag).Append(") }, baseSchema: null, kind: ")
-            .Append(RuntimeName).AppendLine("SchemaKind.InlineValue);");
+        output.Append("        var schema = new ").Append(SchemaName).Append("DurableSchema(context.GetTypeExpr(typeof(").Append(domain)
+            .Append(")), ").Append(type.Version).Append(", new ").Append(SchemaName).Append("DurableFieldInfo[] { new(1, ")
+            .Append(SchemaName).Append("TypeTag.").Append(type.Fields[0].TypeTag).Append(") }, baseSchema: null, kind: ")
+            .Append(SchemaName).AppendLine("SchemaKind.InlineValue);");
         output.AppendLine("        context.BindSchema(schema);");
-        output.Append("        return new ").Append(RuntimeName).Append("StateValueBinding(new ").Append(RuntimeName)
-            .Append("DurableFieldInfo(1, ").Append(RuntimeName).Append("TypeTag.InlineValue, inlineSchema: schema), typeof(")
+        output.Append("        return new ").Append(RuntimeName).Append("StateValueBinding(new ").Append(SchemaName)
+            .Append("DurableFieldInfo(1, ").Append(SchemaName).Append("TypeTag.InlineValue, inlineSchema: schema), typeof(")
             .Append(dto).Append("), typeof(").Append(body).Append("), typeof(").Append(domain).AppendLine("), typeof(Projection));");
         output.AppendLine("    }");
         output.Append("    public readonly struct Projection : ").Append(RuntimeName).Append("IValueProjection<")
             .Append(domain).Append(", ").Append(dto).AppendLine("> {");
         output.Append("        public static ").Append(dto).Append(" Capture(in ").Append(domain).Append(" value, ")
-            .Append(RuntimeName).Append("CaptureContext context, ").Append(RuntimeName).Append("DurableFieldInfo slot) => new((")
+            .Append(RuntimeName).Append("CaptureContext context, ").Append(SchemaName).Append("DurableFieldInfo slot) => new((")
             .Append(scalar).AppendLine(")value);");
         output.Append("        public static void Hydrate(ref ").Append(domain).Append(" target, in ").Append(dto).Append(" state, ")
-            .Append(RuntimeName).Append("ObjectReadTable objects, ").Append(RuntimeName).Append("DurableFieldInfo slot) => target = (")
+            .Append(RuntimeName).Append("ObjectReadTable objects, ").Append(SchemaName).Append("DurableFieldInfo slot) => target = (")
             .Append(domain).Append(")state.").Append(layout.Fields[0].Name).AppendLine(";");
         output.AppendLine("    }");
         output.AppendLine("}");

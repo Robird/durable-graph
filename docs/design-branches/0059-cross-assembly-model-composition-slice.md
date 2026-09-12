@@ -35,12 +35,12 @@ DB-058 后，常用标量、record、泛型、Nullable、数组/List/Dictionary 
   `ResolveCurrentValue(typeof(...))` 取得状态、操作和投影类型，再闭合静态泛型代码；
   [历史工厂](../../src/DurableGraph.Generator/DurableSchemaGenerator.GenericFactories.cs)从完整槽绑定取得同类操作数。
   这些动态表示参数不要求生成代码点名外部 DTO。
-- [StateModelRegistry](../../src/DurableGraph.StateStore/StateModelRegistry.cs)及
-  [StateModelSnapshot](../../src/DurableGraph.StateStore/StateModelSnapshot.cs)已有显式登记与跨 Type 闭合；
+- [StateModelRegistry](../../src/DurableGraph.Persistence/StateModelRegistry.cs)及
+  [StateModelSnapshot](../../src/DurableGraph.Persistence/StateModelSnapshot.cs)已有显式登记与跨 Type 闭合；
   不按程序集扫描或选择 reader。引用的 exact 版本仍从被引用对象自己的 Base 取得。
-- [BindSchema / MatchValue](../../src/DurableGraph/StateBindingContext.cs)目前对 named 槽一律查询 Definition，
+- [BindSchema / MatchValue](../../src/DurableGraph/Runtime/Binding/StateBindingContext.cs)目前对 named 槽一律查询 Definition，
   而普通非泛型 SG 入口只登记 concrete Model。跨两种生成路径的 nominal 检查需要局部接通。
-  [Upgrade 反推](../../src/DurableGraph/StateBindingContext.Upgrade.cs)的 `InferSlotFromState` / `BuildSlot` 也有相同的 reference 分类需求。
+  [Upgrade 反推](../../src/DurableGraph/Runtime/Binding/StateBindingContext.Upgrade.cs)的 `InferSlotFromState` / `BuildSlot` 也有相同的 reference 分类需求。
 - SG 自动选择 Family 的条件包含泛型、record、enum、Nullable、显式规则等；纯普通 struct 库不会因此获得完整 Definition 工厂。
   不能要求用户添加 dummy 泛型类型来改变生成路径。
 - history 名义引用不要求外部定义文件一并在本项目出现；固定 base/inline 的 exact 依赖则要求完整历史。
@@ -278,7 +278,7 @@ reader 证据来自 snapshot 中已经显式登记的 reader，不执行工厂�
   [独立编译工具](../../tests/DurableGraph.Tests/CrossAssemblyGeneratorTestSupport.cs)、
   [图保存恢复](../../tests/DurableGraph.Tests/CrossAssemblyGraphTests.cs)、
   [外部值历史](../../tests/DurableGraph.Tests/CrossAssemblyHistoryTests.cs)、
-  [名义查询与公开只读入口](../../tests/DurableGraph.StateStore.Tests/CrossAssemblyNominalBindingTests.cs)。
+  [名义查询与公开只读入口](../../tests/DurableGraph.Persistence.Tests/CrossAssemblyNominalBindingTests.cs)。
 - 基线 root build：0 警告/错误；基线完整 2290 项通过（Runtime/SG 1354、StateStore 618、Serialization 163、Storage 155）。
   实施后最终 root build：0 警告/错误（10.43 秒）；完整 **2337 项通过、0 失败/跳过**：
   Runtime/SG 1389、StateStore 630、Serialization 163、Storage 155，Runtime/SG 3 分 25 秒。

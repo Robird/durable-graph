@@ -15,12 +15,12 @@ TValue 已有的投影、完整 exact 布局、融合 Delta 和值 Upgrade 可�
 
 | 机制 | 当前依据 | 本片增量 |
 |---|---|---|
-| 内容对象与静态投影 | [ListObjectBinding](../../src/DurableGraph/ListObjectBinding.cs)、[IStateOps / IValueProjection](../../src/DurableGraph/StateValueBinding.cs) | key/value 两套已闭合能力 |
-| owned 状态、历史 body | [FrozenListState](../../src/DurableGraph/FrozenListState.cs)、[ListStateReader](../../src/DurableGraph/ListStateReader.cs) | 无序 entries、键寻址稀疏 Delta |
-| exact/current 绑定 | [List snapshot](../../src/DurableGraph.StateStore/StateModelSnapshot.Lists.cs) | 两槽完整依赖与内建 Dictionary 路由 |
-| 容器 owner Upgrade | [ListUpgrade](../../src/DurableGraph/StateBindingContext.ListUpgrade.cs) | 分开的 key/value 工具与升级后键冲突检查 |
-| 持久表示 | [SchemaStore](../../src/DurableGraph.StateStore/SchemaStore.cs)、[catalog codec](../../src/DurableGraph.StateStore/SchemaCatalogWireCodec.cs) | 一个双实参内建构造及双槽目录记录 |
-| 恢复/下一次基线 | [WorldWorkspace](../../src/DurableGraph.StateStore/WorldWorkspace.cs) | 沿用全分配后 Hydrate；不把枚举位置当持久身份 |
+| 内容对象与静态投影 | [ListObjectBinding](../../src/DurableGraph/Runtime/Containers/ListObjectBinding.cs)、[IStateOps / IValueProjection](../../src/DurableGraph/Runtime/Binding/StateValueBinding.cs) | key/value 两套已闭合能力 |
+| owned 状态、历史 body | [FrozenListState](../../src/DurableGraph/Runtime/Containers/FrozenListState.cs)、[ListStateReader](../../src/DurableGraph/Runtime/Containers/ListStateReader.cs) | 无序 entries、键寻址稀疏 Delta |
+| exact/current 绑定 | [List snapshot](../../src/DurableGraph.Persistence/StateModelSnapshot.Lists.cs) | 两槽完整依赖与内建 Dictionary 路由 |
+| 容器 owner Upgrade | [ListUpgrade](../../src/DurableGraph/Runtime/Binding/StateBindingContext.ListUpgrade.cs) | 分开的 key/value 工具与升级后键冲突检查 |
+| 持久表示 | [SchemaStore](../../src/DurableGraph.Persistence/SchemaStore.cs)、[catalog codec](../../src/DurableGraph.Persistence/SchemaCatalogWireCodec.cs) | 一个双实参内建构造及双槽目录记录 |
+| 恢复/下一次基线 | [WorldWorkspace](../../src/DurableGraph.Persistence/WorldWorkspace.cs) | 沿用全分配后 Hydrate；不把枚举位置当持久身份 |
 
 Microsoft 的 [Dictionary 合同](https://learn.microsoft.com/en-us/dotnet/api/system.collections.generic.dictionary-2?view=net-10.0)
 规定 comparer 决定键相等性，键在容器内不能发生影响 hash 的变化，枚举顺序没有保证。
@@ -214,8 +214,8 @@ key 和 value 都参与 VisitReferences、目标类型验证和可达性；键�
 不得借助当前领域 key CLR 来校验历史 enum。ScalarDefault 使用已知标量/历史 enum 整数槽的比较能力，
 浮点重复判断遵循 .NET 默认查找相等而非 body bytes；两个 string ID 可内容相等，应在内容 comparer 下拒绝重复。
 所有 source 行都接受完整 exact/current 验证，包括之后不可达的字典，沿用当前 source 处理合同。
-具体接缝是 [RevisionDecoder.ReadCore](../../src/DurableGraph.StateStore/RevisionDecoder.cs) 在完整目标表和引用校验后、
-返回 DecodedRevision 前检查全部 source 字典；[NormalizedRevision.Create](../../src/DurableGraph.StateStore/NormalizedRevision.cs)
+具体接缝是 [RevisionDecoder.ReadCore](../../src/DurableGraph.Persistence/RevisionDecoder.cs) 在完整目标表和引用校验后、
+返回 DecodedRevision 前检查全部 source 字典；[NormalizedRevision.Create](../../src/DurableGraph.Persistence/NormalizedRevision.cs)
 在所有 Normalize 及 current 引用校验后检查全部 current 字典。不能只在可达 World 的 Hydrate/Add 中验证。
 局部 typed reader 不承诺在缺少引用目标表时完成跨对象内容验证，Revision/World API 才提供完整图级结果。
 
@@ -307,9 +307,9 @@ Dictionary reader/current binding 分别提供内部 ValidateLookupKeys(row, res
 |---|---|---|
 | 双实参/Schema 引用/common Runtime | TypeExpr/ObjectLayout/ObjectStateRecord/引用与模板替换 | [生成图测试](../../tests/DurableGraph.Tests/DictionaryGeneratedGraphTests.cs)：13 标量与八整数 enum 键、复合 value、泛型/容器及不调用领域相等 |
 | SG 与历史 v7 | Generator/Shared/Build | [生成测试](../../tests/DurableGraph.Tests/DictionaryGeneratorTests.cs)、[history 测试](../../tests/DurableGraph.Tests/DictionaryHistoryTests.cs)：旧格式/文件保留、嵌套语法、诊断 |
-| 双槽持久目录 | SchemaStore/catalog/nominal wire | [目录测试](../../tests/DurableGraph.StateStore.Tests/DictionaryCatalogTests.cs)：独立 golden、双端依赖、冲突原子性/冷重开 |
+| 双槽持久目录 | SchemaStore/catalog/nominal wire | [目录测试](../../tests/DurableGraph.Persistence.Tests/DictionaryCatalogTests.cs)：独立 golden、双端依赖、冲突原子性/冷重开 |
 | frozen/body/key policy | Dictionary 新 Runtime 文件 | [body 测试](../../tests/DurableGraph.Tests/DictionaryBodyTests.cs)、[policy 测试](../../tests/DurableGraph.Tests/DictionaryKeyPolicyTests.cs)：融合计数、排列、截断、浮点/Empty/策略拒绝 |
-| current/exact 图接入 | snapshot/registry/Seal/decoded/normalized | [绑定测试](../../tests/DurableGraph.StateStore.Tests/DictionaryBindingCatalogTests.cs)、[Repository 测试](../../tests/DurableGraph.StateStore.Tests/DictionaryRepositoryTests.cs)：全部 source/current 校验、连续保存、晚期依赖冲突 |
+| current/exact 图接入 | snapshot/registry/Seal/decoded/normalized | [绑定测试](../../tests/DurableGraph.Persistence.Tests/DictionaryBindingCatalogTests.cs)、[Repository 测试](../../tests/DurableGraph.Persistence.Tests/DictionaryRepositoryTests.cs)：全部 source/current 校验、连续保存、晚期依赖冲突 |
 | 显式 key/value Upgrade | DictionaryUpgrade/UpgradeContext | [升级测试](../../tests/DurableGraph.Tests/DictionaryUpgradeTests.cs)：独立规则、空/absent、late conflict、碰撞、Context 与失败隔离 |
 | 真实包两代 | DictionaryConsumer/runner | [包见证](../../experiments/PackageConsumerProbe/DictionaryConsumer/README.md)：旧 enum/struct 删除、96 callbacks、两字典 Base 后 Delta |
 | 旧包回归与独立审查 | 主线程串行验证，独立 reviewer 两轮审查 | 下述九条包 lane 全部通过；无未解决阻塞，无跳过/削弱旧断言 |

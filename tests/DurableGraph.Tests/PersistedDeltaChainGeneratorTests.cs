@@ -1,10 +1,12 @@
+using Atelia.DurableGraph.Runtime;
+using Atelia.DurableGraph.Schema;
 using System.Buffers;
 using System.Reflection;
 using Atelia.DurableGraph.Build;
-using Atelia.DurableGraph.StateStore;
+using Atelia.DurableGraph.Persistence;
 using Atelia.Rbf;
-using Atelia.DurableGraph.StateStore.Serialization;
-using Atelia.DurableGraph.StateStore.Storage;
+using Atelia.DurableGraph.Serialization;
+using Atelia.DurableGraph.Storage;
 using Atelia.RbfSegmentStore;
 using SegmentStore = Atelia.RbfSegmentStore.RbfSegmentStore;
 
@@ -169,9 +171,9 @@ public sealed partial class DurableSchemaGeneratorTests {
                 DecodeCalls++;
                 return Leaf.__DurableState.ReadBaseBodyV1(ref reader);
             }
-            public static byte[] DecodeStored(Atelia.DurableGraph.StateStore.Storage.ObjectVersionChain chain,
-                Atelia.DurableGraph.StateStore.SchemaStore schemas, DurableSchema expected) {
-                var state = Atelia.DurableGraph.StateStore.TypedObjectVersionReader.ReadDurable(
+            public static byte[] DecodeStored(Atelia.DurableGraph.Storage.ObjectVersionChain chain,
+                Atelia.DurableGraph.Persistence.SchemaStore schemas, DurableSchema expected) {
+                var state = Atelia.DurableGraph.Persistence.TypedObjectVersionReader.ReadDurable(
                     chain, schemas, expected, ReadOld, Leaf.__DurableState.ApplyDeltaBodyV1);
                 return Leaf.__DurableState.PrepareBaseBody(in state).Body.ToArray();
             }
@@ -253,9 +255,11 @@ public sealed partial class DurableSchemaGeneratorTests {
         using System.IO;
         using System.Linq;
         using Atelia.DurableGraph;
-        using Atelia.DurableGraph.StateStore;
-        using Atelia.DurableGraph.StateStore.Storage;
-        using Atelia.DurableGraph.StateStore.Serialization;
+        using Atelia.DurableGraph.Schema;
+        using Atelia.DurableGraph.Runtime;
+        using Atelia.DurableGraph.Persistence;
+        using Atelia.DurableGraph.Storage;
+        using Atelia.DurableGraph.Serialization;
         namespace PersistedCapture;
         [DurableType("persisted.capture.base", 1)]
         public abstract partial class Base : IDurableObject {

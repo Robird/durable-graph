@@ -1,6 +1,8 @@
+using Atelia.DurableGraph.Runtime;
+using Atelia.DurableGraph.Schema;
 using System.Buffers;
 using System.Runtime.CompilerServices;
-using Atelia.DurableGraph.StateStore.Serialization;
+using Atelia.DurableGraph.Serialization;
 using Microsoft.CodeAnalysis;
 
 namespace Atelia.DurableGraph.Tests;

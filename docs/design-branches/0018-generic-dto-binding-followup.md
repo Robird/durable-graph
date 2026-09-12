@@ -20,7 +20,7 @@ CLR 可以共享部分泛型执行代码。参见[静态成员规则](https://le
 证据分两层：
 
 - DB-018 的完整可复跑见证：静态 `GSlots<T>` + 运行时闭合，读入 `GCell<int>[]` 得到 `[17,29]`。
-- [RuntimeGenericSlotBindingTests](../../tests/DurableGraph.StateStore.Serialization.Tests/Serialization/RuntimeGenericSlotBindingTests.cs)：
+- [RuntimeGenericSlotBindingTests](../../tests/DurableGraph.Serialization.Tests/Serialization/RuntimeGenericSlotBindingTests.cs)：
   使用真实 BinaryPayloadReader/Writer，组合 `Cell<Cell<int>>` 与 `Cell<double>`，同一 ref body
   操作局部变量、字段、SZ 和 rank-2 元素。这里由工厂显式传入 member codec，不是全局 static-T 注册表。
   部分读取失败的测试仅证明已访问槽位的行为，不承诺整个图恢复的事务性。

@@ -1,7 +1,9 @@
+using Atelia.DurableGraph.Runtime;
+using Atelia.DurableGraph.Schema;
 using System.Buffers;
 using System.Reflection;
-using Atelia.DurableGraph.StateStore;
-using Atelia.DurableGraph.StateStore.Serialization;
+using Atelia.DurableGraph.Persistence;
+using Atelia.DurableGraph.Serialization;
 
 namespace Atelia.DurableGraph.Tests;
 
@@ -22,6 +24,8 @@ public sealed partial class DurableSchemaGeneratorTests {
     public void EnumGeneratedBodiesPreserveAllIntegerBitsAndReuseInlineDelta(string underlying, object[] values, string[] golden) {
         GeneratorTestRun run = RunGenerator($$"""
             using Atelia.DurableGraph;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
             [System.Flags, DurableType("enum.body", 1)]
             public enum Bits : {{underlying}} { Zero = 0, One = 1, Alias = 1 }
             """);

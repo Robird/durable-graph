@@ -1,6 +1,6 @@
 using Atelia.DurableGraph;
-using Atelia.DurableGraph.StateStore;
-using Atelia.DurableGraph.StateStore.Storage;
+using Atelia.DurableGraph.Persistence;
+using Atelia.DurableGraph.Storage;
 using Atelia.RbfSegmentStore;
 using RecordClassConsumer;
 using RecordClassLibrary.Base;

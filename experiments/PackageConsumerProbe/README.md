@@ -8,6 +8,15 @@ This experiment verifies the reusable delivery boundary rather than project-to-p
 The consumer project has one `PackageReference` to `Atelia.DurableGraph`; it contains no manual
 analyzer reference, `AdditionalFiles`, build hook, or `Import`.
 
+[Organization migration](Run-OrganizationMigrationProbe.ps1) compares two distinct real runtime and generator
+package versions through isolated legacy/current lanes. It preserves identical model/history bytes, opens old
+E/S frames, resumes a pending event, continues Delta/NoChange, and cold-opens in another process. It checks
+every old complete frame at its original byte address and verifies read-only browsing leaves files unchanged.
+Use mandatory `-LegacyPackageSource/-LegacyVersion/-PackageSource/-Version`; `-Stage Seed` then `-Stage Complete`
+with the same `-WorkRoot` freezes legacy evidence before changing product sources. The separate
+[API inventory](OrganizationApiInventory/README.md) compares compiled type/member shapes under the approved mapping.
+This complements the older DurableBase migration witness; its old lane still uses its original packages and marker.
+
 The [cross-assembly consumer](CrossAssemblyConsumer/README.md) runs through `Run-CrossAssemblyProbe.ps1`:
 independent DomainLibrary and AppModel packages expose public registration catalogs, and a pure Host saves
 a shared cyclic graph. A compatible V2 library replacement leaves AppModel/Host DLL hashes and World history
@@ -187,7 +196,7 @@ assertions; consumers no longer own the save pipeline or call internal preparati
 
 The local feed contains **nine** packages, including the unmodified sibling EventJournal substrate.
 Each consumer references `Atelia.DurableGraph` for generator/build assets and
-`Atelia.DurableGraph.StateStore` for the facade, without manual analyzer/import/project wiring.
+`Atelia.DurableGraph.Persistence` for the facade, without manual analyzer/import/project wiring.
 Most runners accept `-PackageSource <feed> -Version <version>` to reuse a matching feed. Accepted
 history hashes remain immutable across consumer builds. Frozen-content probes now save through
 the facade and then mutate/clear their source objects before reading the saved graph; staging and

@@ -1,6 +1,7 @@
+using Atelia.DurableGraph.Schema;
 using System.Reflection;
-using Atelia.DurableGraph.StateStore;
-using Atelia.DurableGraph.StateStore.Storage;
+using Atelia.DurableGraph.Persistence;
+using Atelia.DurableGraph.Storage;
 using Atelia.Rbf;
 using SegmentStore = Atelia.RbfSegmentStore.RbfSegmentStore;
 
@@ -205,8 +206,10 @@ public sealed partial class DurableSchemaGeneratorTests {
     private const string InlineGraphSource = """
         using System;
         using Atelia.DurableGraph;
-        using Atelia.DurableGraph.StateStore;
-        using Atelia.DurableGraph.StateStore.Storage;
+        using Atelia.DurableGraph.Schema;
+        using Atelia.DurableGraph.Runtime;
+        using Atelia.DurableGraph.Persistence;
+        using Atelia.DurableGraph.Storage;
         namespace InlineGraph;
 
         [DurableType("inline.graph.leaf", 1)]

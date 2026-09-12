@@ -1,5 +1,7 @@
 using Atelia.DurableGraph;
-using Atelia.DurableGraph.StateStore;
+using Atelia.DurableGraph.Runtime;
+using Atelia.DurableGraph.Schema;
+using Atelia.DurableGraph.Persistence;
 
 namespace Atelia.ListDeltaReplayProbe;
 

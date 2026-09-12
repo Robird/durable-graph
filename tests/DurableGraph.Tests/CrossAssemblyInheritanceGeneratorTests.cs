@@ -1,6 +1,8 @@
+using Atelia.DurableGraph.Runtime;
+using Atelia.DurableGraph.Schema;
 using System.Collections.Immutable;
 using Atelia.DurableGraph.Build;
-using Atelia.DurableGraph.StateStore;
+using Atelia.DurableGraph.Persistence;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.Emit;
@@ -59,6 +61,8 @@ public sealed partial class DurableSchemaGeneratorTests {
         // generated factories must not be required, and malformed helpers need no executable body.
         string publicSource = $$"""
             using Atelia.DurableGraph;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
             [assembly:DurableSchemaExport({{(defect == "contract" ? 1 : 2)}},"Base",1,{{SymbolDisplay.FormatLiteral(BaseManifest, true)}})]
             [DurableType("Base",1)] public class Base:IDurableObject { }
             namespace Atelia.DurableGraph.Generated {
@@ -69,12 +73,12 @@ public sealed partial class DurableSchemaGeneratorTests {
                         {{(defect == "constructor" ? "private" : "public")}} V1(int valueSegment0Field1) { Segment0Field1=valueSegment0Field1; }
                     }
                     public readonly struct BodyV1 {
-                        public static void Write({{(defect == "write" ? "in" : "ref")}} StateStore.Serialization.BinaryPayloadWriter writer,in V1 value,DurableSchema schema) { }
-                        public static V1 Read({{(defect == "read" ? "in" : "ref")}} StateStore.Serialization.BinaryPayloadReader reader,DurableSchema schema)=>default;
-                        public static V1 Apply(ref StateStore.Serialization.BinaryPayloadReader reader,in V1 prior,DurableSchema schema,bool requireChanges={{(defect == "apply-default" ? "true" : "false")}})=>default;
+                        public static void Write({{(defect == "write" ? "in" : "ref")}} Serialization.BinaryPayloadWriter writer,in V1 value,DurableSchema schema) { }
+                        public static V1 Read({{(defect == "read" ? "in" : "ref")}} Serialization.BinaryPayloadReader reader,DurableSchema schema)=>default;
+                        public static V1 Apply(ref Serialization.BinaryPayloadReader reader,in V1 prior,DurableSchema schema,bool requireChanges={{(defect == "apply-default" ? "true" : "false")}})=>default;
                         public static void Visit(in V1 value,IStateReferenceVisitor visitor,DurableSchema schema) { }
-                        public static StateStore.Serialization.PreparedBaseBody PrepareBase(in V1 value,DurableSchema schema)=>default;
-                        public static StateStore.Serialization.PreparedDeltaBody PrepareDelta(in V1 prior,{{(defect == "delta" ? "" : "in")}} V1 current,DurableSchema schema)=>default;
+                        public static Serialization.PreparedBaseBody PrepareBase(in V1 value,DurableSchema schema)=>default;
+                        public static Serialization.PreparedDeltaBody PrepareDelta(in V1 prior,{{(defect == "delta" ? "" : "in")}} V1 current,DurableSchema schema)=>default;
                         public static bool StateEquals(in V1 left,in V1 right,DurableSchema schema)=>true;
                     }
                 }
@@ -110,8 +114,8 @@ public sealed partial class DurableSchemaGeneratorTests {
                     [Atelia.DurableGraph.DurableField(1)] public T Own;
                 }
                 public static class Host {
-                    public static Atelia.DurableGraph.StateStore.StateModelRegistry Models() {
-                        var models=new Atelia.DurableGraph.StateStore.StateModelRegistry();
+                    public static Atelia.DurableGraph.Persistence.StateModelRegistry Models() {
+                        var models=new Atelia.DurableGraph.Persistence.StateModelRegistry();
                         REMOTE_REGISTER
                         Atelia.DurableGraph.Generated.DurableDefinitions.Register(models);return models;
                     }
@@ -211,6 +215,8 @@ public sealed partial class DurableSchemaGeneratorTests {
         string stateConstraint = defect == "state-constraint" ? ", global::System.IComparable<TState>" : "";
         string source = $$"""
             using Atelia.DurableGraph;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
             [assembly:DurableSchemaExport(2,"Base",1,{{SymbolDisplay.FormatLiteral(manifest, true)}})]
             [DurableType("Base",1)] public class Base<T>:IDurableObject { }
             namespace Atelia.DurableGraph.Generated {
@@ -223,12 +229,12 @@ public sealed partial class DurableSchemaGeneratorTests {
                     public readonly {{(defect == "body-ref-struct" ? "ref" : "")}} struct BodyV1<TState,TOps>
                         where TState:unmanaged{{stateConstraint}}
                         where TOps:struct,IStateOps<TState>{{(defect == "ops-constraint" ? ",global::System.IDisposable" : "")}} {
-                        public static void Write(ref StateStore.Serialization.BinaryPayloadWriter writer,in V1<TState> value,DurableSchema schema) { }
-                        public static V1<TState> Read(ref StateStore.Serialization.BinaryPayloadReader reader,DurableSchema schema)=>default;
-                        public static V1<TState> Apply(ref StateStore.Serialization.BinaryPayloadReader reader,in V1<TState> prior,DurableSchema schema,bool requireChanges=false)=>default;
+                        public static void Write(ref Serialization.BinaryPayloadWriter writer,in V1<TState> value,DurableSchema schema) { }
+                        public static V1<TState> Read(ref Serialization.BinaryPayloadReader reader,DurableSchema schema)=>default;
+                        public static V1<TState> Apply(ref Serialization.BinaryPayloadReader reader,in V1<TState> prior,DurableSchema schema,bool requireChanges=false)=>default;
                         public static void Visit(in V1<TState> value,IStateReferenceVisitor visitor,DurableSchema schema) { }
-                        public static StateStore.Serialization.PreparedBaseBody PrepareBase(in V1<TState> value,DurableSchema schema)=>default;
-                        public static StateStore.Serialization.PreparedDeltaBody PrepareDelta(in V1<TState> prior,in V1<TState> current,DurableSchema schema)=>default;
+                        public static Serialization.PreparedBaseBody PrepareBase(in V1<TState> value,DurableSchema schema)=>default;
+                        public static Serialization.PreparedDeltaBody PrepareDelta(in V1<TState> prior,in V1<TState> current,DurableSchema schema)=>default;
                         public static bool StateEquals(in V1<TState> left,in V1<TState> right,DurableSchema schema)=>true;
                     }
                 }
@@ -244,6 +250,8 @@ public sealed partial class DurableSchemaGeneratorTests {
     public void CrossAssemblyInheritanceDistinctNominalArgumentsCanBothUseObjectIdState() {
         GeneratorTestRun library = RunCrossAssemblyGenerator("""
             using Atelia.DurableGraph;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
             [DurableType("Base",1)] public partial class Base<T,U>:IDurableObject {
                 [DurableField(1)] private T _first;
                 [DurableField(2)] private U _second;
@@ -254,7 +262,9 @@ public sealed partial class DurableSchemaGeneratorTests {
             """, forceDefinitions: "true");
         GeneratorTestRun app = RunCrossAssemblyGenerator("""
             using Atelia.DurableGraph;
-            using Atelia.DurableGraph.StateStore;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
+            using Atelia.DurableGraph.Persistence;
             [DurableType("NodeA",1)] public partial class NodeA:IDurableObject { [DurableField(1)] public int A; }
             [DurableType("NodeB",1)] public partial class NodeB:IDurableObject { [DurableField(1)] public int B; }
             [DurableType("Leaf",1)] public partial class Leaf:Base<NodeA,NodeB> { public Leaf():base(new NodeA{A=17},new NodeB{B=29}) { } }
@@ -289,6 +299,8 @@ public sealed partial class DurableSchemaGeneratorTests {
 
     private const string InheritanceLibrary = """
         using Atelia.DurableGraph;
+        using Atelia.DurableGraph.Schema;
+        using Atelia.DurableGraph.Runtime;
         namespace Remote {
             [DurableType("Pair",1)] internal readonly partial struct InternalPair<T> {
                 [DurableField(1)] private readonly T _value;
@@ -317,7 +329,9 @@ public sealed partial class DurableSchemaGeneratorTests {
 
     private const string InheritanceApplication = """
         using Atelia.DurableGraph;
-        using Atelia.DurableGraph.StateStore;
+        using Atelia.DurableGraph.Schema;
+        using Atelia.DurableGraph.Runtime;
+        using Atelia.DurableGraph.Persistence;
         namespace App {
             [DurableType("Repeat",1)] public partial class Repeat<T>:Remote.Base<T,T,int> {
                 [DurableField(1)] private readonly T _own;

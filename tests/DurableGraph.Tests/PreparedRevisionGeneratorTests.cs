@@ -1,6 +1,8 @@
-using Atelia.DurableGraph.StateStore;
-using Atelia.DurableGraph.StateStore.Serialization;
-using Atelia.DurableGraph.StateStore.Storage;
+using Atelia.DurableGraph.Runtime;
+using Atelia.DurableGraph.Schema;
+using Atelia.DurableGraph.Persistence;
+using Atelia.DurableGraph.Serialization;
+using Atelia.DurableGraph.Storage;
 using Atelia.Rbf;
 using Atelia.RbfSegmentStore;
 using SegmentStore = Atelia.RbfSegmentStore.RbfSegmentStore;
@@ -216,9 +218,11 @@ public sealed partial class DurableSchemaGeneratorTests {
         using System.IO;
         using System.Linq;
         using Atelia.DurableGraph;
-        using Atelia.DurableGraph.StateStore;
-        using Atelia.DurableGraph.StateStore.Storage;
-        using Atelia.DurableGraph.StateStore.Serialization;
+        using Atelia.DurableGraph.Schema;
+        using Atelia.DurableGraph.Runtime;
+        using Atelia.DurableGraph.Persistence;
+        using Atelia.DurableGraph.Storage;
+        using Atelia.DurableGraph.Serialization;
         namespace PreparedRevisionWitness;
         [DurableType("prepared-revision.owner", 1)]
         public sealed partial class Owner : IDurableObject {

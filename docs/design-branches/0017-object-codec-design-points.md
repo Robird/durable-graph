@@ -54,7 +54,7 @@ Half 的原语已有，但是否列入首片请明确；decimal、Int128/UInt128
 不借“primitive”一词自动包含。推荐这些先后续：decimal 有 scale/位模式，enum 有 underlying type，
 Nullable<T> 有 presence，native int 有平台宽度，需要各自说清。Guid/时间类型和一般值类型再按消费者增加。
 
-**影响范围**：目前 [TypeTag](../../src/DurableGraph/TypeTag.cs)仅 Boolean/Int32/Int64/String 四项。
+**影响范围**：目前 [TypeTag](../../src/DurableGraph/Schema/TypeTag.cs)仅 Boolean/Int32/Int64/String 四项。
 支持更多标量不只是添加 reader/writer，还要同步 current/historical Snapshot 类型映射、boxed 旧路径、
 Schema 校验与 history publisher/parser。不能让新增类型能编译但其历史描述无法发布或读取。
 
@@ -70,7 +70,7 @@ Schema 校验与 history publisher/parser。不能让新增类型能编译但其
 - string 内容仍按 UTF-16 code units 保留；用户后续明确将图内 ReferenceEquals 纳入恢复保证。
   相同源实例必须恢复共享，不同源实例不能因内容相等被合并；字符串对象 body 才 inline 写内容。
 
-inline 并不等于必须选 UTF-8。现有 [StringPayloadCodec](../../src/DurableGraph.StateStore.Serialization/Serialization/StringPayloadCodec.cs)
+inline 并不等于必须选 UTF-8。现有 [StringPayloadCodec](../../src/DurableGraph.Serialization/StringPayloadCodec.cs)
 在 strict UTF-8 与 UTF-16LE 中选较短者，平局选 UTF-16LE，并保留孤立代理项。
 推荐首片沿用，避免第二套字符串语义。
 
@@ -255,9 +255,9 @@ null/空字符串/UTF-16 内容、浮点位模式、错误 Schema/损坏/尾随�
 ObjectVersion 持久内容、Delta、H 恢复及 Save 接入仍按真实消费者推进；
 讨论这条能力路线不等于取消 DB-016 中“尽快接入真实内容存储”的目标。
 
-当前事实依据：[primitive writer](../../src/DurableGraph.StateStore.Serialization/Serialization/BinaryPayloadWriter.cs)、
-[primitive tests](../../tests/DurableGraph.StateStore.Serialization.Tests/Serialization/BinaryPayloadPrimitiveTests.cs)、
-[string tests](../../tests/DurableGraph.StateStore.Serialization.Tests/Serialization/StringPayloadCodecTests.cs)、
+当前事实依据：[primitive writer](../../src/DurableGraph.Serialization/BinaryPayloadWriter.cs)、
+[primitive tests](../../tests/DurableGraph.Serialization.Tests/Serialization/BinaryPayloadPrimitiveTests.cs)、
+[string tests](../../tests/DurableGraph.Serialization.Tests/Serialization/StringPayloadCodecTests.cs)、
 [生成器](../../src/DurableGraph.Generator/DurableSchemaGenerator.cs)、
 [历史解析器](../../src/DurableGraph.Build/SchemaHistoryTool.cs)。
 

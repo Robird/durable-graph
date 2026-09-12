@@ -1,6 +1,8 @@
+using Atelia.DurableGraph.Runtime;
+using Atelia.DurableGraph.Schema;
 using System.Reflection;
 using Atelia.DurableGraph.Build;
-using Atelia.DurableGraph.StateStore.Serialization;
+using Atelia.DurableGraph.Serialization;
 using Microsoft.CodeAnalysis;
 
 namespace Atelia.DurableGraph.Tests;
@@ -105,7 +107,9 @@ public sealed partial class DurableSchemaGeneratorTests {
         using System.IO;
         using System.Linq;
         using Atelia.DurableGraph;
-        using Atelia.DurableGraph.StateStore.Serialization;
+        using Atelia.DurableGraph.Schema;
+        using Atelia.DurableGraph.Runtime;
+        using Atelia.DurableGraph.Serialization;
         namespace FusedCapture;
         [DurableType("fused.capture.base", 1)]
         public abstract partial class Base : IDurableObject {

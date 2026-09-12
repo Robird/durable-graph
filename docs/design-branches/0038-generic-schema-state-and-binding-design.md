@@ -391,12 +391,12 @@ inline/base 才进入 exact 布局递归，检查环/最大路径；TypeExpr 本
 
 | 现有落点 | 需要调整的职责 |
 |---|---|
-| [DurableSchema / DurableFieldInfo](../../src/DurableGraph/DurableSchema.cs) | 闭合族 TypeExpr 与完整 exact 布局；原 nominal 字符串扩大为类型表达；区分定义模式/闭合实例 |
+| [DurableSchema / DurableFieldInfo](../../src/DurableGraph/Schema/DurableSchema.cs) | 闭合族 TypeExpr 与完整 exact 布局；原 nominal 字符串扩大为类型表达；区分定义模式/闭合实例 |
 | [SchemaHistoryTool](../../src/DurableGraph.Build/SchemaHistoryTool.cs)、[SG history](../../src/DurableGraph.Generator/DurableSchemaGenerator.Ancestry.cs) | arity/参数模式、历史闭包、模板版本和当前固定依赖；源代码历史不要求枚举全部 closures |
 | [SG body](../../src/DurableGraph.Generator/DurableSchemaGenerator.GeneratedState.cs)、[inline helper](../../src/DurableGraph.Generator/DurableSchemaGenerator.InlineState.cs) | 共享 family DTO/开放 body、自由值表达式参数、静态 helper、当前领域桥接 |
-| [StateModelRegistry](../../src/DurableGraph.StateStore/StateModelRegistry.cs)、[StateReaderBinding](../../src/DurableGraph/StateReaderBinding.cs) | 从逐个完整 model/reader 目录扩为模板目录 + snapshot 内按需闭合，保留非泛型入口 |
-| [SchemaKey](../../src/DurableGraph.StateStore/SchemaKey.cs)、[SchemaStore](../../src/DurableGraph.StateStore/SchemaStore.cs) | key 的构造类型表达、闭合布局同 key 一致性；不能仍只按 DefinitionId 索引模型 |
-| [TypedObjectVersionReader](../../src/DurableGraph.StateStore/TypedObjectVersionReader.cs)、[RevisionDecoder](../../src/DurableGraph.StateStore/RevisionDecoder.cs) | 在读取完整 stored Schema 后解析 exact reader，再执行 body；不由 current CLR 类型选择历史表示 |
+| [StateModelRegistry](../../src/DurableGraph.Persistence/StateModelRegistry.cs)、[StateReaderBinding](../../src/DurableGraph/Runtime/Binding/StateReaderBinding.cs) | 从逐个完整 model/reader 目录扩为模板目录 + snapshot 内按需闭合，保留非泛型入口 |
+| [SchemaKey](../../src/DurableGraph.Persistence/SchemaKey.cs)、[SchemaStore](../../src/DurableGraph.Persistence/SchemaStore.cs) | key 的构造类型表达、闭合布局同 key 一致性；不能仍只按 DefinitionId 索引模型 |
+| [TypedObjectVersionReader](../../src/DurableGraph.Persistence/TypedObjectVersionReader.cs)、[RevisionDecoder](../../src/DurableGraph.Persistence/RevisionDecoder.cs) | 在读取完整 stored Schema 后解析 exact reader，再执行 body；不由 current CLR 类型选择历史表示 |
 | [StateModel 生成](../../src/DurableGraph.Generator/DurableSchemaGenerator.StateModel.cs)、Normalize | 单对象相邻边选择、参数化/闭合 provider、旧新 Schema 匹配、统一 Context adapter；仍 live 升级对象强制 Base |
 
 格式变动应显式版本化：history/manifest 与 SchemaBatch 需新的 arity/类型模式/闭合 key 表达；
@@ -544,8 +544,8 @@ probe 使用手写 generated-like 模板和少量 BinaryWriter/Reader 定长字�
 | 闸门 | 产品证据 |
 |---|---|
 | G0 / G2 | [真实生成模板/静态 body/readonly 继承/属性入口](../../tests/DurableGraph.Tests/GenericGeneratedStateTests.cs)、[逐对象/相邻边 Context](../../tests/DurableGraph.Tests/GeneratedUpgradeContextTests.cs)、[CLR 约束补充验证](../../tests/DurableGraph.Tests/GenericUnmanagedConstraintTests.cs) |
-| G1 | [结构化身份](../../tests/DurableGraph.Tests/GenericSchemaIdentityTests.cs)、[canonical/旧 wire/仓库冲突](../../tests/DurableGraph.StateStore.Tests/GenericSchemaPersistenceTests.cs)、[v3 history](../../tests/DurableGraph.Tests/GenericTemplateHistoryTests.cs) |
-| G3 | [snapshot/重复参数/缓存/DAG/引用边](../../tests/DurableGraph.StateStore.Tests/GenericBindingCatalogTests.cs)、[整链/phantom/闭合特例/缺能力](../../tests/DurableGraph.Tests/GenericUpgradeBindingTests.cs)；实际图保存冷读也由 G0/G2 生成测试覆盖 |
+| G1 | [结构化身份](../../tests/DurableGraph.Tests/GenericSchemaIdentityTests.cs)、[canonical/旧 wire/仓库冲突](../../tests/DurableGraph.Persistence.Tests/GenericSchemaPersistenceTests.cs)、[v3 history](../../tests/DurableGraph.Tests/GenericTemplateHistoryTests.cs) |
+| G3 | [snapshot/重复参数/缓存/DAG/引用边](../../tests/DurableGraph.Persistence.Tests/GenericBindingCatalogTests.cs)、[整链/phantom/闭合特例/缺能力](../../tests/DurableGraph.Tests/GenericUpgradeBindingTests.cs)；实际图保存冷读也由 G0/G2 生成测试覆盖 |
 | G4 | [GenericConsumer](../../experiments/PackageConsumerProbe/GenericConsumer/README.md)：三代真实包、缺闭合转换反例、删除旧 inline CLR、完整 Context、强制 Base 后稳定保存 |
 
 DB-039 从现有 `UpgradeContext`、`StateUpgradeProvider`、`StateBindingContext` 的已绑定计划接入；

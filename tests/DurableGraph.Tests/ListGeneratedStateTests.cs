@@ -1,3 +1,4 @@
+using Atelia.DurableGraph.Schema;
 using System.Reflection;
 using Atelia.DurableGraph.Build;
 
@@ -9,6 +10,8 @@ public sealed partial class DurableSchemaGeneratorTests {
         GeneratorTestRun run = RunGenerator("""
             using System.Collections.Generic;
             using Atelia.DurableGraph;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
             [DurableType("Point",1)] public partial struct Point { [DurableField(1)] public int X; }
             [DurableType("Pair",1)] public partial struct Pair<T,U> {
                 [DurableField(1)] public T First;
@@ -28,7 +31,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             """);
         AssertSchemaOnlyCompiles(run);
         string generated = GeneratedSource(run, "DurableGenericStates.g.cs");
-        Assert.Contains("global::Atelia.DurableGraph.TypeExpr.List(", generated);
+        Assert.Contains("global::Atelia.DurableGraph.Schema.TypeExpr.List(", generated);
         Assert.Contains("context.CaptureObject(field", generated);
         Assert.Contains("objects.ResolveObject<", generated);
         Assert.Contains("global::Atelia.DurableGraph.ObjectId", generated);
@@ -57,6 +60,8 @@ public sealed partial class DurableSchemaGeneratorTests {
     public void SourceDefinedFrameworkNamedListIsNotRecognizedAsTheBclConstructor() {
         GeneratorTestRun run = RunGenerator("""
             using Atelia.DurableGraph;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
             namespace System.Collections.Generic { public class List<T> {} }
             [DurableType("Bad",1)] public partial class Bad:IDurableObject {
                 [DurableField(1)] public System.Collections.Generic.List<int> Value;
@@ -69,6 +74,8 @@ public sealed partial class DurableSchemaGeneratorTests {
     public void DurableUserListHasNamedIdentityWhileBclListKeepsBuiltinIdentity() {
         GeneratorTestRun run = RunGenerator("""
             using Atelia.DurableGraph;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
             [DurableType("UserList",1)] public partial class List<T>:IDurableObject { [DurableField(1)] public T Value; }
             [DurableType("World",1)] public partial class World:IDurableObject {
                 [DurableField(1)] public List<int> User;
@@ -87,6 +94,8 @@ public sealed partial class DurableSchemaGeneratorTests {
         const string source = """
             using System.Collections.Generic;
             using Atelia.DurableGraph;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
             [DurableType("Point",1)] public partial struct Point { [DurableField(1)] public int X; }
             [DurableType("World",1)] public partial class World:IDurableObject { [DurableField(1)] public List<Point> Points; }
             """;
@@ -105,6 +114,8 @@ public sealed partial class DurableSchemaGeneratorTests {
         using AncestryHistoryDirectory history = new();
         GeneratorTestRun first = RunGenerator("""
             using Atelia.DurableGraph;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
             [DurableType("Box",1)] public partial class Box<T>:IDurableObject { [DurableField(1)] public T Value; }
             """);
         AssertSchemaOnlyCompiles(first);
@@ -112,6 +123,8 @@ public sealed partial class DurableSchemaGeneratorTests {
         GeneratorTestRun second = RunGenerator("""
             using System.Collections.Generic;
             using Atelia.DurableGraph;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
             using States=Atelia.DurableGraph.Generated.Family_426F78;
             [DurableType("Box",2)] public partial class Box<T>:IDurableObject {
                 [DurableField(1)] public T Value;
@@ -125,7 +138,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             """, history.ReadAdditionalTexts());
         AssertSchemaOnlyCompiles(second);
         string generated = GeneratedSource(second, "DurableGenericStates.g.cs");
-        Assert.Contains("closedOwner: global::Atelia.DurableGraph.TypeExpr.Named(\"Box\", global::Atelia.DurableGraph.TypeExpr.List(", generated);
+        Assert.Contains("closedOwner: global::Atelia.DurableGraph.Schema.TypeExpr.Named(\"Box\", global::Atelia.DurableGraph.Schema.TypeExpr.List(", generated);
     }
 
     [Fact]
@@ -134,7 +147,9 @@ public sealed partial class DurableSchemaGeneratorTests {
             using System;
             using System.Collections.Generic;
             using Atelia.DurableGraph;
-            using Atelia.DurableGraph.StateStore;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
+            using Atelia.DurableGraph.Persistence;
             using Atelia.DurableGraph.Generated;
             [DurableType("Recursive",1)] public partial struct Recursive {
                 [DurableField(1)] public int Value;

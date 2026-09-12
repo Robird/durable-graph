@@ -1,3 +1,4 @@
+using Atelia.DurableGraph.Schema;
 using System.Reflection;
 using System.Text;
 using Microsoft.CodeAnalysis;
@@ -9,6 +10,8 @@ public sealed partial class DurableSchemaGeneratorTests {
     public void StandaloneAttributedStructEmitsSchemaAndStaticValueBridgeWithoutObjectRegistration() {
         GeneratorTestRun run = RunGenerator("""
             using Atelia.DurableGraph;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
             [DurableType("position", 1)]
             public readonly partial struct Position {
                 [DurableField(7)] private readonly int _x;
@@ -31,7 +34,9 @@ public sealed partial class DurableSchemaGeneratorTests {
     public void MutableStructFieldCaptureFreezesValueBeforeInPlaceDomainMutation() {
         GeneratorTestRun run = RunGenerator("""
             using Atelia.DurableGraph;
-            using Atelia.DurableGraph.StateStore.Serialization;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
+            using Atelia.DurableGraph.Serialization;
             [DurableType("mutable.value", 1)]
             public partial struct Value {
                 [DurableField(1)] public int X;
@@ -75,6 +80,8 @@ public sealed partial class DurableSchemaGeneratorTests {
     public void UnmarkedStructFieldIsNotAutomaticallyEnrolled() {
         GeneratorTestRun run = RunGenerator("""
             using Atelia.DurableGraph;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
             public struct Value { public int X; }
             [DurableType("world",1)] public partial class World : IDurableObject {
                 [DurableField(1)] public Value Value;
@@ -87,6 +94,8 @@ public sealed partial class DurableSchemaGeneratorTests {
     public void InlineVersionChangeRequiresOwnerVersionChange() {
         GeneratorTestRun run = RunGenerator("""
             using Atelia.DurableGraph;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
             [DurableType("value",2)] public partial struct Value { [DurableField(1)] public long X; }
             [DurableType("world",1)] public partial class World : IDurableObject { [DurableField(1)] public Value Value; }
             """, InlineHistory("value",1,2,"1|2"), InlineHistory("world",1,1,"1|16|dmFsdWU=|1"));
@@ -97,6 +106,8 @@ public sealed partial class DurableSchemaGeneratorTests {
     public void AcceptedInlineDependencyCannotBeRepairedFromCurrentCandidate() {
         GeneratorTestRun run = RunGenerator("""
             using Atelia.DurableGraph;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
             [DurableType("value",1)] public partial struct Value { [DurableField(1)] public int X; }
             [DurableType("world",2)] public partial class World : IDurableObject { }
             """, InlineHistory("world",1,1,"1|16|dmFsdWU=|1"));
@@ -107,6 +118,8 @@ public sealed partial class DurableSchemaGeneratorTests {
     public void HistoricalStructDeclarationCanDisappearWhileOwnerUpgradeChainStillCompiles() {
         GeneratorTestRun run = RunGenerator("""
             using Atelia.DurableGraph;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
             using States=Atelia.DurableGraph.Generated.Family_776F726C64;
             [DurableType("world",3)] public partial class World : IDurableObject {
                 [DurableField(1)] public int X;
@@ -131,6 +144,8 @@ public sealed partial class DurableSchemaGeneratorTests {
     public void SchemaFamilyCannotChangeFromClassToInlineValue() {
         GeneratorTestRun run = RunGenerator("""
             using Atelia.DurableGraph;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
             [DurableType("value",2)] public partial struct Value { }
             """, SchemaHistory("old.dgschema","value",1));
         Assert.Contains(run.GeneratorDiagnostics, diagnostic => diagnostic.Id == "DG0015");

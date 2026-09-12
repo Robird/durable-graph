@@ -7,7 +7,7 @@
     <IsPackable>false</IsPackable>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="../../src/DurableGraph.StateStore/DurableGraph.StateStore.csproj" />
+    <ProjectReference Include="../../src/DurableGraph.Persistence/DurableGraph.Persistence.csproj" />
     <ProjectReference Include="../../src/DurableGraph.Generator/DurableGraph.Generator.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
   </ItemGroup>
 </Project>

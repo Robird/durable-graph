@@ -1,3 +1,5 @@
+using Atelia.DurableGraph.Runtime;
+using Atelia.DurableGraph.Schema;
 using System.Reflection;
 using Atelia.DurableGraph.Build;
 using Microsoft.CodeAnalysis;
@@ -82,7 +84,7 @@ public sealed partial class DurableSchemaGeneratorTests {
                 public static object State(int version) => version == 1
                     ? (object)new Item.__DurableState.V1(8) : new Item.__DurableState.V2(8, 2);
                 public static int ReadOld() {
-                    var reader = new Atelia.DurableGraph.StateStore.Serialization.BinaryPayloadReader(new byte[] { 16 });
+                    var reader = new Atelia.DurableGraph.Serialization.BinaryPayloadReader(new byte[] { 16 });
                     return Item.__DurableState.ReadBaseBodyV1(ref reader).Segment0Field1;
                 }
             }
@@ -103,6 +105,8 @@ public sealed partial class DurableSchemaGeneratorTests {
         SchemaHistoryTool publisher = new();
         GeneratorTestRun initial = RunGenerator("""
             using Atelia.DurableGraph;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
             namespace StateModels;
             [DurableType("state.base", 1)]
             public abstract partial class OldBase : IDurableObject { [DurableField(4)] private int _old; }
@@ -113,6 +117,8 @@ public sealed partial class DurableSchemaGeneratorTests {
         publisher.Publish(files.WriteManifest(initial), files.History);
         GeneratorTestRun run = RunGenerator("""
             using Atelia.DurableGraph;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
             namespace StateModels;
             [DurableType("state.base", 2)]
             public abstract partial class NewBase : IDurableObject {
@@ -151,6 +157,8 @@ public sealed partial class DurableSchemaGeneratorTests {
     public void GeneratedReadonlyHydrateSkipsConstructorsAndInitializersPreservesIdentityAndCapturesAgain() {
         GeneratorTestRun run = RunGenerator("""
             using Atelia.DurableGraph;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
             namespace StateModels;
             [DurableType("readonly.base", 1)]
             public abstract partial class Base : IDurableObject {
@@ -271,7 +279,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             public static class Host {
                 public static StateModelBinding Model() => Item.__DurableState.Model;
                 public static object Old() {
-                    var reader = new Atelia.DurableGraph.StateStore.Serialization.BinaryPayloadReader(new byte[] { 16 });
+                    var reader = new Atelia.DurableGraph.Serialization.BinaryPayloadReader(new byte[] { 16 });
                     return Item.__DurableState.ReadBaseBodyV1(ref reader);
                 }
             }
@@ -290,6 +298,8 @@ public sealed partial class DurableSchemaGeneratorTests {
 
     private static string StateModelHistorySource(int version) => """
         using Atelia.DurableGraph;
+        using Atelia.DurableGraph.Schema;
+        using Atelia.DurableGraph.Runtime;
         namespace StateModels;
         """ + $"\n[DurableType(\"state.model\", {version})]\n" +
         "public sealed partial class Item : IDurableObject { [DurableField(1)] private int _number; " +

@@ -11,11 +11,13 @@ using Microsoft.CodeAnalysis.Text;
 namespace Atelia.DurableGraph.Generator;
 
 public sealed partial class DurableSchemaGenerator {
-    private const string RuntimeName = "global::Atelia.DurableGraph.";
+    private const string RootName = "global::Atelia.DurableGraph.";
+    private const string SchemaName = RootName + "Schema.";
+    private const string RuntimeName = RootName + "Runtime.";
     private static readonly SymbolDisplayFormat GenericQualifiedNameFormat = SymbolDisplayFormat.FullyQualifiedFormat;
 
     private static string FamilyName(string id) => "Family_" + BitConverter.ToString(StrictUtf8.GetBytes(id)).Replace("-", string.Empty);
-    private static string FamilyType(string id) => RuntimeName + "Generated." + FamilyName(id);
+    private static string FamilyType(string id) => RootName + "Generated." + FamilyName(id);
     private static string Number(int value) => value.ToString(CultureInfo.InvariantCulture);
     private static string Literal(string value) => SymbolDisplay.FormatLiteral(value, true);
     private static string GenericList(IEnumerable<string> names) {
@@ -113,7 +115,7 @@ public sealed partial class DurableSchemaGenerator {
         if (field.DynamicIndex >= 0) return "TState" + Number(field.DynamicIndex);
         if (field.Field.InlineSchema is SchemaReference inline) return FamilyType(inline.SchemaId) + ".V" + Number(inline.Version);
         int tag = field.Pattern.Kind == PatternKind.Builtin ? field.Pattern.BuiltinTag : field.Field.TypeTagValue;
-        if (IsBinaryReference(tag)) return RuntimeName + "ObjectId";
+        if (IsBinaryReference(tag)) return RootName + "ObjectId";
         return "global::System." + GetTypeTagName(GetBinarySlotTypeTag(tag));
     }
 
@@ -126,7 +128,7 @@ public sealed partial class DurableSchemaGenerator {
     private static string GenericFieldRead(GenericField field) => BinarySlotRead(GenericFieldTag(field));
     private static string GenericFieldEquality(GenericField field, string left, string right) {
         if (GenericFieldTag(field) == 20) return
-            "global::Atelia.DurableGraph.StateStore.Serialization.ScalarStateEquality.DecimalEquals(in " + left + ", in " + right + ")";
+            "global::Atelia.DurableGraph.Serialization.ScalarStateEquality.DecimalEquals(in " + left + ", in " + right + ")";
         if (GenericFieldTag(field) == 24) return left + ".EqualsExact(" + right + ")";
         string? bits = GenericFieldTag(field) switch { 12 => "HalfToUInt16Bits", 13 => "SingleToUInt32Bits", 14 => "DoubleToUInt64Bits", _ => null };
         return bits is null ? left + " == " + right : "global::System.BitConverter." + bits + "(" + left + ") == global::System.BitConverter." + bits + "(" + right + ")";
@@ -161,7 +163,7 @@ public sealed partial class DurableSchemaGenerator {
         AppendGenericConstraints(output, layout, true);
         output.AppendLine(" {");
         output.Append("        public static void Write(ref ").Append(PayloadNamespace).Append("BinaryPayloadWriter writer, in ").Append(dto)
-            .Append(" value, ").Append(RuntimeName).AppendLine("DurableSchema schema) {");
+            .Append(" value, ").Append(SchemaName).AppendLine("DurableSchema schema) {");
         foreach (GenericField field in layout.Fields) {
             if (UsesGenericOps(field)) output.Append("            ").Append(GenericFieldOps(field)).Append(".WriteBase(ref writer, in value.")
                 .Append(field.Name).Append(", ").Append(field.Slot()).AppendLine(");");
@@ -170,13 +172,13 @@ public sealed partial class DurableSchemaGenerator {
         }
         output.AppendLine("        }");
         output.Append("        public static ").Append(dto).Append(" Read(ref ").Append(PayloadNamespace).Append("BinaryPayloadReader reader, ")
-            .Append(RuntimeName).AppendLine("DurableSchema schema) {");
+            .Append(SchemaName).AppendLine("DurableSchema schema) {");
         foreach (GenericField field in layout.Fields) output.Append("            var ").Append(field.Argument).Append(" = ")
             .Append(UsesGenericOps(field) ? GenericFieldOps(field) + ".ReadBase(ref reader, " + field.Slot() + ")" : GenericFieldRead(field)).AppendLine(";");
         AppendGenericReturn(output, layout, "            ");
         output.AppendLine("        }");
         output.Append("        public static ").Append(PayloadNamespace).Append("PreparedBaseBody PrepareBase(in ").Append(dto).Append(" value, ")
-            .Append(RuntimeName).AppendLine("DurableSchema schema) {");
+            .Append(SchemaName).AppendLine("DurableSchema schema) {");
         output.AppendLine("            var buffer = new global::System.Buffers.ArrayBufferWriter<byte>();");
         output.Append("            var writer = new ").Append(PayloadNamespace).AppendLine("BinaryPayloadWriter(buffer);");
         output.AppendLine("            Write(ref writer, in value, schema);");
@@ -186,7 +188,7 @@ public sealed partial class DurableSchemaGenerator {
         AppendGenericDelta(output, layout);
         AppendGenericApply(output, layout);
         output.Append("        public static void Visit(in ").Append(dto).Append(" state, ").Append(RuntimeName).Append("IStateReferenceVisitor visitor, ")
-            .Append(RuntimeName).AppendLine("DurableSchema schema) {");
+            .Append(SchemaName).AppendLine("DurableSchema schema) {");
         foreach (GenericField field in layout.Fields) {
             if (UsesGenericOps(field)) output.Append("            ").Append(GenericFieldOps(field)).Append(".VisitReferences(in state.").Append(field.Name)
                 .Append(", visitor, ").Append(field.Slot()).AppendLine(");");
@@ -197,24 +199,24 @@ public sealed partial class DurableSchemaGenerator {
         output.AppendLine("        }");
         if (layout.Shape.Kind == 2) {
             output.Append("        public static bool StateEquals(in ").Append(dto).Append(" left, in ").Append(dto)
-                .Append(" right, ").Append(RuntimeName).AppendLine("DurableFieldInfo slot) => StateEquals(in left, in right, slot.InlineSchema!);");
+                .Append(" right, ").Append(SchemaName).AppendLine("DurableFieldInfo slot) => StateEquals(in left, in right, slot.InlineSchema!);");
             output.Append("        public static void WriteBase(ref ").Append(PayloadNamespace).Append("BinaryPayloadWriter writer, in ").Append(dto)
-                .Append(" value, ").Append(RuntimeName).AppendLine("DurableFieldInfo slot) => Write(ref writer, in value, slot.InlineSchema!);");
+                .Append(" value, ").Append(SchemaName).AppendLine("DurableFieldInfo slot) => Write(ref writer, in value, slot.InlineSchema!);");
             output.Append("        public static ").Append(dto).Append(" ReadBase(ref ").Append(PayloadNamespace).Append("BinaryPayloadReader reader, ")
-                .Append(RuntimeName).AppendLine("DurableFieldInfo slot) => Read(ref reader, slot.InlineSchema!);");
+                .Append(SchemaName).AppendLine("DurableFieldInfo slot) => Read(ref reader, slot.InlineSchema!);");
             output.Append("        public static ").Append(PayloadNamespace).Append("PreparedDeltaBody PrepareDelta(in ").Append(dto).Append(" prior, in ").Append(dto)
-                .Append(" current, ").Append(RuntimeName).AppendLine("DurableFieldInfo slot) => PrepareDelta(in prior, in current, slot.InlineSchema!);");
+                .Append(" current, ").Append(SchemaName).AppendLine("DurableFieldInfo slot) => PrepareDelta(in prior, in current, slot.InlineSchema!);");
             output.Append("        public static ").Append(dto).Append(" ApplyDelta(ref ").Append(PayloadNamespace).Append("BinaryPayloadReader reader, in ").Append(dto)
-                .Append(" prior, ").Append(RuntimeName).AppendLine("DurableFieldInfo slot) => Apply(ref reader, in prior, slot.InlineSchema!, true);");
+                .Append(" prior, ").Append(SchemaName).AppendLine("DurableFieldInfo slot) => Apply(ref reader, in prior, slot.InlineSchema!, true);");
             output.Append("        public static void VisitReferences(in ").Append(dto).Append(" state, ").Append(RuntimeName).Append("IStateReferenceVisitor visitor, ")
-                .Append(RuntimeName).AppendLine("DurableFieldInfo slot) => Visit(in state, visitor, slot.InlineSchema!);");
+                .Append(SchemaName).AppendLine("DurableFieldInfo slot) => Visit(in state, visitor, slot.InlineSchema!);");
         }
         output.AppendLine("    }");
     }
 
     private static void AppendGenericStateEquality(StringBuilder output, GenericLayout layout) {
         output.Append("        public static bool StateEquals(in ").Append(layout.Dto).Append(" left, in ")
-            .Append(layout.Dto).Append(" right, ").Append(RuntimeName).AppendLine("DurableSchema schema) {");
+            .Append(layout.Dto).Append(" right, ").Append(SchemaName).AppendLine("DurableSchema schema) {");
         foreach (GenericField field in layout.Fields) {
             output.Append("            if (!(");
             if (UsesGenericOps(field)) output.Append(GenericFieldOps(field)).Append(".StateEquals(in left.").Append(field.Name)
@@ -228,7 +230,7 @@ public sealed partial class DurableSchemaGenerator {
 
     private static void AppendGenericDelta(StringBuilder output, GenericLayout layout) {
         output.Append("        public static ").Append(PayloadNamespace).Append("PreparedDeltaBody PrepareDelta(in ").Append(layout.Dto).Append(" prior, in ")
-            .Append(layout.Dto).Append(" current, ").Append(RuntimeName).AppendLine("DurableSchema schema) {");
+            .Append(layout.Dto).Append(" current, ").Append(SchemaName).AppendLine("DurableSchema schema) {");
         int masks = (layout.Fields.Count + 7) / 8;
         for (int index = 0; index < masks; index++) output.Append("            byte mask").Append(index).AppendLine(" = 0;");
         for (int index = 0; index < layout.Fields.Count; index++) {
@@ -256,7 +258,7 @@ public sealed partial class DurableSchemaGenerator {
 
     private static void AppendGenericApply(StringBuilder output, GenericLayout layout) {
         output.Append("        public static ").Append(layout.Dto).Append(" Apply(ref ").Append(PayloadNamespace).Append("BinaryPayloadReader reader, in ")
-            .Append(layout.Dto).Append(" prior, ").Append(RuntimeName).AppendLine("DurableSchema schema, bool requireChanges = false) {");
+            .Append(layout.Dto).Append(" prior, ").Append(SchemaName).AppendLine("DurableSchema schema, bool requireChanges = false) {");
         int masks = (layout.Fields.Count + 7) / 8;
         for (int index = 0; index < masks; index++) output.Append("            byte mask").Append(index).AppendLine(" = reader.ReadByte();");
         output.Append("            if (requireChanges && (")

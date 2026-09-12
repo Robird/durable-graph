@@ -20,7 +20,7 @@
 
 ## 2. 复用现有描述，不先设计替代类型体系
 
-[ObjectLayout](../../src/DurableGraph/ObjectLayout.cs) 已提供所需载体：String、完整 DurableSchema、ArrayLayout。
+[ObjectLayout](../../src/DurableGraph/Schema/ObjectLayout.cs) 已提供所需载体：String、完整 DurableSchema、ArrayLayout。
 class 的 exact base/inline 依赖、数组 exact 元素槽及 nominal 类型身份全部复用。
 引用槽保留声明约束，目标对象的版本继续由目标自己的 Base 负责。
 
@@ -54,8 +54,8 @@ ResolveReader 复用 `bindings.ResolveObjectReader(layout)` 并核对完整布�
 
 表示目录由 SchemaStore 拥有，继续使用同一 `schemas.rbf`，不增加 Repository 文件、服务层或注册表接口家族。
 一个 ID→layout 索引与一个 layout→ID 索引描述同一份持久事实，进程缓存不能重新分配既有 ID。
-实际代码：[RepresentationId](../../src/DurableGraph.StateStore/RepresentationId.cs)、
-[SchemaStore](../../src/DurableGraph.StateStore/SchemaStore.cs)。`SchemaStore.Count` 仍只统计用户 Schema 定义，
+实际代码：[RepresentationId](../../src/DurableGraph.Persistence/RepresentationId.cs)、
+[SchemaStore](../../src/DurableGraph.Persistence/SchemaStore.cs)。`SchemaStore.Count` 仍只统计用户 Schema 定义，
 不把内建 string 或表示登记数量混入原计数。
 
 ## 4. ID 与登记日志
@@ -87,7 +87,7 @@ descriptor 复用今天的 class SchemaKey / 数组 codec、构造码和元素�
 可写非空重开仍需确认持久屏障，不能只以用户 Schema 数量判断非空：纯基元数组也会产生表示登记帧。
 非法 ID、跳号、重复/重绑定 ID、同表示重复绑定不同 ID、缺依赖、未知格式、坏尾和溢长均拒绝；不按字典枚举顺序恢复编号。
 定义 kind/arity 的声明一致性覆盖 Schema 和数组表示登记，恢复时亦统一检查。
-参考 [SchemaStore](../../src/DurableGraph.StateStore/SchemaStore.cs)；原 SchemaBatchWireCodec、RepresentationBatchWireCodec、
+参考 [SchemaStore](../../src/DurableGraph.Persistence/SchemaStore.cs)；原 SchemaBatchWireCodec、RepresentationBatchWireCodec、
 RepresentationDescriptorCodec 的后继为 [DB-046 统一目录](0046-unified-schema-catalog-slice.md)。
 
 ## 5. Base 与读写贯通
@@ -136,9 +136,9 @@ G0–G1 需要测试以下容易被 DTO 类型相等掩盖的案例：不同 nom
 
 | 闸门 | 代码与回归入口 | 状态 |
 |---|---|---|
-| G0 表示目录 | [SchemaStore](../../src/DurableGraph.StateStore/SchemaStore.cs)、[目录测试](../../tests/DurableGraph.StateStore.Tests/RepresentationStoreTests.cs)、[批次格式测试（DB-046 后继）](../../tests/DurableGraph.StateStore.Tests/SchemaCatalogReplayTests.cs) | 通过 |
-| G1 Base 格式 | [BaseObjectBodyCodec](../../src/DurableGraph.StateStore/BaseObjectBodyCodec.cs)、[DecodedBaseObjectBody](../../src/DurableGraph.StateStore/DecodedBaseObjectBody.cs)、[表示头测试](../../tests/DurableGraph.StateStore.Tests/RepresentationHeaderTests.cs)、[旧头兼容测试](../../tests/DurableGraph.StateStore.Tests/BaseObjectBodyCodecTests.cs) | 通过 |
-| G2 保存与读取 | [CapturedRevisionPlanner](../../src/DurableGraph.StateStore/CapturedRevisionPlanner.cs)、[LoadedRevisionPlanner](../../src/DurableGraph.StateStore/LoadedRevisionPlanner.cs)、[RevisionDecoder](../../src/DurableGraph.StateStore/RevisionDecoder.cs)、[TypedObjectVersionReader](../../src/DurableGraph.StateStore/TypedObjectVersionReader.cs)、[GraphRepository](../../src/DurableGraph.StateStore/GraphRepository.cs)、[集成测试](../../tests/DurableGraph.StateStore.Tests/RepresentationIntegrationTests.cs) | 通过 |
+| G0 表示目录 | [SchemaStore](../../src/DurableGraph.Persistence/SchemaStore.cs)、[目录测试](../../tests/DurableGraph.Persistence.Tests/RepresentationStoreTests.cs)、[批次格式测试（DB-046 后继）](../../tests/DurableGraph.Persistence.Tests/SchemaCatalogReplayTests.cs) | 通过 |
+| G1 Base 格式 | [BaseObjectBodyCodec](../../src/DurableGraph.Persistence/BaseObjectBodyCodec.cs)、[DecodedBaseObjectBody](../../src/DurableGraph.Persistence/DecodedBaseObjectBody.cs)、[表示头测试](../../tests/DurableGraph.Persistence.Tests/RepresentationHeaderTests.cs)、[旧头兼容测试](../../tests/DurableGraph.Persistence.Tests/BaseObjectBodyCodecTests.cs) | 通过 |
+| G2 保存与读取 | [CapturedRevisionPlanner](../../src/DurableGraph.Persistence/CapturedRevisionPlanner.cs)、[LoadedRevisionPlanner](../../src/DurableGraph.Persistence/LoadedRevisionPlanner.cs)、[RevisionDecoder](../../src/DurableGraph.Persistence/RevisionDecoder.cs)、[TypedObjectVersionReader](../../src/DurableGraph.Persistence/TypedObjectVersionReader.cs)、[GraphRepository](../../src/DurableGraph.StateStore/GraphRepository.cs)、[集成测试](../../tests/DurableGraph.Persistence.Tests/RepresentationIntegrationTests.cs) | 通过 |
 | G3 实际包与历史 | [ArrayConsumer](../../experiments/PackageConsumerProbe/ArrayConsumer/README.md)、[GenericConsumer](../../experiments/PackageConsumerProbe/GenericConsumer/README.md)、[ValueUpgradeConsumer](../../experiments/PackageConsumerProbe/ValueUpgradeConsumer/README.md) | 通过 |
 
 ### 6.2 验证证据

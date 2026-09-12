@@ -23,21 +23,21 @@
 
 ## 2. 当前代码提供了什么
 
-- [LoadedWorld](../../src/DurableGraph.StateStore/LoadedWorld.cs)：`_baseline` 固定，`Prepare` 在 finally
+- [LoadedWorld](../../src/DurableGraph.Persistence/LoadedWorld.cs)：`_baseline` 固定，`Prepare` 在 finally
   Discard 候选；`PrepareNew` 也丢弃捕获会话。计划可独立 Append，但没有下一基线及新对象绑定安装。
   因此重新 Load 会分配另一套实例，继续使用原 LoadedWorld 则仍从原 Parent 分支准备。
-- [CaptureSession](../../src/DurableGraph/CaptureSession.cs)：已有 candidate 身份检查、Accept/Discard、
+- [CaptureSession](../../src/DurableGraph/Runtime/Capture/CaptureSession.cs)：已有 candidate 身份检查、Accept/Discard、
   live bindings 转移和单调 cursor；这是可复用的内核，Accept 本身不是持久 Commit。
-- [NormalizedRevision](../../src/DurableGraph.StateStore/NormalizedRevision.cs) 与
-  [LoadedRevisionPlanner](../../src/DurableGraph.StateStore/LoadedRevisionPlanner.cs)：保存完整 source membership、
+- [NormalizedRevision](../../src/DurableGraph.Persistence/NormalizedRevision.cs) 与
+  [LoadedRevisionPlanner](../../src/DurableGraph.Persistence/LoadedRevisionPlanner.cs)：保存完整 source membership、
   current DTO、SourceSchema/RequiresRewrite，已经拥有加载后首次升级续写所需信息。
-- [StateRevisionStore.Append](../../src/DurableGraph.StateStore.Storage/StateRevisionStore.cs) 只在 writer lease
+- [StateRevisionStore.Append](../../src/DurableGraph.Storage/StateRevisionStore.cs) 只在 writer lease
   内 EndAppend 并返回地址，没有 State durability barrier 或发布。底层
   [OpenActiveWriter](../../../atelia/src/RbfSegmentStore/RbfSegmentStore.cs) 可以在取得 lease 时轮转；
   Append 后重新 OpenActiveWriter 再 flush，不能证明 flush 的是刚追加帧所属文件。
-- [BaseObjectBodyCodec](../../src/DurableGraph.StateStore/BaseObjectBodyCodec.cs) 已是 internal，签名为
+- [BaseObjectBodyCodec](../../src/DurableGraph.Persistence/BaseObjectBodyCodec.cs) 已是 internal，签名为
   `PreparedBaseBody → EncodedBaseObjectBody`；内部 PreparedObject/规划器只接受对应表示。
-  [ObjectStateRecord](../../src/DurableGraph/ObjectStateRecord.cs) 是中性单行，来源仍由外层视图约束。
+  [ObjectStateRecord](../../src/DurableGraph/Runtime/Capture/ObjectStateRecord.cs) 是中性单行，来源仍由外层视图约束。
   不需要再增加三个不同阶段的单行 DTO 或泛型 phase 框架。
 
 ## 3. 主线：最小受控工作会话
@@ -85,7 +85,7 @@ SchemaStore 保持单调持久注册；新发布记录只需选择 State Revisio
 5. 地址已知后，在发布前完成剩余基线包装与分配；发布 `(RevisionAddress, WorldId)`。
 6. 仅在发布已确认后安装候选、Parent 和 live bindings。正常安装不再 Capture、Hydrate、调用用户代码或分配集合。
 
-[CaptureContext.DetachBindings](../../src/DurableGraph/CaptureContext.cs) 当前会 new 一个空 Dictionary，
+[CaptureContext.DetachBindings](../../src/DurableGraph/Runtime/Capture/CaptureContext.cs) 当前会 new 一个空 Dictionary，
 因此不能直接把现有 Accept 放到发布后就宣称安装无分配；应移动准备动作或简化转移状态。
 这不承诺所有运行时异常都可避免；发布已成功而会话安装失败时，持久结果仍成功，会话失效并从权威 head 恢复。
 
@@ -128,10 +128,10 @@ publication carrier 候选为单独的短 RBF 发布日志，或小 head 文件�
 | exact 解码历史 Revision 的 DTO 全目录 | 对每个 source-live durable 族/版保留 exact Schema、DTO reader、同版 Delta applier、引用遍历 |
 | 将历史 Revision 恢复为当前可编辑 World | 上述能力 + 全部 source 行到当前 DTO 的 Normalize/Upgrade；全部 current 引用合法；可达对象可 Allocate/Hydrate |
 
-[StateReaderBinding](../../src/DurableGraph/StateReaderBinding.cs) 不依赖领域 CLR Type，
+[StateReaderBinding](../../src/DurableGraph/Runtime/Binding/StateReaderBinding.cs) 不依赖领域 CLR Type，
 但[生成入口](../../src/DurableGraph.Generator/DurableSchemaGenerator.GeneratedState.cs)依附当前被标记类。
 删除整个模型族的类，仅留 `.dgschema` 不会自动生成该族 reader；
-[StateModelRegistry](../../src/DurableGraph.StateStore/StateModelRegistry.cs) 与 NormalizedRevision
+[StateModelRegistry](../../src/DurableGraph.Persistence/StateModelRegistry.cs) 与 NormalizedRevision
 也仍要求每个 source-live durable 族有 current model。
 旧版 DTO 可以由历史形状再生成，不等于被删除的整个模型族会自动恢复可执行能力。
 
@@ -151,7 +151,7 @@ publication carrier 候选为单独的短 RBF 发布日志，或小 head 文件�
 
 需用两/三版实际 PackageReference 消费工程验证：旧图落盘 → 新 World 删边 + 壳归一化 → 不分配壳 →
 保存 Remove → 再删壳程序能读新 Revision、读旧 Revision 明确缺能力；另验证坏 orphan 仍失败。
-已有 [abstract orphan 测试](../../tests/DurableGraph.StateStore.Tests/LoadedReferenceWorldTests.cs)
+已有 [abstract orphan 测试](../../tests/DurableGraph.Persistence.Tests/LoadedReferenceWorldTests.cs)
 和[旧 nominal 槽测试](../../tests/DurableGraph.Tests/GeneratedReferenceBodyTests.cs)分别提供局部证据，不能代替该完整见证。
 
 后续只有在真实应用需要**完全删除 CLR 壳却继续加载旧图**时，再评估独立的 family 状态能力、

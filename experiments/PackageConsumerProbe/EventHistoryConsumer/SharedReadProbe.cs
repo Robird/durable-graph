@@ -2,8 +2,8 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Security.Cryptography;
 using Atelia.DurableGraph;
-using Atelia.DurableGraph.StateStore;
-using Atelia.DurableGraph.StateStore.Storage;
+using Atelia.DurableGraph.Persistence;
+using Atelia.DurableGraph.Storage;
 using Atelia.RbfSegmentStore;
 using SegmentStore = Atelia.RbfSegmentStore.RbfSegmentStore;
 

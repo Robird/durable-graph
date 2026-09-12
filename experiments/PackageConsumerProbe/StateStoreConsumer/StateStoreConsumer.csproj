@@ -14,6 +14,6 @@
     <Compile Include="World.V2.cs" Condition="'$(RestoreVersion)' == '2'" />
     <Compile Include="GraphWorld.cs" Condition="'$(RestoreVersion)' == '2'" />
     <PackageReference Include="Atelia.DurableGraph" Version="$(DurableGraphPackageVersion)" />
-    <PackageReference Include="Atelia.DurableGraph.StateStore" Version="$(DurableGraphPackageVersion)" />
+    <PackageReference Include="Atelia.DurableGraph.Persistence" Version="$(DurableGraphPackageVersion)" />
   </ItemGroup>
 </Project>

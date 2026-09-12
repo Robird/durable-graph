@@ -146,9 +146,9 @@ public sealed partial class DurableSchemaGenerator {
     }
 
     private static void AppendTypePatternExpression(StringBuilder text, TypePattern pattern) {
-        const string prefix = "global::Atelia.DurableGraph.TypeExpr.";
+        const string prefix = "global::Atelia.DurableGraph.Schema.TypeExpr.";
         if (pattern.Kind == PatternKind.Builtin) {
-            text.Append(prefix).Append("Builtin((global::Atelia.DurableGraph.TypeTag)").Append(pattern.BuiltinTag).Append(')');
+            text.Append(prefix).Append("Builtin((global::Atelia.DurableGraph.Schema.TypeTag)").Append(pattern.BuiltinTag).Append(')');
         } else if (pattern.Kind == PatternKind.Parameter) {
             text.Append(prefix).Append("Parameter(").Append(pattern.ParameterOrdinal).Append(')');
         } else if (pattern.IsNullable) {

@@ -11,7 +11,9 @@ public sealed partial class DurableSchemaGeneratorTests {
             using System;
             using System.Buffers;
             using Atelia.DurableGraph;
-            using Atelia.DurableGraph.StateStore.Serialization;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
+            using Atelia.DurableGraph.Serialization;
             namespace BinaryBodies;
             [DurableType("state.copy", 1)]
             public sealed partial class Item : IDurableObject {
@@ -56,13 +58,13 @@ public sealed partial class DurableSchemaGeneratorTests {
         Assert.Null(body.GetMethod("Read", BindingFlags.Static | BindingFlags.NonPublic));
         Assert.Equal(dto, body.GetMethod("ReadBaseBodyV1", BindingFlags.Static | BindingFlags.NonPublic)!.ReturnType);
         MethodInfo prepare = body.GetMethod("PrepareDeltaBody", BindingFlags.Static | BindingFlags.NonPublic)!;
-        Assert.Equal(typeof(Atelia.DurableGraph.StateStore.Serialization.PreparedDeltaBody), prepare.ReturnType);
+        Assert.Equal(typeof(Atelia.DurableGraph.Serialization.PreparedDeltaBody), prepare.ReturnType);
         Assert.All(prepare.GetParameters(), parameter => {
             Assert.Equal(dto.MakeByRefType(), parameter.ParameterType);
             Assert.True(parameter.IsIn);
         });
         MethodInfo prepareBase = body.GetMethod("PrepareBaseBody", BindingFlags.Static | BindingFlags.NonPublic)!;
-        Assert.Equal(typeof(Atelia.DurableGraph.StateStore.Serialization.PreparedBaseBody), prepareBase.ReturnType);
+        Assert.Equal(typeof(Atelia.DurableGraph.Serialization.PreparedBaseBody), prepareBase.ReturnType);
         ParameterInfo baseParameter = Assert.Single(prepareBase.GetParameters());
         Assert.Equal(dto.MakeByRefType(), baseParameter.ParameterType);
         Assert.True(baseParameter.IsIn);
@@ -76,7 +78,9 @@ public sealed partial class DurableSchemaGeneratorTests {
             using System;
             using System.Buffers;
             using Atelia.DurableGraph;
-            using Atelia.DurableGraph.StateStore.Serialization;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
+            using Atelia.DurableGraph.Serialization;
             namespace BinaryBodies;
             [DurableType("state.history", 3)]
             public sealed partial class Item : IDurableObject {
@@ -135,6 +139,8 @@ public sealed partial class DurableSchemaGeneratorTests {
         ] : [historical];
         GeneratorTestRun run = RunGenerator("""
             using Atelia.DurableGraph;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
             [DurableType("state.item", 2)]
             public sealed partial class Item : IDurableObject { [DurableField(1)] private int _current; }
             """, history);
@@ -150,6 +156,8 @@ public sealed partial class DurableSchemaGeneratorTests {
     public void ReferenceCaptureStateDtoScalarLeafKeepsContextFreeCaptureWithHistoricalBaseString() {
         GeneratorTestRun run = RunGenerator("""
             using Atelia.DurableGraph;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
             [DurableType("state.base", 2)]
             public abstract partial class Base : IDurableObject { [DurableField(1)] private int _current; }
             [DurableType("state.leaf", 1)]
@@ -170,7 +178,9 @@ public sealed partial class DurableSchemaGeneratorTests {
             using System;
             using System.Buffers;
             using Atelia.DurableGraph;
-            using Atelia.DurableGraph.StateStore.Serialization;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
+            using Atelia.DurableGraph.Serialization;
             namespace BinaryBodies;
             [DurableType("state.empty", 1)]
             public sealed partial class Item : IDurableObject { }

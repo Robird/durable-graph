@@ -1,3 +1,5 @@
+using Atelia.DurableGraph.Runtime;
+using Atelia.DurableGraph.Schema;
 using System.Reflection;
 using Atelia.DurableGraph.Build;
 using Microsoft.CodeAnalysis;
@@ -60,6 +62,8 @@ public sealed partial class DurableSchemaGeneratorTests {
     public void ReferenceCaptureStringOptInKeepsStringSchemaAndGeneratesOnlyIdDtoSlots() {
         GeneratorTestRun run = RunGenerator("""
             using Atelia.DurableGraph;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
             [DurableType("body.string", 1)]
             public sealed partial class Item : IDurableObject {
                 [DurableField(1)] private string _text = string.Empty;
@@ -85,7 +89,9 @@ public sealed partial class DurableSchemaGeneratorTests {
             using System.Buffers;
             using System.Linq;
             using Atelia.DurableGraph;
-            using Atelia.DurableGraph.StateStore.Serialization;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
+            using Atelia.DurableGraph.Serialization;
             namespace BinaryBodies;
             [DurableType("reference.mixed-base", 1)]
             public abstract partial class Base : IDurableObject { [DurableField(1)] {{baseField}} }
@@ -189,7 +195,9 @@ public sealed partial class DurableSchemaGeneratorTests {
         using System.Buffers;
         using System.Linq;
         using Atelia.DurableGraph;
-        using Atelia.DurableGraph.StateStore.Serialization;
+        using Atelia.DurableGraph.Schema;
+        using Atelia.DurableGraph.Runtime;
+        using Atelia.DurableGraph.Serialization;
         namespace ReferenceCaptureDomain;
         [DurableType("reference.base", 1)]
         public abstract partial class Base : IDurableObject {
@@ -339,7 +347,9 @@ public sealed partial class DurableSchemaGeneratorTests {
         using System.Buffers;
         using System.Linq;
         using Atelia.DurableGraph;
-        using Atelia.DurableGraph.StateStore.Serialization;
+        using Atelia.DurableGraph.Schema;
+        using Atelia.DurableGraph.Runtime;
+        using Atelia.DurableGraph.Serialization;
         namespace ReferenceHistory;
         [DurableType("reference-history.base", 1)]
         public abstract partial class OldBase : IDurableObject {
@@ -371,7 +381,9 @@ public sealed partial class DurableSchemaGeneratorTests {
         using System;
         using System.Buffers;
         using Atelia.DurableGraph;
-        using Atelia.DurableGraph.StateStore.Serialization;
+        using Atelia.DurableGraph.Schema;
+        using Atelia.DurableGraph.Runtime;
+        using Atelia.DurableGraph.Serialization;
         namespace ReferenceHistory;
         [DurableType("{{(replaceChain ? "reference-history.replacement" : "reference-history.base")}}", {{(replaceChain ? 1 : 2)}})]
         public abstract partial class CurrentBase : IDurableObject {

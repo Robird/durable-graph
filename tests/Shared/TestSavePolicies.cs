@@ -1,4 +1,4 @@
-using Atelia.DurableGraph.StateStore;
+using Atelia.DurableGraph.Persistence;
 
 namespace Atelia.DurableGraph.Testing;
 

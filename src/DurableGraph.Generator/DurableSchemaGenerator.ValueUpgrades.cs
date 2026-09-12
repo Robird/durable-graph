@@ -178,8 +178,8 @@ public sealed partial class DurableSchemaGenerator {
     }
 
     private static void AppendValueUpgradeNominal(StringBuilder output, string id, int arity) {
-        output.Append(RuntimeName).Append("TypeExpr.Named(").Append(Literal(id));
-        for (int ordinal = 0; ordinal < arity; ordinal++) output.Append(", ").Append(RuntimeName).Append("TypeExpr.Parameter(").Append(ordinal).Append(')');
+        output.Append(SchemaName).Append("TypeExpr.Named(").Append(Literal(id));
+        for (int ordinal = 0; ordinal < arity; ordinal++) output.Append(", ").Append(SchemaName).Append("TypeExpr.Parameter(").Append(ordinal).Append(')');
         output.Append(')');
     }
 
@@ -203,7 +203,7 @@ public sealed partial class DurableSchemaGenerator {
         output.Append("internal static class ").Append(name).AppendLine(" {");
         output.Append("    internal static void Invoke").Append(syntax.TypeParameterList?.ToString()).Append("(in ")
             .Append(syntax.ParameterList.Parameters[0].Type!.ToString()).Append(" prior, out ")
-            .Append(syntax.ParameterList.Parameters[1].Type!.ToString()).Append(" next, ").Append(RuntimeName).Append("UpgradeContext context)");
+            .Append(syntax.ParameterList.Parameters[1].Type!.ToString()).Append(" next, ").Append(RootName).Append("UpgradeContext context)");
         foreach (TypeParameterConstraintClauseSyntax constraint in syntax.ConstraintClauses) output.Append(' ').Append(constraint.ToString());
         output.AppendLine(" {");
         output.Append("        ").Append(method.ContainingType.ToDisplayString(GenericQualifiedNameFormat)).Append('.')

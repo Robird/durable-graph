@@ -1,3 +1,5 @@
+using Atelia.DurableGraph.Runtime;
+using Atelia.DurableGraph.Schema;
 using System.Reflection;
 using Atelia.DurableGraph.Build;
 
@@ -10,6 +12,8 @@ public sealed partial class DurableSchemaGeneratorTests {
         SchemaHistoryTool publisher = new();
         GeneratorTestRun initial = RunGenerator("""
             using Atelia.DurableGraph;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
             namespace ReaderHistory;
             [DurableType("reader.base", 1)]
             public abstract partial class RemovedBase : IDurableObject {
@@ -24,7 +28,9 @@ public sealed partial class DurableSchemaGeneratorTests {
         publisher.Publish(files.WriteManifest(initial), files.History);
         const string currentSource = """
             using Atelia.DurableGraph;
-            using Atelia.DurableGraph.StateStore.Serialization;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
+            using Atelia.DurableGraph.Serialization;
             namespace ReaderHistory;
             [DurableType("reader.base", 2)]
             public abstract partial class CurrentBase : IDurableObject {
@@ -89,6 +95,8 @@ public sealed partial class DurableSchemaGeneratorTests {
     public void GeneratedReaderBindingsKeepMemberOperationsStaticallyBound() {
         GeneratorTestRun run = RunGenerator("""
             using Atelia.DurableGraph;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
             [DurableType("reader.static", 1)]
             public sealed partial class Model : IDurableObject {
                 [DurableField(1)] private int _number;
@@ -103,7 +111,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         Assert.Contains("reader.ReadInt32();", generated);
         Assert.Contains("new global::Atelia.DurableGraph.ObjectId(reader.ReadUInt32())", generated);
         Assert.Contains("table.ResolveString(state.Segment0Field2);", generated);
-        foreach (string forbidden in new[] { "ValueSlotCodec", "PrimitiveSlotCodecs", "DynamicInvoke", "System.Reflection", "Dictionary<", "StateStore.Storage" }) {
+        foreach (string forbidden in new[] { "ValueSlotCodec", "PrimitiveSlotCodecs", "DynamicInvoke", "System.Reflection", "Dictionary<", "Storage" }) {
             Assert.DoesNotContain(forbidden, generated);
         }
     }
@@ -112,6 +120,8 @@ public sealed partial class DurableSchemaGeneratorTests {
     public void GeneratedReaderBindingsAreNotPublishedForReservedHelperCollision() {
         GeneratorTestRun run = RunGenerator("""
             using Atelia.DurableGraph;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
             [DurableType("reader.invalid", 1)]
             public sealed partial class Invalid : IDurableObject { private static class __DurableState { } }
             """);

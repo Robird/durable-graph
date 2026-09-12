@@ -1,3 +1,4 @@
+using Atelia.DurableGraph.Schema;
 using System.Collections.Immutable;
 using System.Text;
 using Atelia.DurableGraph.Build;
@@ -10,6 +11,8 @@ namespace Atelia.DurableGraph.Tests;
 public sealed partial class DurableSchemaGeneratorTests {
     private const string InlineLibrarySource = """
         using Atelia.DurableGraph;
+        using Atelia.DurableGraph.Schema;
+        using Atelia.DurableGraph.Runtime;
         namespace Remote {
             [DurableType("Point",1)] public readonly partial struct Point {
                 [DurableField(1)] private readonly int _x;
@@ -35,6 +38,8 @@ public sealed partial class DurableSchemaGeneratorTests {
         MetadataReference reference = MetadataReference.CreateFromImage(ImmutableArray.CreateRange(stream.ToArray()));
         GeneratorTestRun app = RunCrossAssemblyGenerator("""
             using Atelia.DurableGraph;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
             [DurableType("World",1)] public partial class World:IDurableObject {
                 [DurableField(1)] public Remote.Point Position;
                 [DurableField(2)] public Remote.Shell Shell;
@@ -65,6 +70,8 @@ public sealed partial class DurableSchemaGeneratorTests {
         var library = EmitCrossAssemblyReference(RunCrossAssemblyGenerator(InlineLibrarySource,forceDefinitions:"true"));
         GeneratorTestRun app=RunCrossAssemblyGenerator($$"""
             using Atelia.DurableGraph;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
             [DurableType("LocalPoint",1)] public partial struct LocalPoint { [DurableField(1)] public int X; }
             [DurableType("LocalInline",1)] public partial struct LocalInline { [DurableField(1)] public Remote.Point Position; }
             [DurableType("Base",1)] public partial class Base:IDurableObject { [DurableField(1)] public Remote.Point Position; }
@@ -95,6 +102,8 @@ public sealed partial class DurableSchemaGeneratorTests {
         string manifest=InlinePointManifest;
         string source=$$"""
             using Atelia.DurableGraph;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
             [assembly:DurableSchemaExport({{contract}},"Point",1,{{Microsoft.CodeAnalysis.CSharp.SymbolDisplay.FormatLiteral(manifest,true)}})]
             [DurableType("Point",1)] public struct Point { public int X; }
             """;
@@ -120,6 +129,8 @@ public sealed partial class DurableSchemaGeneratorTests {
         // Shell's private fixed dependency is Hidden. Identical local layout still cannot replace its owner.
         GeneratorTestRun app=RunCrossAssemblyGenerator("""
             using Atelia.DurableGraph;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
             [DurableType("Hidden",1)] public partial struct LocalHidden { [DurableField(1)] public int X; }
             [DurableType("World",1)] public partial class World:IDurableObject { [DurableField(1)] public Remote.Shell Value; }
             """,[library.Reference]);
@@ -148,6 +159,8 @@ public sealed partial class DurableSchemaGeneratorTests {
         var referenceV2 = EmitCrossAssemblyReference(libraryV2).Reference;
         GeneratorTestRun appV2 = RunCrossAssemblyGenerator("""
             using Atelia.DurableGraph;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
             using W=Atelia.DurableGraph.Generated.Family_576F726C64;
             [DurableType("World",2)] public partial class World:IDurableObject {
                 [DurableField(2)] public int Count;
@@ -159,6 +172,8 @@ public sealed partial class DurableSchemaGeneratorTests {
         Assert.DoesNotContain("public static class Family_506F696E74", GeneratedSource(appV2, "DurableGenericStates.g.cs"));
         GeneratorTestRun ruleOnly = RunCrossAssemblyGenerator("""
             using Atelia.DurableGraph;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
             using P=Atelia.DurableGraph.Generated.Family_506F696E74;
             [ValueUpgradeRuleSet] public sealed class Rules;
             public static class Converter {
@@ -205,14 +220,14 @@ public sealed partial class DurableSchemaGeneratorTests {
         foreach (GeneratorTestRun run in new[] { local, external }) {
             var assembly = loaded.Load(run);
             Type host = assembly.GetType("BodyHost")!;
-            var models = new StateStore.StateModelRegistry();
+            var models = new Persistence.StateModelRegistry();
             host.GetMethod("Register")!.Invoke(null, [models]);
             DurableSchema schema = models.Snapshot().ResolveCurrentModel(assembly.GetType("Item")!).CurrentSchema;
             if (priorSchema is not null) Assert.Equal(priorSchema, schema);
             priorSchema = schema;
             Assert.Empty(assembly.GetType("Atelia.DurableGraph.Generated.Family_4974656D+V1")!.GetGenericArguments());
             var write = host.GetMethod("Base")!.CreateDelegate<Func<byte[], DurableSchema, byte[]>>();
-            var delta = host.GetMethod("Delta")!.CreateDelegate<Func<byte[], byte[], DurableSchema, StateStore.Serialization.PreparedDeltaBody>>();
+            var delta = host.GetMethod("Delta")!.CreateDelegate<Func<byte[], byte[], DurableSchema, Serialization.PreparedDeltaBody>>();
             byte[] before = [2, 7, 9, 6];
             byte[] after = [4, 8, 9, 10];
             Assert.Equal(before, write(before, schema));

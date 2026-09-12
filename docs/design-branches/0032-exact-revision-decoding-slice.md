@@ -29,17 +29,17 @@ live 对象都由文件中的类型信息分派；应用不再逐对象选择 Re
 
 ## 3. 当前可复用接缝
 
-- [StateRevisionStore](../../src/DurableGraph.StateStore.Storage/StateRevisionStore.cs)：
+- [StateRevisionStore](../../src/DurableGraph.Storage/StateRevisionStore.cs)：
   ReadLiveObjectHeads 提供有序完整 membership；ReadObjectVersionChain 按对象逐链验证 prior，返回 owned bytes。
-- [TypedObjectVersionReader](../../src/DurableGraph.StateStore/TypedObjectVersionReader.cs)：
+- [TypedObjectVersionReader](../../src/DurableGraph.Persistence/TypedObjectVersionReader.cs)：
   Base 的完整 Schema 匹配先于该对象 body callbacks；同版逐段读取、全消费，string 禁止 Delta。
 - [SG BinaryBody](../../src/DurableGraph.Generator/DurableSchemaGenerator.BinaryBody.cs)：
   已为每个受支持模型的 V1..Vcurrent 生成 Schema、ReadVn、ApplyDeltaVn 和 ValidateStringReferences。
   历史祖先可不保留 CLR 定义；但整个模型族若已从当前源码消失，不会仅凭 Schema 日志自动生成 reader。
 - [CapturedObject](../../src/DurableGraph/CapturedObject.cs)：
   已有 exact Schema、owned boxed unmanaged DTO、复制返回 GetState 和 string 内容的行表示。
-  [CapturedGraph](../../src/DurableGraph/CapturedGraph.cs) 另有 roots 与 Capture 含义，不能伪造空 roots 充作读回图。
-- [StringReadTable](../../src/DurableGraph/StringReadTable.cs)：
+  [CapturedGraph](../../src/DurableGraph/Runtime/Capture/CapturedGraph.cs) 另有 roots 与 Capture 含义，不能伪造空 roots 充作读回图。
+- [StringReadTable](../../src/DurableGraph/Runtime/Capture/StringReadTable.cs)：
   已定义每视图身份及零 ID/null、Empty 规则；当前仅接受 raw bytes，统一读取需要小的建表接缝。
 
 ## 4. 推荐设计

@@ -32,9 +32,9 @@
 
 ### 2.1 可保存，不等于能安全重建索引
 
-[StateValueBinding](../../../src/DurableGraph/StateValueBinding.cs) 和既有 inline DTO 已能冻结复合 Key。
-[DictionaryStateReader](../../../src/DurableGraph/DictionaryStateReader.cs) 的 Delta 已以完整 canonical key Base bytes 配对。
-当前拒绝 struct 的位置主要是 [DictionaryKeyPolicy](../../../src/DurableGraph/DictionaryKeyPolicy.cs) 和 SG 的已知 key 诊断。
+[StateValueBinding](../../../src/DurableGraph/Runtime/Binding/StateValueBinding.cs) 和既有 inline DTO 已能冻结复合 Key。
+[DictionaryStateReader](../../../src/DurableGraph/Runtime/Containers/DictionaryStateReader.cs) 的 Delta 已以完整 canonical key Base bytes 配对。
+当前拒绝 struct 的位置主要是 [DictionaryKeyPolicy](../../../src/DurableGraph/Runtime/Containers/DictionaryKeyPolicy.cs) 和 SG 的已知 key 诊断。
 
 真正欠缺的是一份不依赖已删除 CLR、Transient 或目标对象恢复顺序的查找规则。
 只让 body 接受 struct，随后在 Hydrate 中调用 Default，并不能提供这份规则。
@@ -141,8 +141,8 @@ generated KeyComparer<Key<T>>
 已知字段保持直接绑定，不在每次查询时按 Type 查表、反射字段、装箱整个 key、编码 bytes 或分配冻结 DTO。
 闭合期的反射/MakeGenericType 与现有 [GenericFactories](../../../src/DurableGraph.Generator/DurableSchemaGenerator.GenericFactories.cs) 模式一致。
 
-建议在 [StateDefinitionBinding](../../../src/DurableGraph/StateDefinitionBinding.cs) 增加可选的 current key-comparer factory，
-由 [StateBindingContext](../../../src/DurableGraph/StateBindingContext.cs) 的专用解析入口按需求调用。
+建议在 [StateDefinitionBinding](../../../src/DurableGraph/Runtime/Binding/StateDefinitionBinding.cs) 增加可选的 current key-comparer factory，
+由 [StateBindingContext](../../../src/DurableGraph/Runtime/Binding/StateBindingContext.cs) 的专用解析入口按需求调用。
 这样普通 TValue 的 ResolveCurrentValue 不必建立额外键能力，历史 DTO/binding 也不用携带它。
 保持原有显式登记权威；`StateModelRegistry` 的公开入口只是创建一次无 SchemaStore 的快照并解析。
 
@@ -217,11 +217,11 @@ string 内容依赖使独立 body reader 仍不承诺单独验证完整查找等
 空 struct 可能产生零字节 key；当 exact 布局可证明键只有一个等价类时，Base count / Delta 结果 count 大于 1，
 应在 entries 数组分配前拒绝。特别是 TValue 也为零字节时，不能只依靠现有 payload 最小尺寸预检。
 这是一项具体的键唯一性约束，不扩展为全图内存预算；合法的 0/1 条映射继续支持。
-当前实际接缝：[DictionaryStateReader](../../../src/DurableGraph/DictionaryStateReader.cs)、
-[CaptureContext](../../../src/DurableGraph/CaptureContext.cs)、[RevisionDecoder](../../../src/DurableGraph.StateStore/RevisionDecoder.cs)、
-[NormalizedRevision](../../../src/DurableGraph.StateStore/NormalizedRevision.cs)。
+当前实际接缝：[DictionaryStateReader](../../../src/DurableGraph/Runtime/Containers/DictionaryStateReader.cs)、
+[CaptureContext](../../../src/DurableGraph/Runtime/Capture/CaptureContext.cs)、[RevisionDecoder](../../../src/DurableGraph.Persistence/RevisionDecoder.cs)、
+[NormalizedRevision](../../../src/DurableGraph.Persistence/NormalizedRevision.cs)。
 
-Upgrade 保留 [DictionaryUpgrade](../../../src/DurableGraph/StateBindingContext.DictionaryUpgrade.cs) 的双槽独立工具和完整预检：
+Upgrade 保留 [DictionaryUpgrade](../../../src/DurableGraph/Runtime/Binding/StateBindingContext.DictionaryUpgrade.cs) 的双槽独立工具和完整预检：
 
 - Key 的 inline 布局变化沿现有 exact Schema 版本规则处理；显式转换全部条目，保留 ObjectId/count/comparer。
 - 不能只查转换后的 canonical bytes；不同 string ID 的同内容键、不同 NaN 位模式等仍可能 lookup 碰撞。
@@ -311,8 +311,8 @@ ValueTuple/record struct 继续保留明确后继，不为本片承诺其外观�
 
 ## 11. 证据入口
 
-- 本库：[DB-054](../../design-branches/0054-dictionary-content-object-slice.md)、[DictionaryObjectBinding](../../../src/DurableGraph/DictionaryObjectBinding.cs)、
-  [StateModelRegistry](../../../src/DurableGraph.StateStore/StateModelRegistry.cs)、[Dictionary snapshot](../../../src/DurableGraph.StateStore/StateModelSnapshot.Dictionaries.cs)、
+- 本库：[DB-054](../../design-branches/0054-dictionary-content-object-slice.md)、[DictionaryObjectBinding](../../../src/DurableGraph/Runtime/Containers/DictionaryObjectBinding.cs)、
+  [StateModelRegistry](../../../src/DurableGraph.Persistence/StateModelRegistry.cs)、[Dictionary snapshot](../../../src/DurableGraph.Persistence/StateModelSnapshot.Dictionaries.cs)、
   [生成形状检查](../../../src/DurableGraph.Generator/DurableSchemaGenerator.Ancestry.cs)、[持久成员枚举](../../../src/DurableGraph.Generator/DurableSchemaGenerator.cs)。
 - BCL Dictionary 允许选择 comparer，默认使用类型默认相等，要求键的 hash 依据在存入期间稳定；这支持“显式规则”与“普通 Default”必须分开的判断。
   [Microsoft Dictionary 文档](https://learn.microsoft.com/en-us/dotnet/api/system.collections.generic.dictionary-2?view=net-10.0)。

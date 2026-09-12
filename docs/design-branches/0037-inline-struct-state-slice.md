@@ -32,11 +32,11 @@ struct 无独立对象行，历史按旧布局读，新模型按显式 Upgrade �
 | 当前实现 | 本片所需增量 |
 |---|---|
 | [DurableTypeAttribute](../../src/DurableGraph/DurableTypeAttribute.cs) 只允许 class；[SG](../../src/DurableGraph.Generator/DurableSchemaGenerator.cs) 拒绝 struct 字段 | 增加显式标记的 struct 类型路径，与 class 的 DurableBase 继承规则区分 |
-| [DurableFieldInfo](../../src/DurableGraph/DurableFieldInfo.cs) 只有 tag 与 nominal target；[DurableSchema](../../src/DurableGraph/DurableSchema.cs) 只有 exact BaseSchema | 增加最小 Schema kind、exact inline 字段依赖及完整依赖校验 |
-| [Ancestry](../../src/DurableGraph.Generator/DurableSchemaGenerator.Ancestry.cs)、[Build history](../../src/DurableGraph.Build/SchemaHistoryTool.cs)、[SchemaStore](../../src/DurableGraph.StateStore/SchemaStore.cs) 只解析 exact 祖先链 | 扩为 base + inline 依赖 DAG，nominal 边不进入此闭包 |
+| [DurableFieldInfo](../../src/DurableGraph/Schema/DurableFieldInfo.cs) 只有 tag 与 nominal target；[DurableSchema](../../src/DurableGraph/Schema/DurableSchema.cs) 只有 exact BaseSchema | 增加最小 Schema kind、exact inline 字段依赖及完整依赖校验 |
+| [Ancestry](../../src/DurableGraph.Generator/DurableSchemaGenerator.Ancestry.cs)、[Build history](../../src/DurableGraph.Build/SchemaHistoryTool.cs)、[SchemaStore](../../src/DurableGraph.Persistence/SchemaStore.cs) 只解析 exact 祖先链 | 扩为 base + inline 依赖 DAG，nominal 边不进入此闭包 |
 | [GeneratedState](../../src/DurableGraph.Generator/DurableSchemaGenerator.GeneratedState.cs) 原语/ID DTO、Base/Delta、refs visitor | 嵌套 DTO 及递归静态 body/Capture/VisitReferences |
 | [StateModel 生成](../../src/DurableGraph.Generator/DurableSchemaGenerator.StateModel.cs) class Normalize/Allocate/Hydrate | owner Upgrade 保持；增加当前值的 ref 恢复 helper |
-| [StateReaderBinding](../../src/DurableGraph/StateReaderBinding.cs) 与准备管线要求 unmanaged DTO | 嵌套 DTO 的叶子仍为标量/UInt32 ID，保持该约束，不把领域引用复制进去 |
+| [StateReaderBinding](../../src/DurableGraph/Runtime/Binding/StateReaderBinding.cs) 与准备管线要求 unmanaged DTO | 嵌套 DTO 的叶子仍为标量/UInt32 ID，保持该约束，不把领域引用复制进去 |
 
 推荐支持：同一编译中的顶层、非泛型、非 record 的 `partial struct`，包括 `readonly partial struct`。
 **用户直接在 struct 声明上添加 `[DurableType(schemaId, version)]`，与 class 一样显式纳入 SG 管线。**
@@ -232,7 +232,7 @@ history/manifest v2 在 version 后写 kind 行，inline field 写 exact key；S
 | G0 | [代码形状见证](../../tests/DurableGraph.Tests/InlineStructShapeWitnessTests.cs) | 独立 test-only project 编译执行 2/2；精确 struct ref、private readonly、default 恢复、字段/元素及删除领域宿主后的完整升级链 |
 | G1 Runtime | [Schema 合同测试](../../tests/DurableGraph.Tests/InlineSchemaContractTests.cs) | exact 值依赖相等性、kind/参数互斥、200 层共享 DAG 比较/哈希、inline 无对象身份入口 |
 | G1 Build | [history 工具测试](../../tests/DurableGraph.Tests/InlineSchemaHistoryToolTests.cs) | v2 golden、旧 v1 原字节保留、闭包/深度/冲突/kind、历史缺口不由 current 补齐、批次失败无写入 |
-| G1 Store | [持久 Schema 测试](../../tests/DurableGraph.StateStore.Tests/InlineSchemaStoreTests.cs) | 混合 v1/v2 重开、base+inline DAG、原子预检、对象头/typed reader/发布 head 指向 inline 的拒绝 |
+| G1 Store | [持久 Schema 测试](../../tests/DurableGraph.Persistence.Tests/InlineSchemaStoreTests.cs) | 混合 v1/v2 重开、base+inline DAG、原子预检、对象头/typed reader/发布 head 指向 inline 的拒绝 |
 | G1/G2 SG | [生成器测试](../../tests/DurableGraph.Tests/InlineStructGeneratorTests.cs)、[body 测试](../../tests/DurableGraph.Tests/InlineStructBodyTests.cs) | standalone 标注、支持形状、历史宿主消失、深度/升版、静态 nested Delta golden、浮点按位、坏位图/空子变化/截断/尾随拒绝、真实 SG ref 恢复 |
 | G3 | [真实生成图测试](../../tests/DurableGraph.Tests/InlineStructGraphTests.cs) | 同实例连续 Commit、nested owner Delta、child-only、共享/循环/string 身份、Remove、失败基线、候选隔离、stored 深层缺失/错误 kind ID 拒绝 |
 | G4 | [真实 PackageReference 消费者](../../experiments/PackageConsumerProbe/InlineStructConsumer)、[运行脚本](../../experiments/PackageConsumerProbe/Run-InlineStructProbe.ps1) | 四阶段全部通过；history 5→10→11→13，旧 hash 不变；精确值/owner/派生升版强制 Base；nominal child 独升；删除 Point/Links CLR 后 exact read 和完整 owner Upgrade 链均成功 |

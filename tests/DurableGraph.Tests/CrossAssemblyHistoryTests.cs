@@ -1,6 +1,8 @@
+using Atelia.DurableGraph.Runtime;
+using Atelia.DurableGraph.Schema;
 using Atelia.DurableGraph.Build;
-using Atelia.DurableGraph.StateStore;
-using Atelia.DurableGraph.StateStore.Storage;
+using Atelia.DurableGraph.Persistence;
+using Atelia.DurableGraph.Storage;
 using Atelia.Rbf;
 using SegmentStore = Atelia.RbfSegmentStore.RbfSegmentStore;
 
@@ -144,6 +146,8 @@ public sealed partial class DurableSchemaGeneratorTests {
 
     private static string CrossAssemblyHistoryRemote(int version, bool rules = true) => $$"""
         using Atelia.DurableGraph;
+        using Atelia.DurableGraph.Schema;
+        using Atelia.DurableGraph.Runtime;
         using P=Atelia.DurableGraph.Generated.Family_52656D6F7465506F696E74;
         namespace CrossHistoryRemote;
         [DurableType("RemotePoint",{{version}})] public partial struct Point {
@@ -169,8 +173,10 @@ public sealed partial class DurableSchemaGeneratorTests {
         using System.IO;
         using System.Linq;
         using Atelia.DurableGraph;
-        using Atelia.DurableGraph.StateStore;
-        using Atelia.DurableGraph.StateStore.Storage;
+        using Atelia.DurableGraph.Schema;
+        using Atelia.DurableGraph.Runtime;
+        using Atelia.DurableGraph.Persistence;
+        using Atelia.DurableGraph.Storage;
         using CrossHistoryRemote;
         using I=Atelia.DurableGraph.Generated.Family_4C6F63616C496E6C696E65;
         using W=Atelia.DurableGraph.Generated.Family_43726F7373576F726C64;

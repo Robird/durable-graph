@@ -149,13 +149,20 @@ try {
         $history = Join-Path $root "history"
         New-Item -ItemType Directory -Path $root, $history | Out-Null
         $project = Join-Path $root "Consumer.csproj"
-        [IO.File]::WriteAllText($project, $projectText, $utf8)
+        # Keep the legacy package and namespace templates bound to the real pre-marker implementation.
+        $generationProject = $projectText
+        $generationProgram = $programText
+        if (-not $isLegacy) {
+            $generationProject = $generationProject.Replace("Atelia.DurableGraph.StateStore", "Atelia.DurableGraph.Persistence")
+            $generationProgram = $generationProgram.Replace("Atelia.DurableGraph.StateStore.Storage", "Atelia.DurableGraph.Storage").Replace("Atelia.DurableGraph.StateStore", "Atelia.DurableGraph.Persistence")
+        }
+        [IO.File]::WriteAllText($project, $generationProject, $utf8)
         $marker = if ($isLegacy) { "DurableBase" } else { "IDurableObject" }
         $legacyLiteral = if ($isLegacy) { "true" } else { "false" }
         # DB-067 introduced Store-owned caches and IDisposable; the actual older package has neither.
         $stateDeclaration = if ($isLegacy) { "var" } else { "using var" }
         [IO.File]::WriteAllText((Join-Path $root "Model.cs"), $modelText.Replace("__MARKER__", $marker), $utf8)
-        [IO.File]::WriteAllText((Join-Path $root "Program.cs"), $programText.Replace("__LEGACY__", $legacyLiteral).Replace("__STATE_DECLARATION__", $stateDeclaration), $utf8)
+        [IO.File]::WriteAllText((Join-Path $root "Program.cs"), $generationProgram.Replace("__LEGACY__", $legacyLiteral).Replace("__STATE_DECLARATION__", $stateDeclaration), $utf8)
         if (-not $isLegacy) {
             foreach ($file in Get-ChildItem -LiteralPath (Join-Path $workRoot "legacy/history") -Filter *.dgschema -File) {
                 Copy-Item -LiteralPath $file.FullName -Destination (Join-Path $history $file.Name)

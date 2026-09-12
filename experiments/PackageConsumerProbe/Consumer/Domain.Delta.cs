@@ -1,5 +1,5 @@
 using System.Buffers;
-using Atelia.DurableGraph.StateStore.Serialization;
+using Atelia.DurableGraph.Serialization;
 
 namespace PackageConsumerProbe;
 

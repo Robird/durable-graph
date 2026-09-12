@@ -1,3 +1,4 @@
+using Atelia.DurableGraph.Runtime;
 namespace Atelia.DurableGraph.Tests;
 
 public sealed partial class DurableSchemaGeneratorTests {
@@ -6,6 +7,8 @@ public sealed partial class DurableSchemaGeneratorTests {
         GeneratorTestRun run = RunGenerator("""
             using System;
             using Atelia.DurableGraph;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
             namespace ScalarRestore;
             [DurableType("restore.scalars", 1)]
             public sealed partial class World : IDurableObject {

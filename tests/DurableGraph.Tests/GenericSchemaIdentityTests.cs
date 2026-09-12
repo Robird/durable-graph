@@ -1,3 +1,4 @@
+using Atelia.DurableGraph.Schema;
 namespace Atelia.DurableGraph.Tests;
 
 public sealed class GenericSchemaIdentityTests {

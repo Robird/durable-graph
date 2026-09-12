@@ -1,3 +1,4 @@
+using Atelia.DurableGraph.Runtime;
 namespace Atelia.DurableGraph.Tests;
 
 public sealed partial class DurableSchemaGeneratorTests {
@@ -49,6 +50,8 @@ public sealed partial class DurableSchemaGeneratorTests {
     public void RecordClassInheritedPositionalParameterCannotPretendToDeclareNewStorage(string ignoredAttribute) {
         GeneratorTestRun run = RunGenerator("""
             using Atelia.DurableGraph;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
             [DurableType("base",1)] public abstract partial record Base([field:DurableField(1)] int X) : IDurableObject;
             [DurableType("leaf",1)] public sealed partial record Leaf(
             """ + ignoredAttribute + "int X) : Base(X);");
@@ -59,6 +62,8 @@ public sealed partial class DurableSchemaGeneratorTests {
     public void RecordClassCannotSkipUnmarkedIntermediateAncestor() {
         GeneratorTestRun run = RunGenerator("""
             using Atelia.DurableGraph;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
             [DurableType("base",1)] public abstract partial record Base([field:DurableField(1)] int X) : IDurableObject;
             public abstract record Middle(int X) : Base(X);
             [DurableType("leaf",1)] public sealed partial record Leaf(int X) : Middle(X);
@@ -70,6 +75,8 @@ public sealed partial class DurableSchemaGeneratorTests {
     public void RecordClassPropertyShadowingKeepsBothActualDeclarationLayers() {
         GeneratorTestRun run = RunGenerator("""
             using Atelia.DurableGraph;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
             [DurableType("base",1)] public abstract partial record Base([field:DurableField(1)] int Number) : IDurableObject;
             [DurableType("leaf",1)] public sealed partial record Leaf(int Number) : Base(Number) {
                 [field:DurableField(1)] public new int Number { get; init; } = Number + 10;

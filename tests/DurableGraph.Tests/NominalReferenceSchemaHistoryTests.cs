@@ -1,3 +1,4 @@
+using Atelia.DurableGraph.Schema;
 using System.Reflection;
 using System.Text;
 using Atelia.DurableGraph.Build;
@@ -40,6 +41,8 @@ public sealed partial class DurableSchemaGeneratorTests {
     public void HistoricalNominalMetadataDoesNotNeedDeletedTargetClrType() {
         GeneratorTestRun run = RunGenerator("""
             using Atelia.DurableGraph;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
             [DurableType("A", 2)]
             public partial class A : IDurableObject { [DurableField(1)] public int Value; }
             """, new InMemoryAdditionalText("a.dgschema", NominalHistory));
@@ -103,6 +106,8 @@ public sealed partial class DurableSchemaGeneratorTests {
 
     private static string NominalSource(int targetVersion) => $$"""
         using Atelia.DurableGraph;
+        using Atelia.DurableGraph.Schema;
+        using Atelia.DurableGraph.Runtime;
         namespace Nominal;
         [DurableType("A", 1)]
         public partial class A : IDurableObject {

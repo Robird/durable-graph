@@ -25,8 +25,8 @@ ReadPair 为优化实例共享，是否需要额外依赖对象编码成功？�
 
 | 项目 | 当前事实 | 本片选择 |
 |---|---|---|
-| 候选比较依赖编码 | [GraphReader.HasSameCurrentState](../../src/DurableGraph.StateStore/GraphReader.cs) 对两份 current DTO 执行 Validate/PrepareBase，再逐字节比较 | 改用独立比较回调；不否定 DB-064 当时为简化实现而作的选择 |
-| 正式的只读 current model | [StateModelBinding](../../src/DurableGraph/StateModelBinding.cs) 仍要求 preparation，[CapturedStatePreparation](../../src/DurableGraph/CapturedStatePreparation.cs) 要求非空 Base/Delta 委托 | 不引入新注册体系或允许 writer=null；只明确哪些回调会被读取使用 |
+| 候选比较依赖编码 | [GraphReader.HasSameCurrentState](../../src/DurableGraph.Persistence/GraphReader.cs) 对两份 current DTO 执行 Validate/PrepareBase，再逐字节比较 | 改用独立比较回调；不否定 DB-064 当时为简化实现而作的选择 |
+| 正式的只读 current model | [StateModelBinding](../../src/DurableGraph/Runtime/Binding/StateModelBinding.cs) 仍要求 preparation，[CapturedStatePreparation](../../src/DurableGraph/Runtime/Capture/CapturedStatePreparation.cs) 要求非空 Base/Delta 委托 | 不引入新注册体系或允许 writer=null；只明确哪些回调会被读取使用 |
 | 最小失败见证 | 抛错 Base-preparer 可造成单读成功而 pair 失败，调用路径明确；下游尚未执行该复现 | 在施工时固化回归，不能把静态推导写成实际下游故障 |
 | 同版 Normalize | 同 head/layout 且 RequiresRewrite=false 仍可能改变值或引用 | 完整 current 比较继续必需，不能改成地址/布局快速放行 |
 | Transient 重建 | README 分别说明“pair 只读”和“恢复后应用重建 Transient”，缺少两者的连接 | 明确 Transient 写入也可能影响另一视图，提供图外索引示例 |
@@ -35,7 +35,7 @@ ReadPair 为优化实例共享，是否需要额外依赖对象编码成功？�
 ### 读取仍可能包含必要的规范编码
 
 不能将新合同写成“整个 ReadPair 不执行任何 encoder”。
-[DictionaryStateBody](../../src/DurableGraph/DictionaryStateReader.cs) 的 ReadBase/ApplyDelta 与完整 lookup 验证
+[DictionaryStateBody](../../src/DurableGraph/Runtime/Containers/DictionaryStateReader.cs) 的 ReadBase/ApplyDelta 与完整 lookup 验证
 已通过 Index → KOps.WriteBase 生成 canonical key bytes，检查持久 key 的唯一性。这条必要验证路径也存在于单读。
 
 本片精确移除的是：**共享候选判定对对象 Base/Delta preparation 的调用，以及为比较而新增的槽编码。**
@@ -92,10 +92,10 @@ bool ProvesSameState(ObjectStateRecord left, ObjectStateRecord right);
 |---|---|
 | 普通 SG class | [StateModel.cs](../../src/DurableGraph.Generator/DurableSchemaGenerator.StateModel.cs) 传入 [GeneratedState.cs](../../src/DurableGraph.Generator/DurableSchemaGenerator.GeneratedState.cs) 已生成的完整 StateEquals |
 | Family/泛型与跨程序集 class | [GenericProjection.cs](../../src/DurableGraph.Generator/DurableSchemaGenerator.GenericProjection.cs) 将 [GenericState.cs](../../src/DurableGraph.Generator/DurableSchemaGenerator.GenericState.cs) 的 StateEquals 与 exact schema 闭合为委托；复用已有完整 leaf 字段比较 |
-| scalar、inline、enum、Nullable | 继续使用生成 helper/[IStateOps](../../src/DurableGraph/StateValueBinding.cs)；浮点按位、decimal 全表示、DateTimeOffset exact，Nullable 比 presence 与有效 child，引用槽比 ObjectId |
-| [ArrayObjectBinding](../../src/DurableGraph/ArrayObjectBinding.cs) | 完整 shape 相等，再按 row-major 比较每个元素的 TOps.StateEquals；相同元素总数不能替代 shape |
-| [ListObjectBinding](../../src/DurableGraph/ListObjectBinding.cs) | Count 相同，再按顺序比较每个元素 |
-| [DictionaryObjectBinding](../../src/DurableGraph/DictionaryObjectBinding.cs) | ComparerKind、Count 相同，再按当前 frozen entry 顺序比较每对 key/value 的 KOps/VOps.StateEquals |
+| scalar、inline、enum、Nullable | 继续使用生成 helper/[IStateOps](../../src/DurableGraph/Runtime/Binding/StateValueBinding.cs)；浮点按位、decimal 全表示、DateTimeOffset exact，Nullable 比 presence 与有效 child，引用槽比 ObjectId |
+| [ArrayObjectBinding](../../src/DurableGraph/Runtime/Containers/ArrayObjectBinding.cs) | 完整 shape 相等，再按 row-major 比较每个元素的 TOps.StateEquals；相同元素总数不能替代 shape |
+| [ListObjectBinding](../../src/DurableGraph/Runtime/Containers/ListObjectBinding.cs) | Count 相同，再按顺序比较每个元素 |
+| [DictionaryObjectBinding](../../src/DurableGraph/Runtime/Containers/DictionaryObjectBinding.cs) | ComparerKind、Count 相同，再按当前 frozen entry 顺序比较每对 key/value 的 KOps/VOps.StateEquals |
 | 手工模型 | 可选委托缺失时，该对象不共享；向引用它的 owner/环传播。独立 child 若满足条件仍可共享，不必禁用整次 pair |
 
 Dictionary 采用的是保守的相等证明：条目顺序不同可返回 false，不代表业务映射不同。
@@ -160,8 +160,8 @@ Transient 表示不进入持久布局，**不表示修改没有可见效果**。
 - 普通 SG 与 Family 两条路径都证明无需手工登记 equality，且实际共享仍生效；普通路径不能被只测试 Family 掩盖。
 - 真实包 external view 示例校验两视图查询结果，不依赖跨图实例身份；包内两种 ReadPair remarks 包含 Transient 限制。
 
-优先复用 [SharedGraphReaderTests](../../tests/DurableGraph.StateStore.Tests/SharedGraphReaderTests.cs)、
-[SharedEventHistoryTests](../../tests/DurableGraph.StateStore.Tests/SharedEventHistoryTests.cs)、
+优先复用 [SharedGraphReaderTests](../../tests/DurableGraph.Persistence.Tests/SharedGraphReaderTests.cs)、
+[SharedEventHistoryTests](../../tests/DurableGraph.Persistence.Tests/SharedEventHistoryTests.cs)、
 [EventHistoryConsumer](../../experiments/PackageConsumerProbe/EventHistoryConsumer/README.md) 和
 [DB-065 包文档验收](../../experiments/PackageConsumerProbe/Run-EventHistoryRecoveryProbe.ps1)。
 普通/Family 生成器验收覆盖 current 比较登记；cross-assembly 只复用其既有执行合同，不创建新历史版本。
@@ -189,10 +189,10 @@ Runtime、SG、公开合同/真实包示例分工实现，主线程负责 GraphR
 
 | 要求 | 实现与可执行见证 |
 |---|---|
-| 可选完整 proof，缺能力与错误区分 | [CapturedStatePreparation](../../src/DurableGraph/CapturedStatePreparation.cs)、[ObjectStateComparisonTests](../../tests/DurableGraph.Tests/ObjectStateComparisonTests.cs)；双方 exact Schema/DTO 均校验，不回退编码 |
+| 可选完整 proof，缺能力与错误区分 | [CapturedStatePreparation](../../src/DurableGraph/Runtime/Capture/CapturedStatePreparation.cs)、[ObjectStateComparisonTests](../../tests/DurableGraph.Tests/ObjectStateComparisonTests.cs)；双方 exact Schema/DTO 均校验，不回退编码 |
 | 容器完整比较且不编码 | 三种 binding；上述 tests 用抛错槽 writer 验证 shape、零长度维度、Count、ComparerKind、key/value 和顺序 |
 | SG 自动登记及完整表示 | [GeneratedComparisonRegistrationTests](../../tests/DurableGraph.Tests/GeneratedComparisonRegistrationTests.cs)；普通/Family 分别 Capture 并调用已登记 proof，冷重开 ReadPair 证明实际共享；覆盖继承、inline/generic 引用、特殊浮点、decimal、offset、Nullable |
-| 读取仅依赖比较，错误不重试 | [SharedGraphReaderTests](../../tests/DurableGraph.StateStore.Tests/SharedGraphReaderTests.cs)；保存后用抛错 preparer 读取，缺 proof 与循环依赖、比较异常计数，以及同版 Normalize 改值/改边 |
+| 读取仅依赖比较，错误不重试 | [SharedGraphReaderTests](../../tests/DurableGraph.Persistence.Tests/SharedGraphReaderTests.cs)；保存后用抛错 preparer 读取，缺 proof 与循环依赖、比较异常计数，以及同版 Normalize 改值/改边 |
 | 两种 Transient 用法与包交付 | [SharedReadProbe](../../experiments/PackageConsumerProbe/EventHistoryConsumer/SharedReadProbe.cs)；两个 WorldView 查询各自上下文，独立只读打开后原位初始化；[XML gate](../../experiments/PackageConsumerProbe/Run-EventHistoryRecoveryProbe.ps1) 检查两种 ReadPair remarks |
 
 串行验证（2026-09-11），日志存放于未跟踪的 `artifacts/db066-validation/`：

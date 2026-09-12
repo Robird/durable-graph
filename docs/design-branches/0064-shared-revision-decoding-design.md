@@ -69,9 +69,9 @@ A 自己的字段没变，两个 Revision 复用 a1 完全正确；但已 Hydrat
 不能同时指向 B 的两个版本。即使 A 的 Next 字段是 readonly，问题仍存在。
 引用版本是 Revision 的解释结果；不应为简化加载而给每个祖先重写 ObjectVersion，破坏现有增量语义。
 
-这不是新假设：[EventHistoryRepositoryTests](../../tests/DurableGraph.StateStore.Tests/EventHistoryRepositoryTests.cs)
+这不是新假设：[EventHistoryRepositoryTests](../../tests/DurableGraph.Persistence.Tests/EventHistoryRepositoryTests.cs)
 的 `ThreeCommitsRetainInstancesAndAdvanceExactParentThenReopenFromPublishedWorldId` 已写出只 child 变化、root 不写且有循环的见证；
-[LoadedReferenceWorldTests](../../tests/DurableGraph.StateStore.Tests/LoadedReferenceWorldTests.cs)
+[LoadedReferenceWorldTests](../../tests/DurableGraph.Persistence.Tests/LoadedReferenceWorldTests.cs)
 检验未变 owner 的引用仍按当前 Revision 验证。
 
 后续算法必须遵守的安全边界为：
@@ -197,18 +197,18 @@ DB-062/063 的已选保存拓扑仍可复用磁盘中真实未变的 ObjectVersi
 
 ## 6. 实施与验收记录（2026-09-11）
 
-实现入口为 [RevisionReadSession](../../src/DurableGraph.StateStore/RevisionReadSession.cs)、
-[RevisionDecoder](../../src/DurableGraph.StateStore/RevisionDecoder.cs)、
-[GraphReader](../../src/DurableGraph.StateStore/GraphReader.cs)；
-[WorldWorkspace](../../src/DurableGraph.StateStore/WorldWorkspace.cs) 与
-[EventHistoryRepository](../../src/DurableGraph.StateStore/EventHistoryRepository.cs) 接通仅阶段 A 的冷 Resume。
+实现入口为 [RevisionReadSession](../../src/DurableGraph.Persistence/RevisionReadSession.cs)、
+[RevisionDecoder](../../src/DurableGraph.Persistence/RevisionDecoder.cs)、
+[GraphReader](../../src/DurableGraph.Persistence/GraphReader.cs)；
+[WorldWorkspace](../../src/DurableGraph.Persistence/WorldWorkspace.cs) 与
+[EventHistoryRepository](../../src/DurableGraph.Persistence/EventHistoryRepository.cs) 接通仅阶段 A 的冷 Resume。
 缓存按完整 head 的重建结果复用；不同 head 的链即使共享 Base 前缀，仍分别重建。
 
 | 证据 | 结果与边界 |
 |---|---|
-| [RevisionReadSessionTests](../../tests/DurableGraph.StateStore.Tests/RevisionReadSessionTests.cs) | 10 cases：实际 ID/head、同 Frame 多 ID、Delta 链、等值新 Base、owned 数据闭库后可用、cache hit 仍验证引用/nominal/Dictionary lookup、坏 head/未全消费拒绝、不跨操作缓存 |
-| [SharedGraphReaderTests](../../tests/DurableGraph.StateStore.Tests/SharedGraphReaderTests.cs) | 17 cases：双向选择、稳定/变化环、同值新版本、独立 owner 共享 leaf、Normalize 改值/边、升级与 source 验证、晚期失败、singleton、非空 string 与 Empty 例外 |
-| [SharedEventHistoryTests](../../tests/DurableGraph.StateStore.Tests/SharedEventHistoryTests.cs) | 3 cases：Pending 与 State 的 child/List 可变隔离；同版 string 复用后 ID 不漂移，未改立即提交零 local object writes；错误 allocator 拒绝且仓库仍可重试读取 |
+| [RevisionReadSessionTests](../../tests/DurableGraph.Persistence.Tests/RevisionReadSessionTests.cs) | 10 cases：实际 ID/head、同 Frame 多 ID、Delta 链、等值新 Base、owned 数据闭库后可用、cache hit 仍验证引用/nominal/Dictionary lookup、坏 head/未全消费拒绝、不跨操作缓存 |
+| [SharedGraphReaderTests](../../tests/DurableGraph.Persistence.Tests/SharedGraphReaderTests.cs) | 17 cases：双向选择、稳定/变化环、同值新版本、独立 owner 共享 leaf、Normalize 改值/边、升级与 source 验证、晚期失败、singleton、非空 string 与 Empty 例外 |
+| [SharedEventHistoryTests](../../tests/DurableGraph.Persistence.Tests/SharedEventHistoryTests.cs) | 3 cases：Pending 与 State 的 child/List 可变隔离；同版 string 复用后 ID 不漂移，未改立即提交零 local object writes；错误 allocator 拒绝且仓库仍可重试读取 |
 | StateStore suite | 聚焦 74、全量 702 通过，0 失败/跳过；包含既有独立 Event、错误 handle、发布与严格只读回归 |
 | Runtime/Generator suite | 全量 1519 通过，0 失败/跳过；两套全量合计 2221 个测试 |
 | 根构建与审阅 | `DurableGraph.slnx` build：0 警告/错误；独立实现/测试审阅无阻碍项，受影响 Markdown 本地链接与锚点校验通过 |

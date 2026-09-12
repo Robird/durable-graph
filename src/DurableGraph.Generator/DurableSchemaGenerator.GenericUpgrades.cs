@@ -139,7 +139,7 @@ public sealed partial class DurableSchemaGenerator {
         string adapterName = implicitMethod ? "__DurableUpgradeAdapter" + Number(fromVersion) : "Invoke";
         output.Append("    internal static void ").Append(adapterName).Append(syntax.TypeParameterList?.ToString()).Append("(in ")
             .Append(syntax.ParameterList.Parameters[0].Type!.ToString()).Append(" prior, out ")
-            .Append(syntax.ParameterList.Parameters[1].Type!.ToString()).Append(" next, ").Append(RuntimeName).Append("UpgradeContext context)");
+            .Append(syntax.ParameterList.Parameters[1].Type!.ToString()).Append(" next, ").Append(RootName).Append("UpgradeContext context)");
         foreach (TypeParameterConstraintClauseSyntax constraint in syntax.ConstraintClauses) output.Append(' ').Append(constraint.ToString());
         output.AppendLine(" {");
         output.Append("        ").Append(method.ContainingType.ToDisplayString(GenericQualifiedNameFormat)).Append('.').Append(EscapeIdentifier(method.Name))

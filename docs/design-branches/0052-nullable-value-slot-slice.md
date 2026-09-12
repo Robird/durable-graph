@@ -25,18 +25,18 @@ DB-051 已完成默认 List Delta 竞争。下一步推荐补一项常见值形�
 
 ## 2. 当前代码证据
 
-- [TypeExpr](../../src/DurableGraph/TypeExpr.cs) 仅有 builtin/named/parameter/array/List 构造。
-- [DurableFieldInfo](../../src/DurableGraph/DurableFieldInfo.cs) 的完整槽只用 TypeTag、TargetType、InlineSchema 表达；尚无可空内建值包装。
-- [StateValueBinding](../../src/DurableGraph/StateValueBinding.cs) 的 IStateOps/IValueProjection 已提供静态组合能力，状态参数要求 unmanaged。
+- [TypeExpr](../../src/DurableGraph/Schema/TypeExpr.cs) 仅有 builtin/named/parameter/array/List 构造。
+- [DurableFieldInfo](../../src/DurableGraph/Schema/DurableFieldInfo.cs) 的完整槽只用 TypeTag、TargetType、InlineSchema 表达；尚无可空内建值包装。
+- [StateValueBinding](../../src/DurableGraph/Runtime/Binding/StateValueBinding.cs) 的 IStateOps/IValueProjection 已提供静态组合能力，状态参数要求 unmanaged。
   CLR `Nullable<TState>` 不符合这里的泛型约束，不能直接充当生成 DTO 的状态类型。
-- [StateDefinitionBinding](../../src/DurableGraph/StateDefinitionBinding.cs) 的 StateFieldTemplate 固定版本目前只接受顶层 named inline。
-  [StateBindingContext](../../src/DurableGraph/StateBindingContext.cs) 的 Match、NominalType、WithFieldId 与 exact 依赖证书需要识别包装内的值依赖。
-- [StateModelSnapshot](../../src/DurableGraph.StateStore/StateModelSnapshot.cs) 的 current/stored 值绑定与 CLR/nominal 双向映射需要一起扩展。
+- [StateDefinitionBinding](../../src/DurableGraph/Runtime/Binding/StateDefinitionBinding.cs) 的 StateFieldTemplate 固定版本目前只接受顶层 named inline。
+  [StateBindingContext](../../src/DurableGraph/Runtime/Binding/StateBindingContext.cs) 的 Match、NominalType、WithFieldId 与 exact 依赖证书需要识别包装内的值依赖。
+- [StateModelSnapshot](../../src/DurableGraph.Persistence/StateModelSnapshot.cs) 的 current/stored 值绑定与 CLR/nominal 双向映射需要一起扩展。
 - [现有拒绝回归](../../tests/DurableGraph.Tests/ScalarStateDtoTests.cs) 的 `ScalarTypeRecognitionKeepsUnsupportedValueKindsOutsideTheSlice`
   同时列出 enum 与 int?；实施时只迁出 Nullable 断言，保留其余负例，不整体删除该测试。
-- [值 Upgrade](../../src/DurableGraph/StateBindingContext.ValueUpgrade.cs) 的 provider 匹配、子依赖选择与 requirement 收集直接使用 InlineSchema；
-  [List Upgrade](../../src/DurableGraph/StateBindingContext.ListUpgrade.cs) 的元素预检也有该假设。仅增加 codec 会遗漏历史能力。
-- [Schema 目录 codec](../../src/DurableGraph.StateStore/SchemaCatalogWireCodec.cs) 当前遍历字段/元素的直接 InlineSchema 依赖。
+- [值 Upgrade](../../src/DurableGraph/Runtime/Binding/StateBindingContext.ValueUpgrade.cs) 的 provider 匹配、子依赖选择与 requirement 收集直接使用 InlineSchema；
+  [List Upgrade](../../src/DurableGraph/Runtime/Binding/StateBindingContext.ListUpgrade.cs) 的元素预检也有该假设。仅增加 codec 会遗漏历史能力。
+- [Schema 目录 codec](../../src/DurableGraph.Persistence/SchemaCatalogWireCodec.cs) 当前遍历字段/元素的直接 InlineSchema 依赖。
   新包装不能成为完整闭包检查的盲点。
 
 独立设计审视同意单独 Nullable 的优先级，并要求把历史布局、显式升级提升和空内容预检纳入同片。
@@ -199,7 +199,7 @@ Base标记0/1；Delta Clear=0、Set=1、Patch=2，各自校验prior前提。
 - [元数据与绑定](../../tests/DurableGraph.Tests/NullableSchemaTests.cs)：完整布局相等、固定版本、T/T?参数来源、泛型基类替换、共享DAG和晚登记冲突。
 - [静态body](../../tests/DurableGraph.Tests/NullableStateBodyTests.cs)：13标量、浮点位语义、独立golden、Clear/Set/Patch、非法prior/截断、absent sentinel、零字节child与真实引用边。
 - [生成与历史](../../tests/DurableGraph.Tests/NullableGeneratedTests.cs)、[history协议](../../tests/DurableGraph.Tests/NullableTemplateHistoryTests.cs)：普通声明迁入Family、readonly、递归组合、版本传播、删除旧CLR后的真实旧body读取、v6语法及v1–v5保留。
-- [目录](../../tests/DurableGraph.StateStore.Tests/NullableCatalogTests.cs)：tag18和整数依赖golden、SCB1v1拒绝、原子冲突与ID、无领域CLR的historical绑定、空集合reader缓存、kind和深度约束。
+- [目录](../../tests/DurableGraph.Persistence.Tests/NullableCatalogTests.cs)：tag18和整数依赖golden、SCB1v1拒绝、原子冲突与ID、无领域CLR的historical绑定、空集合reader缓存、kind和深度约束。
 - [Upgrade](../../tests/DurableGraph.Tests/NullableUpgradeTests.cs)：显式provider优先级、相邻child版本选择、缺工具/错误签名/expected/dependency不回退、全空集合能力预检及缓存中间布局晚冲突。
 - [冻结与Discard](../../tests/DurableGraph.Tests/NullableGraphIntegrationTests.cs)：嵌套组合、候选不随领域修改、Discard不退休原引用身份。
 - [真实包见证](../../experiments/PackageConsumerProbe/NullableConsumer/README.md)：独立feed的八个包，history3→5文件并验证hash；

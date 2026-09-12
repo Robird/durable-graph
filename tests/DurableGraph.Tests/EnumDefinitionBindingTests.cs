@@ -1,3 +1,5 @@
+using Atelia.DurableGraph.Runtime;
+using Atelia.DurableGraph.Schema;
 using Xunit;
 
 namespace Atelia.DurableGraph.Tests;

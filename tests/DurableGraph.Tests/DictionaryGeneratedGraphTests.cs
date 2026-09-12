@@ -40,8 +40,10 @@ public sealed partial class DurableSchemaGeneratorTests {
             using System;
             using System.Collections.Generic;
             using Atelia.DurableGraph;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
             using Atelia.DurableGraph.Generated;
-            using Atelia.DurableGraph.StateStore;
+            using Atelia.DurableGraph.Persistence;
             {{declaration}}
             [DurableType("KeyWorld", 1)] public partial class KeyWorld<TKey> : IDurableObject where TKey : notnull {
                 [DurableField(1)] public Dictionary<TKey, string> Values = new();
@@ -85,8 +87,10 @@ public sealed partial class DurableSchemaGeneratorTests {
             using System.Collections.Generic;
             using System.Linq;
             using Atelia.DurableGraph;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
             using Atelia.DurableGraph.Generated;
-            using Atelia.DurableGraph.StateStore;
+            using Atelia.DurableGraph.Persistence;
             [DurableType("Point", 1)] public partial struct Point {
                 [DurableField(1)] public int X;
                 [DurableField(2)] public Node? Link;

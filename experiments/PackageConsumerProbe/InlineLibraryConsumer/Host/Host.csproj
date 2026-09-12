@@ -9,7 +9,7 @@
     <WarningsAsErrors>$(WarningsAsErrors);CS0433;CS0436</WarningsAsErrors>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="Atelia.DurableGraph.StateStore" Version="$(DurableGraphPackageVersion)" />
+    <PackageReference Include="Atelia.DurableGraph.Persistence" Version="$(DurableGraphPackageVersion)" />
     <PackageReference Include="Atelia.InlineAppModel" Version="$(ModelPackageVersion)" />
   </ItemGroup>
 </Project>

@@ -1,4 +1,5 @@
 using Atelia.DurableGraph;
+using Atelia.DurableGraph.Runtime;
 using NodeStates = Atelia.DurableGraph.Generated.Family_4E6F6465;
 #if HISTORY_V1
 using Payload = CrossAssembly.Domain.LegacyPayload;

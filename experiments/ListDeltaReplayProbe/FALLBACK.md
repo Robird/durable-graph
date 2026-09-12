@@ -153,5 +153,5 @@ N=48/65 的某些候选因为半预算不足而失败，碰巧保留了较小输
    不能只消灭两个已知测试，也不要求逐例胜过所有策略后才能继续探索。
 
 代码入口：[协调器](FallbackMatcher.cs)、[生成 DTO 夹具](FallbackFixtures.cs)、[性质检查](FallbackChecks.cs)、
-[测量](FallbackTrial.cs)、[共享 kernel](../../src/DurableGraph/ListDeltaMatcher.cs)。
+[测量](FallbackTrial.cs)、[共享 kernel](../../src/DurableGraph/Runtime/Containers/ListDeltaMatcher.cs)。
 此前证据：[白盒](WHITEBOX.md)、[普通落盘重放](RESULTS.md)。

@@ -1,6 +1,8 @@
+using Atelia.DurableGraph.Runtime;
+using Atelia.DurableGraph.Schema;
 using System.Reflection;
 using Atelia.DurableGraph.Build;
-using Atelia.DurableGraph.StateStore.Serialization;
+using Atelia.DurableGraph.Serialization;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 
@@ -46,6 +48,8 @@ public sealed partial class DurableSchemaGeneratorTests {
         using AncestryHistoryDirectory history = new();
         GeneratorTestRun first = RunGenerator("""
             using Atelia.DurableGraph;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
             [DurableType("Pair",1)] public partial struct Pair<T> {
                 [DurableField(1)] public byte Prefix;
                 [DurableField(2)] public T Value;
@@ -61,7 +65,9 @@ public sealed partial class DurableSchemaGeneratorTests {
             using System.Runtime.CompilerServices;
             using System.Runtime.InteropServices;
             using Atelia.DurableGraph;
-            using Atelia.DurableGraph.StateStore.Serialization;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
+            using Atelia.DurableGraph.Serialization;
             using PairState=Atelia.DurableGraph.Generated.Family_50616972;
             using EmptyState=Atelia.DurableGraph.Generated.Family_456D707479;
             using BoxState=Atelia.DurableGraph.Generated.Family_426F78;

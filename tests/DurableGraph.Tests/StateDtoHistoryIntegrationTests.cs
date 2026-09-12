@@ -55,7 +55,9 @@ public sealed partial class DurableSchemaGeneratorTests {
     private const string InitialStateDtoHistorySource = """
         using System.Buffers;
         using Atelia.DurableGraph;
-        using Atelia.DurableGraph.StateStore.Serialization;
+        using Atelia.DurableGraph.Schema;
+        using Atelia.DurableGraph.Runtime;
+        using Atelia.DurableGraph.Serialization;
         namespace DtoHistory;
         [DurableType("dto-history.base", 1)]
         public abstract partial class OldBase : IDurableObject {
@@ -100,7 +102,9 @@ public sealed partial class DurableSchemaGeneratorTests {
             using System;
             using System.Buffers;
             using Atelia.DurableGraph;
-            using Atelia.DurableGraph.StateStore.Serialization;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
+            using Atelia.DurableGraph.Serialization;
             namespace DtoHistory;
             {{ancestors}}
             [DurableType("dto-history.leaf", 2)]

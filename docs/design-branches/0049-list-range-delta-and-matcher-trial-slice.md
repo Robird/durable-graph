@@ -223,10 +223,10 @@ source/target 范围和预算回退，不以 benchmark 输出成功代替正确�
 
 | 要求 | 实施责任 | 状态 / 证据 |
 |---|---|---|
-| G0 静态比较、SG/history | [IStateOps](../../src/DurableGraph/StateValueBinding.cs)、SG 两条 body 路径 | [静态比较](../../tests/DurableGraph.Tests/StateEqualityTests.cs)、[历史/泛型/padding](../../tests/DurableGraph.Tests/GeneratedStateEqualityTests.cs) 通过 |
-| G1 区间 codec / ListLayout | [reader/body](../../src/DurableGraph/ListStateReader.cs)、[ListLayout](../../src/DurableGraph/ListLayout.cs) | [golden/坏输入](../../tests/DurableGraph.Tests/ListBodyTests.cs)、[区间与源独立](../../tests/DurableGraph.Tests/ListRangeDeltaTests.cs) 通过 |
-| G2 Position/Local/Myers | [matcher](../../src/DurableGraph/ListDeltaMatcher.cs) | [独立 DP/随机/预算](../../tests/DurableGraph.Tests/ListDeltaMatcherTests.cs) 通过 |
-| G3 snapshot 配置、目录与集成 | [Registry](../../src/DurableGraph.StateStore/StateModelRegistry.cs)、List binding | [配置冻结/跨算法续链](../../tests/DurableGraph.StateStore.Tests/ListRepositoryTests.cs)、目录 tests 通过 |
+| G0 静态比较、SG/history | [IStateOps](../../src/DurableGraph/Runtime/Binding/StateValueBinding.cs)、SG 两条 body 路径 | [静态比较](../../tests/DurableGraph.Tests/StateEqualityTests.cs)、[历史/泛型/padding](../../tests/DurableGraph.Tests/GeneratedStateEqualityTests.cs) 通过 |
+| G1 区间 codec / ListLayout | [reader/body](../../src/DurableGraph/Runtime/Containers/ListStateReader.cs)、[ListLayout](../../src/DurableGraph/Schema/ListLayout.cs) | [golden/坏输入](../../tests/DurableGraph.Tests/ListBodyTests.cs)、[区间与源独立](../../tests/DurableGraph.Tests/ListRangeDeltaTests.cs) 通过 |
+| G2 Position/Local/Myers | [matcher](../../src/DurableGraph/Runtime/Containers/ListDeltaMatcher.cs) | [独立 DP/随机/预算](../../tests/DurableGraph.Tests/ListDeltaMatcherTests.cs) 通过 |
+| G3 snapshot 配置、目录与集成 | [Registry](../../src/DurableGraph.Persistence/StateModelRegistry.cs)、List binding | [配置冻结/跨算法续链](../../tests/DurableGraph.Persistence.Tests/ListRepositoryTests.cs)、目录 tests 通过 |
 | G4 同历史重放与报告 | [ReplayProbe](../../experiments/ListDeltaReplayProbe/README.md) | Release smoke 及三规模三次重复矩阵通过，[结果](../../experiments/ListDeltaReplayProbe/RESULTS.md) |
 | 独立审查、完整构建/tests/真实包、文档 | 主线程与独立 reviewer | 核心及 replay 审查无剩余阻断；根 tests 1,529、五组相关真实包通过 |
 

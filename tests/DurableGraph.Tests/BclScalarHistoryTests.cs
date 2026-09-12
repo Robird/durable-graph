@@ -1,6 +1,7 @@
+using Atelia.DurableGraph.Runtime;
 using System.Text;
 using Atelia.DurableGraph.Build;
-using Atelia.DurableGraph.StateStore;
+using Atelia.DurableGraph.Persistence;
 
 namespace Atelia.DurableGraph.Tests;
 
@@ -17,6 +18,8 @@ public sealed partial class DurableSchemaGeneratorTests {
         File.WriteAllBytes(path, originalBytes);
         GeneratorTestRun run = RunGenerator("""
             using Atelia.DurableGraph;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
             [DurableType("World",1)] public partial class World:IDurableObject { [DurableField(1)] public int Renamed; }
             """, history.ReadAdditionalTexts());
         AssertSchemaOnlyCompiles(run);
@@ -82,6 +85,8 @@ public sealed partial class DurableSchemaGeneratorTests {
         GeneratorTestRun first = RunGenerator("""
             using System;
             using Atelia.DurableGraph;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
             [DurableType("Money",1)] public readonly partial record struct OldMoney(
                 [field:DurableField(1)] Guid Id, [field:DurableField(2)] decimal Amount, [field:DurableField(3)] TimeSpan Duration);
             [DurableType("World",1)] public partial class World:IDurableObject {
@@ -94,6 +99,8 @@ public sealed partial class DurableSchemaGeneratorTests {
         Assert.All(history.ReadContents().Values, text => Assert.StartsWith("// durable-graph-schema-history:9\n", text));
         GeneratorTestRun next = RunGenerator("""
             using Atelia.DurableGraph;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
             [DurableType("World",2)] public partial class World:IDurableObject { [DurableField(1)] public long Value; }
             """, history.ReadAdditionalTexts());
         AssertSchemaOnlyCompiles(next);

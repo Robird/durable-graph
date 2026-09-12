@@ -32,9 +32,9 @@ Capture 到 prepared rows 的强类型适配在集成测试中显式编写，不
   尚无通用 Write/PrepareDelta 分派。StateStore 目前只引用 Storage，不引用 DurableGraph runtime。
 - [PreparedDelta](../../src/DurableGraph.StateStore.Serialization/Serialization/PreparedDelta.cs)
   拥有 payload 和 HasChanges，不认证 Schema、prior 或两份 DTO 的对应关系。
-- [策略](../../src/DurableGraph.StateStore/ReadAmplificationBaseBudgetPolicy.cs)消费完整 post-live 估算，
-  但 [ObjectSaveEstimate](../../src/DurableGraph.StateStore/ObjectSaveEstimate.cs) 的 Update 当前强制要求 D/H。
-- [Storage](../../src/DurableGraph.StateStore.Storage/StateRevisionStore.cs) 已能取得 exact Parent map、
+- [策略](../../src/DurableGraph.Persistence/ReadAmplificationBaseBudgetPolicy.cs)消费完整 post-live 估算，
+  但 [ObjectSaveEstimate](../../src/DurableGraph.Persistence/ObjectSaveEstimate.cs) 的 Update 当前强制要求 D/H。
+- [Storage](../../src/DurableGraph.Storage/StateRevisionStore.cs) 已能取得 exact Parent map、
   按对象读取完整链和 H，并预检 Delta 的直接 prior；Append 不发布 head。
 
 主代理与设计 subagent 一致推荐较小边界；独立事实调查另核对了 rollover 和 wire 计量接缝。
@@ -147,7 +147,7 @@ B 是精确对象 Base payload 成本，H 是盘上实际对象链成本；D 是
 
 ### 4.2 为什么暂不冻结 writer scope
 
-[StateRevisionStore.Append](../../src/DurableGraph.StateStore.Storage/StateRevisionStore.cs) 内部取得 writer lease
+[StateRevisionStore.Append](../../src/DurableGraph.Storage/StateRevisionStore.cs) 内部取得 writer lease
 后才确定实际 Segment。底层 [OpenActiveWriter](../../../atelia/src/RbfSegmentStore/RbfSegmentStore.cs)
 会先按旧 tail 判断 rollover；调用前的 ActiveSegmentNumber 不是本次目标 scope 的承诺。
 持有 active writer lease 时，底层也不允许再打开同 active Segment 的 reader。
@@ -246,15 +246,15 @@ publication/reconcile 均保持各自路线，不为本片预制接口。
 最终实现入口：
 
 - [PreparedBase](../../src/DurableGraph.StateStore.Serialization/Serialization/PreparedBase.cs) 与
-  [StringPayloadCodec.PrepareBase](../../src/DurableGraph.StateStore.Serialization/Serialization/StringPayloadCodec.cs)；
+  [StringPayloadCodec.PrepareBase](../../src/DurableGraph.Serialization/StringPayloadCodec.cs)；
   [SG helper](../../src/DurableGraph.Generator/DurableSchemaGenerator.BinaryBody.cs) 对每个 Vn 复用 Write。
-- [ObjectVersionPayloadSize](../../src/DurableGraph.StateStore.Storage/ObjectVersionPayloadSize.cs) 集中 v3 envelope 计量；
-  [独立 wire 测试](../../tests/DurableGraph.StateStore.Storage.Tests/ObjectVersionPayloadSizeTests.cs) 验证 B 精确、D 超额 0..4。
-- [PreparedObject](../../src/DurableGraph.StateStore/PreparedObject.cs)、
-  [ObjectRevisionPlanner](../../src/DurableGraph.StateStore/ObjectRevisionPlanner.cs)、
-  [结果](../../src/DurableGraph.StateStore/PreparedObjectRevision.cs) 连接固定 policy 与可追加 Revision。
+- [ObjectVersionPayloadSize](../../src/DurableGraph.Storage/ObjectVersionPayloadSize.cs) 集中 v3 envelope 计量；
+  [独立 wire 测试](../../tests/DurableGraph.Storage.Tests/ObjectVersionPayloadSizeTests.cs) 验证 B 精确、D 超额 0..4。
+- [PreparedObject](../../src/DurableGraph.Persistence/PreparedObject.cs)、
+  [ObjectRevisionPlanner](../../src/DurableGraph.Persistence/ObjectRevisionPlanner.cs)、
+  [结果](../../src/DurableGraph.Persistence/PreparedObjectRevision.cs) 连接固定 policy 与可追加 Revision。
   Estimates 与 RepresentationPlan 使用真正只读集合，同时修复旧计划经 ICollection.SyncRoot 泄漏数组的问题。
-- [规划器文件测试](../../tests/DurableGraph.StateStore.Tests/ObjectRevisionPlannerTests.cs) 覆盖完整集合、
+- [规划器文件测试](../../tests/DurableGraph.Persistence.Tests/ObjectRevisionPlannerTests.cs) 覆盖完整集合、
   两参数、实际 H、prior/失败、BaseOnly 截断坏链、保守 D 改变选择与已准备分支。
 - [真实 SG 集成](../../tests/DurableGraph.Tests/PreparedRevisionGeneratorTests.cs) 用五轮保存验证 Base → Delta →
   Delta → 主动 Base → NoChange；包含 string 退出、共享/相等但不同实例/Empty、冻结后 mutation、

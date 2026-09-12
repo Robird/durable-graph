@@ -1,6 +1,8 @@
+using Atelia.DurableGraph.Runtime;
+using Atelia.DurableGraph.Schema;
 using System.Reflection;
 using Atelia.DurableGraph.Build;
-using Atelia.DurableGraph.StateStore;
+using Atelia.DurableGraph.Persistence;
 using Atelia.Rbf;
 
 namespace Atelia.DurableGraph.Tests;
@@ -115,6 +117,8 @@ public sealed partial class DurableSchemaGeneratorTests {
     private static Assembly EnumUpgradeAssembly(AncestryHistoryDirectory history, string underlying, string provider = "valid") {
         GeneratorTestRun first = RunGenerator("""
             using Atelia.DurableGraph;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
             [DurableType("Mode",1)] public enum OldMode:byte { Named=1 }
             [DurableType("World",1)] public partial class World:IDurableObject { [DurableField(1)] public OldMode Value; }
             [DurableType("Optional",1)] public partial class Optional:IDurableObject { [DurableField(1)] public OldMode? Value; }
@@ -129,6 +133,8 @@ public sealed partial class DurableSchemaGeneratorTests {
             """;
         GeneratorTestRun run = RunGenerator($$"""
             using Atelia.DurableGraph;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
             using W=Atelia.DurableGraph.Generated.Family_576F726C64;
             using O=Atelia.DurableGraph.Generated.Family_4F7074696F6E616C;
             using M=Atelia.DurableGraph.Generated.Family_4D6F6465;

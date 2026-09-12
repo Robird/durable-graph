@@ -1,5 +1,5 @@
 using System.Reflection;
-using Atelia.DurableGraph.StateStore.Serialization;
+using Atelia.DurableGraph.Serialization;
 
 namespace Atelia.DurableGraph.Tests;
 
@@ -172,7 +172,9 @@ public sealed partial class DurableSchemaGeneratorTests {
         using System;
         using System.Buffers;
         using Atelia.DurableGraph;
-        using Atelia.DurableGraph.StateStore.Serialization;
+        using Atelia.DurableGraph.Schema;
+        using Atelia.DurableGraph.Runtime;
+        using Atelia.DurableGraph.Serialization;
         namespace FusedDelta;
 
         """;

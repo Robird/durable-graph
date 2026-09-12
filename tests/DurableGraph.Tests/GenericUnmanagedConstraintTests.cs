@@ -1,5 +1,6 @@
+using Atelia.DurableGraph.Schema;
 using System.Reflection;
-using Atelia.DurableGraph.StateStore;
+using Atelia.DurableGraph.Persistence;
 
 namespace Atelia.DurableGraph.Tests;
 
@@ -8,6 +9,8 @@ public sealed partial class DurableSchemaGeneratorTests {
     public void ReflectedManagedArgumentsCannotBypassGeneratedUnmanagedDomainConstraints() {
         GeneratorTestRun run = RunGenerator("""
             using Atelia.DurableGraph;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
             [DurableType("Managed",1)] public partial struct Managed {
                 [DurableField(1)] public string? Text;
             }

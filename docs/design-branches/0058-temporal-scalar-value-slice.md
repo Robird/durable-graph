@@ -26,18 +26,18 @@
 
 ## 2. 实施前事实与代码接缝
 
-- [TypeTag](../../src/DurableGraph/TypeTag.cs) 的 19/20/21 是 Guid/decimal/TimeSpan，
+- [TypeTag](../../src/DurableGraph/Schema/TypeTag.cs) 的 19/20/21 是 Guid/decimal/TimeSpan，
   `TypeTagFacts.IsBuiltin` 区分叶子与 15/16/17/18 的引用、inline、history parameter、Nullable。
   新三值目前不在支持范围；不能从 DTO 可装入一个 CLR struct 推导已经可保存。
-- [BclScalarStateValues](../../src/DurableGraph/BclScalarStateValues.cs) 是静态 `IStateOps<T>` 例子；
-  [BuiltinStateValues](../../src/DurableGraph/BuiltinStateValues.cs) 负责 current/stored 值绑定。
+- [BclScalarStateValues](../../src/DurableGraph/Runtime/State/BclScalarStateValues.cs) 是静态 `IStateOps<T>` 例子；
+  [BuiltinStateValues](../../src/DurableGraph/Runtime/State/BuiltinStateValues.cs) 负责 current/stored 值绑定。
   生成器的普通 body 与 Family body 均需覆盖，不能仅在 Runtime 添加映射。
-- [DictionaryKeyPolicy](../../src/DurableGraph/DictionaryKeyPolicy.cs) 已把标准领域查找与完整 key bytes 配对分开；
+- [DictionaryKeyPolicy](../../src/DurableGraph/Runtime/Containers/DictionaryKeyPolicy.cs) 已把标准领域查找与完整 key bytes 配对分开；
   [DB-057](0057-bcl-scalar-value-slice.md) 已验证数值相等但 decimal 表示不同的键替换。
 - [Shared TypePattern](../../src/Shared/SchemaHistoryTypePattern.cs)、[Build history](../../src/DurableGraph.Build/SchemaHistoryTool.cs)
   与 [SG history](../../src/DurableGraph.Generator/DurableSchemaGenerator.TemplateHistory.cs) 当前新写 v8，旧版本有递归能力门槛。
-- ValueTuple 接缝不是序列化循环本身：[DurableFieldInfo.ValueSchema](../../src/DurableGraph/DurableFieldInfo.cs)
-  目前只提取一个 inline 依赖；[StateFieldTemplate/StateParameterTemplate](../../src/DurableGraph/StateDefinitionBinding.cs)
+- ValueTuple 接缝不是序列化循环本身：[DurableFieldInfo.ValueSchema](../../src/DurableGraph/Schema/DurableFieldInfo.cs)
+  目前只提取一个 inline 依赖；[StateFieldTemplate/StateParameterTemplate](../../src/DurableGraph/Runtime/Binding/StateDefinitionBinding.cs)
   只带一个 `InlineVersion`。具体多 child 反例保留在 [DB-057 §8](0057-bcl-scalar-value-slice.md#8-valuetuple-后继保留的问题)。
 
 ## 3. 已采纳支持合同
@@ -202,8 +202,8 @@ DateTimeOffset clock Ticks + offset 整分钟 Int32 ZigZag；状态比较用 Equ
 
 | 要求 | 实现责任 | 验收 | 状态 |
 |---|---|---|---|
-| G0/G1 三值字节、合法范围与 cursor | Serialization Reader/Writer | [TemporalScalarPayloadTests](../../tests/DurableGraph.StateStore.Serialization.Tests/Serialization/TemporalScalarPayloadTests.cs)：37 展开用例；独立 golden、全部 1681 种合法 offset 的边界、非法输入/unmanaged | 已验证 |
-| G1 Runtime/目录/标准字典/最低尺寸 | [TemporalScalarStateValues](../../src/DurableGraph/TemporalScalarStateValues.cs)、BuiltinStateValues、StateModelSnapshot、DictionaryKeyPolicy | [目录/绑定](../../tests/DurableGraph.StateStore.Tests/TemporalScalarCatalogTests.cs) 8 例；[静态状态](../../tests/DurableGraph.Tests/TemporalScalarStateTests.cs) 8 例，包含实际 absent Nullable List 的最低字节预检 | 已验证 |
+| G0/G1 三值字节、合法范围与 cursor | Serialization Reader/Writer | [TemporalScalarPayloadTests](../../tests/DurableGraph.Serialization.Tests/Serialization/TemporalScalarPayloadTests.cs)：37 展开用例；独立 golden、全部 1681 种合法 offset 的边界、非法输入/unmanaged | 已验证 |
+| G1 Runtime/目录/标准字典/最低尺寸 | [TemporalScalarStateValues](../../src/DurableGraph/Runtime/State/TemporalScalarStateValues.cs)、BuiltinStateValues、StateModelSnapshot、DictionaryKeyPolicy | [目录/绑定](../../tests/DurableGraph.Persistence.Tests/TemporalScalarCatalogTests.cs) 8 例；[静态状态](../../tests/DurableGraph.Tests/TemporalScalarStateTests.cs) 8 例，包含实际 absent Nullable List 的最低字节预检 | 已验证 |
 | G2 普通/Family SG 及 genuine corelib | SG 两条 body、类型识别与模板 history | [TemporalScalarGeneratorTests](../../tests/DurableGraph.Tests/TemporalScalarGeneratorTests.cs)：16 例，独立编译执行/组合/伪类型/同版变更诊断 | 已验证 |
 | G2 v9/旧 history 完整接受集合 | Shared TypePattern、Build history、SG reader | [TemporalScalarHistoryTests](../../tests/DurableGraph.Tests/TemporalScalarHistoryTests.cs)：14 例；固定 v8、递归门槛、旧接受集合、旧 CLR 删除 | 已验证 |
 | G3 同实例图、字典双比较、显式升级 | 既有会话/容器与值规则 | [图](../../tests/DurableGraph.Tests/TemporalScalarGraphTests.cs)：9 对象冻结隔离、18 次 Commit/原始 Delta/冷重开；[Nullable 升级](../../tests/DurableGraph.Tests/NullableUpgradeTests.cs)：显式 UTC+08 与空/非空预检 2 例 | 已验证 |

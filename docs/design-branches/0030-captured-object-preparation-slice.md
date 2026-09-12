@@ -33,14 +33,14 @@ Base → Delta → 策略主动 Base → NoChange、new/remove 和冷重开验�
 
 规划起点 `0755a56` 的源码事实（实现后的接缝见 §7）：
 
-- [CaptureContext](../../src/DurableGraph/CaptureContext.cs) 的 RootCapture 已配对 domain、Schema、
+- [CaptureContext](../../src/DurableGraph/Runtime/Capture/CaptureContext.cs) 的 RootCapture 已配对 domain、Schema、
   DTO 和 Capture；[SG AddRoot](../../src/DurableGraph.Generator/DurableSchemaGenerator.BinaryBody.cs)
   是注入准备操作的自然位置。
 - [CapturedObject](../../src/DurableGraph/CapturedObject.cs) 私有保存 DTO box，公开 GetState<T> 按值返回；
   Seal 后尚未保留通用的准备操作。
-- [CaptureSession](../../src/DurableGraph/CaptureSession.cs) 的 Current 只表示已 Accept 的内存图，
+- [CaptureSession](../../src/DurableGraph/Runtime/Capture/CaptureSession.cs) 的 Current 只表示已 Accept 的内存图，
   RequireCandidate 能检查当前 unresolved candidate；没有 Storage 地址或发布含义。
-- [ObjectRevisionPlanner](../../src/DurableGraph.StateStore/ObjectRevisionPlanner.cs) 校验 ID/prior/H，
+- [ObjectRevisionPlanner](../../src/DurableGraph.Persistence/ObjectRevisionPlanner.cs) 校验 ID/prior/H，
   不认证 DTO/Schema。raw wire 没有类型头，拿 current codec 成功解码或 roundtrip 同一段 bytes，
   也不能证明该记录原本属于这个 exact Schema。
 
@@ -203,10 +203,10 @@ DTO upgrade/Restore、一般引用、struct、数组对象、BCL 或性能设施
 
 最终入口与证据：
 
-- [CapturedStatePreparation](../../src/DurableGraph/CapturedStatePreparation.cs) 实现对象级 typed 桥接，
-  [CaptureSession.Prepare](../../src/DurableGraph/CaptureSession.cs) 完整预检后准备内容，
-  [PreparedCapturedGraph](../../src/DurableGraph/PreparedCapturedGraph.cs) 保存来源及只读 rows。
-- [CaptureContext](../../src/DurableGraph/CaptureContext.cs) 保留 capture-only overload，检查重复根 binding，
+- [CapturedStatePreparation](../../src/DurableGraph/Runtime/Capture/CapturedStatePreparation.cs) 实现对象级 typed 桥接，
+  [CaptureSession.Prepare](../../src/DurableGraph/Runtime/Capture/CaptureSession.cs) 完整预检后准备内容，
+  [PreparedCapturedGraph](../../src/DurableGraph/Runtime/Capture/PreparedCapturedGraph.cs) 保存来源及只读 rows。
+- [CaptureContext](../../src/DurableGraph/Runtime/Capture/CaptureContext.cs) 保留 capture-only overload，检查重复根 binding，
   并在 Resolve 前检查临时 guard；无效的新 overload 登记仍遵循原 AbortBuild/烧号规则。
 - [生成器](../../src/DurableGraph.Generator/DurableSchemaGenerator.BinaryBody.cs) 仅为 concrete current DTO
   生成 private static readonly Preparation 字段，绑定已有方法组并传给 AddRoot；未增加字段遍历或历史 binding。

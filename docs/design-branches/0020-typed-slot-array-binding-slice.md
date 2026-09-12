@@ -5,7 +5,7 @@
 > 基线：`29a4704`；承接 [DB-018](0018-generated-graph-codec-shape.md)。属于 P1 的执行机制子片。
 
 后续校准：用户指出已知成员类型应由 SG 直接静态绑定。PrimitiveSlotCodecs 已移入
-[测试共享工具](../../tests/DurableGraph.StateStore.Serialization.Tests/TestHelpers/PrimitiveSlotCodecs.cs)，
+[测试共享工具](../../tests/DurableGraph.Serialization.Tests/TestHelpers/PrimitiveSlotCodecs.cs)，
 保留原调用与测试；它不是产品 SG 的必经接口。ValueSlotCodec/ArrayElementCodec 本次保留。
 
 ## 问题与选择

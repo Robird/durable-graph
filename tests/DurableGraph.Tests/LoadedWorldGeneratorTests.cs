@@ -1,8 +1,9 @@
+using Atelia.DurableGraph.Schema;
 using System.Reflection;
 using Atelia.DurableGraph.Build;
-using Atelia.DurableGraph.StateStore;
-using Atelia.DurableGraph.StateStore.Serialization;
-using Atelia.DurableGraph.StateStore.Storage;
+using Atelia.DurableGraph.Persistence;
+using Atelia.DurableGraph.Serialization;
+using Atelia.DurableGraph.Storage;
 using Atelia.Rbf;
 using Atelia.RbfSegmentStore;
 using SegmentStore = Atelia.RbfSegmentStore.RbfSegmentStore;
@@ -256,9 +257,9 @@ public sealed partial class DurableSchemaGeneratorTests {
         }
         public static class Host {
         """ + FusedDeltaHostMethods("Leaf", 1) + """
-            public static object Load(Atelia.DurableGraph.StateStore.Storage.StateRevisionStore store,
-                Atelia.DurableGraph.StateStore.SchemaStore schemas, Atelia.DurableGraph.StateStore.Storage.FrameAddress revision) {
-                var models = new Atelia.DurableGraph.StateStore.StateModelRegistry();
+            public static object Load(Atelia.DurableGraph.Storage.StateRevisionStore store,
+                Atelia.DurableGraph.Persistence.SchemaStore schemas, Atelia.DurableGraph.Storage.FrameAddress revision) {
+                var models = new Atelia.DurableGraph.Persistence.StateModelRegistry();
                 Leaf.__DurableState.RegisterModel(models);
                 return Atelia.DurableGraph.Tests.FixtureLoadedWorld.Load<Leaf>(store, schemas, revision, new(1), models);
             }
@@ -269,11 +270,11 @@ public sealed partial class DurableSchemaGeneratorTests {
             public static void Change(object loaded, int value) =>
                 ((Atelia.DurableGraph.Tests.FixtureLoadedWorld<Leaf>)loaded).World.Change(value);
             public static int UpgradeCalls() => Leaf.Upgrades;
-            public static byte[] ReadStored(Atelia.DurableGraph.StateStore.Storage.StateRevisionStore store,
-                Atelia.DurableGraph.StateStore.SchemaStore schemas, Atelia.DurableGraph.StateStore.Storage.FrameAddress revision) {
-                var readers = new Atelia.DurableGraph.StateStore.StateReaderRegistry();
+            public static byte[] ReadStored(Atelia.DurableGraph.Storage.StateRevisionStore store,
+                Atelia.DurableGraph.Persistence.SchemaStore schemas, Atelia.DurableGraph.Storage.FrameAddress revision) {
+                var readers = new Atelia.DurableGraph.Persistence.StateReaderRegistry();
                 Leaf.__DurableState.RegisterReaders(readers);
-                var decoded = Atelia.DurableGraph.StateStore.RevisionDecoder.Read(store, schemas, revision, readers);
+                var decoded = Atelia.DurableGraph.Persistence.RevisionDecoder.Read(store, schemas, revision, readers);
                 var old = decoded.GetRequired(new(1)).GetState<Leaf.__DurableState.V1>();
                 return Leaf.__DurableState.PrepareBaseBody(in old).Body.ToArray();
             }

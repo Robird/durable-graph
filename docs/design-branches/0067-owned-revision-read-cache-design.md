@@ -49,9 +49,9 @@
 
 ### 2.2 当前消费者和不同缓存层
 
-[StateRevisionStore](../../src/DurableGraph.StateStore.Storage/StateRevisionStore.cs) 是 raw Read、完整 map、对象链及 Append direct-prior preflight 的共同入口。
-读取方包括 [RevisionDecoder](../../src/DurableGraph.StateStore/RevisionDecoder.cs)、Loaded/Captured/ObjectRevisionPlanner 以及 EventHistory 打开时的逐历史图验证。
-连续提交经 [WorldWorkspace](../../src/DurableGraph.StateStore/WorldWorkspace.cs) → [LoadedRevisionPlanner](../../src/DurableGraph.StateStore/LoadedRevisionPlanner.cs) → [ObjectRevisionPlanner](../../src/DurableGraph.StateStore/ObjectRevisionPlanner.cs)，因此保存侧同样有当前消费者。
+[StateRevisionStore](../../src/DurableGraph.Storage/StateRevisionStore.cs) 是 raw Read、完整 map、对象链及 Append direct-prior preflight 的共同入口。
+读取方包括 [RevisionDecoder](../../src/DurableGraph.Persistence/RevisionDecoder.cs)、Loaded/Captured/ObjectRevisionPlanner 以及 EventHistory 打开时的逐历史图验证。
+连续提交经 [WorldWorkspace](../../src/DurableGraph.Persistence/WorldWorkspace.cs) → [LoadedRevisionPlanner](../../src/DurableGraph.Persistence/LoadedRevisionPlanner.cs) → [ObjectRevisionPlanner](../../src/DurableGraph.Persistence/ObjectRevisionPlanner.cs)，因此保存侧同样有当前消费者。
 
 [DB-064](0064-shared-revision-decoding-design.md) 的操作内 (ObjectId, head) DTO/string 缓存继续保持其生命周期，不合并进 raw 缓存。
 完整 head map 是从 Revision 链派生的浅声明；它不证明 external locator 真有 local record，更不证明 typed body 或图有效。
@@ -60,7 +60,7 @@
 
 ### 3.1 一个共享内部表示
 
-将用户已重命名的私有类型提取为 Storage 共享的 [FrozenSortedDictionary](../../src/DurableGraph.StateStore.Storage/FrozenSortedDictionary.cs)，供两个当前消费者使用：
+将用户已重命名的私有类型提取为 Storage 共享的 [FrozenSortedDictionary](../../src/DurableGraph.Storage/FrozenSortedDictionary.cs)，供两个当前消费者使用：
 
 1. StateRevision 的 ExternalObjectHeads；
 2. LiveObjectHeadMapMaterializer 完成后的完整 head map。
@@ -97,12 +97,12 @@ StateRevision 的公开创建入口仍冻结调用方输入；不能为少一次
 从 Dictionary 构建后最后排序、直接接管 wire reader 数组、流式合并多个 Delta，均不是本片前置任务。
 后续若构建成本成为实测热点，再在相同结果与拒绝规则下独立比较。
 
-保留 [wire writer](../../src/DurableGraph.StateStore.Storage/StateRevisionWireWriter.cs) 的升序遍历及 reader 的严格递增检查；
+保留 [wire writer](../../src/DurableGraph.Storage/StateRevisionWireWriter.cs) 的升序遍历及 reader 的严格递增检查；
 新表示不改变 wire 或 H。双数组新增加的冻结复制属于构建成本，不能从删除树节点推断总分配也必然下降。
 
 ### 3.3 LocalObjects 直接使用已有排序结果
 
-[StateRevision](../../src/DurableGraph.StateStore.Storage/StateRevision.cs) 的 LocalObjects 及 local IDs 已排序，无需为 local record 再建字典或复制一组索引。
+[StateRevision](../../src/DurableGraph.Storage/StateRevision.cs) 的 LocalObjects 及 local IDs 已排序，无需为 local record 再建字典或复制一组索引。
 将 StateRevisionStore.FindLocalRecord 的线性扫描改为对现有排序记录的二分，保持 direct local record 缺失时拒绝，不能回退 parent。
 这是帧内定位优化，不是单 ID membership 早退；完整 map、prior 和图校验仍照常运行。
 
@@ -177,7 +177,7 @@ FrameCharge      = 固定 revision/record/数组估算 + owned body bytes
 EntryCharge      = entry/index/LRU 摊销 + 已有两组件成本
 ~~~
 
-实现常数集中于 [StateRevisionReadCache](../../src/DurableGraph.StateStore.Storage/StateRevisionReadCache.cs)：entry/index/LRU 摊销 160B，map 对象 32B，数组头部 24B 并向 8B 对齐，FrameAddress 元素宽度取实际 Unsafe.SizeOf。revision 及三个 list 外观合计 168B，每个 record 估算 64B，另计各数组与 body。这是保守的 64-bit 布局估算，不是实测 GC 对象大小；乘加用 checked long。每项有正 charge，空 body 也计元数据和容器成本，不重复计算共享于同 entry 的开销。
+实现常数集中于 [StateRevisionReadCache](../../src/DurableGraph.Storage/StateRevisionReadCache.cs)：entry/index/LRU 摊销 160B，map 对象 32B，数组头部 24B 并向 8B 对齐，FrameAddress 元素宽度取实际 Unsafe.SizeOf。revision 及三个 list 外观合计 168B，每个 record 估算 64B，另计各数组与 body。这是保守的 64-bit 布局估算，不是实测 GC 对象大小；乘加用 checked long。每项有正 charge，空 body 也计元数据和容器成本，不重复计算共享于同 entry 的开销。
 调用方持有值、构建器和冻结时同时存活的数组、索引容量高水位及未 GC 对象不由 resident charge 精确约束。
 8 MiB 是施工起点，不是已测最优容量。统计只作 internal：两类命中/缺失/成功生产、驱逐、准入绕过及 resident/peak charge。
 不将 raw 缓存统计混入 DB-064 的 typed GraphReadStatistics.CacheHits。
@@ -268,12 +268,12 @@ Append/AppendDurably 不 seed 输入 StateRevision：CreateBase/CreateDelta 的 
 
 | 要求 | 实现落点 | 验证落点 |
 |---|---|---|
-| 双数组、升序与 owned 冻结 | FrozenSortedDictionary、StateRevision、LiveObjectHeadMapMaterializer | [字典测试](../../tests/DurableGraph.StateStore.Storage.Tests/FrozenSortedDictionaryTests.cs)、现有 Revision/materializer/wire 测试 |
-| local-record 二分、成功读回准入、真实 H | StateRevisionStore | [缓存验收](../../tests/DurableGraph.StateStore.Storage.Tests/StateRevisionReadCacheTests.cs)、ObjectVersionChainStoreTests |
+| 双数组、升序与 owned 冻结 | FrozenSortedDictionary、StateRevision、LiveObjectHeadMapMaterializer | [字典测试](../../tests/DurableGraph.Storage.Tests/FrozenSortedDictionaryTests.cs)、现有 Revision/materializer/wire 测试 |
+| local-record 二分、成功读回准入、真实 H | StateRevisionStore | [缓存验收](../../tests/DurableGraph.Storage.Tests/StateRevisionReadCacheTests.cs)、ObjectVersionChainStoreTests |
 | 三态整项 LRU、单预算、诊断 | StateRevisionReadCache | 缓存验收的命中提升、超大/组合超预算、物化中驱逐场景 |
-| Store 自身释放、借用寿命、离线新开 | StateRevisionStore.Dispose、GraphResources.Dispose、活动直接消费者 using | 缓存验收、[GraphResourcesTests](../../tests/DurableGraph.StateStore.Tests/GraphResourcesTests.cs)、真实 PackageReference Probe |
+| Store 自身释放、借用寿命、离线新开 | StateRevisionStore.Dispose、GraphResources.Dispose、活动直接消费者 using | 缓存验收、[GraphResourcesTests](../../tests/DurableGraph.Persistence.Tests/GraphResourcesTests.cs)、真实 PackageReference Probe |
 | typed/引用/Dictionary/ReadPair/Resume 语义 | 原 Decoder、GraphReader 与宿主入口 | StateStore 与 Generator 集成回归 |
-| 新表示及实际产品测量 | [Storage 测量](../../tests/DurableGraph.StateStore.Storage.Tests/ReadCacheMeasurementTests.cs)、[产品测量](../../tests/DurableGraph.StateStore.Tests/ReadCacheProductMeasurementTests.cs) | 全 body/H checksum、驻留预算，以及分阶段时间/线程分配样本 |
+| 新表示及实际产品测量 | [Storage 测量](../../tests/DurableGraph.Storage.Tests/ReadCacheMeasurementTests.cs)、[产品测量](../../tests/DurableGraph.Persistence.Tests/ReadCacheProductMeasurementTests.cs) | 全 body/H checksum、驻留预算，以及分阶段时间/线程分配样本 |
 
 诊断通过 internal ReadCacheStatistics 值快照读取；0 预算仍计 miss 和成功生产，未分配缓存。Dispose 释放整个缓存对象，之后缓存专属的驻留/驱逐/峰值诊断归零；如需保留最终诊断，先取得快照。诊断不成为公共 API。
 

@@ -1,5 +1,6 @@
-using Atelia.DurableGraph.StateStore;
-using Atelia.DurableGraph.StateStore.Storage;
+using Atelia.DurableGraph.Schema;
+using Atelia.DurableGraph.Persistence;
+using Atelia.DurableGraph.Storage;
 using Atelia.Rbf;
 using SegmentStore = Atelia.RbfSegmentStore.RbfSegmentStore;
 
@@ -116,6 +117,8 @@ public sealed partial class DurableSchemaGeneratorTests {
     private static string InheritanceHistoryBases(int version) => $$"""
         using System;
         using Atelia.DurableGraph;
+        using Atelia.DurableGraph.Schema;
+        using Atelia.DurableGraph.Runtime;
         using B=Atelia.DurableGraph.Generated.Family_4842;
         namespace InheritanceHistoryBases;
         public static class Trace { public static int Constructors,Initializers,BaseUpgrades,MiddleUpgrades,LeafUpgrades; public static int Init(){Initializers++;return 100;} }
@@ -146,6 +149,8 @@ public sealed partial class DurableSchemaGeneratorTests {
 
     private static string InheritanceHistoryMiddle(int version) => $$"""
         using Atelia.DurableGraph;
+        using Atelia.DurableGraph.Schema;
+        using Atelia.DurableGraph.Runtime;
         using InheritanceHistoryBases;
         using M=Atelia.DurableGraph.Generated.Family_484D;
         namespace InheritanceHistoryMiddle;
@@ -170,8 +175,10 @@ public sealed partial class DurableSchemaGeneratorTests {
         using System.Collections.Generic;
         using System.IO;
         using Atelia.DurableGraph;
-        using Atelia.DurableGraph.StateStore;
-        using Atelia.DurableGraph.StateStore.Storage;
+        using Atelia.DurableGraph.Schema;
+        using Atelia.DurableGraph.Runtime;
+        using Atelia.DurableGraph.Persistence;
+        using Atelia.DurableGraph.Storage;
         using InheritanceHistoryBases;
         using InheritanceHistoryMiddle;
         using L=Atelia.DurableGraph.Generated.Family_484C;

@@ -1,6 +1,8 @@
+using Atelia.DurableGraph.Runtime;
+using Atelia.DurableGraph.Schema;
 using System.Reflection;
 using Atelia.DurableGraph.Build;
-using Atelia.DurableGraph.StateStore;
+using Atelia.DurableGraph.Persistence;
 
 namespace Atelia.DurableGraph.Tests;
 
@@ -22,6 +24,8 @@ public sealed partial class DurableSchemaGeneratorTests {
     public void NullableScalarSlotsUseUnmanagedFamilyOperands(string scalar) {
         GeneratorTestRun run = RunGenerator($$"""
             using Atelia.DurableGraph;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
             [DurableType("World",1)] public partial class World:IDurableObject {
                 [DurableField(1)] private readonly {{scalar}}? _value;
             }
@@ -45,6 +49,8 @@ public sealed partial class DurableSchemaGeneratorTests {
         GeneratorTestRun run = RunGenerator("""
             using System.Collections.Generic;
             using Atelia.DurableGraph;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
             [DurableType("Point",1)] public partial struct Point { [DurableField(1)] public int X; }
             [DurableType("Cell",1)] public partial struct Cell<T> where T:struct {
                 [DurableField(1)] public T? Optional;
@@ -68,7 +74,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         Assert.Contains("// field:3|15|nQm94(q(nUG9pbnQ=()))", manifest);
         Assert.Contains("// field:4|15|a1(l(q(nUG9pbnQ=())))", manifest);
         string generated = GeneratedSource(run, "DurableGenericStates.g.cs");
-        Assert.Contains("TypeExpr.Nullable(global::Atelia.DurableGraph.TypeExpr.Parameter(0))", generated);
+        Assert.Contains("TypeExpr.Nullable(global::Atelia.DurableGraph.Schema.TypeExpr.Parameter(0))", generated);
         Assert.Contains("where T : struct", generated);
     }
 
@@ -79,6 +85,8 @@ public sealed partial class DurableSchemaGeneratorTests {
     public void NullableDoesNotAdmitUnsupportedValueOperands(string valueType) {
         GeneratorTestRun run = RunGenerator($$"""
             using Atelia.DurableGraph;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
             public enum Choice { A, B }
             public struct Plain { public int X; }
             [DurableType("Bad",1)] public partial class Bad:IDurableObject {
@@ -94,6 +102,8 @@ public sealed partial class DurableSchemaGeneratorTests {
         using AncestryHistoryDirectory history = new();
         const string source = """
             using Atelia.DurableGraph;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
             [DurableType("Node",1)] public partial class Node:IDurableObject { [DurableField(1)] public int X; }
             [DurableType("Point",1)] public partial struct Point {
                 [DurableField(1)] public int X;
@@ -115,6 +125,8 @@ public sealed partial class DurableSchemaGeneratorTests {
         using AncestryHistoryDirectory history = new();
         GeneratorTestRun first = RunGenerator("""
             using Atelia.DurableGraph;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
             [DurableType("World",1)] public partial class World:IDurableObject { [DurableField(1)] public int Value; }
             """);
         AssertSchemaOnlyCompiles(first);
@@ -122,6 +134,8 @@ public sealed partial class DurableSchemaGeneratorTests {
         new SchemaHistoryTool().Publish(history.WriteManifest(first), history.History);
         GeneratorTestRun next = RunGenerator("""
             using Atelia.DurableGraph;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
             using States=Atelia.DurableGraph.Generated.Family_576F726C64;
             [DurableType("World",2)] public partial class World:IDurableObject { [DurableField(1)] public int? Value; }
             public static class Changes {
@@ -148,6 +162,8 @@ public sealed partial class DurableSchemaGeneratorTests {
         using AncestryHistoryDirectory history = new();
         GeneratorTestRun first = RunGenerator("""
             using Atelia.DurableGraph;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
             [DurableType("Point",1)] public partial struct Point { [DurableField(1)] public int X; }
             [DurableType("World",1)] public partial class World:IDurableObject { [DurableField(1)] public Point? Value; }
             """);
@@ -155,6 +171,8 @@ public sealed partial class DurableSchemaGeneratorTests {
         new SchemaHistoryTool().Publish(history.WriteManifest(first), history.History);
         GeneratorTestRun next = RunGenerator("""
             using Atelia.DurableGraph;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
             [DurableType("World",2)] public partial class World:IDurableObject { [DurableField(1)] public int? Value; }
             """, history.ReadAdditionalTexts());
         AssertSchemaOnlyCompiles(next);
@@ -208,7 +226,9 @@ public sealed partial class DurableSchemaGeneratorTests {
             using System;
             using System.Collections.Generic;
             using Atelia.DurableGraph;
-            using Atelia.DurableGraph.StateStore;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
+            using Atelia.DurableGraph.Persistence;
             using Atelia.DurableGraph.Generated;
             [DurableType("Point",1)] public readonly partial struct Point {
                 [DurableField(1)] public readonly int X;

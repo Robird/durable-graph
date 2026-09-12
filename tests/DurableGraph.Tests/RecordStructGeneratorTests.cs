@@ -17,6 +17,8 @@ public sealed partial class DurableSchemaGeneratorTests {
     public void RecordStructBackingAccessorNameCannotCollideWithUserMember() {
         GeneratorTestRun run = RunGenerator("""
             using Atelia.DurableGraph;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
             [DurableType("x",1)] public readonly partial record struct X([field: DurableField(1)] int Number) {
                 private static void __DurableReadonly_Family_78_1() { }
             }
@@ -28,6 +30,8 @@ public sealed partial class DurableSchemaGeneratorTests {
     public void RecordStructUnrelatedFieldAttributeAliasDoesNotBecomeTransient() {
         GeneratorTestRun run = RunGenerator("""
             using Atelia.DurableGraph;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
             using Transient = System.NonSerializedAttribute;
             [DurableType("record.value", 1)] public partial record struct Value(
                 [field: DurableField(1), @Transient] int X);
@@ -40,6 +44,8 @@ public sealed partial class DurableSchemaGeneratorTests {
     public void RecordStructUnrelatedAttributeAliasIsNotReinterpretedAsStorageClassification() {
         GeneratorTestRun run = RunGenerator("""
             using Atelia.DurableGraph;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
             using Transient = System.ObsoleteAttribute;
             [DurableType("x", 1)] public partial record struct X {
                 [field: @Transient] public int Computed => 1;
@@ -56,6 +62,8 @@ public sealed partial class DurableSchemaGeneratorTests {
     public void RecordStructTypeNameCannotCollideWithGeneratedHostMember() {
         GeneratorTestRun run = RunGenerator("""
             using Atelia.DurableGraph;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
             [DurableType("record.value", 1)] public partial record struct __DurableCapture(
                 [field: DurableField(1)] int X);
             """);
@@ -138,6 +146,8 @@ public sealed partial class DurableSchemaGeneratorTests {
     public void UnmarkedRecordStructIsNotAutomaticallyEnrolled() {
         GeneratorTestRun run = RunGenerator("""
             using Atelia.DurableGraph;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
             public partial record struct Value(int X);
             [DurableType("record.world", 1)] public partial class World : IDurableObject {
                 [DurableField(1)] public Value Value;
@@ -150,6 +160,8 @@ public sealed partial class DurableSchemaGeneratorTests {
     public void RecordStructFieldLikeEventIsNotSilentlyDiscarded() {
         GeneratorTestRun run = RunGenerator("""
             using Atelia.DurableGraph;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
             [DurableType("record.value", 1)] public partial record struct Value {
                 public event System.Action? Changed;
             }

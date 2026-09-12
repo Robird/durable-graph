@@ -336,10 +336,10 @@ public sealed partial class DurableSchemaGenerator {
         string hiding = GetCurrentBaseReference(current).HasValue ? "new " : string.Empty;
         source.Append(indent).Append(current.IsInline ? "partial struct " : "partial class ").Append(EscapeIdentifier(current.Symbol.Name)).AppendLine(" {");
         source.Append(member).Append("public ").Append(hiding)
-            .Append("static global::Atelia.DurableGraph.DurableSchema Schema => GetSchema(")
+            .Append("static global::Atelia.DurableGraph.Schema.DurableSchema Schema => GetSchema(")
             .Append(current.Version.ToString(CultureInfo.InvariantCulture)).AppendLine(");");
         source.Append(member).Append("public ").Append(hiding)
-            .AppendLine("static global::Atelia.DurableGraph.DurableSchema GetSchema(int version) => version switch {");
+            .AppendLine("static global::Atelia.DurableGraph.Schema.DurableSchema GetSchema(int version) => version switch {");
         foreach (SchemaHistoryModel version in versions) {
             string number = version.Version.ToString(CultureInfo.InvariantCulture);
             source.Append(member).Append("    ").Append(number).Append(" => ")
@@ -350,7 +350,7 @@ public sealed partial class DurableSchemaGenerator {
         source.Append(member).AppendLine("};");
         source.Append(member).Append("private static class ").Append(SchemaHistoryCacheName).AppendLine(" {");
         foreach (SchemaHistoryModel version in versions) {
-            source.Append(member).Append("    internal static readonly global::Atelia.DurableGraph.DurableSchema V")
+            source.Append(member).Append("    internal static readonly global::Atelia.DurableGraph.Schema.DurableSchema V")
                 .Append(version.Version.ToString(CultureInfo.InvariantCulture)).Append(" = ");
             // Historical roots use only accepted records, even if a current candidate has the same key.
             AppendSchemaExpression(source, version, version.Version == current.Version ? available : history);
@@ -374,9 +374,9 @@ public sealed partial class DurableSchemaGenerator {
         foreach (SchemaHistoryModel shape in available) {
             string member = SchemaCacheMember(shape);
             if (!emitted.Add(member)) continue;
-            source.Append("    internal static global::Atelia.DurableGraph.DurableSchema ").Append(member).Append(" => Cache_").Append(member).AppendLine(".Value;");
+            source.Append("    internal static global::Atelia.DurableGraph.Schema.DurableSchema ").Append(member).Append(" => Cache_").Append(member).AppendLine(".Value;");
             source.Append("    private static class Cache_").Append(member).AppendLine(" {");
-            source.Append("        internal static readonly global::Atelia.DurableGraph.DurableSchema Value = ");
+            source.Append("        internal static readonly global::Atelia.DurableGraph.Schema.DurableSchema Value = ");
             AppendSchemaConstruction(source, shape, available);
             source.AppendLine(";");
             source.AppendLine("    }");
@@ -391,14 +391,14 @@ public sealed partial class DurableSchemaGenerator {
 
     private static void AppendSchemaConstruction(
         StringBuilder source, SchemaHistoryModel shape, List<SchemaHistoryModel> available) {
-        source.Append("new global::Atelia.DurableGraph.DurableSchema(")
+        source.Append("new global::Atelia.DurableGraph.Schema.DurableSchema(")
             .Append(SymbolDisplay.FormatLiteral(shape.SchemaId, quote: true)).Append(", ")
             .Append(shape.Version.ToString(CultureInfo.InvariantCulture))
-            .Append(", new global::Atelia.DurableGraph.DurableFieldInfo[] { ");
+            .Append(", new global::Atelia.DurableGraph.Schema.DurableFieldInfo[] { ");
         foreach (SchemaHistoryFieldModel field in shape.Fields) {
-            source.Append("new global::Atelia.DurableGraph.DurableFieldInfo(")
+            source.Append("new global::Atelia.DurableGraph.Schema.DurableFieldInfo(")
                 .Append(field.FieldId.ToString(CultureInfo.InvariantCulture))
-                .Append(", (global::Atelia.DurableGraph.TypeTag)")
+                .Append(", (global::Atelia.DurableGraph.Schema.TypeTag)")
                 .Append(field.TypeTagValue.ToString(CultureInfo.InvariantCulture));
             if (field.TargetSchemaId is not null) {
                 source.Append(", ").Append(SymbolDisplay.FormatLiteral(field.TargetSchemaId, quote: true));
@@ -414,6 +414,6 @@ public sealed partial class DurableSchemaGenerator {
             SchemaReference reference = shape.BaseSchema.Value;
             AppendSchemaExpression(source, FindHistory(available, reference.SchemaId, reference.Version)[0], available);
         } else source.Append("null");
-        source.Append(", (global::Atelia.DurableGraph.SchemaKind)").Append(shape.Kind.ToString(CultureInfo.InvariantCulture)).Append(')');
+        source.Append(", (global::Atelia.DurableGraph.Schema.SchemaKind)").Append(shape.Kind.ToString(CultureInfo.InvariantCulture)).Append(')');
     }
 }

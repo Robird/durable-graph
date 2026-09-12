@@ -15,9 +15,9 @@ public sealed partial class DurableSchemaGeneratorTests {
             [CSharpSyntaxTree.ParseText(WithFixtureBridgeImport(source), ParseOptions)],
             PlatformReferences().Concat(new[] {
                 typeof(IDurableObject).Assembly,
-                typeof(StateStore.Serialization.BinaryPayloadReader).Assembly,
-                typeof(StateStore.SchemaStore).Assembly,
-                typeof(StateStore.Storage.ObjectVersionChain).Assembly,
+                typeof(Serialization.BinaryPayloadReader).Assembly,
+                typeof(Persistence.SchemaStore).Assembly,
+                typeof(Storage.ObjectVersionChain).Assembly,
             }.Select(assembly => MetadataReference.CreateFromFile(assembly.Location)))
                 .Concat(FixtureBridgeReferences(source))
                 .Concat(extraReferences ?? []),

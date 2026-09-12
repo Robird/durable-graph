@@ -20,9 +20,9 @@
 | Probe 源码和测试 | 严格阈值、完整 B 计费、放大率排序、前缀选择、首候选超预算已有可执行参照 |
 | 根 AGENTS.md | 原型 API 未冻结；优先小纵切；当前源码和测试优先于相邻设计文档 |
 
-产品事实见 [StateStore 项目](../../src/DurableGraph.StateStore/DurableGraph.StateStore.csproj)、
-[StateRevision](../../src/DurableGraph.StateStore.Storage/StateRevision.cs)、
-[StateRevisionStore](../../src/DurableGraph.StateStore.Storage/StateRevisionStore.cs)。
+产品事实见 [StateStore 项目](../../src/DurableGraph.Persistence/DurableGraph.Persistence.csproj)、
+[StateRevision](../../src/DurableGraph.Storage/StateRevision.cs)、
+[StateRevisionStore](../../src/DurableGraph.Storage/StateRevisionStore.cs)。
 策略参照为 [MultiSegment 实现（归档）](../../experiments/ARCHIVE.md#multi-segment "原路径：experiments/MultiSegmentStateStoreProbe/Policies/ReadAmplificationBaseBudgetPolicy.cs")
 及[测试（归档）](../../experiments/ARCHIVE.md#multi-segment "原路径：experiments/MultiSegmentStateStoreProbe/Tests/ReadAmplificationBaseBudgetPolicyTests.cs")。
 TwoLeg 只提供设计储备，不建立项目依赖，不继承 Stay/Rotate、A-debt、evacuation 或两文件约束。
@@ -250,12 +250,12 @@ ObjectHeadMap checkpoint 等映射冷读纵切；物理 Frame 成本等真实读
 ## 8. 实施边界与证据入口
 
 本轮在现有 StateStore 项目加入
-[估算 DTO](../../src/DurableGraph.StateStore/ObjectSaveEstimate.cs)、
-[整数参数](../../src/DurableGraph.StateStore/ReadAmplificationBaseBudgetParameters.cs)、
-[只读计划](../../src/DurableGraph.StateStore/ObjectRepresentationPlan.cs)和
-[固定纯 selector](../../src/DurableGraph.StateStore/ReadAmplificationBaseBudgetPolicy.cs)，
+[估算 DTO](../../src/DurableGraph.Persistence/ObjectSaveEstimate.cs)、
+[整数参数](../../src/DurableGraph.Persistence/ReadAmplificationBaseBudgetParameters.cs)、
+[只读计划](../../src/DurableGraph.Persistence/ObjectRepresentationPlan.cs)和
+[固定纯 selector](../../src/DurableGraph.Persistence/ReadAmplificationBaseBudgetPolicy.cs)，
 只为现有 StateStore.Tests 增加 friend assembly。
-[产品验收测试](../../tests/DurableGraph.StateStore.Tests/ReadAmplificationBaseBudgetPolicyTests.cs)使用独立预期值验证第 6 节。
+[产品验收测试](../../tests/DurableGraph.Persistence.Tests/ReadAmplificationBaseBudgetPolicyTests.cs)使用独立预期值验证第 6 节。
 
 2026-09-05 集成验证：`dotnet build DurableGraph.slnx --no-restore` 成功（0 警告、0 错误）；
 StateStore、Storage、Serialization 三个测试项目分别通过 40、73、65 项，无失败或跳过。

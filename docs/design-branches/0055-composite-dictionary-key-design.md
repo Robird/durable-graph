@@ -32,8 +32,8 @@
 | 冻结、配对、Delta | 同 exact KeySlot 的完整 canonical Base bytes；引用为 ObjectId，浮点按位，inline 按持久字段 | 不调用领域 Equals/Hash，不访问引用目标的内容 |
 | 当前领域恢复 | 按对象的恢复模式选择当前 comparer，逐个 TryAdd | 不重现任意旧业务方法；不合并或静默丢弃冲突条目 |
 
-现有 [FrozenDictionaryState](../../src/DurableGraph/FrozenDictionaryState.cs) 已持有独立 entries，
-[DictionaryStateReader.Index](../../src/DurableGraph/DictionaryStateReader.cs) 已使用 key bytes 和完整相等检查。
+现有 [FrozenDictionaryState](../../src/DurableGraph/Runtime/Containers/FrozenDictionaryState.cs) 已持有独立 entries，
+[DictionaryStateReader.Index](../../src/DurableGraph/Runtime/Containers/DictionaryStateReader.cs) 已使用 key bytes 和完整相等检查。
 Hash 仅加速查找；不落盘、不作持久身份。内部数组承载无序映射，不改用有序 List 的算法，也不增加 entry ID。
 
 设 P(k) 为冻结后的完整 key body。用户比较规则若满足：
@@ -109,7 +109,7 @@ record struct、ValueTuple、其他 CLR/BCL 类型的序列化能力仍未实现
 标准模式不能被 Application 的配置覆盖；CurrentDefault 也不被外置配置覆盖。
 普通 new() 使用 Default，不要求先创建 Registry。未指定 comparer 的默认使用与 Application 缺配置是两回事。
 
-标准模式的保留有现成证据：[同闭合类型的多比较策略回归](../../tests/DurableGraph.StateStore.Tests/DictionaryRepositoryTests.cs)。
+标准模式的保留有现成证据：[同闭合类型的多比较策略回归](../../tests/DurableGraph.Persistence.Tests/DictionaryRepositoryTests.cs)。
 若全部删掉模式，一个只有 `"MiXeD"` 的 IgnoreCase 字典用 Default 恢复时不会碰撞，却已改变查询行为。
 TryAdd 无法检测这种配置丢失。保留模式只选择当前内建规则，并不保证跨运行库的任意历史行为复现。
 
@@ -272,13 +272,13 @@ Key/Value 的 exact 布局变化继续分别选显式 Upgrade 工具，空容器
 
 | 代码接缝 | 推荐改动 |
 |---|---|
-| [DictionaryKeyPolicy](../../src/DurableGraph/DictionaryKeyPolicy.cs)、[ComparerKind](../../src/DurableGraph/DictionaryComparerKind.cs) | 分开可表示 key、模式识别、stored 资格与 current comparer 创建；扩展 4/5，标准规则不泛化成任意 Default |
+| [DictionaryKeyPolicy](../../src/DurableGraph/Runtime/Containers/DictionaryKeyPolicy.cs)、[ComparerKind](../../src/DurableGraph/DictionaryComparerKind.cs) | 分开可表示 key、模式识别、stored 资格与 current comparer 创建；扩展 4/5，标准规则不泛化成任意 Default |
 | [Generator.TemplateHistory](../../src/DurableGraph.Generator/DurableSchemaGenerator.TemplateHistory.cs) | 放开已知 Durable struct key 的局部资格拦截，保留不支持形状诊断；Dictionary 双实参原本已触发 Family |
-| [StateModelRegistry](../../src/DurableGraph.StateStore/StateModelRegistry.cs)、[Dictionary snapshot](../../src/DurableGraph.StateStore/StateModelSnapshot.Dictionaries.cs) | typed 选择、一个 resolver、snapshot 配置与惰性缓存；不扩展历史 reader 工厂 |
-| [DictionaryObjectBinding](../../src/DurableGraph/DictionaryObjectBinding.cs) | Capture 识别/预检，Allocate 注入并包装当前 comparer；Hydrate 保持同实例 TryAdd |
-| [DictionaryStateReader](../../src/DurableGraph/DictionaryStateReader.cs)、[FrozenDictionaryState](../../src/DurableGraph/FrozenDictionaryState.cs) | 新模式资格、根 null/零宽检查；新模式跳过业务 lookup，保留 canonical 索引/所有编码操作 |
-| [DictionaryUpgrade](../../src/DurableGraph/StateBindingContext.DictionaryUpgrade.cs)、[RevisionDecoder](../../src/DurableGraph.StateStore/RevisionDecoder.cs)、[NormalizedRevision](../../src/DurableGraph.StateStore/NormalizedRevision.cs) | exact 与新业务边界分开；不在只读/归一化阶段执行 comparer resolver；策略保留和碰撞诊断准确 |
-| [WorldWorkspace](../../src/DurableGraph.StateStore/WorldWorkspace.cs) | 核对分配/填充及回捕边界，原则上不增加全图阶段或第二份模式状态 |
+| [StateModelRegistry](../../src/DurableGraph.Persistence/StateModelRegistry.cs)、[Dictionary snapshot](../../src/DurableGraph.Persistence/StateModelSnapshot.Dictionaries.cs) | typed 选择、一个 resolver、snapshot 配置与惰性缓存；不扩展历史 reader 工厂 |
+| [DictionaryObjectBinding](../../src/DurableGraph/Runtime/Containers/DictionaryObjectBinding.cs) | Capture 识别/预检，Allocate 注入并包装当前 comparer；Hydrate 保持同实例 TryAdd |
+| [DictionaryStateReader](../../src/DurableGraph/Runtime/Containers/DictionaryStateReader.cs)、[FrozenDictionaryState](../../src/DurableGraph/Runtime/Containers/FrozenDictionaryState.cs) | 新模式资格、根 null/零宽检查；新模式跳过业务 lookup，保留 canonical 索引/所有编码操作 |
+| [DictionaryUpgrade](../../src/DurableGraph/Runtime/Binding/StateBindingContext.DictionaryUpgrade.cs)、[RevisionDecoder](../../src/DurableGraph.Persistence/RevisionDecoder.cs)、[NormalizedRevision](../../src/DurableGraph.Persistence/NormalizedRevision.cs) | exact 与新业务边界分开；不在只读/归一化阶段执行 comparer resolver；策略保留和碰撞诊断准确 |
+| [WorldWorkspace](../../src/DurableGraph.Persistence/WorldWorkspace.cs) | 核对分配/填充及回捕边界，原则上不增加全图阶段或第二份模式状态 |
 
 ## 9. 建议施工顺序与最小验收
 
@@ -337,7 +337,7 @@ SortedDictionary 的排序与 OrderedDictionary 的顺序状态独立设计，�
 | 要求 | 实现归属 | 验收入口 | 状态 |
 |---|---|---|---|
 | G0：普通/generic struct key 与完整 DTO 差分 | Generator 资格、Runtime key policy | [真实 SG 纵向 tests](../../tests/DurableGraph.Tests/CompositeDictionaryGeneratorTests.cs) | 已验证 |
-| G1：模式 4/5、当前配置、回捕稳定 | Runtime binding/wrapper；StateStore Registry/Snapshot | [body tests](../../tests/DurableGraph.Tests/CompositeDictionaryBodyTests.cs)、[Repository tests](../../tests/DurableGraph.StateStore.Tests/CompositeDictionaryRepositoryTests.cs) | 已验证 |
+| G1：模式 4/5、当前配置、回捕稳定 | Runtime binding/wrapper；StateStore Registry/Snapshot | [body tests](../../tests/DurableGraph.Tests/CompositeDictionaryBodyTests.cs)、[Repository tests](../../tests/DurableGraph.Persistence.Tests/CompositeDictionaryRepositoryTests.cs) | 已验证 |
 | G2：历史数据/业务验证分层、Upgrade、零宽/根 null | Runtime reader/Upgrade、既有图验证 | [Upgrade tests](../../tests/DurableGraph.Tests/CompositeDictionaryUpgradeTests.cs)、上述 body/Repository tests | 已验证 |
 | G3：删除旧 CLR、两代历史与同 Schema 行为变化 | PackageConsumerProbe | [真实包见证](../../experiments/PackageConsumerProbe/CompositeDictionaryConsumer/README.md) | 已验证 |
 

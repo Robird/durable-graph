@@ -9,9 +9,9 @@
 
 下一步比较过两条路线：继续持久化开放 Schema 模板，或增加首个 BCL 内容适配。
 当前 SchemaStore 已直接恢复闭合 Schema；冷读不需要先展开磁盘上的开放模板。
-[BindSchema/Match](../../src/DurableGraph/StateBindingContext.cs) 核对的是持久布局与保留的代码历史，
+[BindSchema/Match](../../src/DurableGraph/Runtime/Binding/StateBindingContext.cs) 核对的是持久布局与保留的代码历史，
 同时推导 DTO 的 exact 值操作数，承担 kind/arity、字段、base/inline、重复参数及泛型作用域一致性。
-[Upgrade 推导](../../src/DurableGraph/StateBindingContext.Upgrade.cs) 和
+[Upgrade 推导](../../src/DurableGraph/Runtime/Binding/StateBindingContext.Upgrade.cs) 和
 [当前模型生成](../../src/DurableGraph.Generator/DurableSchemaGenerator.GenericProjection.cs) 确有构造后再匹配的往返，
 但持久化模板本身不能删除这些证明义务，也不能替代手工 Schema/reader 入口。
 尚未找到净简化的完整替换路径，因此本片不扩大这项重构。
@@ -151,9 +151,9 @@ List 自己是内容 Upgrade 的 owner，不由入边字段各自转换：
 不要求完整复制数组实现，也不把通用序列容器框架当作前置工程。
 
 代码入口：
-[数组当前投影](../../src/DurableGraph/ArrayObjectBinding.cs)、[历史 reader/body](../../src/DurableGraph/ArrayStateReader.cs)、
-[数组升级](../../src/DurableGraph/StateBindingContext.ArrayUpgrade.cs)、[对象引用验证](../../src/DurableGraph/StateReferenceVisitor.cs)、
-[绑定快照](../../src/DurableGraph.StateStore/StateModelSnapshot.Arrays.cs)、[SchemaCatalog](../../src/DurableGraph.StateStore/SchemaCatalogWireCodec.cs)、
+[数组当前投影](../../src/DurableGraph/Runtime/Containers/ArrayObjectBinding.cs)、[历史 reader/body](../../src/DurableGraph/Runtime/Containers/ArrayStateReader.cs)、
+[数组升级](../../src/DurableGraph/Runtime/Binding/StateBindingContext.ArrayUpgrade.cs)、[对象引用验证](../../src/DurableGraph/Runtime/Binding/StateReferenceVisitor.cs)、
+[绑定快照](../../src/DurableGraph.Persistence/StateModelSnapshot.Arrays.cs)、[SchemaCatalog](../../src/DurableGraph.Persistence/SchemaCatalogWireCodec.cs)、
 [SG 类型模式](../../src/DurableGraph.Generator/DurableSchemaGenerator.TemplateHistory.cs)、[Shared 模式](../../src/Shared/SchemaHistoryTypePattern.cs)。
 实施时审查全部 IsArray 分支：只有“内建引用构造”的判断应扩为 List，维数/shape/数组规则选择保持数组专用。
 
@@ -182,10 +182,10 @@ G0 采用上文 TypeExpr=8、目录 kind=4、history/manifest v5 及位置 Delta
 
 | 合同 | 实施责任与入口 | 验证状态 |
 |---|---|---|
-| List nominal/layout、owned 内容、位置 Delta、图投影 | [ListObjectBinding](../../src/DurableGraph/ListObjectBinding.cs)、[ListStateReader/body](../../src/DurableGraph/ListStateReader.cs)、[ListBodyTests](../../tests/DurableGraph.Tests/ListBodyTests.cs)、[ListGraphTests](../../tests/DurableGraph.Tests/ListGraphTests.cs) | 已验证 |
+| List nominal/layout、owned 内容、位置 Delta、图投影 | [ListObjectBinding](../../src/DurableGraph/Runtime/Containers/ListObjectBinding.cs)、[ListStateReader/body](../../src/DurableGraph/Runtime/Containers/ListStateReader.cs)、[ListBodyTests](../../tests/DurableGraph.Tests/ListBodyTests.cs)、[ListGraphTests](../../tests/DurableGraph.Tests/ListGraphTests.cs) | 已验证 |
 | 递归类型生成、历史 v5 与旧 history 保留 | [ListTemplateHistoryTests](../../tests/DurableGraph.Tests/ListTemplateHistoryTests.cs)、[ListGeneratedStateTests](../../tests/DurableGraph.Tests/ListGeneratedStateTests.cs) | 已验证 |
-| List owner Upgrade、空内容预绑定、Context/完整依赖复核 | [ListUpgrade](../../src/DurableGraph/StateBindingContext.ListUpgrade.cs)、[ListUpgradeTests](../../tests/DurableGraph.Tests/ListUpgradeTests.cs) | 已验证 |
-| 当前/历史绑定、统一目录、注册与 Repository 接入 | [ListBindingCatalogTests](../../tests/DurableGraph.StateStore.Tests/ListBindingCatalogTests.cs)、[ListCatalogTests](../../tests/DurableGraph.StateStore.Tests/ListCatalogTests.cs)、[ListRepositoryTests](../../tests/DurableGraph.StateStore.Tests/ListRepositoryTests.cs) | 已验证 |
+| List owner Upgrade、空内容预绑定、Context/完整依赖复核 | [ListUpgrade](../../src/DurableGraph/Runtime/Binding/StateBindingContext.ListUpgrade.cs)、[ListUpgradeTests](../../tests/DurableGraph.Tests/ListUpgradeTests.cs) | 已验证 |
+| 当前/历史绑定、统一目录、注册与 Repository 接入 | [ListBindingCatalogTests](../../tests/DurableGraph.Persistence.Tests/ListBindingCatalogTests.cs)、[ListCatalogTests](../../tests/DurableGraph.Persistence.Tests/ListCatalogTests.cs)、[ListRepositoryTests](../../tests/DurableGraph.Persistence.Tests/ListRepositoryTests.cs) | 已验证 |
 | 真包跨版本、组合图、共享升级与持久续写 | [ListConsumer](../../experiments/PackageConsumerProbe/ListConsumer/README.md)、[Run-ListProbe](../../experiments/PackageConsumerProbe/Run-ListProbe.ps1) | 两代通过 |
 | 跨模块集成、独立审查、最终构建/各测试项目与文档 | 主线程与独立只读 reviewer | 已验收 |
 

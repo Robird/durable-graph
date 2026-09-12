@@ -24,12 +24,12 @@
 
 | 当前事实 | 代码依据 | 对本轮的约束 |
 |---|---|---|
-| List Base 为 count＋元素 Base；Delta 为 newCount＋共同位置稀疏子 Delta＋新增尾部 Base | [ListStateReader / ListStateBody](../../src/DurableGraph/ListStateReader.cs) | DB-047 是正确且有竞争力的稀疏更新基线，不能只拿头插用例与之比较 |
-| `TState : unmanaged`；引用槽是 ObjectId，inline 槽是嵌套 DTO | [FrozenListState](../../src/DurableGraph/FrozenListState.cs)、[StateValueBinding](../../src/DurableGraph/StateValueBinding.cs) | 列表 diff 不读取被引用对象内容，不调用领域 Equals，也不沿引用递归匹配 |
-| 每次 Apply 分配新元素 buffer；reader 逐条 Apply 历史 Delta | [ListStateReader](../../src/DurableGraph/ListStateReader.cs) | 紧凑 patch 不会自动消除每层整表物化成本 |
-| Capture 后全部 live Base 提前编码，再准备 existing 对象 Delta | [CaptureSession](../../src/DurableGraph/CaptureSession.cs)、[ListObjectBinding](../../src/DurableGraph/ListObjectBinding.cs) | Diff 加速不等于 Commit 同比例加速；Base/Capture 成本必须单列 |
-| H 为对象版本 payload 累计字节；策略根据 H、B、D 产生 Base 动机 | [ObjectVersionChain](../../src/DurableGraph.StateStore.Storage/ObjectVersionChain.cs)、[策略](../../src/DurableGraph.StateStore/ReadAmplificationBaseBudgetPolicy.cs) | H 不度量整表复制 CPU、分配或全部物理 I/O |
-| ListLayout 包含 codec version，当前只接受 1 | [ListLayout](../../src/DurableGraph/ListLayout.cs) | 更换 patch 语法必须显式改变解释版本，不能悄悄重解释原版本 |
+| List Base 为 count＋元素 Base；Delta 为 newCount＋共同位置稀疏子 Delta＋新增尾部 Base | [ListStateReader / ListStateBody](../../src/DurableGraph/Runtime/Containers/ListStateReader.cs) | DB-047 是正确且有竞争力的稀疏更新基线，不能只拿头插用例与之比较 |
+| `TState : unmanaged`；引用槽是 ObjectId，inline 槽是嵌套 DTO | [FrozenListState](../../src/DurableGraph/Runtime/Containers/FrozenListState.cs)、[StateValueBinding](../../src/DurableGraph/Runtime/Binding/StateValueBinding.cs) | 列表 diff 不读取被引用对象内容，不调用领域 Equals，也不沿引用递归匹配 |
+| 每次 Apply 分配新元素 buffer；reader 逐条 Apply 历史 Delta | [ListStateReader](../../src/DurableGraph/Runtime/Containers/ListStateReader.cs) | 紧凑 patch 不会自动消除每层整表物化成本 |
+| Capture 后全部 live Base 提前编码，再准备 existing 对象 Delta | [CaptureSession](../../src/DurableGraph/Runtime/Capture/CaptureSession.cs)、[ListObjectBinding](../../src/DurableGraph/Runtime/Containers/ListObjectBinding.cs) | Diff 加速不等于 Commit 同比例加速；Base/Capture 成本必须单列 |
+| H 为对象版本 payload 累计字节；策略根据 H、B、D 产生 Base 动机 | [ObjectVersionChain](../../src/DurableGraph.Storage/ObjectVersionChain.cs)、[策略](../../src/DurableGraph.Persistence/ReadAmplificationBaseBudgetPolicy.cs) | H 不度量整表复制 CPU、分配或全部物理 I/O |
+| ListLayout 包含 codec version，当前只接受 1 | [ListLayout](../../src/DurableGraph/Schema/ListLayout.cs) | 更换 patch 语法必须显式改变解释版本，不能悄悄重解释原版本 |
 
 ## 3. 前人工作：借用机制，区分其优化目标
 
@@ -169,8 +169,8 @@ exact 匹配无法推断业务上的元素身份；允许回退且必须纳入�
 
 ## 7. 元素相等与融合 PrepareDelta 的关系
 
-[IStateOps](../../src/DurableGraph/StateValueBinding.cs) 没有 equality/hash。
-[PreparedDeltaBody](../../src/DurableGraph.StateStore.Serialization/Serialization/PreparedDeltaBody.cs) 是有 owned bytes 的对象；
+[IStateOps](../../src/DurableGraph/Runtime/Binding/StateValueBinding.cs) 没有 equality/hash。
+[PreparedDeltaBody](../../src/DurableGraph.Serialization/PreparedDeltaBody.cs) 是有 owned bytes 的对象；
 [生成的 struct PrepareDelta](../../src/DurableGraph.Generator/DurableSchemaGenerator.GenericState.cs) 还会创建缓冲、递归准备子 Delta。
 将它反复用作任意两位置的 equality oracle，会产生大量弃用编码，不能当作理想 Myers 的廉价比较。
 

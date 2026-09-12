@@ -32,12 +32,12 @@
 
 调查基线只支持 13 种标量，string 是独立引用对象。下面是实施前的接缝盘点；新能力与执行见证见 §9：
 
-- [TypeTag](../../src/DurableGraph/TypeTag.cs) 的 1–14 包含已有标量/string；15、16、18 分别为引用、inline、Nullable，17 留给 history 参数。
-  [TypeExpr.Builtin](../../src/DurableGraph/TypeExpr.cs) 与 [共享 TypePattern](../../src/Shared/SchemaHistoryTypePattern.cs) 把 builtin 限于 1–14。
-- [BuiltinStateValues](../../src/DurableGraph/BuiltinStateValues.cs) 的 current/stored 绑定、`IdentityValueProjection<T>`、静态 `IStateOps<T>`
+- [TypeTag](../../src/DurableGraph/Schema/TypeTag.cs) 的 1–14 包含已有标量/string；15、16、18 分别为引用、inline、Nullable，17 留给 history 参数。
+  [TypeExpr.Builtin](../../src/DurableGraph/Schema/TypeExpr.cs) 与 [共享 TypePattern](../../src/Shared/SchemaHistoryTypePattern.cs) 把 builtin 限于 1–14。
+- [BuiltinStateValues](../../src/DurableGraph/Runtime/State/BuiltinStateValues.cs) 的 current/stored 绑定、`IdentityValueProjection<T>`、静态 `IStateOps<T>`
   已能承载无引用 unmanaged 值；这里没有这三种 CLR 类型的分支。
-- [BinaryPayloadWriter](../../src/DurableGraph.StateStore.Serialization/Serialization/BinaryPayloadWriter.cs) /
-  [Reader](../../src/DurableGraph.StateStore.Serialization/Serialization/BinaryPayloadReader.cs) 尚无这三种方法；有符号整数采用 canonical ZigZag varint。
+- [BinaryPayloadWriter](../../src/DurableGraph.Serialization/BinaryPayloadWriter.cs) /
+  [Reader](../../src/DurableGraph.Serialization/BinaryPayloadReader.cs) 尚无这三种方法；有符号整数采用 canonical ZigZag varint。
 - [Generator](../../src/DurableGraph.Generator/DurableSchemaGenerator.cs) 的识别/类型名/tag，
   [普通 body](../../src/DurableGraph.Generator/DurableSchemaGenerator.GeneratedState.cs) 与
   [Family body](../../src/DurableGraph.Generator/DurableSchemaGenerator.GenericState.cs) 都需要接入。
@@ -45,12 +45,12 @@
 - [history 解析/模板](../../src/DurableGraph.Generator/DurableSchemaGenerator.TemplateHistory.cs) 与
   [Build 工具](../../src/DurableGraph.Build/SchemaHistoryTool.cs) 有连续 tag 上界和格式能力判定；
   新标量可能出现在直接字段，也可能只出现在 Nullable、容器、泛型/base 的 nominal 实参里。
-- [StateModelSnapshot](../../src/DurableGraph.StateStore/StateModelSnapshot.cs) 需要闭合 CLR ↔ nominal ↔ stored 槽双向映射；
-  [TypeExpr wire](../../src/DurableGraph.StateStore/TypeExprWireCodec.cs) 与
-  [目录 codec](../../src/DurableGraph.StateStore/SchemaCatalogWireCodec.cs) 的 ReadSlot 也各自只把 1–14 当叶子。
-- [DictionaryKeyPolicy](../../src/DurableGraph/DictionaryKeyPolicy.cs) 的 current key 入口能复用 builtin binding，
+- [StateModelSnapshot](../../src/DurableGraph.Persistence/StateModelSnapshot.cs) 需要闭合 CLR ↔ nominal ↔ stored 槽双向映射；
+  [TypeExpr wire](../../src/DurableGraph.Persistence/TypeExprWireCodec.cs) 与
+  [目录 codec](../../src/DurableGraph.Persistence/SchemaCatalogWireCodec.cs) 的 ReadSlot 也各自只把 1–14 当叶子。
+- [DictionaryKeyPolicy](../../src/DurableGraph/Runtime/Containers/DictionaryKeyPolicy.cs) 的 current key 入口能复用 builtin binding，
   但 `TryScalarTag` / `ReadScalar` 仍须同步，否则会出现 current 接受、stored 拒绝。
-  [StateBodySize](../../src/DurableGraph/StateBodySize.cs) 需补新叶子的最小字节数。
+  [StateBodySize](../../src/DurableGraph/Runtime/State/StateBodySize.cs) 需补新叶子的最小字节数。
 
 建议收敛明确的 builtin tag 判定，避免多个 `<= 14` 散落失配；不能改成 `<= 21` 而把中间复合 tag 当叶子。
 只提取本片实际需要的固定判定/映射，不引入可注册标量插件、另一套 Schema 权威或通用 codec 平台。
@@ -229,8 +229,8 @@ Runtime/SG 使用该比较，未知泛型槽仍走静态操作。不改变会话
 
 | 要求 | 实现落点 | 验收证据 |
 |---|---|---|
-| G0 / G1 字节与完整表示比较 | Serialization Reader/Writer、唯一 ScalarStateEquality | [BclScalarPayloadTests](../../tests/DurableGraph.StateStore.Serialization.Tests/Serialization/BclScalarPayloadTests.cs)：独立 golden、全部 scale/符号、非法 flags、极值/截断、unmanaged |
-| G1 Runtime/current/stored/目录/字典 | TypeTagFacts、BclScalarStateValues、StateModelSnapshot、目录与 DictionaryKeyPolicy | [静态操作/最低尺寸](../../tests/DurableGraph.Tests/BclScalarStateTests.cs)、[独立目录 bytes](../../tests/DurableGraph.StateStore.Tests/BclScalarCatalogTests.cs)；新叶子不创建 Schema 行，旧 tag bytes 不变 |
+| G0 / G1 字节与完整表示比较 | Serialization Reader/Writer、唯一 ScalarStateEquality | [BclScalarPayloadTests](../../tests/DurableGraph.Serialization.Tests/Serialization/BclScalarPayloadTests.cs)：独立 golden、全部 scale/符号、非法 flags、极值/截断、unmanaged |
+| G1 Runtime/current/stored/目录/字典 | TypeTagFacts、BclScalarStateValues、StateModelSnapshot、目录与 DictionaryKeyPolicy | [静态操作/最低尺寸](../../tests/DurableGraph.Tests/BclScalarStateTests.cs)、[独立目录 bytes](../../tests/DurableGraph.Persistence.Tests/BclScalarCatalogTests.cs)；新叶子不创建 Schema 行，旧 tag bytes 不变 |
 | G2 SG 普通/Family/组合 | 真正 corelib 符号识别、普通 body 资格、唯一 decimal 比较与静态读写 | [BclScalarGeneratorTests](../../tests/DurableGraph.Tests/BclScalarGeneratorTests.cs)：分离 compilation、实际执行 golden、nominal/base/phantom/容器、伪类型拒绝 |
 | G2 history v8 / 旧文件 | Shared TypePattern、Build、SG history reader | [BclScalarHistoryTests](../../tests/DurableGraph.Tests/BclScalarHistoryTests.cs)：固定 v7 filename/hash/bytes 保留，v1–7 直接/递归拒绝，旧 CLR 删除后的 exact reader |
 | G3 差分与连续图 | 既有 GraphSession、容器和规则，不新增对象机制 | [14 次 Commit 图](../../tests/DurableGraph.Tests/BclScalarGraphTests.cs)：decimal scale 分形状修改，键 Remove+Add / value Patch；[显式值工具](../../tests/DurableGraph.Tests/NullableUpgradeTests.cs)：long→TimeSpan 与 Nullable lifting，缺规则零 callback |

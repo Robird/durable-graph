@@ -1,3 +1,4 @@
+using Atelia.DurableGraph.Schema;
 using System.Text;
 using Atelia.DurableGraph.Build;
 

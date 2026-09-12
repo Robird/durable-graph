@@ -23,16 +23,16 @@
 | 001-D 跨重开定位 | 成立，现有 GraphFrame 是一次打开内的受检 handle，无持久 locator→handle 入口 | 保留候选，具体书签/引用需求出现再设计；本片只说明现有边界 |
 | 001-E 最近 N 条 | 成立，ReadEvents 先全链物化再筛选；尚无长历史测量 | 采纳顺序/物化/成本文档；局部浏览 API 与测量另行触发 |
 
-本片实施时 [Repository](../../src/DurableGraph.StateStore/EventHistoryRepository.cs) 的 DefaultPolicy 为 `(3, 5)`；
+本片实施时 [Repository](../../src/DurableGraph.Persistence/EventHistoryRepository.cs) 的 DefaultPolicy 为 `(3, 5)`；
 后继默认值选择见 [DB-070](0070-read-amplification-default.md)。
 每次 CreateBranch/Commit 独立使用该次参数或默认值；CreateBranch 的覆盖值不会变成后续 Commit 的会话默认值。
 默认数值是当前实现选择，不是业务语义或永久格式保证。
 
-[Publish](../../src/DurableGraph.StateStore/EventHistoryRepository.cs) 先 Stage，再 State/Journal 屏障与 ref 发布，
+[Publish](../../src/DurableGraph.Persistence/EventHistoryRepository.cs) 先 Stage，再 State/Journal 屏障与 ref 发布，
 最后 Install、更新 Head/PendingEvent 并返回。写入前失败可以直接抛原异常；发生追加尝试后才按发布阶段包装
-[GraphCommitException](../../src/DurableGraph.StateStore/GraphCommitException.cs)。NotPublished 也可能已经使仓库 faulted。
+[GraphCommitException](../../src/DurableGraph.Persistence/GraphCommitException.cs)。NotPublished 也可能已经使仓库 faulted。
 
-[ReadFrames/ReadEvents](../../src/DurableGraph.StateStore/EventHistoryRepository.cs) 返回所选 branch head 的逻辑祖先链，
+[ReadFrames/ReadEvents](../../src/DurableGraph.Persistence/EventHistoryRepository.cs) 返回所选 branch head 的逻辑祖先链，
 从旧到新，以数组完整物化；不把物理 orphan 或其他分支独有记录混入该链。它们不恢复领域对象。
 打开仓库仍检查物理 Journal、引用 Revision/根等完整性，包括 orphan；枚举、冷打开与领域图恢复是不同成本。
 
@@ -170,10 +170,10 @@ Windows .NET 验证串行执行。
 
 现有恢复证据入口：
 
-- [EventHistoryRepositoryTests](../../tests/DurableGraph.StateStore.Tests/EventHistoryRepositoryTests.cs)：
+- [EventHistoryRepositoryTests](../../tests/DurableGraph.Persistence.Tests/EventHistoryRepositoryTests.cs)：
   KnownPrepublicationFailureDoesNotInstallCandidateAndColdResumeSeesPendingEvent、
   PublishedStateFailureFaultsWriterAndReopenMustNotReplayPendingEvent。
-- [EventHistoryPublicationFailureTests](../../tests/DurableGraph.StateStore.Tests/EventHistoryPublicationFailureTests.cs)：
+- [EventHistoryPublicationFailureTests](../../tests/DurableGraph.Persistence.Tests/EventHistoryPublicationFailureTests.cs)：
   PublishedEventFailureReopensAsPendingWithoutAdvancingStateBaseline、真实 Ref Create/Init/Bind 故障与 CAS 失败。
 - [当前真实包 runner](../../experiments/PackageConsumerProbe/Run-EventHistoryProbe.ps1)：独立 feed、history Publish/Verify、两代模型；
   新推荐示例不替换其 DB-063/064 机制证据。
@@ -208,9 +208,9 @@ record class、接口集合等适配工作量继续从真实 DramaBoard 集成�
 
 | 验收项 | 实施归属 | 证据 |
 |---|---|---|
-| B1、E1 调用处文档 | [StateStore 项目](../../src/DurableGraph.StateStore/DurableGraph.StateStore.csproj)、上述公开外观 | 新 nupkg/恢复目录 DLL/XML 相邻、XML 一致，12 个关键 member 的 summary/remarks 校验通过；仅项目局部忽略1591 |
+| B1、E1 调用处文档 | [StateStore 项目](../../src/DurableGraph.Persistence/DurableGraph.Persistence.csproj)、上述公开外观 | 新 nupkg/恢复目录 DLL/XML 相邻、XML 一致，12 个关键 member 的 summary/remarks 校验通过；仅项目局部忽略1591 |
 | C1、C2 快照/恢复例子 | [RecoveryConsumer](../../experiments/PackageConsumerProbe/EventHistoryRecoveryConsumer/README.md)、[runner](../../experiments/PackageConsumerProbe/Run-EventHistoryRecoveryProbe.ps1) | 热/冷多进程均 E.Hp=10、S.Hp=7、观察保持；再次恢复无 Pending 不写文件；后续 S.Hp=4 时只登记 Event/Snapshot 仍读回旧 E；只读字节/时间戳不变 |
-| B2–B4 恢复分支 | [同源故障测试](../../tests/DurableGraph.StateStore.Tests/EventHistoryConsumerRecoveryTests.cs) 链接 [PendingRecovery](../../experiments/PackageConsumerProbe/EventHistoryRecoveryConsumer/PendingRecovery.cs) | 新增 5 case；包含已发布后未交付的两个 checkpoint、NotPublished/faulted、原业务/写前异常；EventHistoryRepositoryTests 共 37/37 通过 |
+| B2–B4 恢复分支 | [同源故障测试](../../tests/DurableGraph.Persistence.Tests/EventHistoryConsumerRecoveryTests.cs) 链接 [PendingRecovery](../../experiments/PackageConsumerProbe/EventHistoryRecoveryConsumer/PendingRecovery.cs) | 新增 5 case；包含已发布后未交付的两个 checkpoint、NotPublished/faulted、原业务/写前异常；EventHistoryRepositoryTests 共 37/37 通过 |
 | A1、G3 | [README 原文 runner](../../experiments/PackageConsumerProbe/Run-ReadmeQuickStartProbe.ps1) 与根 README | 从正文提取真实项目/Models/Program/Upgrade/浏览代码；独立包两次 V1 得 HP99/98，按文档升版后 HP97/Day1；保留旧 history，Clean/Verify 成功 |
 
 独立审阅检查了调用处合同、共享恢复函数、快照模型、故障断言与两个新 runner，没有未解决的阻碍项。

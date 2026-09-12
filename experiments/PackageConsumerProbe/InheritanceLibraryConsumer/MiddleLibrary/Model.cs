@@ -1,4 +1,5 @@
 using Atelia.DurableGraph;
+using Atelia.DurableGraph.Runtime;
 using InheritanceLibrary.Base;
 using MiddleStates = Atelia.DurableGraph.Generated.Family_484D6964646C65;
 using PairStates = Atelia.DurableGraph.Generated.Family_4850616972;
