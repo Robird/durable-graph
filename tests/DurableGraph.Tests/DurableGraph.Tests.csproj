@@ -17,6 +17,7 @@
 
   <ItemGroup>
     <Using Include="Xunit" />
+    <Compile Include="..\Shared\TestSavePolicies.cs" Link="TestSavePolicies.cs" />
   </ItemGroup>
 
   <ItemGroup>

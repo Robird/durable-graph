@@ -3,6 +3,8 @@ using EventHistoryRecovery;
 namespace Atelia.DurableGraph.StateStore.Tests;
 
 public sealed partial class EventHistoryRepositoryTests {
+    // Intentionally use omitted policies here and in the linked PendingRecovery source:
+    // these tests execute the consumer recovery contract with the public default API.
     [Theory]
     [InlineData((int)CommitCheckpoint.AfterStateDurable, false)]
     [InlineData((int)CommitCheckpoint.AfterPublication, true)]

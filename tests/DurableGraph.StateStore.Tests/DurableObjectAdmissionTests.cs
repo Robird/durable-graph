@@ -1,3 +1,5 @@
+using Atelia.DurableGraph.Testing;
+
 namespace Atelia.DurableGraph.StateStore.Tests;
 
 public sealed partial class EventHistoryRepositoryTests {
@@ -50,15 +52,15 @@ public sealed partial class EventHistoryRepositoryTests {
     [Fact]
     public void ErasedEventBoundaryRejectsBoxedAndUnregisteredMarkersBeforePublication() {
         using EventHistoryRepository repository = CreateRepository();
-        using EventHistorySession<Node> session = repository.CreateBranch("main", new Node(), Models());
+        using EventHistorySession<Node> session = repository.CreateBranch("main", new Node(), Models(), TestSavePolicies.Baseline);
         GraphFrame initial = session.Head;
         IDurableObject boxed = new BoxedMarker();
-        Assert.Throws<ArgumentException>(() => session.CommitDomainEvent(boxed));
-        Assert.Throws<ArgumentException>(() => session.CommitDomainEvent(new UnregisteredMarker()));
+        Assert.Throws<ArgumentException>(() => session.CommitDomainEvent(boxed, TestSavePolicies.Baseline));
+        Assert.Throws<ArgumentException>(() => session.CommitDomainEvent(new UnregisteredMarker(), TestSavePolicies.Baseline));
         Assert.Same(initial, session.Head);
         Assert.Null(session.PendingEvent);
         Assert.False(session.IsFaulted);
-        session.CommitDomainEvent(new Node { Value = 7 });
+        session.CommitDomainEvent(new Node { Value = 7 }, TestSavePolicies.Baseline);
         Assert.Equal((byte)7, session.GetPendingEvent<Node>().Value);
     }
 
