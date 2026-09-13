@@ -16,8 +16,8 @@ Journal 的命名 branch ref 是唯一发布点；恢复读取已保存的结果
 
 ## 最短接入路径
 
-需要 .NET 10 SDK 和一份匹配当前源码的本地 NuGet feed。首次准备 feed 见文末
-[从源码打包](#从源码打包)；这里不假定某个版本已发布到 nuget.org。
+下面的应用接入示例需要 .NET 10 SDK 和包含当前 DurableGraph 包 G 的完整本地 NuGet feed，准备方式见文末
+[从源码打包](#从源码打包)。底层存储包 S 从 nuget.org 下载；这里不假定 DurableGraph 自身的包已公开发布。
 
 创建一个独立控制台项目，例如 `QuickStart/QuickStart.csproj`：
 
@@ -351,9 +351,9 @@ Transient 只表示不参与持久化，并不表示修改没有可见影响。�
 
 底层五库存储依赖来自独立的 [atelia-storage](https://github.com/Atelia-org/atelia-storage)，
 默认使用 [StorageDependency.props](eng/StorageDependency.props) 固定的 NuGet 版本 S。
-先运行 `./eng/Prepare-Storage.ps1`，从固定 commit 准备 `.artifacts/storage-feed`；远端尚未可用时，
-可用 `-SourceRepository <本地 atelia-storage 仓路径>` 取得同一个固定 commit。
-正常构建不要求旁边存在源码仓。源码联调、版本升级与来源核验见 [存储依赖指南](docs/storage-dependency.md)。
+正常 `dotnet build/test` 直接从 nuget.org restore，不需要先运行 Prepare 或检出存储源码。
+独立包 probes 的 Prepare 仅下载公开五个 nupkg 并返回 feed，不 clone 或重新打包存储库。
+源码联调、唯一版本的本地开发包与显式 NuGet 配置见 [存储依赖指南](docs/storage-dependency.md)。
 
 从 DurableGraph 根目录执行以下命令，生成含五个 S 包和四个 DG 包的完整 feed。
 `$version` 只控制 DG 的版本 G，必须与 S 不同；每批 DG 产物使用新版本，避免缓存复用同版本旧代码：
@@ -369,7 +369,8 @@ Prepare-DurableGraphProbeFeed -RepositoryRoot (Get-Location).Path -OutputDirecto
 将 `$feed` 和 `$version` 用于前面的 restore/run。也可直接运行带独立 feed、两代模型和历史校验的
 [真实包实验](experiments/PackageConsumerProbe/README.md)，例如 `Run-InheritanceLibraryProbe.ps1`。
 源码模式用于 build/test；`dotnet pack -p:UseStorageSources=true` 会被拒绝。联调实验包先由上游 Pack
-生成新的存储版本，再按包模式打 DG。不能给五库重复套用 DG 的 G。
+生成新的存储版本，再用指南中的自定义 NuGet.Config 和 `StoragePackageVersion` 按包模式打 DG。
+不能给五库重复套用 DG 的 G，也不能覆盖公开版本或通过清空缓存切换包内容。
 
 ## 接下来查什么
 

@@ -21,11 +21,12 @@
 
 存储依赖已改为独立 `atelia-storage` 的版本包与显式源码联调。
 版本/来源 pin 统一记录在 [StorageDependency.props](../eng/StorageDependency.props)。
-固定来源 Prepare、包/源码引用图、934 项存储/持久化测试、EventHistory/recovery 包 probes
-及冻结旧存档的冷读→续写→再冷读已通过；完整 2668 项测试通过于此前 `.2` 候选。
-最终固定包为 `0.1.1-dev.20260913.4`，来源 `09d979941d2c671a1e7a8ffabfa6e2b340e00f69`。
-远端创建与公开发布尚未执行，首次 Prepare 可明确提供本地 Git 来源；不把本地验收当作远端获取成功。
-日常准备、显式源码联调及包版本边界统一见[存储依赖指南](../docs/storage-dependency.md)；
+本地固定来源准备、包/源码引用图、934 项存储/持久化测试、EventHistory/recovery 包 probes
+及冻结旧存档的冷读→续写→再冷读已通过；完整 2668 项测试通过于此前本地 `0.1.1-dev.20260913.2` 候选。
+P5 公开包下载、签名与 Source Link、私有缓存下的完整构建/Storage 202 项、EventHistory/recovery probes 和旧数据冷进程验证已通过。
+版本与源码 commit 以 pin 为唯一权威；五个存储包已发布到 nuget.org，DG 自身四包仍由本仓按需生成。
+日常 build/test 直接从 nuget.org restore；Prepare 仅为独立 probes 下载公开 nupkg，不再 clone 或重打存储包。
+普通构建、显式源码联调及本地开发包的独立 NuGet 配置统一见[存储依赖指南](../docs/storage-dependency.md)；
 本片只改交付接线，不改变下述存储格式、恢复和产品能力。
 
 [DB-071：程序集与命名空间组织](../docs/design-branches/0071-assembly-namespace-organization-review.md) 已实施：

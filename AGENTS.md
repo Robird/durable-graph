@@ -34,8 +34,10 @@
 ## Repository conventions
 
 - Storage dependencies use the version/revision in [eng/StorageDependency.props](eng/StorageDependency.props).
-  Start with [docs/storage-dependency.md](docs/storage-dependency.md) for preparation, explicit source development,
-  source provenance and package validation. Do not infer storage behavior from a sibling checkout at an unrelated HEAD.
+  Normal build/test restores storage packages directly from nuget.org; Prepare is only a public-package download
+  helper for isolated probes, not a source clone/build step. Start with [docs/storage-dependency.md](docs/storage-dependency.md)
+  for explicit source development, unique local dev packages with a dedicated NuGet.Config, and package validation.
+  Do not infer storage behavior from a sibling checkout at an unrelated HEAD.
   `UseStorageSources=true` is for build/test only; package delivery requires package mode and independent storage/DG versions.
 
 - Runtime projects target .NET 10. The Roslyn Source Generator targets `netstandard2.0` unless a concrete compatibility experiment changes that decision.

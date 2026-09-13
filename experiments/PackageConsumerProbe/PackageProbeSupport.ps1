@@ -3,8 +3,8 @@
 function Invoke-DotNet {
     param([Parameter(Mandatory)][string[]] $Arguments)
     if ($Arguments[0] -eq 'restore') {
-        # Runners supply their complete feed(s) with --source. Do not inherit the
-        # root config's exact storage-feed mapping for these isolated consumers.
+        # Use the runner's explicit complete feed(s), independently of source
+        # mappings inherited from parent NuGet configurations.
         $config = Join-Path $workRoot 'probe.nuget.config'
         if (!(Test-Path -LiteralPath $config)) {
             [void](New-Item -ItemType Directory -Force -Path $workRoot)
