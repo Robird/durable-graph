@@ -33,6 +33,11 @@
 
 ## Repository conventions
 
+- Storage dependencies use the version/revision in [eng/StorageDependency.props](eng/StorageDependency.props).
+  Start with [docs/storage-dependency.md](docs/storage-dependency.md) for preparation, explicit source development,
+  source provenance and package validation. Do not infer storage behavior from a sibling checkout at an unrelated HEAD.
+  `UseStorageSources=true` is for build/test only; package delivery requires package mode and independent storage/DG versions.
+
 - Runtime projects target .NET 10. The Roslyn Source Generator targets `netstandard2.0` unless a concrete compatibility experiment changes that decision.
 - `Directory.Build.props` supplies the `Atelia.` assembly, root namespace, and package-name prefix.
 - Follow the K&R C# brace style configured in `.editorconfig`.

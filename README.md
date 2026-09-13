@@ -349,29 +349,27 @@ Transient 只表示不参与持久化，并不表示修改没有可见影响。�
 `Atelia.DurableGraph.Schema`，绑定与状态操作使用 `Atelia.DurableGraph.Runtime`，两者仍在主程序集内。
 仅组织迁移不需要提高业务 Schema 版本，保留 accepted history；不提供旧 DLL 的直接二进制兼容。
 
-本仓库需要相邻的兄弟仓库 `../atelia`（Data、Primitives、RBF 等依赖）。从 DurableGraph 根目录执行；
-每批使用新版本号，避免 NuGet 缓存复用同版本旧代码：
+底层五库存储依赖来自独立的 [atelia-storage](https://github.com/Atelia-org/atelia-storage)，
+默认使用 [StorageDependency.props](eng/StorageDependency.props) 固定的 NuGet 版本 S。
+先运行 `./eng/Prepare-Storage.ps1`，从固定 commit 准备 `.artifacts/storage-feed`；远端尚未可用时，
+可用 `-SourceRepository <本地 atelia-storage 仓路径>` 取得同一个固定 commit。
+正常构建不要求旁边存在源码仓。源码联调、版本升级与来源核验见 [存储依赖指南](docs/storage-dependency.md)。
+
+从 DurableGraph 根目录执行以下命令，生成含五个 S 包和四个 DG 包的完整 feed。
+`$version` 只控制 DG 的版本 G，必须与 S 不同；每批 DG 产物使用新版本，避免缓存复用同版本旧代码：
 
 ```powershell
 $ErrorActionPreference = "Stop"
 $version = "0.0.0-local.$([DateTime]::UtcNow.ToString('yyyyMMddHHmmss'))"
-$feed = Join-Path (Get-Location) "artifacts/nuget/$version"
-foreach ($project in @(
-    "../atelia/src/Data/Data.csproj", "../atelia/src/Primitives/Primitives.csproj",
-    "../atelia/src/Rbf/Rbf.csproj", "../atelia/src/RbfSegmentStore/RbfSegmentStore.csproj",
-    "../atelia/src/EventJournal/EventJournal.csproj",
-    "src/DurableGraph.Serialization/DurableGraph.Serialization.csproj",
-    "src/DurableGraph/DurableGraph.csproj",
-    "src/DurableGraph.Storage/DurableGraph.Storage.csproj",
-    "src/DurableGraph.Persistence/DurableGraph.Persistence.csproj"
-)) {
-    dotnet pack $project --configuration Release --output $feed -p:PackageVersion=$version
-    if ($LASTEXITCODE -ne 0) { throw "Pack failed: $project" }
-}
+$feed = Join-Path (Get-Location) ".artifacts/nuget/$version"
+. ./experiments/PackageConsumerProbe/PackageProbeSupport.ps1
+Prepare-DurableGraphProbeFeed -RepositoryRoot (Get-Location).Path -OutputDirectory $feed -Version $version
 ```
 
 将 `$feed` 和 `$version` 用于前面的 restore/run。也可直接运行带独立 feed、两代模型和历史校验的
 [真实包实验](experiments/PackageConsumerProbe/README.md)，例如 `Run-InheritanceLibraryProbe.ps1`。
+源码模式用于 build/test；`dotnet pack -p:UseStorageSources=true` 会被拒绝。联调实验包先由上游 Pack
+生成新的存储版本，再按包模式打 DG。不能给五库重复套用 DG 的 G。
 
 ## 接下来查什么
 

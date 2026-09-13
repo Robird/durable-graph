@@ -1,4 +1,5 @@
 <Project>
+  <Import Project="$(MSBuildThisFileDirectory)eng/StorageDependency.props" />
   <PropertyGroup>
     <!-- 默认程序集名、命名空间、包名均为 Atelia.{项目名} -->
     <AssemblyName>Atelia.$(MSBuildProjectName)</AssemblyName>

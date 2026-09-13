@@ -6,7 +6,10 @@
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
   </PropertyGroup>
-  <ItemGroup>
-    <ProjectReference Include="../../../atelia/src/RbfSegmentStore/RbfSegmentStore.csproj" />
+  <ItemGroup Condition="'$(UseStorageSources)' != 'true'">
+    <PackageReference Include="Atelia.RbfSegmentStore" Version="$(StoragePackageVersion)" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(UseStorageSources)' == 'true'">
+    <ProjectReference Include="$(StorageSourceRoot)/src/RbfSegmentStore/RbfSegmentStore.csproj" />
   </ItemGroup>
 </Project>

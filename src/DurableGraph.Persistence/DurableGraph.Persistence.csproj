@@ -12,7 +12,12 @@
   <ItemGroup>
     <ProjectReference Include="..\DurableGraph\DurableGraph.csproj" />
     <ProjectReference Include="..\DurableGraph.Storage\DurableGraph.Storage.csproj" />
-    <ProjectReference Include="..\..\..\atelia\src\EventJournal\EventJournal.csproj" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(UseStorageSources)' != 'true'">
+    <PackageReference Include="Atelia.EventJournal" Version="$(StoragePackageVersion)" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(UseStorageSources)' == 'true'">
+    <ProjectReference Include="$(StorageSourceRoot)/src/EventJournal/EventJournal.csproj" />
   </ItemGroup>
 
   <ItemGroup>

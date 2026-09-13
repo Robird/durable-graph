@@ -1,0 +1,15 @@
+<Project>
+  <Target Name="ValidateStorageSourceMode" BeforeTargets="CollectPackageReferences;PrepareForBuild">
+    <Error Condition="'$(UseStorageSources)' != 'true' and '$(UseStorageSources)' != 'false'"
+           Text="UseStorageSources must be true or false." />
+    <Error Condition="'$(UseStorageSources)' == 'true' and '$(StorageSourceRoot)' == ''"
+           Text="UseStorageSources=true requires an absolute StorageSourceRoot pointing to atelia-storage." />
+    <Error Condition="'$(UseStorageSources)' == 'true' and '$(StorageSourceRoot)' != '' and !$([System.IO.Path]::IsPathFullyQualified('$(StorageSourceRoot)'))"
+           Text="StorageSourceRoot must be an absolute atelia-storage directory path." />
+    <Error Condition="'$(UseStorageSources)' == 'true' and !Exists('$(StorageSourceRoot)/src/EventJournal/EventJournal.csproj')"
+           Text="StorageSourceRoot does not contain src/EventJournal/EventJournal.csproj. Source mode never falls back to packages." />
+  </Target>
+  <Target Name="RejectStorageSourcePackaging" BeforeTargets="GenerateNuspec;Pack" Condition="'$(UseStorageSources)' == 'true'">
+    <Error Text="Packing DurableGraph with UseStorageSources=true is unsupported. Pack atelia-storage with a unique version first, select StoragePackageVersion, then pack DurableGraph with UseStorageSources=false." />
+  </Target>
+</Project>

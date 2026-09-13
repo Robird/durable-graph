@@ -5,11 +5,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-function Invoke-DotNet {
-    param([Parameter(Mandatory)][string[]] $Arguments)
-    & dotnet @Arguments
-    if ($LASTEXITCODE -ne 0) { throw "dotnet $($Arguments -join ' ') failed with exit code $LASTEXITCODE." }
-}
+. (Join-Path $PSScriptRoot 'PackageProbeSupport.ps1')
 function Get-Example {
     param([string] $Language, [string] $Marker)
     $pattern = '(?ms)^```' + [regex]::Escape($Language) + '\r?\n(.*?)^```'

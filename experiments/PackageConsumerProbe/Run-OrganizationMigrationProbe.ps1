@@ -20,10 +20,7 @@ if (!$WorkRoot) {
 }
 $WorkRoot = [IO.Path]::GetFullPath($WorkRoot)
 $database = Join-Path $WorkRoot 'database'
-function Invoke-DotNet([string[]] $Arguments) {
-    & dotnet @Arguments
-    if ($LASTEXITCODE -ne 0) { throw "dotnet $($Arguments -join ' ') failed ($LASTEXITCODE)." }
-}
+. (Join-Path $PSScriptRoot 'PackageProbeSupport.ps1')
 function Get-History([string] $Root) {
     $result = @{}
     foreach ($file in Get-ChildItem -LiteralPath $Root -File -Filter *.dgschema) {

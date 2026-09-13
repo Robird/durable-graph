@@ -8,11 +8,7 @@ param(
 
 # The legacy source below is an intentional, isolated input witness. No product compatibility shell is used.
 $ErrorActionPreference = "Stop"
-function Invoke-DotNet {
-    param([Parameter(Mandatory)][string[]] $Arguments)
-    & dotnet @Arguments
-    if ($LASTEXITCODE -ne 0) { throw "dotnet $($Arguments -join ' ') failed with exit code $LASTEXITCODE." }
-}
+. (Join-Path $PSScriptRoot 'PackageProbeSupport.ps1')
 function Assert-History {
     param([string] $Directory, [hashtable] $Accepted)
     $files = @(Get-ChildItem -LiteralPath $Directory -Filter *.dgschema -File)

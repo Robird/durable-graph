@@ -9,11 +9,7 @@ if ([string]::IsNullOrWhiteSpace($PackageSource) -ne [string]::IsNullOrWhiteSpac
     throw "Supply both -PackageSource and -Version, or neither for a self-contained run."
 }
 
-function Invoke-DotNet {
-    param([Parameter(Mandatory)][string[]] $Arguments)
-    & dotnet @Arguments
-    if ($LASTEXITCODE -ne 0) { throw "dotnet $($Arguments -join ' ') failed with exit code $LASTEXITCODE." }
-}
+. (Join-Path $PSScriptRoot 'PackageProbeSupport.ps1')
 function Read-History {
     param([string] $Directory, [int] $ExpectedCount, [hashtable] $Accepted)
     $files = @(Get-ChildItem -LiteralPath $Directory -Filter *.dgschema -File)
@@ -75,17 +71,7 @@ try {
         $PackageSource = Join-Path $workRoot "feed"
         New-Item -ItemType Directory -Path $PackageSource | Out-Null
         $Version = "0.0.0-inheritance-library-e2e.$runStamp"
-        foreach ($project in @(
-            "../atelia/src/Data/Data.csproj", "../atelia/src/Primitives/Primitives.csproj",
-            "../atelia/src/Rbf/Rbf.csproj", "../atelia/src/RbfSegmentStore/RbfSegmentStore.csproj",
-        "../atelia/src/EventJournal/EventJournal.csproj",
-            "src/DurableGraph.Serialization/DurableGraph.Serialization.csproj",
-            "src/DurableGraph/DurableGraph.csproj",
-            "src/DurableGraph.Storage/DurableGraph.Storage.csproj",
-            "src/DurableGraph.Persistence/DurableGraph.Persistence.csproj"
-        )) {
-            Invoke-DotNet @("pack", $project, "--configuration", "Release", "--output", $PackageSource, "-p:PackageVersion=$Version")
-        }
+        Prepare-DurableGraphProbeFeed -RepositoryRoot $repositoryRoot -OutputDirectory $PackageSource -Version $Version
         if (@(Get-ChildItem -LiteralPath $PackageSource -Filter *.nupkg -File).Count -ne 9) { throw "Expected nine runtime dependency packages." }
     }
     foreach ($generation in @(1, 2)) {

@@ -4,6 +4,15 @@
 > history/build integration, or package wiring. Root-solution tests do not exercise this
 > delivery boundary. Product progress lives in [src/PROJECT-STATE.md](../../src/PROJECT-STATE.md).
 
+Storage dependencies now have their own version S, pinned in
+[StorageDependency.props](../../eng/StorageDependency.props). The current self-contained runners share
+[PackageProbeSupport.ps1](PackageProbeSupport.ps1): it prepares the five pinned storage packages once,
+then packs only the four DG packages at the runner's independent version G. `S != G` is required.
+Prepare storage from a fixed commit first as described in [the dependency guide](../../docs/storage-dependency.md).
+An explicit `-PackageSource <feed> -Version <G>` still consumes the supplied complete feed without repacking it.
+The public consumer projects keep their minimal DG PackageReferences; storage arrives transitively.
+Isolated restore uses a task config so the repository's normal storage-feed mapping cannot redirect it.
+
 This experiment verifies the reusable delivery boundary rather than project-to-project wiring.
 The consumer project has one `PackageReference` to `Atelia.DurableGraph`; it contains no manual
 analyzer reference, `AdditionalFiles`, build hook, or `Import`.

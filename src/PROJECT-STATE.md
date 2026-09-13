@@ -19,6 +19,15 @@
 
 ## 当前焦点
 
+存储依赖已改为独立 `atelia-storage` 的版本包与显式源码联调。
+版本/来源 pin 统一记录在 [StorageDependency.props](../eng/StorageDependency.props)。
+固定来源 Prepare、包/源码引用图、934 项存储/持久化测试、EventHistory/recovery 包 probes
+及冻结旧存档的冷读→续写→再冷读已通过；完整 2668 项测试通过于此前 `.2` 候选。
+最终固定包为 `0.1.1-dev.20260913.4`，来源 `09d979941d2c671a1e7a8ffabfa6e2b340e00f69`。
+远端创建与公开发布尚未执行，首次 Prepare 可明确提供本地 Git 来源；不把本地验收当作远端获取成功。
+日常准备、显式源码联调及包版本边界统一见[存储依赖指南](../docs/storage-dependency.md)；
+本片只改交付接线，不改变下述存储格式、恢复和产品能力。
+
 [DB-071：程序集与命名空间组织](../docs/design-branches/0071-assembly-namespace-organization-review.md) 已实施：
 七项目依赖保持；底层包为 Serialization/Storage，上层为 Persistence，主程序集内分根/Schema/Runtime。
 签名、产品回归、真实包、旧包续写和隔离 DramaBoard 证据集中在[验收记录](../docs/design-branches/0071-assembly-namespace-validation.md)。
